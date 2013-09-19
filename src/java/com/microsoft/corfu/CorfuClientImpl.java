@@ -165,7 +165,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		CorfuErrorCode er;
 		
 		try {
-			offset = sequencer.nextpos();
+			offset = sequencer.nextpos(1);
 			er = sunits[0].write(offset, ByteBuffer.wrap(buf));
 		} catch (TException e) {
 			e.printStackTrace();

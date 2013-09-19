@@ -34,13 +34,13 @@ public class CorfuSequencer {
 
   public interface Iface {
 
-    public long nextpos() throws org.apache.thrift.TException;
+    public long nextpos(int ntokens) throws org.apache.thrift.TException;
 
   }
 
   public interface AsyncIface {
 
-    public void nextpos(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.nextpos_call> resultHandler) throws org.apache.thrift.TException;
+    public void nextpos(int ntokens, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.nextpos_call> resultHandler) throws org.apache.thrift.TException;
 
   }
 
@@ -64,15 +64,16 @@ public class CorfuSequencer {
       super(iprot, oprot);
     }
 
-    public long nextpos() throws org.apache.thrift.TException
+    public long nextpos(int ntokens) throws org.apache.thrift.TException
     {
-      send_nextpos();
+      send_nextpos(ntokens);
       return recv_nextpos();
     }
 
-    public void send_nextpos() throws org.apache.thrift.TException
+    public void send_nextpos(int ntokens) throws org.apache.thrift.TException
     {
       nextpos_args args = new nextpos_args();
+      args.setNtokens(ntokens);
       sendBase("nextpos", args);
     }
 
@@ -104,21 +105,24 @@ public class CorfuSequencer {
       super(protocolFactory, clientManager, transport);
     }
 
-    public void nextpos(org.apache.thrift.async.AsyncMethodCallback<nextpos_call> resultHandler) throws org.apache.thrift.TException {
+    public void nextpos(int ntokens, org.apache.thrift.async.AsyncMethodCallback<nextpos_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
-      nextpos_call method_call = new nextpos_call(resultHandler, this, ___protocolFactory, ___transport);
+      nextpos_call method_call = new nextpos_call(ntokens, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
       ___manager.call(method_call);
     }
 
     public static class nextpos_call extends org.apache.thrift.async.TAsyncMethodCall {
-      public nextpos_call(org.apache.thrift.async.AsyncMethodCallback<nextpos_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+      private int ntokens;
+      public nextpos_call(int ntokens, org.apache.thrift.async.AsyncMethodCallback<nextpos_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
         super(client, protocolFactory, transport, resultHandler, false);
+        this.ntokens = ntokens;
       }
 
       public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("nextpos", org.apache.thrift.protocol.TMessageType.CALL, 0));
         nextpos_args args = new nextpos_args();
+        args.setNtokens(ntokens);
         args.write(prot);
         prot.writeMessageEnd();
       }
@@ -165,7 +169,7 @@ public class CorfuSequencer {
 
       public nextpos_result getResult(I iface, nextpos_args args) throws org.apache.thrift.TException {
         nextpos_result result = new nextpos_result();
-        result.success = iface.nextpos();
+        result.success = iface.nextpos(args.ntokens);
         result.setSuccessIsSet(true);
         return result;
       }
@@ -176,6 +180,7 @@ public class CorfuSequencer {
   public static class nextpos_args implements org.apache.thrift.TBase<nextpos_args, nextpos_args._Fields>, java.io.Serializable, Cloneable   {
     private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("nextpos_args");
 
+    private static final org.apache.thrift.protocol.TField NTOKENS_FIELD_DESC = new org.apache.thrift.protocol.TField("ntokens", org.apache.thrift.protocol.TType.I32, (short)-1);
 
     private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
     static {
@@ -183,10 +188,11 @@ public class CorfuSequencer {
       schemes.put(TupleScheme.class, new nextpos_argsTupleSchemeFactory());
     }
 
+    public int ntokens; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-;
+      NTOKENS((short)-1, "ntokens");
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -201,6 +207,8 @@ public class CorfuSequencer {
        */
       public static _Fields findByThriftId(int fieldId) {
         switch(fieldId) {
+          case -1: // NTOKENS
+            return NTOKENS;
           default:
             return null;
         }
@@ -239,9 +247,15 @@ public class CorfuSequencer {
         return _fieldName;
       }
     }
+
+    // isset id assignments
+    private static final int __NTOKENS_ISSET_ID = 0;
+    private byte __isset_bitfield = 0;
     public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
       Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.NTOKENS, new org.apache.thrift.meta_data.FieldMetaData("ntokens", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
       org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(nextpos_args.class, metaDataMap);
     }
@@ -249,10 +263,20 @@ public class CorfuSequencer {
     public nextpos_args() {
     }
 
+    public nextpos_args(
+      int ntokens)
+    {
+      this();
+      this.ntokens = ntokens;
+      setNtokensIsSet(true);
+    }
+
     /**
      * Performs a deep copy on <i>other</i>.
      */
     public nextpos_args(nextpos_args other) {
+      __isset_bitfield = other.__isset_bitfield;
+      this.ntokens = other.ntokens;
     }
 
     public nextpos_args deepCopy() {
@@ -261,15 +285,51 @@ public class CorfuSequencer {
 
     @Override
     public void clear() {
+      setNtokensIsSet(false);
+      this.ntokens = 0;
+    }
+
+    public int getNtokens() {
+      return this.ntokens;
+    }
+
+    public nextpos_args setNtokens(int ntokens) {
+      this.ntokens = ntokens;
+      setNtokensIsSet(true);
+      return this;
+    }
+
+    public void unsetNtokens() {
+      __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __NTOKENS_ISSET_ID);
+    }
+
+    /** Returns true if field ntokens is set (has been assigned a value) and false otherwise */
+    public boolean isSetNtokens() {
+      return EncodingUtils.testBit(__isset_bitfield, __NTOKENS_ISSET_ID);
+    }
+
+    public void setNtokensIsSet(boolean value) {
+      __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __NTOKENS_ISSET_ID, value);
     }
 
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
+      case NTOKENS:
+        if (value == null) {
+          unsetNtokens();
+        } else {
+          setNtokens((Integer)value);
+        }
+        break;
+
       }
     }
 
     public Object getFieldValue(_Fields field) {
       switch (field) {
+      case NTOKENS:
+        return Integer.valueOf(getNtokens());
+
       }
       throw new IllegalStateException();
     }
@@ -281,6 +341,8 @@ public class CorfuSequencer {
       }
 
       switch (field) {
+      case NTOKENS:
+        return isSetNtokens();
       }
       throw new IllegalStateException();
     }
@@ -298,6 +360,15 @@ public class CorfuSequencer {
       if (that == null)
         return false;
 
+      boolean this_present_ntokens = true;
+      boolean that_present_ntokens = true;
+      if (this_present_ntokens || that_present_ntokens) {
+        if (!(this_present_ntokens && that_present_ntokens))
+          return false;
+        if (this.ntokens != that.ntokens)
+          return false;
+      }
+
       return true;
     }
 
@@ -314,6 +385,16 @@ public class CorfuSequencer {
       int lastComparison = 0;
       nextpos_args typedOther = (nextpos_args)other;
 
+      lastComparison = Boolean.valueOf(isSetNtokens()).compareTo(typedOther.isSetNtokens());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetNtokens()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ntokens, typedOther.ntokens);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
       return 0;
     }
 
@@ -334,6 +415,9 @@ public class CorfuSequencer {
       StringBuilder sb = new StringBuilder("nextpos_args(");
       boolean first = true;
 
+      sb.append("ntokens:");
+      sb.append(this.ntokens);
+      first = false;
       sb.append(")");
       return sb.toString();
     }
@@ -353,6 +437,8 @@ public class CorfuSequencer {
 
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
       try {
+        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
+        __isset_bitfield = 0;
         read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
       } catch (org.apache.thrift.TException te) {
         throw new java.io.IOException(te);
@@ -377,6 +463,14 @@ public class CorfuSequencer {
             break;
           }
           switch (schemeField.id) {
+            case -1: // NTOKENS
+              if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
+                struct.ntokens = iprot.readI32();
+                struct.setNtokensIsSet(true);
+              } else { 
+                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+              }
+              break;
             default:
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
           }
@@ -392,6 +486,9 @@ public class CorfuSequencer {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
+        oprot.writeFieldBegin(NTOKENS_FIELD_DESC);
+        oprot.writeI32(struct.ntokens);
+        oprot.writeFieldEnd();
         oprot.writeFieldStop();
         oprot.writeStructEnd();
       }
@@ -409,11 +506,24 @@ public class CorfuSequencer {
       @Override
       public void write(org.apache.thrift.protocol.TProtocol prot, nextpos_args struct) throws org.apache.thrift.TException {
         TTupleProtocol oprot = (TTupleProtocol) prot;
+        BitSet optionals = new BitSet();
+        if (struct.isSetNtokens()) {
+          optionals.set(0);
+        }
+        oprot.writeBitSet(optionals, 1);
+        if (struct.isSetNtokens()) {
+          oprot.writeI32(struct.ntokens);
+        }
       }
 
       @Override
       public void read(org.apache.thrift.protocol.TProtocol prot, nextpos_args struct) throws org.apache.thrift.TException {
         TTupleProtocol iprot = (TTupleProtocol) prot;
+        BitSet incoming = iprot.readBitSet(1);
+        if (incoming.get(0)) {
+          struct.ntokens = iprot.readI32();
+          struct.setNtokensIsSet(true);
+        }
       }
     }
 

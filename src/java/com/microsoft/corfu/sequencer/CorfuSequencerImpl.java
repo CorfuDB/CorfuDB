@@ -16,9 +16,11 @@ public class CorfuSequencerImpl implements CorfuSequencer.Iface {
 	
 	long pos = 0;
 	
-	public long nextpos() throws org.apache.thrift.TException {
+	public long nextpos(int range) throws org.apache.thrift.TException {
 		// if (pos % 10000 == 0) System.out.println("issue token " + pos + "...");
-		return pos++;
+		long ret = pos;
+		pos += range;
+		return ret;
 	}
 	
 	static class dorun implements Runnable {

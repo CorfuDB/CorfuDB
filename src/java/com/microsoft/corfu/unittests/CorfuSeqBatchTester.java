@@ -64,7 +64,7 @@ public class CorfuSeqBatchTester implements Runnable {
 			
 			// acquire the next 'batchsize' tokens...
 			try {
-				long off = seqclient.nextpos();
+				long off = seqclient.nextpos(batchsize);
 				while (batchsize-- > 0) { 
 					tokens.put(1);
 				}

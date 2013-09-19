@@ -98,7 +98,7 @@ public class CorfuSequencerTester implements Runnable {
 			starttime = System.currentTimeMillis();
 			for (int i = 0; i < nrequests; i++) {
 				// System.out.println(i + "..");
-				off = seqclient.nextpos();
+				off = seqclient.nextpos(1);
 				if (i % 10000 == 0) {
 					elapsetime = System.currentTimeMillis();
 					System.out.println("++" + myid + "++: " + i + " tokens in " + (elapsetime-starttime) + " ms");
