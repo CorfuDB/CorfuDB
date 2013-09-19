@@ -1,0 +1,45 @@
+=====================
+Installing Ant:
+=====================
+
+- download Apache Ant  from here to a directory $ANTHOME
+-	add $ANTHOME\bin to environment path
+
+=====================
+Installing Thrift:
+=====================
+
+1) download Apache Thrift from here and extract into a directory $THRIFTHOME
+
+note, the distribution is in a .tar.gz gzipped-archive. there are a number of free utilities you may use to extract
+  the thrift distribution from this archive. if you have cygwin installed, use .. ; 
+  otherwise, you may download 7-zip
+
+go to $THRIFTHOME\lib\java, type ‘ant’, and wait for it to build
+
+
+2) Download the Windows Thrift compiler from here to a location like C:\Program Files (x86)\thrift-0.9.0.exe , and make sure the directory is in your path
+
+==================
+Eclipse setup: 
+==================
+
+- Create new project and name it $YOURNAME. 
+   In the new-project setup page
+		- choose 'Java Project
+		- unclick 'use default location'
+		- browse to the parent directory of the CorfuJava distribution
+
+- to reference Thrift libraries:
+	- right-click on project -> Build path -> Configure Build Path  
+		* click Libraries tab -> Add External JARs
+		* add all .jars under $THRIFTHOME\lib\java\build and under $THRIFTHOME\lib\java\build\lib
+		* right-click project -> refresh
+
+================
+command shell setup:
+================
+
+-	from command line: you must add all jar files to CLASSPATH (attached is a PowerShell script to append .jars to CLASSPATH; if you want to permanently add thing to CLASSPATH, uncomment the ‘setx ..’ line and comment the one below it
+
+Running: Run CorfuStandaloneServerTester first, then CorfuStandaloneClientTester
