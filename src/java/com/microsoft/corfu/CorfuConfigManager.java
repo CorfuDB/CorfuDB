@@ -44,6 +44,18 @@ public class CorfuConfigManager
 	 */
 	public CorfuNode getSequencer() { return C.getActiveSegmentView().tokenserver; }
 	
+	/** Obtain the grain size of the currently active segment 
+	 * (TODO shouldn't this permanent and not change with each segment??)
+	 * @return grain-size of current segment
+	 */
+	public int getGrain() { return C.getActiveSegmentView().grain; }
+	
+	/** Obtain the unit size of the currently active segment 
+	 * (TODO shouldn't this permanent and not change with each segment??)
+	 * @return disk-size of current segment
+	 */
+	public int getUnitsize() { return C.getActiveSegmentView().disksize; }
+
 	/** Constructor
 	 * @param bootstraplocation
 	 */
@@ -174,8 +186,29 @@ class Configuration
 	}
 
 	
+	/** This is a utility function, which computes an array of page-ranges 
+	 * for the given offset-range. The range must be within the current active range (for now).
+	 * 
+	 * @param startoff the starting offset
+	 * @param endoff the end offset
+	 * @return
+	 */
+	/*RangeLocation[] getLocationForRange(long startoff, long endoff) {
+		SegmentView sv = this.getActiveSegmentView();
+		RangeLocation[] ret = new RangeLocation[sv.numgroups];
+		
+		
+		
+		return ret;
+	}*/
 	
 }
+
+class RangeLocation
+{
+	GroupView group;
+	long physstartoff, physendoff;
+};
 
 class EntryLocation
 {

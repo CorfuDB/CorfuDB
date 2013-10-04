@@ -1,9 +1,3 @@
-function doicm {
-	icm $args[0] -Scriptblock $args[1] -argumentList $args[2..($args.length-1)] -asjob
-}
-
-
- 
 # clean up previous jobs
 write-host killing all previous jobs ...
 stop-job *
@@ -30,24 +24,20 @@ if ($pushflag) { write-host push updates to destinations }
 # 
 [xml]$CL = gc "CLIENTS.xml"
 
-$tstjar=".\corfu-client.jar"
-$tstmainclass = "com.microsoft.corfu.unittests.CorfuClientTester"
-$nthreads=2
-$nrepeat=10000
-# $entsize=1048576
-$entsize = 128 * 1024  # 128K
-$printfreq = 10
+$tstjar=".\corfu-sequencertester.jar"
+$tstmainclass = "com.microsoft.corfu.unittests.CorfuSequencerTester"
+$tstargs = -threads 64 -repeat 100000
 
-[scriptblock]$sb = { $a = $args[0]; cd c:\users\$a\corfu-bin; java $args[1..($args.length-1)] }
- 
-# start client tester on all remote clients
-#
 $clnodes = $CL.testing.CLIENTS.CLIENT
+
+ 
+# start sequencertster on all remote clients
+#
 $clnodes | %{ 
 	$n = $_.nodeaddress
 	write-host client on machine $n
 
-	# push jarfile to remote
+	# push sequencertester-jar to remote
 	#
 	$j = $binDir + $tstjar
 	if ($pushflag) { 
@@ -55,6 +45,9 @@ $clnodes | %{
 		xcopy $configFileName  \\$n\c$\users\$uid\corfu-bin /Y /D
 	}
 
-	doicm $n $sb $uid -classpath $tstjar $tstmainclass -threads $nthreads -repeat $nrepeat -size $entsize -printfreq $printfreq
+	icm $n -ScriptBlock { param($tstjar, $tstmainclass, $tstargs, $uid) 
+		cd c:\users\$uid\corfu-bin;
+		java -classpath $tstjar $tstmainclass -threads 64 -repeat 100000
+	} -ArgumentList @($tstjar, $tstmainclass, $tstargs, $uid) -asjob
 }
 

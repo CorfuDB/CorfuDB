@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.thrift.*;
 import org.apache.thrift.protocol.*;
@@ -23,10 +24,13 @@ import com.microsoft.corfu.CorfuStandaloneClientImpl;
 
 public class CorfuClientTester implements Runnable {
 
+	static AtomicInteger commulative = new AtomicInteger(0);
+	
 	private CorfuConfigManager CM;
-	private boolean sa = false; // flag: use standalone CORFU service
 	private int myid = -1;
-	private int nrepeat = 2;
+	static private int nrepeat = 100000;
+	static private int entsize = 0;
+	static private int printfreq = 1000;
 	
 	/**
 	 * @param args
@@ -34,31 +38,39 @@ public class CorfuClientTester implements Runnable {
 	 */
 	public static void main(String[] args) throws Exception {
 		
-		boolean sa = false;
 		int nthreads = 5;
-
+		
 		CorfuConfigManager CM = new CorfuConfigManager(new File("./0.aux"));
 
 		// parse args
 		for (int i = 0; i < args.length; ) {
-			if (args[i].equals("-sa")) {
-				System.out.println("using standalone Corfu");
-				sa = true;
-				i++;
+			if (args[i].startsWith("-repeat") && i < args.length-1) {
+				nrepeat = Integer.valueOf(args[i+1]);
+				System.out.println("repeat count: " + nrepeat);
+				i += 2;
 			} else if (args[i].startsWith("-threads") && i < args.length-1) {
 				nthreads = Integer.valueOf(args[i+1]);
 				System.out.println("concurrent client threads: " + nthreads);
 				i += 2;
+			} else if (args[i].startsWith("-size") && i < args.length-1) {
+				entsize = Integer.valueOf(args[i+1]);
+				System.out.println("entry size: " + entsize);
+				i += 2;
+			} else if (args[i].startsWith("-printfreq") && i < args.length-1) {
+				printfreq = Integer.valueOf(args[i+1]);
+				System.out.println("print every # appends: " + printfreq);
+				i += 2;
 			} else {
+				System.out.println("unknown param: " + args[i]);
 				throw new Exception("Usage: " + CorfuClientTester.class.getName() + 
-						" [-sa] [-threads <numthreads>] [-repeat <nrepeat>]");
+						" [-threads <numthreads>] [-repeat <nrepeat>] [-size <entry-size>] [-printfreq <frequency>]");
 			}
 		}
 		
 		System.out.println("starting client ..");
 		ExecutorService executor = Executors.newFixedThreadPool(nthreads);
 		for (int i = 0; i < nthreads; i++) {
-			Runnable worker = new CorfuClientTester(i, sa, CM);
+			Runnable worker = new CorfuClientTester(i, CM);
 			executor.execute(worker);
 		}
 		
@@ -67,9 +79,8 @@ public class CorfuClientTester implements Runnable {
 	}
 	
 	
-	public CorfuClientTester(int myind, boolean sa, CorfuConfigManager CM) {
+	public CorfuClientTester(int myind, CorfuConfigManager CM) {
 		super();
-		this.sa = sa;
 		this.CM = CM;
 		this.myid = myind; // thread id
 	}
@@ -82,87 +93,55 @@ public class CorfuClientTester implements Runnable {
 		long elapsetime = 0;
 		long startoff, off = -1, contoff;
 		long readoff = 0;
-		CorfuInterface crf;
+		CorfuExtendedInterface crf;
+		String myname = System.getenv("computername");
 		
 		try {
-			if (sa) {
-				// kluge; assume only one storage-unit for now!
-				crf = new CorfuStandaloneClientImpl(CM.getGroupByNumber(0)[0].toString());		
-			} else {
-				crf = new CorfuClientImpl(CM);
-			}
+			crf = new CorfuClientImpl(CM);
 		} catch (CorfuException e3) {
 			System.out.println("cannot set client conenction, giving up");
 			e3.printStackTrace();
 			return;
 		}
 		
-		try {
-			startoff = crf.check();
-		} catch (CorfuException e) {
-			System.out.println("check failed (shouldn't happen)");
-			return;
-		}
-
-		for (int rpt = 0; rpt < nrepeat; rpt ++) {
-			try {                  
-				System.out.println("+- " + myid + "-+ start iteration " + rpt + "..");
-				for (int i = 0; ; i++) {
-					// System.out.println(i + "..");
-					byte[] buf = new byte[4096];
-					off = crf.append(buf);
-					byte[] ret;
-					ret = crf.read(off);
-					if (i % 1000 == 0) {
-						elapsetime = System.currentTimeMillis();
-						System.out.println("+- " + myid + "-+  " + i + " appends+reads in " + (elapsetime-starttime) + " ms");
-					}
+		int rpt;
+		for (rpt = 0; rpt < nrepeat; rpt ++) {
+			try {
+				byte[] buf = new byte[entsize];
+				off = crf.forceappend(buf, entsize);
+				byte[] ret;
+				ret = crf.read(off);
+				if (rpt > 0 && rpt % printfreq == 0) {
+					int c = commulative.addAndGet(printfreq);
+					elapsetime = System.currentTimeMillis();
+					System.out.println("+- " + myname + ":" + myid + 
+							"-+  " + (rpt+1)/printfreq + "(*" + printfreq + ") appends+reads" +
+							" (commulative " + c/printfreq + "(*" + printfreq + ") in " + (elapsetime-starttime)/1000 + " secs");
 				}
-	
 			} catch (CorfuException e) {
-				if (e.er.equals(CorfuErrorCode.ERR_FULL)) {
-					try {
-						contoff = crf.check(true);
-						System.out.println("+- " + myid + "-+ trimming up to mark " + contoff);
-						crf.trim(contoff);
-						off = contoff;
-						
-						// we already reserved the token at the failed position; repait will need to fill it!!
-						// byte[] buf = new byte[4096];
-						// crf.fill(contoff, buf);
-					} catch (CorfuException te) {
-						te.printStackTrace();
-						// break;
-					}
-				
-				} else if (e.er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
-					System.out.println("+- " + myid + "-+ repairing the log..");
+				if (e.er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
+					System.out.println("+- " + myname + ":" + myid + "-+ repairing the log..");
 					try {
 						((CorfuExtendedInterface)crf).repairlog();
 					} catch (CorfuException e1) {
 						// TODO Auto-generated catch block
 						e1.printStackTrace();
+						break;
 					}
 				} else if (e.er.equals(CorfuErrorCode.ERR_TRIMMED))  {
-					System.out.println("+- " + myid + "+ read failed at " + off);
+					System.out.println("+- " + myname + ":" + myid + "+ read failed at " + off);
 				} else {
 					e.printStackTrace();
 					break;
 				}
-
-			System.out.println("+- " + myid + "-+ done repetition " + rpt + " (up to offset " + off + ")");
-		
 			}
 		}
 
-	
-		try {
-			off = crf.check();
-		} catch (CorfuException e) {
-			System.out.println("check failed (shouldn't happen)");
-			return;
-		}
 		elapsetime = System.currentTimeMillis();
-		System.out.println("FINISHED [" + startoff + ".." + off + "]: " + (off-startoff) + " entries, time=" +  (elapsetime-starttime) + " ms");
+		int c = commulative.addAndGet(rpt % printfreq);
+		System.out.println("FINISHED [" + myname + ":" + myid + "]: " +
+				rpt/printfreq + "(*" + printfreq + ") entries (commulative " + c/printfreq + "(*" + printfreq + 
+				"*" + entsize/1024 + "KBytes), time= " +
+				(elapsetime-starttime)/1000 + " secs");
 	}
 }

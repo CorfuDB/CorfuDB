@@ -15,7 +15,7 @@ service CorfuStandaloneServer {
      *
      * @throws org.apache.thrift.TException
      */
-	common.CorfuOffsetWrap append(1:common.LogPayload ctnt),
+	common.LogHeader append(1:common.LogEntryWrap entry),
 
     /**
      * @param offset: log position to read
@@ -30,7 +30,7 @@ service CorfuStandaloneServer {
      *
      * @throws org.apache.thrift.TException
      */
-	common.CorfuPayloadWrap read(1:i64 offset),
+	common.LogEntryWrap read(1:common.LogHeader hdr),
 
 	 /**
      * @return a position one higher than the last appended position
@@ -39,12 +39,12 @@ service CorfuStandaloneServer {
      i64 check(),
 	
     /**
-     * Evict all log positions up to the marked offset. 
+     * Evict all log positions up to (excl) the marked offset. 'mark' becomes the new start of the log.
      * 
-     * @param mark: a position one higher than the last trimmed offset
+     * @param mark: one higher than the highest offset to be evicted
      * @return true if trim was successful, 
-     * 			false if trimming an illegal position, such as an already trimmed offset, 
-     * 			or a position beyond the current head of the log
+     * 			false if trimming an illegal position, such as an offset never written, 
+     * 			or past the last contiguously filled position
      * @throws org.apache.thrift.TException
      */
 	bool trim (1:i64 mark),

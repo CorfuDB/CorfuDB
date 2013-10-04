@@ -1,6 +1,5 @@
 namespace java com.microsoft.corfu
 
-typedef binary LogPayload
 
 enum CorfuErrorCode {
 	OK,
@@ -11,16 +10,17 @@ enum CorfuErrorCode {
 	ERR_FULL,
 }
 
+struct LogHeader {
+	1: i64 off,
+	2: i16 npages,
+	3: CorfuErrorCode err,
+	}
+	
+typedef binary LogPayload
 
-struct CorfuOffsetWrap {
-	1: CorfuErrorCode offerr,
-	2: i64 off,
-}
-
-struct CorfuPayloadWrap {
-	1: CorfuErrorCode err,
-	2: LogPayload ctnt,
-}
-
-
+struct LogEntryWrap {
+	1: LogHeader hdr,
+	2: list<LogPayload> ctnt,
+	}
+	
 

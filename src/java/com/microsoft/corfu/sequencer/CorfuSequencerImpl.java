@@ -1,6 +1,7 @@
 package com.microsoft.corfu.sequencer;
 
 import java.io.File;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
@@ -14,12 +15,11 @@ import com.microsoft.corfu.sequencer.CorfuSequencer.Processor;
 
 public class CorfuSequencerImpl implements CorfuSequencer.Iface {
 	
-	long pos = 0;
+	AtomicLong pos = new AtomicLong(0);
 	
 	public long nextpos(int range) throws org.apache.thrift.TException {
 		// if (pos % 10000 == 0) System.out.println("issue token " + pos + "...");
-		long ret = pos;
-		pos += range;
+		long ret = pos.getAndAdd(range);
 		return ret;
 	}
 	
@@ -69,7 +69,7 @@ public class CorfuSequencerImpl implements CorfuSequencer.Iface {
 		public void run() {
 			long starttime = System.currentTimeMillis();
 			long elapsetime = 0;
-			long lastpos = -1;
+			long lastpos = -1, newpos = -1;
 
 			while (true) {
 				try {
@@ -78,10 +78,11 @@ public class CorfuSequencerImpl implements CorfuSequencer.Iface {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				if (lastpos != CI.pos) {
+				newpos = CI.pos.get();
+				if (lastpos != newpos) {
 					elapsetime = System.currentTimeMillis() - starttime;
-					System.out.println("++stats: pos=" + CI.pos/1000 + "K elapse ~" + elapsetime/1000 + " seconds");
-					lastpos = CI.pos;
+					System.out.println("++stats: pos=" + newpos/1000 + "K elapse ~" + elapsetime/1000 + " seconds");
+					lastpos = newpos;
 				}
 			}
 		}

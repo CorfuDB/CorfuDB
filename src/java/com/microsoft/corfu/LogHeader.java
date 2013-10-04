@@ -30,33 +30,36 @@ import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap, CorfuOffsetWrap._Fields>, java.io.Serializable, Cloneable {
-  private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("CorfuOffsetWrap");
+public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._Fields>, java.io.Serializable, Cloneable {
+  private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("LogHeader");
 
-  private static final org.apache.thrift.protocol.TField OFFERR_FIELD_DESC = new org.apache.thrift.protocol.TField("offerr", org.apache.thrift.protocol.TType.I32, (short)1);
-  private static final org.apache.thrift.protocol.TField OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("off", org.apache.thrift.protocol.TType.I64, (short)2);
+  private static final org.apache.thrift.protocol.TField OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("off", org.apache.thrift.protocol.TType.I64, (short)1);
+  private static final org.apache.thrift.protocol.TField NPAGES_FIELD_DESC = new org.apache.thrift.protocol.TField("npages", org.apache.thrift.protocol.TType.I16, (short)2);
+  private static final org.apache.thrift.protocol.TField ERR_FIELD_DESC = new org.apache.thrift.protocol.TField("err", org.apache.thrift.protocol.TType.I32, (short)3);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
-    schemes.put(StandardScheme.class, new CorfuOffsetWrapStandardSchemeFactory());
-    schemes.put(TupleScheme.class, new CorfuOffsetWrapTupleSchemeFactory());
+    schemes.put(StandardScheme.class, new LogHeaderStandardSchemeFactory());
+    schemes.put(TupleScheme.class, new LogHeaderTupleSchemeFactory());
   }
 
+  public long off; // required
+  public short npages; // required
   /**
    * 
    * @see CorfuErrorCode
    */
-  public CorfuErrorCode offerr; // required
-  public long off; // required
+  public CorfuErrorCode err; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+    OFF((short)1, "off"),
+    NPAGES((short)2, "npages"),
     /**
      * 
      * @see CorfuErrorCode
      */
-    OFFERR((short)1, "offerr"),
-    OFF((short)2, "off");
+    ERR((short)3, "err");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -71,10 +74,12 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
      */
     public static _Fields findByThriftId(int fieldId) {
       switch(fieldId) {
-        case 1: // OFFERR
-          return OFFERR;
-        case 2: // OFF
+        case 1: // OFF
           return OFF;
+        case 2: // NPAGES
+          return NPAGES;
+        case 3: // ERR
+          return ERR;
         default:
           return null;
       }
@@ -116,90 +121,67 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
 
   // isset id assignments
   private static final int __OFF_ISSET_ID = 0;
+  private static final int __NPAGES_ISSET_ID = 1;
   private byte __isset_bitfield = 0;
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-    tmpMap.put(_Fields.OFFERR, new org.apache.thrift.meta_data.FieldMetaData("offerr", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, CorfuErrorCode.class)));
     tmpMap.put(_Fields.OFF, new org.apache.thrift.meta_data.FieldMetaData("off", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
+    tmpMap.put(_Fields.NPAGES, new org.apache.thrift.meta_data.FieldMetaData("npages", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I16)));
+    tmpMap.put(_Fields.ERR, new org.apache.thrift.meta_data.FieldMetaData("err", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, CorfuErrorCode.class)));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
-    org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(CorfuOffsetWrap.class, metaDataMap);
+    org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(LogHeader.class, metaDataMap);
   }
 
-  public CorfuOffsetWrap() {
+  public LogHeader() {
   }
 
-  public CorfuOffsetWrap(
-    CorfuErrorCode offerr,
-    long off)
+  public LogHeader(
+    long off,
+    short npages,
+    CorfuErrorCode err)
   {
     this();
-    this.offerr = offerr;
     this.off = off;
     setOffIsSet(true);
+    this.npages = npages;
+    setNpagesIsSet(true);
+    this.err = err;
   }
 
   /**
    * Performs a deep copy on <i>other</i>.
    */
-  public CorfuOffsetWrap(CorfuOffsetWrap other) {
+  public LogHeader(LogHeader other) {
     __isset_bitfield = other.__isset_bitfield;
-    if (other.isSetOfferr()) {
-      this.offerr = other.offerr;
-    }
     this.off = other.off;
+    this.npages = other.npages;
+    if (other.isSetErr()) {
+      this.err = other.err;
+    }
   }
 
-  public CorfuOffsetWrap deepCopy() {
-    return new CorfuOffsetWrap(this);
+  public LogHeader deepCopy() {
+    return new LogHeader(this);
   }
 
   @Override
   public void clear() {
-    this.offerr = null;
     setOffIsSet(false);
     this.off = 0;
-  }
-
-  /**
-   * 
-   * @see CorfuErrorCode
-   */
-  public CorfuErrorCode getOfferr() {
-    return this.offerr;
-  }
-
-  /**
-   * 
-   * @see CorfuErrorCode
-   */
-  public CorfuOffsetWrap setOfferr(CorfuErrorCode offerr) {
-    this.offerr = offerr;
-    return this;
-  }
-
-  public void unsetOfferr() {
-    this.offerr = null;
-  }
-
-  /** Returns true if field offerr is set (has been assigned a value) and false otherwise */
-  public boolean isSetOfferr() {
-    return this.offerr != null;
-  }
-
-  public void setOfferrIsSet(boolean value) {
-    if (!value) {
-      this.offerr = null;
-    }
+    setNpagesIsSet(false);
+    this.npages = 0;
+    this.err = null;
   }
 
   public long getOff() {
     return this.off;
   }
 
-  public CorfuOffsetWrap setOff(long off) {
+  public LogHeader setOff(long off) {
     this.off = off;
     setOffIsSet(true);
     return this;
@@ -218,16 +200,63 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
     __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __OFF_ISSET_ID, value);
   }
 
+  public short getNpages() {
+    return this.npages;
+  }
+
+  public LogHeader setNpages(short npages) {
+    this.npages = npages;
+    setNpagesIsSet(true);
+    return this;
+  }
+
+  public void unsetNpages() {
+    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __NPAGES_ISSET_ID);
+  }
+
+  /** Returns true if field npages is set (has been assigned a value) and false otherwise */
+  public boolean isSetNpages() {
+    return EncodingUtils.testBit(__isset_bitfield, __NPAGES_ISSET_ID);
+  }
+
+  public void setNpagesIsSet(boolean value) {
+    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __NPAGES_ISSET_ID, value);
+  }
+
+  /**
+   * 
+   * @see CorfuErrorCode
+   */
+  public CorfuErrorCode getErr() {
+    return this.err;
+  }
+
+  /**
+   * 
+   * @see CorfuErrorCode
+   */
+  public LogHeader setErr(CorfuErrorCode err) {
+    this.err = err;
+    return this;
+  }
+
+  public void unsetErr() {
+    this.err = null;
+  }
+
+  /** Returns true if field err is set (has been assigned a value) and false otherwise */
+  public boolean isSetErr() {
+    return this.err != null;
+  }
+
+  public void setErrIsSet(boolean value) {
+    if (!value) {
+      this.err = null;
+    }
+  }
+
   public void setFieldValue(_Fields field, Object value) {
     switch (field) {
-    case OFFERR:
-      if (value == null) {
-        unsetOfferr();
-      } else {
-        setOfferr((CorfuErrorCode)value);
-      }
-      break;
-
     case OFF:
       if (value == null) {
         unsetOff();
@@ -236,16 +265,35 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
       }
       break;
 
+    case NPAGES:
+      if (value == null) {
+        unsetNpages();
+      } else {
+        setNpages((Short)value);
+      }
+      break;
+
+    case ERR:
+      if (value == null) {
+        unsetErr();
+      } else {
+        setErr((CorfuErrorCode)value);
+      }
+      break;
+
     }
   }
 
   public Object getFieldValue(_Fields field) {
     switch (field) {
-    case OFFERR:
-      return getOfferr();
-
     case OFF:
       return Long.valueOf(getOff());
+
+    case NPAGES:
+      return Short.valueOf(getNpages());
+
+    case ERR:
+      return getErr();
 
     }
     throw new IllegalStateException();
@@ -258,10 +306,12 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
     }
 
     switch (field) {
-    case OFFERR:
-      return isSetOfferr();
     case OFF:
       return isSetOff();
+    case NPAGES:
+      return isSetNpages();
+    case ERR:
+      return isSetErr();
     }
     throw new IllegalStateException();
   }
@@ -270,23 +320,14 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
   public boolean equals(Object that) {
     if (that == null)
       return false;
-    if (that instanceof CorfuOffsetWrap)
-      return this.equals((CorfuOffsetWrap)that);
+    if (that instanceof LogHeader)
+      return this.equals((LogHeader)that);
     return false;
   }
 
-  public boolean equals(CorfuOffsetWrap that) {
+  public boolean equals(LogHeader that) {
     if (that == null)
       return false;
-
-    boolean this_present_offerr = true && this.isSetOfferr();
-    boolean that_present_offerr = true && that.isSetOfferr();
-    if (this_present_offerr || that_present_offerr) {
-      if (!(this_present_offerr && that_present_offerr))
-        return false;
-      if (!this.offerr.equals(that.offerr))
-        return false;
-    }
 
     boolean this_present_off = true;
     boolean that_present_off = true;
@@ -294,6 +335,24 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
       if (!(this_present_off && that_present_off))
         return false;
       if (this.off != that.off)
+        return false;
+    }
+
+    boolean this_present_npages = true;
+    boolean that_present_npages = true;
+    if (this_present_npages || that_present_npages) {
+      if (!(this_present_npages && that_present_npages))
+        return false;
+      if (this.npages != that.npages)
+        return false;
+    }
+
+    boolean this_present_err = true && this.isSetErr();
+    boolean that_present_err = true && that.isSetErr();
+    if (this_present_err || that_present_err) {
+      if (!(this_present_err && that_present_err))
+        return false;
+      if (!this.err.equals(that.err))
         return false;
     }
 
@@ -305,30 +364,40 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
     return 0;
   }
 
-  public int compareTo(CorfuOffsetWrap other) {
+  public int compareTo(LogHeader other) {
     if (!getClass().equals(other.getClass())) {
       return getClass().getName().compareTo(other.getClass().getName());
     }
 
     int lastComparison = 0;
-    CorfuOffsetWrap typedOther = (CorfuOffsetWrap)other;
+    LogHeader typedOther = (LogHeader)other;
 
-    lastComparison = Boolean.valueOf(isSetOfferr()).compareTo(typedOther.isSetOfferr());
-    if (lastComparison != 0) {
-      return lastComparison;
-    }
-    if (isSetOfferr()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.offerr, typedOther.offerr);
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-    }
     lastComparison = Boolean.valueOf(isSetOff()).compareTo(typedOther.isSetOff());
     if (lastComparison != 0) {
       return lastComparison;
     }
     if (isSetOff()) {
       lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.off, typedOther.off);
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+    }
+    lastComparison = Boolean.valueOf(isSetNpages()).compareTo(typedOther.isSetNpages());
+    if (lastComparison != 0) {
+      return lastComparison;
+    }
+    if (isSetNpages()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.npages, typedOther.npages);
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+    }
+    lastComparison = Boolean.valueOf(isSetErr()).compareTo(typedOther.isSetErr());
+    if (lastComparison != 0) {
+      return lastComparison;
+    }
+    if (isSetErr()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.err, typedOther.err);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -350,19 +419,23 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
 
   @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder("CorfuOffsetWrap(");
+    StringBuilder sb = new StringBuilder("LogHeader(");
     boolean first = true;
 
-    sb.append("offerr:");
-    if (this.offerr == null) {
-      sb.append("null");
-    } else {
-      sb.append(this.offerr);
-    }
-    first = false;
-    if (!first) sb.append(", ");
     sb.append("off:");
     sb.append(this.off);
+    first = false;
+    if (!first) sb.append(", ");
+    sb.append("npages:");
+    sb.append(this.npages);
+    first = false;
+    if (!first) sb.append(", ");
+    sb.append("err:");
+    if (this.err == null) {
+      sb.append("null");
+    } else {
+      sb.append(this.err);
+    }
     first = false;
     sb.append(")");
     return sb.toString();
@@ -391,15 +464,15 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
     }
   }
 
-  private static class CorfuOffsetWrapStandardSchemeFactory implements SchemeFactory {
-    public CorfuOffsetWrapStandardScheme getScheme() {
-      return new CorfuOffsetWrapStandardScheme();
+  private static class LogHeaderStandardSchemeFactory implements SchemeFactory {
+    public LogHeaderStandardScheme getScheme() {
+      return new LogHeaderStandardScheme();
     }
   }
 
-  private static class CorfuOffsetWrapStandardScheme extends StandardScheme<CorfuOffsetWrap> {
+  private static class LogHeaderStandardScheme extends StandardScheme<LogHeader> {
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot, CorfuOffsetWrap struct) throws org.apache.thrift.TException {
+    public void read(org.apache.thrift.protocol.TProtocol iprot, LogHeader struct) throws org.apache.thrift.TException {
       org.apache.thrift.protocol.TField schemeField;
       iprot.readStructBegin();
       while (true)
@@ -409,18 +482,26 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
           break;
         }
         switch (schemeField.id) {
-          case 1: // OFFERR
-            if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
-              struct.offerr = CorfuErrorCode.findByValue(iprot.readI32());
-              struct.setOfferrIsSet(true);
+          case 1: // OFF
+            if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
+              struct.off = iprot.readI64();
+              struct.setOffIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 2: // OFF
-            if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
-              struct.off = iprot.readI64();
-              struct.setOffIsSet(true);
+          case 2: // NPAGES
+            if (schemeField.type == org.apache.thrift.protocol.TType.I16) {
+              struct.npages = iprot.readI16();
+              struct.setNpagesIsSet(true);
+            } else { 
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+            }
+            break;
+          case 3: // ERR
+            if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
+              struct.err = CorfuErrorCode.findByValue(iprot.readI32());
+              struct.setErrIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
@@ -436,62 +517,75 @@ public class CorfuOffsetWrap implements org.apache.thrift.TBase<CorfuOffsetWrap,
       struct.validate();
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot, CorfuOffsetWrap struct) throws org.apache.thrift.TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot, LogHeader struct) throws org.apache.thrift.TException {
       struct.validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
-      if (struct.offerr != null) {
-        oprot.writeFieldBegin(OFFERR_FIELD_DESC);
-        oprot.writeI32(struct.offerr.getValue());
-        oprot.writeFieldEnd();
-      }
       oprot.writeFieldBegin(OFF_FIELD_DESC);
       oprot.writeI64(struct.off);
       oprot.writeFieldEnd();
+      oprot.writeFieldBegin(NPAGES_FIELD_DESC);
+      oprot.writeI16(struct.npages);
+      oprot.writeFieldEnd();
+      if (struct.err != null) {
+        oprot.writeFieldBegin(ERR_FIELD_DESC);
+        oprot.writeI32(struct.err.getValue());
+        oprot.writeFieldEnd();
+      }
       oprot.writeFieldStop();
       oprot.writeStructEnd();
     }
 
   }
 
-  private static class CorfuOffsetWrapTupleSchemeFactory implements SchemeFactory {
-    public CorfuOffsetWrapTupleScheme getScheme() {
-      return new CorfuOffsetWrapTupleScheme();
+  private static class LogHeaderTupleSchemeFactory implements SchemeFactory {
+    public LogHeaderTupleScheme getScheme() {
+      return new LogHeaderTupleScheme();
     }
   }
 
-  private static class CorfuOffsetWrapTupleScheme extends TupleScheme<CorfuOffsetWrap> {
+  private static class LogHeaderTupleScheme extends TupleScheme<LogHeader> {
 
     @Override
-    public void write(org.apache.thrift.protocol.TProtocol prot, CorfuOffsetWrap struct) throws org.apache.thrift.TException {
+    public void write(org.apache.thrift.protocol.TProtocol prot, LogHeader struct) throws org.apache.thrift.TException {
       TTupleProtocol oprot = (TTupleProtocol) prot;
       BitSet optionals = new BitSet();
-      if (struct.isSetOfferr()) {
+      if (struct.isSetOff()) {
         optionals.set(0);
       }
-      if (struct.isSetOff()) {
+      if (struct.isSetNpages()) {
         optionals.set(1);
       }
-      oprot.writeBitSet(optionals, 2);
-      if (struct.isSetOfferr()) {
-        oprot.writeI32(struct.offerr.getValue());
+      if (struct.isSetErr()) {
+        optionals.set(2);
       }
+      oprot.writeBitSet(optionals, 3);
       if (struct.isSetOff()) {
         oprot.writeI64(struct.off);
+      }
+      if (struct.isSetNpages()) {
+        oprot.writeI16(struct.npages);
+      }
+      if (struct.isSetErr()) {
+        oprot.writeI32(struct.err.getValue());
       }
     }
 
     @Override
-    public void read(org.apache.thrift.protocol.TProtocol prot, CorfuOffsetWrap struct) throws org.apache.thrift.TException {
+    public void read(org.apache.thrift.protocol.TProtocol prot, LogHeader struct) throws org.apache.thrift.TException {
       TTupleProtocol iprot = (TTupleProtocol) prot;
-      BitSet incoming = iprot.readBitSet(2);
+      BitSet incoming = iprot.readBitSet(3);
       if (incoming.get(0)) {
-        struct.offerr = CorfuErrorCode.findByValue(iprot.readI32());
-        struct.setOfferrIsSet(true);
-      }
-      if (incoming.get(1)) {
         struct.off = iprot.readI64();
         struct.setOffIsSet(true);
+      }
+      if (incoming.get(1)) {
+        struct.npages = iprot.readI16();
+        struct.setNpagesIsSet(true);
+      }
+      if (incoming.get(2)) {
+        struct.err = CorfuErrorCode.findByValue(iprot.readI32());
+        struct.setErrIsSet(true);
       }
     }
   }

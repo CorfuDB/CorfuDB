@@ -4,9 +4,9 @@ include "common.thrift"
 
 service CorfuUnitServer {
 
-	common.CorfuErrorCode write(1:i64 position 2:common.LogPayload ctnt),
+	common.CorfuErrorCode write(1:common.LogEntryWrap entry),
 
-	common.CorfuPayloadWrap read(1:i64 offset),
+	common.LogEntryWrap read(1:common.LogHeader hdr),
 	
 	i64 check(),
 	

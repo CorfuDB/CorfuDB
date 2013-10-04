@@ -30,32 +30,24 @@ import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWrap, CorfuPayloadWrap._Fields>, java.io.Serializable, Cloneable {
-  private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("CorfuPayloadWrap");
+public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEntryWrap._Fields>, java.io.Serializable, Cloneable {
+  private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("LogEntryWrap");
 
-  private static final org.apache.thrift.protocol.TField ERR_FIELD_DESC = new org.apache.thrift.protocol.TField("err", org.apache.thrift.protocol.TType.I32, (short)1);
-  private static final org.apache.thrift.protocol.TField CTNT_FIELD_DESC = new org.apache.thrift.protocol.TField("ctnt", org.apache.thrift.protocol.TType.STRING, (short)2);
+  private static final org.apache.thrift.protocol.TField HDR_FIELD_DESC = new org.apache.thrift.protocol.TField("hdr", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+  private static final org.apache.thrift.protocol.TField CTNT_FIELD_DESC = new org.apache.thrift.protocol.TField("ctnt", org.apache.thrift.protocol.TType.LIST, (short)2);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
-    schemes.put(StandardScheme.class, new CorfuPayloadWrapStandardSchemeFactory());
-    schemes.put(TupleScheme.class, new CorfuPayloadWrapTupleSchemeFactory());
+    schemes.put(StandardScheme.class, new LogEntryWrapStandardSchemeFactory());
+    schemes.put(TupleScheme.class, new LogEntryWrapTupleSchemeFactory());
   }
 
-  /**
-   * 
-   * @see CorfuErrorCode
-   */
-  public CorfuErrorCode err; // required
-  public ByteBuffer ctnt; // required
+  public LogHeader hdr; // required
+  public List<ByteBuffer> ctnt; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-    /**
-     * 
-     * @see CorfuErrorCode
-     */
-    ERR((short)1, "err"),
+    HDR((short)1, "hdr"),
     CTNT((short)2, "ctnt");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
@@ -71,8 +63,8 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
      */
     public static _Fields findByThriftId(int fieldId) {
       switch(fieldId) {
-        case 1: // ERR
-          return ERR;
+        case 1: // HDR
+          return HDR;
         case 2: // CTNT
           return CTNT;
         default:
@@ -118,95 +110,97 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-    tmpMap.put(_Fields.ERR, new org.apache.thrift.meta_data.FieldMetaData("err", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, CorfuErrorCode.class)));
+    tmpMap.put(_Fields.HDR, new org.apache.thrift.meta_data.FieldMetaData("hdr", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, LogHeader.class)));
     tmpMap.put(_Fields.CTNT, new org.apache.thrift.meta_data.FieldMetaData("ctnt", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING        , "LogPayload")));
+        new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+            new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING            , "LogPayload"))));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
-    org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(CorfuPayloadWrap.class, metaDataMap);
+    org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(LogEntryWrap.class, metaDataMap);
   }
 
-  public CorfuPayloadWrap() {
+  public LogEntryWrap() {
   }
 
-  public CorfuPayloadWrap(
-    CorfuErrorCode err,
-    ByteBuffer ctnt)
+  public LogEntryWrap(
+    LogHeader hdr,
+    List<ByteBuffer> ctnt)
   {
     this();
-    this.err = err;
+    this.hdr = hdr;
     this.ctnt = ctnt;
   }
 
   /**
    * Performs a deep copy on <i>other</i>.
    */
-  public CorfuPayloadWrap(CorfuPayloadWrap other) {
-    if (other.isSetErr()) {
-      this.err = other.err;
+  public LogEntryWrap(LogEntryWrap other) {
+    if (other.isSetHdr()) {
+      this.hdr = new LogHeader(other.hdr);
     }
     if (other.isSetCtnt()) {
-      this.ctnt = other.ctnt;
+      List<ByteBuffer> __this__ctnt = new ArrayList<ByteBuffer>();
+      for (ByteBuffer other_element : other.ctnt) {
+        __this__ctnt.add(other_element);
+      }
+      this.ctnt = __this__ctnt;
     }
   }
 
-  public CorfuPayloadWrap deepCopy() {
-    return new CorfuPayloadWrap(this);
+  public LogEntryWrap deepCopy() {
+    return new LogEntryWrap(this);
   }
 
   @Override
   public void clear() {
-    this.err = null;
+    this.hdr = null;
     this.ctnt = null;
   }
 
-  /**
-   * 
-   * @see CorfuErrorCode
-   */
-  public CorfuErrorCode getErr() {
-    return this.err;
+  public LogHeader getHdr() {
+    return this.hdr;
   }
 
-  /**
-   * 
-   * @see CorfuErrorCode
-   */
-  public CorfuPayloadWrap setErr(CorfuErrorCode err) {
-    this.err = err;
+  public LogEntryWrap setHdr(LogHeader hdr) {
+    this.hdr = hdr;
     return this;
   }
 
-  public void unsetErr() {
-    this.err = null;
+  public void unsetHdr() {
+    this.hdr = null;
   }
 
-  /** Returns true if field err is set (has been assigned a value) and false otherwise */
-  public boolean isSetErr() {
-    return this.err != null;
+  /** Returns true if field hdr is set (has been assigned a value) and false otherwise */
+  public boolean isSetHdr() {
+    return this.hdr != null;
   }
 
-  public void setErrIsSet(boolean value) {
+  public void setHdrIsSet(boolean value) {
     if (!value) {
-      this.err = null;
+      this.hdr = null;
     }
   }
 
-  public byte[] getCtnt() {
-    setCtnt(org.apache.thrift.TBaseHelper.rightSize(ctnt));
-    return ctnt == null ? null : ctnt.array();
+  public int getCtntSize() {
+    return (this.ctnt == null) ? 0 : this.ctnt.size();
   }
 
-  public ByteBuffer bufferForCtnt() {
-    return ctnt;
+  public java.util.Iterator<ByteBuffer> getCtntIterator() {
+    return (this.ctnt == null) ? null : this.ctnt.iterator();
   }
 
-  public CorfuPayloadWrap setCtnt(byte[] ctnt) {
-    setCtnt(ctnt == null ? (ByteBuffer)null : ByteBuffer.wrap(ctnt));
-    return this;
+  public void addToCtnt(ByteBuffer elem) {
+    if (this.ctnt == null) {
+      this.ctnt = new ArrayList<ByteBuffer>();
+    }
+    this.ctnt.add(elem);
   }
 
-  public CorfuPayloadWrap setCtnt(ByteBuffer ctnt) {
+  public List<ByteBuffer> getCtnt() {
+    return this.ctnt;
+  }
+
+  public LogEntryWrap setCtnt(List<ByteBuffer> ctnt) {
     this.ctnt = ctnt;
     return this;
   }
@@ -228,11 +222,11 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
 
   public void setFieldValue(_Fields field, Object value) {
     switch (field) {
-    case ERR:
+    case HDR:
       if (value == null) {
-        unsetErr();
+        unsetHdr();
       } else {
-        setErr((CorfuErrorCode)value);
+        setHdr((LogHeader)value);
       }
       break;
 
@@ -240,7 +234,7 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
       if (value == null) {
         unsetCtnt();
       } else {
-        setCtnt((ByteBuffer)value);
+        setCtnt((List<ByteBuffer>)value);
       }
       break;
 
@@ -249,8 +243,8 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
 
   public Object getFieldValue(_Fields field) {
     switch (field) {
-    case ERR:
-      return getErr();
+    case HDR:
+      return getHdr();
 
     case CTNT:
       return getCtnt();
@@ -266,8 +260,8 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
     }
 
     switch (field) {
-    case ERR:
-      return isSetErr();
+    case HDR:
+      return isSetHdr();
     case CTNT:
       return isSetCtnt();
     }
@@ -278,21 +272,21 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
   public boolean equals(Object that) {
     if (that == null)
       return false;
-    if (that instanceof CorfuPayloadWrap)
-      return this.equals((CorfuPayloadWrap)that);
+    if (that instanceof LogEntryWrap)
+      return this.equals((LogEntryWrap)that);
     return false;
   }
 
-  public boolean equals(CorfuPayloadWrap that) {
+  public boolean equals(LogEntryWrap that) {
     if (that == null)
       return false;
 
-    boolean this_present_err = true && this.isSetErr();
-    boolean that_present_err = true && that.isSetErr();
-    if (this_present_err || that_present_err) {
-      if (!(this_present_err && that_present_err))
+    boolean this_present_hdr = true && this.isSetHdr();
+    boolean that_present_hdr = true && that.isSetHdr();
+    if (this_present_hdr || that_present_hdr) {
+      if (!(this_present_hdr && that_present_hdr))
         return false;
-      if (!this.err.equals(that.err))
+      if (!this.hdr.equals(that.hdr))
         return false;
     }
 
@@ -313,20 +307,20 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
     return 0;
   }
 
-  public int compareTo(CorfuPayloadWrap other) {
+  public int compareTo(LogEntryWrap other) {
     if (!getClass().equals(other.getClass())) {
       return getClass().getName().compareTo(other.getClass().getName());
     }
 
     int lastComparison = 0;
-    CorfuPayloadWrap typedOther = (CorfuPayloadWrap)other;
+    LogEntryWrap typedOther = (LogEntryWrap)other;
 
-    lastComparison = Boolean.valueOf(isSetErr()).compareTo(typedOther.isSetErr());
+    lastComparison = Boolean.valueOf(isSetHdr()).compareTo(typedOther.isSetHdr());
     if (lastComparison != 0) {
       return lastComparison;
     }
-    if (isSetErr()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.err, typedOther.err);
+    if (isSetHdr()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.hdr, typedOther.hdr);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -358,14 +352,14 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
 
   @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder("CorfuPayloadWrap(");
+    StringBuilder sb = new StringBuilder("LogEntryWrap(");
     boolean first = true;
 
-    sb.append("err:");
-    if (this.err == null) {
+    sb.append("hdr:");
+    if (this.hdr == null) {
       sb.append("null");
     } else {
-      sb.append(this.err);
+      sb.append(this.hdr);
     }
     first = false;
     if (!first) sb.append(", ");
@@ -383,6 +377,9 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
   public void validate() throws org.apache.thrift.TException {
     // check for required fields
     // check for sub-struct validity
+    if (hdr != null) {
+      hdr.validate();
+    }
   }
 
   private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
@@ -401,15 +398,15 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
     }
   }
 
-  private static class CorfuPayloadWrapStandardSchemeFactory implements SchemeFactory {
-    public CorfuPayloadWrapStandardScheme getScheme() {
-      return new CorfuPayloadWrapStandardScheme();
+  private static class LogEntryWrapStandardSchemeFactory implements SchemeFactory {
+    public LogEntryWrapStandardScheme getScheme() {
+      return new LogEntryWrapStandardScheme();
     }
   }
 
-  private static class CorfuPayloadWrapStandardScheme extends StandardScheme<CorfuPayloadWrap> {
+  private static class LogEntryWrapStandardScheme extends StandardScheme<LogEntryWrap> {
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot, CorfuPayloadWrap struct) throws org.apache.thrift.TException {
+    public void read(org.apache.thrift.protocol.TProtocol iprot, LogEntryWrap struct) throws org.apache.thrift.TException {
       org.apache.thrift.protocol.TField schemeField;
       iprot.readStructBegin();
       while (true)
@@ -419,17 +416,28 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
           break;
         }
         switch (schemeField.id) {
-          case 1: // ERR
-            if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
-              struct.err = CorfuErrorCode.findByValue(iprot.readI32());
-              struct.setErrIsSet(true);
+          case 1: // HDR
+            if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
+              struct.hdr = new LogHeader();
+              struct.hdr.read(iprot);
+              struct.setHdrIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
           case 2: // CTNT
-            if (schemeField.type == org.apache.thrift.protocol.TType.STRING) {
-              struct.ctnt = iprot.readBinary();
+            if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
+              {
+                org.apache.thrift.protocol.TList _list0 = iprot.readListBegin();
+                struct.ctnt = new ArrayList<ByteBuffer>(_list0.size);
+                for (int _i1 = 0; _i1 < _list0.size; ++_i1)
+                {
+                  ByteBuffer _elem2; // required
+                  _elem2 = iprot.readBinary();
+                  struct.ctnt.add(_elem2);
+                }
+                iprot.readListEnd();
+              }
               struct.setCtntIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
@@ -446,18 +454,25 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
       struct.validate();
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot, CorfuPayloadWrap struct) throws org.apache.thrift.TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot, LogEntryWrap struct) throws org.apache.thrift.TException {
       struct.validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
-      if (struct.err != null) {
-        oprot.writeFieldBegin(ERR_FIELD_DESC);
-        oprot.writeI32(struct.err.getValue());
+      if (struct.hdr != null) {
+        oprot.writeFieldBegin(HDR_FIELD_DESC);
+        struct.hdr.write(oprot);
         oprot.writeFieldEnd();
       }
       if (struct.ctnt != null) {
         oprot.writeFieldBegin(CTNT_FIELD_DESC);
-        oprot.writeBinary(struct.ctnt);
+        {
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, struct.ctnt.size()));
+          for (ByteBuffer _iter3 : struct.ctnt)
+          {
+            oprot.writeBinary(_iter3);
+          }
+          oprot.writeListEnd();
+        }
         oprot.writeFieldEnd();
       }
       oprot.writeFieldStop();
@@ -466,43 +481,59 @@ public class CorfuPayloadWrap implements org.apache.thrift.TBase<CorfuPayloadWra
 
   }
 
-  private static class CorfuPayloadWrapTupleSchemeFactory implements SchemeFactory {
-    public CorfuPayloadWrapTupleScheme getScheme() {
-      return new CorfuPayloadWrapTupleScheme();
+  private static class LogEntryWrapTupleSchemeFactory implements SchemeFactory {
+    public LogEntryWrapTupleScheme getScheme() {
+      return new LogEntryWrapTupleScheme();
     }
   }
 
-  private static class CorfuPayloadWrapTupleScheme extends TupleScheme<CorfuPayloadWrap> {
+  private static class LogEntryWrapTupleScheme extends TupleScheme<LogEntryWrap> {
 
     @Override
-    public void write(org.apache.thrift.protocol.TProtocol prot, CorfuPayloadWrap struct) throws org.apache.thrift.TException {
+    public void write(org.apache.thrift.protocol.TProtocol prot, LogEntryWrap struct) throws org.apache.thrift.TException {
       TTupleProtocol oprot = (TTupleProtocol) prot;
       BitSet optionals = new BitSet();
-      if (struct.isSetErr()) {
+      if (struct.isSetHdr()) {
         optionals.set(0);
       }
       if (struct.isSetCtnt()) {
         optionals.set(1);
       }
       oprot.writeBitSet(optionals, 2);
-      if (struct.isSetErr()) {
-        oprot.writeI32(struct.err.getValue());
+      if (struct.isSetHdr()) {
+        struct.hdr.write(oprot);
       }
       if (struct.isSetCtnt()) {
-        oprot.writeBinary(struct.ctnt);
+        {
+          oprot.writeI32(struct.ctnt.size());
+          for (ByteBuffer _iter4 : struct.ctnt)
+          {
+            oprot.writeBinary(_iter4);
+          }
+        }
       }
     }
 
     @Override
-    public void read(org.apache.thrift.protocol.TProtocol prot, CorfuPayloadWrap struct) throws org.apache.thrift.TException {
+    public void read(org.apache.thrift.protocol.TProtocol prot, LogEntryWrap struct) throws org.apache.thrift.TException {
       TTupleProtocol iprot = (TTupleProtocol) prot;
       BitSet incoming = iprot.readBitSet(2);
       if (incoming.get(0)) {
-        struct.err = CorfuErrorCode.findByValue(iprot.readI32());
-        struct.setErrIsSet(true);
+        struct.hdr = new LogHeader();
+        struct.hdr.read(iprot);
+        struct.setHdrIsSet(true);
       }
       if (incoming.get(1)) {
-        struct.ctnt = iprot.readBinary();
+        {
+          org.apache.thrift.protocol.TList _list5 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
+          struct.ctnt = new ArrayList<ByteBuffer>(_list5.size);
+          for (int _i6 = 0; _i6 < _list5.size; ++_i6)
+          {
+            ByteBuffer _elem7; // required
+            _elem7 = iprot.readBinary();
+            struct.ctnt.add(_elem7);
+          }
+        }
         struct.setCtntIsSet(true);
       }
     }

@@ -107,7 +107,8 @@ public class CorfuStandaloneClientImpl implements com.microsoft.corfu.CorfuInter
 	 */
 	@Override
 	public /* synchronized */ long append(byte[] buf) throws CorfuException {
-		CorfuOffsetWrap r = null;
+		LogEntryWrap ctnt = new LogEntryWrap(null, ByteBuffer.wrap(buf));
+		LogHeader ret = null;
 		
 		if (buf == null) {
 			LOGGER.warn("append invoked with null buf");
@@ -120,24 +121,24 @@ public class CorfuStandaloneClientImpl implements com.microsoft.corfu.CorfuInter
 		}
 		
 		try {
-			r = crf.append(ByteBuffer.wrap(buf));
+			ret = crf.append(ctnt);
 		} catch (TException e) {
 			e.printStackTrace();
 			LOGGER.warn("append failed");
 			throw new CorfuException("append() failed");
 		}
 		
-		if (r.offerr == CorfuErrorCode.ERR_FULL) {
+		if (ret.err == CorfuErrorCode.ERR_FULL) {
 			LOGGER.warn("append failed, log is full");
 			throw new OutOfSpaceCorfuException("append() failed");
 		}
-		if (r.offerr == CorfuErrorCode.ERR_BADPARAM) {
+		if (ret.err == CorfuErrorCode.ERR_BADPARAM) {
 			LOGGER.warn("append was invoked with a bad parameter");
 			throw new BadParamCorfuException("append() failed due to bad parameter");
 		}
 		
-		LOGGER.trace("CorfuStandaloneClient.append completed at offset " + r.off);
-		return r.off;
+		LOGGER.trace("CorfuStandaloneClient.append completed at offset " + ret.off);
+		return ret.off;
 	}
 
 	/**
@@ -164,20 +165,21 @@ public class CorfuStandaloneClientImpl implements com.microsoft.corfu.CorfuInter
 	public /* synchronized */ byte[] read(long pos) throws CorfuException {
 		LOGGER.trace("read invoked for offset " + pos);
 
-		CorfuPayloadWrap ret = null;
+		LogEntryWrap ret = null;
+		LogHeader hdr = new LogHeader(pos, (short)1, null);
 		try {
-			ret = crf.read(pos);
+			ret = crf.read(hdr);
 		} catch (TException e) {
 			e.printStackTrace();
 			LOGGER.warn("read failed");
 			throw new CorfuException("read() failed");
 		}
 		
-		if (ret.err == CorfuErrorCode.ERR_TRIMMED) { 
+		if (ret.hdr.err == CorfuErrorCode.ERR_TRIMMED) { 
 			LOGGER.warn("read position " + pos + " failed because it has been trimmed");
 			throw new TrimmedCorfuException("read(" + pos + ") failed, trimmed");
 		}
-		if (ret.err == CorfuErrorCode.ERR_UNWRITTEN) { 
+		if (ret.hdr.err == CorfuErrorCode.ERR_UNWRITTEN) { 
 			LOGGER.warn("read position " + pos + " failed becauase it has not been written yet");
 			throw new UnwrittenCorfuException("read(" + pos + ") failed, unwritten");
 		}

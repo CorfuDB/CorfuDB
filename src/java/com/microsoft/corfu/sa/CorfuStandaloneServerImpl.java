@@ -12,8 +12,8 @@ import org.apache.thrift.TException;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.CorfuStandaloneClientImpl;
 import com.microsoft.corfu.CorfuErrorCode;
-import com.microsoft.corfu.CorfuOffsetWrap;
-import com.microsoft.corfu.CorfuPayloadWrap;
+import com.microsoft.corfu.LogEntryWrap;
+import com.microsoft.corfu.LogHeader;
 
 public class CorfuStandaloneServerImpl implements CorfuStandaloneServer.Iface {
 
@@ -28,44 +28,44 @@ public class CorfuStandaloneServerImpl implements CorfuStandaloneServer.Iface {
 	 * @see com.microsoft.corfu.sa.CorfuStandaloneServer.Iface#append(java.nio.ByteBuffer)
 	 */
 	@Override
-	synchronized public CorfuOffsetWrap append(ByteBuffer pload) throws TException {
+	synchronized public LogHeader append(LogEntryWrap ent) throws TException {
 		LOGGER.trace("append invoked; logtail at " + logtail);
-		if (pload == null) {
+		if (ent == null || ent.ctnt == null) {
 			LOGGER.warn("append invoked with null buffer");
-			return new CorfuOffsetWrap(CorfuErrorCode.ERR_BADPARAM, 0);
+			return new LogHeader(0, (short)0, CorfuErrorCode.ERR_BADPARAM);
 		}
-		if (pload.hasArray() && pload.array().length != ENTRYSIZE) { // do something, like throw exception
-			LOGGER.warn("append invoked with buffer of size " + pload.array().length + " : expected " + ENTRYSIZE);
-			return new CorfuOffsetWrap(CorfuErrorCode.ERR_BADPARAM, 0);
+		if (ent.ctnt.hasArray() && ent.ctnt.array().length != ENTRYSIZE) { // do something, like throw exception
+			LOGGER.warn("append invoked with buffer of size " + ent.ctnt.array().length + " : expected " + ENTRYSIZE);
+			return new LogHeader(0, (short)0, CorfuErrorCode.ERR_BADPARAM);
 		}
 		
 		if (inmemorylog.size() >= LOGSIZE) {
 			LOGGER.warn("append attempt when log is full");
-			return new CorfuOffsetWrap(CorfuErrorCode.ERR_FULL, 0);
+			return new LogHeader(0, (short)0, CorfuErrorCode.ERR_FULL);
 		}
 		
-		inmemorylog.add(pload);
+		inmemorylog.add(ent.ctnt);
 		LOGGER.trace("append completed; log has " + inmemorylog.size() + "entries; logtail=" + logtail);
-		return new CorfuOffsetWrap(CorfuErrorCode.OK, logtail++);
+		return new LogHeader(logtail++, (short)1, CorfuErrorCode.OK);
 	}
 	
-	synchronized public CorfuPayloadWrap read(long offset) {
+	synchronized public LogEntryWrap read(LogHeader hdr) {
 		// read beyond the log tail
-		LOGGER.trace("read invoked with offset " + offset);
-		if (offset >= logtail) {
-			LOGGER.warn("read attempt at offset " + offset + " is past the log tail " + logtail);
-			return new CorfuPayloadWrap(CorfuErrorCode.ERR_UNWRITTEN, null);
+		LOGGER.trace("read invoked with offset " + hdr.off);
+		if (hdr.off >= logtail) {
+			LOGGER.warn("read attempt at offset " + hdr.off + " is past the log tail " + logtail);
+			return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_UNWRITTEN), null);
 		}
 		
 		// read below the trim mark
-		if (offset < trimmark) {
-			System.out.println("read below trimmed mark" + offset);
-			LOGGER.warn("read attempt at offset " + offset + " is below the trimmed mark " + trimmark);
-			return new CorfuPayloadWrap(CorfuErrorCode.ERR_TRIMMED, null);
+		if (hdr.off < trimmark) {
+			System.out.println("read below trimmed mark" + hdr.off);
+			LOGGER.warn("read attempt at offset " + hdr.off + " is below the trimmed mark " + trimmark);
+			return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_TRIMMED), null);
 		}
 		
 		// read successful
-		return new CorfuPayloadWrap(CorfuErrorCode.OK, inmemorylog.get((int)(offset-trimmark)));
+		return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.OK), inmemorylog.get((int)(hdr.off-trimmark)));
 	}
 	
 	synchronized public long check() {
