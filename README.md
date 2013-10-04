@@ -25,6 +25,15 @@ lib/java/build/lib/*.jar
 
 =============================================================== 
 
+Bringing up Corfu:
+
+There must be a configuration file named 0.aux in your deployment directory. 
+It is an XML file; you may look at scripts/0.aux for an example. It is pretty self explanatory.
+
+scripts/runcorfu.ps1 contains a powershell script that automatically deploys corfu,
+based on the configuration description in 0.aux . Run 'runcofru.ps1 -push' to make sure any updates you introduce
+to binaries or to 0.aux are copies to all of the deployed machines.  
+
 =====================
 Installing Ant:
 =====================
