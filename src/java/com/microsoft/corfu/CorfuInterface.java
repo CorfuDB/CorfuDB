@@ -37,13 +37,6 @@ public interface CorfuInterface
 	public long check(boolean contiguous, boolean cached) throws CorfuException;
 
 	/**
-	 * Returns the maximum size of a Corfu entry
-	 *
-	 * @return		entry size
-	 */
-	public int entrysize() throws CorfuException;
-
-	/**
 	 * Appends an entry to the log.
 	 *
 	 * @param	buf	the buffer to append to the log

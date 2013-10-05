@@ -12,7 +12,7 @@ enum CorfuErrorCode {
 
 struct LogHeader {
 	1: i64 off,
-	2: i16 npages,
+	2: i32 ngrains,
 	3: CorfuErrorCode err,
 	}
 	

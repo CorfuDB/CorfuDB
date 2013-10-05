@@ -2,6 +2,7 @@ package com.microsoft.corfu.unittests;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.nio.ByteBuffer;
 import java.nio.channels.ShutdownChannelGroupException;
 import java.util.List;
 import java.util.Arrays;
@@ -20,7 +21,6 @@ import com.microsoft.corfu.CorfuErrorCode;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.CorfuExtendedInterface;
 import com.microsoft.corfu.CorfuInterface;
-import com.microsoft.corfu.CorfuStandaloneClientImpl;
 
 public class CorfuClientTester implements Runnable {
 
@@ -108,9 +108,9 @@ public class CorfuClientTester implements Runnable {
 		for (rpt = 0; rpt < nrepeat; rpt ++) {
 			try {
 				byte[] buf = new byte[entsize];
-				off = crf.forceappend(buf, entsize);
-				byte[] ret;
-				ret = crf.read(off);
+				off = crf.forceAppend(buf, entsize);
+				List<ByteBuffer> ret;
+				ret = crf.varRead(off, entsize);
 				if (rpt > 0 && rpt % printfreq == 0) {
 					int c = commulative.addAndGet(printfreq);
 					elapsetime = System.currentTimeMillis();
@@ -122,7 +122,7 @@ public class CorfuClientTester implements Runnable {
 				if (e.er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
 					System.out.println("+- " + myname + ":" + myid + "-+ repairing the log..");
 					try {
-						((CorfuExtendedInterface)crf).repairlog();
+						((CorfuExtendedInterface)crf).repairLog();
 					} catch (CorfuException e1) {
 						// TODO Auto-generated catch block
 						e1.printStackTrace();
