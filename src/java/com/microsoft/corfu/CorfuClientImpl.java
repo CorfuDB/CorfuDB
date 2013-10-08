@@ -214,7 +214,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		try {
 			offset = sequencer.nextpos(ctnt.size()); 
 			er = sunits[0].write(		
-					new LogEntryWrap(new LogHeader(offset, ctnt.size(), null), ctnt)
+					new LogEntryWrap(new LogHeader(offset, ctnt.size(), CorfuErrorCode.OK), ctnt)
 			);
 		} catch (TException e) {
 			e.printStackTrace();
@@ -252,7 +252,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		}
 		
 		try {
-			ret = sunits[0].read(new LogHeader(pos, numentries, null));
+			ret = sunits[0].read(new LogHeader(pos, numentries, CorfuErrorCode.OK));
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("read() failed");
@@ -315,8 +315,10 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		try {
 			offset = sequencer.nextpos(ctnt.size()); 
-			ent = new LogEntryWrap(new LogHeader(offset, ctnt.size(), null), ctnt);
+			ent = new LogEntryWrap(new LogHeader(offset, ctnt.size(), CorfuErrorCode.OK), ctnt);
+			System.out.println("before");
 			er = sunits[0].write(ent);
+			System.out.println("after");
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("forceappend() failed");
@@ -463,7 +465,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		try {
 			ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
 			wbufs.add(ByteBuffer.wrap(junkbytes));
-			er = sunits[0].write(new LogEntryWrap(new LogHeader(pos, 0, null), wbufs));
+			er = sunits[0].write(new LogEntryWrap(new LogHeader(pos, 0, CorfuErrorCode.OK), wbufs));
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("fill() failed");

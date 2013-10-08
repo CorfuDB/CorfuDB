@@ -98,6 +98,7 @@ public class CorfuClientTester implements Runnable {
 		
 		try {
 			crf = new CorfuClientImpl(CM);
+			System.out.println("first check(): " + crf.check());
 		} catch (CorfuException e3) {
 			System.out.println("cannot set client conenction, giving up");
 			e3.printStackTrace();
@@ -108,9 +109,10 @@ public class CorfuClientTester implements Runnable {
 		for (rpt = 0; rpt < nrepeat; rpt ++) {
 			try {
 				byte[] buf = new byte[entsize];
-				off = crf.forceAppend(buf, entsize);
+				// off = crf.forceAppend(buf, entsize);
+				off = crf.append(buf);
 				List<ByteBuffer> ret;
-				ret = crf.varRead(off, entsize);
+				ret = crf.varRead(rpt, entsize);
 				if (rpt > 0 && rpt % printfreq == 0) {
 					int c = commulative.addAndGet(printfreq);
 					elapsetime = System.currentTimeMillis();

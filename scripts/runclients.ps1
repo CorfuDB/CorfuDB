@@ -34,9 +34,8 @@ $tstjar=".\corfu-client.jar"
 $tstmainclass = "com.microsoft.corfu.unittests.CorfuClientTester"
 $nthreads=2
 $nrepeat=10000
-# $entsize=1048576
-$entsize = 128 * 1024  # 128K
-$printfreq = 10
+$entsize = 128 #               * 1024  # 128K
+$printfreq = 1
 
 [scriptblock]$sb = { $a = $args[0]; cd c:\users\$a\corfu-bin; java $args[1..($args.length-1)] }
  
