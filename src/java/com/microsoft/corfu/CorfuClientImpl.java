@@ -316,9 +316,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		try {
 			offset = sequencer.nextpos(ctnt.size()); 
 			ent = new LogEntryWrap(new LogHeader(offset, ctnt.size(), CorfuErrorCode.OK), ctnt);
-			System.out.println("before");
 			er = sunits[0].write(ent);
-			System.out.println("after");
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("forceappend() failed");

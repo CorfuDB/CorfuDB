@@ -109,8 +109,8 @@ public class CorfuClientTester implements Runnable {
 		for (rpt = 0; rpt < nrepeat; rpt ++) {
 			try {
 				byte[] buf = new byte[entsize];
-				// off = crf.forceAppend(buf, entsize);
-				off = crf.append(buf);
+				off = crf.forceAppend(buf, entsize);
+				// off = crf.varAppend(buf, entsize);
 				List<ByteBuffer> ret;
 				ret = crf.varRead(rpt, entsize);
 				if (rpt > 0 && rpt % printfreq == 0) {

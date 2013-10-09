@@ -23,7 +23,7 @@ import java.util.BitSet;
  * @author dalia
  *
  */
-public class MappedBufTester {
+public class MappedBufTesterB{
 
 	
 	public enum TESTMODE {
@@ -35,56 +35,45 @@ public class MappedBufTester {
 	static int RAMSIZE = BUFSIZE;
 	
 	static FileChannel DriveChannel = null;
-	static ArrayList<MappedByteBuffer> DriveMemoryMap = null;
-	
+	static MappedByteBuffer DriveMemoryMap = null;
+	static long DriveMapWindow = -1; // indicates the current drive "windows" mapped by DriveMemoryMap
 
-	static private MappedByteBuffer getStoreMap(long relOff) {
+	static private void getStoreMap(long relOff) {
 		
-		int mapind = (int) (relOff/(long)RAMSIZE);
-		if (mapind < 0) {
-			System.out.println("");
-			System.out.println("relOff=" + relOff + " RAMSIZE=" + RAMSIZE +
-					" (relOff/(long)RAMSIZE)=" + (relOff/(long)RAMSIZE) +
-					" (int)(relOff/(long)RAMSIZE)" + (int) (relOff/(long)RAMSIZE));
-		}
-		MappedByteBuffer mb  = null;
-		
-		if (DriveMemoryMap.size() <= mapind)
+		if (DriveMapWindow != (int) (relOff/(long)RAMSIZE))
 			try {
-				mb = DriveChannel.map(MapMode.READ_WRITE, relOff, RAMSIZE);
-				DriveMemoryMap.add(mapind, mb);
-				mb.load();
-				mb.rewind(); 
+				/* if (DriveMemoryMap != null) { DriveMemoryMap.force(); DriveMemoryMap.limit(0);  } */
+				DriveMemoryMap = DriveChannel.map(MapMode.READ_WRITE, relOff, RAMSIZE);
+				DriveMemoryMap.load();
+				DriveMemoryMap.rewind(); 
+				DriveMapWindow = (int) (relOff/(long)RAMSIZE);
 	
 			} catch (IOException e) {
 				System.out.println("failure to sync drive to memory");
 				e.printStackTrace();
 				System.exit(-1);
 			}
-		else
-			mb = DriveMemoryMap.get(mapind);
 
-		mb.position((int) (relOff % (long)RAMSIZE));
-		return mb;
+		DriveMemoryMap.position((int) (relOff % (long)RAMSIZE));
 	}
 
 	static private void RamToStore(long relOff, ByteBuffer buf) {
-		MappedByteBuffer mb = getStoreMap(relOff);
-		assert (mb.capacity() >= buf.capacity()); 
+		getStoreMap(relOff);
+		assert (DriveMemoryMap.capacity() >= buf.capacity()); 
 		buf.rewind();
-		mb.put(buf.array());
+		DriveMemoryMap.put(buf.array());
 	}
 	
 	static private void StoreToRam(long relOff, ByteBuffer buf)  {
 
-		MappedByteBuffer mb = getStoreMap(relOff);
+		getStoreMap(relOff);
 
 		if (!buf.hasArray()) 
 			buf.allocate(BUFSIZE);
-		assert (mb.capacity() >= buf.capacity()); 
+		assert (DriveMemoryMap.capacity() >= buf.capacity()); 
 
 		buf.rewind();
-		mb.get(buf.array());
+		DriveMemoryMap.get(buf.array());
 	}
 
 
@@ -129,10 +118,6 @@ public class MappedBufTester {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
-		DriveMemoryMap = new ArrayList<MappedByteBuffer>((int) (FILESIZE/RAMSIZE));
-		System.out.println(DriveMemoryMap.size() + " Mapped BybteBuffers");
-
 
 		for (int rpt = 0; rpt < 5; rpt++) {
 			runtest(TESTMODE.TSTWRITE);
