@@ -31,6 +31,23 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	public List<ByteBuffer> varRead(long pos, int reqsize) throws CorfuException;
 
 	/**
+	 * Reads the next multi-page log entry; it remembers the last entry read, starting with zero.
+	 * 
+	 * @return              list of ByteBuffers, one for each read entry
+	 * @throws CorfuException
+	 */
+	public List<ByteBuffer> varReadnext() throws CorfuException;
+
+	/**
+	 * a variant of varReadnext that takes the first log-offset position to read next entry from.
+	 * 
+	 * @param pos           starting position to read
+	 * @return              list of ByteBuffers, one for each read entry
+	 * @throws CorfuException
+	 */
+	public List<ByteBuffer> varReadnext(long pos) throws CorfuException;
+
+	/**
 	 * Appends a list of log-entries (rather than one). Entries will be written to consecutive log offsets.
 	 *
 	 * @param ctnt          list of ByteBuffers to be written

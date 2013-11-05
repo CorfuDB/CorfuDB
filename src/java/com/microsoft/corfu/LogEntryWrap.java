@@ -33,8 +33,9 @@ import org.slf4j.LoggerFactory;
 public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEntryWrap._Fields>, java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("LogEntryWrap");
 
-  private static final org.apache.thrift.protocol.TField HDR_FIELD_DESC = new org.apache.thrift.protocol.TField("hdr", org.apache.thrift.protocol.TType.STRUCT, (short)1);
-  private static final org.apache.thrift.protocol.TField CTNT_FIELD_DESC = new org.apache.thrift.protocol.TField("ctnt", org.apache.thrift.protocol.TType.LIST, (short)2);
+  private static final org.apache.thrift.protocol.TField ERR_FIELD_DESC = new org.apache.thrift.protocol.TField("err", org.apache.thrift.protocol.TType.I32, (short)1);
+  private static final org.apache.thrift.protocol.TField NEXTINF_FIELD_DESC = new org.apache.thrift.protocol.TField("nextinf", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+  private static final org.apache.thrift.protocol.TField CTNT_FIELD_DESC = new org.apache.thrift.protocol.TField("ctnt", org.apache.thrift.protocol.TType.LIST, (short)3);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
@@ -42,13 +43,23 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
     schemes.put(TupleScheme.class, new LogEntryWrapTupleSchemeFactory());
   }
 
-  public LogHeader hdr; // required
+  /**
+   * 
+   * @see CorfuErrorCode
+   */
+  public CorfuErrorCode err; // required
+  public MetaInfo nextinf; // required
   public List<ByteBuffer> ctnt; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-    HDR((short)1, "hdr"),
-    CTNT((short)2, "ctnt");
+    /**
+     * 
+     * @see CorfuErrorCode
+     */
+    ERR((short)1, "err"),
+    NEXTINF((short)2, "nextinf"),
+    CTNT((short)3, "ctnt");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -63,9 +74,11 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
      */
     public static _Fields findByThriftId(int fieldId) {
       switch(fieldId) {
-        case 1: // HDR
-          return HDR;
-        case 2: // CTNT
+        case 1: // ERR
+          return ERR;
+        case 2: // NEXTINF
+          return NEXTINF;
+        case 3: // CTNT
           return CTNT;
         default:
           return null;
@@ -110,8 +123,10 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-    tmpMap.put(_Fields.HDR, new org.apache.thrift.meta_data.FieldMetaData("hdr", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, LogHeader.class)));
+    tmpMap.put(_Fields.ERR, new org.apache.thrift.meta_data.FieldMetaData("err", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, CorfuErrorCode.class)));
+    tmpMap.put(_Fields.NEXTINF, new org.apache.thrift.meta_data.FieldMetaData("nextinf", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, MetaInfo.class)));
     tmpMap.put(_Fields.CTNT, new org.apache.thrift.meta_data.FieldMetaData("ctnt", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
             new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING            , "LogPayload"))));
@@ -123,11 +138,13 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
   }
 
   public LogEntryWrap(
-    LogHeader hdr,
+    CorfuErrorCode err,
+    MetaInfo nextinf,
     List<ByteBuffer> ctnt)
   {
     this();
-    this.hdr = hdr;
+    this.err = err;
+    this.nextinf = nextinf;
     this.ctnt = ctnt;
   }
 
@@ -135,8 +152,11 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
    * Performs a deep copy on <i>other</i>.
    */
   public LogEntryWrap(LogEntryWrap other) {
-    if (other.isSetHdr()) {
-      this.hdr = new LogHeader(other.hdr);
+    if (other.isSetErr()) {
+      this.err = other.err;
+    }
+    if (other.isSetNextinf()) {
+      this.nextinf = new MetaInfo(other.nextinf);
     }
     if (other.isSetCtnt()) {
       List<ByteBuffer> __this__ctnt = new ArrayList<ByteBuffer>();
@@ -153,31 +173,64 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
 
   @Override
   public void clear() {
-    this.hdr = null;
+    this.err = null;
+    this.nextinf = null;
     this.ctnt = null;
   }
 
-  public LogHeader getHdr() {
-    return this.hdr;
+  /**
+   * 
+   * @see CorfuErrorCode
+   */
+  public CorfuErrorCode getErr() {
+    return this.err;
   }
 
-  public LogEntryWrap setHdr(LogHeader hdr) {
-    this.hdr = hdr;
+  /**
+   * 
+   * @see CorfuErrorCode
+   */
+  public LogEntryWrap setErr(CorfuErrorCode err) {
+    this.err = err;
     return this;
   }
 
-  public void unsetHdr() {
-    this.hdr = null;
+  public void unsetErr() {
+    this.err = null;
   }
 
-  /** Returns true if field hdr is set (has been assigned a value) and false otherwise */
-  public boolean isSetHdr() {
-    return this.hdr != null;
+  /** Returns true if field err is set (has been assigned a value) and false otherwise */
+  public boolean isSetErr() {
+    return this.err != null;
   }
 
-  public void setHdrIsSet(boolean value) {
+  public void setErrIsSet(boolean value) {
     if (!value) {
-      this.hdr = null;
+      this.err = null;
+    }
+  }
+
+  public MetaInfo getNextinf() {
+    return this.nextinf;
+  }
+
+  public LogEntryWrap setNextinf(MetaInfo nextinf) {
+    this.nextinf = nextinf;
+    return this;
+  }
+
+  public void unsetNextinf() {
+    this.nextinf = null;
+  }
+
+  /** Returns true if field nextinf is set (has been assigned a value) and false otherwise */
+  public boolean isSetNextinf() {
+    return this.nextinf != null;
+  }
+
+  public void setNextinfIsSet(boolean value) {
+    if (!value) {
+      this.nextinf = null;
     }
   }
 
@@ -222,11 +275,19 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
 
   public void setFieldValue(_Fields field, Object value) {
     switch (field) {
-    case HDR:
+    case ERR:
       if (value == null) {
-        unsetHdr();
+        unsetErr();
       } else {
-        setHdr((LogHeader)value);
+        setErr((CorfuErrorCode)value);
+      }
+      break;
+
+    case NEXTINF:
+      if (value == null) {
+        unsetNextinf();
+      } else {
+        setNextinf((MetaInfo)value);
       }
       break;
 
@@ -243,8 +304,11 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
 
   public Object getFieldValue(_Fields field) {
     switch (field) {
-    case HDR:
-      return getHdr();
+    case ERR:
+      return getErr();
+
+    case NEXTINF:
+      return getNextinf();
 
     case CTNT:
       return getCtnt();
@@ -260,8 +324,10 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
     }
 
     switch (field) {
-    case HDR:
-      return isSetHdr();
+    case ERR:
+      return isSetErr();
+    case NEXTINF:
+      return isSetNextinf();
     case CTNT:
       return isSetCtnt();
     }
@@ -281,12 +347,21 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
     if (that == null)
       return false;
 
-    boolean this_present_hdr = true && this.isSetHdr();
-    boolean that_present_hdr = true && that.isSetHdr();
-    if (this_present_hdr || that_present_hdr) {
-      if (!(this_present_hdr && that_present_hdr))
+    boolean this_present_err = true && this.isSetErr();
+    boolean that_present_err = true && that.isSetErr();
+    if (this_present_err || that_present_err) {
+      if (!(this_present_err && that_present_err))
         return false;
-      if (!this.hdr.equals(that.hdr))
+      if (!this.err.equals(that.err))
+        return false;
+    }
+
+    boolean this_present_nextinf = true && this.isSetNextinf();
+    boolean that_present_nextinf = true && that.isSetNextinf();
+    if (this_present_nextinf || that_present_nextinf) {
+      if (!(this_present_nextinf && that_present_nextinf))
+        return false;
+      if (!this.nextinf.equals(that.nextinf))
         return false;
     }
 
@@ -315,12 +390,22 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
     int lastComparison = 0;
     LogEntryWrap typedOther = (LogEntryWrap)other;
 
-    lastComparison = Boolean.valueOf(isSetHdr()).compareTo(typedOther.isSetHdr());
+    lastComparison = Boolean.valueOf(isSetErr()).compareTo(typedOther.isSetErr());
     if (lastComparison != 0) {
       return lastComparison;
     }
-    if (isSetHdr()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.hdr, typedOther.hdr);
+    if (isSetErr()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.err, typedOther.err);
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+    }
+    lastComparison = Boolean.valueOf(isSetNextinf()).compareTo(typedOther.isSetNextinf());
+    if (lastComparison != 0) {
+      return lastComparison;
+    }
+    if (isSetNextinf()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.nextinf, typedOther.nextinf);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -355,11 +440,19 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
     StringBuilder sb = new StringBuilder("LogEntryWrap(");
     boolean first = true;
 
-    sb.append("hdr:");
-    if (this.hdr == null) {
+    sb.append("err:");
+    if (this.err == null) {
       sb.append("null");
     } else {
-      sb.append(this.hdr);
+      sb.append(this.err);
+    }
+    first = false;
+    if (!first) sb.append(", ");
+    sb.append("nextinf:");
+    if (this.nextinf == null) {
+      sb.append("null");
+    } else {
+      sb.append(this.nextinf);
     }
     first = false;
     if (!first) sb.append(", ");
@@ -377,8 +470,8 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
   public void validate() throws org.apache.thrift.TException {
     // check for required fields
     // check for sub-struct validity
-    if (hdr != null) {
-      hdr.validate();
+    if (nextinf != null) {
+      nextinf.validate();
     }
   }
 
@@ -416,16 +509,24 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
           break;
         }
         switch (schemeField.id) {
-          case 1: // HDR
-            if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
-              struct.hdr = new LogHeader();
-              struct.hdr.read(iprot);
-              struct.setHdrIsSet(true);
+          case 1: // ERR
+            if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
+              struct.err = CorfuErrorCode.findByValue(iprot.readI32());
+              struct.setErrIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 2: // CTNT
+          case 2: // NEXTINF
+            if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
+              struct.nextinf = new MetaInfo();
+              struct.nextinf.read(iprot);
+              struct.setNextinfIsSet(true);
+            } else { 
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+            }
+            break;
+          case 3: // CTNT
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
                 org.apache.thrift.protocol.TList _list0 = iprot.readListBegin();
@@ -458,9 +559,14 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
       struct.validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
-      if (struct.hdr != null) {
-        oprot.writeFieldBegin(HDR_FIELD_DESC);
-        struct.hdr.write(oprot);
+      if (struct.err != null) {
+        oprot.writeFieldBegin(ERR_FIELD_DESC);
+        oprot.writeI32(struct.err.getValue());
+        oprot.writeFieldEnd();
+      }
+      if (struct.nextinf != null) {
+        oprot.writeFieldBegin(NEXTINF_FIELD_DESC);
+        struct.nextinf.write(oprot);
         oprot.writeFieldEnd();
       }
       if (struct.ctnt != null) {
@@ -493,15 +599,21 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
     public void write(org.apache.thrift.protocol.TProtocol prot, LogEntryWrap struct) throws org.apache.thrift.TException {
       TTupleProtocol oprot = (TTupleProtocol) prot;
       BitSet optionals = new BitSet();
-      if (struct.isSetHdr()) {
+      if (struct.isSetErr()) {
         optionals.set(0);
       }
-      if (struct.isSetCtnt()) {
+      if (struct.isSetNextinf()) {
         optionals.set(1);
       }
-      oprot.writeBitSet(optionals, 2);
-      if (struct.isSetHdr()) {
-        struct.hdr.write(oprot);
+      if (struct.isSetCtnt()) {
+        optionals.set(2);
+      }
+      oprot.writeBitSet(optionals, 3);
+      if (struct.isSetErr()) {
+        oprot.writeI32(struct.err.getValue());
+      }
+      if (struct.isSetNextinf()) {
+        struct.nextinf.write(oprot);
       }
       if (struct.isSetCtnt()) {
         {
@@ -517,13 +629,17 @@ public class LogEntryWrap implements org.apache.thrift.TBase<LogEntryWrap, LogEn
     @Override
     public void read(org.apache.thrift.protocol.TProtocol prot, LogEntryWrap struct) throws org.apache.thrift.TException {
       TTupleProtocol iprot = (TTupleProtocol) prot;
-      BitSet incoming = iprot.readBitSet(2);
+      BitSet incoming = iprot.readBitSet(3);
       if (incoming.get(0)) {
-        struct.hdr = new LogHeader();
-        struct.hdr.read(iprot);
-        struct.setHdrIsSet(true);
+        struct.err = CorfuErrorCode.findByValue(iprot.readI32());
+        struct.setErrIsSet(true);
       }
       if (incoming.get(1)) {
+        struct.nextinf = new MetaInfo();
+        struct.nextinf.read(iprot);
+        struct.setNextinfIsSet(true);
+      }
+      if (incoming.get(2)) {
         {
           org.apache.thrift.protocol.TList _list5 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
           struct.ctnt = new ArrayList<ByteBuffer>(_list5.size);

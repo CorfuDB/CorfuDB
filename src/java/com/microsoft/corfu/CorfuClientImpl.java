@@ -182,7 +182,6 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		throw new CorfuException("append with variable size is depracated; use varAppend instead");
 	}
 	
-
 	/**
 	 * Appends a variable-length entry to the log. 
 	 * Breaks the entry into fixed-size buffers, and invokes varappend(List<ByteBuffer>);
@@ -193,11 +192,16 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 */
 	@Override
 	public long varAppend(byte[] buf, int reqsize) throws CorfuException {
+		return varAppend(buf, reqsize, false);
+	}
+
+	long varAppend(byte[] buf, int reqsize, boolean force) throws CorfuException {
+
 		int numents = (int)(reqsize/grainsize());
 		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>(numents);
 		for (int i = 0; i < numents; i++)
 			wbufs.add(ByteBuffer.wrap(buf, i*grainsize(), grainsize()));
-		return varAppend(wbufs);
+		return varAppend(wbufs, force);
 	}
 	
 	/**
@@ -207,23 +211,42 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @return              the first log-offset of the written range 
 	 * @throws CorfuException
 	 */
+	@Override
 	public long varAppend(List<ByteBuffer> ctnt) throws CorfuException {
+		return varAppend(ctnt, false);
+	}
+	
+	long varAppend(List<ByteBuffer> ctnt, boolean force) throws CorfuException {
 		long offset = -1;
 		CorfuErrorCode er = null;
+		MetaInfo inf = new MetaInfo(offset, offset+ctnt.size());
 		
 		try {
 			offset = sequencer.nextpos(ctnt.size()); 
-			er = sunits[0].write(		
-					new LogEntryWrap(new LogHeader(offset, ctnt.size(), CorfuErrorCode.OK), ctnt)
-			);
+			er = sunits[0].write(offset, ctnt, inf);
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("append() failed");
 		}
 		
+		if (er.equals(CorfuErrorCode.ERR_FULL) && force) {
+			try {
+				long ckoff = checkpointLoc();
+				long contigoff = check(true, true);
+				if (ckoff > contigoff) repairLog(true, ckoff);
+				
+                System.out.println("LOG FULL! forceappend trimming to " + ckoff);
+				trim(ckoff);
+				er = sunits[0].write(offset, ctnt, inf);
+			} catch (Exception e) {
+				e.printStackTrace();
+				throw new CorfuException("forceappend() failed");
+			}
+		} 
+		
 		if (er.equals(CorfuErrorCode.ERR_FULL)) {
-			throw new OutOfSpaceCorfuException("append() failed: full");
-		} else 
+			throw new OverwriteCorfuException("append() failed: full");
+		} else
 		if (er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
 			throw new OverwriteCorfuException("append() failed: overwritten");
 		} else
@@ -233,6 +256,30 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		return offset;
 	}
+
+	/**
+	 * Like append, but if the log is full, trims to the latest checkpoint-mark and retries
+	 * 
+	 * If successful, this method will not leave a hole in the log. 
+	 * Conversely, calling append() with a failure, then trim() + append(), will leave a hole, 
+	 * because the token assigned for append() the first time goes unused.
+	 *  
+	 * @param buf buffer to be written
+	 * @param bufsize number of bytes to be written out of 'buf'
+	 * @return
+	 */
+	@Override
+	public long forceAppend(byte[] buf, int bufsize) throws CorfuException {
+		return varAppend(buf, bufsize, true);
+	}	
+	
+	@Override
+	public long forceAppend(List<ByteBuffer> ctnt) throws CorfuException {
+		return varAppend(ctnt, true);
+	}
+	
+	boolean nextreadflag = false;
+	MetaInfo nextinf = new MetaInfo();
 
 	/**
 	 * Reads a range of log-entries (rather than one).
@@ -246,114 +293,79 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		LogEntryWrap ret;
 		int numentries = (int) (reqsize / grainsize()); 
+		MetaInfo inf = new MetaInfo(pos, pos+numentries);
 		
 		if (reqsize % grainsize() != 0) {
 			throw new BadParamCorfuException("varread expects size which is an integer multiple of grainsize");
 		}
 		
 		try {
-			ret = sunits[0].read(new LogHeader(pos, numentries, CorfuErrorCode.OK));
+			ret = sunits[0].read(new LogHeader(pos, numentries, true, inf.metaLastOff+1, CorfuErrorCode.OK), inf);
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("read() failed");
 		}
 
-		if (ret.hdr.err.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
+		if (ret.err.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
 			throw new UnwrittenCorfuException("read(" + pos +") failed: unwritten");
 		} else 
-		if (ret.hdr.err.equals(CorfuErrorCode.ERR_TRIMMED)) {
+		if (ret.err.equals(CorfuErrorCode.ERR_TRIMMED)) {
 			throw new TrimmedCorfuException("read(" + pos +") failed: trimmed");
 		} else
-		if (ret.hdr.err.equals(CorfuErrorCode.ERR_BADPARAM)) {
+		if (ret.err.equals(CorfuErrorCode.ERR_BADPARAM)) {
 			throw new OutOfSpaceCorfuException("read(" + pos +") failed: bad parameter");
 		} 
 
+		nextinf = ret.nextinf.deepCopy();
+		if (nextinf.equals(inf)) { // indicate next meta-info was not available for reading
+			nextreadflag = false;
+		} else {
+			nextreadflag = true;
+		}
 		return ret.ctnt;
 	}
+	
+	public List<ByteBuffer> varReadnext() throws CorfuException {
+		if (!nextreadflag) 
+			return varReadnext(nextinf.metaLastOff+1);
+		else
+			return varReadnext(nextinf.metaFirstOff);
+	}
+
+	/**
+	 * a variant of varReadnext that takes the first log-offset position to read next entry from.
+	 * 
+	 * @param pos           starting position to read
+	 * @return              list of ByteBuffers, one for each read entry
+	 * @throws CorfuException
+	 */
+	public List<ByteBuffer> varReadnext(long pos) throws CorfuException {
+		LogEntryWrap ret;
+		if (nextinf.metaFirstOff != pos) { // otherwise, we already have the meta-info for this position
+			try {
+				ret = sunits[0].readmeta(pos);
+			} catch (TException e) {
+				e.printStackTrace();
+				throw new CorfuException("readmeta() failed");
+			}
+			if (ret.err.equals(CorfuErrorCode.ERR_UNWRITTEN)) { // indicate next meta-info was not available for reading
+				throw new UnwrittenCorfuException("read(" + pos +") failed: unwritten");
+			} else {
+				nextinf = ret.nextinf.deepCopy();
+				nextreadflag = true;
+			}
+		}
+		return varRead(nextinf.metaFirstOff, (int)( nextinf.metaLastOff-nextinf.metaFirstOff));
+	}
+
+	
 	
 	/**
 	 * @return starting offset at the log of last (successful) checkpoint
 	 */
 	public long checkpointLoc() throws CorfuException { return check(false); // TODO!!!
 	}
-	
-	/**
-	 * Like append, but if the log is full, trims to the latest checkpoint-mark and retries
-	 * 
-	 * If successful, this method will not leave a hole in the log. 
-	 * Conversely, calling append() with a failure, then trim() + append(), will leave a hole, 
-	 * because the token assigned for append() the first time goes unused.
-	 *  
-	 * @param buf buffer to be written
-	 * @param bufsize number of bytes to be written out of 'buf'
-	 * @return
-	 */
-	public long forceAppend(byte[] buf, int bufsize) throws CorfuException {
-		int numents = bufsize/grainsize();
-		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>(numents);
-		for (int i = 0; i < numents; i++)
-			wbufs.add(ByteBuffer.wrap(buf, i*grainsize(), grainsize()));
-		return forceAppend(wbufs);
-	}
-
-	/**
-	 * Like varAppend, but if the log is full, trims to the latest checkpoint-mark (and possibly fills 
-	 * holes to make the log contiguous up to that point). It then retries
-	 * 
-	 * If successful, this method will not leave a hole in the log. 
-	 * Conversely, calling append() with a failure, then trim() + append(), will leave a hole, 
-	 * because the token assigned for append() the first time goes unused.
-	 *  
-	 * @param ctnt    list of requested buffers to append
-	 * @return        the first log offset of the consecutively appended range
-	 */
-	public long forceAppend(List<ByteBuffer> ctnt) throws CorfuException {
-		long offset = -1;
-		CorfuErrorCode er = null;
-		LogEntryWrap ent = null;
-	
-		
-		try {
-			offset = sequencer.nextpos(ctnt.size()); 
-			ent = new LogEntryWrap(new LogHeader(offset, ctnt.size(), CorfuErrorCode.OK), ctnt);
-			System.out.println("before");
-			er = sunits[0].write(ent);
-			System.out.println("after");
-		} catch (TException e) {
-			e.printStackTrace();
-			throw new CorfuException("forceappend() failed");
-		}
-		
-		if (er.equals(CorfuErrorCode.ERR_FULL)) {
-			try {
-				long ckoff = checkpointLoc();
-				long contigoff = check(true, true);
-				if (ckoff > contigoff) repairLog(true, ckoff);
-				
-                System.out.println("LOG FULL! forceappend trimming to " + ckoff);
-				trim(ckoff);
-				er = sunits[0].write(ent);
-			} catch (Exception e) {
-				e.printStackTrace();
-				throw new CorfuException("forceappend() failed");
-			}
-		} 
-
-		if (er.equals(CorfuErrorCode.ERR_FULL)) {
-			throw new OutOfSpaceCorfuException("forceappend() failed: full");
-		} else 
-		if (er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
-			throw new OverwriteCorfuException("forceappend() failed: overwritten");
-		} else
-		if (er.equals(CorfuErrorCode.ERR_BADPARAM)) {
-			throw new BadParamCorfuException("forceappend() failed: bad parameter passed");
-		} 
-		return offset;
-		
-	}
-
-	
-	
+			
 	/**
 	 * Reads an entry from the log. This is a safe read; any returned
 	 * entry is guaranteed to be persistent and visible to other clients.
@@ -465,7 +477,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		try {
 			ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
 			wbufs.add(ByteBuffer.wrap(junkbytes));
-			er = sunits[0].write(new LogEntryWrap(new LogHeader(pos, 0, CorfuErrorCode.OK), wbufs));
+			er = sunits[0].write(pos, wbufs, new MetaInfo(pos, pos));
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("fill() failed");

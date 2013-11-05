@@ -35,7 +35,9 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
 
   private static final org.apache.thrift.protocol.TField OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("off", org.apache.thrift.protocol.TType.I64, (short)1);
   private static final org.apache.thrift.protocol.TField NGRAINS_FIELD_DESC = new org.apache.thrift.protocol.TField("ngrains", org.apache.thrift.protocol.TType.I32, (short)2);
-  private static final org.apache.thrift.protocol.TField ERR_FIELD_DESC = new org.apache.thrift.protocol.TField("err", org.apache.thrift.protocol.TType.I32, (short)3);
+  private static final org.apache.thrift.protocol.TField READNEXT_FIELD_DESC = new org.apache.thrift.protocol.TField("readnext", org.apache.thrift.protocol.TType.BOOL, (short)3);
+  private static final org.apache.thrift.protocol.TField NEXTOFF_FIELD_DESC = new org.apache.thrift.protocol.TField("nextoff", org.apache.thrift.protocol.TType.I64, (short)4);
+  private static final org.apache.thrift.protocol.TField ERR_FIELD_DESC = new org.apache.thrift.protocol.TField("err", org.apache.thrift.protocol.TType.I32, (short)5);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
@@ -45,6 +47,8 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
 
   public long off; // required
   public int ngrains; // required
+  public boolean readnext; // required
+  public long nextoff; // required
   /**
    * 
    * @see CorfuErrorCode
@@ -55,11 +59,13 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
     OFF((short)1, "off"),
     NGRAINS((short)2, "ngrains"),
+    READNEXT((short)3, "readnext"),
+    NEXTOFF((short)4, "nextoff"),
     /**
      * 
      * @see CorfuErrorCode
      */
-    ERR((short)3, "err");
+    ERR((short)5, "err");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -78,7 +84,11 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
           return OFF;
         case 2: // NGRAINS
           return NGRAINS;
-        case 3: // ERR
+        case 3: // READNEXT
+          return READNEXT;
+        case 4: // NEXTOFF
+          return NEXTOFF;
+        case 5: // ERR
           return ERR;
         default:
           return null;
@@ -122,6 +132,8 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
   // isset id assignments
   private static final int __OFF_ISSET_ID = 0;
   private static final int __NGRAINS_ISSET_ID = 1;
+  private static final int __READNEXT_ISSET_ID = 2;
+  private static final int __NEXTOFF_ISSET_ID = 3;
   private byte __isset_bitfield = 0;
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
@@ -130,6 +142,10 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
     tmpMap.put(_Fields.NGRAINS, new org.apache.thrift.meta_data.FieldMetaData("ngrains", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
+    tmpMap.put(_Fields.READNEXT, new org.apache.thrift.meta_data.FieldMetaData("readnext", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.BOOL)));
+    tmpMap.put(_Fields.NEXTOFF, new org.apache.thrift.meta_data.FieldMetaData("nextoff", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
     tmpMap.put(_Fields.ERR, new org.apache.thrift.meta_data.FieldMetaData("err", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, CorfuErrorCode.class)));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
@@ -142,6 +158,8 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
   public LogHeader(
     long off,
     int ngrains,
+    boolean readnext,
+    long nextoff,
     CorfuErrorCode err)
   {
     this();
@@ -149,6 +167,10 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     setOffIsSet(true);
     this.ngrains = ngrains;
     setNgrainsIsSet(true);
+    this.readnext = readnext;
+    setReadnextIsSet(true);
+    this.nextoff = nextoff;
+    setNextoffIsSet(true);
     this.err = err;
   }
 
@@ -159,6 +181,8 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     __isset_bitfield = other.__isset_bitfield;
     this.off = other.off;
     this.ngrains = other.ngrains;
+    this.readnext = other.readnext;
+    this.nextoff = other.nextoff;
     if (other.isSetErr()) {
       this.err = other.err;
     }
@@ -174,6 +198,10 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     this.off = 0;
     setNgrainsIsSet(false);
     this.ngrains = 0;
+    setReadnextIsSet(false);
+    this.readnext = false;
+    setNextoffIsSet(false);
+    this.nextoff = 0;
     this.err = null;
   }
 
@@ -221,6 +249,52 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
 
   public void setNgrainsIsSet(boolean value) {
     __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __NGRAINS_ISSET_ID, value);
+  }
+
+  public boolean isReadnext() {
+    return this.readnext;
+  }
+
+  public LogHeader setReadnext(boolean readnext) {
+    this.readnext = readnext;
+    setReadnextIsSet(true);
+    return this;
+  }
+
+  public void unsetReadnext() {
+    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __READNEXT_ISSET_ID);
+  }
+
+  /** Returns true if field readnext is set (has been assigned a value) and false otherwise */
+  public boolean isSetReadnext() {
+    return EncodingUtils.testBit(__isset_bitfield, __READNEXT_ISSET_ID);
+  }
+
+  public void setReadnextIsSet(boolean value) {
+    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __READNEXT_ISSET_ID, value);
+  }
+
+  public long getNextoff() {
+    return this.nextoff;
+  }
+
+  public LogHeader setNextoff(long nextoff) {
+    this.nextoff = nextoff;
+    setNextoffIsSet(true);
+    return this;
+  }
+
+  public void unsetNextoff() {
+    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __NEXTOFF_ISSET_ID);
+  }
+
+  /** Returns true if field nextoff is set (has been assigned a value) and false otherwise */
+  public boolean isSetNextoff() {
+    return EncodingUtils.testBit(__isset_bitfield, __NEXTOFF_ISSET_ID);
+  }
+
+  public void setNextoffIsSet(boolean value) {
+    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __NEXTOFF_ISSET_ID, value);
   }
 
   /**
@@ -273,6 +347,22 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
       }
       break;
 
+    case READNEXT:
+      if (value == null) {
+        unsetReadnext();
+      } else {
+        setReadnext((Boolean)value);
+      }
+      break;
+
+    case NEXTOFF:
+      if (value == null) {
+        unsetNextoff();
+      } else {
+        setNextoff((Long)value);
+      }
+      break;
+
     case ERR:
       if (value == null) {
         unsetErr();
@@ -292,6 +382,12 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     case NGRAINS:
       return Integer.valueOf(getNgrains());
 
+    case READNEXT:
+      return Boolean.valueOf(isReadnext());
+
+    case NEXTOFF:
+      return Long.valueOf(getNextoff());
+
     case ERR:
       return getErr();
 
@@ -310,6 +406,10 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
       return isSetOff();
     case NGRAINS:
       return isSetNgrains();
+    case READNEXT:
+      return isSetReadnext();
+    case NEXTOFF:
+      return isSetNextoff();
     case ERR:
       return isSetErr();
     }
@@ -344,6 +444,24 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
       if (!(this_present_ngrains && that_present_ngrains))
         return false;
       if (this.ngrains != that.ngrains)
+        return false;
+    }
+
+    boolean this_present_readnext = true;
+    boolean that_present_readnext = true;
+    if (this_present_readnext || that_present_readnext) {
+      if (!(this_present_readnext && that_present_readnext))
+        return false;
+      if (this.readnext != that.readnext)
+        return false;
+    }
+
+    boolean this_present_nextoff = true;
+    boolean that_present_nextoff = true;
+    if (this_present_nextoff || that_present_nextoff) {
+      if (!(this_present_nextoff && that_present_nextoff))
+        return false;
+      if (this.nextoff != that.nextoff)
         return false;
     }
 
@@ -392,6 +510,26 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
         return lastComparison;
       }
     }
+    lastComparison = Boolean.valueOf(isSetReadnext()).compareTo(typedOther.isSetReadnext());
+    if (lastComparison != 0) {
+      return lastComparison;
+    }
+    if (isSetReadnext()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.readnext, typedOther.readnext);
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+    }
+    lastComparison = Boolean.valueOf(isSetNextoff()).compareTo(typedOther.isSetNextoff());
+    if (lastComparison != 0) {
+      return lastComparison;
+    }
+    if (isSetNextoff()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.nextoff, typedOther.nextoff);
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+    }
     lastComparison = Boolean.valueOf(isSetErr()).compareTo(typedOther.isSetErr());
     if (lastComparison != 0) {
       return lastComparison;
@@ -428,6 +566,14 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     if (!first) sb.append(", ");
     sb.append("ngrains:");
     sb.append(this.ngrains);
+    first = false;
+    if (!first) sb.append(", ");
+    sb.append("readnext:");
+    sb.append(this.readnext);
+    first = false;
+    if (!first) sb.append(", ");
+    sb.append("nextoff:");
+    sb.append(this.nextoff);
     first = false;
     if (!first) sb.append(", ");
     sb.append("err:");
@@ -498,7 +644,23 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 3: // ERR
+          case 3: // READNEXT
+            if (schemeField.type == org.apache.thrift.protocol.TType.BOOL) {
+              struct.readnext = iprot.readBool();
+              struct.setReadnextIsSet(true);
+            } else { 
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+            }
+            break;
+          case 4: // NEXTOFF
+            if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
+              struct.nextoff = iprot.readI64();
+              struct.setNextoffIsSet(true);
+            } else { 
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+            }
+            break;
+          case 5: // ERR
             if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
               struct.err = CorfuErrorCode.findByValue(iprot.readI32());
               struct.setErrIsSet(true);
@@ -526,6 +688,12 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
       oprot.writeFieldEnd();
       oprot.writeFieldBegin(NGRAINS_FIELD_DESC);
       oprot.writeI32(struct.ngrains);
+      oprot.writeFieldEnd();
+      oprot.writeFieldBegin(READNEXT_FIELD_DESC);
+      oprot.writeBool(struct.readnext);
+      oprot.writeFieldEnd();
+      oprot.writeFieldBegin(NEXTOFF_FIELD_DESC);
+      oprot.writeI64(struct.nextoff);
       oprot.writeFieldEnd();
       if (struct.err != null) {
         oprot.writeFieldBegin(ERR_FIELD_DESC);
@@ -556,15 +724,27 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
       if (struct.isSetNgrains()) {
         optionals.set(1);
       }
-      if (struct.isSetErr()) {
+      if (struct.isSetReadnext()) {
         optionals.set(2);
       }
-      oprot.writeBitSet(optionals, 3);
+      if (struct.isSetNextoff()) {
+        optionals.set(3);
+      }
+      if (struct.isSetErr()) {
+        optionals.set(4);
+      }
+      oprot.writeBitSet(optionals, 5);
       if (struct.isSetOff()) {
         oprot.writeI64(struct.off);
       }
       if (struct.isSetNgrains()) {
         oprot.writeI32(struct.ngrains);
+      }
+      if (struct.isSetReadnext()) {
+        oprot.writeBool(struct.readnext);
+      }
+      if (struct.isSetNextoff()) {
+        oprot.writeI64(struct.nextoff);
       }
       if (struct.isSetErr()) {
         oprot.writeI32(struct.err.getValue());
@@ -574,7 +754,7 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     @Override
     public void read(org.apache.thrift.protocol.TProtocol prot, LogHeader struct) throws org.apache.thrift.TException {
       TTupleProtocol iprot = (TTupleProtocol) prot;
-      BitSet incoming = iprot.readBitSet(3);
+      BitSet incoming = iprot.readBitSet(5);
       if (incoming.get(0)) {
         struct.off = iprot.readI64();
         struct.setOffIsSet(true);
@@ -584,6 +764,14 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
         struct.setNgrainsIsSet(true);
       }
       if (incoming.get(2)) {
+        struct.readnext = iprot.readBool();
+        struct.setReadnextIsSet(true);
+      }
+      if (incoming.get(3)) {
+        struct.nextoff = iprot.readI64();
+        struct.setNextoffIsSet(true);
+      }
+      if (incoming.get(4)) {
         struct.err = CorfuErrorCode.findByValue(iprot.readI32());
         struct.setErrIsSet(true);
       }

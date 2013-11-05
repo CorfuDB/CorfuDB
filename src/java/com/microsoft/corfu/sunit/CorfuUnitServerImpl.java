@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -11,17 +12,14 @@ import java.nio.channels.FileChannel.MapMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.List;
 
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
-import com.microsoft.corfu.CorfuConfigManager;
-import com.microsoft.corfu.CorfuErrorCode;
-import com.microsoft.corfu.CorfuNode;
-import com.microsoft.corfu.LogEntryWrap;
-import com.microsoft.corfu.LogHeader;
+import com.microsoft.corfu.*;
 import com.microsoft.corfu.sunit.CorfuUnitServer;
 import com.microsoft.corfu.sunit.CorfuUnitServer.Iface;
 import com.microsoft.corfu.sunit.CorfuUnitServer.Processor;
@@ -30,15 +28,17 @@ import com.sun.xml.internal.bind.v2.runtime.reflect.ListIterator;
 
 public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
-	private static int UNITCAPACITY; // capacity in ENTRYSIZE units, i.e. UNITCAPACITY*ENTRYSIZE bytes
+	private static long UNITCAPACITY; // capacity in ENTRYSIZE units, i.e. UNITCAPACITY*ENTRYSIZE bytes
 	private static int ENTRYSIZE;
 	private static int PORT;
 	private static String DRIVENAME = null;
 	private static boolean RAMMODE = false;
 	private static int RAMSIZE = -1; // RAM buffer capacity in ENTRYSIZE units, i.e. RAMSIZE*ENTRYSIZE bytes
-	private static final int MAXRAMSIZE = 4 * 1024 * 1024 * 1024; 
+	private static final int MAXRAMSIZE = 2 * 1024 * 1024 * 1024; // this size is in bytes
 
 	private ArrayList<ByteBuffer> inmemoryStore;
+		
+	private MetaInfo[] inmemoryMeta; // store for the meta data which would go at the end of each disk-block
 	private BitSet storeMap;
 	private int contiguoustail = 0;
 	private long trimmark = 0; // log has been trimmed up to this position, non-inclusive
@@ -55,7 +55,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		int sid = -1;
 		ENTRYSIZE = CM.getGrain();
 		UNITCAPACITY = CM.getUnitsize(); 
-		RAMSIZE = Math.min(UNITCAPACITY, MAXRAMSIZE/ENTRYSIZE);
+		RAMSIZE = (int) Math.min(UNITCAPACITY, (long) (MAXRAMSIZE/ENTRYSIZE));
 
 		for (int i = 0; i < args.length; ) {
 			if (args[i].startsWith("-rammode")) {
@@ -133,7 +133,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 				RandomAccessFile f = new RandomAccessFile(DRIVENAME, "rw");
 				f.setLength(UNITCAPACITY * ENTRYSIZE);
 				DriveChannel = f.getChannel();
-				DriveMap = new ArrayList<MappedByteBuffer>(UNITCAPACITY*ENTRYSIZE/RAMSIZE); 
+				DriveMap = new ArrayList<MappedByteBuffer>((int) (UNITCAPACITY*ENTRYSIZE/RAMSIZE)); 
 			} catch (FileNotFoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -143,23 +143,25 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			}
 		}
 		else {	
-			inmemoryStore = new ArrayList<ByteBuffer>(UNITCAPACITY*ENTRYSIZE/RAMSIZE); 
+			inmemoryStore = new ArrayList<ByteBuffer>((int) UNITCAPACITY); 
+			inmemoryMeta = new MetaInfo[(int) UNITCAPACITY];
 		}
 		
-		storeMap = new BitSet(UNITCAPACITY);
+		storeMap = new BitSet((int) UNITCAPACITY); // TODO if UNITCAPACITY is more than MAXINT, 
+													// make storeMap a list of bitmaps, each one of MAXINT size
 	}
 	
 
-	private MappedByteBuffer getStoreMap(int relOff) {
-		System.out.println("getStoreMap(" + relOff + ")");
+	private MappedByteBuffer getStoreMap(long relOff) {
+		// System.out.println("getStoreMap(" + relOff + ")");
 		
-		int mapind = relOff/RAMSIZE;
+		int mapind = (int) (relOff/RAMSIZE);
 		MappedByteBuffer mb  = null;
 		
-		System.out.println("  mapind=" + mapind);
+		// System.out.println("  mapind=" + mapind);
 		
 		if (DriveMap.size() <= mapind) {
-			System.out.println("  allocate new memory mapped buffer");
+			// System.out.println("  allocate new memory mapped buffer");
 			try {
 				mb = DriveChannel.map(MapMode.READ_WRITE, relOff*ENTRYSIZE, RAMSIZE*ENTRYSIZE);
 				DriveMap.add(mapind, mb);
@@ -175,42 +177,56 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		else
 			mb = DriveMap.get(mapind);
 
-		mb.position((relOff % RAMSIZE) * ENTRYSIZE);
+		mb.position(((int) (relOff % RAMSIZE)) * ENTRYSIZE);
 
-		System.out.println("getStoreMap relOff=" + relOff);
-		System.out.println("  mapind=" + mapind);
-		System.out.println("inmemStore.size()=" + inmemoryStore.size());
-		System.out.println("mb.position()=" + mb.position());
+		// System.out.println("getStoreMap relOff=" + relOff);
+		// System.out.println("  mapind=" + mapind);
+		// System.out.println("inmemStore.size()=" + inmemoryStore.size());
+		// System.out.println("mb.position()=" + mb.position());
 	
 		return mb;
 	}
 
-	private void RamToStore(int relOff, ByteBuffer buf) {
-		System.out.println("RamToStore( " + relOff + ")");
-		System.out.println("  RAMMODE=" + RAMMODE);
+	private void RamToStore(long relOff, ByteBuffer buf, MetaInfo inf) {
+		// System.out.println("RamToStore( " + relOff + ")");
+		// System.out.println("  RAMMODE=" + RAMMODE);
+		
 		if (RAMMODE) {
 			if (inmemoryStore.size() > relOff) {
-				System.out.println("  replace existing Buff at pos");
-				inmemoryStore.set(relOff, buf);
+				// System.out.println("  replace existing Buff at pos");
+				inmemoryStore.set((int) relOff, buf);
 			}
 			else {
-				System.out.println("  add new Buff at pos");
-				System.out.println("  buf.capacity " + buf.capacity());
-				inmemoryStore.add(relOff, buf);
+				// System.out.println("  add new Buff at pos");
+				// System.out.println("  buf.capacity " + buf.capacity());
+				inmemoryStore.add((int) relOff, buf);
 			}
+			inmemoryMeta[(int)relOff] = inf; 
 		}
 		else {
 			MappedByteBuffer mb = getStoreMap(relOff);
-			assert (mb.capacity() >= buf.capacity()); 
+			assert (mb.capacity() >= buf.capacity() + 8); // 8 == sizeof long, ugh 
 			buf.rewind();
 			mb.put(buf.array());
+			mb.putLong(inf.metaFirstOff);
+			mb.putLong(inf.metaLastOff);
 		}
 	}
 	
-	private MappedByteBuffer StoreToRam(int relOff)  {
+	private ByteBuffer StoreToRam(long relOff, MetaInfo inf)  {
 
-		MappedByteBuffer mb = getStoreMap(relOff);
-		return mb;
+		if (RAMMODE) {
+			assert(inmemoryStore.size() > relOff);
+			inf = inmemoryMeta[(int)relOff];
+			return inmemoryStore.get((int)relOff);
+		}
+		else {
+			MappedByteBuffer mb = getStoreMap(relOff);
+			ByteBuffer rb = ByteBuffer.wrap(mb.array(), mb.position(), ENTRYSIZE);
+			inf.setMetaFirstOff(mb.getLong());
+			inf.setMetaLastOff(mb.getLong());
+			return rb;
+		}
 	}
 
 	
@@ -222,21 +238,11 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 * this means that we first check if all the pages to be written are free, and that the incoming entry contains content for each page.
 	 * in the event of some error in the middle, we reset any values we already set.
 	 */
-	synchronized public CorfuErrorCode write(LogEntryWrap ent) throws org.apache.thrift.TException {
-		try {
-			System.out.println("CorfuUnitServer.write()");
-			// throw new Exception();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		
+	synchronized public CorfuErrorCode write(long fromOff, List<ByteBuffer> ctnt, MetaInfo inf) throws org.apache.thrift.TException {
 		ByteBuffer bb;
-		long fromOff = ent.hdr.off, toOff = (fromOff + ent.ctnt.size());
-		System.out.println("  from,to:" + fromOff + " " + toOff);
+		long toOff = (fromOff + ctnt.size());
+		// System.out.println("  from,to:" + fromOff + " " + toOff);
 		
-		java.util.ListIterator<ByteBuffer> li = ent.ctnt.listIterator();
-
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		// from here until the next '^^^^..' mark : 
 		// code to verify that there is room to write the entire multi-page entry in one shot, and not overwrite any filled pages
@@ -251,18 +257,18 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			return CorfuErrorCode.ERR_OVERWRITE; 
 		}
 
-		int relFromOff = (int)(fromOff % UNITCAPACITY), relToOff = (int)(toOff % UNITCAPACITY);
-		System.out.println("rel from,to:" + relFromOff + " " + relToOff);
+		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
+		// System.out.println("rel from,to:" + relFromOff + " " + relToOff);
 
 		if (relToOff > relFromOff) {
-			int i = storeMap.nextSetBit(relFromOff);
+			int i = storeMap.nextSetBit((int) relFromOff);
 			if (i >= 0 && i < relToOff) { // we expect the next set bit to be higher than ToOff, or none at all
 				System.out.println("attempt to overwrite! offset=" + 
 						(fromOff+i) + "with range [" + fromOff + ".." + toOff + "]");
 				return CorfuErrorCode.ERR_OVERWRITE; 
 			}
 		} else {   // range wraps around the array
-			int i = storeMap.nextSetBit(relFromOff); 
+			int i = storeMap.nextSetBit((int) relFromOff); 
 			if (i >= 0) { // we expect no bit higher than FromOff to be set, hence for i to be -1
 				System.out.println("attempt to overwrite! offset=" + 
 						(fromOff+i) + "with range [" + fromOff + ".." + toOff + "]");
@@ -277,50 +283,117 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		
+		java.util.ListIterator<ByteBuffer> li = ctnt.listIterator();
+
 		if (relToOff < relFromOff) {
-			storeMap.set(relFromOff , UNITCAPACITY);
-			for (int off = relFromOff; off < UNITCAPACITY; off++) {
+			storeMap.set((int) relFromOff , (int) UNITCAPACITY);
+			for (long off = relFromOff; off < UNITCAPACITY; off++) {
 				assert li.hasNext();
 				bb = li.next();
 				assert bb.capacity() == ENTRYSIZE;
-				RamToStore(off, bb);
+				RamToStore(off, bb, inf);
 			}
 			relFromOff = 0;
 		}
 		
-		storeMap.set(relFromOff , relToOff);
-		for (int off = relFromOff; off < relToOff; off++) {
-			System.out.println("  writing offset to store: " + off);
+		storeMap.set((int) relFromOff , (int) relToOff);
+		for (long off = relFromOff; off < relToOff; off++) {
+			// System.out.println("  writing offset to store: " + off);
 			assert li.hasNext();
 			bb = li.next();
 			assert bb.capacity() == ENTRYSIZE;
-			RamToStore(off, bb);
+			RamToStore(off, bb, inf);
 		}
 		return CorfuErrorCode.OK; 
     }
 
-
-	synchronized public LogEntryWrap read(LogHeader hdr) throws org.apache.thrift.TException {
-		// System.out.println("CorfuUnitServer check invoked");
-		if ((hdr.off - trimmark) >= UNITCAPACITY) {
-			System.out.println("read past end of storage unit: " + hdr.off);
-			return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_UNWRITTEN), null);
+	class returnhelper {
+		LogEntryWrap retval;
+		public returnhelper(CorfuErrorCode er, long fromOff, long toOff, long badOff) {
+			retval = new LogEntryWrap(er, null, null);
+			System.out.println("error reading offset " + badOff);
+			System.out.println(" from range [" + fromOff + ".." + toOff + "]");
+			System.out.println(" error val=" + er);
 		}
-		if (hdr.off < trimmark) {
-			System.out.println("read below trimmed mark: " + hdr.off);
-			return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_TRIMMED), null);
+	} 
+	
+	/* (non-Javadoc)
+	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#read(com.microsoft.corfu.LogHeader, com.microsoft.corfu.MetaInfo)
+	 */
+	synchronized public LogEntryWrap read(LogHeader hdr, MetaInfo inf) throws org.apache.thrift.TException {
+
+		long fromOff = hdr.off, toOff = fromOff + hdr.ngrains;
+		
+		// check that we can satisfy this request in full, up to '^^^^^^^^^^^^^' mark
+		//
+		
+		if ((toOff - trimmark) >= UNITCAPACITY) 
+			return new returnhelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, toOff).retval;
+		
+		if (fromOff < trimmark)
+			return new returnhelper(CorfuErrorCode.ERR_TRIMMED, fromOff, toOff, fromOff).retval;
+		
+		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
+
+		if (relToOff > relFromOff) {
+			int i = storeMap.nextClearBit((int) relFromOff);
+			if (i < relToOff)  // we expect the next clear bit to be higher than ToOff, or none at all
+				return new returnhelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+i ).retval;
+			
+		} else {   // range wraps around the array
+			int i = storeMap.nextClearBit((int) relFromOff); 
+			if (i < (int) UNITCAPACITY)  // we expect no bit higher than FromOff to be clear, hence for i to be UNITCAPACITY
+				return new returnhelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+i ).retval;
+
+			i = storeMap.nextClearBit(0); 
+			if (i < relToOff)  // we expect the next clear bit from wraparound origin to be higher than ToOff, or none
+				return new returnhelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+i ).retval;
+
+		}
+		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		
+		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
+		MetaInfo ckinf = new MetaInfo();
+		
+		if (relToOff < relFromOff) {
+			for (long off = relFromOff; off < UNITCAPACITY; off++) {
+				wbufs.add(StoreToRam(off, ckinf));
+				if (!ckinf.equals(inf)) 
+					return new returnhelper(CorfuErrorCode.ERR_BADPARAM, fromOff, toOff, fromOff+off ).retval;
+			}
+			relFromOff = 0;
 		}
 		
-		int relOffset = (int) (hdr.off % UNITCAPACITY);
-		if (!storeMap.get(relOffset)) {
-			System.out.println("attempt to read unwritten entry" + hdr.off);
-			return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_UNWRITTEN), null);
+		for (long off = relFromOff; off < relToOff; off++) {
+			wbufs.add(StoreToRam(off, ckinf));
+			if (!ckinf.equals(inf)) 
+				return new returnhelper(CorfuErrorCode.ERR_BADPARAM, fromOff, toOff, fromOff+off ).retval;
 		}
-	
-		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
-		wbufs.add(inmemoryStore.get(relOffset));
 
-		return new LogEntryWrap(new LogHeader(hdr.off, (short)0, CorfuErrorCode.OK), wbufs);
+		if (hdr.readnext && (hdr.nextoff - trimmark) < UNITCAPACITY && storeMap.get((int) (hdr.nextoff % UNITCAPACITY)) ) {
+			StoreToRam(hdr.nextoff % UNITCAPACITY, ckinf); // TODO read only the meta-info here
+			return new LogEntryWrap(CorfuErrorCode.OK, ckinf, wbufs); 
+		} else {
+			return new LogEntryWrap(CorfuErrorCode.OK, inf, wbufs);
+		}
+	}
+	
+	/* read the meta-info record at specified offset
+	 * 
+	 * @param off- the offset to read from
+	 * @return the meta-info record "wrapped" in LogEntryWrap. 
+	 *         The wrapping contains error code: UNWRITTEN if reading beyond the tail of the log
+	 * 
+	 * (non-Javadoc)
+	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#readmeta(long)
+	 */
+	public LogEntryWrap readmeta(long off) {
+		MetaInfo ret = new MetaInfo();
+		if ((off - trimmark) < UNITCAPACITY && storeMap.get((int) (off % UNITCAPACITY)) ) {
+			StoreToRam(off % UNITCAPACITY, ret); // TODO read only the meta-info here
+			return new LogEntryWrap(CorfuErrorCode.OK, ret, null);
+	} else 
+		return new returnhelper(CorfuErrorCode.ERR_UNWRITTEN, off, off, off ).retval;
 	}
 
 	synchronized public long check() throws org.apache.thrift.TException {
@@ -331,7 +404,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			if (candidateA >= 0) return (long) (trimmark + UNITCAPACITY - (a-1-candidateA));
 		}
 		
-		int candidateB = storeMap.previousSetBit(UNITCAPACITY-1);
+		int candidateB = storeMap.previousSetBit((int)UNITCAPACITY-1);
 		if (candidateB >= 0) return (long) (trimmark + (candidateB+1-a));
 		
 		return trimmark;
@@ -369,7 +442,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
     	if (newRelTrim > curRelTrim) {
     		storeMap.clear(curRelTrim, newRelTrim);
     	} else {
-    		storeMap.clear(curRelTrim, UNITCAPACITY);
+    		storeMap.clear(curRelTrim, (int)UNITCAPACITY);
     		storeMap.clear(0, newRelTrim);
     	}
     	trimmark = mark;
