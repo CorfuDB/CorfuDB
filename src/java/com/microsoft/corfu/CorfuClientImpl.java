@@ -339,28 +339,9 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @return              list of ByteBuffers, one for each read entry
 	 * @throws CorfuException
 	 */
-<<<<<<< HEAD
 	public List<ByteBuffer> varReadnext(long pos) throws CorfuException {
 		LogEntryWrap ret;
 		if (nextinf.metaFirstOff != pos) { // otherwise, we already have the meta-info for this position
-=======
-	public long forceAppend(List<ByteBuffer> ctnt) throws CorfuException {
-		long offset = -1;
-		CorfuErrorCode er = null;
-		LogEntryWrap ent = null;
-	
-		
-		try {
-			offset = sequencer.nextpos(ctnt.size()); 
-			ent = new LogEntryWrap(new LogHeader(offset, ctnt.size(), CorfuErrorCode.OK), ctnt);
-			er = sunits[0].write(ent);
-		} catch (TException e) {
-			e.printStackTrace();
-			throw new CorfuException("forceappend() failed");
-		}
-		
-		if (er.equals(CorfuErrorCode.ERR_FULL)) {
->>>>>>> cd039ef9a39cdda6996015655191f6a2ba5d8d61
 			try {
 				ret = sunits[0].readmeta(pos);
 			} catch (TException e) {

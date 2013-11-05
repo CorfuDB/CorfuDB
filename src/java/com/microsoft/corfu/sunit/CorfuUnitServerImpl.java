@@ -143,12 +143,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			}
 		}
 		else {	
-<<<<<<< HEAD
 			inmemoryStore = new ArrayList<ByteBuffer>((int) UNITCAPACITY); 
 			inmemoryMeta = new MetaInfo[(int) UNITCAPACITY];
-=======
-			inmemoryStore = new ArrayList<ByteBuffer>((int) (UNITCAPACITY*ENTRYSIZE/RAMSIZE)); 
->>>>>>> cd039ef9a39cdda6996015655191f6a2ba5d8d61
 		}
 		
 		storeMap = new BitSet((int) UNITCAPACITY); // TODO if UNITCAPACITY is more than MAXINT, 
@@ -191,16 +187,10 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		return mb;
 	}
 
-<<<<<<< HEAD
 	private void RamToStore(long relOff, ByteBuffer buf, MetaInfo inf) {
 		// System.out.println("RamToStore( " + relOff + ")");
 		// System.out.println("  RAMMODE=" + RAMMODE);
 		
-=======
-	private void RamToStore(long relOff, ByteBuffer buf) {
-		// System.out.println("RamToStore( " + relOff + ")");
-		// System.out.println("  RAMMODE=" + RAMMODE);
->>>>>>> cd039ef9a39cdda6996015655191f6a2ba5d8d61
 		if (RAMMODE) {
 			if (inmemoryStore.size() > relOff) {
 				// System.out.println("  replace existing Buff at pos");
@@ -223,30 +213,19 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}
 	}
 	
-<<<<<<< HEAD
 	private ByteBuffer StoreToRam(long relOff, MetaInfo inf)  {
 
 		if (RAMMODE) {
 			assert(inmemoryStore.size() > relOff);
 			inf = inmemoryMeta[(int)relOff];
-=======
-	private ByteBuffer StoreToRam(long relOff)  {
-
-		if (RAMMODE) {
-			assert(inmemoryStore.size() > relOff);
->>>>>>> cd039ef9a39cdda6996015655191f6a2ba5d8d61
 			return inmemoryStore.get((int)relOff);
 		}
 		else {
 			MappedByteBuffer mb = getStoreMap(relOff);
-<<<<<<< HEAD
 			ByteBuffer rb = ByteBuffer.wrap(mb.array(), mb.position(), ENTRYSIZE);
 			inf.setMetaFirstOff(mb.getLong());
 			inf.setMetaLastOff(mb.getLong());
 			return rb;
-=======
-			return ByteBuffer.wrap(mb.array(), mb.position(), ENTRYSIZE);
->>>>>>> cd039ef9a39cdda6996015655191f6a2ba5d8d61
 		}
 	}
 
@@ -259,15 +238,9 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 * this means that we first check if all the pages to be written are free, and that the incoming entry contains content for each page.
 	 * in the event of some error in the middle, we reset any values we already set.
 	 */
-<<<<<<< HEAD
 	synchronized public CorfuErrorCode write(long fromOff, List<ByteBuffer> ctnt, MetaInfo inf) throws org.apache.thrift.TException {
 		ByteBuffer bb;
 		long toOff = (fromOff + ctnt.size());
-=======
-	synchronized public CorfuErrorCode write(LogEntryWrap ent) throws org.apache.thrift.TException {
-		ByteBuffer bb;
-		long fromOff = ent.hdr.off, toOff = (fromOff + ent.ctnt.size());
->>>>>>> cd039ef9a39cdda6996015655191f6a2ba5d8d61
 		// System.out.println("  from,to:" + fromOff + " " + toOff);
 		
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -376,16 +349,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			if (i < relToOff)  // we expect the next clear bit from wraparound origin to be higher than ToOff, or none
 				return new returnhelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+i ).retval;
 
-<<<<<<< HEAD
-=======
-	synchronized public LogEntryWrap read(LogHeader hdr) throws org.apache.thrift.TException {
-
-		long fromOff = hdr.off, toOff = fromOff + hdr.ngrains;
-		
-		if ((hdr.off - trimmark) >= UNITCAPACITY) {
-			System.out.println("read past end of storage unit: " + hdr.off);
-			return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_UNWRITTEN), null);
->>>>>>> cd039ef9a39cdda6996015655191f6a2ba5d8d61
 		}
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		
@@ -401,7 +364,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			relFromOff = 0;
 		}
 		
-<<<<<<< HEAD
 		for (long off = relFromOff; off < relToOff; off++) {
 			wbufs.add(StoreToRam(off, ckinf));
 			if (!ckinf.equals(inf)) 
@@ -432,46 +394,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			return new LogEntryWrap(CorfuErrorCode.OK, ret, null);
 	} else 
 		return new returnhelper(CorfuErrorCode.ERR_UNWRITTEN, off, off, off ).retval;
-=======
-		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
-
-		if (relToOff > relFromOff) {
-			int i = storeMap.nextClearBit((int) relFromOff);
-			if (i < relToOff) { // we expect the next clear bit to be higher than ToOff, or none at all
-				System.out.println("attempt read unwritten entry! offset=" + 
-						(fromOff+i) + "with range [" + fromOff + ".." + toOff + "]");
-				return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_UNWRITTEN), null);
-			}
-		} else {   // range wraps around the array
-			int i = storeMap.nextClearBit((int) relFromOff); 
-			if (i < (int) UNITCAPACITY) { // we expect no bit higher than FromOff to be clear, hence for i to be UNITCAPACITY
-				System.out.println("attempt to read unwritten entry ! offset=" + 
-						(fromOff+i) + "with range [" + fromOff + ".." + toOff + "]");
-				return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_UNWRITTEN), null);
-			}
-			i = storeMap.nextClearBit(0); 
-			if (i < relToOff) { // we expect the next clear bit from wraparound origin to be higher than ToOff, or none
-				System.out.println("attempt to read unwritten entry ! offset=" + 
-						(fromOff+i) + "with range [" + fromOff + ".." + toOff + "]");
-				return new LogEntryWrap(new LogHeader(0, (short)0, CorfuErrorCode.ERR_UNWRITTEN), null);
-			}
-		}
-		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-		
-		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
-		if (relToOff < relFromOff) {
-			for (long off = relFromOff; off < UNITCAPACITY; off++) {
-				wbufs.add(StoreToRam(off));
-			}
-			relFromOff = 0;
-		}
-		
-		for (long off = relFromOff; off < relToOff; off++) {
-			wbufs.add(StoreToRam(off));
-		}
-
-		return new LogEntryWrap(hdr, wbufs);
->>>>>>> cd039ef9a39cdda6996015655191f6a2ba5d8d61
 	}
 
 	synchronized public long check() throws org.apache.thrift.TException {
