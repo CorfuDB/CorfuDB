@@ -219,11 +219,12 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	long varAppend(List<ByteBuffer> ctnt, boolean force) throws CorfuException {
 		long offset = -1;
 		CorfuErrorCode er = null;
-		MetaInfo inf = new MetaInfo(offset, offset+ctnt.size());
+		MetaInfo inf;
 		
 		try {
 			offset = sequencer.nextpos(ctnt.size()); 
-			er = sunits[0].write(offset, ctnt, inf);
+			inf  = new MetaInfo(offset, offset+ctnt.size());
+			er = sunits[0].write(inf, ctnt);
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("append() failed");
@@ -237,7 +238,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 				
                 System.out.println("LOG FULL! forceappend trimming to " + ckoff);
 				trim(ckoff);
-				er = sunits[0].write(offset, ctnt, inf);
+				er = sunits[0].write(inf, ctnt);
 			} catch (Exception e) {
 				e.printStackTrace();
 				throw new CorfuException("forceappend() failed");
@@ -279,44 +280,38 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	}
 	
 	boolean nextreadflag = false;
-	MetaInfo nextinf = new MetaInfo();
+	MetaInfo nextinf = new MetaInfo(-1, -1);
 
 	/**
-	 * Reads a range of log-entries (rather than one).
+	 * Reads a range of log-pages belonging to one entry.
 	 * 
 	 * @param pos           starting position to read
 	 * @param numentries    number of log entries to read
 	 * @return              list of ByteBuffers, one for each read entry
 	 * @throws CorfuException
 	 */
-	public List<ByteBuffer> varRead(long pos, int reqsize) throws CorfuException {
+	public List<ByteBuffer> varRead(MetaInfo inf) throws CorfuException {
 		
 		LogEntryWrap ret;
-		int numentries = (int) (reqsize / grainsize()); 
-		MetaInfo inf = new MetaInfo(pos, pos+numentries);
-		
-		if (reqsize % grainsize() != 0) {
-			throw new BadParamCorfuException("varread expects size which is an integer multiple of grainsize");
-		}
 		
 		try {
-			ret = sunits[0].read(new LogHeader(pos, numentries, true, inf.metaLastOff+1, CorfuErrorCode.OK), inf);
+			ret = sunits[0].read(new LogHeader(inf, true, inf.metaLastOff+1, CorfuErrorCode.OK));
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("read() failed");
 		}
 
 		if (ret.err.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
-			throw new UnwrittenCorfuException("read(" + pos +") failed: unwritten");
+			throw new UnwrittenCorfuException("read(" + inf +") failed: unwritten");
 		} else 
 		if (ret.err.equals(CorfuErrorCode.ERR_TRIMMED)) {
-			throw new TrimmedCorfuException("read(" + pos +") failed: trimmed");
+			throw new TrimmedCorfuException("read(" + inf +") failed: trimmed");
 		} else
 		if (ret.err.equals(CorfuErrorCode.ERR_BADPARAM)) {
-			throw new OutOfSpaceCorfuException("read(" + pos +") failed: bad parameter");
+			throw new OutOfSpaceCorfuException("read(" + inf +") failed: bad parameter");
 		} 
 
-		nextinf = ret.nextinf.deepCopy();
+		nextinf = ret.nextinf;
 		if (nextinf.equals(inf)) { // indicate next meta-info was not available for reading
 			nextreadflag = false;
 		} else {
@@ -324,12 +319,12 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		}
 		return ret.ctnt;
 	}
-	
+		
 	public List<ByteBuffer> varReadnext() throws CorfuException {
 		if (!nextreadflag) 
 			return varReadnext(nextinf.metaLastOff+1);
 		else
-			return varReadnext(nextinf.metaFirstOff);
+			return varRead(nextinf);
 	}
 
 	/**
@@ -351,11 +346,11 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			if (ret.err.equals(CorfuErrorCode.ERR_UNWRITTEN)) { // indicate next meta-info was not available for reading
 				throw new UnwrittenCorfuException("read(" + pos +") failed: unwritten");
 			} else {
-				nextinf = ret.nextinf.deepCopy();
-				nextreadflag = true;
+				nextinf = ret.nextinf;
 			}
 		}
-		return varRead(nextinf.metaFirstOff, (int)( nextinf.metaLastOff-nextinf.metaFirstOff));
+		// System.out.println("varReadnext range " + nextinf);
+		return varRead(nextinf);
 	}
 
 	
@@ -367,7 +362,9 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	}
 			
 	/**
-	 * Reads an entry from the log. This is a safe read; any returned
+	 * Reads a single-page entry from the log.
+	 * 
+	 * This is a safe read; any returned
 	 * entry is guaranteed to be persistent and visible to other clients.
 	 *
 	 * @param	pos	log position to read
@@ -375,7 +372,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 */	
 	@Override
 	public byte[] read(long pos) throws CorfuException {
-		List<ByteBuffer> ret = varRead(pos, grainsize());
+		MetaInfo inf = new MetaInfo(pos, pos);
+		List<ByteBuffer> ret = varRead(inf);
 		if (! ret.get(0).hasArray()) {
 			throw new CorfuException("read() cannot extract byte array");
 		}		
@@ -465,19 +463,22 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	}
 	
 	/**
-	 * Fills a hole in the log, either completing a torn write or writing the supplied junk value.
+	 * Fills a hole in the log. An entire multi-page entry will be junked.
 	 *
 	 * @param	pos	log position to fill
-	 * @param	junkbytes	junk value to fill entry with
+	 * @param	a junk buffer (ignored)
 	 */
 	@Override
 	public void fill(long pos, byte[] junkbytes) throws CorfuException {
+		fill(new MetaInfo(pos, pos));
+	}
+	
+	public void fill(MetaInfo inf) throws CorfuException {
 		CorfuErrorCode er;
 		
+		inf.setMetaLastOff(-inf.getMetaLastOff());
 		try {
-			ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
-			wbufs.add(ByteBuffer.wrap(junkbytes));
-			er = sunits[0].write(pos, wbufs, new MetaInfo(pos, pos));
+			er = sunits[0].fill(inf);
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("fill() failed");
@@ -485,14 +486,14 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		if (er.equals(CorfuErrorCode.ERR_FULL)) {
 			// this should never happen, the client invoking this fill is at fault here!
-			throw new OutOfSpaceCorfuException("fill(" + pos +") failed: full");
+			throw new OutOfSpaceCorfuException("fill(" + inf +") failed: full");
 		} else 
 		if (er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
 			// this may be a good thing!
-			throw new OverwriteCorfuException("fill(" + pos +") failed (may be a good sign!): overwritten");
+			throw new OverwriteCorfuException("fill(" + inf +") failed (may be a good sign!): overwritten");
 		} else
 		if (er.equals(CorfuErrorCode.ERR_BADPARAM)) {
-			throw new BadParamCorfuException("fill(" + pos +") failed: bad parameter passed");
+			throw new BadParamCorfuException("fill(" + inf +") failed: bad parameter passed");
 		} 
 	}
 	
@@ -507,21 +508,21 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 */
 	@Override
 	public List<ByteBuffer> forceRead(long pos) throws CorfuException {
-		return forceRead(pos, grainsize());
+		return forceVarRead(new MetaInfo(pos, pos));
 	}
 	
-	public List<ByteBuffer> forceRead(long pos, int reqsize) throws CorfuException {
+	@Override
+	public List<ByteBuffer> forceVarRead(MetaInfo inf) throws CorfuException {
 
 		List<ByteBuffer> ret = null;
 		boolean tryrepeat = true;
 		
 		while (true) {
 			try {
-				ret = varRead(pos, reqsize);
+				ret = varRead(inf);
 			} catch (UnwrittenCorfuException e) {
 				try {
-					byte[] buf = new byte[4096];
-					fill(pos, buf);
+					fill(inf);
 				} catch (OverwriteCorfuException e1) {
 					// This is good, means the entry has been written meanwhile!
 					if (!tryrepeat) {
@@ -568,8 +569,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 				byte[] ret = read(contig_tail);
 			} catch (UnwrittenCorfuException e) {
 				try {
-					byte[] buf = new byte[4096];
-					fill(contig_tail, buf);
+					fill(contig_tail, null);
 				} catch (OverwriteCorfuException e01) {
 					// This is good, means the entry has been written meanwhile!
 				} catch (TrimmedCorfuException e02) {

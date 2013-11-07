@@ -10,37 +10,42 @@ import java.util.ArrayList;
 
 import com.microsoft.corfu.LogHeader;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class Junk {
-	int a , b;
-	class foo {
-		Junk j;
-		int bar;
-	}
-	
-	static void foo(ArrayList<ByteBuffer> p, com.microsoft.corfu.LogHeader R) {
-		p.add(ByteBuffer.allocate(50));
-		R.off = 1; R.ngrains = 1;
+	static class info {
+		public info(int a, int b) {
+			super();
+			this.a = a;
+			this.b = b;
+		}
+
+		int a, b;
+		
+		public info(info another) {
+			this.a = another.a;
+			this.b = another.b;
+		}
 	}
 
+	static void foo(info inf) {
+		info newinf = new info(1, 5);
+		inf = new info(newinf);
+	}
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) throws Exception {
 		// TODO Auto-generated method stub
+		Logger log = LoggerFactory.getLogger(Junk.class);
 		
-		MetaInfo inf = new MetaInfo();
-		LogEntryWrap le = new LogEntryWrap(CorfuErrorCode.OK, new MetaInfo(), null);
-		le.nextinf.metaFirstOff = 1;
-		System.out.println("le firstoff=" + le.nextinf.metaFirstOff);
-		inf = le.nextinf;
-		System.out.println("inf firstoff=" + inf.metaFirstOff);
-
-		le = new LogEntryWrap(CorfuErrorCode.OK, new MetaInfo(), null);
-		le.nextinf.metaFirstOff = 2;
-		System.out.println("le firstoff=" + le.nextinf.metaFirstOff);
-		System.out.println("inf firstoff=" + inf.metaFirstOff);
+		info inf = new info(0,0);
+		log.info("before " + inf.a + ", " + inf.b);
+		foo(inf); 
+		log.info("after " + inf.a + ", " + inf.b);
 		
-		
+/*		
 		ArrayList<ByteBuffer> ar;		
 		ar = new ArrayList<ByteBuffer>(10);
 		
@@ -78,7 +83,7 @@ public class Junk {
 		ar.add(ByteBuffer.wrap(bio.toByteArray()));
 		System.out.println("ar size: " + ar.size());
 		System.out.println("buf at pos 3 capacity: " + ar.get(3).capacity());
-		
+*/		
 	}
 
 }

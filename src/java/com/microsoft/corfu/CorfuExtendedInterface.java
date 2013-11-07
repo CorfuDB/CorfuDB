@@ -21,14 +21,13 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	public int grainsize() throws CorfuException;
 
 	/**
-	 * Reads a range of log-entries (rather than one).
+	 * Reads a range of log-pages belonging to one entry.
 	 * 
-	 * @param pos           starting position to read
-	 * @param reqsize       requested size to read (must be an integer multiple of entrysize(), and less than 4GB)
+	 * @param inf           range to read
 	 * @return              list of ByteBuffers, one for each read entry
 	 * @throws CorfuException
 	 */
-	public List<ByteBuffer> varRead(long pos, int reqsize) throws CorfuException;
+	public List<ByteBuffer> varRead(MetaInfo inf) throws CorfuException;
 
 	/**
 	 * Reads the next multi-page log entry; it remembers the last entry read, starting with zero.
@@ -78,7 +77,7 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	 * @throws CorfuException
 	 */
 	public List<ByteBuffer> forceRead(long pos) throws CorfuException;
-	public List<ByteBuffer> forceRead(long pos, int reqsize) throws CorfuException;
+	public List<ByteBuffer> forceVarRead(MetaInfo inf) throws CorfuException;
 	
 	/**
 	 * this utility routing attempts to fill up log holes up to its current tail.

@@ -33,11 +33,10 @@ import org.slf4j.LoggerFactory;
 public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._Fields>, java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("LogHeader");
 
-  private static final org.apache.thrift.protocol.TField OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("off", org.apache.thrift.protocol.TType.I64, (short)1);
-  private static final org.apache.thrift.protocol.TField NGRAINS_FIELD_DESC = new org.apache.thrift.protocol.TField("ngrains", org.apache.thrift.protocol.TType.I32, (short)2);
-  private static final org.apache.thrift.protocol.TField READNEXT_FIELD_DESC = new org.apache.thrift.protocol.TField("readnext", org.apache.thrift.protocol.TType.BOOL, (short)3);
-  private static final org.apache.thrift.protocol.TField NEXTOFF_FIELD_DESC = new org.apache.thrift.protocol.TField("nextoff", org.apache.thrift.protocol.TType.I64, (short)4);
-  private static final org.apache.thrift.protocol.TField ERR_FIELD_DESC = new org.apache.thrift.protocol.TField("err", org.apache.thrift.protocol.TType.I32, (short)5);
+  private static final org.apache.thrift.protocol.TField RANGE_FIELD_DESC = new org.apache.thrift.protocol.TField("range", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+  private static final org.apache.thrift.protocol.TField READNEXT_FIELD_DESC = new org.apache.thrift.protocol.TField("readnext", org.apache.thrift.protocol.TType.BOOL, (short)2);
+  private static final org.apache.thrift.protocol.TField NEXTOFF_FIELD_DESC = new org.apache.thrift.protocol.TField("nextoff", org.apache.thrift.protocol.TType.I64, (short)3);
+  private static final org.apache.thrift.protocol.TField ERR_FIELD_DESC = new org.apache.thrift.protocol.TField("err", org.apache.thrift.protocol.TType.I32, (short)4);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
   static {
@@ -45,8 +44,7 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     schemes.put(TupleScheme.class, new LogHeaderTupleSchemeFactory());
   }
 
-  public long off; // required
-  public int ngrains; // required
+  public MetaInfo range; // required
   public boolean readnext; // required
   public long nextoff; // required
   /**
@@ -57,15 +55,14 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-    OFF((short)1, "off"),
-    NGRAINS((short)2, "ngrains"),
-    READNEXT((short)3, "readnext"),
-    NEXTOFF((short)4, "nextoff"),
+    RANGE((short)1, "range"),
+    READNEXT((short)2, "readnext"),
+    NEXTOFF((short)3, "nextoff"),
     /**
      * 
      * @see CorfuErrorCode
      */
-    ERR((short)5, "err");
+    ERR((short)4, "err");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -80,15 +77,13 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
      */
     public static _Fields findByThriftId(int fieldId) {
       switch(fieldId) {
-        case 1: // OFF
-          return OFF;
-        case 2: // NGRAINS
-          return NGRAINS;
-        case 3: // READNEXT
+        case 1: // RANGE
+          return RANGE;
+        case 2: // READNEXT
           return READNEXT;
-        case 4: // NEXTOFF
+        case 3: // NEXTOFF
           return NEXTOFF;
-        case 5: // ERR
+        case 4: // ERR
           return ERR;
         default:
           return null;
@@ -130,18 +125,14 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
   }
 
   // isset id assignments
-  private static final int __OFF_ISSET_ID = 0;
-  private static final int __NGRAINS_ISSET_ID = 1;
-  private static final int __READNEXT_ISSET_ID = 2;
-  private static final int __NEXTOFF_ISSET_ID = 3;
+  private static final int __READNEXT_ISSET_ID = 0;
+  private static final int __NEXTOFF_ISSET_ID = 1;
   private byte __isset_bitfield = 0;
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-    tmpMap.put(_Fields.OFF, new org.apache.thrift.meta_data.FieldMetaData("off", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
-    tmpMap.put(_Fields.NGRAINS, new org.apache.thrift.meta_data.FieldMetaData("ngrains", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
+    tmpMap.put(_Fields.RANGE, new org.apache.thrift.meta_data.FieldMetaData("range", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, MetaInfo.class)));
     tmpMap.put(_Fields.READNEXT, new org.apache.thrift.meta_data.FieldMetaData("readnext", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.BOOL)));
     tmpMap.put(_Fields.NEXTOFF, new org.apache.thrift.meta_data.FieldMetaData("nextoff", org.apache.thrift.TFieldRequirementType.DEFAULT, 
@@ -156,17 +147,13 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
   }
 
   public LogHeader(
-    long off,
-    int ngrains,
+    MetaInfo range,
     boolean readnext,
     long nextoff,
     CorfuErrorCode err)
   {
     this();
-    this.off = off;
-    setOffIsSet(true);
-    this.ngrains = ngrains;
-    setNgrainsIsSet(true);
+    this.range = range;
     this.readnext = readnext;
     setReadnextIsSet(true);
     this.nextoff = nextoff;
@@ -179,8 +166,9 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
    */
   public LogHeader(LogHeader other) {
     __isset_bitfield = other.__isset_bitfield;
-    this.off = other.off;
-    this.ngrains = other.ngrains;
+    if (other.isSetRange()) {
+      this.range = new MetaInfo(other.range);
+    }
     this.readnext = other.readnext;
     this.nextoff = other.nextoff;
     if (other.isSetErr()) {
@@ -194,10 +182,7 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
 
   @Override
   public void clear() {
-    setOffIsSet(false);
-    this.off = 0;
-    setNgrainsIsSet(false);
-    this.ngrains = 0;
+    this.range = null;
     setReadnextIsSet(false);
     this.readnext = false;
     setNextoffIsSet(false);
@@ -205,50 +190,28 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     this.err = null;
   }
 
-  public long getOff() {
-    return this.off;
+  public MetaInfo getRange() {
+    return this.range;
   }
 
-  public LogHeader setOff(long off) {
-    this.off = off;
-    setOffIsSet(true);
+  public LogHeader setRange(MetaInfo range) {
+    this.range = range;
     return this;
   }
 
-  public void unsetOff() {
-    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __OFF_ISSET_ID);
+  public void unsetRange() {
+    this.range = null;
   }
 
-  /** Returns true if field off is set (has been assigned a value) and false otherwise */
-  public boolean isSetOff() {
-    return EncodingUtils.testBit(__isset_bitfield, __OFF_ISSET_ID);
+  /** Returns true if field range is set (has been assigned a value) and false otherwise */
+  public boolean isSetRange() {
+    return this.range != null;
   }
 
-  public void setOffIsSet(boolean value) {
-    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __OFF_ISSET_ID, value);
-  }
-
-  public int getNgrains() {
-    return this.ngrains;
-  }
-
-  public LogHeader setNgrains(int ngrains) {
-    this.ngrains = ngrains;
-    setNgrainsIsSet(true);
-    return this;
-  }
-
-  public void unsetNgrains() {
-    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __NGRAINS_ISSET_ID);
-  }
-
-  /** Returns true if field ngrains is set (has been assigned a value) and false otherwise */
-  public boolean isSetNgrains() {
-    return EncodingUtils.testBit(__isset_bitfield, __NGRAINS_ISSET_ID);
-  }
-
-  public void setNgrainsIsSet(boolean value) {
-    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __NGRAINS_ISSET_ID, value);
+  public void setRangeIsSet(boolean value) {
+    if (!value) {
+      this.range = null;
+    }
   }
 
   public boolean isReadnext() {
@@ -331,19 +294,11 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
 
   public void setFieldValue(_Fields field, Object value) {
     switch (field) {
-    case OFF:
+    case RANGE:
       if (value == null) {
-        unsetOff();
+        unsetRange();
       } else {
-        setOff((Long)value);
-      }
-      break;
-
-    case NGRAINS:
-      if (value == null) {
-        unsetNgrains();
-      } else {
-        setNgrains((Integer)value);
+        setRange((MetaInfo)value);
       }
       break;
 
@@ -376,11 +331,8 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
 
   public Object getFieldValue(_Fields field) {
     switch (field) {
-    case OFF:
-      return Long.valueOf(getOff());
-
-    case NGRAINS:
-      return Integer.valueOf(getNgrains());
+    case RANGE:
+      return getRange();
 
     case READNEXT:
       return Boolean.valueOf(isReadnext());
@@ -402,10 +354,8 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     }
 
     switch (field) {
-    case OFF:
-      return isSetOff();
-    case NGRAINS:
-      return isSetNgrains();
+    case RANGE:
+      return isSetRange();
     case READNEXT:
       return isSetReadnext();
     case NEXTOFF:
@@ -429,21 +379,12 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     if (that == null)
       return false;
 
-    boolean this_present_off = true;
-    boolean that_present_off = true;
-    if (this_present_off || that_present_off) {
-      if (!(this_present_off && that_present_off))
+    boolean this_present_range = true && this.isSetRange();
+    boolean that_present_range = true && that.isSetRange();
+    if (this_present_range || that_present_range) {
+      if (!(this_present_range && that_present_range))
         return false;
-      if (this.off != that.off)
-        return false;
-    }
-
-    boolean this_present_ngrains = true;
-    boolean that_present_ngrains = true;
-    if (this_present_ngrains || that_present_ngrains) {
-      if (!(this_present_ngrains && that_present_ngrains))
-        return false;
-      if (this.ngrains != that.ngrains)
+      if (!this.range.equals(that.range))
         return false;
     }
 
@@ -490,22 +431,12 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     int lastComparison = 0;
     LogHeader typedOther = (LogHeader)other;
 
-    lastComparison = Boolean.valueOf(isSetOff()).compareTo(typedOther.isSetOff());
+    lastComparison = Boolean.valueOf(isSetRange()).compareTo(typedOther.isSetRange());
     if (lastComparison != 0) {
       return lastComparison;
     }
-    if (isSetOff()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.off, typedOther.off);
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-    }
-    lastComparison = Boolean.valueOf(isSetNgrains()).compareTo(typedOther.isSetNgrains());
-    if (lastComparison != 0) {
-      return lastComparison;
-    }
-    if (isSetNgrains()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ngrains, typedOther.ngrains);
+    if (isSetRange()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.range, typedOther.range);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -560,12 +491,12 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     StringBuilder sb = new StringBuilder("LogHeader(");
     boolean first = true;
 
-    sb.append("off:");
-    sb.append(this.off);
-    first = false;
-    if (!first) sb.append(", ");
-    sb.append("ngrains:");
-    sb.append(this.ngrains);
+    sb.append("range:");
+    if (this.range == null) {
+      sb.append("null");
+    } else {
+      sb.append(this.range);
+    }
     first = false;
     if (!first) sb.append(", ");
     sb.append("readnext:");
@@ -590,6 +521,9 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
   public void validate() throws org.apache.thrift.TException {
     // check for required fields
     // check for sub-struct validity
+    if (range != null) {
+      range.validate();
+    }
   }
 
   private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
@@ -628,23 +562,16 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
           break;
         }
         switch (schemeField.id) {
-          case 1: // OFF
-            if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
-              struct.off = iprot.readI64();
-              struct.setOffIsSet(true);
+          case 1: // RANGE
+            if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
+              struct.range = new MetaInfo();
+              struct.range.read(iprot);
+              struct.setRangeIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 2: // NGRAINS
-            if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
-              struct.ngrains = iprot.readI32();
-              struct.setNgrainsIsSet(true);
-            } else { 
-              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-            }
-            break;
-          case 3: // READNEXT
+          case 2: // READNEXT
             if (schemeField.type == org.apache.thrift.protocol.TType.BOOL) {
               struct.readnext = iprot.readBool();
               struct.setReadnextIsSet(true);
@@ -652,7 +579,7 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 4: // NEXTOFF
+          case 3: // NEXTOFF
             if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
               struct.nextoff = iprot.readI64();
               struct.setNextoffIsSet(true);
@@ -660,7 +587,7 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 5: // ERR
+          case 4: // ERR
             if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
               struct.err = CorfuErrorCode.findByValue(iprot.readI32());
               struct.setErrIsSet(true);
@@ -683,12 +610,11 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
       struct.validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
-      oprot.writeFieldBegin(OFF_FIELD_DESC);
-      oprot.writeI64(struct.off);
-      oprot.writeFieldEnd();
-      oprot.writeFieldBegin(NGRAINS_FIELD_DESC);
-      oprot.writeI32(struct.ngrains);
-      oprot.writeFieldEnd();
+      if (struct.range != null) {
+        oprot.writeFieldBegin(RANGE_FIELD_DESC);
+        struct.range.write(oprot);
+        oprot.writeFieldEnd();
+      }
       oprot.writeFieldBegin(READNEXT_FIELD_DESC);
       oprot.writeBool(struct.readnext);
       oprot.writeFieldEnd();
@@ -718,27 +644,21 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     public void write(org.apache.thrift.protocol.TProtocol prot, LogHeader struct) throws org.apache.thrift.TException {
       TTupleProtocol oprot = (TTupleProtocol) prot;
       BitSet optionals = new BitSet();
-      if (struct.isSetOff()) {
+      if (struct.isSetRange()) {
         optionals.set(0);
       }
-      if (struct.isSetNgrains()) {
+      if (struct.isSetReadnext()) {
         optionals.set(1);
       }
-      if (struct.isSetReadnext()) {
+      if (struct.isSetNextoff()) {
         optionals.set(2);
       }
-      if (struct.isSetNextoff()) {
+      if (struct.isSetErr()) {
         optionals.set(3);
       }
-      if (struct.isSetErr()) {
-        optionals.set(4);
-      }
-      oprot.writeBitSet(optionals, 5);
-      if (struct.isSetOff()) {
-        oprot.writeI64(struct.off);
-      }
-      if (struct.isSetNgrains()) {
-        oprot.writeI32(struct.ngrains);
+      oprot.writeBitSet(optionals, 4);
+      if (struct.isSetRange()) {
+        struct.range.write(oprot);
       }
       if (struct.isSetReadnext()) {
         oprot.writeBool(struct.readnext);
@@ -754,24 +674,21 @@ public class LogHeader implements org.apache.thrift.TBase<LogHeader, LogHeader._
     @Override
     public void read(org.apache.thrift.protocol.TProtocol prot, LogHeader struct) throws org.apache.thrift.TException {
       TTupleProtocol iprot = (TTupleProtocol) prot;
-      BitSet incoming = iprot.readBitSet(5);
+      BitSet incoming = iprot.readBitSet(4);
       if (incoming.get(0)) {
-        struct.off = iprot.readI64();
-        struct.setOffIsSet(true);
+        struct.range = new MetaInfo();
+        struct.range.read(iprot);
+        struct.setRangeIsSet(true);
       }
       if (incoming.get(1)) {
-        struct.ngrains = iprot.readI32();
-        struct.setNgrainsIsSet(true);
-      }
-      if (incoming.get(2)) {
         struct.readnext = iprot.readBool();
         struct.setReadnextIsSet(true);
       }
-      if (incoming.get(3)) {
+      if (incoming.get(2)) {
         struct.nextoff = iprot.readI64();
         struct.setNextoffIsSet(true);
       }
-      if (incoming.get(4)) {
+      if (incoming.get(3)) {
         struct.err = CorfuErrorCode.findByValue(iprot.readI32());
         struct.setErrIsSet(true);
       }

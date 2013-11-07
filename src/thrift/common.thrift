@@ -16,11 +16,10 @@ struct MetaInfo {
 }
 
 struct LogHeader {
-	1: i64 off,
-	2: i32 ngrains,
-	3: bool readnext,
-	4: i64 nextoff,
-	5: CorfuErrorCode err,
+	1: MetaInfo range,
+	2: bool readnext,
+	3: i64 nextoff,
+	4: CorfuErrorCode err,
 	}
 	
 typedef binary LogPayload
