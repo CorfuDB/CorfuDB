@@ -17,7 +17,8 @@ public enum CorfuErrorCode implements org.apache.thrift.TEnum {
   ERR_TRIMMED(2),
   ERR_UNWRITTEN(3),
   ERR_BADPARAM(4),
-  ERR_FULL(5);
+  ERR_FULL(5),
+  OK_SKIP(6);
 
   private final int value;
 
@@ -50,6 +51,8 @@ public enum CorfuErrorCode implements org.apache.thrift.TEnum {
         return ERR_BADPARAM;
       case 5:
         return ERR_FULL;
+      case 6:
+        return OK_SKIP;
       default:
         return null;
     }

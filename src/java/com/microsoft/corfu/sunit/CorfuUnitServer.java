@@ -36,7 +36,7 @@ public class CorfuUnitServer {
 
     public com.microsoft.corfu.CorfuErrorCode write(com.microsoft.corfu.MetaInfo inf, List<ByteBuffer> ctnt) throws org.apache.thrift.TException;
 
-    public com.microsoft.corfu.CorfuErrorCode fill(com.microsoft.corfu.MetaInfo inf) throws org.apache.thrift.TException;
+    public com.microsoft.corfu.CorfuErrorCode fill(long pos) throws org.apache.thrift.TException;
 
     public com.microsoft.corfu.LogEntryWrap read(com.microsoft.corfu.LogHeader hdr) throws org.apache.thrift.TException;
 
@@ -54,7 +54,7 @@ public class CorfuUnitServer {
 
     public void write(com.microsoft.corfu.MetaInfo inf, List<ByteBuffer> ctnt, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.write_call> resultHandler) throws org.apache.thrift.TException;
 
-    public void fill(com.microsoft.corfu.MetaInfo inf, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.fill_call> resultHandler) throws org.apache.thrift.TException;
+    public void fill(long pos, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.fill_call> resultHandler) throws org.apache.thrift.TException;
 
     public void read(com.microsoft.corfu.LogHeader hdr, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.read_call> resultHandler) throws org.apache.thrift.TException;
 
@@ -112,16 +112,16 @@ public class CorfuUnitServer {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "write failed: unknown result");
     }
 
-    public com.microsoft.corfu.CorfuErrorCode fill(com.microsoft.corfu.MetaInfo inf) throws org.apache.thrift.TException
+    public com.microsoft.corfu.CorfuErrorCode fill(long pos) throws org.apache.thrift.TException
     {
-      send_fill(inf);
+      send_fill(pos);
       return recv_fill();
     }
 
-    public void send_fill(com.microsoft.corfu.MetaInfo inf) throws org.apache.thrift.TException
+    public void send_fill(long pos) throws org.apache.thrift.TException
     {
       fill_args args = new fill_args();
-      args.setInf(inf);
+      args.setPos(pos);
       sendBase("fill", args);
     }
 
@@ -301,24 +301,24 @@ public class CorfuUnitServer {
       }
     }
 
-    public void fill(com.microsoft.corfu.MetaInfo inf, org.apache.thrift.async.AsyncMethodCallback<fill_call> resultHandler) throws org.apache.thrift.TException {
+    public void fill(long pos, org.apache.thrift.async.AsyncMethodCallback<fill_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
-      fill_call method_call = new fill_call(inf, resultHandler, this, ___protocolFactory, ___transport);
+      fill_call method_call = new fill_call(pos, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
       ___manager.call(method_call);
     }
 
     public static class fill_call extends org.apache.thrift.async.TAsyncMethodCall {
-      private com.microsoft.corfu.MetaInfo inf;
-      public fill_call(com.microsoft.corfu.MetaInfo inf, org.apache.thrift.async.AsyncMethodCallback<fill_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+      private long pos;
+      public fill_call(long pos, org.apache.thrift.async.AsyncMethodCallback<fill_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
         super(client, protocolFactory, transport, resultHandler, false);
-        this.inf = inf;
+        this.pos = pos;
       }
 
       public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("fill", org.apache.thrift.protocol.TMessageType.CALL, 0));
         fill_args args = new fill_args();
-        args.setInf(inf);
+        args.setPos(pos);
         args.write(prot);
         prot.writeMessageEnd();
       }
@@ -545,7 +545,7 @@ public class CorfuUnitServer {
 
       public fill_result getResult(I iface, fill_args args) throws org.apache.thrift.TException {
         fill_result result = new fill_result();
-        result.success = iface.fill(args.inf);
+        result.success = iface.fill(args.pos);
         return result;
       }
     }
@@ -1539,7 +1539,7 @@ public class CorfuUnitServer {
   public static class fill_args implements org.apache.thrift.TBase<fill_args, fill_args._Fields>, java.io.Serializable, Cloneable   {
     private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("fill_args");
 
-    private static final org.apache.thrift.protocol.TField INF_FIELD_DESC = new org.apache.thrift.protocol.TField("inf", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField POS_FIELD_DESC = new org.apache.thrift.protocol.TField("pos", org.apache.thrift.protocol.TType.I64, (short)1);
 
     private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
     static {
@@ -1547,11 +1547,11 @@ public class CorfuUnitServer {
       schemes.put(TupleScheme.class, new fill_argsTupleSchemeFactory());
     }
 
-    public com.microsoft.corfu.MetaInfo inf; // required
+    public long pos; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-      INF((short)1, "inf");
+      POS((short)1, "pos");
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -1566,8 +1566,8 @@ public class CorfuUnitServer {
        */
       public static _Fields findByThriftId(int fieldId) {
         switch(fieldId) {
-          case 1: // INF
-            return INF;
+          case 1: // POS
+            return POS;
           default:
             return null;
         }
@@ -1608,11 +1608,13 @@ public class CorfuUnitServer {
     }
 
     // isset id assignments
+    private static final int __POS_ISSET_ID = 0;
+    private byte __isset_bitfield = 0;
     public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
       Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.INF, new org.apache.thrift.meta_data.FieldMetaData("inf", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, com.microsoft.corfu.MetaInfo.class)));
+      tmpMap.put(_Fields.POS, new org.apache.thrift.meta_data.FieldMetaData("pos", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
       org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(fill_args.class, metaDataMap);
     }
@@ -1621,19 +1623,19 @@ public class CorfuUnitServer {
     }
 
     public fill_args(
-      com.microsoft.corfu.MetaInfo inf)
+      long pos)
     {
       this();
-      this.inf = inf;
+      this.pos = pos;
+      setPosIsSet(true);
     }
 
     /**
      * Performs a deep copy on <i>other</i>.
      */
     public fill_args(fill_args other) {
-      if (other.isSetInf()) {
-        this.inf = new com.microsoft.corfu.MetaInfo(other.inf);
-      }
+      __isset_bitfield = other.__isset_bitfield;
+      this.pos = other.pos;
     }
 
     public fill_args deepCopy() {
@@ -1642,40 +1644,40 @@ public class CorfuUnitServer {
 
     @Override
     public void clear() {
-      this.inf = null;
+      setPosIsSet(false);
+      this.pos = 0;
     }
 
-    public com.microsoft.corfu.MetaInfo getInf() {
-      return this.inf;
+    public long getPos() {
+      return this.pos;
     }
 
-    public fill_args setInf(com.microsoft.corfu.MetaInfo inf) {
-      this.inf = inf;
+    public fill_args setPos(long pos) {
+      this.pos = pos;
+      setPosIsSet(true);
       return this;
     }
 
-    public void unsetInf() {
-      this.inf = null;
+    public void unsetPos() {
+      __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __POS_ISSET_ID);
     }
 
-    /** Returns true if field inf is set (has been assigned a value) and false otherwise */
-    public boolean isSetInf() {
-      return this.inf != null;
+    /** Returns true if field pos is set (has been assigned a value) and false otherwise */
+    public boolean isSetPos() {
+      return EncodingUtils.testBit(__isset_bitfield, __POS_ISSET_ID);
     }
 
-    public void setInfIsSet(boolean value) {
-      if (!value) {
-        this.inf = null;
-      }
+    public void setPosIsSet(boolean value) {
+      __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __POS_ISSET_ID, value);
     }
 
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
-      case INF:
+      case POS:
         if (value == null) {
-          unsetInf();
+          unsetPos();
         } else {
-          setInf((com.microsoft.corfu.MetaInfo)value);
+          setPos((Long)value);
         }
         break;
 
@@ -1684,8 +1686,8 @@ public class CorfuUnitServer {
 
     public Object getFieldValue(_Fields field) {
       switch (field) {
-      case INF:
-        return getInf();
+      case POS:
+        return Long.valueOf(getPos());
 
       }
       throw new IllegalStateException();
@@ -1698,8 +1700,8 @@ public class CorfuUnitServer {
       }
 
       switch (field) {
-      case INF:
-        return isSetInf();
+      case POS:
+        return isSetPos();
       }
       throw new IllegalStateException();
     }
@@ -1717,12 +1719,12 @@ public class CorfuUnitServer {
       if (that == null)
         return false;
 
-      boolean this_present_inf = true && this.isSetInf();
-      boolean that_present_inf = true && that.isSetInf();
-      if (this_present_inf || that_present_inf) {
-        if (!(this_present_inf && that_present_inf))
+      boolean this_present_pos = true;
+      boolean that_present_pos = true;
+      if (this_present_pos || that_present_pos) {
+        if (!(this_present_pos && that_present_pos))
           return false;
-        if (!this.inf.equals(that.inf))
+        if (this.pos != that.pos)
           return false;
       }
 
@@ -1742,12 +1744,12 @@ public class CorfuUnitServer {
       int lastComparison = 0;
       fill_args typedOther = (fill_args)other;
 
-      lastComparison = Boolean.valueOf(isSetInf()).compareTo(typedOther.isSetInf());
+      lastComparison = Boolean.valueOf(isSetPos()).compareTo(typedOther.isSetPos());
       if (lastComparison != 0) {
         return lastComparison;
       }
-      if (isSetInf()) {
-        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.inf, typedOther.inf);
+      if (isSetPos()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.pos, typedOther.pos);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -1772,12 +1774,8 @@ public class CorfuUnitServer {
       StringBuilder sb = new StringBuilder("fill_args(");
       boolean first = true;
 
-      sb.append("inf:");
-      if (this.inf == null) {
-        sb.append("null");
-      } else {
-        sb.append(this.inf);
-      }
+      sb.append("pos:");
+      sb.append(this.pos);
       first = false;
       sb.append(")");
       return sb.toString();
@@ -1786,9 +1784,6 @@ public class CorfuUnitServer {
     public void validate() throws org.apache.thrift.TException {
       // check for required fields
       // check for sub-struct validity
-      if (inf != null) {
-        inf.validate();
-      }
     }
 
     private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
@@ -1801,6 +1796,8 @@ public class CorfuUnitServer {
 
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
       try {
+        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
+        __isset_bitfield = 0;
         read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
       } catch (org.apache.thrift.TException te) {
         throw new java.io.IOException(te);
@@ -1825,11 +1822,10 @@ public class CorfuUnitServer {
             break;
           }
           switch (schemeField.id) {
-            case 1: // INF
-              if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
-                struct.inf = new com.microsoft.corfu.MetaInfo();
-                struct.inf.read(iprot);
-                struct.setInfIsSet(true);
+            case 1: // POS
+              if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
+                struct.pos = iprot.readI64();
+                struct.setPosIsSet(true);
               } else { 
                 org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
               }
@@ -1849,11 +1845,9 @@ public class CorfuUnitServer {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
-        if (struct.inf != null) {
-          oprot.writeFieldBegin(INF_FIELD_DESC);
-          struct.inf.write(oprot);
-          oprot.writeFieldEnd();
-        }
+        oprot.writeFieldBegin(POS_FIELD_DESC);
+        oprot.writeI64(struct.pos);
+        oprot.writeFieldEnd();
         oprot.writeFieldStop();
         oprot.writeStructEnd();
       }
@@ -1872,12 +1866,12 @@ public class CorfuUnitServer {
       public void write(org.apache.thrift.protocol.TProtocol prot, fill_args struct) throws org.apache.thrift.TException {
         TTupleProtocol oprot = (TTupleProtocol) prot;
         BitSet optionals = new BitSet();
-        if (struct.isSetInf()) {
+        if (struct.isSetPos()) {
           optionals.set(0);
         }
         oprot.writeBitSet(optionals, 1);
-        if (struct.isSetInf()) {
-          struct.inf.write(oprot);
+        if (struct.isSetPos()) {
+          oprot.writeI64(struct.pos);
         }
       }
 
@@ -1886,9 +1880,8 @@ public class CorfuUnitServer {
         TTupleProtocol iprot = (TTupleProtocol) prot;
         BitSet incoming = iprot.readBitSet(1);
         if (incoming.get(0)) {
-          struct.inf = new com.microsoft.corfu.MetaInfo();
-          struct.inf.read(iprot);
-          struct.setInfIsSet(true);
+          struct.pos = iprot.readI64();
+          struct.setPosIsSet(true);
         }
       }
     }

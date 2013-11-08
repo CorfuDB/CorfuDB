@@ -8,6 +8,7 @@ enum CorfuErrorCode {
 	ERR_UNWRITTEN,
 	ERR_BADPARAM,
 	ERR_FULL,
+	OK_SKIP
 }
 
 struct MetaInfo {
@@ -17,8 +18,8 @@ struct MetaInfo {
 
 struct LogHeader {
 	1: MetaInfo range,
-	2: bool readnext,
-	3: i64 nextoff,
+	2: bool prefetch,
+	3: i64 prefetchOff,
 	4: CorfuErrorCode err,
 	}
 	

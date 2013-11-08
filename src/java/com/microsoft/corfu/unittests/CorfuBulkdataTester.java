@@ -80,6 +80,7 @@ public class CorfuBulkdataTester implements Runnable {
 	}
 	
 	private int myid = -1;
+	CorfuExtendedInterface crf;
 	private boolean isreader = false;
 	long starttime = System.currentTimeMillis();
 	String myname = System.getenv("computername");
@@ -107,7 +108,6 @@ public class CorfuBulkdataTester implements Runnable {
 		
 		long startoff, off = -1, contoff;
 		long readoff = 0;
-		CorfuExtendedInterface crf;
 		
 		try {
 			crf = new CorfuClientImpl(CM);
@@ -118,47 +118,60 @@ public class CorfuBulkdataTester implements Runnable {
 			return;
 		}
 		
-		if (isreader) readerloop(crf); else writerloop(crf);
+		if (isreader) readerloop(); else writerloop();
 	}
 	
-	private void readerloop(CorfuExtendedInterface crf) {
+	private void readerloop() {
 		int rpt = 0;
+
+		while(rpt < nrepeat) {
+			readnext();
+			stats(rpt++);
+		}
+	}
+	
+	private synchronized void readnext() {
 		long cumsize = 0, cumpos = 0;
 		List<ByteBuffer> ret;
-
-		while(rpt < nrepeat) {
-			try {
-				ret = crf.varReadnext();
-				stats(rpt++);
-				cumsize += ret.size();
-				if (cumsize >= CM.getUnitsize()/2) {
-					cumpos += CM.getUnitsize()/2;
-					cumsize -= CM.getUnitsize()/2;
-					crf.trim(cumpos);
-				}
-			} catch (CorfuException e) {
-				System.out.println("read failed");
-				if (e.er.equals(CorfuErrorCode.ERR_UNWRITTEN))  // it's ok, but not counted
-					{ rpt++; // TODO, for now
-					continue; }
+		for (;;) {
+		try {
+			ret = crf.varReadnext();
+			cumsize += ret.size();
+			if (cumsize >= CM.getUnitsize()/2) {
+				cumpos += CM.getUnitsize()/2;
+				cumsize -= CM.getUnitsize()/2;
+				crf.trim(cumpos);
 			}
-		}
+			return;
+		} catch (CorfuException e) {
+			System.out.println("read failed");
+			if (!e.er.equals(CorfuErrorCode.ERR_UNWRITTEN)) break;
+			
+			try {
+				wait(1000);
+			} catch (InterruptedException ex) {
+				System.out.println("shouldn't happend..");
+			}
+		}}
 	}
 
-	private void writerloop(CorfuExtendedInterface crf) {
+	private void writerloop() {
 		int rpt = 0;
+	
+		while(rpt < nrepeat) {
+			writenext();
+			stats(rpt++);
+		}
+	}
+	
+	private synchronized void writenext() {
 		byte[] bb = new byte[entsize];
 		long pos;
-
-		while(rpt < nrepeat) {
-			try {
-				pos = crf.varAppend(bb, entsize);
-				stats(rpt++);
-			} catch (CorfuException e) {
-				System.out.println("corfu append failed");
-				break;
-			}
+		try {
+			pos = crf.varAppend(bb, entsize);
+			notify();
+		} catch (CorfuException e) {
+			System.out.println("corfu append failed");
 		}
 	}
-
 }

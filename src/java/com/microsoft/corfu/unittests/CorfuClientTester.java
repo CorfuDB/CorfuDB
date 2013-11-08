@@ -111,8 +111,8 @@ public class CorfuClientTester implements Runnable {
 				byte[] buf = new byte[entsize];
 				off = crf.forceAppend(buf, entsize);
 				// off = crf.varAppend(buf, entsize);
-				List<ByteBuffer> ret;
-				ret = crf.varRead(rpt, entsize);
+				byte[] ret;
+				ret = crf.read(rpt);
 				if (rpt > 0 && rpt % printfreq == 0) {
 					int c = commulative.addAndGet(printfreq);
 					elapsetime = System.currentTimeMillis();

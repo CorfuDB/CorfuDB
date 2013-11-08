@@ -47,9 +47,9 @@ class OutOfSpaceCorfuException extends CorfuException
 
 
 @SuppressWarnings("serial")
-class UnsupportedTrimCorfuException extends CorfuException
+class UnsupportedCorfuException extends CorfuException
 {
-	public UnsupportedTrimCorfuException(String desc)
+	public UnsupportedCorfuException(String desc)
 	{
 		super(desc);
 		this.er = CorfuErrorCode.ERR_BADPARAM;

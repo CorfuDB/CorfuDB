@@ -6,7 +6,7 @@ service CorfuUnitServer {
 
 	common.CorfuErrorCode write(1:common.MetaInfo inf, 2:list<common.LogPayload> ctnt),
 	
-	common.CorfuErrorCode fill(1:common.MetaInfo inf),
+	common.CorfuErrorCode fill(1:i64 pos),
 
 	common.LogEntryWrap read(1:common.LogHeader hdr),
 	

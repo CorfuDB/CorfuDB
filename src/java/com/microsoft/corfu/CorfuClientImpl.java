@@ -10,13 +10,15 @@ import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.slf4j.*;
 
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.sequencer.CorfuSequencer;
 import com.microsoft.corfu.sunit.CorfuUnitServer;
-import com.microsoft.corfu.sunit.CorfuUnitServer.Processor.checkcontiguous;
 
 public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterface {
+	Logger log = LoggerFactory.getLogger(CorfuClientImpl.class);
+	
 	CorfuConfigManager CM;
 	CorfuUnitServer.Client[] sunits;
 	CorfuSequencer.Client sequencer;
@@ -24,6 +26,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	
 	public CorfuClientImpl(CorfuConfigManager CM) throws CorfuException {
 		
+		log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}", 
+				log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
 		this.CM = CM;
 		buildClientConnections();
 	}
@@ -39,7 +43,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 				protocol = new TBinaryProtocol(t);
 				cl = new CorfuUnitServer.Client(protocol);
 				t.open();
-				System.out.println("cleint connection open with server  " + cn.hostname + ":" + cn.port);
+				log.info("client connection open with server  {}:{}" , cn.hostname , cn.port);
 		} catch (TTransportException e) {
 				e.printStackTrace();
 				throw new CorfuException("could not set up connection(s)");
@@ -58,7 +62,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 				protocol = new TBinaryProtocol(t);
 				cl = new CorfuSequencer.Client(protocol);
 				t.open();
-				System.out.println("client connection open with sequencer  " + cn.hostname + ":" + cn.port);
+				log.info("client connection open with sequencer {}:{}", cn.hostname, cn.port);
 			} catch (TTransportException e) {
 				e.printStackTrace();
 				throw new CorfuException("could not set up connection(s)");
@@ -236,7 +240,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 				long contigoff = check(true, true);
 				if (ckoff > contigoff) repairLog(true, ckoff);
 				
-                System.out.println("LOG FULL! forceappend trimming to " + ckoff);
+                log.debug("log full! forceappend trimming to " + ckoff);
 				trim(ckoff);
 				er = sunits[0].write(inf, ctnt);
 			} catch (Exception e) {
@@ -295,7 +299,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		LogEntryWrap ret;
 		
 		try {
-			ret = sunits[0].read(new LogHeader(inf, true, inf.metaLastOff+1, CorfuErrorCode.OK));
+			ret = sunits[0].read(new LogHeader(inf, true, inf.getMetaLastOff()+1, CorfuErrorCode.OK));
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("read() failed");
@@ -313,18 +317,23 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 
 		nextinf = ret.nextinf;
 		if (nextinf.equals(inf)) { // indicate next meta-info was not available for reading
+			log.debug("varRead({}) next meta-info not available", inf);
 			nextreadflag = false;
 		} else {
+			log.debug("varRead({}) next meta-info available -- {}", inf, nextinf);
 			nextreadflag = true;
 		}
 		return ret.ctnt;
 	}
 		
 	public List<ByteBuffer> varReadnext() throws CorfuException {
-		if (!nextreadflag) 
+		if (!nextreadflag) {
+			log.debug("varReadnext() need to fetch next meta-info");
 			return varReadnext(nextinf.metaLastOff+1);
-		else
+		} else {
+			log.debug("varReadnext() has next meta-info -- {}", nextinf);
 			return varRead(nextinf);
+		}
 	}
 
 	/**
@@ -457,28 +466,22 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	@Override
 	public void trim(long pos, boolean offsettrim) throws CorfuException {
 		if (offsettrim)
-			throw new UnsupportedTrimCorfuException("offset-trim not supported");
+			throw new UnsupportedCorfuException("offset-trim not supported");
 		else
 			trim(pos);
 	}
 	
 	/**
-	 * Fills a hole in the log. An entire multi-page entry will be junked.
+	 * Fills a hole in the log. 
 	 *
 	 * @param	pos	log position to fill
 	 * @param	a junk buffer (ignored)
 	 */
 	@Override
 	public void fill(long pos, byte[] junkbytes) throws CorfuException {
-		fill(new MetaInfo(pos, pos));
-	}
-	
-	public void fill(MetaInfo inf) throws CorfuException {
 		CorfuErrorCode er;
-		
-		inf.setMetaLastOff(-inf.getMetaLastOff());
 		try {
-			er = sunits[0].fill(inf);
+			er = sunits[0].fill(pos);
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("fill() failed");
@@ -486,14 +489,14 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		if (er.equals(CorfuErrorCode.ERR_FULL)) {
 			// this should never happen, the client invoking this fill is at fault here!
-			throw new OutOfSpaceCorfuException("fill(" + inf +") failed: full");
+			throw new OutOfSpaceCorfuException("fill(" + pos +") failed: full");
 		} else 
 		if (er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
 			// this may be a good thing!
-			throw new OverwriteCorfuException("fill(" + inf +") failed (may be a good sign!): overwritten");
+			throw new OverwriteCorfuException("fill(" + pos +") failed (may be a good sign!): overwritten");
 		} else
-		if (er.equals(CorfuErrorCode.ERR_BADPARAM)) {
-			throw new BadParamCorfuException("fill(" + inf +") failed: bad parameter passed");
+		if (er.equals(CorfuErrorCode.ERR_TRIMMED)) {
+			throw new TrimmedCorfuException("fill(" + pos +") failed: position has been trimmed");
 		} 
 	}
 	
@@ -508,35 +511,14 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 */
 	@Override
 	public List<ByteBuffer> forceRead(long pos) throws CorfuException {
-		return forceVarRead(new MetaInfo(pos, pos));
+		throw new UnsupportedCorfuException("forceRead not implemented");
 	}
 	
 	@Override
 	public List<ByteBuffer> forceVarRead(MetaInfo inf) throws CorfuException {
-
-		List<ByteBuffer> ret = null;
-		boolean tryrepeat = true;
-		
-		while (true) {
-			try {
-				ret = varRead(inf);
-			} catch (UnwrittenCorfuException e) {
-				try {
-					fill(inf);
-				} catch (OverwriteCorfuException e1) {
-					// This is good, means the entry has been written meanwhile!
-					if (!tryrepeat) {
-						throw new CorfuException("forceread: read failed even after fill");
-					} else {
-						tryrepeat = false;
-					}
-				}
-			}	
-			break;
-		}
-		return ret;
+		throw new UnsupportedCorfuException("forceVarRead not implemented");
 	}
-	
+		
 	/**
 	 * @throws CorfuException
 	 * 

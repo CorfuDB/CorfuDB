@@ -132,6 +132,9 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	
 	public CorfuUnitServerImpl() {
 		
+		log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}", 
+				log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
+
 		if (!RAMMODE) {
 			try {
 				RandomAccessFile f = new RandomAccessFile(DRIVENAME, "rw");
@@ -192,7 +195,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	}
 
 	private void RamToStore(long relOff, ByteBuffer buf, MetaInfo inf) {
-		log.debug("RamToStore( {} ) RAMMODE={} metainf={}", relOff, RAMMODE, inf);
 		
 		if (RAMMODE) {
 			if (inmemoryStore.size() > relOff) {
@@ -222,7 +224,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			assert(inmemoryStore.size() > relOff);
 			inf.setMetaFirstOff(inmemoryMeta[(int)relOff].getMetaFirstOff());
 			inf.setMetaLastOff(inmemoryMeta[(int)relOff].getMetaLastOff());
-			log.debug("storeToRam metainf={}", inf);
 			return inmemoryStore.get((int)relOff);
 		}
 		else {
@@ -310,10 +311,26 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		return CorfuErrorCode.OK; 
     }
 	
-	synchronized public CorfuErrorCode fill(MetaInfo inf) {
-		// TODO!!!
-		log.error("fill not implemented yet");
-		return CorfuErrorCode.ERR_BADPARAM;
+	synchronized public CorfuErrorCode fill(long pos) {
+		if (pos - trimmark >= UNITCAPACITY) {
+			log.warn("attempt to fill beyond unit capacity! trimmark= {} fill({})", trimmark, pos);
+			return CorfuErrorCode.ERR_FULL; 
+		}
+		
+		if (pos < trimmark) {
+			log.info("attempt to fill trimmed offset {}!", pos);
+			return CorfuErrorCode.ERR_TRIMMED; 
+		}
+
+		int relOff = (int) (pos % UNITCAPACITY);
+		if (storeMap.get(relOff)) {
+			log.debug("attempt to fill a written entry (good?) {}", pos);
+			return CorfuErrorCode.ERR_OVERWRITE;
+		}
+		
+		storeMap.set(relOff);
+		RamToStore(relOff, null, new MetaInfo(-pos, -pos));
+		return CorfuErrorCode.OK;
 	}
 	
 	/**
@@ -340,11 +357,20 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	
 	/* (non-Javadoc)
 	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#read(com.microsoft.corfu.LogHeader, com.microsoft.corfu.MetaInfo)
+	 * 
+	 * this method performs actual reading of a range of pages.
+	 * it fails if any page within range has not been written.
+	 * it returns OK_SKIP if it finds any page within range which has been junk-filled (i.e., the entire range becomes junked).
+	 * 
+	 * the method also reads-ahead the subsequent meta-info entry if hdr.readnext is set.
+	 * if the next meta info record is not available, it returns the current meta-info structure
+	 * 
+	 *  @param a LogHeader describing the range to read
 	 */
 	@Override
 	synchronized public LogEntryWrap read(LogHeader hdr) throws org.apache.thrift.TException {
 
-		long fromOff = hdr.range.metaFirstOff, toOff = fromOff + hdr.range.metaLastOff;
+		long fromOff = hdr.range.getMetaFirstOff(), toOff = hdr.range.getMetaLastOff();
 		log.debug("read [{}..{}] time={} CAPACITY={}", fromOff, toOff, trimmark, UNITCAPACITY);
 		
 		// check that we can satisfy this request in full, up to '^^^^^^^^^^^^^' mark
@@ -357,23 +383,25 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			return retval.rh(CorfuErrorCode.ERR_TRIMMED, fromOff, toOff, fromOff);
 		
 		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
+		long relBaseOff = fromOff - relFromOff;
 
 		if (relToOff > relFromOff) {
 			int i = storeMap.nextClearBit((int) relFromOff);
 			if (i < relToOff)  // we expect the next clear bit to be higher than ToOff, or none at all
-				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+i );
+				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+i) );
 			
 		} else {   // range wraps around the array
 			int i = storeMap.nextClearBit((int) relFromOff); 
 			if (i < (int) UNITCAPACITY)  // we expect no bit higher than FromOff to be clear, hence for i to be UNITCAPACITY
-				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+i );
+				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+i) );
 
 			i = storeMap.nextClearBit(0); 
 			if (i < relToOff)  // we expect the next clear bit from wraparound origin to be higher than ToOff, or none
-				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+i );
+				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+UNITCAPACITY+i) );
 
 		}
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		// actual reading starts here
 		
 		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
 		MetaInfo ckinf = new MetaInfo();
@@ -381,22 +409,29 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		if (relToOff < relFromOff) {
 			for (long off = relFromOff; off < UNITCAPACITY; off++) {
 				wbufs.add(StoreToRam(off, ckinf));
-				if (!ckinf.equals(hdr.range)) 
-					return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+off );
+				if (!ckinf.equals(hdr.range)) {
+					log.debug("metainfo mismatch off={} expecting {} received {}", relBaseOff+off, hdr.range, ckinf);
+					return retval.rh(CorfuErrorCode.OK_SKIP, fromOff, toOff, (relBaseOff+off) );
+				}
 			}
-			relFromOff = 0;
+			relFromOff = 0; // wrap around and "spill" to the for loop below
 		}
 		
 		for (long off = relFromOff; off < relToOff; off++) {
 			wbufs.add(StoreToRam(off, ckinf));
-			if (!ckinf.equals(hdr.range)) 
-				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, fromOff+off );
+			if (!ckinf.equals(hdr.range)) {
+				log.debug("metainfo mismatch off={} expecting {} received {}", relBaseOff+off, hdr.range, ckinf);
+				return retval.rh(CorfuErrorCode.OK_SKIP, fromOff, toOff, (relBaseOff+UNITCAPACITY+off) );
+			}
 		}
 
-		if (hdr.readnext && (hdr.nextoff - trimmark) < UNITCAPACITY && storeMap.get((int) (hdr.nextoff % UNITCAPACITY)) ) {
-			StoreToRam(hdr.nextoff % UNITCAPACITY, ckinf); // TODO read only the meta-info here
+		int relPrefetch = (int) (hdr.prefetchOff % UNITCAPACITY);
+		if (hdr.prefetch && (hdr.prefetchOff - trimmark) < UNITCAPACITY && storeMap.get(relPrefetch)) {
+			StoreToRam(relPrefetch, ckinf); // TODO read only the meta-info here
+			log.debug("metainfo prefetch {} available -- {}", relPrefetch, ckinf);
 			return new LogEntryWrap(CorfuErrorCode.OK, ckinf, wbufs); 
 		} else {
+			log.debug("metainfo prefetch {} unavailable", relPrefetch);
 			return new LogEntryWrap(CorfuErrorCode.OK, hdr.range, wbufs);
 		}
 	}
