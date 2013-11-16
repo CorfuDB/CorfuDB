@@ -21,74 +21,81 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	public int grainsize() throws CorfuException;
 
 	/**
-	 * Reads a range of log-pages belonging to one entry.
+	 * Reads the next extent; it remembers the last read extent (starting with zero).
 	 * 
-	 * @param inf           range to read
-	 * @return              list of ByteBuffers, one for each read entry
+	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
 	 * @throws CorfuException
 	 */
-	public List<ByteBuffer> varRead(MetaInfo inf) throws CorfuException;
+	public ExtntWrap readExtnt() throws CorfuException;
 
 	/**
-	 * Reads the next multi-page log entry; it remembers the last entry read, starting with zero.
-	 * 
-	 * @return              list of ByteBuffers, one for each read entry
-	 * @throws CorfuException
-	 */
-	public List<ByteBuffer> varReadnext() throws CorfuException;
-
-	/**
-	 * a variant of varReadnext that takes the first log-offset position to read next entry from.
+	 * a variant of readnext that takes the first log-offset position to read next extent from.
 	 * 
 	 * @param pos           starting position to read
-	 * @return              list of ByteBuffers, one for each read entry
+	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
 	 * @throws CorfuException
 	 */
-	public List<ByteBuffer> varReadnext(long pos) throws CorfuException;
+	public ExtntWrap readExtnt(long pos) throws CorfuException;
 
 	/**
-	 * Appends a list of log-entries (rather than one). Entries will be written to consecutive log offsets.
+	 * Appends an extent to the log. Extent will be written to consecutive log offsets.
+	 * 
+	 * if autoTrim is set, and the log is full, this call trims to the latest checkpoint-mark (and possibly fills 
+	 * holes to make the log contiguous up to that point). if autoTrim is set, this method will not leave a hole in the log. 
+	 * Conversely, if autoTrim is false and appendExtent() fails, any log-offsets assigned by the sequencers will remain holes. 
 	 *
 	 * @param ctnt          list of ByteBuffers to be written
+	 * @param autoTrim		flag, indicating whether to automatically trim the log to latest checkpoint if full
 	 * @return              the first log-offset of the written range 
 	 * @throws CorfuException
 	 */
-	public long varAppend(List<ByteBuffer> ctnt) throws CorfuException;
+	public long appendExtnt(List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException;
+	public long appendExtnt(List<ByteBuffer> ctnt) throws CorfuException;
 
 	/**
-	 * Appends a variable-length entry to the log. 
-	 * Breaks the entry into fixed-size buffers, and invokes varappend(List<ByteBuffer>);
+	 * see appendExtnt(List<ByteBuffer>): 
+	 *   Breaks the bytebuffer is gets as parameter into grain-size buffers, and invokes appendExtnt(List<ByteBuffer>);
 	 *
 	 * @param	buf	the buffer to append to the log
 	 * @param	bufsize	size of buffer to append
-	 * @return		position that buffer was appended at
-	 */
-	public long varAppend(byte[] buf, int reqsize) throws CorfuException;
-	
-	/**
-	 * @see com.microsoft.corfu.CorfuInterface#read(long)
-	 * 
-	 * fetch a log entry at specified position. 
-	 * If the entry at the specified position is not (fully) written yet, 
-	 * this call incurs a hole-filling at pos
-
-	 * @param pos position to (force successful) read from
-	 * @return an array of bytes with the content of the requested position
+	 * @param autoTrim		flag, indicating whether to automatically trim the log to latest checkpoint if full
+	 * @return		the first log-offset of the written range 
 	 * @throws CorfuException
 	 */
-	public List<ByteBuffer> forceRead(long pos) throws CorfuException;
-	public List<ByteBuffer> forceVarRead(MetaInfo inf) throws CorfuException;
+	public long appendExtnt(byte[] buf, int reqsize, boolean autoTrim) throws CorfuException;
+	public long appendExtnt(byte[] buf, int reqsize) throws CorfuException;
 	
 	/**
-	 * this utility routing attempts to fill up log holes up to its current tail.
+	 * Obtain the current mark in the log, where mark is one of the log mark types: Head, tail, or contiguous tail.
+	 * 
+	 * @param typ the type of log mark we query
+	 * @return an offset in the log corresponding to the requested mark type. 
+	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
+	 */
+	public long checkLogMark(CorfuLogMark typ) throws CorfuException;
+	
+	/**
+	 * set the read mark to the requested position. 
+	 * after this, invoking readExtnt will perform at the specified position.
+	 * 
+	 * @param pos move the read mark to this log position
+	 * @throws CorfuException
+	 */
+	public void setMark(long pos);
+		
+	/**
+	 * this utility routine does two maintenance chores:
+	 * 1. attempt to 'readExtnt()' up to the current consecutive tail.
+	 * 		- if any broken extent encountered, invoke 'fix()' on the entire extent, to allow skipping them.
+	 * 2. attempt to see if any log-offsets were allocated by the sequencer and never written. 
+	 * 		- if any offsets are preventing progress, invoke 'fix()' on individual offsets to allow skipping them,
 	 * 
 	 * @throws CorfuException
 	 */
 	public void repairLog() throws CorfuException;
 	
 	/**
-	 * this utility routing attempts to fill up log holes up to specified offset;
-	 * if bounded is false, it attempts to fill up to its current tail, same as repairlog() with no params.
+	 * same as repailLog(), but if bounded is true, repairs only up to that offset.
 	 * 
 	 * @throws CorfuException
 	 */
@@ -99,30 +106,4 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	 */
 	public long checkpointLoc() throws CorfuException;
 	
-	/**
-	 * Like varAppend, but if the log is full, trims to the latest checkpoint-mark (and possibly fills 
-	 * holes to make the log contiguous up to that point). It then retries
-	 * 
-	 * If successful, this method will not leave a hole in the log. 
-	 * Conversely, calling append() with a failure, then trim() + append(), will leave a hole, 
-	 * because the token assigned for append() the first time goes unused.
-	 *  
-	 * @param buf            buffer to be written
-	 * @param bufsize        number of bytes to be written out of 'buf'
-	 * @return               the first log offset of the consecutively appended range
-	 */
-	public long forceAppend(byte[] buf, int bufsize) throws CorfuException;
-
-	/**
-	 * Like varAppend, but if the log is full, trims to the latest checkpoint-mark (and possibly fills 
-	 * holes to make the log contiguous up to that point). It then retries
-	 * 
-	 * If successful, this method will not leave a hole in the log. 
-	 * Conversely, calling append() with a failure, then trim() + append(), will leave a hole, 
-	 * because the token assigned for append() the first time goes unused.
-	 *  
-	 * @param ctnt    list of requested buffers to append
-	 * @return        the first log offset of the consecutively appended range
-	 */
-	public long forceAppend(List<ByteBuffer> ctnt) throws CorfuException;
 }

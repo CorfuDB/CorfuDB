@@ -41,7 +41,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
 	private ArrayList<ByteBuffer> inmemoryStore;
 		
-	private MetaInfo[] inmemoryMeta; // store for the meta data which would go at the end of each disk-block
+	private ExtntInfo[] inmemoryMeta; // store for the meta data which would go at the end of each disk-block
 	private BitSet storeMap;
 	private int contiguoustail = 0;
 	private long trimmark = 0; // log has been trimmed up to this position, non-inclusive
@@ -151,7 +151,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}
 		else {	
 			inmemoryStore = new ArrayList<ByteBuffer>((int) UNITCAPACITY); 
-			inmemoryMeta = new MetaInfo[(int) UNITCAPACITY];
+			inmemoryMeta = new ExtntInfo[(int) UNITCAPACITY];
 		}
 		
 		storeMap = new BitSet((int) UNITCAPACITY); // TODO if UNITCAPACITY is more than MAXINT, 
@@ -194,7 +194,15 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		return mb;
 	}
 
-	private void RamToStore(long relOff, ByteBuffer buf, MetaInfo inf) {
+	/**
+	 * utility function to handle incoming log-entry. depending on mode, if RAMMODE, it holds a pointer to the entry buffer in memory, 
+	 * otherwise, it copies it into store.
+	 * 
+	 * @param relOff the physical offset to write to
+	 * @param buf the buffer to store
+	 * @param inf meta information on the extent that this entry belongs to
+	 */
+	private void RamToStore(long relOff, ByteBuffer buf, ExtntInfo inf) {
 		
 		if (RAMMODE) {
 			if (inmemoryStore.size() > relOff) {
@@ -218,7 +226,16 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}
 	}
 	
-	private ByteBuffer StoreToRam(long relOff, MetaInfo inf)  {
+	/**
+	 * utility function to bring into memory a log entry. depending on mode, if RAMMODE, simply return a point to the in-memory buffer, 
+	 * otherwise, it read the buffer from store.
+	 * we also fill-up 'inf' here with the meta-info of the extent that this entry belongs to.
+	 * 
+	 * @param relOff the log-offset we would like to obtain
+	 * @param inf reference to meta-info record to fill with the extent's meta-information
+	 * @return a pointer to a ByteBuffer containing the content
+	 */
+	private ByteBuffer StoreToRam(long relOff, ExtntInfo inf)  {
 
 		if (RAMMODE) {
 			assert(inmemoryStore.size() > relOff);
@@ -234,21 +251,47 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			return rb;
 		}
 	}
+	
+	/**
+	 * utility function to mark a log-entry as a permanent "hole"
+	 * reads can skip an entire extent once any of the entries in the range is marked a hole
+	 * 
+	 * @param relOff the offset to mark a hole
+	 */
+	private void FillholeStore(long relOff) {
+		if (RAMMODE) {
+			if (inmemoryStore.size() > relOff) {
+				inmemoryStore.set((int) relOff, null);
+			}
+			else {
+				// System.out.println("  add new Buff at pos");
+				// System.out.println("  buf.capacity " + buf.capacity());
+				inmemoryStore.add((int) relOff, null);
+			}
+			inmemoryMeta[(int)relOff].setFlag(commonConstants.SKIPFLAG); 
+		}
+		else {
+			MappedByteBuffer mb = getMappedBuf(relOff);
+			assert (mb.capacity() >= ENTRYSIZE + 20); // TODO!!! long+long+bool , ugh 
+			mb.position(mb.position() + ENTRYSIZE+8+8);
+			mb.putInt(commonConstants.SKIPFLAG);
+		}
+		
+	}
 
 	
 	/* (non-Javadoc)
 	 * implements to CorfuUnitServer.Iface write() method.
-	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#write(com.microsoft.corfu.LogEntryWrap)
+	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#write(com.microsoft.corfu.ExtntWrap)
 	 * 
 	 * we make great effort for the write to either succeed in full, or not leave any partial garbage behind. 
 	 * this means that we first check if all the pages to be written are free, and that the incoming entry contains content for each page.
 	 * in the event of some error in the middle, we reset any values we already set.
 	 */
 	@Override
-	synchronized public CorfuErrorCode write(MetaInfo inf, List<ByteBuffer> ctnt) throws org.apache.thrift.TException {
+	synchronized public CorfuErrorCode write(ExtntInfo inf, List<ByteBuffer> ctnt) throws org.apache.thrift.TException {
 		ByteBuffer bb;
-		long fromOff = inf.metaFirstOff, toOff = (fromOff + ctnt.size());
-		// System.out.println("write  from,to:" + fromOff + " " + toOff);
+		long fromOff = inf.getMetaFirstOff(), toOff = inf.getMetaLastOff();
 		
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		// from here until the next '^^^^..' mark : 
@@ -265,7 +308,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}
 
 		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
-		// System.out.println("rel from,to:" + relFromOff + " " + relToOff);
 
 		if (relToOff > relFromOff) {
 			int i = storeMap.nextSetBit((int) relFromOff);
@@ -311,52 +353,90 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		return CorfuErrorCode.OK; 
     }
 	
-	synchronized public CorfuErrorCode fill(long pos) {
-		if (pos - trimmark >= UNITCAPACITY) {
-			log.warn("attempt to fill beyond unit capacity! trimmark= {} fill({})", trimmark, pos);
+	synchronized public CorfuErrorCode fix(ExtntInfo inf) {
+		long fromOff = inf.getMetaFirstOff(), toOff = inf.getMetaLastOff();
+		CorfuErrorCode er = CorfuErrorCode.ERR_OVERWRITE; 
+		
+		if (toOff - trimmark >= UNITCAPACITY) {
+			log.warn("unit full ! trimmark= {} fill[{}..{}]", trimmark, fromOff, toOff);
 			return CorfuErrorCode.ERR_FULL; 
 		}
 		
-		if (pos < trimmark) {
-			log.info("attempt to fill trimmed offset {}!", pos);
-			return CorfuErrorCode.ERR_TRIMMED; 
+		if (fromOff < trimmark) {
+			log.debug("attempt to fix a trimmed range! [{}..{}]", fromOff, toOff);
+			return CorfuErrorCode.OK; 
 		}
 
-		int relOff = (int) (pos % UNITCAPACITY);
-		if (storeMap.get(relOff)) {
-			log.debug("attempt to fill a written entry (good?) {}", pos);
-			return CorfuErrorCode.ERR_OVERWRITE;
+		int relFromOff = (int) (fromOff % UNITCAPACITY), relToOff = (int) (toOff % UNITCAPACITY);
+		
+		if (relToOff < relFromOff) {
+			for (int off = relFromOff; off < UNITCAPACITY; off++) {
+				if (storeMap.get(off)) continue; // offset already written
+				storeMap.set(off);
+				FillholeStore(off);
+				er = CorfuErrorCode.OK; // if at least one offset is marked hole, return success
+			}
+			relFromOff = 0;
 		}
 		
-		storeMap.set(relOff);
-		RamToStore(relOff, null, new MetaInfo(-pos, -pos));
-		return CorfuErrorCode.OK;
+		for (int off = relFromOff; off < relToOff; off++) {
+			if (storeMap.get(off)) continue; // offset already written
+			storeMap.set(off);
+			FillholeStore(off);
+			er = CorfuErrorCode.OK; // if at least one offset is marked hole, return success
+		}
+		return er; 
+
 	}
-	
+
 	/**
 	 * @author dalia
-	 * this is a util class interface, to save repetition of error-returning code
+	 * a great portion of the unit-server read() method is dedicated to error-handling,
+	 * so the ErrorHelper class is an attempt to reduce repetition of error-handling code
 	 *
-	 * @param <T>
+	 * @param <T> the return type from read()
 	 */
 	interface ErrorHelper<T> {
-		T rh(CorfuErrorCode er, long... args);
+		/** helper to construct a ExtntWrap record and return in case of read error
+		 * @param er the returned error-code
+		 * @param args expects three longs: from-offset, to-offset, and bad-offset
+		 * @return a ExtntWrap with empty contents and the requested error-code
+		 */
+		T badoffHelper(CorfuErrorCode er, long... args);
+		
+		/** helper to construct a ExtntWrap record and return in case of meta-info problem 
+		 * @param reqinfo the meta-info requested for this read
+		 * @param ckinf the meta-info retrieved (and causing the problem)
+		 * @return a ExtntWrap with empty contents and an appropriate error-code
+		 */
+		T badmetaHelper(ExtntInfo reqinfo, ExtntInfo ckinf);
 	}
-	ErrorHelper<LogEntryWrap> retval = new ErrorHelper<LogEntryWrap>() {
+	ErrorHelper<ExtntWrap> retval = new ErrorHelper<ExtntWrap>() {
 		@Override
-		public LogEntryWrap rh(CorfuErrorCode er, long... args) {
-			long fromOff = args[0];
-			long toOff = args[1]; 
-			long badOff = args[2];
-			LogEntryWrap r;
-			r = new LogEntryWrap(er, null, null);
-			log.info("error reading offset {} in [{}..{}] errval={}", badOff, fromOff, toOff, er);
-			return r;
+		public ExtntWrap badoffHelper(CorfuErrorCode er, long... args) {
+			log.info("error reading offset {} in [{}..{}] errval={}", 
+					args[2] /* badOff */, 
+					args[0] /* from Off */, 
+					args[1] /* to Off */, 
+					er);
+			return new ExtntWrap(er, null, null);
+		}
+
+		@Override
+		public ExtntWrap badmetaHelper(ExtntInfo reqinfo, ExtntInfo ckinf) {
+			if (ckinf.getFlag() == commonConstants.SKIPFLAG ) {
+				log.info("extent {} filled; returning SKIP code ", ckinf);
+				return new ExtntWrap(CorfuErrorCode.OK_SKIP, null, null);
+			} else {
+				log.info("ExtntInfo mismatch expecting {} received {}", reqinfo, ckinf);
+				return new ExtntWrap(CorfuErrorCode.ERR_BADPARAM, null, null);
+			}
+
 		}
 	};
 	
 	/* (non-Javadoc)
-	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#read(com.microsoft.corfu.LogHeader, com.microsoft.corfu.MetaInfo)
+	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#read(com.microsoft.corfu.CorfuHeader, com.microsoft.corfu.ExtntInfo)
 	 * 
 	 * this method performs actual reading of a range of pages.
 	 * it fails if any page within range has not been written.
@@ -365,22 +445,22 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 * the method also reads-ahead the subsequent meta-info entry if hdr.readnext is set.
 	 * if the next meta info record is not available, it returns the current meta-info structure
 	 * 
-	 *  @param a LogHeader describing the range to read
+	 *  @param a CorfuHeader describing the range to read
 	 */
 	@Override
-	synchronized public LogEntryWrap read(LogHeader hdr) throws org.apache.thrift.TException {
+	synchronized public ExtntWrap read(CorfuHeader hdr) throws org.apache.thrift.TException {
 
-		long fromOff = hdr.range.getMetaFirstOff(), toOff = hdr.range.getMetaLastOff();
-		log.debug("read [{}..{}] time={} CAPACITY={}", fromOff, toOff, trimmark, UNITCAPACITY);
+		long fromOff = hdr.getExtntInf().getMetaFirstOff(), toOff = hdr.getExtntInf().getMetaLastOff();
+		log.debug("read [{}..{}] trim={} CAPACITY={}", fromOff, toOff, trimmark, UNITCAPACITY);
 		
 		// check that we can satisfy this request in full, up to '^^^^^^^^^^^^^' mark
 		//
 		
 		if ((toOff - trimmark) >= UNITCAPACITY) 
-			return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, toOff);
+			return retval.badoffHelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, toOff);
 		
 		if (fromOff < trimmark)
-			return retval.rh(CorfuErrorCode.ERR_TRIMMED, fromOff, toOff, fromOff);
+			return retval.badoffHelper(CorfuErrorCode.ERR_TRIMMED, fromOff, toOff, fromOff);
 		
 		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
 		long relBaseOff = fromOff - relFromOff;
@@ -388,111 +468,119 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		if (relToOff > relFromOff) {
 			int i = storeMap.nextClearBit((int) relFromOff);
 			if (i < relToOff)  // we expect the next clear bit to be higher than ToOff, or none at all
-				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+i) );
+				return retval.badoffHelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+i) );
 			
 		} else {   // range wraps around the array
 			int i = storeMap.nextClearBit((int) relFromOff); 
 			if (i < (int) UNITCAPACITY)  // we expect no bit higher than FromOff to be clear, hence for i to be UNITCAPACITY
-				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+i) );
+				return retval.badoffHelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+i) );
 
 			i = storeMap.nextClearBit(0); 
 			if (i < relToOff)  // we expect the next clear bit from wraparound origin to be higher than ToOff, or none
-				return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+UNITCAPACITY+i) );
+				return retval.badoffHelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, (relBaseOff+UNITCAPACITY+i) );
 
 		}
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-		// actual reading starts here
+		// actual reading starts here (we already checked that entire range is written)
 		
 		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
-		MetaInfo ckinf = new MetaInfo();
+		ExtntInfo ckinf = new ExtntInfo();
 		
 		if (relToOff < relFromOff) {
 			for (long off = relFromOff; off < UNITCAPACITY; off++) {
 				wbufs.add(StoreToRam(off, ckinf));
-				if (!ckinf.equals(hdr.range)) {
-					log.debug("metainfo mismatch off={} expecting {} received {}", relBaseOff+off, hdr.range, ckinf);
-					return retval.rh(CorfuErrorCode.OK_SKIP, fromOff, toOff, (relBaseOff+off) );
-				}
+				if (!ckinf.equals(hdr.getExtntInf())) 
+					return retval.badmetaHelper(hdr.getExtntInf(), ckinf);
 			}
 			relFromOff = 0; // wrap around and "spill" to the for loop below
 		}
 		
 		for (long off = relFromOff; off < relToOff; off++) {
 			wbufs.add(StoreToRam(off, ckinf));
-			if (!ckinf.equals(hdr.range)) {
-				log.debug("metainfo mismatch off={} expecting {} received {}", relBaseOff+off, hdr.range, ckinf);
-				return retval.rh(CorfuErrorCode.OK_SKIP, fromOff, toOff, (relBaseOff+UNITCAPACITY+off) );
-			}
+			if (!ckinf.equals(hdr.getExtntInf())) 
+				return retval.badmetaHelper(hdr.getExtntInf(), ckinf);
 		}
 
-		int relPrefetch = (int) (hdr.prefetchOff % UNITCAPACITY);
-		if (hdr.prefetch && (hdr.prefetchOff - trimmark) < UNITCAPACITY && storeMap.get(relPrefetch)) {
+		int relPrefetch = (int) (hdr.getPrefetchOff() % UNITCAPACITY);
+		if (hdr.isPrefetch() && (hdr.getPrefetchOff() - trimmark) < UNITCAPACITY && storeMap.get(relPrefetch)) {
 			StoreToRam(relPrefetch, ckinf); // TODO read only the meta-info here
-			log.debug("metainfo prefetch {} available -- {}", relPrefetch, ckinf);
-			return new LogEntryWrap(CorfuErrorCode.OK, ckinf, wbufs); 
+			log.debug("ExtntInfo prefetch {} available -- {}", relPrefetch, ckinf);
+			return new ExtntWrap(CorfuErrorCode.OK, ckinf, wbufs); 
 		} else {
-			log.debug("metainfo prefetch {} unavailable", relPrefetch);
-			return new LogEntryWrap(CorfuErrorCode.OK, hdr.range, wbufs);
+			log.debug("ExtntInfo prefetch {} unavailable", relPrefetch);
+			return new ExtntWrap(CorfuErrorCode.OK, hdr.getExtntInf(), wbufs);
 		}
 	}
 	
 	/* read the meta-info record at specified offset
 	 * 
 	 * @param off- the offset to read from
-	 * @return the meta-info record "wrapped" in LogEntryWrap. 
+	 * @return the meta-info record "wrapped" in ExtntWrap. 
 	 *         The wrapping contains error code: UNWRITTEN if reading beyond the tail of the log
 	 * 
 	 * (non-Javadoc)
 	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#readmeta(long)
 	 */
 	@Override
-	public LogEntryWrap readmeta(long off) {
-		MetaInfo ret = new MetaInfo();
-		if ((off - trimmark) < UNITCAPACITY && storeMap.get((int) (off % UNITCAPACITY)) ) {
-			StoreToRam(off % UNITCAPACITY, ret); // TODO read only the meta-info here
-			log.debug("readmeta off={} retinfo={}" , off, ret);
-			return new LogEntryWrap(CorfuErrorCode.OK, ret, null);
-	} else 
-		return retval.rh(CorfuErrorCode.ERR_UNWRITTEN, off, off, off );
+	public ExtntWrap readmeta(long off) {
+		log.debug("readmeta {}", off);
+		if (off < trimmark)
+			return retval.badoffHelper(CorfuErrorCode.ERR_TRIMMED, off, off, off);
+		if ((off - trimmark) >= UNITCAPACITY )
+			return retval.badoffHelper(CorfuErrorCode.ERR_UNWRITTEN, off, off, off );
+		if (! storeMap.get((int) (off % UNITCAPACITY)) ) 
+			return retval.badoffHelper(CorfuErrorCode.ERR_UNWRITTEN, off, off, off );
+
+		ExtntInfo ret = new ExtntInfo();
+		StoreToRam(off % UNITCAPACITY, ret); // TODO read only the meta-info here
+		log.debug("readmeta off={} retinfo={}" , off, ret);
+		return new ExtntWrap(CorfuErrorCode.OK, ret, null);
 	}
 
 	@Override
-	synchronized public long check() throws org.apache.thrift.TException {
+	synchronized public long check(CorfuLogMark typ) {
+		
 		int a = (int) (trimmark % UNITCAPACITY); // a is the relative trim mark
-
-		if (a > 0) {
-			int candidateA = storeMap.previousSetBit(a-1);
-			if (candidateA >= 0) return trimmark + UNITCAPACITY - (a-1-candidateA);
+		if (typ.equals(CorfuLogMark.HEAD)) {
+			return trimmark;
+		} 
+		
+		else if (typ.equals(CorfuLogMark.TAIL)) {
+	
+			if (a > 0) {
+				int candidateA = storeMap.previousSetBit(a-1);
+				if (candidateA >= 0) return trimmark + UNITCAPACITY - (a-1-candidateA);
+			}
+			
+			int candidateB = storeMap.previousSetBit((int)UNITCAPACITY-1);
+			if (candidateB >= 0) return trimmark + (candidateB+1-a);
+			
+			return trimmark;
 		}
 		
-		int candidateB = storeMap.previousSetBit((int)UNITCAPACITY-1);
-		if (candidateB >= 0) return trimmark + (candidateB+1-a);
-		
-		return trimmark;
-	}
+		else if (typ.equals(CorfuLogMark.CONTIG)) {
+			int candidateB = storeMap.nextClearBit(a);
+			if (candidateB < UNITCAPACITY) return trimmark + (candidateB-a);
+			// note: nextClearBit does not return -1 if none is found; 
+			// the "next" index it finds is the one past the end of the bitMap. Odd, but that's the way it is..
 	
-	@Override
-	synchronized public long checkcontiguous() throws org.apache.thrift.TException{
-		int a = (int) (trimmark % UNITCAPACITY); // a is the relative trim mark
-
-		int candidateB = storeMap.nextClearBit(a);
-		if (candidateB < UNITCAPACITY) return trimmark + (candidateB-a);
-		// note: nextClearBit does not return -1 if none is found; 
-		// the "next" index it finds is the one past the end of the bitMap. Odd, but that's the way it is..
-
-		int candidateA = storeMap.nextClearBit(0);
-		if (candidateA < a) return trimmark + UNITCAPACITY - (a - candidateA);
+			int candidateA = storeMap.nextClearBit(0);
+			if (candidateA < a) return trimmark + UNITCAPACITY - (a - candidateA);
+			
+			return trimmark+UNITCAPACITY;		
+		}
 		
-		return trimmark+UNITCAPACITY;		
+		log.warn("check({}) shouldn't reach here", typ);
+		return -1;
 	}
 	
 	@Override
 	synchronized public boolean trim(long mark) throws org.apache.thrift.TException {
-		log.debug("CorfuUnitServer trim curTrimMark={} newTrimMark={} contiguousmark={} check()={}", 
-				trimmark, mark, checkcontiguous(), check());
+		log.debug("CorfuUnitServer trim curTrimMark={} newTrimMark={} contiguousmark={} check(CorfuLogMark.TAIL)={}", 
+				trimmark, mark, check(CorfuLogMark.CONTIG), check(CorfuLogMark.TAIL));
 		
 		if (mark <= trimmark) return true;		
-    	if (mark > checkcontiguous()) {
+    	if (mark > check(CorfuLogMark.CONTIG)) {
     		log.warn("attempt to trim past the filled mark of storage unit {}", mark);
     		return false;
     	}

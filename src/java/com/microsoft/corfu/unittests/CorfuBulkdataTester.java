@@ -13,6 +13,8 @@ import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuErrorCode;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.CorfuExtendedInterface;
+import com.microsoft.corfu.CorfuLogMark;
+import com.microsoft.corfu.ExtntWrap;
 
 public class CorfuBulkdataTester implements Runnable {
 
@@ -122,56 +124,82 @@ public class CorfuBulkdataTester implements Runnable {
 	}
 	
 	private void readerloop() {
+		long trimpos = 0;
 		int rpt = 0;
+		ExtntWrap ret = null;
 
 		while(rpt < nrepeat) {
-			readnext();
-			stats(rpt++);
+
+			try {
+				ret = crf.readExtnt();
+			} catch (CorfuException e) {
+				System.out.println("read failed");
+				e.printStackTrace();
+				
+				if (e.er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
+					
+					synchronized(this) {
+						try {
+							wait(1000);
+						} catch (InterruptedException ex) {
+							System.out.println("shouldn't happend..");
+						}
+					}
+					continue;
+				}
+				
+				if (e.er.equals(CorfuErrorCode.ERR_TRIMMED)) {
+					try {
+						trimpos = crf.checkLogMark(CorfuLogMark.HEAD);
+						System.out.println("setting read mark to current lod head at " + trimpos);
+						crf.setMark(trimpos);
+					} catch (CorfuException ce) {
+						break;
+					}
+					continue;
+				}
+				
+				// give up on all other error types
+				break;
+			}
+			
+			if (ret.getCtnt().size() > 0) stats(++rpt);
+			
+			if (ret.getPrefetchInf().getMetaFirstOff() - trimpos >= CM.getUnitsize()/2) {
+				System.out.println("trim log by " + CM.getUnitsize()/2);
+				trimpos += CM.getUnitsize()/2;
+				try {
+					crf.trim(trimpos);
+				} catch (CorfuException e) {
+					System.out.println("warning: trim(" + trimpos + ") failed");
+					// e.printStackTrace();
+				}
+			}
 		}
 	}
 	
-	private synchronized void readnext() {
-		long cumsize = 0, cumpos = 0;
-		List<ByteBuffer> ret;
-		for (;;) {
-		try {
-			ret = crf.varReadnext();
-			cumsize += ret.size();
-			if (cumsize >= CM.getUnitsize()/2) {
-				cumpos += CM.getUnitsize()/2;
-				cumsize -= CM.getUnitsize()/2;
-				crf.trim(cumpos);
-			}
-			return;
-		} catch (CorfuException e) {
-			System.out.println("read failed");
-			if (!e.er.equals(CorfuErrorCode.ERR_UNWRITTEN)) break;
-			
-			try {
-				wait(1000);
-			} catch (InterruptedException ex) {
-				System.out.println("shouldn't happend..");
-			}
-		}}
-	}
-
 	private void writerloop() {
 		int rpt = 0;
-	
-		while(rpt < nrepeat) {
-			writenext();
-			stats(rpt++);
-		}
-	}
-	
-	private synchronized void writenext() {
 		byte[] bb = new byte[entsize];
 		long pos;
-		try {
-			pos = crf.varAppend(bb, entsize);
-			notify();
-		} catch (CorfuException e) {
-			System.out.println("corfu append failed");
+	
+		while(rpt < nrepeat) {
+			try {
+				pos = crf.appendExtnt(bb, entsize);
+				synchronized(this) { notify(); }
+				stats(++rpt);
+			} catch (CorfuException e) {
+				System.out.println("corfu append failed; repairing log");
+				try {
+					synchronized(this) { notify(); }
+					crf.repairLog();
+					// Thread.sleep(1000);
+				} catch(CorfuException e1) {
+					System.out.println("repairLog failed; quitting");
+					break;
+				}
+			}
 		}
 	}
+	
 }

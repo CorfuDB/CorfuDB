@@ -4,18 +4,16 @@ include "common.thrift"
 
 service CorfuUnitServer {
 
-	common.CorfuErrorCode write(1:common.MetaInfo inf, 2:list<common.LogPayload> ctnt),
+	common.CorfuErrorCode write(1:common.ExtntInfo inf, 2:list<common.LogPayload> ctnt),
 	
-	common.CorfuErrorCode fill(1:i64 pos),
+	common.CorfuErrorCode fix(1:common.ExtntInfo inf),
 
-	common.LogEntryWrap read(1:common.LogHeader hdr),
+	common.ExtntWrap read(1:common.CorfuHeader hdr),
 	
-	common.LogEntryWrap readmeta(1:i64 off),
+	common.ExtntWrap readmeta(1:i64 off),
 
-	i64 check(),
-	
-	i64 checkcontiguous(),
-	
+	i64 check(common.CorfuLogMark typ),
+		
 	bool trim (1:i64 mark),
 
 }

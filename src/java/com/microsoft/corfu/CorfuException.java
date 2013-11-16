@@ -76,3 +76,14 @@ class UnwrittenCorfuException extends CorfuException
 		this.er = CorfuErrorCode.ERR_UNWRITTEN;
 	}
 }
+
+@SuppressWarnings("serial")
+class InternalCorfuException extends CorfuException
+{
+	public InternalCorfuException(String desc)
+	{
+		super(desc);
+		this.er = CorfuErrorCode.ERR_BADPARAM;
+	}
+}
+
