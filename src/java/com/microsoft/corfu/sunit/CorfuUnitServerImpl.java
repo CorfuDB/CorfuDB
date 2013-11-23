@@ -194,6 +194,11 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		return mb;
 	}
 
+	private void ExtntInfoCopy(ExtntInfo from, ExtntInfo to) {
+		to.setFlag(from.getFlag());
+		to.setMetaFirstOff(from.getMetaFirstOff());
+		to.setMetaLength(from.getMetaLength());
+	}
 	/**
 	 * utility function to handle incoming log-entry. depending on mode, if RAMMODE, it holds a pointer to the entry buffer in memory, 
 	 * otherwise, it copies it into store.
@@ -222,7 +227,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			buf.rewind();
 			mb.put(buf.array());
 			mb.putLong(inf.getMetaFirstOff());
-			mb.putLong(inf.getMetaLastOff());
+			mb.putInt(inf.getMetaLength());
 		}
 	}
 	
@@ -239,15 +244,14 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
 		if (RAMMODE) {
 			assert(inmemoryStore.size() > relOff);
-			inf.setMetaFirstOff(inmemoryMeta[(int)relOff].getMetaFirstOff());
-			inf.setMetaLastOff(inmemoryMeta[(int)relOff].getMetaLastOff());
+			ExtntInfoCopy(inmemoryMeta[(int)relOff], inf);
 			return inmemoryStore.get((int)relOff);
 		}
 		else {
 			MappedByteBuffer mb = getMappedBuf(relOff);
 			ByteBuffer rb = ByteBuffer.wrap(mb.array(), mb.position(), ENTRYSIZE);
 			inf.setMetaFirstOff(mb.getLong());
-			inf.setMetaLastOff(mb.getLong());
+			inf.setMetaLength(mb.getInt());
 			return rb;
 		}
 	}
@@ -291,13 +295,13 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	@Override
 	synchronized public CorfuErrorCode write(ExtntInfo inf, List<ByteBuffer> ctnt) throws org.apache.thrift.TException {
 		ByteBuffer bb;
-		long fromOff = inf.getMetaFirstOff(), toOff = inf.getMetaLastOff();
+		long fromOff = inf.getMetaFirstOff(), toOff = fromOff + inf.getMetaLength();
 		
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		// from here until the next '^^^^..' mark : 
 		// code to verify that there is room to write the entire multi-page entry in one shot, and not overwrite any filled pages
 		//
-		if (toOff - trimmark >= UNITCAPACITY) {
+		if (toOff - trimmark > UNITCAPACITY) {
 			log.warn("unit full ! trimmark= {} fill[{}..{}]", trimmark, fromOff, toOff);
 			return CorfuErrorCode.ERR_FULL; 
 		}
@@ -353,18 +357,30 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		return CorfuErrorCode.OK; 
     }
 	
+	/**
+	 * fix the specified extent
+	 * @return OK errorcode if it succeeds in marking at least one of the extent's pages for 'skip'
+	 * 		OK error if the entire extent has already been trimmed
+	 * 		ERROR_OVERWRITE if the entire extent is occupied
+	 * 		ERROR_FULL if the extent spills over the capacity of the log
+	 */
 	synchronized public CorfuErrorCode fix(ExtntInfo inf) {
-		long fromOff = inf.getMetaFirstOff(), toOff = inf.getMetaLastOff();
+		long fromOff = inf.getMetaFirstOff(), toOff = fromOff + inf.getMetaLength();
 		CorfuErrorCode er = CorfuErrorCode.ERR_OVERWRITE; 
 		
-		if (toOff - trimmark >= UNITCAPACITY) {
+		if (toOff - trimmark > UNITCAPACITY) {
 			log.warn("unit full ! trimmark= {} fill[{}..{}]", trimmark, fromOff, toOff);
 			return CorfuErrorCode.ERR_FULL; 
 		}
 		
-		if (fromOff < trimmark) {
+		if (toOff <= trimmark) {
 			log.debug("attempt to fix a trimmed range! [{}..{}]", fromOff, toOff);
 			return CorfuErrorCode.OK; 
+		}
+		
+		if (fromOff < trimmark) {
+			log.warn("extent {} partially trimmed! fixing the rest of the extent", inf );
+			fromOff = trimmark;
 		}
 
 		int relFromOff = (int) (fromOff % UNITCAPACITY), relToOff = (int) (toOff % UNITCAPACITY);
@@ -450,13 +466,13 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	@Override
 	synchronized public ExtntWrap read(CorfuHeader hdr) throws org.apache.thrift.TException {
 
-		long fromOff = hdr.getExtntInf().getMetaFirstOff(), toOff = hdr.getExtntInf().getMetaLastOff();
+		long fromOff = hdr.getExtntInf().getMetaFirstOff(), toOff = fromOff + hdr.getExtntInf().getMetaLength();
 		log.debug("read [{}..{}] trim={} CAPACITY={}", fromOff, toOff, trimmark, UNITCAPACITY);
 		
 		// check that we can satisfy this request in full, up to '^^^^^^^^^^^^^' mark
 		//
 		
-		if ((toOff - trimmark) >= UNITCAPACITY) 
+		if ((toOff - trimmark) > UNITCAPACITY) 
 			return retval.badoffHelper(CorfuErrorCode.ERR_UNWRITTEN, fromOff, toOff, toOff);
 		
 		if (fromOff < trimmark)

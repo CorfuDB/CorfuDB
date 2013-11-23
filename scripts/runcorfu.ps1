@@ -1,3 +1,10 @@
+function doicm {
+	icm $args[0] -Scriptblock $args[1] -argumentList $args[2..($args.length-1)] -asjob
+}
+[scriptblock]$sb = { $a = $args[0]; cd c:\users\$a\corfu-bin; java $args[1..($args.length-1)] }
+
+##################################################################################################
+
 # clean up previous jobs
 write-host killing all previous jobs ...
 stop-job *
@@ -24,7 +31,7 @@ if ($pushflag) { write-host push updates to destinations }
 # sequencer 
 # ################################################################################################################
 $t = $CONFIG.systemview.CONFIGURATION.tokenserver
-write-host tokenserver is $t
+# write-host tokenserver is $t
 ($rem, $port) = $t.split(":")
 $sjar=".\corfu-sequencer.jar"
 $smainclass = "com.microsoft.corfu.sequencer.CorfuSequencerImpl"
@@ -41,11 +48,7 @@ if ($pushflag) {
  
 # start sequencer on remote
 #
-icm $rem -ScriptBlock { param($sjar, $smainclass, $uid
-		)
-		cd c:\users\$uid\corfu-bin; 
-		java -classpath $sjar $smainclass
-	} -ArgumentList @($sjar, $smainclass, $uid) -asjob
+doicm $rem $sb $uid -classpath $sjar $smainclass
 
 # sunit servers 
 # ################################################################################################################
@@ -69,10 +72,7 @@ $sunits | %{ $ind=0} {
  
 	# start unit server on remote
 	#
-	icm $rem -ScriptBlock { param($sjar, $smainclass, $port, $uid, $ind)
-		cd c:\users\$uid\corfu-bin; 
-		java -classpath $sjar $smainclass $ind
-		} -ArgumentList @($sjar, $smainclass, $port, $uid, $ind) -asjob
+	doicm $rem $sb $uid -classpath $sjar $smainclass -unit $ind -rammode -drivename foo.txt 
 
-	$i++
+	$ind++
 }

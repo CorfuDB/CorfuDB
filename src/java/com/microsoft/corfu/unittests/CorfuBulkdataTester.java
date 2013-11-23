@@ -8,6 +8,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.microsoft.corfu.CorfuClientImpl;
 import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuErrorCode;
@@ -15,10 +18,13 @@ import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.CorfuExtendedInterface;
 import com.microsoft.corfu.CorfuLogMark;
 import com.microsoft.corfu.ExtntWrap;
+import com.microsoft.corfu.sunit.CorfuUnitServerImpl;
 
 public class CorfuBulkdataTester implements Runnable {
+	private Logger log = LoggerFactory.getLogger(CorfuBulkdataTester.class);
 
-	static AtomicInteger commulative = new AtomicInteger(0);
+	static AtomicInteger wcommulative = new AtomicInteger(0);
+	static AtomicInteger rcommulative = new AtomicInteger(0);
 	
 	static private CorfuConfigManager CM;
 	static private int nrepeat = 100000;
@@ -93,15 +99,17 @@ public class CorfuBulkdataTester implements Runnable {
 		this.isreader = isreader; // thread id
 	}
 
-	private void stats(int rpt) {
+	private void stats(int rpt, AtomicInteger cumm, String t) {
 		long elapsetime;
 	
 		if (rpt > 0 && rpt % printfreq == 0) {
-			int c = commulative.addAndGet(printfreq);
+			int c = cumm.addAndGet(printfreq);
 			elapsetime = System.currentTimeMillis();
-			System.out.println("+- " + myname + ":" + myid + 
-					"-+  " + (rpt+1)/printfreq + "(*" + printfreq + ") appends+reads" +
-					" (commulative " + c/printfreq + "(*" + printfreq + ") in " + (elapsetime-starttime)/1000 + " secs");
+			log.info("{}*{} (cummulative {}*{}) {}'s in {} secs", 
+					(rpt+1)/printfreq, printfreq, 
+					t, 
+					c/printfreq, printfreq,
+					(elapsetime-starttime)/1000);
 		}
 	}
 
@@ -113,9 +121,9 @@ public class CorfuBulkdataTester implements Runnable {
 		
 		try {
 			crf = new CorfuClientImpl(CM);
-			System.out.println("first check(): " + crf.check());
+			log.info("first check(): " + crf.check());
 		} catch (CorfuException e3) {
-			System.out.println("cannot set client conenction, giving up");
+			log.error("cannot set client conenction, giving up");
 			e3.printStackTrace();
 			return;
 		}
@@ -133,25 +141,25 @@ public class CorfuBulkdataTester implements Runnable {
 			try {
 				ret = crf.readExtnt();
 			} catch (CorfuException e) {
-				System.out.println("read failed");
-				e.printStackTrace();
 				
 				if (e.er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
+					log.info("read failed: unwritten, wait 1 sec");
 					
 					synchronized(this) {
 						try {
 							wait(1000);
 						} catch (InterruptedException ex) {
-							System.out.println("shouldn't happend..");
+							log.warn("reader wait interrupted; shouldn't happend..");
 						}
 					}
 					continue;
 				}
 				
 				if (e.er.equals(CorfuErrorCode.ERR_TRIMMED)) {
+					log.info("read failed: trimmed, reset reader-mark");
 					try {
 						trimpos = crf.checkLogMark(CorfuLogMark.HEAD);
-						System.out.println("setting read mark to current lod head at " + trimpos);
+						log.info("setting read mark to current log head at {}", trimpos);
 						crf.setMark(trimpos);
 					} catch (CorfuException ce) {
 						break;
@@ -163,16 +171,15 @@ public class CorfuBulkdataTester implements Runnable {
 				break;
 			}
 			
-			if (ret.getCtnt().size() > 0) stats(++rpt);
+			if (ret.getCtnt().size() > 0) stats(++rpt, rcommulative, "READ");
 			
 			if (ret.getPrefetchInf().getMetaFirstOff() - trimpos >= CM.getUnitsize()/2) {
-				System.out.println("trim log by " + CM.getUnitsize()/2);
 				trimpos += CM.getUnitsize()/2;
+				log.info("reader consumed half-log bulk; trimming log to {}", trimpos);
 				try {
 					crf.trim(trimpos);
 				} catch (CorfuException e) {
-					System.out.println("warning: trim(" + trimpos + ") failed");
-					// e.printStackTrace();
+					log.warn(" trim({}) failed", trimpos);
 				}
 			}
 		}
@@ -187,15 +194,15 @@ public class CorfuBulkdataTester implements Runnable {
 			try {
 				pos = crf.appendExtnt(bb, entsize);
 				synchronized(this) { notify(); }
-				stats(++rpt);
+				stats(++rpt, wcommulative, "WRITE");
 			} catch (CorfuException e) {
-				System.out.println("corfu append failed; repairing log");
+				log.info("corfu append failed; repairing log");
 				try {
 					synchronized(this) { notify(); }
 					crf.repairLog();
 					// Thread.sleep(1000);
 				} catch(CorfuException e1) {
-					System.out.println("repairLog failed; quitting");
+					log.error("repairLog failed; quitting");
 					break;
 				}
 			}

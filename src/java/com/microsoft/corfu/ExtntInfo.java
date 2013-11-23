@@ -34,7 +34,7 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("ExtntInfo");
 
   private static final org.apache.thrift.protocol.TField META_FIRST_OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("metaFirstOff", org.apache.thrift.protocol.TType.I64, (short)1);
-  private static final org.apache.thrift.protocol.TField META_LAST_OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("metaLastOff", org.apache.thrift.protocol.TType.I64, (short)2);
+  private static final org.apache.thrift.protocol.TField META_LENGTH_FIELD_DESC = new org.apache.thrift.protocol.TField("metaLength", org.apache.thrift.protocol.TType.I32, (short)2);
   private static final org.apache.thrift.protocol.TField FLAG_FIELD_DESC = new org.apache.thrift.protocol.TField("flag", org.apache.thrift.protocol.TType.I32, (short)3);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
@@ -44,13 +44,13 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
   }
 
   public long metaFirstOff; // required
-  public long metaLastOff; // required
+  public int metaLength; // required
   public int flag; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
     META_FIRST_OFF((short)1, "metaFirstOff"),
-    META_LAST_OFF((short)2, "metaLastOff"),
+    META_LENGTH((short)2, "metaLength"),
     FLAG((short)3, "flag");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
@@ -68,8 +68,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       switch(fieldId) {
         case 1: // META_FIRST_OFF
           return META_FIRST_OFF;
-        case 2: // META_LAST_OFF
-          return META_LAST_OFF;
+        case 2: // META_LENGTH
+          return META_LENGTH;
         case 3: // FLAG
           return FLAG;
         default:
@@ -113,7 +113,7 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
 
   // isset id assignments
   private static final int __METAFIRSTOFF_ISSET_ID = 0;
-  private static final int __METALASTOFF_ISSET_ID = 1;
+  private static final int __METALENGTH_ISSET_ID = 1;
   private static final int __FLAG_ISSET_ID = 2;
   private byte __isset_bitfield = 0;
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
@@ -121,8 +121,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
     tmpMap.put(_Fields.META_FIRST_OFF, new org.apache.thrift.meta_data.FieldMetaData("metaFirstOff", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
-    tmpMap.put(_Fields.META_LAST_OFF, new org.apache.thrift.meta_data.FieldMetaData("metaLastOff", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
+    tmpMap.put(_Fields.META_LENGTH, new org.apache.thrift.meta_data.FieldMetaData("metaLength", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
     tmpMap.put(_Fields.FLAG, new org.apache.thrift.meta_data.FieldMetaData("flag", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
@@ -136,14 +136,14 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
 
   public ExtntInfo(
     long metaFirstOff,
-    long metaLastOff,
+    int metaLength,
     int flag)
   {
     this();
     this.metaFirstOff = metaFirstOff;
     setMetaFirstOffIsSet(true);
-    this.metaLastOff = metaLastOff;
-    setMetaLastOffIsSet(true);
+    this.metaLength = metaLength;
+    setMetaLengthIsSet(true);
     this.flag = flag;
     setFlagIsSet(true);
   }
@@ -154,7 +154,7 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
   public ExtntInfo(ExtntInfo other) {
     __isset_bitfield = other.__isset_bitfield;
     this.metaFirstOff = other.metaFirstOff;
-    this.metaLastOff = other.metaLastOff;
+    this.metaLength = other.metaLength;
     this.flag = other.flag;
   }
 
@@ -166,8 +166,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
   public void clear() {
     setMetaFirstOffIsSet(false);
     this.metaFirstOff = 0;
-    setMetaLastOffIsSet(false);
-    this.metaLastOff = 0;
+    setMetaLengthIsSet(false);
+    this.metaLength = 0;
     this.flag = 0;
 
   }
@@ -195,27 +195,27 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __METAFIRSTOFF_ISSET_ID, value);
   }
 
-  public long getMetaLastOff() {
-    return this.metaLastOff;
+  public int getMetaLength() {
+    return this.metaLength;
   }
 
-  public ExtntInfo setMetaLastOff(long metaLastOff) {
-    this.metaLastOff = metaLastOff;
-    setMetaLastOffIsSet(true);
+  public ExtntInfo setMetaLength(int metaLength) {
+    this.metaLength = metaLength;
+    setMetaLengthIsSet(true);
     return this;
   }
 
-  public void unsetMetaLastOff() {
-    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __METALASTOFF_ISSET_ID);
+  public void unsetMetaLength() {
+    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __METALENGTH_ISSET_ID);
   }
 
-  /** Returns true if field metaLastOff is set (has been assigned a value) and false otherwise */
-  public boolean isSetMetaLastOff() {
-    return EncodingUtils.testBit(__isset_bitfield, __METALASTOFF_ISSET_ID);
+  /** Returns true if field metaLength is set (has been assigned a value) and false otherwise */
+  public boolean isSetMetaLength() {
+    return EncodingUtils.testBit(__isset_bitfield, __METALENGTH_ISSET_ID);
   }
 
-  public void setMetaLastOffIsSet(boolean value) {
-    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __METALASTOFF_ISSET_ID, value);
+  public void setMetaLengthIsSet(boolean value) {
+    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __METALENGTH_ISSET_ID, value);
   }
 
   public int getFlag() {
@@ -251,11 +251,11 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       }
       break;
 
-    case META_LAST_OFF:
+    case META_LENGTH:
       if (value == null) {
-        unsetMetaLastOff();
+        unsetMetaLength();
       } else {
-        setMetaLastOff((Long)value);
+        setMetaLength((Integer)value);
       }
       break;
 
@@ -275,8 +275,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     case META_FIRST_OFF:
       return Long.valueOf(getMetaFirstOff());
 
-    case META_LAST_OFF:
-      return Long.valueOf(getMetaLastOff());
+    case META_LENGTH:
+      return Integer.valueOf(getMetaLength());
 
     case FLAG:
       return Integer.valueOf(getFlag());
@@ -294,8 +294,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     switch (field) {
     case META_FIRST_OFF:
       return isSetMetaFirstOff();
-    case META_LAST_OFF:
-      return isSetMetaLastOff();
+    case META_LENGTH:
+      return isSetMetaLength();
     case FLAG:
       return isSetFlag();
     }
@@ -324,12 +324,12 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
         return false;
     }
 
-    boolean this_present_metaLastOff = true;
-    boolean that_present_metaLastOff = true;
-    if (this_present_metaLastOff || that_present_metaLastOff) {
-      if (!(this_present_metaLastOff && that_present_metaLastOff))
+    boolean this_present_metaLength = true;
+    boolean that_present_metaLength = true;
+    if (this_present_metaLength || that_present_metaLength) {
+      if (!(this_present_metaLength && that_present_metaLength))
         return false;
-      if (this.metaLastOff != that.metaLastOff)
+      if (this.metaLength != that.metaLength)
         return false;
     }
 
@@ -368,12 +368,12 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
         return lastComparison;
       }
     }
-    lastComparison = Boolean.valueOf(isSetMetaLastOff()).compareTo(typedOther.isSetMetaLastOff());
+    lastComparison = Boolean.valueOf(isSetMetaLength()).compareTo(typedOther.isSetMetaLength());
     if (lastComparison != 0) {
       return lastComparison;
     }
-    if (isSetMetaLastOff()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.metaLastOff, typedOther.metaLastOff);
+    if (isSetMetaLength()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.metaLength, typedOther.metaLength);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -412,8 +412,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     sb.append(this.metaFirstOff);
     first = false;
     if (!first) sb.append(", ");
-    sb.append("metaLastOff:");
-    sb.append(this.metaLastOff);
+    sb.append("metaLength:");
+    sb.append(this.metaLength);
     first = false;
     if (!first) sb.append(", ");
     sb.append("flag:");
@@ -472,10 +472,10 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 2: // META_LAST_OFF
-            if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
-              struct.metaLastOff = iprot.readI64();
-              struct.setMetaLastOffIsSet(true);
+          case 2: // META_LENGTH
+            if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
+              struct.metaLength = iprot.readI32();
+              struct.setMetaLengthIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
@@ -506,8 +506,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       oprot.writeFieldBegin(META_FIRST_OFF_FIELD_DESC);
       oprot.writeI64(struct.metaFirstOff);
       oprot.writeFieldEnd();
-      oprot.writeFieldBegin(META_LAST_OFF_FIELD_DESC);
-      oprot.writeI64(struct.metaLastOff);
+      oprot.writeFieldBegin(META_LENGTH_FIELD_DESC);
+      oprot.writeI32(struct.metaLength);
       oprot.writeFieldEnd();
       oprot.writeFieldBegin(FLAG_FIELD_DESC);
       oprot.writeI32(struct.flag);
@@ -533,7 +533,7 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       if (struct.isSetMetaFirstOff()) {
         optionals.set(0);
       }
-      if (struct.isSetMetaLastOff()) {
+      if (struct.isSetMetaLength()) {
         optionals.set(1);
       }
       if (struct.isSetFlag()) {
@@ -543,8 +543,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       if (struct.isSetMetaFirstOff()) {
         oprot.writeI64(struct.metaFirstOff);
       }
-      if (struct.isSetMetaLastOff()) {
-        oprot.writeI64(struct.metaLastOff);
+      if (struct.isSetMetaLength()) {
+        oprot.writeI32(struct.metaLength);
       }
       if (struct.isSetFlag()) {
         oprot.writeI32(struct.flag);
@@ -560,8 +560,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
         struct.setMetaFirstOffIsSet(true);
       }
       if (incoming.get(1)) {
-        struct.metaLastOff = iprot.readI64();
-        struct.setMetaLastOffIsSet(true);
+        struct.metaLength = iprot.readI32();
+        struct.setMetaLengthIsSet(true);
       }
       if (incoming.get(2)) {
         struct.flag = iprot.readI32();

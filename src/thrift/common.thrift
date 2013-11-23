@@ -21,7 +21,7 @@ const i32 SKIPFLAG = 1
 
 struct ExtntInfo {
 	1: i64 metaFirstOff,
-	2: i64 metaLastOff,
+	2: i32 metaLength,
 	3: i32 flag=false
 }
 

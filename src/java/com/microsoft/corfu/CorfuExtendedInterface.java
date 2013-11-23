@@ -67,6 +67,9 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	
 	/**
 	 * Obtain the current mark in the log, where mark is one of the log mark types: Head, tail, or contiguous tail.
+	 *    Head is the lowest non-trimmed log offset
+	 *    Tail is the offset succeeding the last position filled in the log
+	 *    Contiguous-tail is the offset succeeding the last position in the contiguous filled prefix of the log
 	 * 
 	 * @param typ the type of log mark we query
 	 * @return an offset in the log corresponding to the requested mark type. 
