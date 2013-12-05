@@ -86,27 +86,21 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	 */
 	public void setMark(long pos);
 		
-	/**
-	 * this utility routine does two maintenance chores:
-	 * 1. attempt to 'readExtnt()' up to the current consecutive tail.
-	 * 		- if any broken extent encountered, invoke 'fix()' on the entire extent, to allow skipping them.
-	 * 2. attempt to see if any log-offsets were allocated by the sequencer and never written. 
-	 * 		- if any offsets are preventing progress, invoke 'fix()' on individual offsets to allow skipping them,
-	 * 
-	 * @throws CorfuException
-	 */
-	public void repairLog() throws CorfuException;
-	
-	/**
-	 * same as repailLog(), but if bounded is true, repairs only up to that offset.
-	 * 
-	 * @throws CorfuException
-	 */
-	public void repairLog(boolean bounded, long off) throws CorfuException;
+	public void repairNext() throws CorfuException;
 
 	/**
 	 * @return starting offset at the log of last (successful) checkpoint
 	 */
 	public long checkpointLoc() throws CorfuException;
+	
+	/**
+	 * return the meta-info record associated with the specified offset. used for debugging.
+	 * 
+	 * @param offset the inquired position 
+	 * @return an ExtntInfo object
+	 * @throws CorfuException
+	 *     TrimmedCorfuException, BadParam, Unwritten, with the obvious meanings
+	 */
+	public ExtntInfo dbg(long offset) throws CorfuException;
 	
 }

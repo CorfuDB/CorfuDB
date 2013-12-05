@@ -36,7 +36,7 @@ typedef binary LogPayload
 
 struct ExtntWrap {
 	1: CorfuErrorCode err,
-	2: ExtntInfo prefetchInf,
+	2: ExtntInfo inf,
 	3: list<LogPayload> ctnt,
 	}
 	

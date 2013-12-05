@@ -164,8 +164,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		if (er.equals(CorfuErrorCode.ERR_FULL) && autoTrim) {
 			try {
 				long ckoff = checkpointLoc();
-				long contigoff = check(true, true);
-				if (ckoff > contigoff) repairLog(true, ckoff);
+				long contigoff = checkLogMark(CorfuLogMark.CONTIG);
+				if (ckoff > contigoff) ckoff = contigoff;
 				
                 log.info("log full! forceappend trimming to " + ckoff);
 				trim(ckoff);
@@ -177,7 +177,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		} 
 		
 		if (er.equals(CorfuErrorCode.ERR_FULL)) {
-			throw new OverwriteCorfuException("append() failed: full");
+			throw new OutOfSpaceCorfuException("append() failed: full");
 		} else
 		if (er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
 			throw new OverwriteCorfuException("append() failed: overwritten");
@@ -189,8 +189,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		return offset;
 	}
 	
-	ExtntInfo curExtntInfo = new ExtntInfo(0, 0, 0); // meta-info of last successfully read extent  
-	ExtntInfo nexExtntInfo = new ExtntInfo(0, 0, 0); // pre-fetched meta-info of next extent to read
+	ExtntInfo lastReadExtntInfo = new ExtntInfo(-1, 1, 0); // meta-info of last successfully read extent  
+	ExtntInfo PrefetchExtntInfo = new ExtntInfo(-1, 0, 0); // prefetched meta-info from last successful read, if any
 	
 	/** utility method to copy one Extnt meta-info record to another
 	 * @param from source ExtntInfo
@@ -203,47 +203,43 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	}
 	
 	/** utility method to compute the log-offset succeeding an extent
-	 * @param inf a parameter extent meta-info
+	 * @param inf the extent's meta-info
 	 * @return the offset succeeding this extent
 	 */
 	private long ExtntSuccessor(ExtntInfo inf) { return inf.getMetaFirstOff() + inf.getMetaLength(); }
 	
 	/**
-	 * obtain the ExtntInfo meta-info for the next extent to read.
+	 * obtain the ExtntInfo for the next extent to read.
 	 * 
-	 * this method makes use of the state we store in curExtntInfo and nextExtntInfo, which we update by pre-fetching on readExtnt() calls.
+	 * this method makes use of the state we store in lastReadExtntInfo, lastTriedExtntInfo and PrefetchExtntInfo, 
 	 * 
 	 * @param nextinf an ExtntInfo object to fill with the next log extent meta-info.
-	 * @return OK if succeeds; 
-	 * 		ERR_UNWRITTEN if the next meta-record hasn't been written yet;
-	 * 		ERR_TRIMMED if the next position following the last extent has been meanwhile trimmed
-	 * @throws CorfuException if read from server fails 
+	 * @throws CorfuException if read from server fails. Specifically,
+	 * 		UnwrittenCorfuException if the next meta-record hasn't been written yet;
+	 * 		TrimmedCorfuException if the next position following the last extent has been meanwhile trimmed
 	 */
-	private CorfuErrorCode getNextMeta(ExtntInfo inf) throws CorfuException {
-		CorfuErrorCode er;
-		
-		synchronized(curExtntInfo) {
+	private void getNextMeta(ExtntInfo inf) throws CorfuException {
+		synchronized(lastReadExtntInfo) {
 			for (;;) {
-				if (curExtntInfo.equals(nexExtntInfo)) {
-						// this means nexExtntInfo wasn't available for prefetching last time
-					log.debug("getNextMeta for cur={}", curExtntInfo);
-					er = fetchMetaAt(ExtntSuccessor(curExtntInfo), nexExtntInfo);
-					if (er != CorfuErrorCode.OK && er != CorfuErrorCode.OK_SKIP) return er;
-					continue;
-				}
-				else if ((nexExtntInfo.getFlag() & commonConstants.SKIPFLAG)!=0 ) {
+				if (PrefetchExtntInfo.getMetaFirstOff() > lastReadExtntInfo.getMetaFirstOff()) {
+					if ((PrefetchExtntInfo.getFlag() & commonConstants.SKIPFLAG) != 0) {
 						// in this case, the nexExtntInfo we fetched previously must be skipped 
 						// we try to progress both curExtntInfo and nexExtntInfo to the subsequent extent
-					log.info("getNextMeta skip cur={} proceed to={}", curExtntInfo, nexExtntInfo);
-					ExtntInfoCopy(nexExtntInfo, curExtntInfo);
-					er = fetchMetaAt(ExtntSuccessor(nexExtntInfo), nexExtntInfo);
-					if (er != CorfuErrorCode.OK && er != CorfuErrorCode.OK_SKIP) return er;
+						log.debug("getNextMeta skip {}", PrefetchExtntInfo);
+						ExtntInfoCopy(PrefetchExtntInfo, lastReadExtntInfo);
+						fetchMetaAt(ExtntSuccessor(PrefetchExtntInfo), PrefetchExtntInfo);
+						continue;
+					}
+				
+				} else {
+					// this means nexExtntInfo wasn't available for prefetching last time
+					log.debug("getNextMeta for cur={}", lastReadExtntInfo);
+					fetchMetaAt(ExtntSuccessor(lastReadExtntInfo), PrefetchExtntInfo);
 					continue;
 				}
 				
-				ExtntInfoCopy(nexExtntInfo, inf);
-				return CorfuErrorCode.OK;
-
+				ExtntInfoCopy(PrefetchExtntInfo, inf);
+				break;
 			}
 		}
 	}
@@ -252,13 +248,11 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * get ExtntInfo for an extent starting at a specified log position.
 	 * 
 	 * @param pos the starting position of the extent 
-	 * @return a ExtntInfo record of the extent starting at specified position.
-	 *         throws a CorfuException if read from server fails; throws a TrimmedCorfuException if the requested position has been trimmed.
-	 *         returns null if the next meta-record hasn't been written yet.
-	 *         
+	 * @param ref to an ExtntInfo record to fill 
+	 * @throws CorfuException if read from server fails
 	 */
-	private CorfuErrorCode fetchMetaAt(long pos, ExtntInfo inf) throws CorfuException {
-		synchronized(curExtntInfo) {
+	private void fetchMetaAt(long pos, ExtntInfo inf) throws CorfuException {
+		synchronized(lastReadExtntInfo) {
 			ExtntWrap ret;
 		
 			try {
@@ -267,12 +261,23 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 				e.printStackTrace();
 				throw new CorfuException("readmeta() failed");
 			}
+			
+			CorfuErrorCode er = ret.getErr();
 
-			if (ret.getErr().equals(CorfuErrorCode.OK) || ret.getErr().equals(CorfuErrorCode.OK_SKIP)) {
-				ExtntInfoCopy(ret.getPrefetchInf(), inf);
+			if (er.equals(CorfuErrorCode.OK)) {
+				ExtntInfoCopy(ret.getInf(), inf);
+			} else {
+				log.debug("readmeta({}) fails err={}", pos, er);
+				if (er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
+					throw new UnwrittenCorfuException("readExtnt fails, not written yet");
+				} else 
+				if (er.equals(CorfuErrorCode.ERR_TRIMMED)) {
+					throw new TrimmedCorfuException("readExtnt fails because log was trimmed");
+				} else
+				if (er.equals(CorfuErrorCode.ERR_BADPARAM)) {
+					throw new BadParamCorfuException("readExtnt fails with bad parameter");
+				} 
 			}
-					
-			return ret.getErr();
 		}
 	}	
 
@@ -282,8 +287,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @param prefetch the pre-fetched meta-info of the next extent
 	 */
 	private synchronized void updateMeta(ExtntInfo cur, ExtntInfo prefetch) {
-		ExtntInfoCopy(cur, curExtntInfo);
-		ExtntInfoCopy(prefetch, nexExtntInfo);
+		ExtntInfoCopy(cur, lastReadExtntInfo);
+		ExtntInfoCopy(prefetch, PrefetchExtntInfo);
 	}
 	
 	/**
@@ -302,7 +307,9 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		ExtntWrap ret;
 		
 		try {
-			ret = sunits[0].read(new CorfuHeader(inf, true, ExtntSuccessor(inf), CorfuErrorCode.OK));
+			CorfuHeader hdr = new CorfuHeader(inf, true, ExtntSuccessor(inf), CorfuErrorCode.OK);
+			log.debug("readExtnt read(rang={}, prefertchoff={} isprefetch={})", hdr.getExtntInf(), hdr.getPrefetchOff(), hdr.isPrefetch());
+			ret = sunits[0].read(hdr);
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("read() failed");
@@ -322,8 +329,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			throw new OutOfSpaceCorfuException("read(" + inf +") failed: bad parameter");
 		} 
 
-		updateMeta(inf, ret.getPrefetchInf());
-		ret.prefetchInf = inf;
+		updateMeta(inf, ret.getInf()); 	// first param is what we just read; second param is prefetch meta-info of next extent
+		ret.setInf(inf);				// overwrite the prefetched meta-info, in order to return the extent info which we Wrap just read
 		return ret;
 	}
 		
@@ -337,23 +344,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		ExtntWrap r;
 		ExtntInfo nextinf = new ExtntInfo();
-		CorfuErrorCode er;
 		do {
-			er = getNextMeta(nextinf);
-			
-			if (er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
-				log.info("readExtnt({}) cannot get next extent meta-info, unwritten", curExtntInfo);
-				throw new UnwrittenCorfuException("readExtnt fails, not written yet");
-			} else 
-			if (er.equals(CorfuErrorCode.ERR_TRIMMED)) {
-				log.info("readExtnt({}) cannot get next extent meta-info, trimmed", curExtntInfo);
-				throw new TrimmedCorfuException("readExtnt fails because log was trimmed");
-			} else
-			if (er.equals(CorfuErrorCode.ERR_BADPARAM)) {
-				log.info("readExtnt({}) cannot get next extent meta-info, bad param", curExtntInfo);
-				throw new BadParamCorfuException("readExtnt fails with bad parameter");
-			} 
-
+			getNextMeta(nextinf);
 			r = readExtnt(nextinf);
 		} while (r.getErr().equals(CorfuErrorCode.OK_SKIP));
 		return r;
@@ -369,168 +361,97 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	public ExtntWrap readExtnt(long pos) throws CorfuException {
 		ExtntInfo inf = new ExtntInfo();
 		
-		CorfuErrorCode er = fetchMetaAt(pos, inf);
-		if (er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
-			log.info("readExtnt({}) cannot get next extent meta-info, unwritten", pos);
-			throw new UnwrittenCorfuException("readExtnt({}) fails, not written yet");
-		} else 
-		if (er.equals(CorfuErrorCode.ERR_TRIMMED)) {
-			log.info("readExtnt({}) cannot get next extent meta-info, trimmed", pos);
-			throw new TrimmedCorfuException("readExtnt({}) fails because log was trimmed");
-		} else
-		if (er.equals(CorfuErrorCode.ERR_BADPARAM)) {
-			log.info("readExtnt({}) cannot get next extent meta-info, bad param", pos);
-			throw new BadParamCorfuException("readExtnt({}) fails with bad parameter");
-		} 
+		log.debug("readExtnt for position {}", pos);
+		fetchMetaAt(pos, inf);
+		log.debug("readExtnt({}) meta-info: {}", pos, inf);
 
 		return readExtnt(inf);
 	}
 	
-	/**
-	 * this utility routine does two maintenance chores:
-	 * 1. attempt to 'readExtnt()' up to the current consecutive tail.
-	 * 		- if any broken extent encountered, invoke 'fix()' on the entire extent, to allow skipping them.
-	 * 2. attempt to see if any log-offsets were allocated by the sequencer and never written. 
-	 * 		- if any offsets are preventing progress, invoke 'fix()' on individual offsets to allow skipping them,
-	 * 
-	 * @throws CorfuException
-	 */
-	@Override
-	public void repairLog() throws CorfuException {
-		repairLog(false, -1);
+	public void repairPos(long pos) {
+		
 	}
 	
-	/**
-	 * same as repailLog(), but if bounded is true, repairs only up to that offset.
-	 * 
-	 * @throws CorfuException
-	 */
-	@Override
-	public void repairLog(boolean bounded, long lastpos)  throws CorfuException {
-		boolean dummytail = false; 
-		if (!bounded) {
-			try {
-				lastpos = sequencer.nextpos(1);
-				log.info("repairLog grabbed next token {}", lastpos);
-				dummytail = true;
-			} catch (TException e) {
-				e.printStackTrace();
-				lastpos = checkLogMark(CorfuLogMark.TAIL)-1;
-				log.warn("repairLog cannot obtain token from sequencer; repairing only up to check()={} mark", lastpos);
-				dummytail = false;
-			}
-		}
-		log.info("repairLog from {} up to {}", curExtntInfo.getMetaFirstOff(), lastpos);
+	public void repairNext() throws CorfuException {
+		ExtntInfo inf = new ExtntInfo();
+		long head, tail;
+		long pos;
+		CorfuErrorCode fetchErr = CorfuErrorCode.OK;
+		CorfuErrorCode readErr = CorfuErrorCode.OK;
+		boolean skip = false;
 		
-		ExtntWrap r;
-		ExtntInfo nextinf = new ExtntInfo();
+		// check current log bounds
+		head = checkLogMark(CorfuLogMark.HEAD); 
+		tail = checkLogMark(CorfuLogMark.TAIL); 
+		
+		// first, get the meta-info of the next extent
+		pos = ExtntSuccessor(lastReadExtntInfo);
+		
+		if (pos < head) {
+			log.info("repairNext repositioning to head={}", head);
+			pos = head;
+		}
+		if (pos >= tail) return; // TODO do something??
+		
+		try {
+			fetchMetaAt(pos, inf);
+			if (inf.getMetaFirstOff() < head) {
+				// extent partially trimmed; skip
+				skip = true;
+				inf.setMetaFirstOff(head);
+			}
+		} catch (CorfuException e) {
+			log.warn("repairNext fetchMeta({}) fails err={}", pos, e.er);
+			inf.setMetaFirstOff(pos); inf.setMetaLength(1);
+			skip = true;
+			fetchErr = e.er;
+		}
+		
+		
+		// next, try to read it to see what is the error value
+		try {
+			CorfuHeader hdr = new CorfuHeader(inf, false, 0, CorfuErrorCode.OK);
+			log.debug("repairNext read(range={}, prefertchoff={} isprefetch={})", hdr.getExtntInf(), hdr.getPrefetchOff(), hdr.isPrefetch());
+			ExtntWrap ret = sunits[0].read(hdr);
+			readErr = ret.getErr();
+			if (!readErr.equals(CorfuErrorCode.OK)) skip = true;
+		} catch (TException e) {
+			e.printStackTrace();
+			throw new CorfuException("repairNext read() failed, communication problem; quitting");
+		}
+		
+		// finally, if either the meta-info was broken, or the content was broken, skip will be ==true.
+		// in that case, we mark this entry for skipping, and we also try to mark it for skip on the storage units
+		
+		if (!skip) {
+			updateMeta(lastReadExtntInfo, inf);
+			return;
+		}
+		
+		inf.setFlag(commonConstants.SKIPFLAG);
+		updateMeta(inf, inf);
+			
+		// now we try to fix 'inf'
 		CorfuErrorCode er;
-
-		for (;;) {
-			
-			// the extent following the last read/fixed might be in one of the following states:
-			//	1. completely healthy ---- then getNextMeta() will succeed, and fix() will have no effect
-			//  2. partially written ---- then getNextMeta() will succeed, and fix() will mark it for skipping
-			//  3. not written at all ---- then getNextMeta() will return UNWRITTEN error, and we will invoke fix() one page at a time
-			//  4. trimmed --- then getNextMeta() incurs a TrimmedCorfuException(), we catch it and continue from the trimmed mark
-			
-			er = getNextMeta(nextinf);			
-			if (er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
-				// this is case 3.
-				log.info("repairLog({}) getNextMeta fails", nextinf);
-				nextinf.setMetaFirstOff(ExtntSuccessor(curExtntInfo));
-				nextinf.setMetaLength(1);
-				log.info("repairLog fixing single log page {}", nextinf.getMetaFirstOff());
-			} else 
-			if (er.equals(CorfuErrorCode.ERR_TRIMMED)) {	
-				// this is case 4. 
-				// check the current head of log and try to repair from there
-				log.info("repairLog({}) getNextMeta fails", nextinf);
-				long head = checkLogMark(CorfuLogMark.HEAD);
-				log.info("repairLog moving read mark to {}", head);
-				setMark(head);
-				continue;
-			} else
-			if (er.equals(CorfuErrorCode.ERR_BADPARAM)) {
-				log.info("repairLog({}) getNextMeta fails", nextinf);
-				throw new BadParamCorfuException("repairLog param with bad parameter");
-			} 
-
-			log.debug("next extent to repair : {}", nextinf);
-			if (nextinf.getMetaFirstOff() > lastpos) break;
-
-			// cases 1-3 spill here
+		for (pos = inf.getMetaFirstOff(); pos < ExtntSuccessor(inf); pos++) {
 			try {
-				er = sunits[0].fix(nextinf);
-				
-			} catch (TException e) {
-				e.printStackTrace();
-				throw new CorfuException("repairLog encountered unxpected problem");
+				er = sunits[0].fix(pos, inf);
+			} catch (TException e1) {
+				e1.printStackTrace();
+				throw new CorfuException("repairNext() fix failed, communication problem; quitting");
 			}
-				
 			if (er.equals(CorfuErrorCode.ERR_FULL)) {
-				log.info("repairLog fix({}) failed, log full", nextinf);
-				throw new CorfuException("repairing log failed; shouldn't happen");				
-			}
-			else if (er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
-				log.debug("repairLog fix({}) nothing to fix ", nextinf);
-			}
-			else if (er.equals(CorfuErrorCode.OK)) {
-				log.info("repairLog fix({}) succeeded", nextinf);
-			}
-			else 
-				throw new InternalCorfuException("repairLog unknown return code from fix(): " + er);
-
-			updateMeta(nextinf, nextinf);
-
-		} ;
-		
-		if (dummytail && lastpos > curExtntInfo.getMetaFirstOff()+curExtntInfo.getMetaLength()) {
-			log.info("repairLog fixing the dummy entry {} which was used for querying the tokenserver", lastpos);
-			try {
-				nextinf = new ExtntInfo(lastpos, 1, 0);
-				er = sunits[0].fix(nextinf);
-				if (!er.equals(CorfuErrorCode.ERR_FULL))
-					updateMeta(nextinf, nextinf);
-			} catch (TException e) {
-				throw new CorfuException("repairing log failed; cannot fix current token position");
+				// TODO should we try to trim the log to the latest checkpoint and/or check if the extent range exceeds the log capacity??
+				throw new OutOfSpaceCorfuException("repairNext failed, log full");
 			}
 		}
-	}
+	}	
 	
 	
 	/**
 	 * @return starting offset at the log of last (successful) checkpoint
 	 */
 	public long checkpointLoc() throws CorfuException { return checkLogMark(CorfuLogMark.CONTIG); // TODO!!!
-	}
-
-	/**
-	 * this method tries to mark an extent for skipping. 
-	 * Note that, if even a single page in the extent is successfully marked, the entire extent can never be read, and can be skipped.
-	 * 
-	 * @param extntInf the meta-info of the extent we need to fix
-	 */
-	private void fixExtnt(ExtntInfo extntInf) throws CorfuException {
-		CorfuErrorCode er;
-		try {
-			er = sunits[0].fix(extntInf);
-		} catch (TException e) {
-			e.printStackTrace();
-			throw new CorfuException("fixExtnt() failed");
-		}
-		
-		if (er.equals(CorfuErrorCode.ERR_FULL)) {
-			// this should never happen, the client invoking this fill is at fault here!
-			throw new OutOfSpaceCorfuException("fixExtnt(" + extntInf +") failed: full");
-		} else 
-		if (er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
-			// this may be a good thing!
-			throw new OverwriteCorfuException("fixExtnt(" + extntInf+") failed (may be a good sign!): overwritten");
-		} else
-		if (er.equals(CorfuErrorCode.ERR_TRIMMED)) {
-			throw new TrimmedCorfuException("fixExtnt(" + extntInf +") failed: position has been trimmed");
-		} 
 	}
 			
 	/**
@@ -543,9 +464,12 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	public long checkLogMark(CorfuLogMark typ) throws CorfuException {
 		long r;
 		try {
-			r = sunits[0].check(typ);
+			if (typ.equals(CorfuLogMark.TAIL))
+				r = sequencer.nextpos(0);
+			else
+				r = sunits[0].check(typ);
 		} catch (TException t) {
-			throw new InternalCorfuException("check() call failed on storage unit");
+			throw new InternalCorfuException("checkLogMark() failed ");
 		}
 		if (r < 0) throw new InternalCorfuException("check() call returned negative value, shouldn't happen");
 		return r;
@@ -562,6 +486,20 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		updateMeta(inf, inf);
 	}
 		
+	/**
+	 * return the meta-info record associated with the specified offset. used for debugging.
+	 * 
+	 * @param offset the inquired position 
+	 * @return an ExtntInfo object
+	 * @throws CorfuException
+	 *     TrimmedCorfuException, BadParam, Unwritten, with the obvious meanings
+	 */
+	public ExtntInfo dbg(long pos) throws CorfuException {
+		ExtntInfo inf = new ExtntInfo();
+		fetchMetaAt(pos, inf);
+		log.debug("dbg({}) meta-info: {}", pos, inf);
+		return inf;
+	}
 
 
 	
@@ -676,7 +614,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @param	a junk buffer (ignored)
 	 */
 	@Override
-	public void fill(long pos, byte[] junkbytes) throws CorfuException { repairLog(true, pos); }
+	public void fill(long pos, byte[] junkbytes) throws CorfuException { repairPos(pos); }
 	
 	/**
 	 * Returns the current non-contiguous tail of the Corfu log. This is the

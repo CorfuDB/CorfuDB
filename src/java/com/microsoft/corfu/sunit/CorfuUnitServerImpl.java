@@ -223,11 +223,15 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}
 		else {
 			MappedByteBuffer mb = getMappedBuf(relOff);
-			assert (mb.capacity() >= buf.capacity() + 8); // 8 == sizeof long, ugh 
-			buf.rewind();
-			mb.put(buf.array());
+			if (buf != null) {
+				assert (mb.capacity() >= buf.capacity()); 
+				buf.rewind();
+				mb.put(buf.array());
+			}
+			assert(mb.capacity() >= 16); // TODO this is the size to write ExtntInfo's fields?? ugh!!!
 			mb.putLong(inf.getMetaFirstOff());
 			mb.putInt(inf.getMetaLength());
+			mb.putInt(inf.getFlag());
 		}
 	}
 	
@@ -255,35 +259,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			return rb;
 		}
 	}
-	
-	/**
-	 * utility function to mark a log-entry as a permanent "hole"
-	 * reads can skip an entire extent once any of the entries in the range is marked a hole
-	 * 
-	 * @param relOff the offset to mark a hole
-	 */
-	private void FillholeStore(long relOff) {
-		if (RAMMODE) {
-			if (inmemoryStore.size() > relOff) {
-				inmemoryStore.set((int) relOff, null);
-			}
-			else {
-				// System.out.println("  add new Buff at pos");
-				// System.out.println("  buf.capacity " + buf.capacity());
-				inmemoryStore.add((int) relOff, null);
-			}
-			inmemoryMeta[(int)relOff].setFlag(commonConstants.SKIPFLAG); 
-		}
-		else {
-			MappedByteBuffer mb = getMappedBuf(relOff);
-			assert (mb.capacity() >= ENTRYSIZE + 20); // TODO!!! long+long+bool , ugh 
-			mb.position(mb.position() + ENTRYSIZE+8+8);
-			mb.putInt(commonConstants.SKIPFLAG);
-		}
 		
-	}
-
-	
 	/* (non-Javadoc)
 	 * implements to CorfuUnitServer.Iface write() method.
 	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#write(com.microsoft.corfu.ExtntWrap)
@@ -358,51 +334,40 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
     }
 	
 	/**
-	 * fix the specified extent
-	 * @return OK errorcode if it succeeds in marking at least one of the extent's pages for 'skip'
-	 * 		OK error if the entire extent has already been trimmed
-	 * 		ERROR_OVERWRITE if the entire extent is occupied
-	 * 		ERROR_FULL if the extent spills over the capacity of the log
+	 * fix an individual offset belonging to the specified extent
+	 * @param pos is the offset to fix
+	 * @param inf the extent whose range this offset belongs to
+	 * @return OK if succeeds in marking the extent's page for 'skip'
+	 * 		ERROR_TRIMMED if the offset has already been trimmed
+	 * 		ERROR_OVERWRITE if the offset is occupied (could be a good thing)
+	 * 		ERROR_FULL if the offset spills over the capacity of the log
 	 */
-	synchronized public CorfuErrorCode fix(ExtntInfo inf) {
-		long fromOff = inf.getMetaFirstOff(), toOff = fromOff + inf.getMetaLength();
-		CorfuErrorCode er = CorfuErrorCode.ERR_OVERWRITE; 
+	synchronized public CorfuErrorCode fix(long pos, ExtntInfo inf) {
+		CorfuErrorCode er; 
 		
-		if (toOff - trimmark > UNITCAPACITY) {
-			log.warn("unit full ! trimmark= {} fill[{}..{}]", trimmark, fromOff, toOff);
+		if (pos - trimmark > UNITCAPACITY) {
+			log.warn("fix({}): unit full! trimmark={} ", pos, trimmark);
 			return CorfuErrorCode.ERR_FULL; 
 		}
 		
-		if (toOff <= trimmark) {
-			log.debug("attempt to fix a trimmed range! [{}..{}]", fromOff, toOff);
-			return CorfuErrorCode.OK; 
-		}
-		
-		if (fromOff < trimmark) {
-			log.warn("extent {} partially trimmed! fixing the rest of the extent", inf );
-			fromOff = trimmark;
+		if (pos < trimmark) {
+			log.warn("fix({}): trimmed already! trimmark={} ", pos, trimmark);
+			return CorfuErrorCode.ERR_TRIMMED; 
 		}
 
-		int relFromOff = (int) (fromOff % UNITCAPACITY), relToOff = (int) (toOff % UNITCAPACITY);
+		int relOff = (int) (pos % UNITCAPACITY);
+		inf.setFlag(commonConstants.SKIPFLAG);
 		
-		if (relToOff < relFromOff) {
-			for (int off = relFromOff; off < UNITCAPACITY; off++) {
-				if (storeMap.get(off)) continue; // offset already written
-				storeMap.set(off);
-				FillholeStore(off);
-				er = CorfuErrorCode.OK; // if at least one offset is marked hole, return success
-			}
-			relFromOff = 0;
+		if (storeMap.get(relOff)) {
+			// offset already written
+			log.debug("fix({}): written already! ", pos);
+			return CorfuErrorCode.ERR_OVERWRITE; 
 		}
-		
-		for (int off = relFromOff; off < relToOff; off++) {
-			if (storeMap.get(off)) continue; // offset already written
-			storeMap.set(off);
-			FillholeStore(off);
-			er = CorfuErrorCode.OK; // if at least one offset is marked hole, return success
-		}
-		return er; 
 
+		storeMap.set(relOff);
+		RamToStore(relOff, null, inf);
+		return CorfuErrorCode.OK; 
+		
 	}
 
 	/**
@@ -480,7 +445,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		
 		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
 		long relBaseOff = fromOff - relFromOff;
-
 		if (relToOff > relFromOff) {
 			int i = storeMap.nextClearBit((int) relFromOff);
 			if (i < relToOff)  // we expect the next clear bit to be higher than ToOff, or none at all
@@ -523,7 +487,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			log.debug("ExtntInfo prefetch {} available -- {}", relPrefetch, ckinf);
 			return new ExtntWrap(CorfuErrorCode.OK, ckinf, wbufs); 
 		} else {
-			log.debug("ExtntInfo prefetch {} unavailable", relPrefetch);
+			log.debug("ExtntInfo prefetch {} unavailable isprefetch={} prefetchOff={} trimmark={} mapisset={}", 
+					relPrefetch, hdr.isPrefetch(), hdr.getPrefetchOff(), trimmark, storeMap.get(relPrefetch));
 			return new ExtntWrap(CorfuErrorCode.OK, hdr.getExtntInf(), wbufs);
 		}
 	}

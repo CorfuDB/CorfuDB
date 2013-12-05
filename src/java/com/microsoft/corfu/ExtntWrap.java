@@ -34,7 +34,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("ExtntWrap");
 
   private static final org.apache.thrift.protocol.TField ERR_FIELD_DESC = new org.apache.thrift.protocol.TField("err", org.apache.thrift.protocol.TType.I32, (short)1);
-  private static final org.apache.thrift.protocol.TField PREFETCH_INF_FIELD_DESC = new org.apache.thrift.protocol.TField("prefetchInf", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+  private static final org.apache.thrift.protocol.TField INF_FIELD_DESC = new org.apache.thrift.protocol.TField("inf", org.apache.thrift.protocol.TType.STRUCT, (short)2);
   private static final org.apache.thrift.protocol.TField CTNT_FIELD_DESC = new org.apache.thrift.protocol.TField("ctnt", org.apache.thrift.protocol.TType.LIST, (short)3);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
@@ -48,7 +48,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
    * @see CorfuErrorCode
    */
   public CorfuErrorCode err; // required
-  public ExtntInfo prefetchInf; // required
+  public ExtntInfo inf; // required
   public List<ByteBuffer> ctnt; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
@@ -58,7 +58,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
      * @see CorfuErrorCode
      */
     ERR((short)1, "err"),
-    PREFETCH_INF((short)2, "prefetchInf"),
+    INF((short)2, "inf"),
     CTNT((short)3, "ctnt");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
@@ -76,8 +76,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
       switch(fieldId) {
         case 1: // ERR
           return ERR;
-        case 2: // PREFETCH_INF
-          return PREFETCH_INF;
+        case 2: // INF
+          return INF;
         case 3: // CTNT
           return CTNT;
         default:
@@ -125,7 +125,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
     tmpMap.put(_Fields.ERR, new org.apache.thrift.meta_data.FieldMetaData("err", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, CorfuErrorCode.class)));
-    tmpMap.put(_Fields.PREFETCH_INF, new org.apache.thrift.meta_data.FieldMetaData("prefetchInf", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+    tmpMap.put(_Fields.INF, new org.apache.thrift.meta_data.FieldMetaData("inf", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, ExtntInfo.class)));
     tmpMap.put(_Fields.CTNT, new org.apache.thrift.meta_data.FieldMetaData("ctnt", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
@@ -139,12 +139,12 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
 
   public ExtntWrap(
     CorfuErrorCode err,
-    ExtntInfo prefetchInf,
+    ExtntInfo inf,
     List<ByteBuffer> ctnt)
   {
     this();
     this.err = err;
-    this.prefetchInf = prefetchInf;
+    this.inf = inf;
     this.ctnt = ctnt;
   }
 
@@ -155,8 +155,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     if (other.isSetErr()) {
       this.err = other.err;
     }
-    if (other.isSetPrefetchInf()) {
-      this.prefetchInf = new ExtntInfo(other.prefetchInf);
+    if (other.isSetInf()) {
+      this.inf = new ExtntInfo(other.inf);
     }
     if (other.isSetCtnt()) {
       List<ByteBuffer> __this__ctnt = new ArrayList<ByteBuffer>();
@@ -174,7 +174,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   @Override
   public void clear() {
     this.err = null;
-    this.prefetchInf = null;
+    this.inf = null;
     this.ctnt = null;
   }
 
@@ -210,27 +210,27 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     }
   }
 
-  public ExtntInfo getPrefetchInf() {
-    return this.prefetchInf;
+  public ExtntInfo getInf() {
+    return this.inf;
   }
 
-  public ExtntWrap setPrefetchInf(ExtntInfo prefetchInf) {
-    this.prefetchInf = prefetchInf;
+  public ExtntWrap setInf(ExtntInfo inf) {
+    this.inf = inf;
     return this;
   }
 
-  public void unsetPrefetchInf() {
-    this.prefetchInf = null;
+  public void unsetInf() {
+    this.inf = null;
   }
 
-  /** Returns true if field prefetchInf is set (has been assigned a value) and false otherwise */
-  public boolean isSetPrefetchInf() {
-    return this.prefetchInf != null;
+  /** Returns true if field inf is set (has been assigned a value) and false otherwise */
+  public boolean isSetInf() {
+    return this.inf != null;
   }
 
-  public void setPrefetchInfIsSet(boolean value) {
+  public void setInfIsSet(boolean value) {
     if (!value) {
-      this.prefetchInf = null;
+      this.inf = null;
     }
   }
 
@@ -283,11 +283,11 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
       }
       break;
 
-    case PREFETCH_INF:
+    case INF:
       if (value == null) {
-        unsetPrefetchInf();
+        unsetInf();
       } else {
-        setPrefetchInf((ExtntInfo)value);
+        setInf((ExtntInfo)value);
       }
       break;
 
@@ -307,8 +307,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     case ERR:
       return getErr();
 
-    case PREFETCH_INF:
-      return getPrefetchInf();
+    case INF:
+      return getInf();
 
     case CTNT:
       return getCtnt();
@@ -326,8 +326,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     switch (field) {
     case ERR:
       return isSetErr();
-    case PREFETCH_INF:
-      return isSetPrefetchInf();
+    case INF:
+      return isSetInf();
     case CTNT:
       return isSetCtnt();
     }
@@ -356,12 +356,12 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
         return false;
     }
 
-    boolean this_present_prefetchInf = true && this.isSetPrefetchInf();
-    boolean that_present_prefetchInf = true && that.isSetPrefetchInf();
-    if (this_present_prefetchInf || that_present_prefetchInf) {
-      if (!(this_present_prefetchInf && that_present_prefetchInf))
+    boolean this_present_inf = true && this.isSetInf();
+    boolean that_present_inf = true && that.isSetInf();
+    if (this_present_inf || that_present_inf) {
+      if (!(this_present_inf && that_present_inf))
         return false;
-      if (!this.prefetchInf.equals(that.prefetchInf))
+      if (!this.inf.equals(that.inf))
         return false;
     }
 
@@ -400,12 +400,12 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
         return lastComparison;
       }
     }
-    lastComparison = Boolean.valueOf(isSetPrefetchInf()).compareTo(typedOther.isSetPrefetchInf());
+    lastComparison = Boolean.valueOf(isSetInf()).compareTo(typedOther.isSetInf());
     if (lastComparison != 0) {
       return lastComparison;
     }
-    if (isSetPrefetchInf()) {
-      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.prefetchInf, typedOther.prefetchInf);
+    if (isSetInf()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.inf, typedOther.inf);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -448,11 +448,11 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     }
     first = false;
     if (!first) sb.append(", ");
-    sb.append("prefetchInf:");
-    if (this.prefetchInf == null) {
+    sb.append("inf:");
+    if (this.inf == null) {
       sb.append("null");
     } else {
-      sb.append(this.prefetchInf);
+      sb.append(this.inf);
     }
     first = false;
     if (!first) sb.append(", ");
@@ -470,8 +470,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   public void validate() throws org.apache.thrift.TException {
     // check for required fields
     // check for sub-struct validity
-    if (prefetchInf != null) {
-      prefetchInf.validate();
+    if (inf != null) {
+      inf.validate();
     }
   }
 
@@ -517,11 +517,11 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
             break;
-          case 2: // PREFETCH_INF
+          case 2: // INF
             if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
-              struct.prefetchInf = new ExtntInfo();
-              struct.prefetchInf.read(iprot);
-              struct.setPrefetchInfIsSet(true);
+              struct.inf = new ExtntInfo();
+              struct.inf.read(iprot);
+              struct.setInfIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
             }
@@ -564,9 +564,9 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
         oprot.writeI32(struct.err.getValue());
         oprot.writeFieldEnd();
       }
-      if (struct.prefetchInf != null) {
-        oprot.writeFieldBegin(PREFETCH_INF_FIELD_DESC);
-        struct.prefetchInf.write(oprot);
+      if (struct.inf != null) {
+        oprot.writeFieldBegin(INF_FIELD_DESC);
+        struct.inf.write(oprot);
         oprot.writeFieldEnd();
       }
       if (struct.ctnt != null) {
@@ -602,7 +602,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
       if (struct.isSetErr()) {
         optionals.set(0);
       }
-      if (struct.isSetPrefetchInf()) {
+      if (struct.isSetInf()) {
         optionals.set(1);
       }
       if (struct.isSetCtnt()) {
@@ -612,8 +612,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
       if (struct.isSetErr()) {
         oprot.writeI32(struct.err.getValue());
       }
-      if (struct.isSetPrefetchInf()) {
-        struct.prefetchInf.write(oprot);
+      if (struct.isSetInf()) {
+        struct.inf.write(oprot);
       }
       if (struct.isSetCtnt()) {
         {
@@ -635,9 +635,9 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
         struct.setErrIsSet(true);
       }
       if (incoming.get(1)) {
-        struct.prefetchInf = new ExtntInfo();
-        struct.prefetchInf.read(iprot);
-        struct.setPrefetchInfIsSet(true);
+        struct.inf = new ExtntInfo();
+        struct.inf.read(iprot);
+        struct.setInfIsSet(true);
       }
       if (incoming.get(2)) {
         {
