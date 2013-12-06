@@ -55,6 +55,12 @@ public class CorfuConfigManager
 	 * @return disk-size of current segment
 	 */
 	public int getUnitsize() { return C.getActiveSegmentView().disksize; }
+	
+	/**
+	 * Obtain the capacity (in grain-size unit) of the current active segment
+	 * @return capacity (in grain-size units) of the current active segment
+	 */
+	public int getCapacity() { return C.getActiveSegmentView().disksize * C.getActiveSegmentView().numgroups; }
 
 	/** Constructor
 	 * @param bootstraplocation

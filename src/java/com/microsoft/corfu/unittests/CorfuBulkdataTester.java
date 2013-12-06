@@ -43,6 +43,7 @@ public class CorfuBulkdataTester implements Runnable {
 		int nreaderthreads = 1;
 		
 		CM = new CorfuConfigManager(new File("./0.aux"));
+		entsize = CM.getGrain(); // a default
 
 		// parse args
 		for (int i = 0; i < args.length; ) {
@@ -132,40 +133,39 @@ public class CorfuBulkdataTester implements Runnable {
 		int rpt = 0;
 		ExtntWrap ret = null;
 		long trimpos = 0;
-		long lastread = -1, lastwait = -2;
+		long nextread = 0;
 
 		while(rpt < nrepeat) {
 
 			try {
 				ret = crf.readExtnt();
 				
-				lastread = ret.getInf().getMetaFirstOff();
+				nextread = ret.getInf().getMetaFirstOff() + ret.getInf().getMetaLength();
 				if (ret.getCtnt().size() > 0) stats(++rpt, rcommulative, "READ");
-				if (lastread - trimpos >= CM.getUnitsize()/2) {
-					trimpos = lastread - (lastread % (CM.getUnitsize()/2));
+				if (nextread - trimpos >= CM.getUnitsize()/2) {
+					trimpos = nextread - (nextread % (CM.getUnitsize()/2));
 					log.info("reader consumed half-log bulk; trimming log to {}", trimpos);
 					crf.trim(trimpos);
 				}
 			
 				
 			} catch (CorfuException e) {
-				e.printStackTrace();
-				if (lastwait == lastread) { // no progress since last wait, problem??
-					try {
+				long tail;
+				
+				try {
+					tail = crf.checkLogMark(CorfuLogMark.TAIL);
+					log.info("read stalled..{} nextread={} tail={}", e.er, nextread, tail);
+					if (tail > nextread) {
 						crf.repairNext();
-					} catch (CorfuException ce) {
-						log.error("repairNext failed, shouldn't happen?");
-						return;
+					} else {
+						log.debug("reader waiting for log to fill up");
+						synchronized(this) { wait(1000); }
 					}
-				} else {
-					synchronized(this) {
-						try {
-							lastwait = lastread;
-							wait(1000);
-						} catch (InterruptedException ex) {
-							log.warn("reader wait interrupted; shouldn't happend..");
-						}
-					}
+				} catch (InterruptedException ex) {
+					log.warn("reader wait interrupted; shouldn't happend..");
+				} catch (CorfuException ce) {
+					log.error("repairNext failed, shouldn't happen?");
+					return;
 				}
 			}
 		}						
@@ -177,16 +177,25 @@ public class CorfuBulkdataTester implements Runnable {
 	
 		while(rpt < nrepeat) {
 			try {
-				crf.appendExtnt(bb, entsize);
+				crf.appendExtnt(bb, 	 // the buffer
+								entsize, // buffer size
+								true	 // if log is full, request auto-trimming to last checkpoint
+								);
 				synchronized(this) { notify(); }
 				stats(++rpt, wcommulative, "WRITE");
 			} catch (CorfuException e) {
 				if (e.er.equals(CorfuErrorCode.ERR_FULL)) {
-					log.info("corfu append failed; out of space. sleeping.");
-					synchronized(this) { notify(); }
+					log.info("corfu append failed; out of space...........waiting for readers to consume the log and trim it...");
 					try {
-						Thread.sleep(1000);
+						do {
+							synchronized(this) { notify(); }
+							Thread.sleep(1);
+						} while (crf.checkLogMark(CorfuLogMark.TAIL) - crf.checkLogMark(CorfuLogMark.HEAD) >= CM.getCapacity());
+						
 					} catch (InterruptedException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					} catch (CorfuException e1) {
 						// TODO Auto-generated catch block
 						e1.printStackTrace();
 					}

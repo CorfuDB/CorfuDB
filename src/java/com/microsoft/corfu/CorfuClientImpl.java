@@ -391,12 +391,16 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			log.info("repairNext repositioning to head={}", head);
 			pos = head;
 		}
-		if (pos >= tail) return; // TODO do something??
+		if (pos >= tail) {
+			log.info("repairNext reached log tail, finishing");
+			return; // TODO do something??
+		}
 		
 		try {
 			fetchMetaAt(pos, inf);
 			if (inf.getMetaFirstOff() < head) {
 				// extent partially trimmed; skip
+				log.info("repairNext partially-trimmed extent {}, skipping");
 				skip = true;
 				inf.setMetaFirstOff(head);
 			}
@@ -434,6 +438,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		// now we try to fix 'inf'
 		CorfuErrorCode er;
 		for (pos = inf.getMetaFirstOff(); pos < ExtntSuccessor(inf); pos++) {
+			log.debug("repairNext fix pos={}", pos);
 			try {
 				er = sunits[0].fix(pos, inf);
 			} catch (TException e1) {

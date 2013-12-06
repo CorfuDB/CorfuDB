@@ -273,6 +273,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		ByteBuffer bb;
 		long fromOff = inf.getMetaFirstOff(), toOff = fromOff + inf.getMetaLength();
 		
+		log.debug("write({}) starting", inf);
+		
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		// from here until the next '^^^^..' mark : 
 		// code to verify that there is room to write the entire multi-page entry in one shot, and not overwrite any filled pages
@@ -289,24 +291,19 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
 		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
 
-		if (relToOff > relFromOff) {
-			int i = storeMap.nextSetBit((int) relFromOff);
-			if (i >= 0 && i < relToOff) { // we expect the next set bit to be higher than ToOff, or none at all
-				log.info("attempt to overwrite! offset={} fill[{}..{}]", (fromOff+i), fromOff, toOff);
-				return CorfuErrorCode.ERR_OVERWRITE; 
-			}
-		} else {   // range wraps around the array
-			int i = storeMap.nextSetBit((int) relFromOff); 
+		int i = storeMap.nextSetBit((int) relFromOff);
+		if (relToOff <= relFromOff) { // first, range wraps around the array
 			if (i >= 0) { // we expect no bit higher than FromOff to be set, hence for i to be -1
-				log.info("attempt to overwrite! offset={} fill[{}..{}]", (fromOff+i), fromOff, toOff);
+				log.info("attempt to overwrite! offset={} fill[{}..{}] set-bit before end={}", (fromOff+i), fromOff, toOff, i);
 				return CorfuErrorCode.ERR_OVERWRITE;
 			}
 			i = storeMap.nextSetBit(0); 
-			if (i >= 0 && i < relToOff) { // we expect the next set bit from wraparound origin (to be higher than ToOff, or none
-				log.info("attempt to overwrite! offset={} fill[{}..{}]", (fromOff+i), fromOff, toOff);
-				return CorfuErrorCode.ERR_OVERWRITE;
-			}
 		}
+		if (i >= 0 && i < relToOff) { // we expect the next set bit to be higher than ToOff, or none at all
+				log.info("attempt to overwrite! offset={} fill[{}..{}] set-bit after 0={}", (fromOff+i), fromOff, toOff, i);
+				return CorfuErrorCode.ERR_OVERWRITE; 
+			}
+
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		
 		java.util.ListIterator<ByteBuffer> li = ctnt.listIterator();
@@ -324,7 +321,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		
 		storeMap.set((int) relFromOff , (int) relToOff);
 		for (long off = relFromOff; off < relToOff; off++) {
-			// System.out.println("  writing offset to store: " + off);
+			log.debug("write({}) to store", off);
 			assert li.hasNext();
 			bb = li.next();
 			assert bb.capacity() == ENTRYSIZE;
@@ -365,7 +362,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}
 
 		storeMap.set(relOff);
-		RamToStore(relOff, null, inf);
+		RamToStore(relOff, ByteBuffer.allocate(0), inf);
 		return CorfuErrorCode.OK; 
 		
 	}

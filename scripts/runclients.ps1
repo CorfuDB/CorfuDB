@@ -30,12 +30,13 @@ if ($pushflag) { write-host push updates to destinations }
 # 
 [xml]$CL = gc "CLIENTS.xml"
 
-$tstjar=".\corfu-client.jar"
-$tstmainclass = "com.microsoft.corfu.unittests.CorfuClientTester"
-$nthreads=2
+$tstjar=".\corfu-bulk.jar"
+$tstmainclass = "com.microsoft.corfu.unittests.CorfuBulkdataTester"
+$wthreads=1
+$rthreads=1
 $nrepeat=10000
-$entsize = 128 #               * 1024  # 128K
-$printfreq = 1
+$entsize = 128  * 100 
+$printfreq = 500
 
 [scriptblock]$sb = { $a = $args[0]; cd c:\users\$a\corfu-bin; java $args[1..($args.length-1)] }
  
@@ -54,6 +55,6 @@ $clnodes | %{
 		xcopy $configFileName  \\$n\c$\users\$uid\corfu-bin /Y /D
 	}
 
-	doicm $n $sb $uid -classpath $tstjar $tstmainclass -threads $nthreads -repeat $nrepeat -size $entsize -printfreq $printfreq
+	doicm $n $sb $uid -classpath $tstjar $tstmainclass -rthreads $rthreads -wthreads $wthreads -repeat $nrepeat -size $entsize -printfreq $printfreq
 }
 
