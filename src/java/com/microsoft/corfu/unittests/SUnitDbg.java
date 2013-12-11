@@ -28,7 +28,8 @@ public class SUnitDbg {
 				System.out.println("Usage: ");
 				System.out.println("  help");
 				System.out.println("  read <offset>");
-				System.out.println("  meta <offset>");
+				System.out.println("  dbg <offset>");
+				System.out.println("  fix <offset>");
 				System.out.println("  bounds");
 				System.out.println("  quit");
 			}};
@@ -37,8 +38,8 @@ public class SUnitDbg {
 
 		{
 			put("help", printhelp);
-		
-			put("meta", 
+			
+			put("dbg", 
 				new helper() {
 				public void helperf(StringTokenizer I) {
 					if (!I.hasMoreElements()) {
@@ -47,12 +48,19 @@ public class SUnitDbg {
 					}
 					String OffStr = I.nextToken();
 					long off = Long.parseLong(OffStr);
-					ExtntInfo inf;
+					ExtntWrap di;
 					try {
-						inf = crf.dbg(off);
-						System.out.println("meta: " + inf);
+						di = crf.dbg(off);
+						System.out.println("err=" + di.getErr());
+						if (di.getCtnt().get(0).capacity() == 0)
+							System.out.println("	entry bit is unset");
+						else {
+							System.out.println("	entry bit is set");
+							System.out.println("meta: " + di.getInf());
+						}
 					} catch (CorfuException e) {
 						System.out.println("dbg failed off=" + off);
+						System.out.println("CorfuErr type=" + e.er);
 						e.printStackTrace();
 					}
 				}
@@ -73,11 +81,36 @@ public class SUnitDbg {
 						System.out.println("read: size=" + ret.getCtntSize() + " meta="+ ret.getInf());
 					} catch (CorfuException e) {
 						System.out.println("readExtnt failed off=" + off);
+						System.out.println("CorfuErr type=" + e.er);
 						e.printStackTrace();
 					}
 				}
 			});
 			
+			put("fix",
+					new helper() {
+					public void helperf(StringTokenizer I) {
+						if (!I.hasMoreElements()) {
+							printhelp.helperf(null);
+							return;
+						}
+						String OffStr = I.nextToken();
+						long off = Long.parseLong(OffStr);
+						ExtntWrap ret;
+						try {
+							if (off > 0) {
+								System.out.println("setting reader mark to " + (off-1));
+								ret = crf.readExtnt(off-1);
+								System.out.println("read: size=" + ret.getCtntSize() + " meta="+ ret.getInf());
+							}
+							crf.repairNext();
+						} catch (CorfuException e) {
+							System.out.println("repairNext failed off=" + off);
+							System.out.println("CorfuErr type=" + e.er);
+							e.printStackTrace();
+						}
+					}
+				});
 			put("bounds",
 				new helper() {
 				public void helperf(StringTokenizer I) {
@@ -91,6 +124,7 @@ public class SUnitDbg {
 						head + ", " + ctail + ", " + tail + ")");
 					} catch (CorfuException e) {
 						System.out.println("checkLogMark failed");
+						System.out.println("CorfuErr type=" + e.er);
 					}
 				}
 			});

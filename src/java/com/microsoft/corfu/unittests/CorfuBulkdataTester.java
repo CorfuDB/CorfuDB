@@ -134,6 +134,8 @@ public class CorfuBulkdataTester implements Runnable {
 		ExtntWrap ret = null;
 		long trimpos = 0;
 		long nextread = 0;
+		long lastattempted = -1;
+		long lasttail = -1;
 
 		while(rpt < nrepeat) {
 
@@ -154,10 +156,16 @@ public class CorfuBulkdataTester implements Runnable {
 				
 				try {
 					tail = crf.checkLogMark(CorfuLogMark.TAIL);
-					log.info("read stalled..{} nextread={} tail={}", e.er, nextread, tail);
+					log.info("read stalled..{} lastattempted={} nextread={} tail={}", e.er, lastattempted, nextread, tail);
+					if (lastattempted == nextread && (tail > nextread || lasttail == tail)) {
+						log.error("reader seems stuck; quitting");
+						return;
+					}
+					lastattempted = nextread;
 					if (tail > nextread) {
 						crf.repairNext();
 					} else {
+						lasttail = tail;
 						log.debug("reader waiting for log to fill up");
 						synchronized(this) { wait(1000); }
 					}
@@ -196,10 +204,13 @@ public class CorfuBulkdataTester implements Runnable {
 						// TODO Auto-generated catch block
 						e1.printStackTrace();
 					} catch (CorfuException e1) {
-						// TODO Auto-generated catch block
+						log.error("writeloop checkLogMark() failed, quitting");
 						e1.printStackTrace();
+						break;
 					}
-				} else if (e.er.equals(CorfuErrorCode.ERR_BADPARAM)) {
+				} else if (e.er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
+					log.warn("writeloop incurred OverwriteCorfuException; continuing");
+				} else { // all other errors may not be recoverable 
 					log.error("appendExtnt failed with bad error code, writerloop quitting");
 					break;
 				}

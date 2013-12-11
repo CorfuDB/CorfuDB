@@ -111,14 +111,14 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	}
 
 	/**
-	 * see appendExtnt(List<ByteBuffer>): 
-	 *   Breaks the bytebuffer is gets as parameter into grain-size buffers, and invokes appendExtnt(List<ByteBuffer>);
+	 * Breaks the bytebuffer is gets as parameter into grain-size buffers, and invokes appendExtnt(List<ByteBuffer>);
+	 * 	see appendExtnt(List<ByteBuffer>, boolean) for more details
 	 *
 	 * @param	buf	the buffer to append to the log
 	 * @param	bufsize	size of buffer to append
 	 * @param autoTrim		flag, indicating whether to automatically trim the log to latest checkpoint if full
-	 * @return		the first log-offset of the written range 
-	 * @throws CorfuException
+	 * @return		see appendExtnt(List<ByteBuffer>, boolean) 
+	 * @throws 		see appendExtnt(List<ByteBuffer>, boolean)
 	 */
 	public long appendExtnt(byte[] buf, int reqsize, boolean autoTrim) throws CorfuException {
 
@@ -146,6 +146,9 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @param autoTrim		flag, indicating whether to automatically trim the log to latest checkpoint if full
 	 * @return              the first log-offset of the written range 
 	 * @throws CorfuException
+	 * 		OutOfSpaceCorfuException indicates an attempt to append failed because storage unit(s) are full; user may try trim()
+	 * 		OverwriteException indicates that an attempt to append failed because of an internal race; user may retry
+	 * 		BadParamCorfuException or a general CorfuException indicate an internal problem, such as a server crash. Might not be recoverable
 	 */
 	public long appendExtnt(List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException {
 		long offset = -1;
@@ -499,11 +502,12 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @throws CorfuException
 	 *     TrimmedCorfuException, BadParam, Unwritten, with the obvious meanings
 	 */
-	public ExtntInfo dbg(long pos) throws CorfuException {
-		ExtntInfo inf = new ExtntInfo();
-		fetchMetaAt(pos, inf);
-		log.debug("dbg({}) meta-info: {}", pos, inf);
-		return inf;
+	public ExtntWrap dbg(long pos) throws CorfuException {
+		try {
+			return sunits[0].dbg(pos);
+		} catch (TException t) {
+			throw new InternalCorfuException("dbg() failed ");
+		}
 	}
 
 

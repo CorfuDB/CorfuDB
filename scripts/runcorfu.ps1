@@ -13,7 +13,7 @@ rjb *
 # distribution parameters
 #
 $scriptPath = split-path -parent $MyInvocation.MyCommand.Definition | split-path -parent
-$configFileName = "0.aux"
+$configFileName = ".\0.aux"
 $binDir = $scriptPath + "\bin\java\"
 $uid = $env:username
 
@@ -26,7 +26,7 @@ if ($pushflag) { write-host push updates to destinations }
 
 # parse XML configuration
 # 
-[xml]$CONFIG = gc 0.aux
+[xml]$CONFIG = gc $configFileName
 
 # sequencer 
 # ################################################################################################################

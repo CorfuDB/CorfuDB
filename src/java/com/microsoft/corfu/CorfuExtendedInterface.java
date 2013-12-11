@@ -48,13 +48,18 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	 * @param autoTrim		flag, indicating whether to automatically trim the log to latest checkpoint if full
 	 * @return              the first log-offset of the written range 
 	 * @throws CorfuException
+	 * <UL>
+	 * <LI>		OutOfSpaceCorfuException indicates an attempt to append failed because storage unit(s) are full; user may try trim()
+	 * <LI>		OverwriteException indicates that an attempt to append failed because of an internal race; user may retry
+	 * <LI>		BadParamCorfuException or a general CorfuException indicate an internal problem, such as a server crash. Might not be recoverable
+	 * </UL>
 	 */
 	public long appendExtnt(List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException;
 	public long appendExtnt(List<ByteBuffer> ctnt) throws CorfuException;
 
 	/**
-	 * see appendExtnt(List<ByteBuffer>): 
-	 *   Breaks the bytebuffer is gets as parameter into grain-size buffers, and invokes appendExtnt(List<ByteBuffer>);
+	 * Breaks the bytebuffer is gets as parameter into grain-size buffers, and invokes appendExtnt(List<ByteBuffer>);
+	 * @see #appendExtnt(List, boolean) appendExtnt(List<ByteBuffer> ctnt, boolean autoTrim).
 	 *
 	 * @param	buf	the buffer to append to the log
 	 * @param	bufsize	size of buffer to append
@@ -94,13 +99,13 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	public long checkpointLoc() throws CorfuException;
 	
 	/**
-	 * return the meta-info record associated with the specified offset. used for debugging.
+	 * fetch debugging info associated with the specified offset.
 	 * 
 	 * @param offset the inquired position 
-	 * @return an ExtntInfo object
+	 * @return an ExtntWrap object
 	 * @throws CorfuException
 	 *     TrimmedCorfuException, BadParam, Unwritten, with the obvious meanings
 	 */
-	public ExtntInfo dbg(long offset) throws CorfuException;
+	public ExtntWrap dbg(long offset) throws CorfuException;
 	
 }
