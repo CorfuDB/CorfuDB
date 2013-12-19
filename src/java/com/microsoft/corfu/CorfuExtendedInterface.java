@@ -108,4 +108,11 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	 */
 	public ExtntWrap dbg(long offset) throws CorfuException;
 	
+	/**
+	 * utility function to grab tcnt tokens from the sequencer. used for debugging.
+	 * 
+	 * @param tcnt the number of tokens to grab from sequencer
+	 * @throws CorfuException is thrown in case of unexpected communication problem with the sequencer
+	 */
+	public void grabtokens(int tcnt) throws CorfuException;
 }

@@ -194,23 +194,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	
 	ExtntInfo lastReadExtntInfo = new ExtntInfo(-1, 1, 0); // meta-info of last successfully read extent  
 	ExtntInfo PrefetchExtntInfo = new ExtntInfo(-1, 0, 0); // prefetched meta-info from last successful read, if any
-	
-	/** utility method to copy one Extnt meta-info record to another
-	 * @param from source ExtntInfo
-	 * @param to target ExtntInfo
-	 */
-	private void ExtntInfoCopy(ExtntInfo from, ExtntInfo to) {
-		to.setFlag(from.getFlag());
-		to.setMetaFirstOff(from.getMetaFirstOff());
-		to.setMetaLength(from.getMetaLength());
-	}
-	
-	/** utility method to compute the log-offset succeeding an extent
-	 * @param inf the extent's meta-info
-	 * @return the offset succeeding this extent
-	 */
-	private long ExtntSuccessor(ExtntInfo inf) { return inf.getMetaFirstOff() + inf.getMetaLength(); }
-	
+		
 	/**
 	 * obtain the ExtntInfo for the next extent to read.
 	 * 
@@ -229,19 +213,19 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 						// in this case, the nexExtntInfo we fetched previously must be skipped 
 						// we try to progress both curExtntInfo and nexExtntInfo to the subsequent extent
 						log.debug("getNextMeta skip {}", PrefetchExtntInfo);
-						ExtntInfoCopy(PrefetchExtntInfo, lastReadExtntInfo);
-						fetchMetaAt(ExtntSuccessor(PrefetchExtntInfo), PrefetchExtntInfo);
+						CorfuUtil.ExtntInfoCopy(PrefetchExtntInfo, lastReadExtntInfo);
+						fetchMetaAt(CorfuUtil.ExtntSuccessor(PrefetchExtntInfo), PrefetchExtntInfo);
 						continue;
 					}
 				
 				} else {
 					// this means nexExtntInfo wasn't available for prefetching last time
 					log.debug("getNextMeta for cur={}", lastReadExtntInfo);
-					fetchMetaAt(ExtntSuccessor(lastReadExtntInfo), PrefetchExtntInfo);
+					fetchMetaAt(CorfuUtil.ExtntSuccessor(lastReadExtntInfo), PrefetchExtntInfo);
 					continue;
 				}
 				
-				ExtntInfoCopy(PrefetchExtntInfo, inf);
+				CorfuUtil.ExtntInfoCopy(PrefetchExtntInfo, inf);
 				break;
 			}
 		}
@@ -268,7 +252,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			CorfuErrorCode er = ret.getErr();
 
 			if (er.equals(CorfuErrorCode.OK)) {
-				ExtntInfoCopy(ret.getInf(), inf);
+				CorfuUtil.ExtntInfoCopy(ret.getInf(), inf);
 			} else {
 				log.debug("readmeta({}) fails err={}", pos, er);
 				if (er.equals(CorfuErrorCode.ERR_UNWRITTEN)) {
@@ -290,8 +274,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @param prefetch the pre-fetched meta-info of the next extent
 	 */
 	private synchronized void updateMeta(ExtntInfo cur, ExtntInfo prefetch) {
-		ExtntInfoCopy(cur, lastReadExtntInfo);
-		ExtntInfoCopy(prefetch, PrefetchExtntInfo);
+		CorfuUtil.ExtntInfoCopy(cur, lastReadExtntInfo);
+		CorfuUtil.ExtntInfoCopy(prefetch, PrefetchExtntInfo);
 	}
 	
 	/**
@@ -310,7 +294,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		ExtntWrap ret;
 		
 		try {
-			CorfuHeader hdr = new CorfuHeader(inf, true, ExtntSuccessor(inf), CorfuErrorCode.OK);
+			CorfuHeader hdr = new CorfuHeader(inf, true, CorfuUtil.ExtntSuccessor(inf), CorfuErrorCode.OK);
 			log.debug("readExtnt read(rang={}, prefertchoff={} isprefetch={})", hdr.getExtntInf(), hdr.getPrefetchOff(), hdr.isPrefetch());
 			ret = sunits[0].read(hdr);
 		} catch (TException e) {
@@ -388,7 +372,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		tail = checkLogMark(CorfuLogMark.TAIL); 
 		
 		// first, get the meta-info of the next extent
-		pos = ExtntSuccessor(lastReadExtntInfo);
+		pos = CorfuUtil.ExtntSuccessor(lastReadExtntInfo);
 		
 		if (pos < head) {
 			log.info("repairNext repositioning to head={}", head);
@@ -440,7 +424,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			
 		// now we try to fix 'inf'
 		CorfuErrorCode er;
-		for (pos = inf.getMetaFirstOff(); pos < ExtntSuccessor(inf); pos++) {
+		for (pos = inf.getMetaFirstOff(); pos < CorfuUtil.ExtntSuccessor(inf); pos++) {
 			log.debug("repairNext fix pos={}", pos);
 			try {
 				er = sunits[0].fix(pos, inf);
@@ -507,6 +491,20 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			return sunits[0].dbg(pos);
 		} catch (TException t) {
 			throw new InternalCorfuException("dbg() failed ");
+		}
+	}
+	
+	/**
+	 * utility function to grab tcnt tokens from the sequencer. used for debugging.
+	 * 
+	 * @param tcnt the number of tokens to grab from sequencer
+	 * @throws CorfuException is thrown in case of unexpected communication problem with the sequencer
+	 */
+	public void grabtokens(int tcnt) throws CorfuException {
+		try {
+			sequencer.nextpos(tcnt);
+		} catch (TException t) {
+			throw new InternalCorfuException("grabtoken failed");
 		}
 	}
 

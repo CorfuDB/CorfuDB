@@ -30,12 +30,12 @@ if ($pushflag) { write-host push updates to destinations }
 # 
 [xml]$CL = gc "CLIENTS.xml"
 
-$tstjar=".\corfu-bulk.jar"
-$tstmainclass = "com.microsoft.corfu.unittests.CorfuBulkdataTester"
+$tstjar=".\RWTester.jar"
+$tstmainclass = "com.microsoft.corfu.unittests.CorfuRWTester"
 $wthreads=1
-$rthreads=1
+$rthreads=0
 $nrepeat=10000
-$entsize = 128  * 100 
+$entsize = 1280  * 100 
 $printfreq = 500
 
 [scriptblock]$sb = { $a = $args[0]; cd c:\users\$a\corfu-bin; java $args[1..($args.length-1)] }

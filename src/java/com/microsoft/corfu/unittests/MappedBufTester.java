@@ -30,47 +30,57 @@ public class MappedBufTester {
 		TSTREAD, TSTWRITE
 	};
 	
-	static int BUFSIZE = 4096;
+	static long BUFSIZE = 4096;
 	static long FILESIZE = 1024 * 1024;
-	static int RAMSIZE = BUFSIZE;
+	static long RAMSIZE = BUFSIZE;
+	static int CIRCSIZE = 3; // we maintain a circular list of mapped-buffer of this length
+	static int curmapind = 0;
+	static int[] circ = new int[CIRCSIZE];
 	
 	static FileChannel DriveChannel = null;
-	static ArrayList<MappedByteBuffer> DriveMemoryMap = null;
+	static MappedByteBuffer[] DriveMemoryMap = null;
 	
 
 	static private MappedByteBuffer getStoreMap(long relOff) {
-		
-		int mapind = (int) (relOff/(long)RAMSIZE);
-		if (mapind < 0) {
-			System.out.println("");
-			System.out.println("relOff=" + relOff + " RAMSIZE=" + RAMSIZE +
-					" (relOff/(long)RAMSIZE)=" + (relOff/(long)RAMSIZE) +
-					" (int)(relOff/(long)RAMSIZE)" + (int) (relOff/(long)RAMSIZE));
+				
+		int mapind = (int) (relOff/RAMSIZE);
+
+		MappedByteBuffer mb  = DriveMemoryMap[0 /* mapind */];
+			
+		if (mapind != circ[curmapind]) {
+			curmapind = (curmapind+1) % CIRCSIZE;
+			int c = (curmapind+1)%CIRCSIZE;
+			if (circ[c] >= 0) {
+				// System.out.println("drop ind " + circ[c]);
+				DriveMemoryMap[0 /* circ[c] */].force();
+				// DriveMemoryMap[circ[c]] = null;
+				// System.out.println("done");
+			}
+			circ[curmapind] = mapind;
 		}
-		MappedByteBuffer mb  = null;
-		
-		if (DriveMemoryMap.size() <= mapind)
+	
+		if (mb == null)
 			try {
-				mb = DriveChannel.map(MapMode.READ_WRITE, relOff, RAMSIZE);
-				DriveMemoryMap.add(mapind, mb);
+				// System.out.println("map ind " + mapind);
+				mb = DriveMemoryMap[0 /* mapind */] = DriveChannel.map(MapMode.READ_WRITE, relOff, RAMSIZE);
 				mb.load();
 				mb.rewind(); 
+				// System.out.println("done");
 	
 			} catch (IOException e) {
 				System.out.println("failure to sync drive to memory");
 				e.printStackTrace();
 				System.exit(-1);
 			}
-		else
-			mb = DriveMemoryMap.get(mapind);
-
-		mb.position((int) (relOff % (long)RAMSIZE));
+	
+		mb.position((int) (relOff % RAMSIZE));
 		return mb;
 	}
 
 	static private void RamToStore(long relOff, ByteBuffer buf) {
 		MappedByteBuffer mb = getStoreMap(relOff);
-		assert (mb.capacity() >= buf.capacity()); 
+		// System.out.println(mb.capacity() + " " + mb.position() + " " + mb.remaining());
+		assert (mb.remaining() >= buf.capacity()); 
 		buf.rewind();
 		mb.put(buf.array());
 	}
@@ -80,7 +90,7 @@ public class MappedBufTester {
 		MappedByteBuffer mb = getStoreMap(relOff);
 
 		if (!buf.hasArray()) 
-			buf.allocate(BUFSIZE);
+			buf.allocate((int) BUFSIZE);
 		assert (mb.capacity() >= buf.capacity()); 
 
 		buf.rewind();
@@ -98,12 +108,12 @@ public class MappedBufTester {
 
 		for (int i = 0; i < args.length; ) {
 			if (args[i].startsWith("-filesize") && i < args.length-1) {
-				FILESIZE = Long.valueOf(args[i+1]) * 1024 * 1024;
-				RAMSIZE = (int) Math.min(Integer.MAX_VALUE, FILESIZE);
+				FILESIZE = Long.valueOf(args[i+1]) * 1024;
+				RAMSIZE = Math.min(Integer.MAX_VALUE, FILESIZE);
 				System.out.println("filesize: " + FILESIZE/(1024*1024) + " MBytes");
 				i += 2;
 			} else if (args[i].startsWith("-ramsize") && i < args.length-1) {
-					RAMSIZE =  Math.min(Integer.MAX_VALUE, Integer.valueOf(args[i+1]) * 1024);
+					RAMSIZE =  Math.min(Integer.MAX_VALUE, Long.valueOf(args[i+1]) * 1024);
 					System.out.println("RAMSIZE: " + RAMSIZE/1024 + " KBytes");
 					i += 2;
 			} else if (args[i].startsWith("-filename") && i < args.length-1) {
@@ -112,13 +122,16 @@ public class MappedBufTester {
 				i += 2;
 			} else {
 				System.out.println("unknown param: " + args[i]);
-				throw new Exception("Usage: " + CorfuClientTester.class.getName() + 
-						" [-filesize <# MBytes>] [-ramsize <# KBytes>] -filename <filename>");
+				throw new Exception("Usage: " + MappedBufTester.class.getName() + 
+						" [-filesize <# KBytes>] [-ramsize <# KBytes>] -filename <filename>");
 			}
 		}
 		if (filename == null) {
-			throw new Exception("Usage: " + CorfuClientTester.class.getName() + 
+			throw new Exception("Usage: " + MappedBufTester.class.getName() + 
 					" [-filesize <# MBytes>] [-RAMSIZE <# KBytes>] -filename <filename>");
+		}
+		if (RAMSIZE % BUFSIZE != 0) {
+			throw new Exception("Usage: RAMSIZE must be a multiple of " + BUFSIZE);
 		}
 		
 		try {
@@ -130,13 +143,37 @@ public class MappedBufTester {
 			e.printStackTrace();
 		}
 		
-		DriveMemoryMap = new ArrayList<MappedByteBuffer>((int) (FILESIZE/RAMSIZE));
-		System.out.println(DriveMemoryMap.size() + " Mapped BybteBuffers");
+		DriveMemoryMap = new MappedByteBuffer[(int)(FILESIZE/RAMSIZE)+1];
+		System.out.println(DriveMemoryMap.length + " Mapped BybteBuffers");
+		
+		new Thread(new Runnable() {
+			
+			@Override
+			public void run() {
+				stats();
+				
+			}
+		}).start();
 
 
 		for (int rpt = 0; rpt < 5; rpt++) {
 			runtest(TESTMODE.TSTWRITE);
 			runtest(TESTMODE.TSTREAD);
+		}
+				
+	}
+	
+	static int xput = 0; // in BUFSIZE units
+	
+	private static void stats() {
+		int lastxput = 0;
+		long starttime = System.currentTimeMillis();
+		
+		for (;;) {
+			System.out.println((xput -lastxput) * BUFSIZE / (1024*1024) + 
+					" MB/sec...(total " + xput*BUFSIZE/(1024*1024) + " MB in " + (System.currentTimeMillis() - starttime)/1000 + " secs)");
+			lastxput = xput;
+			try { Thread.sleep(1000); } catch (Exception e) {}
 		}
 	}
 	
@@ -145,43 +182,27 @@ public class MappedBufTester {
 	
 		switch (t) {
 			case TSTREAD:
-				System.out.println("reading file sz =" + FILESIZE/(1024*1024) +
-						" MBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
+				System.out.println("reading file sz =" + FILESIZE/(1024) +
+						" KBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
 				break;
 			case TSTWRITE:
-				System.out.println("write file sz =" + FILESIZE/(1024*1024) +
-						" MBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
+				System.out.println("write file sz =" + FILESIZE/(1024) +
+						" KBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
 				break;
 		}
 
-		ByteBuffer bb = ByteBuffer.allocate(BUFSIZE);
-		byte c;
-		long p = 0; long q = 0;
+		ByteBuffer bb = ByteBuffer.allocate((int)BUFSIZE);
 		for (long i = 0; i*BUFSIZE < FILESIZE; i ++) {
-			if ((i-p)*BUFSIZE >= 1024*1024*20) { // print every 20MB ...
-				p = i;
-				System.out.print((i*BUFSIZE)/(1024*1024) + "MBytes.."); if (++q % 10 == 0) System.out.println("");
-			}
-
+			xput++;
+			
 			switch (t) {
 				case TSTREAD: 
 					StoreToRam(i*BUFSIZE, bb);
 					bb.rewind();
-					for (int b =0; b < BUFSIZE; b++) {
-						if (bb.remaining() <= 0)
-							System.out.println("not more remaining in buf");
-						c = bb.get();
-					}
 					break;
 					
 				case TSTWRITE:
 					bb.rewind();
-					c = (byte)i;
-					for (int b =0; b < BUFSIZE; b++) {
-						if (bb.remaining() <= 0)
-							System.out.println("not more remaining in buf");
-						bb.put(c);
-					}
 					RamToStore(i*BUFSIZE, bb);
 					break;
 			}

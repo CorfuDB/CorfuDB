@@ -1,8 +1,12 @@
 package com.microsoft.corfu.sunit;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.RandomAccessFile;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -25,7 +29,6 @@ import com.microsoft.corfu.*;
 import com.microsoft.corfu.sunit.CorfuUnitServer;
 import com.microsoft.corfu.sunit.CorfuUnitServer.Iface;
 import com.microsoft.corfu.sunit.CorfuUnitServer.Processor;
-import com.microsoft.corfu.unittests.CorfuClientTester;
 import com.sun.xml.internal.bind.v2.runtime.reflect.ListIterator;
 
 public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
@@ -34,6 +37,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
 	private static long UNITCAPACITY; // capacity in ENTRYSIZE units, i.e. UNITCAPACITY*ENTRYSIZE bytes
 	private static int ENTRYSIZE;
+	private static int METASIZE; // size in bytes of ExtntInfo after serialization
 	private static int PORT;
 	private static String DRIVENAME = null;
 	private static boolean RAMMODE = false;
@@ -48,7 +52,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	private long trimmark = 0; // log has been trimmed up to this position, non-inclusive
 
 	private FileChannel DriveChannel = null;
-	private ArrayList<MappedByteBuffer> DriveMap;
 
 	/**
 	 * @param args
@@ -58,6 +61,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		CorfuConfigManager CM = new CorfuConfigManager(new File("./0.aux"));
 		int sid = -1;
 		ENTRYSIZE = CM.getGrain();
+		METASIZE = CorfuUtil.ExtntInfoSSize();
 		UNITCAPACITY = CM.getUnitsize(); 
 		RAMSIZE = Math.min(UNITCAPACITY, MAXRAMSIZE/(long)ENTRYSIZE);
 
@@ -82,14 +86,14 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 				i += 2;
 			} else {
 				slog.error("unknown param: " + args[i]);
-				throw new Exception("Usage: " + CorfuClientTester.class.getName() + 
+				throw new Exception("Usage: " + CorfuUnitServer.class.getName() + 
 						" [-rammode] [-mapsize <# MBytes>] -drivename <name> -unit <unitnumber>");
 			}
 		}
 		
 		if ((!RAMMODE && DRIVENAME == null) || sid < 0) {
 			slog.error("missing arguments!");
-			throw new Exception("Usage: " + CorfuClientTester.class.getName() + 
+			throw new Exception("Usage: " + CorfuUnitServer.class.getName() + 
 					" [-rammode] [-mapsize <# MBytes>] [-drivename <filename>] -unit <unitnumber>");
 		}
 		
@@ -100,8 +104,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}		
 		PORT = cn[sid].getPort();
 		
-		slog.info("unit server #{} starting; port={}, entsize={} capacity={} ramsize={}",
-				sid, PORT, ENTRYSIZE , UNITCAPACITY, RAMSIZE);
+		slog.info("unit server #{} starting; port={}, entsize={} metasize={} capacity={} ramsize={}",
+				sid, PORT, ENTRYSIZE , METASIZE, UNITCAPACITY, RAMSIZE);
 		
 		new Thread(new Runnable() {
 			@Override
@@ -136,16 +140,13 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
 		if (!RAMMODE) {
 			try {
-				RandomAccessFile f = new RandomAccessFile(DRIVENAME, "rw");
-				f.setLength(UNITCAPACITY * ENTRYSIZE);
-				DriveChannel = f.getChannel();
-				DriveMap = new ArrayList<MappedByteBuffer>((int) (UNITCAPACITY*ENTRYSIZE/RAMSIZE)); 
+				DriveChannel = new RandomAccessFile(DRIVENAME, "rw").getChannel();
 			} catch (FileNotFoundException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
+				System.exit(1); // not much to do without storage...
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
+				System.exit(1); // not much to do without storage...
 			}
 		}
 		else {	
@@ -157,41 +158,16 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 													// make storeMap a list of bitmaps, each one of MAXINT size
 	}
 	
-
-	private MappedByteBuffer getMappedBuf(long relOff) {
-		// System.out.println("getMappedBuf(" + relOff + ")");
-		
-		int mapind = (int) (relOff/RAMSIZE);
-		MappedByteBuffer mb  = null;
-		
-		// System.out.println("  mapind=" + mapind);
-		
-		if (DriveMap.size() <= mapind) {
-			try {
-				mb = DriveChannel.map(MapMode.READ_WRITE, relOff*ENTRYSIZE, RAMSIZE*ENTRYSIZE);
-				DriveMap.add(mapind, mb);
-				mb.load();
-				mb.rewind(); 
-	
-			} catch (IOException e) {
-				log.error("failure to sync drive to memory");
-				e.printStackTrace();
-				System.exit(-1);
-			}
+	class entryplus {
+		public entryplus(ByteBuffer buf, ExtntInfo inf) {
+			super();
+			this.buf = buf;
+			this.inf = inf;
 		}
-		else
-			mb = DriveMap.get(mapind);
-
-		mb.position(((int) (relOff % RAMSIZE)) * ENTRYSIZE);
-
-		return mb;
+		ByteBuffer buf;
+		ExtntInfo inf;
 	}
-
-	private void ExtntInfoCopy(ExtntInfo from, ExtntInfo to) {
-		to.setFlag(from.getFlag());
-		to.setMetaFirstOff(from.getMetaFirstOff());
-		to.setMetaLength(from.getMetaLength());
-	}
+		
 	/**
 	 * utility function to handle incoming log-entry. depending on mode, if RAMMODE, it holds a pointer to the entry buffer in memory, 
 	 * otherwise, it copies it into store.
@@ -207,16 +183,16 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			inmemoryMeta[(int)relOff] = inf; 
 		}
 		else {
-			MappedByteBuffer mb = getMappedBuf(relOff);
-			if (buf != null) {
-				assert (mb.capacity() >= buf.capacity()); 
-				buf.rewind();
-				mb.put(buf.array());
+			try {
+				ByteBuffer bb = ByteBuffer.wrap(CorfuUtil.ExtntInfoSerialize(inf));
+
+				DriveChannel.position(relOff*(ENTRYSIZE+METASIZE));
+				DriveChannel.write(buf); 
+				DriveChannel.write(bb);
+			} catch (IOException e) {
+				e.printStackTrace();
+				System.exit(1);
 			}
-			assert(mb.capacity() >= 16); // TODO this is the size to write ExtntInfo's fields?? ugh!!!
-			mb.putLong(inf.getMetaFirstOff());
-			mb.putInt(inf.getMetaLength());
-			mb.putInt(inf.getFlag());
 		}
 	}
 	
@@ -226,10 +202,9 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 * we also fill-up 'inf' here with the meta-info of the extent that this entry belongs to.
 	 * 
 	 * @param relOff the log-offset we would like to obtain
-	 * @param inf reference to meta-info record to fill with the extent's meta-information
-	 * @return a pointer to a ByteBuffer containing the content
+	 * @return an entryplus object with pointers to a ByteBuffer containing the content and an ExtntInfo containing meta-ingo
 	 */
-	private ByteBuffer StoreToRam(long relOff, ExtntInfo inf)  {
+	private entryplus StoreToRam(long relOff)  {
 
 		if (RAMMODE) {
 			if (inmemoryMeta[(int)relOff].equals(null) ||
@@ -239,16 +214,47 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 				System.exit(1);
 				
 			}
-			ExtntInfoCopy(inmemoryMeta[(int)relOff], inf);
-			return inmemoryStore[(int)relOff];
+			return new entryplus(inmemoryStore[(int)relOff], inmemoryMeta[(int)relOff]);
 		}
-		else {
-			MappedByteBuffer mb = getMappedBuf(relOff);
-			ByteBuffer rb = ByteBuffer.wrap(mb.array(), mb.position(), ENTRYSIZE);
-			inf.setMetaFirstOff(mb.getLong());
-			inf.setMetaLength(mb.getInt());
-			return rb;
+		else try {
+			DriveChannel.position(relOff*(ENTRYSIZE+METASIZE));
+			ByteBuffer bb = ByteBuffer.allocate(ENTRYSIZE);
+			DriveChannel.read(bb);
+			ByteBuffer ib = ByteBuffer.allocate(METASIZE);
+			DriveChannel.read(ib);
+			ib.rewind();
+			return new entryplus(bb, CorfuUtil.ExtntInfoDeserialize(ib.array()));
+		} catch (IOException e) {
+			log.warn("cannot retrieve entry {} from store, IO error; quitting", relOff);
+			e.printStackTrace();
+			System.exit(1);
 		}
+		return null; // never reached
+	}
+	
+	private ExtntInfo StoreToRamMeta(long relOff) {
+		ByteBuffer ib = null;
+		if (RAMMODE) {
+			if (inmemoryMeta[(int)relOff].equals(null)) {
+				log.warn("StoreToRam({}) found null entry, bit={}, trimmark={}",
+						relOff, storeMap.get((int)relOff), trimmark);
+				System.exit(1);
+			}
+			return inmemoryMeta[(int)relOff];
+		}
+		else try {
+			DriveChannel.position(relOff*(ENTRYSIZE+METASIZE) + ENTRYSIZE);
+			ib = ByteBuffer.allocate(METASIZE);
+			DriveChannel.read(ib); ib.rewind();
+			return CorfuUtil.ExtntInfoDeserialize(ib.array());
+		} catch (IOException e) {
+			log.warn("cannot retrieve entry {} from store, IO error; quitting", relOff);
+			try {			log.info("channel position {} read buf size {}", DriveChannel.size(), ib.capacity()); } catch (Exception e1) {}
+			e.printStackTrace();
+			System.exit(1);
+		}
+		return null; // never reached
+		
 	}
 		
 	/* (non-Javadoc)
@@ -455,27 +461,28 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		// actual reading starts here (we already checked that entire range is written)
 		
 		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
-		ExtntInfo ckinf = new ExtntInfo();
+		entryplus ent;
 		
 		if (relToOff < relFromOff) {
 			for (long off = relFromOff; off < UNITCAPACITY; off++) {
-				wbufs.add(StoreToRam(off, ckinf));
-				if (!ckinf.equals(hdr.getExtntInf())) 
-					return retval.badmetaHelper(hdr.getExtntInf(), ckinf);
+				ent = StoreToRam(off);
+				if (!ent.inf.equals(hdr.getExtntInf())) 
+					return retval.badmetaHelper(hdr.getExtntInf(), ent.inf);
+				wbufs.add(ent.buf);
 			}
 			relFromOff = 0; // wrap around and "spill" to the for loop below
 		}
 		
 		for (long off = relFromOff; off < relToOff; off++) {
-			wbufs.add(StoreToRam(off, ckinf));
-			if (!ckinf.equals(hdr.getExtntInf())) 
-				return retval.badmetaHelper(hdr.getExtntInf(), ckinf);
+			ent = StoreToRam(off);
+			if (!ent.inf.equals(hdr.getExtntInf())) 
+				return retval.badmetaHelper(hdr.getExtntInf(), ent.inf);
+			wbufs.add(ent.buf);
 		}
 
 		int relPrefetch = (int) (hdr.getPrefetchOff() % UNITCAPACITY);
 		if (hdr.isPrefetch() && (hdr.getPrefetchOff() - trimmark) < UNITCAPACITY && storeMap.get(relPrefetch)) {
-			StoreToRam(relPrefetch, ckinf); // TODO read only the meta-info here
-			return new ExtntWrap(CorfuErrorCode.OK, ckinf, wbufs); 
+			return new ExtntWrap(CorfuErrorCode.OK, StoreToRamMeta(relPrefetch), wbufs); 
 		} else {
 			return new ExtntWrap(CorfuErrorCode.OK, hdr.getExtntInf(), wbufs);
 		}
@@ -500,9 +507,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		if (! storeMap.get((int) (off % UNITCAPACITY)) ) 
 			return retval.badoffHelper(CorfuErrorCode.ERR_UNWRITTEN, off, off, off );
 
-		ExtntInfo ret = new ExtntInfo();
-		StoreToRam(off % UNITCAPACITY, ret); // TODO read only the meta-info here
-		return new ExtntWrap(CorfuErrorCode.OK, ret, new ArrayList<ByteBuffer>());
+		return new ExtntWrap(CorfuErrorCode.OK, StoreToRamMeta(off % UNITCAPACITY), new ArrayList<ByteBuffer>());
 	}
 	
 	synchronized public ExtntWrap dbg(long off) {

@@ -72,7 +72,7 @@ $sunits | %{ $ind=0} {
  
 	# start unit server on remote
 	#
-	doicm $rem $sb $uid -classpath $sjar $smainclass -unit $ind -rammode -drivename foo.txt 
+	doicm $rem $sb $uid -classpath $sjar $smainclass -unit $ind -drivename c:\temp\foo.txt 
 
 	$ind++
 }

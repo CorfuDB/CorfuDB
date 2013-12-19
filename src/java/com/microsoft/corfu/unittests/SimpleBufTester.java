@@ -10,6 +10,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
@@ -23,57 +24,44 @@ import java.util.BitSet;
  * @author dalia
  *
  */
-public class MappedBufTesterB{
+public class SimpleBufTester {
 
 	
 	public enum TESTMODE {
 		TSTREAD, TSTWRITE
 	};
 	
-	static int BUFSIZE = 4096;
+	static long BUFSIZE = 4096*10;
 	static long FILESIZE = 1024 * 1024;
-	static int RAMSIZE = BUFSIZE;
+	static long RAMSIZE = BUFSIZE;
 	
-	static FileChannel DriveChannel = null;
-	static MappedByteBuffer DriveMemoryMap = null;
-	static long DriveMapWindow = -1; // indicates the current drive "windows" mapped by DriveMemoryMap
-
-	static private void getStoreMap(long relOff) {
-		
-		if (DriveMapWindow != (int) (relOff/(long)RAMSIZE))
-			try {
-				/* if (DriveMemoryMap != null) { DriveMemoryMap.force(); DriveMemoryMap.limit(0);  } */
-				DriveMemoryMap = DriveChannel.map(MapMode.READ_WRITE, relOff, RAMSIZE);
-				DriveMemoryMap.load();
-				DriveMemoryMap.rewind(); 
-				DriveMapWindow = (int) (relOff/(long)RAMSIZE);
+	static FileChannel ch;
 	
-			} catch (IOException e) {
-				System.out.println("failure to sync drive to memory");
-				e.printStackTrace();
-				System.exit(-1);
-			}
-
-		DriveMemoryMap.position((int) (relOff % (long)RAMSIZE));
-	}
-
 	static private void RamToStore(long relOff, ByteBuffer buf) {
-		getStoreMap(relOff);
-		assert (DriveMemoryMap.capacity() >= buf.capacity()); 
 		buf.rewind();
-		DriveMemoryMap.put(buf.array());
+		
+		try {
+			ch.write(buf, relOff);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			System.exit(1);
+		}
 	}
 	
 	static private void StoreToRam(long relOff, ByteBuffer buf)  {
 
-		getStoreMap(relOff);
-
 		if (!buf.hasArray()) 
-			buf.allocate(BUFSIZE);
-		assert (DriveMemoryMap.capacity() >= buf.capacity()); 
-
+			buf.allocate((int) BUFSIZE);
 		buf.rewind();
-		DriveMemoryMap.get(buf.array());
+		
+		try {
+			ch.read(buf, relOff);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			System.exit(1);
+		}
 	}
 
 
@@ -87,12 +75,12 @@ public class MappedBufTesterB{
 
 		for (int i = 0; i < args.length; ) {
 			if (args[i].startsWith("-filesize") && i < args.length-1) {
-				FILESIZE = Long.valueOf(args[i+1]) * 1024 * 1024;
-				RAMSIZE = (int) Math.min(Integer.MAX_VALUE, FILESIZE);
+				FILESIZE = Long.valueOf(args[i+1]) * 1024;
+				RAMSIZE = Math.min(Integer.MAX_VALUE, FILESIZE);
 				System.out.println("filesize: " + FILESIZE/(1024*1024) + " MBytes");
 				i += 2;
 			} else if (args[i].startsWith("-ramsize") && i < args.length-1) {
-					RAMSIZE =  Math.min(Integer.MAX_VALUE, Integer.valueOf(args[i+1]) * 1024);
+					RAMSIZE =  Math.min(Integer.MAX_VALUE, Long.valueOf(args[i+1]) * 1024);
 					System.out.println("RAMSIZE: " + RAMSIZE/1024 + " KBytes");
 					i += 2;
 			} else if (args[i].startsWith("-filename") && i < args.length-1) {
@@ -101,27 +89,52 @@ public class MappedBufTesterB{
 				i += 2;
 			} else {
 				System.out.println("unknown param: " + args[i]);
-				throw new Exception("Usage: " + MappedBufTesterB.class.getName() + 
-						" [-filesize <# MBytes>] [-ramsize <# KBytes>] -filename <filename>");
+				throw new Exception("Usage: " + MappedBufTester.class.getName() + 
+						" [-filesize <# KBytes>] [-ramsize <# KBytes>] -filename <filename>");
 			}
 		}
 		if (filename == null) {
-			throw new Exception("Usage: " + MappedBufTesterB.class.getName() + 
+			throw new Exception("Usage: " + MappedBufTester.class.getName() + 
 					" [-filesize <# MBytes>] [-RAMSIZE <# KBytes>] -filename <filename>");
+		}
+		if (RAMSIZE % BUFSIZE != 0) {
+			throw new Exception("Usage: RAMSIZE must be a multiple of " + BUFSIZE);
 		}
 		
 		try {
-			RandomAccessFile f = new RandomAccessFile(filename, "rw");
-			f.setLength(FILESIZE);
-			DriveChannel = f.getChannel();
+			   ch = new RandomAccessFile(filename, "rw").getChannel();
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+		new Thread(new Runnable() {
+			
+			@Override
+			public void run() {
+				stats();
+				
+			}
+		}).start();
 
 		for (int rpt = 0; rpt < 5; rpt++) {
 			runtest(TESTMODE.TSTWRITE);
 			runtest(TESTMODE.TSTREAD);
+		}
+				
+	}
+	
+	static int xput = 0; // in BUFSIZE units
+	
+	private static void stats() {
+		int lastxput = 0;
+		long starttime = System.currentTimeMillis();
+		
+		for (;;) {
+			System.out.println((xput -lastxput) * BUFSIZE / (1024*1024) + 
+					" MB/sec...(total " + xput*BUFSIZE/(1024*1024) + " MB in " + (System.currentTimeMillis() - starttime)/1000 + " secs)");
+			lastxput = xput;
+			try { Thread.sleep(1000); } catch (Exception e) {}
 		}
 	}
 	
@@ -130,43 +143,26 @@ public class MappedBufTesterB{
 	
 		switch (t) {
 			case TSTREAD:
-				System.out.println("reading file sz =" + FILESIZE/(1024*1024) +
-						" MBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
+				System.out.println("reading file sz =" + FILESIZE/(1024) +
+						" KBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
 				break;
 			case TSTWRITE:
-				System.out.println("write file sz =" + FILESIZE/(1024*1024) +
-						" MBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
+				System.out.println("write file sz =" + FILESIZE/(1024) +
+						" KBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
 				break;
 		}
 
-		ByteBuffer bb = ByteBuffer.allocate(BUFSIZE);
-		byte c;
-		long p = 0; long q = 0;
+		ByteBuffer bb = ByteBuffer.allocate((int)BUFSIZE);
 		for (long i = 0; i*BUFSIZE < FILESIZE; i ++) {
-			if ((i-p)*BUFSIZE >= 1024*1024*20) { // print every 20MB ...
-				p = i;
-				System.out.print((i*BUFSIZE)/(1024*1024) + "MBytes.."); if (++q % 10 == 0) System.out.println("");
-			}
-
+			xput++;
+			
 			switch (t) {
 				case TSTREAD: 
 					StoreToRam(i*BUFSIZE, bb);
-					bb.rewind();
-					for (int b =0; b < BUFSIZE; b++) {
-						if (bb.remaining() <= 0)
-							System.out.println("not more remaining in buf");
-						c = bb.get();
-					}
 					break;
 					
 				case TSTWRITE:
 					bb.rewind();
-					c = (byte)i;
-					for (int b =0; b < BUFSIZE; b++) {
-						if (bb.remaining() <= 0)
-							System.out.println("not more remaining in buf");
-						bb.put(c);
-					}
 					RamToStore(i*BUFSIZE, bb);
 					break;
 			}

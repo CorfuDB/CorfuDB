@@ -1,3 +1,66 @@
+/**
+ * @author dalia
+ * 
+ * unit tester. 
+ * creates <rthreads> (commands line parameter) reader threads and <wthreads> (param) writer threads.
+ * 
+ * writer-thread append <repeat> entries of size <size> to the log. 
+ * it notified reader threads (if any) every time it appends to the log.
+ * If the log fills up, it automatically trims it to latest checkpoint to facilitate progress.
+
+ *  without exception handling and so on, the stripped-down writer code is as follows:
+ *  
+		while(rpt < nrepeat) {
+				crf.appendExtnt(bb, 	 // the buffer
+								entsize, // buffer size
+								true	 // if log is full, request auto-trimming to last checkpoint
+								);
+				synchronized(this) { notify(); }
+
+				...if (e.er.equals(CorfuErrorCode.ERR_FULL)) {
+					log.info("corfu append failed; out of space...........waiting for readers to consume the log and trim it...");
+					try {
+						do {
+							synchronized(this) { notify(); }
+							Thread.sleep(1);
+						} while (crf.checkLogMark(CorfuLogMark.TAIL) - crf.checkLogMark(CorfuLogMark.HEAD) >= CM.getCapacity());
+					}
+				}
+			}
+ *						
+ *
+ * reader-thread reads <repeat> entries from the log.
+ * Whenever it consumes half the log capacity, it trims capacity/2 entries. 
+ * If it gets stalled, it tries to repair the log at the point of stalling.
+ * Note that, repair may fill the log with a SKIP mark at that problem point,
+ * 
+ *  without exception handling and so on, the stripped-down reader code is as follows:
+ *  
+ 		while (rpt < nrepeat) {
+			ret = crf.readExtnt();
+		
+			nextread = ret.getInf().getMetaFirstOff() + ret.getInf().getMetaLength();
+			if (nextread - trimpos >= CM.getUnitsize()/2) {
+				trimpos = nextread - (nextread % (CM.getUnitsize()/2));
+				crf.trim(trimpos);
+			}
+	
+			tail = crf.checkLogMark(CorfuLogMark.TAIL);
+			if (lastattempted == nextread && (tail > nextread || lasttail == tail)) {
+				log.error("reader seems stuck; quitting");
+				return;
+			}
+			lastattempted = nextread;
+			if (tail > nextread) {
+				crf.repairNext();
+			} else {
+				lasttail = tail;
+				synchronized(this) { wait(1000); }
+			}
+		}
+ *
+ */
+
 package com.microsoft.corfu.unittests;
 
 import java.io.File;
@@ -22,13 +85,14 @@ import com.microsoft.corfu.ExtntWrap;
 import com.microsoft.corfu.sunit.CorfuUnitServerImpl;
 import com.sun.org.apache.bcel.internal.classfile.CodeException;
 
-public class CorfuBulkdataTester implements Runnable {
-	private Logger log = LoggerFactory.getLogger(CorfuBulkdataTester.class);
+public class CorfuRWTester {
+	static private Logger log = LoggerFactory.getLogger(CorfuRWTester.class);
 
 	static AtomicInteger wcommulative = new AtomicInteger(0);
 	static AtomicInteger rcommulative = new AtomicInteger(0);
 	
 	static private CorfuConfigManager CM;
+	static CorfuRWTester tster;
 	static private int nrepeat = 100000;
 	static private int entsize = 0;
 	static private int printfreq = 1000;
@@ -69,73 +133,73 @@ public class CorfuBulkdataTester implements Runnable {
 				i += 2;
 			} else {
 				System.out.println("unknown param: " + args[i]);
-				throw new Exception("Usage: " + CorfuBulkdataTester.class.getName() + 
+				throw new Exception("Usage: " + CorfuRWTester.class.getName() + 
 						" [-rthreads <numreaderthreads>] [-wthreads <numwriterthreads>][-repeat <nrepeat>] [-size <entry-size>] [-printfreq <frequency>]");
 			}
 		}
-		
-		System.out.println("starting client ..");
+
+		tster = new CorfuRWTester();
 		
 		ExecutorService executor = Executors.newFixedThreadPool(nwriterthreads + nreaderthreads);
 		for (int i = 0; i < nwriterthreads; i++) {
-			Runnable worker = new CorfuBulkdataTester(false, CM);
-			executor.execute(worker);
+			executor.execute(new Runnable() {
+				@Override
+				public void run() {
+					tster.writerloop();
+				}
+			});
 		}
+		
 		for (int i = 0; i < nreaderthreads; i++) {
-			Runnable worker = new CorfuBulkdataTester(true, CM);
-			executor.execute(worker);
+			executor.execute(new Runnable() {
+				@Override
+				public void run() {
+					tster.readerloop();
+				}
+			});
 		}
+		
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				tster.stats();
+			}}).run();
+			
 		
 		executor.shutdown();
 		executor.awaitTermination(1000, TimeUnit.SECONDS);
+		
+		System.exit(0);
 	}
 	
-	CorfuExtendedInterface crf;
-	private boolean isreader = false;
-	long starttime = System.currentTimeMillis();
-	String myname = System.getenv("computername");
-	
-	public CorfuBulkdataTester(boolean isreader, CorfuConfigManager CM) {
-		super();
-		this.isreader = isreader; // thread id
-	}
+	private void stats() {
+		long starttime = System.currentTimeMillis(), elapsetime;
 
-	private void stats(int rpt, AtomicInteger cumm, String t) {
-		long elapsetime;
-	
-		if (rpt > 0 && rpt % printfreq == 0) {
-			int c = cumm.addAndGet(printfreq);
-			elapsetime = System.currentTimeMillis();
-			log.info("{}*{} (cummulative {}*{}) {}'s in {} secs", 
-					(rpt+1)/printfreq, printfreq, 
-					c/printfreq, printfreq,
-					t, 
-					(elapsetime-starttime)/1000);
+		for (;;) {
+			elapsetime = (System.currentTimeMillis() - starttime) / 1000;
+			if (elapsetime > 0)
+				log.info("{} secs,		READs {} ({}/sec)   		WRITEs {} ({}/sec) ",
+					elapsetime, 
+					rcommulative.get(), rcommulative.get()/elapsetime, 
+					wcommulative.get(), wcommulative.get()/elapsetime);
+			try { Thread.sleep(1000); } catch (Exception e) {}
 		}
 	}
 
-	@Override
-	public void run() {
-		
-		try {
-			crf = new CorfuClientImpl(CM);
-			log.info("first check(): " + crf.check());
-		} catch (CorfuException e3) {
-			log.error("cannot set client conenction, giving up");
-			e3.printStackTrace();
-			return;
-		}
-		
-		if (isreader) readerloop(); else writerloop();
-	}
-	
 	private void readerloop() {
+		CorfuExtendedInterface crf;
+		
 		int rpt = 0;
 		ExtntWrap ret = null;
 		long trimpos = 0;
 		long nextread = 0;
-		long lastattempted = -1;
-		long lasttail = -1;
+
+		try {
+			crf = new CorfuClientImpl(CM);
+		} catch (CorfuException e) {
+			log.error("reader cannot set connection to Corfu service, quitting");
+			return;
+		}
 
 		while(rpt < nrepeat) {
 
@@ -143,9 +207,11 @@ public class CorfuBulkdataTester implements Runnable {
 				ret = crf.readExtnt();
 				
 				nextread = ret.getInf().getMetaFirstOff() + ret.getInf().getMetaLength();
-				if (ret.getCtnt().size() > 0) stats(++rpt, rcommulative, "READ");
+				rcommulative.incrementAndGet();
+				rpt++;
+
 				if (nextread - trimpos >= CM.getUnitsize()/2) {
-					trimpos = nextread - (nextread % (CM.getUnitsize()/2));
+					trimpos = crf.checkLogMark(CorfuLogMark.CONTIG);
 					log.info("reader consumed half-log bulk; trimming log to {}", trimpos);
 					crf.trim(trimpos);
 				}
@@ -156,18 +222,12 @@ public class CorfuBulkdataTester implements Runnable {
 				
 				try {
 					tail = crf.checkLogMark(CorfuLogMark.TAIL);
-					log.info("read stalled..{} lastattempted={} nextread={} tail={}", e.er, lastattempted, nextread, tail);
-					if (lastattempted == nextread && (tail > nextread || lasttail == tail)) {
-						log.error("reader seems stuck; quitting");
-						return;
-					}
-					lastattempted = nextread;
+					log.debug("read stalled..{}  nextread={} tail={}", e.er, nextread, tail);
 					if (tail > nextread) {
 						crf.repairNext();
 					} else {
-						lasttail = tail;
 						log.debug("reader waiting for log to fill up");
-						synchronized(this) { wait(1000); }
+						synchronized(this) { wait(1); }
 					}
 				} catch (InterruptedException ex) {
 					log.warn("reader wait interrupted; shouldn't happend..");
@@ -182,15 +242,25 @@ public class CorfuBulkdataTester implements Runnable {
 	private void writerloop() {
 		int rpt = 0;
 		byte[] bb = new byte[entsize];
+		CorfuExtendedInterface crf;
 	
+		try {
+			crf = new CorfuClientImpl(CM);
+		} catch (CorfuException e) {
+			log.error("reader cannot set connection to Corfu service, quitting");
+			return;
+		}
+
 		while(rpt < nrepeat) {
 			try {
 				crf.appendExtnt(bb, 	 // the buffer
 								entsize, // buffer size
 								true	 // if log is full, request auto-trimming to last checkpoint
 								);
+				rpt++;
+				wcommulative.incrementAndGet();
 				synchronized(this) { notify(); }
-				stats(++rpt, wcommulative, "WRITE");
+
 			} catch (CorfuException e) {
 				if (e.er.equals(CorfuErrorCode.ERR_FULL)) {
 					log.info("corfu append failed; out of space...........waiting for readers to consume the log and trim it...");
