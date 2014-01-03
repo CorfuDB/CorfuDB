@@ -14,7 +14,9 @@ service CorfuUnitServer {
 
 	common.ExtntWrap dbg(1:i64 off),
 
-	i64 check(common.CorfuLogMark typ),
+	i64 querytrim(),
+	i64 queryck(),
+	void ckpoint(1:i64 off),
 		
 	bool trim (1:i64 mark),
 

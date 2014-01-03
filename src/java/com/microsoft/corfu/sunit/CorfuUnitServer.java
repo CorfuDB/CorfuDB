@@ -44,7 +44,11 @@ public class CorfuUnitServer {
 
     public com.microsoft.corfu.ExtntWrap dbg(long off) throws org.apache.thrift.TException;
 
-    public long check(com.microsoft.corfu.CorfuLogMark typ) throws org.apache.thrift.TException;
+    public long querytrim() throws org.apache.thrift.TException;
+
+    public long queryck() throws org.apache.thrift.TException;
+
+    public void ckpoint(long off) throws org.apache.thrift.TException;
 
     public boolean trim(long mark) throws org.apache.thrift.TException;
 
@@ -62,7 +66,11 @@ public class CorfuUnitServer {
 
     public void dbg(long off, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.dbg_call> resultHandler) throws org.apache.thrift.TException;
 
-    public void check(com.microsoft.corfu.CorfuLogMark typ, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.check_call> resultHandler) throws org.apache.thrift.TException;
+    public void querytrim(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.querytrim_call> resultHandler) throws org.apache.thrift.TException;
+
+    public void queryck(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.queryck_call> resultHandler) throws org.apache.thrift.TException;
+
+    public void ckpoint(long off, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.ckpoint_call> resultHandler) throws org.apache.thrift.TException;
 
     public void trim(long mark, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.trim_call> resultHandler) throws org.apache.thrift.TException;
 
@@ -205,27 +213,68 @@ public class CorfuUnitServer {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "dbg failed: unknown result");
     }
 
-    public long check(com.microsoft.corfu.CorfuLogMark typ) throws org.apache.thrift.TException
+    public long querytrim() throws org.apache.thrift.TException
     {
-      send_check(typ);
-      return recv_check();
+      send_querytrim();
+      return recv_querytrim();
     }
 
-    public void send_check(com.microsoft.corfu.CorfuLogMark typ) throws org.apache.thrift.TException
+    public void send_querytrim() throws org.apache.thrift.TException
     {
-      check_args args = new check_args();
-      args.setTyp(typ);
-      sendBase("check", args);
+      querytrim_args args = new querytrim_args();
+      sendBase("querytrim", args);
     }
 
-    public long recv_check() throws org.apache.thrift.TException
+    public long recv_querytrim() throws org.apache.thrift.TException
     {
-      check_result result = new check_result();
-      receiveBase(result, "check");
+      querytrim_result result = new querytrim_result();
+      receiveBase(result, "querytrim");
       if (result.isSetSuccess()) {
         return result.success;
       }
-      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "check failed: unknown result");
+      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "querytrim failed: unknown result");
+    }
+
+    public long queryck() throws org.apache.thrift.TException
+    {
+      send_queryck();
+      return recv_queryck();
+    }
+
+    public void send_queryck() throws org.apache.thrift.TException
+    {
+      queryck_args args = new queryck_args();
+      sendBase("queryck", args);
+    }
+
+    public long recv_queryck() throws org.apache.thrift.TException
+    {
+      queryck_result result = new queryck_result();
+      receiveBase(result, "queryck");
+      if (result.isSetSuccess()) {
+        return result.success;
+      }
+      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "queryck failed: unknown result");
+    }
+
+    public void ckpoint(long off) throws org.apache.thrift.TException
+    {
+      send_ckpoint(off);
+      recv_ckpoint();
+    }
+
+    public void send_ckpoint(long off) throws org.apache.thrift.TException
+    {
+      ckpoint_args args = new ckpoint_args();
+      args.setOff(off);
+      sendBase("ckpoint", args);
+    }
+
+    public void recv_ckpoint() throws org.apache.thrift.TException
+    {
+      ckpoint_result result = new ckpoint_result();
+      receiveBase(result, "ckpoint");
+      return;
     }
 
     public boolean trim(long mark) throws org.apache.thrift.TException
@@ -435,24 +484,21 @@ public class CorfuUnitServer {
       }
     }
 
-    public void check(com.microsoft.corfu.CorfuLogMark typ, org.apache.thrift.async.AsyncMethodCallback<check_call> resultHandler) throws org.apache.thrift.TException {
+    public void querytrim(org.apache.thrift.async.AsyncMethodCallback<querytrim_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
-      check_call method_call = new check_call(typ, resultHandler, this, ___protocolFactory, ___transport);
+      querytrim_call method_call = new querytrim_call(resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
       ___manager.call(method_call);
     }
 
-    public static class check_call extends org.apache.thrift.async.TAsyncMethodCall {
-      private com.microsoft.corfu.CorfuLogMark typ;
-      public check_call(com.microsoft.corfu.CorfuLogMark typ, org.apache.thrift.async.AsyncMethodCallback<check_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+    public static class querytrim_call extends org.apache.thrift.async.TAsyncMethodCall {
+      public querytrim_call(org.apache.thrift.async.AsyncMethodCallback<querytrim_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
         super(client, protocolFactory, transport, resultHandler, false);
-        this.typ = typ;
       }
 
       public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
-        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("check", org.apache.thrift.protocol.TMessageType.CALL, 0));
-        check_args args = new check_args();
-        args.setTyp(typ);
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("querytrim", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        querytrim_args args = new querytrim_args();
         args.write(prot);
         prot.writeMessageEnd();
       }
@@ -463,7 +509,68 @@ public class CorfuUnitServer {
         }
         org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
         org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
-        return (new Client(prot)).recv_check();
+        return (new Client(prot)).recv_querytrim();
+      }
+    }
+
+    public void queryck(org.apache.thrift.async.AsyncMethodCallback<queryck_call> resultHandler) throws org.apache.thrift.TException {
+      checkReady();
+      queryck_call method_call = new queryck_call(resultHandler, this, ___protocolFactory, ___transport);
+      this.___currentMethod = method_call;
+      ___manager.call(method_call);
+    }
+
+    public static class queryck_call extends org.apache.thrift.async.TAsyncMethodCall {
+      public queryck_call(org.apache.thrift.async.AsyncMethodCallback<queryck_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+        super(client, protocolFactory, transport, resultHandler, false);
+      }
+
+      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("queryck", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        queryck_args args = new queryck_args();
+        args.write(prot);
+        prot.writeMessageEnd();
+      }
+
+      public long getResult() throws org.apache.thrift.TException {
+        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
+          throw new IllegalStateException("Method call not finished!");
+        }
+        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
+        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
+        return (new Client(prot)).recv_queryck();
+      }
+    }
+
+    public void ckpoint(long off, org.apache.thrift.async.AsyncMethodCallback<ckpoint_call> resultHandler) throws org.apache.thrift.TException {
+      checkReady();
+      ckpoint_call method_call = new ckpoint_call(off, resultHandler, this, ___protocolFactory, ___transport);
+      this.___currentMethod = method_call;
+      ___manager.call(method_call);
+    }
+
+    public static class ckpoint_call extends org.apache.thrift.async.TAsyncMethodCall {
+      private long off;
+      public ckpoint_call(long off, org.apache.thrift.async.AsyncMethodCallback<ckpoint_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+        super(client, protocolFactory, transport, resultHandler, false);
+        this.off = off;
+      }
+
+      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("ckpoint", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        ckpoint_args args = new ckpoint_args();
+        args.setOff(off);
+        args.write(prot);
+        prot.writeMessageEnd();
+      }
+
+      public void getResult() throws org.apache.thrift.TException {
+        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
+          throw new IllegalStateException("Method call not finished!");
+        }
+        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
+        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
+        (new Client(prot)).recv_ckpoint();
       }
     }
 
@@ -517,7 +624,9 @@ public class CorfuUnitServer {
       processMap.put("read", new read());
       processMap.put("readmeta", new readmeta());
       processMap.put("dbg", new dbg());
-      processMap.put("check", new check());
+      processMap.put("querytrim", new querytrim());
+      processMap.put("queryck", new queryck());
+      processMap.put("ckpoint", new ckpoint());
       processMap.put("trim", new trim());
       return processMap;
     }
@@ -622,23 +731,64 @@ public class CorfuUnitServer {
       }
     }
 
-    public static class check<I extends Iface> extends org.apache.thrift.ProcessFunction<I, check_args> {
-      public check() {
-        super("check");
+    public static class querytrim<I extends Iface> extends org.apache.thrift.ProcessFunction<I, querytrim_args> {
+      public querytrim() {
+        super("querytrim");
       }
 
-      public check_args getEmptyArgsInstance() {
-        return new check_args();
+      public querytrim_args getEmptyArgsInstance() {
+        return new querytrim_args();
       }
 
       protected boolean isOneway() {
         return false;
       }
 
-      public check_result getResult(I iface, check_args args) throws org.apache.thrift.TException {
-        check_result result = new check_result();
-        result.success = iface.check(args.typ);
+      public querytrim_result getResult(I iface, querytrim_args args) throws org.apache.thrift.TException {
+        querytrim_result result = new querytrim_result();
+        result.success = iface.querytrim();
         result.setSuccessIsSet(true);
+        return result;
+      }
+    }
+
+    public static class queryck<I extends Iface> extends org.apache.thrift.ProcessFunction<I, queryck_args> {
+      public queryck() {
+        super("queryck");
+      }
+
+      public queryck_args getEmptyArgsInstance() {
+        return new queryck_args();
+      }
+
+      protected boolean isOneway() {
+        return false;
+      }
+
+      public queryck_result getResult(I iface, queryck_args args) throws org.apache.thrift.TException {
+        queryck_result result = new queryck_result();
+        result.success = iface.queryck();
+        result.setSuccessIsSet(true);
+        return result;
+      }
+    }
+
+    public static class ckpoint<I extends Iface> extends org.apache.thrift.ProcessFunction<I, ckpoint_args> {
+      public ckpoint() {
+        super("ckpoint");
+      }
+
+      public ckpoint_args getEmptyArgsInstance() {
+        return new ckpoint_args();
+      }
+
+      protected boolean isOneway() {
+        return false;
+      }
+
+      public ckpoint_result getResult(I iface, ckpoint_args args) throws org.apache.thrift.TException {
+        ckpoint_result result = new ckpoint_result();
+        iface.ckpoint(args.off);
         return result;
       }
     }
@@ -4514,30 +4664,20 @@ public class CorfuUnitServer {
 
   }
 
-  public static class check_args implements org.apache.thrift.TBase<check_args, check_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("check_args");
+  public static class querytrim_args implements org.apache.thrift.TBase<querytrim_args, querytrim_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("querytrim_args");
 
-    private static final org.apache.thrift.protocol.TField TYP_FIELD_DESC = new org.apache.thrift.protocol.TField("typ", org.apache.thrift.protocol.TType.I32, (short)-1);
 
     private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
     static {
-      schemes.put(StandardScheme.class, new check_argsStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new check_argsTupleSchemeFactory());
+      schemes.put(StandardScheme.class, new querytrim_argsStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new querytrim_argsTupleSchemeFactory());
     }
 
-    /**
-     * 
-     * @see com.microsoft.corfu.CorfuLogMark
-     */
-    public com.microsoft.corfu.CorfuLogMark typ; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-      /**
-       * 
-       * @see com.microsoft.corfu.CorfuLogMark
-       */
-      TYP((short)-1, "typ");
+;
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -4552,8 +4692,6 @@ public class CorfuUnitServer {
        */
       public static _Fields findByThriftId(int fieldId) {
         switch(fieldId) {
-          case -1: // TYP
-            return TYP;
           default:
             return null;
         }
@@ -4592,95 +4730,37 @@ public class CorfuUnitServer {
         return _fieldName;
       }
     }
-
-    // isset id assignments
     public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
       Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.TYP, new org.apache.thrift.meta_data.FieldMetaData("typ", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, com.microsoft.corfu.CorfuLogMark.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(check_args.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(querytrim_args.class, metaDataMap);
     }
 
-    public check_args() {
-    }
-
-    public check_args(
-      com.microsoft.corfu.CorfuLogMark typ)
-    {
-      this();
-      this.typ = typ;
+    public querytrim_args() {
     }
 
     /**
      * Performs a deep copy on <i>other</i>.
      */
-    public check_args(check_args other) {
-      if (other.isSetTyp()) {
-        this.typ = other.typ;
-      }
+    public querytrim_args(querytrim_args other) {
     }
 
-    public check_args deepCopy() {
-      return new check_args(this);
+    public querytrim_args deepCopy() {
+      return new querytrim_args(this);
     }
 
     @Override
     public void clear() {
-      this.typ = null;
-    }
-
-    /**
-     * 
-     * @see com.microsoft.corfu.CorfuLogMark
-     */
-    public com.microsoft.corfu.CorfuLogMark getTyp() {
-      return this.typ;
-    }
-
-    /**
-     * 
-     * @see com.microsoft.corfu.CorfuLogMark
-     */
-    public check_args setTyp(com.microsoft.corfu.CorfuLogMark typ) {
-      this.typ = typ;
-      return this;
-    }
-
-    public void unsetTyp() {
-      this.typ = null;
-    }
-
-    /** Returns true if field typ is set (has been assigned a value) and false otherwise */
-    public boolean isSetTyp() {
-      return this.typ != null;
-    }
-
-    public void setTypIsSet(boolean value) {
-      if (!value) {
-        this.typ = null;
-      }
     }
 
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
-      case TYP:
-        if (value == null) {
-          unsetTyp();
-        } else {
-          setTyp((com.microsoft.corfu.CorfuLogMark)value);
-        }
-        break;
-
       }
     }
 
     public Object getFieldValue(_Fields field) {
       switch (field) {
-      case TYP:
-        return getTyp();
-
       }
       throw new IllegalStateException();
     }
@@ -4692,8 +4772,6 @@ public class CorfuUnitServer {
       }
 
       switch (field) {
-      case TYP:
-        return isSetTyp();
       }
       throw new IllegalStateException();
     }
@@ -4702,23 +4780,14 @@ public class CorfuUnitServer {
     public boolean equals(Object that) {
       if (that == null)
         return false;
-      if (that instanceof check_args)
-        return this.equals((check_args)that);
+      if (that instanceof querytrim_args)
+        return this.equals((querytrim_args)that);
       return false;
     }
 
-    public boolean equals(check_args that) {
+    public boolean equals(querytrim_args that) {
       if (that == null)
         return false;
-
-      boolean this_present_typ = true && this.isSetTyp();
-      boolean that_present_typ = true && that.isSetTyp();
-      if (this_present_typ || that_present_typ) {
-        if (!(this_present_typ && that_present_typ))
-          return false;
-        if (!this.typ.equals(that.typ))
-          return false;
-      }
 
       return true;
     }
@@ -4728,24 +4797,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(check_args other) {
+    public int compareTo(querytrim_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      check_args typedOther = (check_args)other;
+      querytrim_args typedOther = (querytrim_args)other;
 
-      lastComparison = Boolean.valueOf(isSetTyp()).compareTo(typedOther.isSetTyp());
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-      if (isSetTyp()) {
-        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.typ, typedOther.typ);
-        if (lastComparison != 0) {
-          return lastComparison;
-        }
-      }
       return 0;
     }
 
@@ -4763,16 +4822,9 @@ public class CorfuUnitServer {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder("check_args(");
+      StringBuilder sb = new StringBuilder("querytrim_args(");
       boolean first = true;
 
-      sb.append("typ:");
-      if (this.typ == null) {
-        sb.append("null");
-      } else {
-        sb.append(this.typ);
-      }
-      first = false;
       sb.append(")");
       return sb.toString();
     }
@@ -4798,15 +4850,15 @@ public class CorfuUnitServer {
       }
     }
 
-    private static class check_argsStandardSchemeFactory implements SchemeFactory {
-      public check_argsStandardScheme getScheme() {
-        return new check_argsStandardScheme();
+    private static class querytrim_argsStandardSchemeFactory implements SchemeFactory {
+      public querytrim_argsStandardScheme getScheme() {
+        return new querytrim_argsStandardScheme();
       }
     }
 
-    private static class check_argsStandardScheme extends StandardScheme<check_args> {
+    private static class querytrim_argsStandardScheme extends StandardScheme<querytrim_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, check_args struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol iprot, querytrim_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -4816,14 +4868,6 @@ public class CorfuUnitServer {
             break;
           }
           switch (schemeField.id) {
-            case -1: // TYP
-              if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
-                struct.typ = com.microsoft.corfu.CorfuLogMark.findByValue(iprot.readI32());
-                struct.setTypIsSet(true);
-              } else { 
-                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-              }
-              break;
             default:
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
           }
@@ -4835,64 +4879,46 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, check_args struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol oprot, querytrim_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
-        if (struct.typ != null) {
-          oprot.writeFieldBegin(TYP_FIELD_DESC);
-          oprot.writeI32(struct.typ.getValue());
-          oprot.writeFieldEnd();
-        }
         oprot.writeFieldStop();
         oprot.writeStructEnd();
       }
 
     }
 
-    private static class check_argsTupleSchemeFactory implements SchemeFactory {
-      public check_argsTupleScheme getScheme() {
-        return new check_argsTupleScheme();
+    private static class querytrim_argsTupleSchemeFactory implements SchemeFactory {
+      public querytrim_argsTupleScheme getScheme() {
+        return new querytrim_argsTupleScheme();
       }
     }
 
-    private static class check_argsTupleScheme extends TupleScheme<check_args> {
+    private static class querytrim_argsTupleScheme extends TupleScheme<querytrim_args> {
 
       @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, check_args struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol prot, querytrim_args struct) throws org.apache.thrift.TException {
         TTupleProtocol oprot = (TTupleProtocol) prot;
-        BitSet optionals = new BitSet();
-        if (struct.isSetTyp()) {
-          optionals.set(0);
-        }
-        oprot.writeBitSet(optionals, 1);
-        if (struct.isSetTyp()) {
-          oprot.writeI32(struct.typ.getValue());
-        }
       }
 
       @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, check_args struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol prot, querytrim_args struct) throws org.apache.thrift.TException {
         TTupleProtocol iprot = (TTupleProtocol) prot;
-        BitSet incoming = iprot.readBitSet(1);
-        if (incoming.get(0)) {
-          struct.typ = com.microsoft.corfu.CorfuLogMark.findByValue(iprot.readI32());
-          struct.setTypIsSet(true);
-        }
       }
     }
 
   }
 
-  public static class check_result implements org.apache.thrift.TBase<check_result, check_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("check_result");
+  public static class querytrim_result implements org.apache.thrift.TBase<querytrim_result, querytrim_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("querytrim_result");
 
     private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.I64, (short)0);
 
     private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
     static {
-      schemes.put(StandardScheme.class, new check_resultStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new check_resultTupleSchemeFactory());
+      schemes.put(StandardScheme.class, new querytrim_resultStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new querytrim_resultTupleSchemeFactory());
     }
 
     public long success; // required
@@ -4964,13 +4990,13 @@ public class CorfuUnitServer {
       tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
           new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(check_result.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(querytrim_result.class, metaDataMap);
     }
 
-    public check_result() {
+    public querytrim_result() {
     }
 
-    public check_result(
+    public querytrim_result(
       long success)
     {
       this();
@@ -4981,13 +5007,13 @@ public class CorfuUnitServer {
     /**
      * Performs a deep copy on <i>other</i>.
      */
-    public check_result(check_result other) {
+    public querytrim_result(querytrim_result other) {
       __isset_bitfield = other.__isset_bitfield;
       this.success = other.success;
     }
 
-    public check_result deepCopy() {
-      return new check_result(this);
+    public querytrim_result deepCopy() {
+      return new querytrim_result(this);
     }
 
     @Override
@@ -5000,7 +5026,7 @@ public class CorfuUnitServer {
       return this.success;
     }
 
-    public check_result setSuccess(long success) {
+    public querytrim_result setSuccess(long success) {
       this.success = success;
       setSuccessIsSet(true);
       return this;
@@ -5058,12 +5084,12 @@ public class CorfuUnitServer {
     public boolean equals(Object that) {
       if (that == null)
         return false;
-      if (that instanceof check_result)
-        return this.equals((check_result)that);
+      if (that instanceof querytrim_result)
+        return this.equals((querytrim_result)that);
       return false;
     }
 
-    public boolean equals(check_result that) {
+    public boolean equals(querytrim_result that) {
       if (that == null)
         return false;
 
@@ -5084,13 +5110,13 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(check_result other) {
+    public int compareTo(querytrim_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      check_result typedOther = (check_result)other;
+      querytrim_result typedOther = (querytrim_result)other;
 
       lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
       if (lastComparison != 0) {
@@ -5119,7 +5145,7 @@ public class CorfuUnitServer {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder("check_result(");
+      StringBuilder sb = new StringBuilder("querytrim_result(");
       boolean first = true;
 
       sb.append("success:");
@@ -5152,15 +5178,15 @@ public class CorfuUnitServer {
       }
     }
 
-    private static class check_resultStandardSchemeFactory implements SchemeFactory {
-      public check_resultStandardScheme getScheme() {
-        return new check_resultStandardScheme();
+    private static class querytrim_resultStandardSchemeFactory implements SchemeFactory {
+      public querytrim_resultStandardScheme getScheme() {
+        return new querytrim_resultStandardScheme();
       }
     }
 
-    private static class check_resultStandardScheme extends StandardScheme<check_result> {
+    private static class querytrim_resultStandardScheme extends StandardScheme<querytrim_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, check_result struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol iprot, querytrim_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -5189,7 +5215,7 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, check_result struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol oprot, querytrim_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -5204,16 +5230,16 @@ public class CorfuUnitServer {
 
     }
 
-    private static class check_resultTupleSchemeFactory implements SchemeFactory {
-      public check_resultTupleScheme getScheme() {
-        return new check_resultTupleScheme();
+    private static class querytrim_resultTupleSchemeFactory implements SchemeFactory {
+      public querytrim_resultTupleScheme getScheme() {
+        return new querytrim_resultTupleScheme();
       }
     }
 
-    private static class check_resultTupleScheme extends TupleScheme<check_result> {
+    private static class querytrim_resultTupleScheme extends TupleScheme<querytrim_result> {
 
       @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, check_result struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol prot, querytrim_result struct) throws org.apache.thrift.TException {
         TTupleProtocol oprot = (TTupleProtocol) prot;
         BitSet optionals = new BitSet();
         if (struct.isSetSuccess()) {
@@ -5226,13 +5252,1211 @@ public class CorfuUnitServer {
       }
 
       @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, check_result struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol prot, querytrim_result struct) throws org.apache.thrift.TException {
         TTupleProtocol iprot = (TTupleProtocol) prot;
         BitSet incoming = iprot.readBitSet(1);
         if (incoming.get(0)) {
           struct.success = iprot.readI64();
           struct.setSuccessIsSet(true);
         }
+      }
+    }
+
+  }
+
+  public static class queryck_args implements org.apache.thrift.TBase<queryck_args, queryck_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("queryck_args");
+
+
+    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
+    static {
+      schemes.put(StandardScheme.class, new queryck_argsStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new queryck_argsTupleSchemeFactory());
+    }
+
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+;
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(queryck_args.class, metaDataMap);
+    }
+
+    public queryck_args() {
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public queryck_args(queryck_args other) {
+    }
+
+    public queryck_args deepCopy() {
+      return new queryck_args(this);
+    }
+
+    @Override
+    public void clear() {
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof queryck_args)
+        return this.equals((queryck_args)that);
+      return false;
+    }
+
+    public boolean equals(queryck_args that) {
+      if (that == null)
+        return false;
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+
+    public int compareTo(queryck_args other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      queryck_args typedOther = (queryck_args)other;
+
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
+    }
+
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("queryck_args(");
+      boolean first = true;
+
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+      // check for sub-struct validity
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private static class queryck_argsStandardSchemeFactory implements SchemeFactory {
+      public queryck_argsStandardScheme getScheme() {
+        return new queryck_argsStandardScheme();
+      }
+    }
+
+    private static class queryck_argsStandardScheme extends StandardScheme<queryck_args> {
+
+      public void read(org.apache.thrift.protocol.TProtocol iprot, queryck_args struct) throws org.apache.thrift.TException {
+        org.apache.thrift.protocol.TField schemeField;
+        iprot.readStructBegin();
+        while (true)
+        {
+          schemeField = iprot.readFieldBegin();
+          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
+            break;
+          }
+          switch (schemeField.id) {
+            default:
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+          }
+          iprot.readFieldEnd();
+        }
+        iprot.readStructEnd();
+
+        // check for required fields of primitive type, which can't be checked in the validate method
+        struct.validate();
+      }
+
+      public void write(org.apache.thrift.protocol.TProtocol oprot, queryck_args struct) throws org.apache.thrift.TException {
+        struct.validate();
+
+        oprot.writeStructBegin(STRUCT_DESC);
+        oprot.writeFieldStop();
+        oprot.writeStructEnd();
+      }
+
+    }
+
+    private static class queryck_argsTupleSchemeFactory implements SchemeFactory {
+      public queryck_argsTupleScheme getScheme() {
+        return new queryck_argsTupleScheme();
+      }
+    }
+
+    private static class queryck_argsTupleScheme extends TupleScheme<queryck_args> {
+
+      @Override
+      public void write(org.apache.thrift.protocol.TProtocol prot, queryck_args struct) throws org.apache.thrift.TException {
+        TTupleProtocol oprot = (TTupleProtocol) prot;
+      }
+
+      @Override
+      public void read(org.apache.thrift.protocol.TProtocol prot, queryck_args struct) throws org.apache.thrift.TException {
+        TTupleProtocol iprot = (TTupleProtocol) prot;
+      }
+    }
+
+  }
+
+  public static class queryck_result implements org.apache.thrift.TBase<queryck_result, queryck_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("queryck_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.I64, (short)0);
+
+    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
+    static {
+      schemes.put(StandardScheme.class, new queryck_resultStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new queryck_resultTupleSchemeFactory());
+    }
+
+    public long success; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+      SUCCESS((short)0, "success");
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 0: // SUCCESS
+            return SUCCESS;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+    private static final int __SUCCESS_ISSET_ID = 0;
+    private byte __isset_bitfield = 0;
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(queryck_result.class, metaDataMap);
+    }
+
+    public queryck_result() {
+    }
+
+    public queryck_result(
+      long success)
+    {
+      this();
+      this.success = success;
+      setSuccessIsSet(true);
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public queryck_result(queryck_result other) {
+      __isset_bitfield = other.__isset_bitfield;
+      this.success = other.success;
+    }
+
+    public queryck_result deepCopy() {
+      return new queryck_result(this);
+    }
+
+    @Override
+    public void clear() {
+      setSuccessIsSet(false);
+      this.success = 0;
+    }
+
+    public long getSuccess() {
+      return this.success;
+    }
+
+    public queryck_result setSuccess(long success) {
+      this.success = success;
+      setSuccessIsSet(true);
+      return this;
+    }
+
+    public void unsetSuccess() {
+      __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __SUCCESS_ISSET_ID);
+    }
+
+    /** Returns true if field success is set (has been assigned a value) and false otherwise */
+    public boolean isSetSuccess() {
+      return EncodingUtils.testBit(__isset_bitfield, __SUCCESS_ISSET_ID);
+    }
+
+    public void setSuccessIsSet(boolean value) {
+      __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __SUCCESS_ISSET_ID, value);
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      case SUCCESS:
+        if (value == null) {
+          unsetSuccess();
+        } else {
+          setSuccess((Long)value);
+        }
+        break;
+
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      case SUCCESS:
+        return Long.valueOf(getSuccess());
+
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      case SUCCESS:
+        return isSetSuccess();
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof queryck_result)
+        return this.equals((queryck_result)that);
+      return false;
+    }
+
+    public boolean equals(queryck_result that) {
+      if (that == null)
+        return false;
+
+      boolean this_present_success = true;
+      boolean that_present_success = true;
+      if (this_present_success || that_present_success) {
+        if (!(this_present_success && that_present_success))
+          return false;
+        if (this.success != that.success)
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+
+    public int compareTo(queryck_result other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      queryck_result typedOther = (queryck_result)other;
+
+      lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetSuccess()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.success, typedOther.success);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
+    }
+
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
+      }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("queryck_result(");
+      boolean first = true;
+
+      sb.append("success:");
+      sb.append(this.success);
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+      // check for sub-struct validity
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
+        __isset_bitfield = 0;
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private static class queryck_resultStandardSchemeFactory implements SchemeFactory {
+      public queryck_resultStandardScheme getScheme() {
+        return new queryck_resultStandardScheme();
+      }
+    }
+
+    private static class queryck_resultStandardScheme extends StandardScheme<queryck_result> {
+
+      public void read(org.apache.thrift.protocol.TProtocol iprot, queryck_result struct) throws org.apache.thrift.TException {
+        org.apache.thrift.protocol.TField schemeField;
+        iprot.readStructBegin();
+        while (true)
+        {
+          schemeField = iprot.readFieldBegin();
+          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
+            break;
+          }
+          switch (schemeField.id) {
+            case 0: // SUCCESS
+              if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
+                struct.success = iprot.readI64();
+                struct.setSuccessIsSet(true);
+              } else { 
+                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+              }
+              break;
+            default:
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+          }
+          iprot.readFieldEnd();
+        }
+        iprot.readStructEnd();
+
+        // check for required fields of primitive type, which can't be checked in the validate method
+        struct.validate();
+      }
+
+      public void write(org.apache.thrift.protocol.TProtocol oprot, queryck_result struct) throws org.apache.thrift.TException {
+        struct.validate();
+
+        oprot.writeStructBegin(STRUCT_DESC);
+        if (struct.isSetSuccess()) {
+          oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
+          oprot.writeI64(struct.success);
+          oprot.writeFieldEnd();
+        }
+        oprot.writeFieldStop();
+        oprot.writeStructEnd();
+      }
+
+    }
+
+    private static class queryck_resultTupleSchemeFactory implements SchemeFactory {
+      public queryck_resultTupleScheme getScheme() {
+        return new queryck_resultTupleScheme();
+      }
+    }
+
+    private static class queryck_resultTupleScheme extends TupleScheme<queryck_result> {
+
+      @Override
+      public void write(org.apache.thrift.protocol.TProtocol prot, queryck_result struct) throws org.apache.thrift.TException {
+        TTupleProtocol oprot = (TTupleProtocol) prot;
+        BitSet optionals = new BitSet();
+        if (struct.isSetSuccess()) {
+          optionals.set(0);
+        }
+        oprot.writeBitSet(optionals, 1);
+        if (struct.isSetSuccess()) {
+          oprot.writeI64(struct.success);
+        }
+      }
+
+      @Override
+      public void read(org.apache.thrift.protocol.TProtocol prot, queryck_result struct) throws org.apache.thrift.TException {
+        TTupleProtocol iprot = (TTupleProtocol) prot;
+        BitSet incoming = iprot.readBitSet(1);
+        if (incoming.get(0)) {
+          struct.success = iprot.readI64();
+          struct.setSuccessIsSet(true);
+        }
+      }
+    }
+
+  }
+
+  public static class ckpoint_args implements org.apache.thrift.TBase<ckpoint_args, ckpoint_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("ckpoint_args");
+
+    private static final org.apache.thrift.protocol.TField OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("off", org.apache.thrift.protocol.TType.I64, (short)1);
+
+    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
+    static {
+      schemes.put(StandardScheme.class, new ckpoint_argsStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new ckpoint_argsTupleSchemeFactory());
+    }
+
+    public long off; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+      OFF((short)1, "off");
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 1: // OFF
+            return OFF;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+    private static final int __OFF_ISSET_ID = 0;
+    private byte __isset_bitfield = 0;
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.OFF, new org.apache.thrift.meta_data.FieldMetaData("off", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(ckpoint_args.class, metaDataMap);
+    }
+
+    public ckpoint_args() {
+    }
+
+    public ckpoint_args(
+      long off)
+    {
+      this();
+      this.off = off;
+      setOffIsSet(true);
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public ckpoint_args(ckpoint_args other) {
+      __isset_bitfield = other.__isset_bitfield;
+      this.off = other.off;
+    }
+
+    public ckpoint_args deepCopy() {
+      return new ckpoint_args(this);
+    }
+
+    @Override
+    public void clear() {
+      setOffIsSet(false);
+      this.off = 0;
+    }
+
+    public long getOff() {
+      return this.off;
+    }
+
+    public ckpoint_args setOff(long off) {
+      this.off = off;
+      setOffIsSet(true);
+      return this;
+    }
+
+    public void unsetOff() {
+      __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __OFF_ISSET_ID);
+    }
+
+    /** Returns true if field off is set (has been assigned a value) and false otherwise */
+    public boolean isSetOff() {
+      return EncodingUtils.testBit(__isset_bitfield, __OFF_ISSET_ID);
+    }
+
+    public void setOffIsSet(boolean value) {
+      __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __OFF_ISSET_ID, value);
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      case OFF:
+        if (value == null) {
+          unsetOff();
+        } else {
+          setOff((Long)value);
+        }
+        break;
+
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      case OFF:
+        return Long.valueOf(getOff());
+
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      case OFF:
+        return isSetOff();
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof ckpoint_args)
+        return this.equals((ckpoint_args)that);
+      return false;
+    }
+
+    public boolean equals(ckpoint_args that) {
+      if (that == null)
+        return false;
+
+      boolean this_present_off = true;
+      boolean that_present_off = true;
+      if (this_present_off || that_present_off) {
+        if (!(this_present_off && that_present_off))
+          return false;
+        if (this.off != that.off)
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+
+    public int compareTo(ckpoint_args other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      ckpoint_args typedOther = (ckpoint_args)other;
+
+      lastComparison = Boolean.valueOf(isSetOff()).compareTo(typedOther.isSetOff());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetOff()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.off, typedOther.off);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
+    }
+
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("ckpoint_args(");
+      boolean first = true;
+
+      sb.append("off:");
+      sb.append(this.off);
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+      // check for sub-struct validity
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
+        __isset_bitfield = 0;
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private static class ckpoint_argsStandardSchemeFactory implements SchemeFactory {
+      public ckpoint_argsStandardScheme getScheme() {
+        return new ckpoint_argsStandardScheme();
+      }
+    }
+
+    private static class ckpoint_argsStandardScheme extends StandardScheme<ckpoint_args> {
+
+      public void read(org.apache.thrift.protocol.TProtocol iprot, ckpoint_args struct) throws org.apache.thrift.TException {
+        org.apache.thrift.protocol.TField schemeField;
+        iprot.readStructBegin();
+        while (true)
+        {
+          schemeField = iprot.readFieldBegin();
+          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
+            break;
+          }
+          switch (schemeField.id) {
+            case 1: // OFF
+              if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
+                struct.off = iprot.readI64();
+                struct.setOffIsSet(true);
+              } else { 
+                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+              }
+              break;
+            default:
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+          }
+          iprot.readFieldEnd();
+        }
+        iprot.readStructEnd();
+
+        // check for required fields of primitive type, which can't be checked in the validate method
+        struct.validate();
+      }
+
+      public void write(org.apache.thrift.protocol.TProtocol oprot, ckpoint_args struct) throws org.apache.thrift.TException {
+        struct.validate();
+
+        oprot.writeStructBegin(STRUCT_DESC);
+        oprot.writeFieldBegin(OFF_FIELD_DESC);
+        oprot.writeI64(struct.off);
+        oprot.writeFieldEnd();
+        oprot.writeFieldStop();
+        oprot.writeStructEnd();
+      }
+
+    }
+
+    private static class ckpoint_argsTupleSchemeFactory implements SchemeFactory {
+      public ckpoint_argsTupleScheme getScheme() {
+        return new ckpoint_argsTupleScheme();
+      }
+    }
+
+    private static class ckpoint_argsTupleScheme extends TupleScheme<ckpoint_args> {
+
+      @Override
+      public void write(org.apache.thrift.protocol.TProtocol prot, ckpoint_args struct) throws org.apache.thrift.TException {
+        TTupleProtocol oprot = (TTupleProtocol) prot;
+        BitSet optionals = new BitSet();
+        if (struct.isSetOff()) {
+          optionals.set(0);
+        }
+        oprot.writeBitSet(optionals, 1);
+        if (struct.isSetOff()) {
+          oprot.writeI64(struct.off);
+        }
+      }
+
+      @Override
+      public void read(org.apache.thrift.protocol.TProtocol prot, ckpoint_args struct) throws org.apache.thrift.TException {
+        TTupleProtocol iprot = (TTupleProtocol) prot;
+        BitSet incoming = iprot.readBitSet(1);
+        if (incoming.get(0)) {
+          struct.off = iprot.readI64();
+          struct.setOffIsSet(true);
+        }
+      }
+    }
+
+  }
+
+  public static class ckpoint_result implements org.apache.thrift.TBase<ckpoint_result, ckpoint_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("ckpoint_result");
+
+
+    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
+    static {
+      schemes.put(StandardScheme.class, new ckpoint_resultStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new ckpoint_resultTupleSchemeFactory());
+    }
+
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+;
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(ckpoint_result.class, metaDataMap);
+    }
+
+    public ckpoint_result() {
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public ckpoint_result(ckpoint_result other) {
+    }
+
+    public ckpoint_result deepCopy() {
+      return new ckpoint_result(this);
+    }
+
+    @Override
+    public void clear() {
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof ckpoint_result)
+        return this.equals((ckpoint_result)that);
+      return false;
+    }
+
+    public boolean equals(ckpoint_result that) {
+      if (that == null)
+        return false;
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+
+    public int compareTo(ckpoint_result other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      ckpoint_result typedOther = (ckpoint_result)other;
+
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
+    }
+
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
+      }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("ckpoint_result(");
+      boolean first = true;
+
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+      // check for sub-struct validity
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private static class ckpoint_resultStandardSchemeFactory implements SchemeFactory {
+      public ckpoint_resultStandardScheme getScheme() {
+        return new ckpoint_resultStandardScheme();
+      }
+    }
+
+    private static class ckpoint_resultStandardScheme extends StandardScheme<ckpoint_result> {
+
+      public void read(org.apache.thrift.protocol.TProtocol iprot, ckpoint_result struct) throws org.apache.thrift.TException {
+        org.apache.thrift.protocol.TField schemeField;
+        iprot.readStructBegin();
+        while (true)
+        {
+          schemeField = iprot.readFieldBegin();
+          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
+            break;
+          }
+          switch (schemeField.id) {
+            default:
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+          }
+          iprot.readFieldEnd();
+        }
+        iprot.readStructEnd();
+
+        // check for required fields of primitive type, which can't be checked in the validate method
+        struct.validate();
+      }
+
+      public void write(org.apache.thrift.protocol.TProtocol oprot, ckpoint_result struct) throws org.apache.thrift.TException {
+        struct.validate();
+
+        oprot.writeStructBegin(STRUCT_DESC);
+        oprot.writeFieldStop();
+        oprot.writeStructEnd();
+      }
+
+    }
+
+    private static class ckpoint_resultTupleSchemeFactory implements SchemeFactory {
+      public ckpoint_resultTupleScheme getScheme() {
+        return new ckpoint_resultTupleScheme();
+      }
+    }
+
+    private static class ckpoint_resultTupleScheme extends TupleScheme<ckpoint_result> {
+
+      @Override
+      public void write(org.apache.thrift.protocol.TProtocol prot, ckpoint_result struct) throws org.apache.thrift.TException {
+        TTupleProtocol oprot = (TTupleProtocol) prot;
+      }
+
+      @Override
+      public void read(org.apache.thrift.protocol.TProtocol prot, ckpoint_result struct) throws org.apache.thrift.TException {
+        TTupleProtocol iprot = (TTupleProtocol) prot;
       }
     }
 

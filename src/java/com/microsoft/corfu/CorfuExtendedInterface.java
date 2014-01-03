@@ -3,6 +3,8 @@ package com.microsoft.corfu;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import org.apache.thrift.TException;
+
 /**
  * @author dalia
  *
@@ -71,16 +73,36 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	public long appendExtnt(byte[] buf, int reqsize) throws CorfuException;
 	
 	/**
-	 * Obtain the current mark in the log, where mark is one of the log mark types: Head, tail, or contiguous tail.
-	 *    Head is the lowest non-trimmed log offset
-	 *    Tail is the offset succeeding the last position filled in the log
-	 *    Contiguous-tail is the offset succeeding the last position in the contiguous filled prefix of the log
-	 * 
-	 * @param typ the type of log mark we query
-	 * @return an offset in the log corresponding to the requested mark type. 
-	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
+	 * Query the log head. 
+	 *  
+	 * @return the current head's index 
+	 * @throws CorfuException if the call fails or returns illegal (negative) value 
 	 */
-	public long checkLogMark(CorfuLogMark typ) throws CorfuException;
+	public long queryhead() throws CorfuException;
+	
+	/**
+	 * Query the log tail. 
+	 *  
+	 * @return the current tail's index 
+	 * @throws CorfuException if the call fails or returns illegal (negative) value 
+	 */
+	public long querytail() throws CorfuException;
+	
+	/**
+	 * Query the last known checkpoint position. 
+	 *  
+	 * @return the last known checkpoint position.
+	 * @throws CorfuException if the call fails or returns illegal (negative) value 
+	 */
+	public long queryck() throws CorfuException;
+	
+	/**
+	 * inform about a new checkpoint mark. 
+	 *  
+	 * @param off the offset of the new checkpoint
+	 * @throws CorfuException if the call fails 
+	 */
+	public void ckpoint(long off) throws CorfuException;
 	
 	/**
 	 * set the read mark to the requested position. 
@@ -91,12 +113,18 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	 */
 	public void setMark(long pos);
 		
-	public void repairNext() throws CorfuException;
+	/**
+	 * Try to fix the log so that the next invocation of readExtnt() succeeds.
+	 * 
+	 * @return the next position to read from
+	 * @throws CorfuException
+	 */
+	public long repairNext() throws CorfuException;
 
 	/**
 	 * @return starting offset at the log of last (successful) checkpoint
 	 */
-	public long checkpointLoc() throws CorfuException;
+	// public long checkpointLoc() throws CorfuException;
 	
 	/**
 	 * fetch debugging info associated with the specified offset.

@@ -11,12 +11,6 @@ enum CorfuErrorCode {
 	OK_SKIP
 }
 
-enum CorfuLogMark {
-	CONTIG,
-	HEAD,
-	TAIL
-}
-
 const i32 SKIPFLAG = 1
 
 struct ExtntInfo {

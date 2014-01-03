@@ -166,12 +166,9 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		if (er.equals(CorfuErrorCode.ERR_FULL) && autoTrim) {
 			try {
-				long ckoff = checkpointLoc();
-				long contigoff = checkLogMark(CorfuLogMark.CONTIG);
-				if (ckoff > contigoff) ckoff = contigoff;
-				
-                log.info("log full! forceappend trimming to " + ckoff);
-				trim(ckoff);
+				long trimoff = queryck(); 
+                log.info("log full! forceappend trimming to " + trimoff);
+				trim(trimoff);
 				er = sunits[0].write(inf, ctnt);
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -316,6 +313,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			throw new OutOfSpaceCorfuException("read(" + inf +") failed: bad parameter");
 		} 
 
+		log.debug("read succeeds inf={} prefetch={}", inf, ret.getInf());
 		updateMeta(inf, ret.getInf()); 	// first param is what we just read; second param is prefetch meta-info of next extent
 		ret.setInf(inf);				// overwrite the prefetched meta-info, in order to return the extent info which we Wrap just read
 		return ret;
@@ -359,7 +357,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 	}
 	
-	public void repairNext() throws CorfuException {
+	public long repairNext() throws CorfuException {
 		ExtntInfo inf = new ExtntInfo();
 		long head, tail;
 		long pos;
@@ -368,8 +366,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		boolean skip = false;
 		
 		// check current log bounds
-		head = checkLogMark(CorfuLogMark.HEAD); 
-		tail = checkLogMark(CorfuLogMark.TAIL); 
+		head = queryhead(); 
+		tail = querytail(); 
 		
 		// first, get the meta-info of the next extent
 		pos = CorfuUtil.ExtntSuccessor(lastReadExtntInfo);
@@ -380,7 +378,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		}
 		if (pos >= tail) {
 			log.info("repairNext reached log tail, finishing");
-			return; // TODO do something??
+			return pos; // TODO do something??
 		}
 		
 		try {
@@ -416,7 +414,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		if (!skip) {
 			updateMeta(lastReadExtntInfo, inf);
-			return;
+			return inf.getMetaFirstOff();
 		}
 		
 		inf.setFlag(commonConstants.SKIPFLAG);
@@ -437,34 +435,73 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 				throw new OutOfSpaceCorfuException("repairNext failed, log full");
 			}
 		}
+		return inf.getMetaFirstOff();
 	}	
 	
 	
 	/**
-	 * @return starting offset at the log of last (successful) checkpoint
-	 */
-	public long checkpointLoc() throws CorfuException { return checkLogMark(CorfuLogMark.CONTIG); // TODO!!!
-	}
-			
-	/**
-	 * Obtain the current mark in the log, where mark is one of the log mark types: Head, tail, or contiguous tail.
-	 * 
-	 * @param typ the type of log mark we query
-	 * @return an offset in the log corresponding to the requested mark type. 
+	 * Query the log head. 
+	 *  
+	 * @return the current head's index 
 	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
 	 */
-	public long checkLogMark(CorfuLogMark typ) throws CorfuException {
+	public long queryhead() throws CorfuException {
 		long r;
 		try {
-			if (typ.equals(CorfuLogMark.TAIL))
-				r = sequencer.nextpos(0);
-			else
-				r = sunits[0].check(typ);
+			r = sunits[0].querytrim();
 		} catch (TException t) {
-			throw new InternalCorfuException("checkLogMark() failed ");
+			throw new InternalCorfuException("queryhead() failed ");
 		}
-		if (r < 0) throw new InternalCorfuException("check() call returned negative value, shouldn't happen");
+		if (r < 0) throw new InternalCorfuException("queryhead() call returned negative value, shouldn't happen");
 		return r;
+	}
+	
+	/**
+	 * Query the log tail. 
+	 *  
+	 * @return the current tail's index 
+	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
+	 */
+	public long querytail() throws CorfuException {
+		long r;
+		try {
+			r = sequencer.nextpos(0);
+		} catch (TException t) {
+			throw new InternalCorfuException("querytail() failed ");
+		}
+		if (r < 0) throw new InternalCorfuException("querytail() call returned negative value, shouldn't happen");
+		return r;
+	}
+
+	/**
+	 * Query the last known checkpoint position. 
+	 *  
+	 * @return the last known checkpoint position.
+	 * @throws CorfuException if the call fails or returns illegal (negative) value 
+	 */
+	public long queryck() throws CorfuException {
+		long r;
+		try {
+			r = sunits[0].queryck();
+		} catch (TException t) {
+			throw new InternalCorfuException("queryck() failed ");
+		}
+		if (r < 0) throw new InternalCorfuException("queryck() call returned negative value, shouldn't happen");
+		return r;		
+	}
+	
+	/**
+	 * inform about a new checkpoint mark. 
+	 *  
+	 * @param off the offset of the new checkpoint
+	 * @throws CorfuException if the call fails 
+	 */
+	public void ckpoint(long off) throws CorfuException {
+		try {
+			sunits[0].ckpoint(off);
+		} catch (TException t) {
+			throw new InternalCorfuException("ckpoint() failed ");
+		}
 	}
 	
 	/**
@@ -631,7 +668,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 */
 	@Override
 	public long check() throws CorfuException {
-		return checkLogMark(CorfuLogMark.TAIL);
+		return querytail();
 	}
 
 	/**
@@ -645,10 +682,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 */
 	@Override
 	public long check(boolean contiguous) throws CorfuException {
-		if (contiguous)
-			return checkLogMark(CorfuLogMark.CONTIG);
-		else
-			return checkLogMark(CorfuLogMark.TAIL);
+		return check();
 	}
 
 	/**

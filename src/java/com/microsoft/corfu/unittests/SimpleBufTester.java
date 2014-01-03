@@ -33,15 +33,19 @@ public class SimpleBufTester {
 	
 	static long BUFSIZE = 4096*10;
 	static long FILESIZE = 1024 * 1024;
-	static long RAMSIZE = BUFSIZE;
 	
 	static FileChannel ch;
 	
-	static private void RamToStore(long relOff, ByteBuffer buf) {
+	static private void RamToStore(long Off, ByteBuffer buf) {
 		buf.rewind();
 		
 		try {
-			ch.write(buf, relOff);
+//			if (Off > 0 && Off % (1024*1024*1024) == 0) {
+//				System.out.println("Off= " + Off + " " + Off%(1024*1024) + " " + Off%(1024*1024*1024) + ": force sync");
+//				ch.force(false);
+//				System.out.println("done sync");
+//			}
+			ch.write(buf, Off);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -76,13 +80,8 @@ public class SimpleBufTester {
 		for (int i = 0; i < args.length; ) {
 			if (args[i].startsWith("-filesize") && i < args.length-1) {
 				FILESIZE = Long.valueOf(args[i+1]) * 1024;
-				RAMSIZE = Math.min(Integer.MAX_VALUE, FILESIZE);
 				System.out.println("filesize: " + FILESIZE/(1024*1024) + " MBytes");
 				i += 2;
-			} else if (args[i].startsWith("-ramsize") && i < args.length-1) {
-					RAMSIZE =  Math.min(Integer.MAX_VALUE, Long.valueOf(args[i+1]) * 1024);
-					System.out.println("RAMSIZE: " + RAMSIZE/1024 + " KBytes");
-					i += 2;
 			} else if (args[i].startsWith("-filename") && i < args.length-1) {
 				filename = args[i+1];
 				System.out.println("filename: " + filename);
@@ -90,15 +89,12 @@ public class SimpleBufTester {
 			} else {
 				System.out.println("unknown param: " + args[i]);
 				throw new Exception("Usage: " + MappedBufTester.class.getName() + 
-						" [-filesize <# KBytes>] [-ramsize <# KBytes>] -filename <filename>");
+						" [-filesize <# KBytes>] -filename <filename>");
 			}
 		}
 		if (filename == null) {
 			throw new Exception("Usage: " + MappedBufTester.class.getName() + 
-					" [-filesize <# MBytes>] [-RAMSIZE <# KBytes>] -filename <filename>");
-		}
-		if (RAMSIZE % BUFSIZE != 0) {
-			throw new Exception("Usage: RAMSIZE must be a multiple of " + BUFSIZE);
+					" [-filesize <# MBytes>] -filename <filename>");
 		}
 		
 		try {
@@ -116,6 +112,19 @@ public class SimpleBufTester {
 				
 			}
 		}).start();
+		
+		new Thread(new Runnable() {
+			public void run() {
+				for(;;) {
+					try {
+						ch.force(false);
+						Thread.sleep(1);
+					} catch(Exception e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}).start();
 
 		for (int rpt = 0; rpt < 5; rpt++) {
 			runtest(TESTMODE.TSTWRITE);
@@ -131,10 +140,13 @@ public class SimpleBufTester {
 		long starttime = System.currentTimeMillis();
 		
 		for (;;) {
-			System.out.println((xput -lastxput) * BUFSIZE / (1024*1024) + 
-					" MB/sec...(total " + xput*BUFSIZE/(1024*1024) + " MB in " + (System.currentTimeMillis() - starttime)/1000 + " secs)");
+			long elapse = (System.currentTimeMillis() - starttime)/1000;
+			if (elapse > 0)
+				System.out.println((xput -lastxput) * BUFSIZE / (1024*1024) + 
+					" MB/sec...(total " + xput*BUFSIZE/(1024*1024) + " MB in " + elapse + " secs)");
 			lastxput = xput;
 			try { Thread.sleep(1000); } catch (Exception e) {}
+			
 		}
 	}
 	
@@ -143,16 +155,15 @@ public class SimpleBufTester {
 	
 		switch (t) {
 			case TSTREAD:
-				System.out.println("reading file sz =" + FILESIZE/(1024) +
-						" KBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
+				System.out.println("reading file sz =" + FILESIZE/(1024*1024) + " MB");
 				break;
 			case TSTWRITE:
-				System.out.println("write file sz =" + FILESIZE/(1024) +
-						" KBytes, using mapped buffers of size =" + RAMSIZE/1024 + " Kbytes");
+				System.out.println("write file sz =" + FILESIZE/(1024*1024) + " MB");
 				break;
 		}
 
 		ByteBuffer bb = ByteBuffer.allocate((int)BUFSIZE);
+		ByteBuffer cc =  ByteBuffer.allocate(1);
 		for (long i = 0; i*BUFSIZE < FILESIZE; i ++) {
 			xput++;
 			
@@ -164,6 +175,7 @@ public class SimpleBufTester {
 				case TSTWRITE:
 					bb.rewind();
 					RamToStore(i*BUFSIZE, bb);
+					RamToStore(FILESIZE-BUFSIZE /* ((i+100)-(i%100))*BUFSIZE */, cc);
 					break;
 			}
 		}
@@ -171,7 +183,6 @@ public class SimpleBufTester {
 		endTime = System.currentTimeMillis();
 		
 		System.out.println("");
-		System.out.println(" total time in seconds: " + (endTime-startTime)/1000);
-		System.out.println(" throughoput MByte/sec: " + FILESIZE/(endTime-startTime)/1024);
+		System.out.println(FILESIZE/(1024*1024) + " MB in " + (endTime-startTime) + " milliseconds: ");
 	}		
 }

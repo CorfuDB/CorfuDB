@@ -14,6 +14,7 @@ rjb *
 #
 $scriptPath = split-path -parent $MyInvocation.MyCommand.Definition | split-path -parent
 $configFileName = ".\0.aux"
+$loggingName = ".\simplelogger.properties"
 $binDir = $scriptPath + "\bin\java\"
 $uid = $env:username
 
@@ -44,6 +45,7 @@ $j = $binDir + $sjar
 if ($pushflag) { 
 	xcopy $j \\$rem\c$\users\$uid\corfu-bin /Y /D 
 	xcopy $configFileName  \\$rem\c$\users\$uid\corfu-bin /Y /D
+	xcopy $loggingName  \\$rem\c$\users\$uid\corfu-bin /Y /D
 }
  
 # start sequencer on remote
@@ -68,6 +70,7 @@ $sunits | %{ $ind=0} {
 	if ($pushflag) { 
 		xcopy $j \\$rem\c$\users\$uid\corfu-bin /Y /D 
 		xcopy $configFileName  \\$rem\c$\users\$uid\corfu-bin /Y /D
+		xcopy $loggingName  \\$rem\c$\users\$uid\corfu-bin /Y /D
 	}
  
 	# start unit server on remote

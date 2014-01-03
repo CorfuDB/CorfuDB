@@ -32,8 +32,8 @@ if ($pushflag) { write-host push updates to destinations }
 
 $tstjar=".\RWTester.jar"
 $tstmainclass = "com.microsoft.corfu.unittests.CorfuRWTester"
-$wthreads=1
-$rthreads=0
+$wthreads=0
+$rthreads=1
 $nrepeat=10000
 $entsize = 1280  * 100 
 $printfreq = 500
