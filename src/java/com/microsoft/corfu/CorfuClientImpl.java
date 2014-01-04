@@ -121,6 +121,10 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @throws 		see appendExtnt(List<ByteBuffer>, boolean)
 	 */
 	public long appendExtnt(byte[] buf, int reqsize, boolean autoTrim) throws CorfuException {
+		
+		if (reqsize % grainsize() != 0) {
+			throw new BadParamCorfuException("appendExtnt must be in multiples of log-entry size (" + grainsize() + ")");
+		}
 
 		int numents = (int)(reqsize/grainsize());
 		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>(numents);
@@ -361,7 +365,6 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		ExtntInfo inf = new ExtntInfo();
 		long head, tail;
 		long pos;
-		CorfuErrorCode fetchErr = CorfuErrorCode.OK;
 		CorfuErrorCode readErr = CorfuErrorCode.OK;
 		boolean skip = false;
 		
@@ -383,17 +386,10 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		try {
 			fetchMetaAt(pos, inf);
-			if (inf.getMetaFirstOff() < head) {
-				// extent partially trimmed; skip
-				log.info("repairNext partially-trimmed extent {}, skipping");
-				skip = true;
-				inf.setMetaFirstOff(head);
-			}
 		} catch (CorfuException e) {
 			log.warn("repairNext fetchMeta({}) fails err={}", pos, e.er);
 			inf.setMetaFirstOff(pos); inf.setMetaLength(1);
 			skip = true;
-			fetchErr = e.er;
 		}
 		
 		
@@ -422,21 +418,30 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			
 		// now we try to fix 'inf'
 		CorfuErrorCode er;
-		for (pos = inf.getMetaFirstOff(); pos < CorfuUtil.ExtntSuccessor(inf); pos++) {
-			log.debug("repairNext fix pos={}", pos);
-			try {
-				er = sunits[0].fix(pos, inf);
-			} catch (TException e1) {
-				e1.printStackTrace();
-				throw new CorfuException("repairNext() fix failed, communication problem; quitting");
-			}
-			if (er.equals(CorfuErrorCode.ERR_FULL)) {
-				// TODO should we try to trim the log to the latest checkpoint and/or check if the extent range exceeds the log capacity??
-				throw new OutOfSpaceCorfuException("repairNext failed, log full");
-			}
+		log.debug("repairNext fix {}", inf);
+		try {
+			er = sunits[0].fix(pos, inf);
+		} catch (TException e1) {
+			e1.printStackTrace();
+			throw new CorfuException("repairNext() fix failed, communication problem; quitting");
+		}
+		if (er.equals(CorfuErrorCode.ERR_FULL)) {
+			// TODO should we try to trim the log to the latest checkpoint and/or check if the extent range exceeds the log capacity??
+			throw new OutOfSpaceCorfuException("repairNext failed, log full");
 		}
 		return inf.getMetaFirstOff();
 	}	
+	
+	/**
+	 * force a delay until we are notified that previously invoked writes to the log have been safely forced to persistent store.
+	 * 
+	 * @throws CorfuException if the call to storage-units failed; in this case, there is no gaurantee regarding data persistence.
+	 */
+	public void sync() throws CorfuException {
+		try { sunits[0].sync(); } catch (TException e) {
+			throw new InternalCorfuException("sync() failed ");
+		}
+	}
 	
 	
 	/**

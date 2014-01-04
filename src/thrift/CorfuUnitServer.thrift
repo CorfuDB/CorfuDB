@@ -10,12 +10,16 @@ service CorfuUnitServer {
 
 	common.ExtntWrap read(1:common.CorfuHeader hdr),
 	
+	void sync(),
+	
 	common.ExtntWrap readmeta(1:i64 off),
 
 	common.ExtntWrap dbg(1:i64 off),
 
 	i64 querytrim(),
+	
 	i64 queryck(),
+	
 	void ckpoint(1:i64 off),
 		
 	bool trim (1:i64 mark),

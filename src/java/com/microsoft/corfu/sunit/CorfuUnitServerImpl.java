@@ -139,17 +139,24 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	
 	// mark the range from 'from' (incl) to 'to' (excl) as occupied by one extent
 	// 
-	// an extent's bitmap starts with [101] and ends with [011]; in between all entries are set to [111]
-	// so the entire range looks like this: [101 111 111 111 ... 111 011]
+	// each position in the range has a status bit-triplet. 
+	// in the first triplet in the range, the second bit is off (unless it is also the last triplet in a single-offset extent);
+	// in the last triplet in the range, the first bit is off (unless it is also the first triplet in a single-offset extent). 
+	// in the middle (if any), all bits are set. 
+	//
+	// an entire extent's bitmap looks like this: [101 111 111 111 ... 111 011]
+	// a single offset extent looks like this: [111]
+	// a two-offsets extent looks like this: [101] [011]
 	//
 	private void markExtntSet(int fr, int to) {
 		int firstInd = 3*fr;  // incl
 		int lastInd = 3*to;	// excl
-		storeMap.set(firstInd, lastInd);
+		storeMap.set(firstInd+2, lastInd);
 
 		// clear the second-bit on first and last bit-pairs 
-		storeMap.clear(firstInd+1); 
-		storeMap.clear(lastInd-2); 
+		storeMap.clear(lastInd-3);
+		storeMap.set(lastInd-2);
+		storeMap.set(firstInd); 
 	}
 	
 	private void markRangeClear(int fr, int to) {
@@ -162,6 +169,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	// 
 	// a skipped extent's bitmap starts with [100] and ends with [010]; in between all entries are clear [000]
 	// so the entire range looks like this: [100 000 000 000 ... 000 010]
+	// or if it is a single-offset skipped-extent, it looks like this: [110] 
 	//
 	private void markExtntSkipped(int fr, int to) {
 		int firstInd = 3*fr; // incl
@@ -171,7 +179,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
 		// set the first-bit on the first and last bit-pairs 
 		storeMap.set(firstInd); 
-		storeMap.set(lastInd+1); 
+		storeMap.set(lastInd-1); 
 	}
 	
 	private boolean isExtntClear(int fr, int to) {
@@ -183,31 +191,38 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	private boolean isExtntSet(int fr, int to) {
 		int firstInd = 3*fr; // incl
 		int lastInd = 3*to; // excl
+		
+		if (to != (fr+1)%UNITCAPACITY)
 
-		return (
+		    return (
 				// verify begin and end markers
 				storeMap.get(firstInd) == true &&
-				storeMap.get(firstInd+1) == false &&
-				storeMap.get(lastInd-2) == false &&
 				storeMap.get(lastInd-1) == true &&
 				// verify inner range is all set
-				storeMap.isRangeSet(firstInd+2, lastInd-2)
+				storeMap.isRangeSet(firstInd+2, lastInd-3)
 				);
+		else
+			return storeMap.isRangeSet(firstInd, firstInd+3);
 	}
 	
 	private boolean isExtntSkipped(int fr, int to) {
 		int firstInd = 3*fr;
 		int lastInd = 3*to;
 
-		return (
+		if (to != (fr+1)%UNITCAPACITY)
+
+		    return (
 				// verify begin and end markers
 				storeMap.get(firstInd) == true &&
-				storeMap.get(firstInd+1) == false &&
-				storeMap.get(lastInd-2) == false &&
 				storeMap.get(lastInd-1) == true &&
 				// verify inner range is all clear 
 				storeMap.isRangeClear(firstInd+2, lastInd-2)
 				);
+		else
+			return (
+				storeMap.get(firstInd) == true &&
+				storeMap.get(firstInd+1) == true &&
+				storeMap.get(firstInd) == false);
 	}
 
 	/**
@@ -305,7 +320,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 					for(;;) {
 						try {
 							DriveChannel.force(false);
-							// DriveChannel.notifyAll(); // TODO this will signal a user-invoked Corfu-force (TODO API)
+							synchronized(this) { this.notifyAll(); }
 							Thread.sleep(1);
 						} catch(Exception e) {
 							e.printStackTrace();
@@ -437,6 +452,25 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		}
 	}
 	
+	private void SkipToStore(ExtntInfo inf) {
+		int from = (int) (inf.getMetaFirstOff()%UNITCAPACITY);
+		int to = (int) ((inf.getMetaFirstOff()+inf.getMetaLength())%UNITCAPACITY);
+		if (RAMMODE) {
+			markExtntSkipped(from, to);
+			addmetainfo(inf);
+		} else {
+			try {
+				writebitmap(from, to);
+				markExtntSkipped(from, to);
+				addmetainfo(inf);
+			} catch (IOException e) {
+				log.warn("cannot write entry {} to store, IO error; quitting", inf);
+				e.printStackTrace();
+				System.exit(1);
+			}
+		}
+	}
+	
 	/**
 	 * utility function to bring into memory a log entry. depending on mode, if RAMMODE, simply return a point to the in-memory buffer, 
 	 * otherwise, it read the buffer from store.
@@ -474,7 +508,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 */
 	@Override
 	synchronized public CorfuErrorCode write(ExtntInfo inf, List<ByteBuffer> ctnt) throws org.apache.thrift.TException {
-		ByteBuffer bb;
 		long fromOff = inf.getMetaFirstOff(), toOff = fromOff + inf.getMetaLength();
 		
 		if (ctnt.size() != inf.getMetaLength()) {
@@ -502,15 +535,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
 		
 		if (!isExtntClear((int)relFromOff, (int)relToOff)) {
-				log.info("write({}) overwrites data, rejected; trimmark={} ", inf, trimmark);
-				for (int k = (int)relFromOff; k < (int) relToOff; k++) {
-					if (isExtntClear(k,  k+1))
-						log.debug("..bitmark({}) clear", k);
-					else
-						log.debug("..bitmark({}) not clear", k);
-					try { Thread.sleep(5000); } catch (Exception e) {}
-				}
-				return CorfuErrorCode.ERR_OVERWRITE;
+			log.info("write({}) overwrites data, rejected; trimmark={} ", inf, trimmark);
+			return CorfuErrorCode.ERR_OVERWRITE;
 		}
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -519,22 +545,42 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
     }
 	
 	/**
-	 * fix an individual offset belonging to the specified extent
-	 * @param pos is the offset to fix
-	 * @param inf the extent whose range this offset belongs to
-	 * @return OK if succeeds in marking the extent's page for 'skip'
-	 * 		ERROR_TRIMMED if the offset has already been trimmed
-	 * 		ERROR_OVERWRITE if the offset is occupied (could be a good thing)
-	 * 		ERROR_FULL if the offset spills over the capacity of the log
+	 * mark an extent 'skiped'
+	 * @param inf the extent 
+	 * @return OK if succeeds in marking the extent for 'skip'
+	 * 		ERROR_TRIMMED if the extent-range has already been trimmed
+	 * 		ERROR_OVERWRITE if the extent is occupied (could be a good thing)
+	 * 		ERROR_FULL if the extent spills over the capacity of the log
 	 */
 	synchronized public CorfuErrorCode fix(long pos, ExtntInfo inf) {
-		CorfuErrorCode er; 
+		long fromOff = inf.getMetaFirstOff(), toOff = fromOff + inf.getMetaLength();
 		
-		log.debug("fix({})", pos);
+		log.debug("fix({})", inf);
 		
-		log.error("fix not supported yet");
+		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		// from here until the next '^^^^..' mark : 
+		// code to verify that there is room to write the entire multi-page entry in one shot, and not overwrite any filled pages
+		//
+		if (toOff - trimmark > UNITCAPACITY) {
+			log.warn("unit full ! trimmark= {} fix[{}..{}]", trimmark, fromOff, toOff);
+			return CorfuErrorCode.ERR_FULL; 
+		}
+		
+		if (fromOff < trimmark) {
+			log.info("attempt to skip trimmed! [{}..{}]", fromOff, toOff);
+			return CorfuErrorCode.ERR_OVERWRITE; 
+		}
+
+		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
+		
+		if (!isExtntClear((int)relFromOff, (int)relToOff)) {
+			log.info("fix({}) overwrites data, rejected; trimmark={} ", inf, trimmark);
+			return CorfuErrorCode.ERR_OVERWRITE;
+		}
+		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+		SkipToStore(inf);
 		return CorfuErrorCode.OK; 
-		
 	}
 
 	/**
@@ -566,7 +612,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 					args[0] /* from Off */, 
 					args[1] /* to Off */, 
 					er);
-			return new ExtntWrap(er, new ExtntInfo(), new ArrayList<ByteBuffer>());
+			return new ExtntWrap(er, new ExtntInfo(0, 0, 0), new ArrayList<ByteBuffer>());
 		}
 
 		@Override
@@ -576,7 +622,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 				return new ExtntWrap(CorfuErrorCode.OK_SKIP, null, null);
 			} else {
 				log.info("ExtntInfo mismatch expecting {} received {}", reqinfo, ckinf);
-				return new ExtntWrap(CorfuErrorCode.ERR_BADPARAM, new ExtntInfo(), new ArrayList<ByteBuffer>());
+				return new ExtntWrap(CorfuErrorCode.ERR_BADPARAM, new ExtntInfo(0, 0, 0), new ArrayList<ByteBuffer>());
 			}
 
 		}
@@ -650,6 +696,17 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
 		return new ExtntWrap(CorfuErrorCode.OK, m, new ArrayList<ByteBuffer>());
 	}
+
+	/**
+	 * wait until any previously written log entries have been forced to persistent store
+	 */
+    synchronized public void sync() throws org.apache.thrift.TException {
+    	try { this.wait(); } catch (Exception e) {
+    		log.error("forcing sync to persistent store failed, quitting");
+    		System.exit(1);
+    	}
+    }
+
 	
 	synchronized public ExtntWrap dbg(long off) {
 		ExtntWrap ret = new ExtntWrap(CorfuErrorCode.ERR_BADPARAM, null, null);

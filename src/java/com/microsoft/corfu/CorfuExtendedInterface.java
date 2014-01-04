@@ -73,6 +73,13 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	public long appendExtnt(byte[] buf, int reqsize) throws CorfuException;
 	
 	/**
+	 * force a delay until we are notified that previously invoked writes to the log have been safely forced to persistent store.
+	 * 
+	 * @throws CorfuException if the call to storage-units failed; in this case, there is no gaurantee regarding data persistence.
+	 */
+	public void sync() throws CorfuException;
+
+	/**
 	 * Query the log head. 
 	 *  
 	 * @return the current head's index 
