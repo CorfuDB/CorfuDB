@@ -14,8 +14,6 @@ service CorfuUnitServer {
 	
 	common.ExtntWrap readmeta(1:i64 off),
 
-	common.ExtntWrap dbg(1:i64 off),
-
 	i64 querytrim(),
 	
 	i64 queryck(),

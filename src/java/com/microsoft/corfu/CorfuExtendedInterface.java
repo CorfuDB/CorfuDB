@@ -3,8 +3,6 @@ package com.microsoft.corfu;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-import org.apache.thrift.TException;
-
 /**
  * @author dalia
  *

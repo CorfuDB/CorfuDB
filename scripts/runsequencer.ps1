@@ -26,7 +26,7 @@ if ($pushflag) { write-host push updates to destinations }
 $t = $CONFIG.systemview.CONFIGURATION.tokenserver
 write-host tokenserver is $t
 ($rem, $port) = $t.split(":")
-$sjar=".\corfu-sequencer.jar"
+$sjar=".\corfu.jar"
 $smainclass = "com.microsoft.corfu.sequencer.CorfuSequencerImpl"
 
 write-host tokenserver on machine $rem port $port

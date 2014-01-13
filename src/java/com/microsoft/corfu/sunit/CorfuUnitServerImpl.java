@@ -1,37 +1,27 @@
 package com.microsoft.corfu.sunit;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.io.RandomAccessFile;
-import java.io.Serializable;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.FileChannel.MapMode;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.slf4j.*;
 
-import org.apache.thrift.meta_data.SetMetaData;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
-import org.apache.thrift.transport.TTransportException;
-
 import com.microsoft.corfu.*;
 import com.microsoft.corfu.sunit.CorfuUnitServer;
-import com.microsoft.corfu.sunit.CorfuUnitServer.Iface;
-import com.microsoft.corfu.sunit.CorfuUnitServer.Processor;
-import com.sun.xml.internal.bind.v2.runtime.reflect.ListIterator;
 
 public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	private static Logger slog = LoggerFactory.getLogger(CorfuUnitServerImpl.class);
@@ -42,31 +32,66 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	private static int PORT;
 	private static String DRIVENAME = null;
 	private static boolean RAMMODE = false;
+	private static boolean RECOVERY = false; // indicate whether we load log from disk on startup
 
 	private ByteBuffer[] inmemoryStore;
+	private TreeMap<Long, ExtntInfo> inmemoryMeta = new TreeMap<Long, ExtntInfo>(); 
 		
-	private HashMap<Long, ExtntInfo> inmemoryMeta; // store for the meta data which would go at the end of each disk-block
 	private long trimmark = 0; // log has been trimmed up to this position, non-inclusive
 	private long ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
 	private FileChannel DriveChannel = null;
 	
-	class CyclicBitSet extends BitSet {
+	class CyclicBitSet {
 		private int cap = 0;
+		private int leng = 0;
+		private byte[] map = null;
 		
-		public CyclicBitSet() { super(); }
-		public CyclicBitSet(int size) { super(size); cap = size; }
+		public CyclicBitSet(int size) throws Exception { 
+			if (size % 8 != 0) throw new Exception("CyclicBitSet size must be a multiple of 8");
+			leng = size/8;
+			map = new byte[leng];
+			cap = size; 
+		}
 		
-		int ci(int ind) { return (ind +cap) % cap; }
-		public boolean get(int ind) { return super.get(ci(ind)); }
+		public CyclicBitSet(byte[] initmap, int size) throws Exception { 
+			if (size % 8 != 0) throw new Exception("CyclicBitSet size must be a multiple of 8");
+			map = initmap;
+			cap = size; 
+			leng = size/8;
+		}
+		
+		public byte[] toByteArray() { return map; }
+		public ByteBuffer toArray(int fr, int to) { 
+			int find = fr/8;
+			int tind = (int)Math.ceil((double)to/8);
+			return ByteBuffer.wrap(map, find, tind-find); 
+		}
+		
+		int ci(int ind) { return (ind+cap) % cap; }
+		public boolean get(int ind) { 
+			int ci = ci(ind);
+			return ((map[ci/8] >> (7-(ci % 8))) & 1) != 0;
+		}
 		
 		/**
 		 * return the index of the next set-bit subsequent to fromInd, wrapping around the end of bit-range if needed.
 		 */
-		public int nextSetBit(int fromInd) { 
-			int ni = super.nextSetBit(ci(fromInd)); 
-			if (ni < 0) // wraparound
-				ni = super.nextSetBit(0);
-			return ni;
+		public int nextSetBit(int fromInd) {
+			int ind = ci(fromInd)/8; byte b = map[ind];
+			for (int j = fromInd%8; j < 8; j++)
+				if (((b >> (7-j)) & 1) != 0) return (ind*8+j);
+			
+			for (int k = ind+1; k != ind; k = (k+1)%leng) {
+				if ((b = map[k]) == 0) continue;
+				for (int j = 0; j < 8; j++)
+					if (((b >> (7-j)) & 1) != 0) return (k*8+j);
+			}
+			
+			b = map[ind];
+			for (int j = 0; j < 8; j++)
+				if (((b >> (7-j)) & 1) != 0) return (ind*8+j);
+
+			return -1;
 		}
 
 		/**
@@ -75,14 +100,22 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		 * and is meaningless here since we wrap-around).
 		 */
 		public int nextClearBit(int fromInd) { 
-			int nc = super.nextClearBit(ci(fromInd)); 
-			if (nc >= cap) { // wraparound
-				nc = super.nextClearBit(0);
-				if (nc >= fromInd) return -1;
+			int ind = ci(fromInd)/8; byte b = map[ind];
+			for (int j = fromInd%8; j < 8; j++)
+				if (((b >> (7-j)) & 1) == 0) return (ind*8+j);
+			
+			for (int k = ind+1; k != ind; k = (k+1)%leng) {
+				if ((b = map[k]) == 0) continue;
+				for (int j = 0; j < 8; j++)
+					if (((b >> (7-j)) & 1) == 0) return (k*8+j);
 			}
-			return nc;
+			
+			b = map[ind];
+			for (int j = 0; j < 8; j++)
+				if (((b >> (7-j)) & 1) == 0) return (ind*8+j);
+
+			return -1;
 		}
-		
 		/**
 		 * check if the specified range (potentially wrapping around the end of bit-range) is completely clear
 		 * @param fr first index (incl)
@@ -109,122 +142,205 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			else			return (i < 0 || i >= to);
 		}
 		
-		public void set(int ind) { super.set(ci(ind)); }
+		public void set(int ind) { 
+			int ci = ci(ind);
+			map[ci/8] |= 1 << (7-(ci % 8));
+		}
 		
 		public void set(int fr, int to) { 
 			fr = ci(fr); to = ci(to);
-			if (to <= fr) {
-				super.set(fr, cap);
-				super.set(0, to);
-			} else
-				super.set(fr, to); 
+			
+			int ind = fr/8;
+			for (int j = ind%8; j < 8; j++)
+				map[ind] |= 1 << (7-j);
+				
+			for (int k = ind+1; k != to; k = (k+1)%leng) {
+				map[k] = (byte)0xFF;
+			}
+			
+			for (int j = 0; j < to%8; j++)
+				map[to] |= 1 << (7-j);
 		}
-		public void clear(int ind) { super.clear(ci(ind)); }
+
+		public void clear(int ind) { 
+			map[(ci(ind)/8)] &= ~(1 << (7-(ind%8)));
+		}
+
 		public void clear(int fr, int to) { 			
 			fr = ci(fr); to = ci(to);
-			if (to <= fr) {
-				super.clear(fr, cap);
-				super.clear(0, to);
-			} else
-				super.clear(fr, to); 
+			
+			int ind = fr/8;
+			for (int j = ind%8; j < 8; j++)
+				map[ind] &= ~(1 << (7-j));
+				
+			for (int k = ind+1; k != to; k = (k+1)%leng) {
+				map[k] = 0;
+			}
+			
+			for (int j = 0; j < to%8; j++)
+				map[to] &= ~(1 << (7-j));
 		}
 	}
+	
 	private CyclicBitSet storeMap;
 	
-	private ByteBuffer getbitrange(int fr, int to) {
-		fr = (fr/8) *8;
-		if (to % 8 != 0) to = (to+1)/8*8;
-		return ByteBuffer.wrap(storeMap.get(fr, to).toByteArray());
-	}
-	
-	// mark the range from 'from' (incl) to 'to' (excl) as occupied by one extent
+	// mark the range from 'from' (incl) to 'to' (excl) as occupied by one extent.
+	// there are several types of extent marks on a storage unit: 
+	//   - global start filled : we mark the beginning with bits [11]
+	//   - global middle : we mark the beginning with bits [10]
+	//   - global skipped : we mark the beginning with bits [01]
+	// (a range starting with [00] is therefore left unwritten)
 	// 
-	// each position in the range has a status bit-triplet. 
-	// in the first triplet in the range, the second bit is off (unless it is also the last triplet in a single-offset extent);
-	// in the last triplet in the range, the first bit is off (unless it is also the first triplet in a single-offset extent). 
-	// in the middle (if any), all bits are set. 
+	// all bits within the range up to the next extent mark remain clear.
 	//
-	// an entire extent's bitmap looks like this: [101 111 111 111 ... 111 011]
-	// a single offset extent looks like this: [111]
-	// a two-offsets extent looks like this: [101] [011]
-	//
-	private void markExtntSet(int fr, int to) {
-		int firstInd = 3*fr;  // incl
-		int lastInd = 3*to;	// excl
-		storeMap.set(firstInd+2, lastInd);
-
-		// clear the second-bit on first and last bit-pairs 
-		storeMap.clear(lastInd-3);
-		storeMap.set(lastInd-2);
-		storeMap.set(firstInd); 
+	private void markExtntSet(int fr, int to, ExtntMarkType et) {
+		int firstInd = 2*fr;  // incl
+		int lastInd = 2*to;	// excl
+		
+		// mark the beginning
+		//
+		switch (et) {
+		
+		case EX_BEGIN:
+			storeMap.set(firstInd);
+			storeMap.set(firstInd+1);
+			break;
+			
+		case EX_MIDDLE:
+			storeMap.set(firstInd);
+			storeMap.clear(firstInd+1);
+			break;
+			
+		case EX_SKIP:
+			storeMap.clear(firstInd);
+			storeMap.set(firstInd+1);
+			break;
+			
+		}
+		
+		// now mark the ending 
+		//
+		
+		if (storeMap.get(lastInd) || storeMap.get(lastInd+1)) // there is already an extent marked here
+			return;
+		storeMap.set(lastInd); // by default, mark it as MIDDLE; this may be overwritten by either BEGIN or SKIPPED if needed
 	}
 	
 	private void markRangeClear(int fr, int to) {
-		int firstInd = 3*fr; // incl
-		int lastInd = 3*to; // excl
+		int firstInd = 2*fr; // incl
+		int lastInd = 2*to; // excl
 		storeMap.clear(firstInd, lastInd);
 	}
 	
-	// mark the range from 'from' (incl) to 'to' (excl) a one "skipped" extent
-	// 
-	// a skipped extent's bitmap starts with [100] and ends with [010]; in between all entries are clear [000]
-	// so the entire range looks like this: [100 000 000 000 ... 000 010]
-	// or if it is a single-offset skipped-extent, it looks like this: [110] 
-	//
-	private void markExtntSkipped(int fr, int to) {
-		int firstInd = 3*fr; // incl
-		int lastInd = 3*to;  // excl
-		
-		storeMap.clear(firstInd, lastInd);
-
-		// set the first-bit on the first and last bit-pairs 
-		storeMap.set(firstInd); 
-		storeMap.set(lastInd-1); 
-	}
-	
+	/**
+	 * verify that a range is clear for re-writing
+	 * the beginning may be marked with a MIDDLE mark and considered clear, because the beginning of 
+	 * a range determines if it is clear or not.
+	 *
+	 * @param fr beginning (incl) of range for verifying 
+	 * @param to end (excl) of range
+	 * @return
+	 */
 	private boolean isExtntClear(int fr, int to) {
-		int firstInd = 3*fr;
-		int lastInd = 3*to;
-		return storeMap.isRangeClear(firstInd, lastInd);
+		int firstInd = 2*fr;
+		int lastInd = 2*to;
+		return storeMap.isRangeClear(firstInd+1, lastInd);
 	}
 	
+	/**
+	 * verify that a range has been set as a BEGIN or MIDDLE extent 
+	 *
+	 * @param fr beginning (incl) of range for verifying 
+	 * @param to end (excl) of range
+	 * @return
+	 */
 	private boolean isExtntSet(int fr, int to) {
-		int firstInd = 3*fr; // incl
-		int lastInd = 3*to; // excl
+		int firstInd = 2*fr; // incl
+		int lastInd = 2*to; // excl
 		
-		if (to != (fr+1)%UNITCAPACITY)
-
-		    return (
+	    return (
 				// verify begin and end markers
-				storeMap.get(firstInd) == true &&
-				storeMap.get(lastInd-1) == true &&
-				// verify inner range is all set
-				storeMap.isRangeSet(firstInd+2, lastInd-3)
+				storeMap.get(firstInd) &&
+				( storeMap.get(lastInd) || storeMap.get(lastInd+1) ) &&
+				// verify inner range is all clear 
+				storeMap.isRangeClear(firstInd+2, lastInd)
 				);
-		else
-			return storeMap.isRangeSet(firstInd, firstInd+3);
 	}
 	
+	/**
+	 * verify that a range has been set as a SKIPPED extent 
+	 *
+	 * @param fr beginning (incl) of range for verifying 
+	 * @param to end (excl) of range
+	 * @return
+	 */
 	private boolean isExtntSkipped(int fr, int to) {
-		int firstInd = 3*fr;
-		int lastInd = 3*to;
+		int firstInd = 2*fr;
+		int lastInd = 2*to;
 
-		if (to != (fr+1)%UNITCAPACITY)
-
-		    return (
+	    return (
 				// verify begin and end markers
-				storeMap.get(firstInd) == true &&
-				storeMap.get(lastInd-1) == true &&
+				( !storeMap.get(firstInd) && storeMap.get(firstInd+1)) &&
+				( storeMap.get(lastInd) || storeMap.get(lastInd+1) ) &&
 				// verify inner range is all clear 
-				storeMap.isRangeClear(firstInd+2, lastInd-2)
+				storeMap.isRangeClear(firstInd+2, lastInd)
 				);
-		else
-			return (
-				storeMap.get(firstInd) == true &&
-				storeMap.get(firstInd+1) == true &&
-				storeMap.get(firstInd) == false);
 	}
+	
+	private void addmetainfo(ExtntInfo inf) {
+		inmemoryMeta.put(inf.getMetaFirstOff(), inf);
+	}
+	
+	private ExtntInfo getmetainfo(long ind) {
+		return inmemoryMeta.get(ind);
+	}
+	
+	private void trimmetainfo(long offset) {
+		SortedMap<Long, ExtntInfo> hm = inmemoryMeta.headMap(offset);
+		Set<Long> ks = inmemoryMeta.keySet();
+		CopyOnWriteArrayList<Long> hs = new CopyOnWriteArrayList<Long>(hm.keySet());
+		ks.removeAll(hs);
+	}
+	
+	private void reconstructExtntMap() {
+		int off;
+		
+		int start, next;
+		int fr, to;
+		ExtntMarkType et = ExtntMarkType.EX_BEGIN;
+		ExtntInfo inf;
+		off = 2* (int) (trimmark % UNITCAPACITY);
+		next = storeMap.nextSetBit(off);
 
+		do {
+			start = next;
+			log.debug("start set bit: {}", start);
+			if (start < 0) break;
+
+			fr = start/2;	
+			if (getmetainfo(fr) != null) break; // wrapped-around!
+			
+			if (storeMap.get(2*fr) && storeMap.get(2*fr+1)) et = ExtntMarkType.EX_BEGIN;
+			if (storeMap.get(2*fr) && !storeMap.get(2*fr+1)) et = ExtntMarkType.EX_MIDDLE;
+			if (!storeMap.get(2*fr) && storeMap.get(2*fr+1)) et = ExtntMarkType.EX_SKIP;
+			
+			next = storeMap.nextSetBit(start+2);
+			log.debug("next set bit: {}", start);
+			if (next == start) {
+				log.info("reconstructExtntMap problem, extent starting at {} has no ending ", fr);
+				break;
+			}
+
+			to = next/2;
+			// log.debug("verifying range [{}..{}]", fr, to);
+			if (to <= fr)
+				inf = new ExtntInfo(fr,  to+(int)UNITCAPACITY-fr, et);
+			else
+				inf = new ExtntInfo(fr,  to-fr,  et);
+			addmetainfo(inf);
+			log.info("reconstructed extent {}", inf);
+		} while (true) ;
+	}
 	/**
 	 * @param args
 	 * @throws Exception 
@@ -234,9 +350,15 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		int sid = -1;
 		ENTRYSIZE = CM.getGrain();
 		UNITCAPACITY = CM.getUnitsize(); 
+		String Usage = "Usage: " + CorfuUnitServer.class.getName() + 
+				" [-rammode] -drivename <name> -unit <unitnumber> -recover";
 		
 		for (int i = 0; i < args.length; ) {
-			if (args[i].startsWith("-rammode")) {
+			if (args[i].startsWith("-recover")) {
+				RECOVERY = true;
+				slog.info("recovery mode");
+				i += 1;
+			} else if (args[i].startsWith("-rammode")) {
 				RAMMODE = true;
 				slog.info("working in RAM mode");
 				i += 1;
@@ -250,15 +372,17 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 				i += 2;
 			} else {
 				slog.error("unknown param: " + args[i]);
-				throw new Exception("Usage: " + CorfuUnitServer.class.getName() + 
-						" [-rammode] -drivename <name> -unit <unitnumber>");
+				throw new Exception(Usage);
 			}
 		}
 		
 		if ((!RAMMODE && DRIVENAME == null) || sid < 0) {
 			slog.error("missing arguments!");
-			throw new Exception("Usage: " + CorfuUnitServer.class.getName() + 
-					" [-rammode] [-drivename <filename>] -unit <unitnumber>");
+			throw new Exception(Usage);
+		}
+		if (RAMMODE && RECOVERY) {
+			slog.error("cannot do recovery in rammode!");
+			throw new Exception(Usage);
 		}
 		
 		CorfuNode[] cn = CM.getGroupByNumber(0);
@@ -288,7 +412,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 					System.out.println("Starting Corfu storage unit server on port " + CorfuUnitServerImpl.PORT);
 					
 					server.serve();
-				} catch (TTransportException e) {
+				} catch (Exception e) {
 					e.printStackTrace();
 				}
 			}}).run();
@@ -297,7 +421,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	
 	////////////////////////////////////////////////////////////////////////////////////
 	
-	public CorfuUnitServerImpl() {
+	public CorfuUnitServerImpl() throws Exception {
 		
 		log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}", 
 				log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
@@ -316,6 +440,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			// fork off a thread to constantly force syncing to disk
 			//
 			new Thread(new Runnable() {
+				@Override
 				public void run() {
 					for(;;) {
 						try {
@@ -333,25 +458,60 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			inmemoryStore = new ByteBuffer[(int) UNITCAPACITY]; 
 		}
 		
-		inmemoryMeta = new HashMap<Long, ExtntInfo>();
-		storeMap = new CyclicBitSet(3* (int) UNITCAPACITY); // TODO if UNITCAPACITY is more than MAXINT, 
-													// make storeMap a list of bitmaps, each one of MAXINT size
+		if (RECOVERY) {
+			recover();
+		} else {
+			storeMap = new CyclicBitSet(2* (int) UNITCAPACITY); // TODO if UNITCAPACITY is more than MAXINT, 
+		}
+		// make storeMap a list of bitmaps, each one of MAXINT size
+
 	}
 	
 	private void writebitmap(int from, int to) throws IOException {
 		if (to <= from) {
-			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+(from/8));
-			DriveChannel.write( getbitrange(3*from, 3*(int)UNITCAPACITY-1) );
+			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+(2*from/8));
+			DriveChannel.write( storeMap.toArray(2*from, 2*(int)UNITCAPACITY) );
 	
 			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+0);
-			DriveChannel.write( getbitrange(0, 3*to-1) );
+			DriveChannel.write( storeMap.toArray(0, 2*to) );
 	
 		} else {
-			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+(from/8));
-			DriveChannel.write( getbitrange(3*from, 3*to-1) );
+			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+(2*from/8));
+			DriveChannel.write( storeMap.toArray(2*from, 2*to) );
+			{ ByteBuffer bb = storeMap.toArray(2*from, 2*to);
+			log.debug("writebitmap: {}", bb);
+			for (int k = 0; k < bb.limit(); k++) log.debug("bb[{}] {}", k, bb.get(k));}
 		}
-		
 	}
+	
+	private void writetrimmark() throws IOException {
+		DriveChannel.position(UNITCAPACITY*ENTRYSIZE+ UNITCAPACITY*3/8);
+		ByteArrayOutputStream b = new ByteArrayOutputStream();
+		DataOutputStream o = new DataOutputStream(b);
+		o.writeLong(trimmark);
+		DriveChannel.write(ByteBuffer.wrap(CorfuUtil.ObjectSerialize(new Long(trimmark))));
+	}
+	
+	private void recover() throws Exception {
+		int sz = CorfuUtil.ObjectSerialize(new Long(0)).length; // size of extra info after bitmap
+	
+		DriveChannel.position(UNITCAPACITY*ENTRYSIZE);
+		ByteBuffer bb = ByteBuffer.allocate((int)UNITCAPACITY*2/8);
+		DriveChannel.read(bb);
+		log.debug("recovery bitmap: {}", bb);
+		for (int k = 0; k < bb.capacity(); k++) log.debug("bb[{}] {}", k, bb.get(k));
+		
+		ByteBuffer tb = ByteBuffer.allocate(sz);
+		if (DriveChannel.read(tb) == sz)
+			trimmark = ((Long)CorfuUtil.ObjectDeserialize(bb.array())).longValue();
+		else {
+			log.info("no trimmark saved, setting initial trim=0");
+			trimmark=0;
+		}
+		storeMap = new CyclicBitSet(bb.array(), (int)UNITCAPACITY*2);
+		reconstructExtntMap();
+	}
+	
 	private void writebufs(int from, int to, List<ByteBuffer> wbufs) throws IOException {
 		if (to <= from) {
 			DriveChannel.position(from*ENTRYSIZE);
@@ -389,15 +549,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		
 		return bb;
 	}
-	
-	private void addmetainfo(ExtntInfo inf) {
-		inmemoryMeta.put(inf.getMetaFirstOff(), inf);
-	}
-	
-	private ExtntInfo getmetainfo(long ind) {
-		return inmemoryMeta.get(ind);
-	}
-	
+		
 	private void addrambufs(int from, int to, List<ByteBuffer> wbufs) {
 		if (to <= from) {
 			for (int i = from; i < UNITCAPACITY; i++)
@@ -435,14 +587,14 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		int from = (int) (inf.getMetaFirstOff()%UNITCAPACITY);
 		int to = (int) ((inf.getMetaFirstOff()+inf.getMetaLength())%UNITCAPACITY);
 		if (RAMMODE) {
-			markExtntSet(from, to);
 			addrambufs(from, to, wbufs);
+			markExtntSet(from, to, ExtntMarkType.EX_BEGIN);
 			addmetainfo(inf);
 		} else {
 			try {
 				writebufs(from, to, wbufs);
+				markExtntSet(from, to, ExtntMarkType.EX_BEGIN);
 				writebitmap(from, to);
-				markExtntSet(from, to);
 				addmetainfo(inf);
 			} catch (IOException e) {
 				log.warn("cannot write entry {} to store, IO error; quitting", inf);
@@ -456,12 +608,12 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		int from = (int) (inf.getMetaFirstOff()%UNITCAPACITY);
 		int to = (int) ((inf.getMetaFirstOff()+inf.getMetaLength())%UNITCAPACITY);
 		if (RAMMODE) {
-			markExtntSkipped(from, to);
+			markExtntSet(from, to, ExtntMarkType.EX_SKIP);
 			addmetainfo(inf);
 		} else {
 			try {
 				writebitmap(from, to);
-				markExtntSkipped(from, to);
+				markExtntSet(from, to, ExtntMarkType.EX_SKIP);
 				addmetainfo(inf);
 			} catch (IOException e) {
 				log.warn("cannot write entry {} to store, IO error; quitting", inf);
@@ -552,6 +704,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 * 		ERROR_OVERWRITE if the extent is occupied (could be a good thing)
 	 * 		ERROR_FULL if the extent spills over the capacity of the log
 	 */
+	@Override
 	synchronized public CorfuErrorCode fix(long pos, ExtntInfo inf) {
 		long fromOff = inf.getMetaFirstOff(), toOff = fromOff + inf.getMetaLength();
 		
@@ -573,8 +726,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 
 		long relFromOff = fromOff % UNITCAPACITY, relToOff = toOff % UNITCAPACITY;
 		
-		if (!isExtntClear((int)relFromOff, (int)relToOff)) {
-			log.info("fix({}) overwrites data, rejected; trimmark={} ", inf, trimmark);
+		if (isExtntSet((int)relFromOff, (int)relToOff)) {
+			log.info("fix({}) overwrites data, rejected", inf);
 			return CorfuErrorCode.ERR_OVERWRITE;
 		}
 		// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -612,17 +765,17 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 					args[0] /* from Off */, 
 					args[1] /* to Off */, 
 					er);
-			return new ExtntWrap(er, new ExtntInfo(0, 0, 0), new ArrayList<ByteBuffer>());
+			return new ExtntWrap(er, new ExtntInfo(0, 0, ExtntMarkType.EX_SKIP), new ArrayList<ByteBuffer>());
 		}
 
 		@Override
 		public ExtntWrap badmetaHelper(ExtntInfo reqinfo, ExtntInfo ckinf) {
-			if (ckinf.getFlag() == commonConstants.SKIPFLAG ) {
+			if (ckinf.getFlag() == ExtntMarkType.EX_SKIP) {
 				log.debug("read({}): SKIP", ckinf);
 				return new ExtntWrap(CorfuErrorCode.OK_SKIP, null, null);
 			} else {
 				log.info("ExtntInfo mismatch expecting {} received {}", reqinfo, ckinf);
-				return new ExtntWrap(CorfuErrorCode.ERR_BADPARAM, new ExtntInfo(0, 0, 0), new ArrayList<ByteBuffer>());
+				return new ExtntWrap(CorfuErrorCode.ERR_BADPARAM, new ExtntInfo(0, 0, ExtntMarkType.EX_SKIP), new ArrayList<ByteBuffer>());
 			}
 
 		}
@@ -700,35 +853,13 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	/**
 	 * wait until any previously written log entries have been forced to persistent store
 	 */
-    synchronized public void sync() throws org.apache.thrift.TException {
+    @Override
+	synchronized public void sync() throws org.apache.thrift.TException {
     	try { this.wait(); } catch (Exception e) {
     		log.error("forcing sync to persistent store failed, quitting");
     		System.exit(1);
     	}
     }
-
-	
-	synchronized public ExtntWrap dbg(long off) {
-		ExtntWrap ret = new ExtntWrap(CorfuErrorCode.ERR_BADPARAM, null, null);
-		
-		if (off < trimmark) {
-			ret.setErr(CorfuErrorCode.ERR_TRIMMED);
-			return ret;
-		}
-		if ((off - trimmark) >= UNITCAPACITY) {
-			ret.setErr(CorfuErrorCode.ERR_FULL);
-			return ret;
-		}
-		ExtntInfo inf = getmetainfo(off);
-		if (inf == null)
-			ret.setInf(new ExtntInfo(-1,  0,  0));
-		else
-			ret.setInf(inf);
-		ret.setCtnt(new ArrayList<ByteBuffer>());
-		ret.setErr(CorfuErrorCode.OK);
-		
-		return ret;
-	}
 
 	@Override
 	synchronized public long querytrim() {	return trimmark; } 
@@ -744,14 +875,28 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			log.warn("attempt to trim beyond log capacity from {} to {}", trimmark, mark);
 			return false;
 		}
+		
+		if (getmetainfo(mark) == null) {
+			log.warn("attempt to trim at offset {} and no extent starts there", mark);
+			return false;
+		}
    
     	markRangeClear((int) (trimmark % UNITCAPACITY), (int) (mark % UNITCAPACITY) );
-    	log.info("log trimmed from {} to {}", trimmark, mark);
-    	trimmark = mark;
+    	trimmetainfo(mark);
     	
-    	// TODO release all ExtntIngo records of trimmed range
+    	if (!RAMMODE) {
+	    	try {
+				writetrimmark();
+			} catch (IOException e) {
+				log.error("writing trimmark failed");
+				e.printStackTrace();
+				return false;
+			}
+    	}
+    	
+    	trimmark = mark;
+    	log.info("log trimmed from {} to {}", trimmark, mark);
     	return true;
-		
 	}
 	
 	@Override

@@ -12,23 +12,15 @@ import org.apache.thrift.scheme.StandardScheme;
 
 import org.apache.thrift.scheme.TupleScheme;
 import org.apache.thrift.protocol.TTupleProtocol;
-import org.apache.thrift.protocol.TProtocolException;
-import org.apache.thrift.EncodingUtils;
-import org.apache.thrift.TException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.EnumMap;
-import java.util.Set;
-import java.util.HashSet;
 import java.util.EnumSet;
 import java.util.Collections;
 import java.util.BitSet;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._Fields>, java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("ExtntWrap");
@@ -110,11 +102,13 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
       _fieldName = fieldName;
     }
 
-    public short getThriftFieldId() {
+    @Override
+	public short getThriftFieldId() {
       return _thriftId;
     }
 
-    public String getFieldName() {
+    @Override
+	public String getFieldName() {
       return _fieldName;
     }
   }
@@ -167,7 +161,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     }
   }
 
-  public ExtntWrap deepCopy() {
+  @Override
+public ExtntWrap deepCopy() {
     return new ExtntWrap(this);
   }
 
@@ -273,7 +268,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     }
   }
 
-  public void setFieldValue(_Fields field, Object value) {
+  @Override
+public void setFieldValue(_Fields field, Object value) {
     switch (field) {
     case ERR:
       if (value == null) {
@@ -302,7 +298,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     }
   }
 
-  public Object getFieldValue(_Fields field) {
+  @Override
+public Object getFieldValue(_Fields field) {
     switch (field) {
     case ERR:
       return getErr();
@@ -318,7 +315,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   }
 
   /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-  public boolean isSet(_Fields field) {
+  @Override
+public boolean isSet(_Fields field) {
     if (field == null) {
       throw new IllegalArgumentException();
     }
@@ -382,13 +380,14 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     return 0;
   }
 
-  public int compareTo(ExtntWrap other) {
+  @Override
+public int compareTo(ExtntWrap other) {
     if (!getClass().equals(other.getClass())) {
       return getClass().getName().compareTo(other.getClass().getName());
     }
 
     int lastComparison = 0;
-    ExtntWrap typedOther = (ExtntWrap)other;
+    ExtntWrap typedOther = other;
 
     lastComparison = Boolean.valueOf(isSetErr()).compareTo(typedOther.isSetErr());
     if (lastComparison != 0) {
@@ -423,15 +422,18 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
     return 0;
   }
 
-  public _Fields fieldForId(int fieldId) {
+  @Override
+public _Fields fieldForId(int fieldId) {
     return _Fields.findByThriftId(fieldId);
   }
 
-  public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+  @Override
+public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
     schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
   }
 
-  public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+  @Override
+public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
     schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
   }
 
@@ -492,14 +494,16 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   }
 
   private static class ExtntWrapStandardSchemeFactory implements SchemeFactory {
-    public ExtntWrapStandardScheme getScheme() {
+    @Override
+	public ExtntWrapStandardScheme getScheme() {
       return new ExtntWrapStandardScheme();
     }
   }
 
   private static class ExtntWrapStandardScheme extends StandardScheme<ExtntWrap> {
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot, ExtntWrap struct) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, ExtntWrap struct) throws org.apache.thrift.TException {
       org.apache.thrift.protocol.TField schemeField;
       iprot.readStructBegin();
       while (true)
@@ -555,7 +559,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
       struct.validate();
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot, ExtntWrap struct) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, ExtntWrap struct) throws org.apache.thrift.TException {
       struct.validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
@@ -588,7 +593,8 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   }
 
   private static class ExtntWrapTupleSchemeFactory implements SchemeFactory {
-    public ExtntWrapTupleScheme getScheme() {
+    @Override
+	public ExtntWrapTupleScheme getScheme() {
       return new ExtntWrapTupleScheme();
     }
   }

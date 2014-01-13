@@ -11,12 +11,12 @@ enum CorfuErrorCode {
 	OK_SKIP
 }
 
-const i32 SKIPFLAG = 1
+enum ExtntMarkType {	EX_BEGIN, EX_MIDDLE, EX_SKIP }
 
 struct ExtntInfo {
 	1: i64 metaFirstOff,
 	2: i32 metaLength,
-	3: i32 flag=false
+	3: ExtntMarkType flag=ExtntMarkType.EX_BEGIN
 }
 
 struct CorfuHeader {

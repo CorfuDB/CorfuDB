@@ -37,7 +37,7 @@ public class CorfuUtil {
         ObjectOutputStream o = new ObjectOutputStream(b);
         o.writeLong(obj.getMetaFirstOff());
         o.writeInt(obj.getMetaLength());
-        o.writeInt(obj.getFlag());
+        o.writeObject(obj.getFlag());
         o.flush();
         return b.toByteArray();
     }
@@ -50,13 +50,13 @@ public class CorfuUtil {
      * @throws IOException shouldn't happen, since we are not doing actual IO, we are de-serializing from a memory buf
      * @throws ClassNotFoundException
      */
-    public static ExtntInfo ExtntInfoDeserialize(byte[] bytes) throws IOException {
+    public static ExtntInfo ExtntInfoDeserialize(byte[] bytes) throws IOException, ClassNotFoundException {
         ByteArrayInputStream b = new ByteArrayInputStream(bytes);
         ObjectInputStream o = new ObjectInputStream(b);
         ExtntInfo i = new ExtntInfo();
         i.setMetaFirstOff(o.readLong());
         i.setMetaLength(o.readInt());
-        i.setFlag(o.readInt());
+        i.setFlag((ExtntMarkType) o.readObject());
         return i;
     }
 
@@ -65,6 +65,22 @@ public class CorfuUtil {
      * @throws IOException 
      */
     public static int ExtntInfoSSize() throws IOException { 
-    	return ByteBuffer.wrap(ExtntInfoSerialize(new ExtntInfo(0, 0, 0))).capacity();
+    	return ByteBuffer.wrap(ExtntInfoSerialize(new ExtntInfo(0, 0, ExtntMarkType.EX_BEGIN))).capacity();
     }
+    
+	public static byte[] ObjectSerialize(Object obj) throws IOException {
+			ByteArrayOutputStream bb = new ByteArrayOutputStream();
+			ObjectOutputStream oo = new ObjectOutputStream(bb);
+			oo.writeObject(obj);
+			oo.flush();
+			return bb.toByteArray();
+	}
+	
+	public static Object ObjectDeserialize(byte[] buf) throws IOException, ClassNotFoundException {
+			ByteArrayInputStream bi = new ByteArrayInputStream(buf);
+			ObjectInputStream oi = new ObjectInputStream(bi);
+			return oi.readObject();
+		}
+
+    
 }

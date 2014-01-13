@@ -5,19 +5,13 @@
 
 package com.microsoft.corfu.unittests;
 
-import java.io.BufferedOutputStream;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
-import java.sql.Time;
-import java.util.ArrayList;
-import java.util.BitSet;
 
 /**
  * @author dalia
@@ -90,7 +84,7 @@ public class MappedBufTester {
 		MappedByteBuffer mb = getStoreMap(relOff);
 
 		if (!buf.hasArray()) 
-			buf.allocate((int) BUFSIZE);
+			ByteBuffer.allocate((int) BUFSIZE);
 		assert (mb.capacity() >= buf.capacity()); 
 
 		buf.rewind();

@@ -4,11 +4,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -49,6 +46,7 @@ public class CorfuSeqBatchTester implements Runnable {
 		}
 	}
 	
+	@Override
 	public void run() {
 		int batchsize;
 		Collection<Integer> c = new ArrayList<Integer>(1000);
@@ -127,6 +125,7 @@ public class CorfuSeqBatchTester implements Runnable {
 		//
 		for (int myid = 0; myid < nconsumerthreads; myid++) {
 			executor.execute(new Runnable() {
+				@Override
 				public void run() {
 					long elapsetime = 0;
 					long starttime = System.currentTimeMillis();

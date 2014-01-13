@@ -36,7 +36,6 @@ import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuErrorCode;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.CorfuExtendedInterface;
-import com.microsoft.corfu.CorfuLogMark;
 import com.microsoft.corfu.ExtntInfo;
 import com.microsoft.corfu.ExtntWrap;
 import com.microsoft.corfu.sunit.CorfuUnitServerImpl;

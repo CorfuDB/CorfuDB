@@ -1,12 +1,10 @@
 package com.microsoft.corfu;
 
 import java.util.List;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
 import org.apache.thrift.TException;
-import org.apache.thrift.meta_data.SetMetaData;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
@@ -120,21 +118,24 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @return		see appendExtnt(List<ByteBuffer>, boolean) 
 	 * @throws 		see appendExtnt(List<ByteBuffer>, boolean)
 	 */
+	@Override
 	public long appendExtnt(byte[] buf, int reqsize, boolean autoTrim) throws CorfuException {
 		
 		if (reqsize % grainsize() != 0) {
 			throw new BadParamCorfuException("appendExtnt must be in multiples of log-entry size (" + grainsize() + ")");
 		}
 
-		int numents = (int)(reqsize/grainsize());
+		int numents = reqsize/grainsize();
 		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>(numents);
 		for (int i = 0; i < numents; i++)
 			wbufs.add(ByteBuffer.wrap(buf, i*grainsize(), grainsize()));
 		return appendExtnt(wbufs, autoTrim);
 	}
+	@Override
 	public long appendExtnt(byte[] buf, int reqsize) throws CorfuException {
 		return appendExtnt(buf, reqsize, false);
 	}
+	@Override
 	public long appendExtnt(List<ByteBuffer> ctnt) throws CorfuException {
 		return appendExtnt(ctnt, false);
 	}
@@ -154,6 +155,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * 		OverwriteException indicates that an attempt to append failed because of an internal race; user may retry
 	 * 		BadParamCorfuException or a general CorfuException indicate an internal problem, such as a server crash. Might not be recoverable
 	 */
+	@Override
 	public long appendExtnt(List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException {
 		long offset = -1;
 		CorfuErrorCode er = null;
@@ -161,7 +163,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		try {
 			offset = sequencer.nextpos(ctnt.size()); 
-			inf  = new ExtntInfo(offset, ctnt.size(), 0);
+			inf  = new ExtntInfo(offset, ctnt.size(), ExtntMarkType.EX_BEGIN);
 			er = sunits[0].write(inf, ctnt);
 		} catch (TException e) {
 			e.printStackTrace();
@@ -193,8 +195,8 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		return offset;
 	}
 	
-	ExtntInfo lastReadExtntInfo = new ExtntInfo(-1, 1, 0); // meta-info of last successfully read extent  
-	ExtntInfo PrefetchExtntInfo = new ExtntInfo(-1, 0, 0); // prefetched meta-info from last successful read, if any
+	ExtntInfo lastReadExtntInfo = new ExtntInfo(-1, 1, ExtntMarkType.EX_SKIP); // meta-info of last successfully read extent  
+	ExtntInfo PrefetchExtntInfo = new ExtntInfo(-1, 0, ExtntMarkType.EX_SKIP); // prefetched meta-info from last successful read, if any
 		
 	/**
 	 * obtain the ExtntInfo for the next extent to read.
@@ -210,7 +212,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		synchronized(lastReadExtntInfo) {
 			for (;;) {
 				if (PrefetchExtntInfo.getMetaFirstOff() > lastReadExtntInfo.getMetaFirstOff()) {
-					if ((PrefetchExtntInfo.getFlag() & commonConstants.SKIPFLAG) != 0) {
+					if (PrefetchExtntInfo.getFlag() == ExtntMarkType.EX_SKIP) {
 						// in this case, the nexExtntInfo we fetched previously must be skipped 
 						// we try to progress both curExtntInfo and nexExtntInfo to the subsequent extent
 						log.debug("getNextMeta skip {}", PrefetchExtntInfo);
@@ -329,6 +331,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
 	 * @throws CorfuException
 	 */
+	@Override
 	public ExtntWrap readExtnt() throws CorfuException {
 		
 		ExtntWrap r;
@@ -347,6 +350,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
 	 * @throws CorfuException
 	 */
+	@Override
 	public ExtntWrap readExtnt(long pos) throws CorfuException {
 		ExtntInfo inf = new ExtntInfo();
 		
@@ -361,6 +365,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 	}
 	
+	@Override
 	public long repairNext() throws CorfuException {
 		ExtntInfo inf = new ExtntInfo();
 		long head, tail;
@@ -413,7 +418,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 			return inf.getMetaFirstOff();
 		}
 		
-		inf.setFlag(commonConstants.SKIPFLAG);
+		inf.setFlag(ExtntMarkType.EX_SKIP);
 		updateMeta(inf, inf);
 			
 		// now we try to fix 'inf'
@@ -437,6 +442,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * 
 	 * @throws CorfuException if the call to storage-units failed; in this case, there is no gaurantee regarding data persistence.
 	 */
+	@Override
 	public void sync() throws CorfuException {
 		try { sunits[0].sync(); } catch (TException e) {
 			throw new InternalCorfuException("sync() failed ");
@@ -450,6 +456,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @return the current head's index 
 	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
 	 */
+	@Override
 	public long queryhead() throws CorfuException {
 		long r;
 		try {
@@ -467,6 +474,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @return the current tail's index 
 	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
 	 */
+	@Override
 	public long querytail() throws CorfuException {
 		long r;
 		try {
@@ -484,6 +492,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @return the last known checkpoint position.
 	 * @throws CorfuException if the call fails or returns illegal (negative) value 
 	 */
+	@Override
 	public long queryck() throws CorfuException {
 		long r;
 		try {
@@ -501,6 +510,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @param off the offset of the new checkpoint
 	 * @throws CorfuException if the call fails 
 	 */
+	@Override
 	public void ckpoint(long off) throws CorfuException {
 		try {
 			sunits[0].ckpoint(off);
@@ -515,8 +525,9 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * 
 	 * @param pos move the read mark to this log position
 	 */
+	@Override
 	public void setMark(long pos) {
-		ExtntInfo inf = new ExtntInfo(pos-1, 1, 0);
+		ExtntInfo inf = new ExtntInfo(pos-1, 1, ExtntMarkType.EX_BEGIN);
 		updateMeta(inf, inf);
 	}
 		
@@ -528,9 +539,10 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @throws CorfuException
 	 *     TrimmedCorfuException, BadParam, Unwritten, with the obvious meanings
 	 */
+	@Override
 	public ExtntWrap dbg(long pos) throws CorfuException {
 		try {
-			return sunits[0].dbg(pos);
+			return sunits[0].readmeta(pos);
 		} catch (TException t) {
 			throw new InternalCorfuException("dbg() failed ");
 		}
@@ -542,6 +554,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @param tcnt the number of tokens to grab from sequencer
 	 * @throws CorfuException is thrown in case of unexpected communication problem with the sequencer
 	 */
+	@Override
 	public void grabtokens(int tcnt) throws CorfuException {
 		try {
 			sequencer.nextpos(tcnt);
@@ -566,7 +579,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 */	
 	@Override
 	public byte[] read(long pos) throws CorfuException {
-		ExtntInfo inf = new ExtntInfo(pos, 1, 0);
+		ExtntInfo inf = new ExtntInfo(pos, 1, ExtntMarkType.EX_BEGIN);
 		ExtntWrap ret = readExtnt(inf);
 		if (! ret.getCtnt().get(0).hasArray()) {
 			throw new CorfuException("read() cannot extract byte array");
@@ -727,6 +740,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	 * @param	bufsize	size of buffer to append
 	 * @return		position that buffer was appended at
 	 */
+	@Override
 	public long append(byte[] buf, int bufsize) throws CorfuException {
 		throw new CorfuException("append with variable size is depracated; use varAppend instead");
 	}

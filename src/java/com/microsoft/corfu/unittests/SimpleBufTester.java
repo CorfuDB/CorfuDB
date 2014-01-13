@@ -5,20 +5,11 @@
 
 package com.microsoft.corfu.unittests;
 
-import java.io.BufferedOutputStream;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.FileChannel.MapMode;
-import java.sql.Time;
-import java.util.ArrayList;
-import java.util.BitSet;
 
 /**
  * @author dalia
@@ -56,7 +47,7 @@ public class SimpleBufTester {
 	static private void StoreToRam(long relOff, ByteBuffer buf)  {
 
 		if (!buf.hasArray()) 
-			buf.allocate((int) BUFSIZE);
+			ByteBuffer.allocate((int) BUFSIZE);
 		buf.rewind();
 		
 		try {
@@ -114,6 +105,7 @@ public class SimpleBufTester {
 		}).start();
 		
 		new Thread(new Runnable() {
+			@Override
 			public void run() {
 				for(;;) {
 					try {

@@ -5,19 +5,13 @@
 
 package com.microsoft.corfu.unittests;
 
-import java.io.BufferedOutputStream;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileChannel.MapMode;
-import java.sql.Time;
-import java.util.ArrayList;
-import java.util.BitSet;
 
 /**
  * @author dalia
@@ -40,13 +34,13 @@ public class MappedBufTesterB{
 
 	static private void getStoreMap(long relOff) {
 		
-		if (DriveMapWindow != (int) (relOff/(long)RAMSIZE))
+		if (DriveMapWindow != (int) (relOff/RAMSIZE))
 			try {
 				/* if (DriveMemoryMap != null) { DriveMemoryMap.force(); DriveMemoryMap.limit(0);  } */
 				DriveMemoryMap = DriveChannel.map(MapMode.READ_WRITE, relOff, RAMSIZE);
 				DriveMemoryMap.load();
 				DriveMemoryMap.rewind(); 
-				DriveMapWindow = (int) (relOff/(long)RAMSIZE);
+				DriveMapWindow = (int) (relOff/RAMSIZE);
 	
 			} catch (IOException e) {
 				System.out.println("failure to sync drive to memory");
@@ -54,7 +48,7 @@ public class MappedBufTesterB{
 				System.exit(-1);
 			}
 
-		DriveMemoryMap.position((int) (relOff % (long)RAMSIZE));
+		DriveMemoryMap.position((int) (relOff % RAMSIZE));
 	}
 
 	static private void RamToStore(long relOff, ByteBuffer buf) {
@@ -69,7 +63,7 @@ public class MappedBufTesterB{
 		getStoreMap(relOff);
 
 		if (!buf.hasArray()) 
-			buf.allocate(BUFSIZE);
+			ByteBuffer.allocate(BUFSIZE);
 		assert (DriveMemoryMap.capacity() >= buf.capacity()); 
 
 		buf.rewind();

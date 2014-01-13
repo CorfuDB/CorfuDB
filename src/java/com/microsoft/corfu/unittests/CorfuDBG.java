@@ -4,15 +4,15 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.StringTokenizer;
 
 import com.microsoft.corfu.CorfuClientImpl;
 import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuException;
-import com.microsoft.corfu.ExtntInfo;
 import com.microsoft.corfu.ExtntWrap;
 
-public class SUnitDbg {
+public class CorfuDBG {
 
 	static CorfuConfigManager CM = null;
 	static CorfuClientImpl crf = null;
@@ -23,15 +23,16 @@ public class SUnitDbg {
 	
 	static helper printhelp = 
 			new helper() {
+			@Override
 			public void helperf(long dummy) {
-				System.out.println("Usage: ");
-				System.out.println("  help");
-				System.out.println("  read <offset>");
-				System.out.println("  dbg <offset>");
-				System.out.println("  fix <offset>");
-				System.out.println("  trim <offset>");
-				System.out.println("  bounds");
-				System.out.println("  quit");
+				System.out.println("------Usage:--------- ");
+				for (Iterator<String> it = debugger.keySet().iterator(); it.hasNext(); ) {
+					System.out.println(it.next());
+				}
+				for (Iterator<String> it = debugger2.keySet().iterator(); it.hasNext(); ) {
+					System.out.println(it.next() + " <offset>");
+				}
+				System.out.println("-------------------- ");
 			}};
 	
 	static HashMap<String, helper> debugger = new HashMap<String, helper>(){
@@ -40,6 +41,7 @@ public class SUnitDbg {
 			put("help", printhelp);
 			put("bounds",
 					new helper() {
+					@Override
 					public void helperf(long dummy) throws CorfuException {
 						long head, tail, ctail;
 						
@@ -52,6 +54,7 @@ public class SUnitDbg {
 				
 				put("quit", 
 					new helper() {
+					@Override
 					public void helperf(long dummy) { System.exit(0); }
 				});
 		}};
@@ -61,20 +64,18 @@ public class SUnitDbg {
 		{
 			put("dbg", 
 				new helper() {
+				@Override
 				public void helperf(long off) throws CorfuException {
 					ExtntWrap di;
 					di = crf.dbg(off);
 					System.out.println("err=" + di.getErr());
-					if (di.getCtnt() == null) 
-						System.out.println("Illegal offset");
-					else {
-						System.out.println("meta: " + di.getInf());
-					}
+					System.out.println("meta: " + di.getInf());
 				}
 			});
 			
 			put("read",
 				new helper() {
+				@Override
 				public void helperf(long off) throws CorfuException {
 					ExtntWrap ret;
 					ret = crf.readExtnt(off);
@@ -84,6 +85,7 @@ public class SUnitDbg {
 			
 			put("trim",
 					new helper() {
+				@Override
 				public void helperf(long off) throws CorfuException {
 					crf.trim(off);
 				}
@@ -91,6 +93,7 @@ public class SUnitDbg {
 			
 			put("fix",
 					new helper() {
+					@Override
 					public void helperf(long off) throws CorfuException {
 						ExtntWrap ret;
 						if (off > 0) {
@@ -110,6 +113,7 @@ public class SUnitDbg {
 	public static void main(String[] args) {
 		
 		new Thread(new Runnable() {
+			@Override
 			public void run() {
 
 				BufferedReader c;

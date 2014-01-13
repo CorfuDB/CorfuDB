@@ -64,8 +64,6 @@
 package com.microsoft.corfu.unittests;
 
 import java.io.File;
-import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -79,10 +77,7 @@ import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuErrorCode;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.CorfuExtendedInterface;
-import com.microsoft.corfu.ExtntInfo;
 import com.microsoft.corfu.ExtntWrap;
-import com.microsoft.corfu.sunit.CorfuUnitServerImpl;
-import com.sun.org.apache.bcel.internal.classfile.CodeException;
 
 public class CorfuRWTester {
 	static private Logger log = LoggerFactory.getLogger(CorfuRWTester.class);

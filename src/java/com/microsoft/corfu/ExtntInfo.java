@@ -12,23 +12,13 @@ import org.apache.thrift.scheme.StandardScheme;
 
 import org.apache.thrift.scheme.TupleScheme;
 import org.apache.thrift.protocol.TTupleProtocol;
-import org.apache.thrift.protocol.TProtocolException;
 import org.apache.thrift.EncodingUtils;
-import org.apache.thrift.TException;
-import java.util.List;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.EnumMap;
-import java.util.Set;
-import java.util.HashSet;
 import java.util.EnumSet;
 import java.util.Collections;
 import java.util.BitSet;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._Fields>, java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("ExtntInfo");
@@ -45,12 +35,20 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
 
   public long metaFirstOff; // required
   public int metaLength; // required
-  public int flag; // required
+  /**
+   * 
+   * @see ExtntMarkType
+   */
+  public ExtntMarkType flag; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
     META_FIRST_OFF((short)1, "metaFirstOff"),
     META_LENGTH((short)2, "metaLength"),
+    /**
+     * 
+     * @see ExtntMarkType
+     */
     FLAG((short)3, "flag");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
@@ -102,11 +100,13 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       _fieldName = fieldName;
     }
 
-    public short getThriftFieldId() {
+    @Override
+	public short getThriftFieldId() {
       return _thriftId;
     }
 
-    public String getFieldName() {
+    @Override
+	public String getFieldName() {
       return _fieldName;
     }
   }
@@ -114,7 +114,6 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
   // isset id assignments
   private static final int __METAFIRSTOFF_ISSET_ID = 0;
   private static final int __METALENGTH_ISSET_ID = 1;
-  private static final int __FLAG_ISSET_ID = 2;
   private byte __isset_bitfield = 0;
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
@@ -124,20 +123,20 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     tmpMap.put(_Fields.META_LENGTH, new org.apache.thrift.meta_data.FieldMetaData("metaLength", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
     tmpMap.put(_Fields.FLAG, new org.apache.thrift.meta_data.FieldMetaData("flag", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
+        new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ExtntMarkType.class)));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
     org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(ExtntInfo.class, metaDataMap);
   }
 
   public ExtntInfo() {
-    this.flag = 0;
+    this.flag = com.microsoft.corfu.ExtntMarkType.EX_BEGIN;
 
   }
 
   public ExtntInfo(
     long metaFirstOff,
     int metaLength,
-    int flag)
+    ExtntMarkType flag)
   {
     this();
     this.metaFirstOff = metaFirstOff;
@@ -145,7 +144,6 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     this.metaLength = metaLength;
     setMetaLengthIsSet(true);
     this.flag = flag;
-    setFlagIsSet(true);
   }
 
   /**
@@ -155,10 +153,13 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     __isset_bitfield = other.__isset_bitfield;
     this.metaFirstOff = other.metaFirstOff;
     this.metaLength = other.metaLength;
-    this.flag = other.flag;
+    if (other.isSetFlag()) {
+      this.flag = other.flag;
+    }
   }
 
-  public ExtntInfo deepCopy() {
+  @Override
+public ExtntInfo deepCopy() {
     return new ExtntInfo(this);
   }
 
@@ -168,7 +169,7 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     this.metaFirstOff = 0;
     setMetaLengthIsSet(false);
     this.metaLength = 0;
-    this.flag = 0;
+    this.flag = com.microsoft.corfu.ExtntMarkType.EX_BEGIN;
 
   }
 
@@ -218,30 +219,40 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __METALENGTH_ISSET_ID, value);
   }
 
-  public int getFlag() {
+  /**
+   * 
+   * @see ExtntMarkType
+   */
+  public ExtntMarkType getFlag() {
     return this.flag;
   }
 
-  public ExtntInfo setFlag(int flag) {
+  /**
+   * 
+   * @see ExtntMarkType
+   */
+  public ExtntInfo setFlag(ExtntMarkType flag) {
     this.flag = flag;
-    setFlagIsSet(true);
     return this;
   }
 
   public void unsetFlag() {
-    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __FLAG_ISSET_ID);
+    this.flag = null;
   }
 
   /** Returns true if field flag is set (has been assigned a value) and false otherwise */
   public boolean isSetFlag() {
-    return EncodingUtils.testBit(__isset_bitfield, __FLAG_ISSET_ID);
+    return this.flag != null;
   }
 
   public void setFlagIsSet(boolean value) {
-    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __FLAG_ISSET_ID, value);
+    if (!value) {
+      this.flag = null;
+    }
   }
 
-  public void setFieldValue(_Fields field, Object value) {
+  @Override
+public void setFieldValue(_Fields field, Object value) {
     switch (field) {
     case META_FIRST_OFF:
       if (value == null) {
@@ -263,14 +274,15 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       if (value == null) {
         unsetFlag();
       } else {
-        setFlag((Integer)value);
+        setFlag((ExtntMarkType)value);
       }
       break;
 
     }
   }
 
-  public Object getFieldValue(_Fields field) {
+  @Override
+public Object getFieldValue(_Fields field) {
     switch (field) {
     case META_FIRST_OFF:
       return Long.valueOf(getMetaFirstOff());
@@ -279,14 +291,15 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       return Integer.valueOf(getMetaLength());
 
     case FLAG:
-      return Integer.valueOf(getFlag());
+      return getFlag();
 
     }
     throw new IllegalStateException();
   }
 
   /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-  public boolean isSet(_Fields field) {
+  @Override
+public boolean isSet(_Fields field) {
     if (field == null) {
       throw new IllegalArgumentException();
     }
@@ -333,12 +346,12 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
         return false;
     }
 
-    boolean this_present_flag = true;
-    boolean that_present_flag = true;
+    boolean this_present_flag = true && this.isSetFlag();
+    boolean that_present_flag = true && that.isSetFlag();
     if (this_present_flag || that_present_flag) {
       if (!(this_present_flag && that_present_flag))
         return false;
-      if (this.flag != that.flag)
+      if (!this.flag.equals(that.flag))
         return false;
     }
 
@@ -350,13 +363,14 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     return 0;
   }
 
-  public int compareTo(ExtntInfo other) {
+  @Override
+public int compareTo(ExtntInfo other) {
     if (!getClass().equals(other.getClass())) {
       return getClass().getName().compareTo(other.getClass().getName());
     }
 
     int lastComparison = 0;
-    ExtntInfo typedOther = (ExtntInfo)other;
+    ExtntInfo typedOther = other;
 
     lastComparison = Boolean.valueOf(isSetMetaFirstOff()).compareTo(typedOther.isSetMetaFirstOff());
     if (lastComparison != 0) {
@@ -391,15 +405,18 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     return 0;
   }
 
-  public _Fields fieldForId(int fieldId) {
+  @Override
+public _Fields fieldForId(int fieldId) {
     return _Fields.findByThriftId(fieldId);
   }
 
-  public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+  @Override
+public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
     schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
   }
 
-  public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+  @Override
+public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
     schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
   }
 
@@ -417,7 +434,11 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
     first = false;
     if (!first) sb.append(", ");
     sb.append("flag:");
-    sb.append(this.flag);
+    if (this.flag == null) {
+      sb.append("null");
+    } else {
+      sb.append(this.flag);
+    }
     first = false;
     sb.append(")");
     return sb.toString();
@@ -447,14 +468,16 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
   }
 
   private static class ExtntInfoStandardSchemeFactory implements SchemeFactory {
-    public ExtntInfoStandardScheme getScheme() {
+    @Override
+	public ExtntInfoStandardScheme getScheme() {
       return new ExtntInfoStandardScheme();
     }
   }
 
   private static class ExtntInfoStandardScheme extends StandardScheme<ExtntInfo> {
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot, ExtntInfo struct) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, ExtntInfo struct) throws org.apache.thrift.TException {
       org.apache.thrift.protocol.TField schemeField;
       iprot.readStructBegin();
       while (true)
@@ -482,7 +505,7 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
             break;
           case 3: // FLAG
             if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
-              struct.flag = iprot.readI32();
+              struct.flag = ExtntMarkType.findByValue(iprot.readI32());
               struct.setFlagIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
@@ -499,7 +522,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       struct.validate();
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot, ExtntInfo struct) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, ExtntInfo struct) throws org.apache.thrift.TException {
       struct.validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
@@ -509,9 +533,11 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
       oprot.writeFieldBegin(META_LENGTH_FIELD_DESC);
       oprot.writeI32(struct.metaLength);
       oprot.writeFieldEnd();
-      oprot.writeFieldBegin(FLAG_FIELD_DESC);
-      oprot.writeI32(struct.flag);
-      oprot.writeFieldEnd();
+      if (struct.flag != null) {
+        oprot.writeFieldBegin(FLAG_FIELD_DESC);
+        oprot.writeI32(struct.flag.getValue());
+        oprot.writeFieldEnd();
+      }
       oprot.writeFieldStop();
       oprot.writeStructEnd();
     }
@@ -519,7 +545,8 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
   }
 
   private static class ExtntInfoTupleSchemeFactory implements SchemeFactory {
-    public ExtntInfoTupleScheme getScheme() {
+    @Override
+	public ExtntInfoTupleScheme getScheme() {
       return new ExtntInfoTupleScheme();
     }
   }
@@ -547,7 +574,7 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
         oprot.writeI32(struct.metaLength);
       }
       if (struct.isSetFlag()) {
-        oprot.writeI32(struct.flag);
+        oprot.writeI32(struct.flag.getValue());
       }
     }
 
@@ -564,7 +591,7 @@ public class ExtntInfo implements org.apache.thrift.TBase<ExtntInfo, ExtntInfo._
         struct.setMetaLengthIsSet(true);
       }
       if (incoming.get(2)) {
-        struct.flag = iprot.readI32();
+        struct.flag = ExtntMarkType.findByValue(iprot.readI32());
         struct.setFlagIsSet(true);
       }
     }

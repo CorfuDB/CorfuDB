@@ -12,21 +12,16 @@ import org.apache.thrift.scheme.StandardScheme;
 
 import org.apache.thrift.scheme.TupleScheme;
 import org.apache.thrift.protocol.TTupleProtocol;
-import org.apache.thrift.protocol.TProtocolException;
 import org.apache.thrift.EncodingUtils;
-import org.apache.thrift.TException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.EnumMap;
-import java.util.Set;
-import java.util.HashSet;
 import java.util.EnumSet;
 import java.util.Collections;
 import java.util.BitSet;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,8 +38,6 @@ public class CorfuUnitServer {
     public void sync() throws org.apache.thrift.TException;
 
     public com.microsoft.corfu.ExtntWrap readmeta(long off) throws org.apache.thrift.TException;
-
-    public com.microsoft.corfu.ExtntWrap dbg(long off) throws org.apache.thrift.TException;
 
     public long querytrim() throws org.apache.thrift.TException;
 
@@ -68,8 +61,6 @@ public class CorfuUnitServer {
 
     public void readmeta(long off, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.readmeta_call> resultHandler) throws org.apache.thrift.TException;
 
-    public void dbg(long off, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.dbg_call> resultHandler) throws org.apache.thrift.TException;
-
     public void querytrim(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.querytrim_call> resultHandler) throws org.apache.thrift.TException;
 
     public void queryck(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.queryck_call> resultHandler) throws org.apache.thrift.TException;
@@ -83,10 +74,12 @@ public class CorfuUnitServer {
   public static class Client extends org.apache.thrift.TServiceClient implements Iface {
     public static class Factory implements org.apache.thrift.TServiceClientFactory<Client> {
       public Factory() {}
-      public Client getClient(org.apache.thrift.protocol.TProtocol prot) {
+      @Override
+	public Client getClient(org.apache.thrift.protocol.TProtocol prot) {
         return new Client(prot);
       }
-      public Client getClient(org.apache.thrift.protocol.TProtocol iprot, org.apache.thrift.protocol.TProtocol oprot) {
+      @Override
+	public Client getClient(org.apache.thrift.protocol.TProtocol iprot, org.apache.thrift.protocol.TProtocol oprot) {
         return new Client(iprot, oprot);
       }
     }
@@ -100,7 +93,8 @@ public class CorfuUnitServer {
       super(iprot, oprot);
     }
 
-    public com.microsoft.corfu.CorfuErrorCode write(com.microsoft.corfu.ExtntInfo inf, List<ByteBuffer> ctnt) throws org.apache.thrift.TException
+    @Override
+	public com.microsoft.corfu.CorfuErrorCode write(com.microsoft.corfu.ExtntInfo inf, List<ByteBuffer> ctnt) throws org.apache.thrift.TException
     {
       send_write(inf, ctnt);
       return recv_write();
@@ -124,7 +118,8 @@ public class CorfuUnitServer {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "write failed: unknown result");
     }
 
-    public com.microsoft.corfu.CorfuErrorCode fix(long pos, com.microsoft.corfu.ExtntInfo inf) throws org.apache.thrift.TException
+    @Override
+	public com.microsoft.corfu.CorfuErrorCode fix(long pos, com.microsoft.corfu.ExtntInfo inf) throws org.apache.thrift.TException
     {
       send_fix(pos, inf);
       return recv_fix();
@@ -148,7 +143,8 @@ public class CorfuUnitServer {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "fix failed: unknown result");
     }
 
-    public com.microsoft.corfu.ExtntWrap read(com.microsoft.corfu.CorfuHeader hdr) throws org.apache.thrift.TException
+    @Override
+	public com.microsoft.corfu.ExtntWrap read(com.microsoft.corfu.CorfuHeader hdr) throws org.apache.thrift.TException
     {
       send_read(hdr);
       return recv_read();
@@ -171,7 +167,8 @@ public class CorfuUnitServer {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "read failed: unknown result");
     }
 
-    public void sync() throws org.apache.thrift.TException
+    @Override
+	public void sync() throws org.apache.thrift.TException
     {
       send_sync();
       recv_sync();
@@ -190,7 +187,8 @@ public class CorfuUnitServer {
       return;
     }
 
-    public com.microsoft.corfu.ExtntWrap readmeta(long off) throws org.apache.thrift.TException
+    @Override
+	public com.microsoft.corfu.ExtntWrap readmeta(long off) throws org.apache.thrift.TException
     {
       send_readmeta(off);
       return recv_readmeta();
@@ -213,30 +211,8 @@ public class CorfuUnitServer {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "readmeta failed: unknown result");
     }
 
-    public com.microsoft.corfu.ExtntWrap dbg(long off) throws org.apache.thrift.TException
-    {
-      send_dbg(off);
-      return recv_dbg();
-    }
-
-    public void send_dbg(long off) throws org.apache.thrift.TException
-    {
-      dbg_args args = new dbg_args();
-      args.setOff(off);
-      sendBase("dbg", args);
-    }
-
-    public com.microsoft.corfu.ExtntWrap recv_dbg() throws org.apache.thrift.TException
-    {
-      dbg_result result = new dbg_result();
-      receiveBase(result, "dbg");
-      if (result.isSetSuccess()) {
-        return result.success;
-      }
-      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "dbg failed: unknown result");
-    }
-
-    public long querytrim() throws org.apache.thrift.TException
+    @Override
+	public long querytrim() throws org.apache.thrift.TException
     {
       send_querytrim();
       return recv_querytrim();
@@ -258,7 +234,8 @@ public class CorfuUnitServer {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "querytrim failed: unknown result");
     }
 
-    public long queryck() throws org.apache.thrift.TException
+    @Override
+	public long queryck() throws org.apache.thrift.TException
     {
       send_queryck();
       return recv_queryck();
@@ -280,7 +257,8 @@ public class CorfuUnitServer {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "queryck failed: unknown result");
     }
 
-    public void ckpoint(long off) throws org.apache.thrift.TException
+    @Override
+	public void ckpoint(long off) throws org.apache.thrift.TException
     {
       send_ckpoint(off);
       recv_ckpoint();
@@ -300,7 +278,8 @@ public class CorfuUnitServer {
       return;
     }
 
-    public boolean trim(long mark) throws org.apache.thrift.TException
+    @Override
+	public boolean trim(long mark) throws org.apache.thrift.TException
     {
       send_trim(mark);
       return recv_trim();
@@ -332,7 +311,8 @@ public class CorfuUnitServer {
         this.clientManager = clientManager;
         this.protocolFactory = protocolFactory;
       }
-      public AsyncClient getAsyncClient(org.apache.thrift.transport.TNonblockingTransport transport) {
+      @Override
+	public AsyncClient getAsyncClient(org.apache.thrift.transport.TNonblockingTransport transport) {
         return new AsyncClient(protocolFactory, clientManager, transport);
       }
     }
@@ -341,7 +321,8 @@ public class CorfuUnitServer {
       super(protocolFactory, clientManager, transport);
     }
 
-    public void write(com.microsoft.corfu.ExtntInfo inf, List<ByteBuffer> ctnt, org.apache.thrift.async.AsyncMethodCallback<write_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void write(com.microsoft.corfu.ExtntInfo inf, List<ByteBuffer> ctnt, org.apache.thrift.async.AsyncMethodCallback<write_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       write_call method_call = new write_call(inf, ctnt, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -357,7 +338,8 @@ public class CorfuUnitServer {
         this.ctnt = ctnt;
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("write", org.apache.thrift.protocol.TMessageType.CALL, 0));
         write_args args = new write_args();
         args.setInf(inf);
@@ -376,7 +358,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void fix(long pos, com.microsoft.corfu.ExtntInfo inf, org.apache.thrift.async.AsyncMethodCallback<fix_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void fix(long pos, com.microsoft.corfu.ExtntInfo inf, org.apache.thrift.async.AsyncMethodCallback<fix_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       fix_call method_call = new fix_call(pos, inf, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -392,7 +375,8 @@ public class CorfuUnitServer {
         this.inf = inf;
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("fix", org.apache.thrift.protocol.TMessageType.CALL, 0));
         fix_args args = new fix_args();
         args.setPos(pos);
@@ -411,7 +395,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void read(com.microsoft.corfu.CorfuHeader hdr, org.apache.thrift.async.AsyncMethodCallback<read_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void read(com.microsoft.corfu.CorfuHeader hdr, org.apache.thrift.async.AsyncMethodCallback<read_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       read_call method_call = new read_call(hdr, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -425,7 +410,8 @@ public class CorfuUnitServer {
         this.hdr = hdr;
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("read", org.apache.thrift.protocol.TMessageType.CALL, 0));
         read_args args = new read_args();
         args.setHdr(hdr);
@@ -443,7 +429,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void sync(org.apache.thrift.async.AsyncMethodCallback<sync_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void sync(org.apache.thrift.async.AsyncMethodCallback<sync_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       sync_call method_call = new sync_call(resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -455,7 +442,8 @@ public class CorfuUnitServer {
         super(client, protocolFactory, transport, resultHandler, false);
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("sync", org.apache.thrift.protocol.TMessageType.CALL, 0));
         sync_args args = new sync_args();
         args.write(prot);
@@ -472,7 +460,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void readmeta(long off, org.apache.thrift.async.AsyncMethodCallback<readmeta_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void readmeta(long off, org.apache.thrift.async.AsyncMethodCallback<readmeta_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       readmeta_call method_call = new readmeta_call(off, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -486,7 +475,8 @@ public class CorfuUnitServer {
         this.off = off;
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("readmeta", org.apache.thrift.protocol.TMessageType.CALL, 0));
         readmeta_args args = new readmeta_args();
         args.setOff(off);
@@ -504,39 +494,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void dbg(long off, org.apache.thrift.async.AsyncMethodCallback<dbg_call> resultHandler) throws org.apache.thrift.TException {
-      checkReady();
-      dbg_call method_call = new dbg_call(off, resultHandler, this, ___protocolFactory, ___transport);
-      this.___currentMethod = method_call;
-      ___manager.call(method_call);
-    }
-
-    public static class dbg_call extends org.apache.thrift.async.TAsyncMethodCall {
-      private long off;
-      public dbg_call(long off, org.apache.thrift.async.AsyncMethodCallback<dbg_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
-        super(client, protocolFactory, transport, resultHandler, false);
-        this.off = off;
-      }
-
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
-        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("dbg", org.apache.thrift.protocol.TMessageType.CALL, 0));
-        dbg_args args = new dbg_args();
-        args.setOff(off);
-        args.write(prot);
-        prot.writeMessageEnd();
-      }
-
-      public com.microsoft.corfu.ExtntWrap getResult() throws org.apache.thrift.TException {
-        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
-          throw new IllegalStateException("Method call not finished!");
-        }
-        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
-        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
-        return (new Client(prot)).recv_dbg();
-      }
-    }
-
-    public void querytrim(org.apache.thrift.async.AsyncMethodCallback<querytrim_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void querytrim(org.apache.thrift.async.AsyncMethodCallback<querytrim_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       querytrim_call method_call = new querytrim_call(resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -548,7 +507,8 @@ public class CorfuUnitServer {
         super(client, protocolFactory, transport, resultHandler, false);
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("querytrim", org.apache.thrift.protocol.TMessageType.CALL, 0));
         querytrim_args args = new querytrim_args();
         args.write(prot);
@@ -565,7 +525,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void queryck(org.apache.thrift.async.AsyncMethodCallback<queryck_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void queryck(org.apache.thrift.async.AsyncMethodCallback<queryck_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       queryck_call method_call = new queryck_call(resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -577,7 +538,8 @@ public class CorfuUnitServer {
         super(client, protocolFactory, transport, resultHandler, false);
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("queryck", org.apache.thrift.protocol.TMessageType.CALL, 0));
         queryck_args args = new queryck_args();
         args.write(prot);
@@ -594,7 +556,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void ckpoint(long off, org.apache.thrift.async.AsyncMethodCallback<ckpoint_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void ckpoint(long off, org.apache.thrift.async.AsyncMethodCallback<ckpoint_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       ckpoint_call method_call = new ckpoint_call(off, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -608,7 +571,8 @@ public class CorfuUnitServer {
         this.off = off;
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("ckpoint", org.apache.thrift.protocol.TMessageType.CALL, 0));
         ckpoint_args args = new ckpoint_args();
         args.setOff(off);
@@ -626,7 +590,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void trim(long mark, org.apache.thrift.async.AsyncMethodCallback<trim_call> resultHandler) throws org.apache.thrift.TException {
+    @Override
+	public void trim(long mark, org.apache.thrift.async.AsyncMethodCallback<trim_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       trim_call method_call = new trim_call(mark, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
@@ -640,7 +605,8 @@ public class CorfuUnitServer {
         this.mark = mark;
       }
 
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+      @Override
+	public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
         prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("trim", org.apache.thrift.protocol.TMessageType.CALL, 0));
         trim_args args = new trim_args();
         args.setMark(mark);
@@ -676,7 +642,6 @@ public class CorfuUnitServer {
       processMap.put("read", new read());
       processMap.put("sync", new sync());
       processMap.put("readmeta", new readmeta());
-      processMap.put("dbg", new dbg());
       processMap.put("querytrim", new querytrim());
       processMap.put("queryck", new queryck());
       processMap.put("ckpoint", new ckpoint());
@@ -689,15 +654,18 @@ public class CorfuUnitServer {
         super("write");
       }
 
-      public write_args getEmptyArgsInstance() {
+      @Override
+	public write_args getEmptyArgsInstance() {
         return new write_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public write_result getResult(I iface, write_args args) throws org.apache.thrift.TException {
+      @Override
+	public write_result getResult(I iface, write_args args) throws org.apache.thrift.TException {
         write_result result = new write_result();
         result.success = iface.write(args.inf, args.ctnt);
         return result;
@@ -709,15 +677,18 @@ public class CorfuUnitServer {
         super("fix");
       }
 
-      public fix_args getEmptyArgsInstance() {
+      @Override
+	public fix_args getEmptyArgsInstance() {
         return new fix_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public fix_result getResult(I iface, fix_args args) throws org.apache.thrift.TException {
+      @Override
+	public fix_result getResult(I iface, fix_args args) throws org.apache.thrift.TException {
         fix_result result = new fix_result();
         result.success = iface.fix(args.pos, args.inf);
         return result;
@@ -729,15 +700,18 @@ public class CorfuUnitServer {
         super("read");
       }
 
-      public read_args getEmptyArgsInstance() {
+      @Override
+	public read_args getEmptyArgsInstance() {
         return new read_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public read_result getResult(I iface, read_args args) throws org.apache.thrift.TException {
+      @Override
+	public read_result getResult(I iface, read_args args) throws org.apache.thrift.TException {
         read_result result = new read_result();
         result.success = iface.read(args.hdr);
         return result;
@@ -749,15 +723,18 @@ public class CorfuUnitServer {
         super("sync");
       }
 
-      public sync_args getEmptyArgsInstance() {
+      @Override
+	public sync_args getEmptyArgsInstance() {
         return new sync_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public sync_result getResult(I iface, sync_args args) throws org.apache.thrift.TException {
+      @Override
+	public sync_result getResult(I iface, sync_args args) throws org.apache.thrift.TException {
         sync_result result = new sync_result();
         iface.sync();
         return result;
@@ -769,37 +746,20 @@ public class CorfuUnitServer {
         super("readmeta");
       }
 
-      public readmeta_args getEmptyArgsInstance() {
+      @Override
+	public readmeta_args getEmptyArgsInstance() {
         return new readmeta_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public readmeta_result getResult(I iface, readmeta_args args) throws org.apache.thrift.TException {
+      @Override
+	public readmeta_result getResult(I iface, readmeta_args args) throws org.apache.thrift.TException {
         readmeta_result result = new readmeta_result();
         result.success = iface.readmeta(args.off);
-        return result;
-      }
-    }
-
-    public static class dbg<I extends Iface> extends org.apache.thrift.ProcessFunction<I, dbg_args> {
-      public dbg() {
-        super("dbg");
-      }
-
-      public dbg_args getEmptyArgsInstance() {
-        return new dbg_args();
-      }
-
-      protected boolean isOneway() {
-        return false;
-      }
-
-      public dbg_result getResult(I iface, dbg_args args) throws org.apache.thrift.TException {
-        dbg_result result = new dbg_result();
-        result.success = iface.dbg(args.off);
         return result;
       }
     }
@@ -809,15 +769,18 @@ public class CorfuUnitServer {
         super("querytrim");
       }
 
-      public querytrim_args getEmptyArgsInstance() {
+      @Override
+	public querytrim_args getEmptyArgsInstance() {
         return new querytrim_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public querytrim_result getResult(I iface, querytrim_args args) throws org.apache.thrift.TException {
+      @Override
+	public querytrim_result getResult(I iface, querytrim_args args) throws org.apache.thrift.TException {
         querytrim_result result = new querytrim_result();
         result.success = iface.querytrim();
         result.setSuccessIsSet(true);
@@ -830,15 +793,18 @@ public class CorfuUnitServer {
         super("queryck");
       }
 
-      public queryck_args getEmptyArgsInstance() {
+      @Override
+	public queryck_args getEmptyArgsInstance() {
         return new queryck_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public queryck_result getResult(I iface, queryck_args args) throws org.apache.thrift.TException {
+      @Override
+	public queryck_result getResult(I iface, queryck_args args) throws org.apache.thrift.TException {
         queryck_result result = new queryck_result();
         result.success = iface.queryck();
         result.setSuccessIsSet(true);
@@ -851,15 +817,18 @@ public class CorfuUnitServer {
         super("ckpoint");
       }
 
-      public ckpoint_args getEmptyArgsInstance() {
+      @Override
+	public ckpoint_args getEmptyArgsInstance() {
         return new ckpoint_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public ckpoint_result getResult(I iface, ckpoint_args args) throws org.apache.thrift.TException {
+      @Override
+	public ckpoint_result getResult(I iface, ckpoint_args args) throws org.apache.thrift.TException {
         ckpoint_result result = new ckpoint_result();
         iface.ckpoint(args.off);
         return result;
@@ -871,15 +840,18 @@ public class CorfuUnitServer {
         super("trim");
       }
 
-      public trim_args getEmptyArgsInstance() {
+      @Override
+	public trim_args getEmptyArgsInstance() {
         return new trim_args();
       }
 
-      protected boolean isOneway() {
+      @Override
+	protected boolean isOneway() {
         return false;
       }
 
-      public trim_result getResult(I iface, trim_args args) throws org.apache.thrift.TException {
+      @Override
+	public trim_result getResult(I iface, trim_args args) throws org.apache.thrift.TException {
         trim_result result = new trim_result();
         result.success = iface.trim(args.mark);
         result.setSuccessIsSet(true);
@@ -956,11 +928,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -1006,7 +980,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public write_args deepCopy() {
+    @Override
+	public write_args deepCopy() {
       return new write_args(this);
     }
 
@@ -1079,7 +1054,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case INF:
         if (value == null) {
@@ -1100,7 +1076,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case INF:
         return getInf();
@@ -1113,7 +1090,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -1166,13 +1144,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(write_args other) {
+    @Override
+	public int compareTo(write_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      write_args typedOther = (write_args)other;
+      write_args typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetInf()).compareTo(typedOther.isSetInf());
       if (lastComparison != 0) {
@@ -1197,15 +1176,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -1258,14 +1240,16 @@ public class CorfuUnitServer {
     }
 
     private static class write_argsStandardSchemeFactory implements SchemeFactory {
-      public write_argsStandardScheme getScheme() {
+      @Override
+	public write_argsStandardScheme getScheme() {
         return new write_argsStandardScheme();
       }
     }
 
     private static class write_argsStandardScheme extends StandardScheme<write_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, write_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, write_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -1313,7 +1297,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, write_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, write_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -1341,7 +1326,8 @@ public class CorfuUnitServer {
     }
 
     private static class write_argsTupleSchemeFactory implements SchemeFactory {
-      public write_argsTupleScheme getScheme() {
+      @Override
+	public write_argsTupleScheme getScheme() {
         return new write_argsTupleScheme();
       }
     }
@@ -1470,11 +1456,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -1508,7 +1496,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public write_result deepCopy() {
+    @Override
+	public write_result deepCopy() {
       return new write_result(this);
     }
 
@@ -1549,7 +1538,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
         if (value == null) {
@@ -1562,7 +1552,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case SUCCESS:
         return getSuccess();
@@ -1572,7 +1563,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -1614,13 +1606,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(write_result other) {
+    @Override
+	public int compareTo(write_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      write_result typedOther = (write_result)other;
+      write_result typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
       if (lastComparison != 0) {
@@ -1635,15 +1628,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -1685,14 +1681,16 @@ public class CorfuUnitServer {
     }
 
     private static class write_resultStandardSchemeFactory implements SchemeFactory {
-      public write_resultStandardScheme getScheme() {
+      @Override
+	public write_resultStandardScheme getScheme() {
         return new write_resultStandardScheme();
       }
     }
 
     private static class write_resultStandardScheme extends StandardScheme<write_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, write_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, write_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -1721,7 +1719,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, write_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, write_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -1737,7 +1736,8 @@ public class CorfuUnitServer {
     }
 
     private static class write_resultTupleSchemeFactory implements SchemeFactory {
-      public write_resultTupleScheme getScheme() {
+      @Override
+	public write_resultTupleScheme getScheme() {
         return new write_resultTupleScheme();
       }
     }
@@ -1837,11 +1837,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -1884,7 +1886,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public fix_args deepCopy() {
+    @Override
+	public fix_args deepCopy() {
       return new fix_args(this);
     }
 
@@ -1942,7 +1945,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case POS:
         if (value == null) {
@@ -1963,7 +1967,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case POS:
         return Long.valueOf(getPos());
@@ -1976,7 +1981,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -2029,13 +2035,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(fix_args other) {
+    @Override
+	public int compareTo(fix_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      fix_args typedOther = (fix_args)other;
+      fix_args typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetPos()).compareTo(typedOther.isSetPos());
       if (lastComparison != 0) {
@@ -2060,15 +2067,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -2119,14 +2129,16 @@ public class CorfuUnitServer {
     }
 
     private static class fix_argsStandardSchemeFactory implements SchemeFactory {
-      public fix_argsStandardScheme getScheme() {
+      @Override
+	public fix_argsStandardScheme getScheme() {
         return new fix_argsStandardScheme();
       }
     }
 
     private static class fix_argsStandardScheme extends StandardScheme<fix_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, fix_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, fix_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -2164,7 +2176,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, fix_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, fix_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -2183,7 +2196,8 @@ public class CorfuUnitServer {
     }
 
     private static class fix_argsTupleSchemeFactory implements SchemeFactory {
-      public fix_argsTupleScheme getScheme() {
+      @Override
+	public fix_argsTupleScheme getScheme() {
         return new fix_argsTupleScheme();
       }
     }
@@ -2297,11 +2311,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -2335,7 +2351,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public fix_result deepCopy() {
+    @Override
+	public fix_result deepCopy() {
       return new fix_result(this);
     }
 
@@ -2376,7 +2393,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
         if (value == null) {
@@ -2389,7 +2407,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case SUCCESS:
         return getSuccess();
@@ -2399,7 +2418,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -2441,13 +2461,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(fix_result other) {
+    @Override
+	public int compareTo(fix_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      fix_result typedOther = (fix_result)other;
+      fix_result typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
       if (lastComparison != 0) {
@@ -2462,15 +2483,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -2512,14 +2536,16 @@ public class CorfuUnitServer {
     }
 
     private static class fix_resultStandardSchemeFactory implements SchemeFactory {
-      public fix_resultStandardScheme getScheme() {
+      @Override
+	public fix_resultStandardScheme getScheme() {
         return new fix_resultStandardScheme();
       }
     }
 
     private static class fix_resultStandardScheme extends StandardScheme<fix_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, fix_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, fix_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -2548,7 +2574,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, fix_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, fix_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -2564,7 +2591,8 @@ public class CorfuUnitServer {
     }
 
     private static class fix_resultTupleSchemeFactory implements SchemeFactory {
-      public fix_resultTupleScheme getScheme() {
+      @Override
+	public fix_resultTupleScheme getScheme() {
         return new fix_resultTupleScheme();
       }
     }
@@ -2659,11 +2687,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -2697,7 +2727,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public read_args deepCopy() {
+    @Override
+	public read_args deepCopy() {
       return new read_args(this);
     }
 
@@ -2730,7 +2761,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case HDR:
         if (value == null) {
@@ -2743,7 +2775,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case HDR:
         return getHdr();
@@ -2753,7 +2786,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -2795,13 +2829,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(read_args other) {
+    @Override
+	public int compareTo(read_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      read_args typedOther = (read_args)other;
+      read_args typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetHdr()).compareTo(typedOther.isSetHdr());
       if (lastComparison != 0) {
@@ -2816,15 +2851,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -2869,14 +2907,16 @@ public class CorfuUnitServer {
     }
 
     private static class read_argsStandardSchemeFactory implements SchemeFactory {
-      public read_argsStandardScheme getScheme() {
+      @Override
+	public read_argsStandardScheme getScheme() {
         return new read_argsStandardScheme();
       }
     }
 
     private static class read_argsStandardScheme extends StandardScheme<read_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, read_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, read_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -2906,7 +2946,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, read_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, read_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -2922,7 +2963,8 @@ public class CorfuUnitServer {
     }
 
     private static class read_argsTupleSchemeFactory implements SchemeFactory {
-      public read_argsTupleScheme getScheme() {
+      @Override
+	public read_argsTupleScheme getScheme() {
         return new read_argsTupleScheme();
       }
     }
@@ -3018,11 +3060,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -3056,7 +3100,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public read_result deepCopy() {
+    @Override
+	public read_result deepCopy() {
       return new read_result(this);
     }
 
@@ -3089,7 +3134,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
         if (value == null) {
@@ -3102,7 +3148,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case SUCCESS:
         return getSuccess();
@@ -3112,7 +3159,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -3154,13 +3202,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(read_result other) {
+    @Override
+	public int compareTo(read_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      read_result typedOther = (read_result)other;
+      read_result typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
       if (lastComparison != 0) {
@@ -3175,15 +3224,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -3228,14 +3280,16 @@ public class CorfuUnitServer {
     }
 
     private static class read_resultStandardSchemeFactory implements SchemeFactory {
-      public read_resultStandardScheme getScheme() {
+      @Override
+	public read_resultStandardScheme getScheme() {
         return new read_resultStandardScheme();
       }
     }
 
     private static class read_resultStandardScheme extends StandardScheme<read_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, read_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, read_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -3265,7 +3319,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, read_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, read_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -3281,7 +3336,8 @@ public class CorfuUnitServer {
     }
 
     private static class read_resultTupleSchemeFactory implements SchemeFactory {
-      public read_resultTupleScheme getScheme() {
+      @Override
+	public read_resultTupleScheme getScheme() {
         return new read_resultTupleScheme();
       }
     }
@@ -3373,11 +3429,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -3397,7 +3455,8 @@ public class CorfuUnitServer {
     public sync_args(sync_args other) {
     }
 
-    public sync_args deepCopy() {
+    @Override
+	public sync_args deepCopy() {
       return new sync_args(this);
     }
 
@@ -3405,19 +3464,22 @@ public class CorfuUnitServer {
     public void clear() {
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       }
       throw new IllegalStateException();
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -3448,26 +3510,30 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(sync_args other) {
+    @Override
+	public int compareTo(sync_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      sync_args typedOther = (sync_args)other;
+      sync_args typedOther = other;
 
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -3502,14 +3568,16 @@ public class CorfuUnitServer {
     }
 
     private static class sync_argsStandardSchemeFactory implements SchemeFactory {
-      public sync_argsStandardScheme getScheme() {
+      @Override
+	public sync_argsStandardScheme getScheme() {
         return new sync_argsStandardScheme();
       }
     }
 
     private static class sync_argsStandardScheme extends StandardScheme<sync_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, sync_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, sync_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -3530,7 +3598,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, sync_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, sync_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -3541,7 +3610,8 @@ public class CorfuUnitServer {
     }
 
     private static class sync_argsTupleSchemeFactory implements SchemeFactory {
-      public sync_argsTupleScheme getScheme() {
+      @Override
+	public sync_argsTupleScheme getScheme() {
         return new sync_argsTupleScheme();
       }
     }
@@ -3619,11 +3689,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -3643,7 +3715,8 @@ public class CorfuUnitServer {
     public sync_result(sync_result other) {
     }
 
-    public sync_result deepCopy() {
+    @Override
+	public sync_result deepCopy() {
       return new sync_result(this);
     }
 
@@ -3651,19 +3724,22 @@ public class CorfuUnitServer {
     public void clear() {
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       }
       throw new IllegalStateException();
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -3694,26 +3770,30 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(sync_result other) {
+    @Override
+	public int compareTo(sync_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      sync_result typedOther = (sync_result)other;
+      sync_result typedOther = other;
 
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -3748,14 +3828,16 @@ public class CorfuUnitServer {
     }
 
     private static class sync_resultStandardSchemeFactory implements SchemeFactory {
-      public sync_resultStandardScheme getScheme() {
+      @Override
+	public sync_resultStandardScheme getScheme() {
         return new sync_resultStandardScheme();
       }
     }
 
     private static class sync_resultStandardScheme extends StandardScheme<sync_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, sync_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, sync_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -3776,7 +3858,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, sync_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, sync_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -3787,7 +3870,8 @@ public class CorfuUnitServer {
     }
 
     private static class sync_resultTupleSchemeFactory implements SchemeFactory {
-      public sync_resultTupleScheme getScheme() {
+      @Override
+	public sync_resultTupleScheme getScheme() {
         return new sync_resultTupleScheme();
       }
     }
@@ -3869,11 +3953,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -3909,7 +3995,8 @@ public class CorfuUnitServer {
       this.off = other.off;
     }
 
-    public readmeta_args deepCopy() {
+    @Override
+	public readmeta_args deepCopy() {
       return new readmeta_args(this);
     }
 
@@ -3942,7 +4029,8 @@ public class CorfuUnitServer {
       __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __OFF_ISSET_ID, value);
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case OFF:
         if (value == null) {
@@ -3955,7 +4043,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case OFF:
         return Long.valueOf(getOff());
@@ -3965,7 +4054,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -4007,13 +4097,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(readmeta_args other) {
+    @Override
+	public int compareTo(readmeta_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      readmeta_args typedOther = (readmeta_args)other;
+      readmeta_args typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetOff()).compareTo(typedOther.isSetOff());
       if (lastComparison != 0) {
@@ -4028,15 +4119,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -4076,14 +4170,16 @@ public class CorfuUnitServer {
     }
 
     private static class readmeta_argsStandardSchemeFactory implements SchemeFactory {
-      public readmeta_argsStandardScheme getScheme() {
+      @Override
+	public readmeta_argsStandardScheme getScheme() {
         return new readmeta_argsStandardScheme();
       }
     }
 
     private static class readmeta_argsStandardScheme extends StandardScheme<readmeta_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, readmeta_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, readmeta_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -4112,7 +4208,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, readmeta_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, readmeta_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -4126,7 +4223,8 @@ public class CorfuUnitServer {
     }
 
     private static class readmeta_argsTupleSchemeFactory implements SchemeFactory {
-      public readmeta_argsTupleScheme getScheme() {
+      @Override
+	public readmeta_argsTupleScheme getScheme() {
         return new readmeta_argsTupleScheme();
       }
     }
@@ -4221,11 +4319,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -4259,7 +4359,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public readmeta_result deepCopy() {
+    @Override
+	public readmeta_result deepCopy() {
       return new readmeta_result(this);
     }
 
@@ -4292,7 +4393,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
         if (value == null) {
@@ -4305,7 +4407,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case SUCCESS:
         return getSuccess();
@@ -4315,7 +4418,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -4357,13 +4461,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(readmeta_result other) {
+    @Override
+	public int compareTo(readmeta_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      readmeta_result typedOther = (readmeta_result)other;
+      readmeta_result typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
       if (lastComparison != 0) {
@@ -4378,15 +4483,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -4431,14 +4539,16 @@ public class CorfuUnitServer {
     }
 
     private static class readmeta_resultStandardSchemeFactory implements SchemeFactory {
-      public readmeta_resultStandardScheme getScheme() {
+      @Override
+	public readmeta_resultStandardScheme getScheme() {
         return new readmeta_resultStandardScheme();
       }
     }
 
     private static class readmeta_resultStandardScheme extends StandardScheme<readmeta_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, readmeta_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, readmeta_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -4468,7 +4578,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, readmeta_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, readmeta_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -4484,7 +4595,8 @@ public class CorfuUnitServer {
     }
 
     private static class readmeta_resultTupleSchemeFactory implements SchemeFactory {
-      public readmeta_resultTupleScheme getScheme() {
+      @Override
+	public readmeta_resultTupleScheme getScheme() {
         return new readmeta_resultTupleScheme();
       }
     }
@@ -4506,717 +4618,6 @@ public class CorfuUnitServer {
 
       @Override
       public void read(org.apache.thrift.protocol.TProtocol prot, readmeta_result struct) throws org.apache.thrift.TException {
-        TTupleProtocol iprot = (TTupleProtocol) prot;
-        BitSet incoming = iprot.readBitSet(1);
-        if (incoming.get(0)) {
-          struct.success = new com.microsoft.corfu.ExtntWrap();
-          struct.success.read(iprot);
-          struct.setSuccessIsSet(true);
-        }
-      }
-    }
-
-  }
-
-  public static class dbg_args implements org.apache.thrift.TBase<dbg_args, dbg_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("dbg_args");
-
-    private static final org.apache.thrift.protocol.TField OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("off", org.apache.thrift.protocol.TType.I64, (short)1);
-
-    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
-    static {
-      schemes.put(StandardScheme.class, new dbg_argsStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new dbg_argsTupleSchemeFactory());
-    }
-
-    public long off; // required
-
-    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-      OFF((short)1, "off");
-
-      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
-
-      static {
-        for (_Fields field : EnumSet.allOf(_Fields.class)) {
-          byName.put(field.getFieldName(), field);
-        }
-      }
-
-      /**
-       * Find the _Fields constant that matches fieldId, or null if its not found.
-       */
-      public static _Fields findByThriftId(int fieldId) {
-        switch(fieldId) {
-          case 1: // OFF
-            return OFF;
-          default:
-            return null;
-        }
-      }
-
-      /**
-       * Find the _Fields constant that matches fieldId, throwing an exception
-       * if it is not found.
-       */
-      public static _Fields findByThriftIdOrThrow(int fieldId) {
-        _Fields fields = findByThriftId(fieldId);
-        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
-        return fields;
-      }
-
-      /**
-       * Find the _Fields constant that matches name, or null if its not found.
-       */
-      public static _Fields findByName(String name) {
-        return byName.get(name);
-      }
-
-      private final short _thriftId;
-      private final String _fieldName;
-
-      _Fields(short thriftId, String fieldName) {
-        _thriftId = thriftId;
-        _fieldName = fieldName;
-      }
-
-      public short getThriftFieldId() {
-        return _thriftId;
-      }
-
-      public String getFieldName() {
-        return _fieldName;
-      }
-    }
-
-    // isset id assignments
-    private static final int __OFF_ISSET_ID = 0;
-    private byte __isset_bitfield = 0;
-    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
-    static {
-      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.OFF, new org.apache.thrift.meta_data.FieldMetaData("off", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
-      metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(dbg_args.class, metaDataMap);
-    }
-
-    public dbg_args() {
-    }
-
-    public dbg_args(
-      long off)
-    {
-      this();
-      this.off = off;
-      setOffIsSet(true);
-    }
-
-    /**
-     * Performs a deep copy on <i>other</i>.
-     */
-    public dbg_args(dbg_args other) {
-      __isset_bitfield = other.__isset_bitfield;
-      this.off = other.off;
-    }
-
-    public dbg_args deepCopy() {
-      return new dbg_args(this);
-    }
-
-    @Override
-    public void clear() {
-      setOffIsSet(false);
-      this.off = 0;
-    }
-
-    public long getOff() {
-      return this.off;
-    }
-
-    public dbg_args setOff(long off) {
-      this.off = off;
-      setOffIsSet(true);
-      return this;
-    }
-
-    public void unsetOff() {
-      __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __OFF_ISSET_ID);
-    }
-
-    /** Returns true if field off is set (has been assigned a value) and false otherwise */
-    public boolean isSetOff() {
-      return EncodingUtils.testBit(__isset_bitfield, __OFF_ISSET_ID);
-    }
-
-    public void setOffIsSet(boolean value) {
-      __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __OFF_ISSET_ID, value);
-    }
-
-    public void setFieldValue(_Fields field, Object value) {
-      switch (field) {
-      case OFF:
-        if (value == null) {
-          unsetOff();
-        } else {
-          setOff((Long)value);
-        }
-        break;
-
-      }
-    }
-
-    public Object getFieldValue(_Fields field) {
-      switch (field) {
-      case OFF:
-        return Long.valueOf(getOff());
-
-      }
-      throw new IllegalStateException();
-    }
-
-    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
-      if (field == null) {
-        throw new IllegalArgumentException();
-      }
-
-      switch (field) {
-      case OFF:
-        return isSetOff();
-      }
-      throw new IllegalStateException();
-    }
-
-    @Override
-    public boolean equals(Object that) {
-      if (that == null)
-        return false;
-      if (that instanceof dbg_args)
-        return this.equals((dbg_args)that);
-      return false;
-    }
-
-    public boolean equals(dbg_args that) {
-      if (that == null)
-        return false;
-
-      boolean this_present_off = true;
-      boolean that_present_off = true;
-      if (this_present_off || that_present_off) {
-        if (!(this_present_off && that_present_off))
-          return false;
-        if (this.off != that.off)
-          return false;
-      }
-
-      return true;
-    }
-
-    @Override
-    public int hashCode() {
-      return 0;
-    }
-
-    public int compareTo(dbg_args other) {
-      if (!getClass().equals(other.getClass())) {
-        return getClass().getName().compareTo(other.getClass().getName());
-      }
-
-      int lastComparison = 0;
-      dbg_args typedOther = (dbg_args)other;
-
-      lastComparison = Boolean.valueOf(isSetOff()).compareTo(typedOther.isSetOff());
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-      if (isSetOff()) {
-        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.off, typedOther.off);
-        if (lastComparison != 0) {
-          return lastComparison;
-        }
-      }
-      return 0;
-    }
-
-    public _Fields fieldForId(int fieldId) {
-      return _Fields.findByThriftId(fieldId);
-    }
-
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
-      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
-    }
-
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
-      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
-    }
-
-    @Override
-    public String toString() {
-      StringBuilder sb = new StringBuilder("dbg_args(");
-      boolean first = true;
-
-      sb.append("off:");
-      sb.append(this.off);
-      first = false;
-      sb.append(")");
-      return sb.toString();
-    }
-
-    public void validate() throws org.apache.thrift.TException {
-      // check for required fields
-      // check for sub-struct validity
-    }
-
-    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
-      try {
-        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
-      } catch (org.apache.thrift.TException te) {
-        throw new java.io.IOException(te);
-      }
-    }
-
-    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
-      try {
-        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
-        __isset_bitfield = 0;
-        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
-      } catch (org.apache.thrift.TException te) {
-        throw new java.io.IOException(te);
-      }
-    }
-
-    private static class dbg_argsStandardSchemeFactory implements SchemeFactory {
-      public dbg_argsStandardScheme getScheme() {
-        return new dbg_argsStandardScheme();
-      }
-    }
-
-    private static class dbg_argsStandardScheme extends StandardScheme<dbg_args> {
-
-      public void read(org.apache.thrift.protocol.TProtocol iprot, dbg_args struct) throws org.apache.thrift.TException {
-        org.apache.thrift.protocol.TField schemeField;
-        iprot.readStructBegin();
-        while (true)
-        {
-          schemeField = iprot.readFieldBegin();
-          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
-            break;
-          }
-          switch (schemeField.id) {
-            case 1: // OFF
-              if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
-                struct.off = iprot.readI64();
-                struct.setOffIsSet(true);
-              } else { 
-                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-              }
-              break;
-            default:
-              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-          }
-          iprot.readFieldEnd();
-        }
-        iprot.readStructEnd();
-
-        // check for required fields of primitive type, which can't be checked in the validate method
-        struct.validate();
-      }
-
-      public void write(org.apache.thrift.protocol.TProtocol oprot, dbg_args struct) throws org.apache.thrift.TException {
-        struct.validate();
-
-        oprot.writeStructBegin(STRUCT_DESC);
-        oprot.writeFieldBegin(OFF_FIELD_DESC);
-        oprot.writeI64(struct.off);
-        oprot.writeFieldEnd();
-        oprot.writeFieldStop();
-        oprot.writeStructEnd();
-      }
-
-    }
-
-    private static class dbg_argsTupleSchemeFactory implements SchemeFactory {
-      public dbg_argsTupleScheme getScheme() {
-        return new dbg_argsTupleScheme();
-      }
-    }
-
-    private static class dbg_argsTupleScheme extends TupleScheme<dbg_args> {
-
-      @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, dbg_args struct) throws org.apache.thrift.TException {
-        TTupleProtocol oprot = (TTupleProtocol) prot;
-        BitSet optionals = new BitSet();
-        if (struct.isSetOff()) {
-          optionals.set(0);
-        }
-        oprot.writeBitSet(optionals, 1);
-        if (struct.isSetOff()) {
-          oprot.writeI64(struct.off);
-        }
-      }
-
-      @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, dbg_args struct) throws org.apache.thrift.TException {
-        TTupleProtocol iprot = (TTupleProtocol) prot;
-        BitSet incoming = iprot.readBitSet(1);
-        if (incoming.get(0)) {
-          struct.off = iprot.readI64();
-          struct.setOffIsSet(true);
-        }
-      }
-    }
-
-  }
-
-  public static class dbg_result implements org.apache.thrift.TBase<dbg_result, dbg_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("dbg_result");
-
-    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRUCT, (short)0);
-
-    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
-    static {
-      schemes.put(StandardScheme.class, new dbg_resultStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new dbg_resultTupleSchemeFactory());
-    }
-
-    public com.microsoft.corfu.ExtntWrap success; // required
-
-    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-      SUCCESS((short)0, "success");
-
-      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
-
-      static {
-        for (_Fields field : EnumSet.allOf(_Fields.class)) {
-          byName.put(field.getFieldName(), field);
-        }
-      }
-
-      /**
-       * Find the _Fields constant that matches fieldId, or null if its not found.
-       */
-      public static _Fields findByThriftId(int fieldId) {
-        switch(fieldId) {
-          case 0: // SUCCESS
-            return SUCCESS;
-          default:
-            return null;
-        }
-      }
-
-      /**
-       * Find the _Fields constant that matches fieldId, throwing an exception
-       * if it is not found.
-       */
-      public static _Fields findByThriftIdOrThrow(int fieldId) {
-        _Fields fields = findByThriftId(fieldId);
-        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
-        return fields;
-      }
-
-      /**
-       * Find the _Fields constant that matches name, or null if its not found.
-       */
-      public static _Fields findByName(String name) {
-        return byName.get(name);
-      }
-
-      private final short _thriftId;
-      private final String _fieldName;
-
-      _Fields(short thriftId, String fieldName) {
-        _thriftId = thriftId;
-        _fieldName = fieldName;
-      }
-
-      public short getThriftFieldId() {
-        return _thriftId;
-      }
-
-      public String getFieldName() {
-        return _fieldName;
-      }
-    }
-
-    // isset id assignments
-    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
-    static {
-      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, com.microsoft.corfu.ExtntWrap.class)));
-      metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(dbg_result.class, metaDataMap);
-    }
-
-    public dbg_result() {
-    }
-
-    public dbg_result(
-      com.microsoft.corfu.ExtntWrap success)
-    {
-      this();
-      this.success = success;
-    }
-
-    /**
-     * Performs a deep copy on <i>other</i>.
-     */
-    public dbg_result(dbg_result other) {
-      if (other.isSetSuccess()) {
-        this.success = new com.microsoft.corfu.ExtntWrap(other.success);
-      }
-    }
-
-    public dbg_result deepCopy() {
-      return new dbg_result(this);
-    }
-
-    @Override
-    public void clear() {
-      this.success = null;
-    }
-
-    public com.microsoft.corfu.ExtntWrap getSuccess() {
-      return this.success;
-    }
-
-    public dbg_result setSuccess(com.microsoft.corfu.ExtntWrap success) {
-      this.success = success;
-      return this;
-    }
-
-    public void unsetSuccess() {
-      this.success = null;
-    }
-
-    /** Returns true if field success is set (has been assigned a value) and false otherwise */
-    public boolean isSetSuccess() {
-      return this.success != null;
-    }
-
-    public void setSuccessIsSet(boolean value) {
-      if (!value) {
-        this.success = null;
-      }
-    }
-
-    public void setFieldValue(_Fields field, Object value) {
-      switch (field) {
-      case SUCCESS:
-        if (value == null) {
-          unsetSuccess();
-        } else {
-          setSuccess((com.microsoft.corfu.ExtntWrap)value);
-        }
-        break;
-
-      }
-    }
-
-    public Object getFieldValue(_Fields field) {
-      switch (field) {
-      case SUCCESS:
-        return getSuccess();
-
-      }
-      throw new IllegalStateException();
-    }
-
-    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
-      if (field == null) {
-        throw new IllegalArgumentException();
-      }
-
-      switch (field) {
-      case SUCCESS:
-        return isSetSuccess();
-      }
-      throw new IllegalStateException();
-    }
-
-    @Override
-    public boolean equals(Object that) {
-      if (that == null)
-        return false;
-      if (that instanceof dbg_result)
-        return this.equals((dbg_result)that);
-      return false;
-    }
-
-    public boolean equals(dbg_result that) {
-      if (that == null)
-        return false;
-
-      boolean this_present_success = true && this.isSetSuccess();
-      boolean that_present_success = true && that.isSetSuccess();
-      if (this_present_success || that_present_success) {
-        if (!(this_present_success && that_present_success))
-          return false;
-        if (!this.success.equals(that.success))
-          return false;
-      }
-
-      return true;
-    }
-
-    @Override
-    public int hashCode() {
-      return 0;
-    }
-
-    public int compareTo(dbg_result other) {
-      if (!getClass().equals(other.getClass())) {
-        return getClass().getName().compareTo(other.getClass().getName());
-      }
-
-      int lastComparison = 0;
-      dbg_result typedOther = (dbg_result)other;
-
-      lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-      if (isSetSuccess()) {
-        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.success, typedOther.success);
-        if (lastComparison != 0) {
-          return lastComparison;
-        }
-      }
-      return 0;
-    }
-
-    public _Fields fieldForId(int fieldId) {
-      return _Fields.findByThriftId(fieldId);
-    }
-
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
-      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
-    }
-
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
-      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
-      }
-
-    @Override
-    public String toString() {
-      StringBuilder sb = new StringBuilder("dbg_result(");
-      boolean first = true;
-
-      sb.append("success:");
-      if (this.success == null) {
-        sb.append("null");
-      } else {
-        sb.append(this.success);
-      }
-      first = false;
-      sb.append(")");
-      return sb.toString();
-    }
-
-    public void validate() throws org.apache.thrift.TException {
-      // check for required fields
-      // check for sub-struct validity
-      if (success != null) {
-        success.validate();
-      }
-    }
-
-    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
-      try {
-        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
-      } catch (org.apache.thrift.TException te) {
-        throw new java.io.IOException(te);
-      }
-    }
-
-    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
-      try {
-        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
-      } catch (org.apache.thrift.TException te) {
-        throw new java.io.IOException(te);
-      }
-    }
-
-    private static class dbg_resultStandardSchemeFactory implements SchemeFactory {
-      public dbg_resultStandardScheme getScheme() {
-        return new dbg_resultStandardScheme();
-      }
-    }
-
-    private static class dbg_resultStandardScheme extends StandardScheme<dbg_result> {
-
-      public void read(org.apache.thrift.protocol.TProtocol iprot, dbg_result struct) throws org.apache.thrift.TException {
-        org.apache.thrift.protocol.TField schemeField;
-        iprot.readStructBegin();
-        while (true)
-        {
-          schemeField = iprot.readFieldBegin();
-          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
-            break;
-          }
-          switch (schemeField.id) {
-            case 0: // SUCCESS
-              if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
-                struct.success = new com.microsoft.corfu.ExtntWrap();
-                struct.success.read(iprot);
-                struct.setSuccessIsSet(true);
-              } else { 
-                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-              }
-              break;
-            default:
-              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-          }
-          iprot.readFieldEnd();
-        }
-        iprot.readStructEnd();
-
-        // check for required fields of primitive type, which can't be checked in the validate method
-        struct.validate();
-      }
-
-      public void write(org.apache.thrift.protocol.TProtocol oprot, dbg_result struct) throws org.apache.thrift.TException {
-        struct.validate();
-
-        oprot.writeStructBegin(STRUCT_DESC);
-        if (struct.success != null) {
-          oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
-          struct.success.write(oprot);
-          oprot.writeFieldEnd();
-        }
-        oprot.writeFieldStop();
-        oprot.writeStructEnd();
-      }
-
-    }
-
-    private static class dbg_resultTupleSchemeFactory implements SchemeFactory {
-      public dbg_resultTupleScheme getScheme() {
-        return new dbg_resultTupleScheme();
-      }
-    }
-
-    private static class dbg_resultTupleScheme extends TupleScheme<dbg_result> {
-
-      @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, dbg_result struct) throws org.apache.thrift.TException {
-        TTupleProtocol oprot = (TTupleProtocol) prot;
-        BitSet optionals = new BitSet();
-        if (struct.isSetSuccess()) {
-          optionals.set(0);
-        }
-        oprot.writeBitSet(optionals, 1);
-        if (struct.isSetSuccess()) {
-          struct.success.write(oprot);
-        }
-      }
-
-      @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, dbg_result struct) throws org.apache.thrift.TException {
         TTupleProtocol iprot = (TTupleProtocol) prot;
         BitSet incoming = iprot.readBitSet(1);
         if (incoming.get(0)) {
@@ -5287,11 +4688,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -5311,7 +4714,8 @@ public class CorfuUnitServer {
     public querytrim_args(querytrim_args other) {
     }
 
-    public querytrim_args deepCopy() {
+    @Override
+	public querytrim_args deepCopy() {
       return new querytrim_args(this);
     }
 
@@ -5319,19 +4723,22 @@ public class CorfuUnitServer {
     public void clear() {
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       }
       throw new IllegalStateException();
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -5362,26 +4769,30 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(querytrim_args other) {
+    @Override
+	public int compareTo(querytrim_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      querytrim_args typedOther = (querytrim_args)other;
+      querytrim_args typedOther = other;
 
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -5416,14 +4827,16 @@ public class CorfuUnitServer {
     }
 
     private static class querytrim_argsStandardSchemeFactory implements SchemeFactory {
-      public querytrim_argsStandardScheme getScheme() {
+      @Override
+	public querytrim_argsStandardScheme getScheme() {
         return new querytrim_argsStandardScheme();
       }
     }
 
     private static class querytrim_argsStandardScheme extends StandardScheme<querytrim_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, querytrim_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, querytrim_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -5444,7 +4857,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, querytrim_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, querytrim_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -5455,7 +4869,8 @@ public class CorfuUnitServer {
     }
 
     private static class querytrim_argsTupleSchemeFactory implements SchemeFactory {
-      public querytrim_argsTupleScheme getScheme() {
+      @Override
+	public querytrim_argsTupleScheme getScheme() {
         return new querytrim_argsTupleScheme();
       }
     }
@@ -5537,11 +4952,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -5577,7 +4994,8 @@ public class CorfuUnitServer {
       this.success = other.success;
     }
 
-    public querytrim_result deepCopy() {
+    @Override
+	public querytrim_result deepCopy() {
       return new querytrim_result(this);
     }
 
@@ -5610,7 +5028,8 @@ public class CorfuUnitServer {
       __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __SUCCESS_ISSET_ID, value);
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
         if (value == null) {
@@ -5623,7 +5042,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case SUCCESS:
         return Long.valueOf(getSuccess());
@@ -5633,7 +5053,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -5675,13 +5096,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(querytrim_result other) {
+    @Override
+	public int compareTo(querytrim_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      querytrim_result typedOther = (querytrim_result)other;
+      querytrim_result typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
       if (lastComparison != 0) {
@@ -5696,15 +5118,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -5744,14 +5169,16 @@ public class CorfuUnitServer {
     }
 
     private static class querytrim_resultStandardSchemeFactory implements SchemeFactory {
-      public querytrim_resultStandardScheme getScheme() {
+      @Override
+	public querytrim_resultStandardScheme getScheme() {
         return new querytrim_resultStandardScheme();
       }
     }
 
     private static class querytrim_resultStandardScheme extends StandardScheme<querytrim_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, querytrim_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, querytrim_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -5780,7 +5207,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, querytrim_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, querytrim_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -5796,7 +5224,8 @@ public class CorfuUnitServer {
     }
 
     private static class querytrim_resultTupleSchemeFactory implements SchemeFactory {
-      public querytrim_resultTupleScheme getScheme() {
+      @Override
+	public querytrim_resultTupleScheme getScheme() {
         return new querytrim_resultTupleScheme();
       }
     }
@@ -5887,11 +5316,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -5911,7 +5342,8 @@ public class CorfuUnitServer {
     public queryck_args(queryck_args other) {
     }
 
-    public queryck_args deepCopy() {
+    @Override
+	public queryck_args deepCopy() {
       return new queryck_args(this);
     }
 
@@ -5919,19 +5351,22 @@ public class CorfuUnitServer {
     public void clear() {
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       }
       throw new IllegalStateException();
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -5962,26 +5397,30 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(queryck_args other) {
+    @Override
+	public int compareTo(queryck_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      queryck_args typedOther = (queryck_args)other;
+      queryck_args typedOther = other;
 
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -6016,14 +5455,16 @@ public class CorfuUnitServer {
     }
 
     private static class queryck_argsStandardSchemeFactory implements SchemeFactory {
-      public queryck_argsStandardScheme getScheme() {
+      @Override
+	public queryck_argsStandardScheme getScheme() {
         return new queryck_argsStandardScheme();
       }
     }
 
     private static class queryck_argsStandardScheme extends StandardScheme<queryck_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, queryck_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, queryck_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -6044,7 +5485,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, queryck_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, queryck_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -6055,7 +5497,8 @@ public class CorfuUnitServer {
     }
 
     private static class queryck_argsTupleSchemeFactory implements SchemeFactory {
-      public queryck_argsTupleScheme getScheme() {
+      @Override
+	public queryck_argsTupleScheme getScheme() {
         return new queryck_argsTupleScheme();
       }
     }
@@ -6137,11 +5580,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -6177,7 +5622,8 @@ public class CorfuUnitServer {
       this.success = other.success;
     }
 
-    public queryck_result deepCopy() {
+    @Override
+	public queryck_result deepCopy() {
       return new queryck_result(this);
     }
 
@@ -6210,7 +5656,8 @@ public class CorfuUnitServer {
       __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __SUCCESS_ISSET_ID, value);
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
         if (value == null) {
@@ -6223,7 +5670,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case SUCCESS:
         return Long.valueOf(getSuccess());
@@ -6233,7 +5681,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -6275,13 +5724,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(queryck_result other) {
+    @Override
+	public int compareTo(queryck_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      queryck_result typedOther = (queryck_result)other;
+      queryck_result typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
       if (lastComparison != 0) {
@@ -6296,15 +5746,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -6344,14 +5797,16 @@ public class CorfuUnitServer {
     }
 
     private static class queryck_resultStandardSchemeFactory implements SchemeFactory {
-      public queryck_resultStandardScheme getScheme() {
+      @Override
+	public queryck_resultStandardScheme getScheme() {
         return new queryck_resultStandardScheme();
       }
     }
 
     private static class queryck_resultStandardScheme extends StandardScheme<queryck_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, queryck_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, queryck_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -6380,7 +5835,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, queryck_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, queryck_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -6396,7 +5852,8 @@ public class CorfuUnitServer {
     }
 
     private static class queryck_resultTupleSchemeFactory implements SchemeFactory {
-      public queryck_resultTupleScheme getScheme() {
+      @Override
+	public queryck_resultTupleScheme getScheme() {
         return new queryck_resultTupleScheme();
       }
     }
@@ -6491,11 +5948,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -6531,7 +5990,8 @@ public class CorfuUnitServer {
       this.off = other.off;
     }
 
-    public ckpoint_args deepCopy() {
+    @Override
+	public ckpoint_args deepCopy() {
       return new ckpoint_args(this);
     }
 
@@ -6564,7 +6024,8 @@ public class CorfuUnitServer {
       __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __OFF_ISSET_ID, value);
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case OFF:
         if (value == null) {
@@ -6577,7 +6038,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case OFF:
         return Long.valueOf(getOff());
@@ -6587,7 +6049,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -6629,13 +6092,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(ckpoint_args other) {
+    @Override
+	public int compareTo(ckpoint_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      ckpoint_args typedOther = (ckpoint_args)other;
+      ckpoint_args typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetOff()).compareTo(typedOther.isSetOff());
       if (lastComparison != 0) {
@@ -6650,15 +6114,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -6698,14 +6165,16 @@ public class CorfuUnitServer {
     }
 
     private static class ckpoint_argsStandardSchemeFactory implements SchemeFactory {
-      public ckpoint_argsStandardScheme getScheme() {
+      @Override
+	public ckpoint_argsStandardScheme getScheme() {
         return new ckpoint_argsStandardScheme();
       }
     }
 
     private static class ckpoint_argsStandardScheme extends StandardScheme<ckpoint_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, ckpoint_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, ckpoint_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -6734,7 +6203,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, ckpoint_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, ckpoint_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -6748,7 +6218,8 @@ public class CorfuUnitServer {
     }
 
     private static class ckpoint_argsTupleSchemeFactory implements SchemeFactory {
-      public ckpoint_argsTupleScheme getScheme() {
+      @Override
+	public ckpoint_argsTupleScheme getScheme() {
         return new ckpoint_argsTupleScheme();
       }
     }
@@ -6839,11 +6310,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -6863,7 +6336,8 @@ public class CorfuUnitServer {
     public ckpoint_result(ckpoint_result other) {
     }
 
-    public ckpoint_result deepCopy() {
+    @Override
+	public ckpoint_result deepCopy() {
       return new ckpoint_result(this);
     }
 
@@ -6871,19 +6345,22 @@ public class CorfuUnitServer {
     public void clear() {
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       }
       throw new IllegalStateException();
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -6914,26 +6391,30 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(ckpoint_result other) {
+    @Override
+	public int compareTo(ckpoint_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      ckpoint_result typedOther = (ckpoint_result)other;
+      ckpoint_result typedOther = other;
 
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -6968,14 +6449,16 @@ public class CorfuUnitServer {
     }
 
     private static class ckpoint_resultStandardSchemeFactory implements SchemeFactory {
-      public ckpoint_resultStandardScheme getScheme() {
+      @Override
+	public ckpoint_resultStandardScheme getScheme() {
         return new ckpoint_resultStandardScheme();
       }
     }
 
     private static class ckpoint_resultStandardScheme extends StandardScheme<ckpoint_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, ckpoint_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, ckpoint_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -6996,7 +6479,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, ckpoint_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, ckpoint_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -7007,7 +6491,8 @@ public class CorfuUnitServer {
     }
 
     private static class ckpoint_resultTupleSchemeFactory implements SchemeFactory {
-      public ckpoint_resultTupleScheme getScheme() {
+      @Override
+	public ckpoint_resultTupleScheme getScheme() {
         return new ckpoint_resultTupleScheme();
       }
     }
@@ -7089,11 +6574,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -7129,7 +6616,8 @@ public class CorfuUnitServer {
       this.mark = other.mark;
     }
 
-    public trim_args deepCopy() {
+    @Override
+	public trim_args deepCopy() {
       return new trim_args(this);
     }
 
@@ -7162,7 +6650,8 @@ public class CorfuUnitServer {
       __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __MARK_ISSET_ID, value);
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case MARK:
         if (value == null) {
@@ -7175,7 +6664,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case MARK:
         return Long.valueOf(getMark());
@@ -7185,7 +6675,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -7227,13 +6718,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(trim_args other) {
+    @Override
+	public int compareTo(trim_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      trim_args typedOther = (trim_args)other;
+      trim_args typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetMark()).compareTo(typedOther.isSetMark());
       if (lastComparison != 0) {
@@ -7248,15 +6740,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
     }
 
@@ -7296,14 +6791,16 @@ public class CorfuUnitServer {
     }
 
     private static class trim_argsStandardSchemeFactory implements SchemeFactory {
-      public trim_argsStandardScheme getScheme() {
+      @Override
+	public trim_argsStandardScheme getScheme() {
         return new trim_argsStandardScheme();
       }
     }
 
     private static class trim_argsStandardScheme extends StandardScheme<trim_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, trim_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, trim_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -7332,7 +6829,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, trim_args struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, trim_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -7346,7 +6844,8 @@ public class CorfuUnitServer {
     }
 
     private static class trim_argsTupleSchemeFactory implements SchemeFactory {
-      public trim_argsTupleScheme getScheme() {
+      @Override
+	public trim_argsTupleScheme getScheme() {
         return new trim_argsTupleScheme();
       }
     }
@@ -7441,11 +6940,13 @@ public class CorfuUnitServer {
         _fieldName = fieldName;
       }
 
-      public short getThriftFieldId() {
+      @Override
+	public short getThriftFieldId() {
         return _thriftId;
       }
 
-      public String getFieldName() {
+      @Override
+	public String getFieldName() {
         return _fieldName;
       }
     }
@@ -7481,7 +6982,8 @@ public class CorfuUnitServer {
       this.success = other.success;
     }
 
-    public trim_result deepCopy() {
+    @Override
+	public trim_result deepCopy() {
       return new trim_result(this);
     }
 
@@ -7514,7 +7016,8 @@ public class CorfuUnitServer {
       __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __SUCCESS_ISSET_ID, value);
     }
 
-    public void setFieldValue(_Fields field, Object value) {
+    @Override
+	public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
         if (value == null) {
@@ -7527,7 +7030,8 @@ public class CorfuUnitServer {
       }
     }
 
-    public Object getFieldValue(_Fields field) {
+    @Override
+	public Object getFieldValue(_Fields field) {
       switch (field) {
       case SUCCESS:
         return Boolean.valueOf(isSuccess());
@@ -7537,7 +7041,8 @@ public class CorfuUnitServer {
     }
 
     /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
+    @Override
+	public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
       }
@@ -7579,13 +7084,14 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public int compareTo(trim_result other) {
+    @Override
+	public int compareTo(trim_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      trim_result typedOther = (trim_result)other;
+      trim_result typedOther = other;
 
       lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
       if (lastComparison != 0) {
@@ -7600,15 +7106,18 @@ public class CorfuUnitServer {
       return 0;
     }
 
-    public _Fields fieldForId(int fieldId) {
+    @Override
+	public _Fields fieldForId(int fieldId) {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+    @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
       schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
     }
 
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+    @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
       }
 
@@ -7648,14 +7157,16 @@ public class CorfuUnitServer {
     }
 
     private static class trim_resultStandardSchemeFactory implements SchemeFactory {
-      public trim_resultStandardScheme getScheme() {
+      @Override
+	public trim_resultStandardScheme getScheme() {
         return new trim_resultStandardScheme();
       }
     }
 
     private static class trim_resultStandardScheme extends StandardScheme<trim_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, trim_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void read(org.apache.thrift.protocol.TProtocol iprot, trim_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -7684,7 +7195,8 @@ public class CorfuUnitServer {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, trim_result struct) throws org.apache.thrift.TException {
+      @Override
+	public void write(org.apache.thrift.protocol.TProtocol oprot, trim_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -7700,7 +7212,8 @@ public class CorfuUnitServer {
     }
 
     private static class trim_resultTupleSchemeFactory implements SchemeFactory {
-      public trim_resultTupleScheme getScheme() {
+      @Override
+	public trim_resultTupleScheme getScheme() {
         return new trim_resultTupleScheme();
       }
     }

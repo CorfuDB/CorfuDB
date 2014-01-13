@@ -10,13 +10,12 @@ import org.apache.thrift.transport.TTransportException;
 
 import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.sequencer.CorfuSequencer;
-import com.microsoft.corfu.sequencer.CorfuSequencer.Iface;
-import com.microsoft.corfu.sequencer.CorfuSequencer.Processor;
 
 public class CorfuSequencerImpl implements CorfuSequencer.Iface {
 	
 	AtomicLong pos = new AtomicLong(0);
 	
+	@Override
 	public long nextpos(int range) throws org.apache.thrift.TException {
 		// if (pos % 10000 == 0) System.out.println("issue token " + pos + "...");
 		long ret = pos.getAndAdd(range);

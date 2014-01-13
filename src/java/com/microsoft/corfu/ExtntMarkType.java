@@ -6,18 +6,14 @@
  */
 package com.microsoft.corfu;
 
-public enum CorfuErrorCode implements org.apache.thrift.TEnum {
-  OK(0),
-  ERR_OVERWRITE(1),
-  ERR_TRIMMED(2),
-  ERR_UNWRITTEN(3),
-  ERR_BADPARAM(4),
-  ERR_FULL(5),
-  OK_SKIP(6);
+public enum ExtntMarkType implements org.apache.thrift.TEnum {
+  EX_BEGIN(0),
+  EX_MIDDLE(1),
+  EX_SKIP(2);
 
   private final int value;
 
-  private CorfuErrorCode(int value) {
+  private ExtntMarkType(int value) {
     this.value = value;
   }
 
@@ -33,22 +29,14 @@ public int getValue() {
    * Find a the enum type by its integer value, as defined in the Thrift IDL.
    * @return null if the value is not found.
    */
-  public static CorfuErrorCode findByValue(int value) { 
+  public static ExtntMarkType findByValue(int value) { 
     switch (value) {
       case 0:
-        return OK;
+        return EX_BEGIN;
       case 1:
-        return ERR_OVERWRITE;
+        return EX_MIDDLE;
       case 2:
-        return ERR_TRIMMED;
-      case 3:
-        return ERR_UNWRITTEN;
-      case 4:
-        return ERR_BADPARAM;
-      case 5:
-        return ERR_FULL;
-      case 6:
-        return OK_SKIP;
+        return EX_SKIP;
       default:
         return null;
     }

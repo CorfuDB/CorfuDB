@@ -7,6 +7,8 @@ import java.io.File;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
@@ -15,6 +17,7 @@ import org.w3c.dom.Node;
  */
 public class CorfuConfigManager 
 {
+	Logger log = LoggerFactory.getLogger(CorfuConfigManager.class);
 
 	Configuration C;
 	
@@ -69,7 +72,7 @@ public class CorfuConfigManager
 	{
 		try
 		{
-			System.out.println("Reading File... " + bootstraplocation);
+			log.info("Reading File {}... ", bootstraplocation);
 			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 		    dbf.setNamespaceAware(true);
 	
@@ -99,25 +102,22 @@ public class CorfuConfigManager
 		    	
 		    	GroupView[] grouplist = new GroupView[numgroups];
 		    	
-		    	System.out.println("Segment " + segmentindex + " with " + numgroups + " group(s), startoff = " + startoff + ", grain = " + grain + ", disksize = " + disksize);
+		    	log.info("Segment {} with {} group(s) [{}..{}] grain={}",
+		    			segmentindex, numgroups, startoff, startoff+disksize, grain);
 		    	
 		    	for(int j=0;j<segmentN.getChildNodes().getLength();j++)
 		    	{
 			    	long localstartoff = 0;
 		    		Node groupN = segmentN.getChildNodes().item(j);
-		    		//if(groupN.getNodeType()!=Node.ELEMENT_NODE) continue;
-//		    		System.out.println(segmentN.hasChildNodes());
-//		    		System.out.println(groupN);
-//		    		System.out.println(segmentN.getChildNodes().getLength());
-//		    		System.out.println(groupN.getNodeType());
-//		    		System.out.println(groupN.hasAttributes());
+
 		    		if(!(groupN.getNodeType()==Node.ELEMENT_NODE && groupN.hasAttributes())) continue;
-		    		System.out.println(groupN.getAttributes().getLength());
 		    		int gindex = Integer.parseInt(groupN.getAttributes().getNamedItem("index").getNodeValue());
 		    		int groupepoch = Integer.parseInt(groupN.getAttributes().getNamedItem("groupepoch").getNodeValue());
 		    		int numnodes = Integer.parseInt(groupN.getAttributes().getNamedItem("numnodes").getNodeValue());
 		    		int groupID = Integer.parseInt(groupN.getAttributes().getNamedItem("groupID").getNodeValue());
-		    		
+		    				    		
+		    		log.info("group {} has {} units", j, groupN.getChildNodes().getLength());
+
 		    		CorfuNode[] corfunodes = new CorfuNode[numnodes];
 //		    		for(int k=0;k<numnodes;k++)
 		    		for(int k=0;k<groupN.getChildNodes().getLength();k++)
@@ -125,6 +125,7 @@ public class CorfuConfigManager
 		    			Node nodeN = groupN.getChildNodes().item(k);
 		    			if(!(nodeN.getNodeType()==Node.ELEMENT_NODE && nodeN.hasAttributes())) continue;
 		    			String nodeaddress = nodeN.getAttributes().getNamedItem("nodeaddress").getNodeValue();
+		    			log.info("node[{}]: {}", k, nodeaddress);
 			    		int nindex = Integer.parseInt(nodeN.getAttributes().getNamedItem("index").getNodeValue());
 		    			int curlocalstartoff = Integer.parseInt(nodeN.getAttributes().getNamedItem("startoffset").getNodeValue());
 		    			if(j!=0 && curlocalstartoff!=localstartoff) throw new Exception("Bad config format: replicas must have same startoff");
