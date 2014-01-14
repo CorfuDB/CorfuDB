@@ -12,13 +12,23 @@ import org.apache.thrift.scheme.StandardScheme;
 
 import org.apache.thrift.scheme.TupleScheme;
 import org.apache.thrift.protocol.TTupleProtocol;
+import org.apache.thrift.protocol.TProtocolException;
 import org.apache.thrift.EncodingUtils;
+import org.apache.thrift.TException;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.EnumMap;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.EnumSet;
 import java.util.Collections;
 import java.util.BitSet;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CorfuHeader implements org.apache.thrift.TBase<CorfuHeader, CorfuHeader._Fields>, java.io.Serializable, Cloneable {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("CorfuHeader");
@@ -105,13 +115,11 @@ public class CorfuHeader implements org.apache.thrift.TBase<CorfuHeader, CorfuHe
       _fieldName = fieldName;
     }
 
-    @Override
-	public short getThriftFieldId() {
+    public short getThriftFieldId() {
       return _thriftId;
     }
 
-    @Override
-	public String getFieldName() {
+    public String getFieldName() {
       return _fieldName;
     }
   }
@@ -168,8 +176,7 @@ public class CorfuHeader implements org.apache.thrift.TBase<CorfuHeader, CorfuHe
     }
   }
 
-  @Override
-public CorfuHeader deepCopy() {
+  public CorfuHeader deepCopy() {
     return new CorfuHeader(this);
   }
 
@@ -285,8 +292,7 @@ public CorfuHeader deepCopy() {
     }
   }
 
-  @Override
-public void setFieldValue(_Fields field, Object value) {
+  public void setFieldValue(_Fields field, Object value) {
     switch (field) {
     case EXTNT_INF:
       if (value == null) {
@@ -323,8 +329,7 @@ public void setFieldValue(_Fields field, Object value) {
     }
   }
 
-  @Override
-public Object getFieldValue(_Fields field) {
+  public Object getFieldValue(_Fields field) {
     switch (field) {
     case EXTNT_INF:
       return getExtntInf();
@@ -343,8 +348,7 @@ public Object getFieldValue(_Fields field) {
   }
 
   /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-  @Override
-public boolean isSet(_Fields field) {
+  public boolean isSet(_Fields field) {
     if (field == null) {
       throw new IllegalArgumentException();
     }
@@ -419,14 +423,13 @@ public boolean isSet(_Fields field) {
     return 0;
   }
 
-  @Override
-public int compareTo(CorfuHeader other) {
+  public int compareTo(CorfuHeader other) {
     if (!getClass().equals(other.getClass())) {
       return getClass().getName().compareTo(other.getClass().getName());
     }
 
     int lastComparison = 0;
-    CorfuHeader typedOther = other;
+    CorfuHeader typedOther = (CorfuHeader)other;
 
     lastComparison = Boolean.valueOf(isSetExtntInf()).compareTo(typedOther.isSetExtntInf());
     if (lastComparison != 0) {
@@ -471,18 +474,15 @@ public int compareTo(CorfuHeader other) {
     return 0;
   }
 
-  @Override
-public _Fields fieldForId(int fieldId) {
+  public _Fields fieldForId(int fieldId) {
     return _Fields.findByThriftId(fieldId);
   }
 
-  @Override
-public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+  public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
     schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
   }
 
-  @Override
-public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+  public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
     schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
   }
 
@@ -545,16 +545,14 @@ public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.
   }
 
   private static class CorfuHeaderStandardSchemeFactory implements SchemeFactory {
-    @Override
-	public CorfuHeaderStandardScheme getScheme() {
+    public CorfuHeaderStandardScheme getScheme() {
       return new CorfuHeaderStandardScheme();
     }
   }
 
   private static class CorfuHeaderStandardScheme extends StandardScheme<CorfuHeader> {
 
-    @Override
-	public void read(org.apache.thrift.protocol.TProtocol iprot, CorfuHeader struct) throws org.apache.thrift.TException {
+    public void read(org.apache.thrift.protocol.TProtocol iprot, CorfuHeader struct) throws org.apache.thrift.TException {
       org.apache.thrift.protocol.TField schemeField;
       iprot.readStructBegin();
       while (true)
@@ -608,8 +606,7 @@ public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.
       struct.validate();
     }
 
-    @Override
-	public void write(org.apache.thrift.protocol.TProtocol oprot, CorfuHeader struct) throws org.apache.thrift.TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot, CorfuHeader struct) throws org.apache.thrift.TException {
       struct.validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
@@ -636,8 +633,7 @@ public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.
   }
 
   private static class CorfuHeaderTupleSchemeFactory implements SchemeFactory {
-    @Override
-	public CorfuHeaderTupleScheme getScheme() {
+    public CorfuHeaderTupleScheme getScheme() {
       return new CorfuHeaderTupleScheme();
     }
   }

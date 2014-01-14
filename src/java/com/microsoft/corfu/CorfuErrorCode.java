@@ -6,6 +6,11 @@
  */
 package com.microsoft.corfu;
 
+
+import java.util.Map;
+import java.util.HashMap;
+import org.apache.thrift.TEnum;
+
 public enum CorfuErrorCode implements org.apache.thrift.TEnum {
   OK(0),
   ERR_OVERWRITE(1),
@@ -24,8 +29,7 @@ public enum CorfuErrorCode implements org.apache.thrift.TEnum {
   /**
    * Get the integer value of this enum value, as defined in the Thrift IDL.
    */
-  @Override
-public int getValue() {
+  public int getValue() {
     return value;
   }
 

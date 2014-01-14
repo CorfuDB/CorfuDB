@@ -6,6 +6,11 @@
  */
 package com.microsoft.corfu;
 
+
+import java.util.Map;
+import java.util.HashMap;
+import org.apache.thrift.TEnum;
+
 public enum ExtntMarkType implements org.apache.thrift.TEnum {
   EX_BEGIN(0),
   EX_MIDDLE(1),
@@ -20,8 +25,7 @@ public enum ExtntMarkType implements org.apache.thrift.TEnum {
   /**
    * Get the integer value of this enum value, as defined in the Thrift IDL.
    */
-  @Override
-public int getValue() {
+  public int getValue() {
     return value;
   }
 

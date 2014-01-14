@@ -6,6 +6,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+
+import com.microsoft.corfu.CorfuUtil;
 
 public class Junk implements Runnable {
 
@@ -63,18 +68,45 @@ public class Junk implements Runnable {
 	/**
 	 * @param args
 	 */
+	
 	public static void main(String[] args) throws Exception {
 		// TODO Auto-generated method stub
 
 		new Thread(new Junk()).start();
 	}
 	
+	@SuppressWarnings("resource")
 	@Override
 	public void run() {
-		byte b = (1 << 3);
+		long trimmark =4;
+		FileChannel DriveChannel = null;
+		int UNITCAPACITY = 1000;
+		int ENTRYSIZE = 1280;
+
+		byte[] ser = null;
+		try {
+			DriveChannel = new RandomAccessFile("C:\\temp\\bar.txt", "rw").getChannel();
+/*			ser = CorfuUtil.ObjectSerialize(new Long(trimmark));
+			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+ UNITCAPACITY*2/8);
+			DriveChannel.write(ByteBuffer.wrap(ser));
+*/
+			int sz = CorfuUtil.ObjectSerialize(new Long(0)).length;
+			ByteBuffer tb = ByteBuffer.allocate(sz);
+			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+ UNITCAPACITY*2/8);
+			if (DriveChannel.read(tb) != sz) {
+				System.out.println("cannot read");
+				return;
+			}
+			trimmark = ((Long)CorfuUtil.ObjectDeserialize(tb.array())).longValue();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		
-		b &= ~(1<<3);
-		System.out.println(Integer.toHexString(b));
+		System.out.println("deserialized: " + trimmark);
 
 	}
 }
