@@ -20,8 +20,8 @@ $uid = $env:username
 
 # parse commandline arguments
 #
-$pushflag = $false
-if ($args.count -gt 0 -and $args[0] -eq "-push") { $pushflag = $true }
+$pushflag = $true
+if ($args.count -gt 0 -and $args[0] -eq "-nopush") { $pushflag = $false }
 if ($pushflag) { write-host push updates to destinations } 
 	else   { write-host do not push updates to destinations }
 
@@ -75,7 +75,8 @@ $sunits | %{ $ind=0} {
  
 	# start unit server on remote
 	#
-	doicm $rem $sb $uid -classpath $sjar $smainclass -unit $ind -drivename c:\temp\foo.txt 
+#	doicm $rem $sb $uid -classpath $sjar $smainclass -unit $ind -rammode
+	doicm $rem $sb $uid -classpath $sjar $smainclass -unit $ind -drivename c:\temp\foo.txt -recover
 
 	$ind++
 }

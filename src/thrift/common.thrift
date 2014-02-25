@@ -11,7 +11,7 @@ enum CorfuErrorCode {
 	OK_SKIP
 }
 
-enum ExtntMarkType {	EX_BEGIN, EX_MIDDLE, EX_SKIP }
+enum ExtntMarkType {	EX_EMPTY, EX_BEGIN, EX_MIDDLE, EX_SKIP }
 
 struct ExtntInfo {
 	1: i64 metaFirstOff,

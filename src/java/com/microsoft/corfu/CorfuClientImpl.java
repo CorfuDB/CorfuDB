@@ -15,7 +15,7 @@ import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.sequencer.CorfuSequencer;
 import com.microsoft.corfu.sunit.CorfuUnitServer;
 
-public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterface {
+public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterface, com.microsoft.corfu.CorfuDbgInterface {
 	Logger log = LoggerFactory.getLogger(CorfuClientImpl.class);
 	
 	CorfuConfigManager CM;
@@ -158,18 +158,28 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	@Override
 	public long appendExtnt(List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException {
 		long offset = -1;
-		CorfuErrorCode er = null;
 		ExtntInfo inf;
 		
 		try {
 			offset = sequencer.nextpos(ctnt.size()); 
 			inf  = new ExtntInfo(offset, ctnt.size(), ExtntMarkType.EX_BEGIN);
+			writeExtnt(inf, ctnt, autoTrim);
+		} catch (TException e) {
+			e.printStackTrace();
+			throw new CorfuException("append() failed");
+		}
+		return offset;
+	}
+	
+	public void writeExtnt(ExtntInfo inf, List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException {
+		CorfuErrorCode er = null;
+		try {
 			er = sunits[0].write(inf, ctnt);
 		} catch (TException e) {
 			e.printStackTrace();
 			throw new CorfuException("append() failed");
 		}
-		
+
 		if (er.equals(CorfuErrorCode.ERR_FULL) && autoTrim) {
 			try {
 				long trimoff = queryck(); 
@@ -191,8 +201,6 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		if (er.equals(CorfuErrorCode.ERR_BADPARAM)) {
 			throw new BadParamCorfuException("append() failed: bad parameter passed");
 		} 
-		
-		return offset;
 	}
 	
 	ExtntInfo lastReadExtntInfo = new ExtntInfo(-1, 1, ExtntMarkType.EX_SKIP); // meta-info of last successfully read extent  
@@ -425,7 +433,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		CorfuErrorCode er;
 		log.debug("repairNext fix {}", inf);
 		try {
-			er = sunits[0].fix(pos, inf);
+			er = sunits[0].fix(inf);
 		} catch (TException e1) {
 			e1.printStackTrace();
 			throw new CorfuException("repairNext() fix failed, communication problem; quitting");
@@ -531,6 +539,9 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		updateMeta(inf, inf);
 	}
 		
+	// from here down, implement CorfuDbgInterface for debugging:
+	// ==========================================================
+	
 	/**
 	 * return the meta-info record associated with the specified offset. used for debugging.
 	 * 
@@ -563,9 +574,24 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		}
 	}
 
+	/* (non-Javadoc)
+	 * @see com.microsoft.corfu.CorfuDbgInterface#write(long, byte[])
+	 */
+	public void write(long offset, byte[] buf) throws CorfuException {
+		if (buf.length % grainsize() != 0) {
+			throw new BadParamCorfuException("appendExtnt must be in multiples of log-entry size (" + grainsize() + ")");
+		}
+
+		int numents = buf.length/grainsize();
+		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>(numents);
+		for (int i = 0; i < numents; i++)
+			wbufs.add(ByteBuffer.wrap(buf, i*grainsize(), grainsize()));
+		ExtntInfo inf = new ExtntInfo(offset, numents, ExtntMarkType.EX_BEGIN);
+		writeExtnt(inf, wbufs, false);
+	}
 
 	
-	// from here down, implement the CorfuInterface xface for backward compatibility:
+	// from here down, implement CorfuInterface for backward compatibility:
 	// ==========================================================
 	
 	/**

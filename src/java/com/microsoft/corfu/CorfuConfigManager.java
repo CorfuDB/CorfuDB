@@ -116,17 +116,16 @@ public class CorfuConfigManager
 		    		int numnodes = Integer.parseInt(groupN.getAttributes().getNamedItem("numnodes").getNodeValue());
 		    		int groupID = Integer.parseInt(groupN.getAttributes().getNamedItem("groupID").getNodeValue());
 		    				    		
-		    		log.info("group {} has {} units", j, groupN.getChildNodes().getLength());
+		    		log.info("group {} has {} units", gindex, numnodes);
 
 		    		CorfuNode[] corfunodes = new CorfuNode[numnodes];
-//		    		for(int k=0;k<numnodes;k++)
 		    		for(int k=0;k<groupN.getChildNodes().getLength();k++)
 		    		{
 		    			Node nodeN = groupN.getChildNodes().item(k);
 		    			if(!(nodeN.getNodeType()==Node.ELEMENT_NODE && nodeN.hasAttributes())) continue;
 		    			String nodeaddress = nodeN.getAttributes().getNamedItem("nodeaddress").getNodeValue();
-		    			log.info("node[{}]: {}", k, nodeaddress);
 			    		int nindex = Integer.parseInt(nodeN.getAttributes().getNamedItem("index").getNodeValue());
+		    			log.info("node[{}]: {}", nindex, nodeaddress);
 		    			int curlocalstartoff = Integer.parseInt(nodeN.getAttributes().getNamedItem("startoffset").getNodeValue());
 		    			if(j!=0 && curlocalstartoff!=localstartoff) throw new Exception("Bad config format: replicas must have same startoff");
 		    			else localstartoff = curlocalstartoff;

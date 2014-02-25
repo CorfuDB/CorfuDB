@@ -12,9 +12,10 @@ import java.util.HashMap;
 import org.apache.thrift.TEnum;
 
 public enum ExtntMarkType implements org.apache.thrift.TEnum {
-  EX_BEGIN(0),
-  EX_MIDDLE(1),
-  EX_SKIP(2);
+  EX_EMPTY(0),
+  EX_BEGIN(1),
+  EX_MIDDLE(2),
+  EX_SKIP(3);
 
   private final int value;
 
@@ -36,10 +37,12 @@ public enum ExtntMarkType implements org.apache.thrift.TEnum {
   public static ExtntMarkType findByValue(int value) { 
     switch (value) {
       case 0:
-        return EX_BEGIN;
+        return EX_EMPTY;
       case 1:
-        return EX_MIDDLE;
+        return EX_BEGIN;
       case 2:
+        return EX_MIDDLE;
+      case 3:
         return EX_SKIP;
       default:
         return null;
