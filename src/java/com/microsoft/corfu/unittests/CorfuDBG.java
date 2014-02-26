@@ -158,7 +158,7 @@ public class CorfuDBG {
 				c = new BufferedReader(new InputStreamReader(System.in));
 				for (;;) {
 					try {
-						long head, tail, ctail;
+						long head, tail;
 						
 						head = crf.queryhead(); 
 						tail = crf.querytail(); 

@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.Lock;
 
 import org.slf4j.*;
 
@@ -44,6 +45,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
 
 	private FileChannel DriveChannel = null;
+	private Object DriveLck = new Object();
 	
 	/**
 	 * utility class. 
@@ -253,9 +255,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		storeMap.clear(firstInd, lastInd);
 	}
 	
-	private void addmetainfo(int fr, int to, ExtntMarkType et) {
-		if (to <= fr) to += UNITCAPACITY;
-		inmemoryMeta.put(fr, new ExtntInfo((long)fr,  to-fr,  et));
+	private void addmetainfo(long fromOff, int leng, ExtntMarkType et) {
+		inmemoryMeta.put((int) (fromOff % UNITCAPACITY), new ExtntInfo(fromOff,  leng,  et));
 	}
 	
 	private ExtntInfo getmetainfo(int off) {
@@ -322,7 +323,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		ExtntMarkType et = ExtntMarkType.EX_BEGIN;
 		ExtntInfo inf;
 		off = 3* (int) (trimmark % UNITCAPACITY);
-		next = storeMap.nextSetBit(off);
+		next = storeMap.nextSetBit(off); 
+		assert(next/3 == (int) (trimmark % UNITCAPACITY));
 
 		do {
 			start = next;
@@ -330,7 +332,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			if (start < 0) break;
 
 			fr = start/3;	
-			if (getmetainfo(fr) != null) break; // wrapped-around!
 			
 			if (!storeMap.get(3*fr+2)) et = ExtntMarkType.EX_EMPTY;
 			else if (storeMap.get(3*fr) && storeMap.get(3*fr+1)) et = ExtntMarkType.EX_BEGIN;
@@ -342,10 +343,14 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 			log.debug("next set bit: {}", start);
 
 			to = next/3;
-			if (et != ExtntMarkType.EX_SKIP && et != ExtntMarkType.EX_EMPTY)	addmetainfo(fr, to, et);
+			if (et != ExtntMarkType.EX_SKIP && et != ExtntMarkType.EX_EMPTY)
+				if (to < fr)
+					addmetainfo(trimmark+fr, to+UNITCAPACITY-fr, et);
+				else
+					addmetainfo(trimmark+fr, to-fr, et);
 			log.info("reconstructed extent {}..{} type={}", fr, to, et);
 			
-			if (next == off) break;
+			if (to == (int) (trimmark % UNITCAPACITY)) break; // wrapped-around, done!
 		} while (true) ;
 	}
 	/**
@@ -452,7 +457,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 					for(;;) {
 						try {
 							DriveChannel.force(false);
-							synchronized(this) { this.notifyAll(); }
+							synchronized(DriveLck) { DriveLck.notifyAll(); }
 							Thread.sleep(1);
 						} catch(Exception e) {
 							e.printStackTrace();
@@ -612,19 +617,18 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		if (RAMMODE) {
 			if (et != ExtntMarkType.EX_SKIP) addrambufs(from, to, wbufs);
 			markExtntSet(from, to, et);
-			addmetainfo(from, to, et);
 		} else {
 			try {
 				if (et != ExtntMarkType.EX_SKIP) writebufs(from, to, wbufs);
 				markExtntSet(from, to, et);
 				writebitmap(from, to+1);
-				addmetainfo(from, to, et);
 			} catch (IOException e) {
 				log.warn("cannot write entry {} to store, IO error; quitting", inf);
 				e.printStackTrace();
 				System.exit(1);
 			}
 		}
+		addmetainfo(inf.getMetaFirstOff(), inf.getMetaLength(), et);
 	}
 		
 	/**
@@ -830,10 +834,10 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 */
     @Override
 	synchronized public void sync() throws org.apache.thrift.TException {
-    	try { this.wait(); } catch (Exception e) {
+    	synchronized(DriveLck) { try { DriveLck.wait(); } catch (Exception e) {
     		log.error("forcing sync to persistent store failed, quitting");
     		System.exit(1);
-    	}
+    	}}
     }
 
 	@Override
@@ -866,11 +870,15 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
     	if (!RAMMODE) {
 	    	try {
 	    	   	writebitmap(relTrimmark, relMark);
-	        	try { this.wait(); } catch (Exception e) {
-	        		log.error("forcing sync to persistent store failed, quitting");
-	        		System.exit(1);
+	    	   	log.debug("forcing bitmap and trimmark to disk");
+	    	   	synchronized(DriveLck) {
+	    	   		try { DriveLck.wait(); } catch (InterruptedException e) {	    	   	
+		        		log.error("forcing sync to persistent store failed, quitting");
+		        		System.exit(1);
+	    	   		}
 	        	}
 	    	    writetrimmark();
+	        	log.info("trimmark persisted to disk");
 			} catch (IOException e) {
 				log.error("writing trimmark failed");
 				e.printStackTrace();

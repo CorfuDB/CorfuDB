@@ -69,10 +69,23 @@ public class Junk implements Runnable {
 	 * @param args
 	 */
 	
+	static Object lck = new Object();
+	
 	public static void main(String[] args) throws Exception {
 		// TODO Auto-generated method stub
 
+		new Thread(new Runnable() {
+			public void run() {
+				synchronized(lck) {
+					System.out.println("waiting..");
+					try { lck.wait(); } catch (InterruptedException e) { System.out.println("interrupted");}
+				}
+				System.out.println("done waiting..");
+			}
+		}).start();
+
 		new Thread(new Junk()).start();
+		
 	}
 	
 	@SuppressWarnings("resource")
@@ -107,6 +120,8 @@ public class Junk implements Runnable {
 		}
 		
 		System.out.println("deserialized: " + trimmark);
+		
+		synchronized(lck) { lck.notify(); }
 
 	}
 }
