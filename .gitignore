@@ -43,6 +43,7 @@ local.properties
 
 # Build results
 
+*.class
 [Dd]ebug/
 [Rr]elease/
 x64/
@@ -213,3 +214,9 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
+
+
+# Intellij
+*.iml
+.idea
+target
