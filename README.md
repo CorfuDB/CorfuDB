@@ -10,17 +10,23 @@ There is a simple Helloworld.java example in the unittests folder.
 It walks you through starting a CORFU client and doing simple log writing/reading.
 There are other simple examples under unittests, like WriteTester.java (writer-loop) and ReaderTester.java (reader loop).
 
+There is also a very primitive interactive debugger, com.microsoft.corfu.unittests.CorfuDBG . It lets you manually append entries to the look and read the meta-information back from the log.
+
 =============================================================== 
 Bringing up Corfu:
 ==============================================================
 
 The CORFU log is striped over a cluster of storage-units, and employs one a sequencer. The configuration is described
 in file named 0.aux. 0.aux is an XML file; you may look at scripts/0.aux for an example. It is pretty self explanatory.
-**all Corfu programs look for 0.aux in their classpath directory, you must place a copy there**.
+
+
+**To run corfu, you must have the file 0.aux in your classpath**.
+
+**The file and simplelogger.properties in your classpath controls your logging options**.
 
 
 Each storage unit is started by running
-       java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <unit #> [-rammode] [-drivename <drivename>] [-recover]
+       java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <unit #> <-rammode | -drivename <drivename> [-recover]>
        
 the sequencer is run by
 	java com.microsoft.corfu.sequencer.CorfuSequencerImpl

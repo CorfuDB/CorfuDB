@@ -475,7 +475,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 		} else {
 			storeMap = new CyclicBitSet(3*UNITCAPACITY); // TODO if UNITCAPACITY is more than MAXINT, 
 			markExtntSet(0, UNITCAPACITY, ExtntMarkType.EX_EMPTY);
-			writebitmap(0, 1);
+			if (!RAMMODE) writebitmap(0, 1);
 		}
 		// make storeMap a list of bitmaps, each one of MAXINT size
 
