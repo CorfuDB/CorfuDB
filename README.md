@@ -2,15 +2,15 @@ CORFU
 =====
 
 CORFU is a distributed log service. 
-Clients link with a client-side library, com.microsoft.corfu.CorfuClientImpl.java, 
-which implements a simple API (see com.microsoft.corfu.CorfuExtendedInterface.java, 
-    which extends com.microsoft.corfu.CorfuInterface.java).
+Clients link with a client-side library, `com.microsoft.corfu.CorfuClientImpl.java`, 
+which implements a simple API (see `com.microsoft.corfu.CorfuExtendedInterface.java`, 
+    which extends `com.microsoft.corfu.CorfuInterface.java`).
     
-There is a simple Helloworld.java example in the unittests folder.
+There is a simple `Helloworld.java` example in the `unittests` folder.
 It walks you through starting a CORFU client and doing simple log writing/reading.
-There are other simple examples under unittests, like WriteTester.java (writer-loop) and ReaderTester.java (reader loop).
+There are other simple examples under `unittests`, like `WriteTester.java` (writer-loop) and `ReaderTester.java` (reader loop).
 
-There is also a very primitive interactive debugger, com.microsoft.corfu.unittests.CorfuDBG . It lets you manually append entries to the look and read the meta-information back from the log.
+There is also a very primitive interactive debugger, `com.microsoft.corfu.unittests.CorfuDBG` . It lets you manually append entries to the look and read the meta-information back from the log.
 
 =============================================================== 
 Bringing up a Corfu service:
@@ -20,33 +20,36 @@ The CORFU log is striped over a cluster of storage-units, and employs a sequence
 in file named 0.aux. 0.aux is an XML file; you may look at scripts/0.aux for an example. It is pretty self explanatory.
 
 
-**To run corfu, you must have the file 0.aux in your classpath**.
+To run corfu, you must have the **file 0.aux in your classpath**.
 
-**The file and simplelogger.properties in your classpath controls your logging options**.
+The file and **simplelogger.properties in your classpath** controls your logging options.
+
 
 
 Each storage unit is started by running
-       java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <unit num> -drivename <drivename> [-recover]
+
+>    java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <unit num> -drivename <drivename> [-recover]
 
 Another option is to run in-memory, without persistence:
-	       java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <unit num> <-rammode>
+
+>	java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <unit num> <-rammode>
        
 the sequencer is run by
-	java com.microsoft.corfu.sequencer.CorfuSequencerImpl
 
-The file scripts/runcorfu.ps1 contains a powershell script that automatically deploys corfu,
-based on the configuration description in 0.aux . Run 'runcorfu.ps1' to make sure any updates you introduce
-to binaries or to 0.aux are copied to all of the deployed machines.  
+>	java com.microsoft.corfu.sequencer.CorfuSequencerImpl
+
+The file `scripts/runcorfu.ps1` contains a powershell script that automatically deploys CORFU,
+based on the configuration description in `0.aux`.  
 
 ========
 Eclipse installation guidelines:    
 ================================================================
-CORFU uses maven for building: mvn install should build 
+CORFU uses maven for building, simply type on a command line: 
+> mvn install 
 
 To import CORFU into Eclipse do:
 
-File -> Import -> Genereal -> Existing Project into Workspace -> Next
+- File -> Import -> Genereal -> Existing Project into Workspace -> Next
+- point the file-browser to the root of the CORFU hierarchy (where `.project `sits).
 
-then point the file-browset to the root of the CORFU hierarchy (where .project sits).
-
-Eclipse should be able to automatically build CORFU 
+(Eclipse should then be able to automatically build CORFU.)
