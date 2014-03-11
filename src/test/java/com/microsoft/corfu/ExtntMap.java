@@ -1,4 +1,4 @@
-package com.microsoft.corfu.unittests;
+package com.microsoft.corfu;
 
 
 import java.nio.ByteBuffer;

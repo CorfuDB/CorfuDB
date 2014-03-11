@@ -6,7 +6,7 @@
  * The main() procedure here appends two extents of different size to the log,
  * and then reads two extents from the head of the log.
  */
-package com.microsoft.corfu.unittests;
+package com.microsoft.corfu;
 
 import java.io.File;
 

@@ -3,7 +3,7 @@
 //
 
 
-package com.microsoft.corfu.unittests;
+package com.microsoft.corfu;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;

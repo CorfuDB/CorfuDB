@@ -1,4 +1,4 @@
-package com.microsoft.corfu.unittests;
+package com.microsoft.corfu;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;

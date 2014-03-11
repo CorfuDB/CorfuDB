@@ -1,11 +1,11 @@
 /**
  * @author dalia
  * 
- * simple write-test. 
+ * simple read-test. 
  * creates <wthreads> (param) writer threads. Each writer-thread appends <repeat> entries of size <size> to the log. 
  */
 
-package com.microsoft.corfu.unittests;
+package com.microsoft.corfu;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;
@@ -19,15 +19,15 @@ import org.slf4j.LoggerFactory;
 import com.microsoft.corfu.CorfuClientImpl;
 import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuException;
+import com.microsoft.corfu.ExtntWrap;
 
-public class WriteTester {
-	static private Logger log = LoggerFactory.getLogger(WriteTester.class);
+public class ReadTester {
+	static private Logger log = LoggerFactory.getLogger(ReadTester.class);
 
-	static AtomicInteger wcommulative = new AtomicInteger(0);
+	static AtomicInteger rcommulative = new AtomicInteger(0);
 	
 	static private CorfuConfigManager CM;
 	static private int nrepeat = 0;
-	static private int entsize = 0;
 	
 	/**
 	 * @param args
@@ -35,7 +35,7 @@ public class WriteTester {
 	 */
 	public static void main(String[] args) throws Exception {
 		
-		int nwriterthreads = 0;
+		int nreaderthreads = 0;
 
 		// parse args
 		for (int i = 0; i < args.length; ) {
@@ -43,38 +43,33 @@ public class WriteTester {
 				nrepeat = Integer.valueOf(args[i+1]);
 				System.out.println("repeat count: " + nrepeat);
 				i += 2;
-			} else if (args[i].startsWith("-wthreads") && i < args.length-1) {
-				nwriterthreads = Integer.valueOf(args[i+1]);
-				System.out.println("concurrent client writer-threads: " + nwriterthreads);
-				i += 2;
-			} else if (args[i].startsWith("-size") && i < args.length-1) {
-				entsize = Integer.valueOf(args[i+1]);
-				System.out.println("entry size: " + entsize);
+			} else if (args[i].startsWith("-rthreads") && i < args.length-1) {
+				nreaderthreads = Integer.valueOf(args[i+1]);
+				System.out.println("concurrent client reader-threads: " + nreaderthreads);
 				i += 2;
 			} else {
 				System.out.println("unknown param: " + args[i]);
 				throw new Exception("Usage: " + CorfuRWTester.class.getName() + 
-						" [-wthreads <numwriterthreads>][-repeat <nrepeat>] [-size <entry-size>]");
+						" [-rthreads <numreaderthreads>][-repeat <nrepeat>]");
 			}
 		}
 		
-		if (nrepeat <= 0 || entsize <= 0 || nwriterthreads <= 0) {
+		if (nrepeat <= 0 || nreaderthreads <= 0) {
 			throw new Exception("Usage: " + CorfuRWTester.class.getName() + 
-					" [-wthreads <numwriterthreads>][-repeat <nrepeat>] [-size <entry-size>]");
+					" [-rthreads <numreaderthreads>][-repeat <nrepeat>]");
 
 		}
-		System.out.println("Starting write tester with " +
-				nwriterthreads + " threads, each writing " +
-				nrepeat + " extents of size " +
-				entsize + " each.");
+		System.out.println("Starting read tester with " +
+				nreaderthreads + " threads, each reading " +
+				nrepeat + " extents");
 		
 		
 		CM = new CorfuConfigManager(new File("./0.aux"));
 
 		// start a thread pool, each executing the simple run() loop inlined here
 		//
-		ExecutorService executor = Executors.newFixedThreadPool(nwriterthreads);
-		for (int i = 0; i < nwriterthreads; i++) {
+		ExecutorService executor = Executors.newFixedThreadPool(nreaderthreads);
+		for (int i = 0; i < nreaderthreads; i++) {
 			executor.execute(new Runnable() {
 				@Override
 				public void run() {
@@ -90,10 +85,9 @@ public class WriteTester {
 
 					// append to log
 					try {
-						byte[] bb = new byte[entsize];
 						for (int r = 0; r < nrepeat; r++) {
-							crf.appendExtnt(bb, entsize);
-							wcommulative.incrementAndGet();
+							ExtntWrap w = crf.readExtnt();
+							rcommulative.incrementAndGet();
 						}
 					} catch (CorfuException e) {
 						System.out.println("Corfu error in appendExtnt: " + e.er + ". Quitting");
@@ -115,10 +109,10 @@ public class WriteTester {
 
 				for (;;) {
 					elapsetime = (System.currentTimeMillis() - starttime) / 1000;
-					long w = wcommulative.get();
+					long w = rcommulative.get();
 					if (elapsetime > 0)
 							if (lastwrite < w) {
-							log.info("{} secs, WRITEs {} ({}/sec) ",
+							log.info("{} secs, READs {} ({}/sec) ",
 							elapsetime, 
 							w, w/elapsetime);
 							lastwrite = w;
