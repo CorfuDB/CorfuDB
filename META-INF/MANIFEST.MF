@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: corfu
+Bundle-SymbolicName: corfu
+Bundle-Version: 1.0.0.qualifier
+Export-Package: com.microsoft.corfu,
+ com.microsoft.corfu.sequencer,
+ com.microsoft.corfu.sunit
