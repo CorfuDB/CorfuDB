@@ -14,11 +14,14 @@ import java.util.List;
 public interface CorfuExtendedInterface extends CorfuInterface {
 	
 	/**
-	 * Returns a "grain" size, the equivalent of an individual Corfu log-page
-	 *
-	 * @return		entry size
+	 * @return		a "grain" size, the equivalent of an individual Corfu log-page
 	 */
 	public int grainsize() throws CorfuException;
+	
+	/**
+	 * @return an object describing the configuration, @see CorfuConfigManager
+	 */
+	public CorfuConfigManager getConfig();
 
 	/**
 	 * Reads the next extent; it remembers the last read extent (starting with zero).

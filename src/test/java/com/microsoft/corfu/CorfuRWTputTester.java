@@ -79,15 +79,14 @@ import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.CorfuExtendedInterface;
 import com.microsoft.corfu.ExtntWrap;
 
-public class CorfuRWTester {
-	static private Logger log = LoggerFactory.getLogger(CorfuRWTester.class);
+public class CorfuRWTputTester {
+	static private Logger log = LoggerFactory.getLogger(CorfuRWTputTester.class);
 
 	static AtomicInteger wcommulative = new AtomicInteger(0);
 	static AtomicInteger rcommulative = new AtomicInteger(0);
 	
-	static private CorfuConfigManager CM;
-	static CorfuRWTester tster;
-	static private int nrepeat = 100000;
+	static CorfuRWTputTester tster;
+	static private int nrepeat = 0;
 	static private int entsize = 0;
 	static private int printfreq = 1000;
 	
@@ -99,10 +98,9 @@ public class CorfuRWTester {
 		
 		int nwriterthreads = 5;
 		int nreaderthreads = 1;
+		String Usage = "Usage: " + CorfuRWTputTester.class.getName() + 
+				" [-rthreads <numreaderthreads>] [-wthreads <numwriterthreads>]-repeat <nrepeat> -size <entry-size> [-printfreq <frequency>]";
 		
-		CM = new CorfuConfigManager(new File("./0.aux"));
-		entsize = CM.getGrain(); // a default
-
 		// parse args
 		for (int i = 0; i < args.length; ) {
 			if (args[i].startsWith("-repeat") && i < args.length-1) {
@@ -127,12 +125,12 @@ public class CorfuRWTester {
 				i += 2;
 			} else {
 				System.out.println("unknown param: " + args[i]);
-				throw new Exception("Usage: " + CorfuRWTester.class.getName() + 
-						" [-rthreads <numreaderthreads>] [-wthreads <numwriterthreads>][-repeat <nrepeat>] [-size <entry-size>] [-printfreq <frequency>]");
+				throw new Exception(Usage);
 			}
 		}
-
-		tster = new CorfuRWTester();
+		if (entsize == 0 || nrepeat == 0) throw new Exception(Usage);
+		
+		tster = new CorfuRWTputTester();
 		
 		ExecutorService executor = Executors.newFixedThreadPool(nwriterthreads + nreaderthreads);
 		for (int i = 0; i < nwriterthreads; i++) {
@@ -192,9 +190,11 @@ public class CorfuRWTester {
 		ExtntWrap ret = null;
 		long trimpos = 0;
 		long nextread = 0;
+		CorfuConfigManager CM = null;
 
 		try {
-			crf = new CorfuClientImpl(CM);
+			crf = new CorfuClientImpl();
+			CM = crf.getConfig();
 		} catch (CorfuException e) {
 			log.error("reader cannot set connection to Corfu service, quitting");
 			return;
@@ -240,17 +240,19 @@ public class CorfuRWTester {
 	
 	private void writerloop() {
 		int rpt = 0;
-		byte[] bb = new byte[entsize];
 		CorfuExtendedInterface crf;
+		CorfuConfigManager CM = null;
 		long off, lasthead;
 	
 		try {
-			crf = new CorfuClientImpl(CM);
+			crf = new CorfuClientImpl();
+			CM = crf.getConfig();
 			lasthead = crf.queryhead();
 		} catch (CorfuException e) {
 			log.error("reader cannot set connection to Corfu service, quitting");
 			return;
 		}
+		byte[] bb = new byte[entsize];
 
 		while(rpt < nrepeat) {
 			try {

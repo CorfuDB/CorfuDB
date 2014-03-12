@@ -358,7 +358,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 * @throws Exception 
 	 */
 	public static void main(String[] args) throws Exception {
-		CorfuConfigManager CM = new CorfuConfigManager(new File("./0.aux"));
+		CorfuConfigManager CM = new CorfuConfigManager(new File("./corfu.xml"));
 		int sid = -1;
 		ENTRYSIZE = CM.getGrain();
 		UNITCAPACITY = CM.getUnitsize(); 

@@ -1,6 +1,7 @@
 package com.microsoft.corfu;
 
 import java.util.List;
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
@@ -23,11 +24,11 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	CorfuSequencer.Client sequencer;
 	TTransport[] transports;
 	
-	public CorfuClientImpl(CorfuConfigManager CM) throws CorfuException {
+	public CorfuClientImpl() throws CorfuException {
 		
 		log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}", 
 				log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
-		this.CM = CM;
+		CM = new CorfuConfigManager(new File("./confu.xml"));
 		buildClientConnections();
 	}
 	
@@ -107,6 +108,11 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 	public int grainsize() throws CorfuException{
 		return CM.getGrain();
 	}
+
+	/**
+	 * @return an object describing the configuration, @see CorfuConfigManager
+	 */
+	public CorfuConfigManager getConfig() { return CM; }
 
 	/**
 	 * Breaks the bytebuffer is gets as parameter into grain-size buffers, and invokes appendExtnt(List<ByteBuffer>);

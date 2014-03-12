@@ -5,25 +5,25 @@ CORFU is a distributed log service.
 Clients link with a client-side library, `com.microsoft.corfu.CorfuClientImpl.java`, 
 which implements a simple API (see `com.microsoft.corfu.CorfuExtendedInterface.java`, 
     which extends `com.microsoft.corfu.CorfuInterface.java`).
-    
-There is a simple `Helloworld.java` example in the `unittests` folder.
-It walks you through starting a CORFU client and doing simple log writing/reading.
-There are other simple examples under `unittests`, like `WriteTester.java` (writer-loop) and `ReaderTester.java` (reader loop).
 
-There is also a very primitive interactive debugger, `com.microsoft.corfu.unittests.CorfuDBG` . It lets you manually append entries to the look and read the meta-information back from the log.
+the `test` folder contains several useful examples:
+1. `Helloworld.java`  - walks you through starting a CORFU client, two appends (of different size extents) followed by two reads. 
+2. `CorfuAppendTputTester.java` - a customizable append-loop
+3. `CorfuReadTputTester.java` - a customizable read-loop
+4. `CorfuRWTputTester.java` - a customizable multi-threaded client, with a mix of read/append threads
+5. `CorfuShell` - a (**very primitive**) interactive debugger. It lets you manually append entries to the log and read the meta-information back from the log.
 
 =============================================================== 
 Bringing up a Corfu service:
 ==============================================================
 
-The CORFU log is striped over a cluster of storage-units, and employs a sequencer. The configuration is described
-in file named 0.aux. 0.aux is an XML file; you may look at scripts/0.aux for an example. It is pretty self explanatory.
+The CORFU log is striped over a cluster of storage-units, and employs a sequencer. You must specify an initial configuration for the clients to find the CORFU service. The CORFU library looks for a file named `corfu.xml` in the working directory.
 
+The `scripts` directory contains useful resources for deployment:
 
-To run corfu, you must have the **file 0.aux in your classpath**.
-
-The file and **simplelogger.properties in your classpath** controls your logging options.
-
+1. example `corfu.xml` file
+2. example `simplelogger.properties` for controling your logging options
+3. `runcorfu.ps1` is a PowerShell script which deploys CORFU servers and sequencer off the configuration
 
 
 Each storage unit is started by running
@@ -38,8 +38,6 @@ the sequencer is run by
 
 >	java com.microsoft.corfu.sequencer.CorfuSequencerImpl
 
-The file `scripts/runcorfu.ps1` contains a powershell script that automatically deploys CORFU,
-based on the configuration description in `0.aux`.  
 
 ========
 Eclipse installation guidelines:    

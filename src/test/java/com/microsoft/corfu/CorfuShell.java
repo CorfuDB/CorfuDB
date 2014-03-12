@@ -12,7 +12,7 @@ import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.ExtntWrap;
 
-public class CorfuShellTest {
+public class CorfuShell {
 
 	static CorfuConfigManager CM = null;
 	static CorfuClientImpl crf = null;
@@ -148,8 +148,7 @@ public class CorfuShellTest {
 				helper h;
 
 				try {
-					CM = new CorfuConfigManager(new File("./0.aux"));
-					crf = new CorfuClientImpl(CM);
+					crf = new CorfuClientImpl();
 				} catch (CorfuException e) {
 					e.printStackTrace();
 					return;

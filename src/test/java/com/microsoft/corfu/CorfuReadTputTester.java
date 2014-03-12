@@ -7,7 +7,6 @@
 
 package com.microsoft.corfu;
 
-import java.io.File;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -17,16 +16,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.microsoft.corfu.CorfuClientImpl;
-import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.ExtntWrap;
 
-public class ReadTester {
-	static private Logger log = LoggerFactory.getLogger(ReadTester.class);
+public class CorfuReadTputTester {
+	static private Logger log = LoggerFactory.getLogger(CorfuReadTputTester.class);
 
 	static AtomicInteger rcommulative = new AtomicInteger(0);
 	
-	static private CorfuConfigManager CM;
 	static private int nrepeat = 0;
 	
 	/**
@@ -49,13 +46,13 @@ public class ReadTester {
 				i += 2;
 			} else {
 				System.out.println("unknown param: " + args[i]);
-				throw new Exception("Usage: " + CorfuRWTester.class.getName() + 
+				throw new Exception("Usage: " + CorfuReadTputTester.class.getName() + 
 						" [-rthreads <numreaderthreads>][-repeat <nrepeat>]");
 			}
 		}
 		
 		if (nrepeat <= 0 || nreaderthreads <= 0) {
-			throw new Exception("Usage: " + CorfuRWTester.class.getName() + 
+			throw new Exception("Usage: " + CorfuReadTputTester.class.getName() + 
 					" [-rthreads <numreaderthreads>][-repeat <nrepeat>]");
 
 		}
@@ -63,9 +60,6 @@ public class ReadTester {
 				nreaderthreads + " threads, each reading " +
 				nrepeat + " extents");
 		
-		
-		CM = new CorfuConfigManager(new File("./0.aux"));
-
 		// start a thread pool, each executing the simple run() loop inlined here
 		//
 		ExecutorService executor = Executors.newFixedThreadPool(nreaderthreads);
@@ -77,7 +71,7 @@ public class ReadTester {
 					
 					// establish client connection with Corfu service
 					try {
-						crf = new CorfuClientImpl(CM);
+						crf = new CorfuClientImpl();
 					} catch (CorfuException e) {
 						System.out.println("cannot establish connection to Corfu service, quitting");
 						return;

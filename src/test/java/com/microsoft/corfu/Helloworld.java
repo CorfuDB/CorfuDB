@@ -18,12 +18,11 @@ import com.microsoft.corfu.ExtntWrap;
 public class Helloworld {
 
 	public static void main(String[] args) {
-		CorfuConfigManager CM = new CorfuConfigManager(new File("./0.aux"));
 		CorfuClientImpl crf;
 		
 		// establish client connection with Corfu service
 		try {
-			crf = new CorfuClientImpl(CM);
+			crf = new CorfuClientImpl();
 		} catch (CorfuException e) {
 			System.out.println("cannot establish connection to Corfu service, quitting");
 			return;
@@ -31,7 +30,7 @@ public class Helloworld {
 
 		// append to log
 		try {
-			int sz = CM.getGrain();			
+			int sz = crf.grainsize();			
 			long offset = crf.appendExtnt(new byte[sz], sz);
 			System.out.println("appended " + sz + " bytes to log at position " + offset);
 			

@@ -92,7 +92,7 @@ public class CorfuSequencerImpl implements CorfuSequencer.Iface {
 	 * @throws Exception 
 	 */
 	public static void main(String[] args) throws Exception {
-		CorfuConfigManager CM = new CorfuConfigManager(new File("./0.aux"));
+		CorfuConfigManager CM = new CorfuConfigManager(new File("./corfu.xml"));
 
 		int port = CM.getSequencer().getPort();
 		CorfuSequencerImpl CI = new CorfuSequencerImpl();
