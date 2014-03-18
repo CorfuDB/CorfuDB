@@ -28,7 +28,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuExtendedInterfa
 		
 		log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}", 
 				log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
-		CM = new CorfuConfigManager(new File("./confu.xml"));
+		CM = new CorfuConfigManager(new File("./corfu.xml"));
 		buildClientConnections();
 	}
 	

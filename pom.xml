@@ -10,6 +10,12 @@
     <version>0.1-SNAPSHOT</version>
     <name>Corfu</name>
 
+    <!-- package-in an examples direcotry -->
+    <packaging>pom</packaging>
+    <modules>
+      <module>CORFULIB</module>
+      <module>CORFUAPPS</module>
+    </modules>
 
     <organization>
         <name>Microsoft</name>
