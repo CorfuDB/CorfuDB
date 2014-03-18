@@ -1,12 +1,11 @@
 CORFU
 =====
 
-CORFU is a distributed log service. 
-Clients link with a client-side library, `com.microsoft.corfu.CorfuClientImpl.java`, 
+CORFU is a distributed log service. `CORFULIB` contain the corfu core. It includes a cient-side library, `com.microsoft.corfu.CorfuClientImpl.java`, 
 which implements a simple API (see `com.microsoft.corfu.CorfuExtendedInterface.java`, 
     which extends `com.microsoft.corfu.CorfuInterface.java`).
 
-the `test` folder contains several useful examples:
+`CORFUAPPS` contains several useful examples:
 1. `Helloworld.java`  - walks you through starting a CORFU client, two appends (of different size extents) followed by two reads. 
 2. `CorfuAppendTputTester.java` - a customizable append-loop
 3. `CorfuReadTputTester.java` - a customizable read-loop
