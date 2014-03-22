@@ -13,11 +13,15 @@ rjb *
 
 # distribution parameters
 #
-$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition | split-path -parent
-$configFileName = ".\corfu.xml"
-$loggingName = ".\simplelogger.properties"
-$corfu = ls $scriptPath"\CORFUAPPS\target\corfu-examples-*-SNAPSHOT-shaded.jar"
-$jarfile = $corfu.name
+$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition 
+
+$configFileName = $scriptPath + "\corfu.xml"
+$loggingName = $scriptPath + "\simplelogger.properties"
+
+$corfu = split-path -parent $scriptPath
+$examples = ls $corfu"\CORFUAPPS\target\corfu-examples-*-SNAPSHOT-shaded.jar"
+$cp = $examples.name + ";."
+write-host classpath will be $cp
 $uid = $env:username
 
 # parse commandline arguments
@@ -43,14 +47,14 @@ write-host tokenserver on machine $rem port $port
 # push sequencer-jar to remote
 #
 if ($pushflag) { 
-	xcopy $corfu \\$rem\c$\users\$uid\corfu-bin /Y /D 
+	xcopy $examples \\$rem\c$\users\$uid\corfu-bin /Y /D 
 	xcopy $configFileName  \\$rem\c$\users\$uid\corfu-bin /Y /D
 	xcopy $loggingName  \\$rem\c$\users\$uid\corfu-bin /Y /D
 }
  
 # start sequencer on remote
 #
-doicm $rem $sb $uid -classpath $jarfile $smainclass
+doicm $rem $sb $uid -classpath $cp $smainclass
 
 # sunit servers 
 # ################################################################################################################
@@ -67,15 +71,15 @@ $sunits | %{ $ind=0} {
 	#
 	$j = $binDir + $sjar
 	if ($pushflag) { 
-		xcopy $corfu \\$rem\c$\users\$uid\corfu-bin /Y /D 
+		xcopy $examples\\$rem\c$\users\$uid\corfu-bin /Y /D 
 		xcopy $configFileName  \\$rem\c$\users\$uid\corfu-bin /Y /D
 		xcopy $loggingName  \\$rem\c$\users\$uid\corfu-bin /Y /D
 	}
  
 	# start unit server on remote
 	#
-	doicm $rem $sb $uid -classpath $jarfile $smainclass -unit $ind -rammode
-#	doicm $rem $sb $uid -classpath $jarfile $smainclass -unit $ind -drivename c:\temp\foo.txt -recover
+	doicm $rem $sb $uid -classpath $cp $smainclass -unit $ind":0" -rammode
+#	doicm $rem $sb $uid -classpath $cp $smainclass -unit $ind":0" -drivename c:\temp\foo.txt -recover
 
 	$ind++
 }

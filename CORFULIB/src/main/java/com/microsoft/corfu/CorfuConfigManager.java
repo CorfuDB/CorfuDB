@@ -84,9 +84,16 @@ public class CorfuConfigManager
 			
 		    Node N = doc.getElementsByTagName("systemview").item(0);
 		    int numsegments = Integer.parseInt(N.getAttributes().getNamedItem("NumConfigs").getNodeValue());
+		    
 //		    System.out.println("numsegments = " + numsegments);
 		    int globalepoch = Integer.parseInt(N.getAttributes().getNamedItem("GlobalEpoch").getNodeValue());
 //		    System.out.println("globalepoch = " + globalepoch);
+		    
+		    // log is mapped onto
+		    // - list of SegmentView's
+		    //   -- each segment striped over a list of replicas GroupViews
+		    //      -- each group has a list of ChildNodes
+		    //
 		    
 		    SegmentView[] segmentlist = new SegmentView[numsegments];
 		    for(int i=0;i<numsegments;i++)
@@ -99,6 +106,7 @@ public class CorfuConfigManager
 		    	int disksize = Integer.parseInt(segmentN.getAttributes().getNamedItem("disksize").getNodeValue());
 		    	String tokenserveraddress = segmentN.getAttributes().getNamedItem("tokenserver").getNodeValue();
 	    		CorfuNode tokenserver = new CorfuNode(tokenserveraddress);
+	    	
 		    	
 		    	GroupView[] grouplist = new GroupView[numgroups];
 		    	
@@ -115,7 +123,7 @@ public class CorfuConfigManager
 		    		int groupepoch = Integer.parseInt(groupN.getAttributes().getNamedItem("groupepoch").getNodeValue());
 		    		int numnodes = Integer.parseInt(groupN.getAttributes().getNamedItem("numnodes").getNodeValue());
 		    		int groupID = Integer.parseInt(groupN.getAttributes().getNamedItem("groupID").getNodeValue());
-		    				    		
+		    		
 		    		log.info("group {} has {} units", gindex, numnodes);
 
 		    		CorfuNode[] corfunodes = new CorfuNode[numnodes];
@@ -125,7 +133,10 @@ public class CorfuConfigManager
 		    			if(!(nodeN.getNodeType()==Node.ELEMENT_NODE && nodeN.hasAttributes())) continue;
 		    			String nodeaddress = nodeN.getAttributes().getNamedItem("nodeaddress").getNodeValue();
 			    		int nindex = Integer.parseInt(nodeN.getAttributes().getNamedItem("index").getNodeValue());
+			    		
+			    		if (nindex > 0) { log.error("replication not supported yet"); System.exit(0); }
 		    			log.info("node[{}]: {}", nindex, nodeaddress);
+		    			
 		    			int curlocalstartoff = Integer.parseInt(nodeN.getAttributes().getNamedItem("startoffset").getNodeValue());
 		    			if(j!=0 && curlocalstartoff!=localstartoff) throw new Exception("Bad config format: replicas must have same startoff");
 		    			else localstartoff = curlocalstartoff;

@@ -1,4 +1,4 @@
-package com.microsoft.corfu;
+package com.microsoft.corfuapps;
 
 import java.io.File;
 import java.util.ArrayList;

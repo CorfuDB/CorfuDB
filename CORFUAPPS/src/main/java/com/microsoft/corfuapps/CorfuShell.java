@@ -1,4 +1,4 @@
-package com.microsoft.corfu;
+package com.microsoft.corfuapps;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -64,7 +64,7 @@ public class CorfuShell {
 					}
 				});
 				
-			put("read",
+			put("readat",
 				new helper() {
 				@Override
 				public void helperf(long dummy) throws CorfuException {
@@ -73,6 +73,15 @@ public class CorfuShell {
 					System.out.println("read: size=" + ret.getCtntSize() + " meta="+ ret.getInf());
 				}
 			});
+				
+			put("read",
+					new helper() {
+					public void helperf(long length) throws CorfuException {
+						ExtntWrap ret;
+						ret = crf.readExtnt();
+						System.out.println("read: size=" + ret.getCtntSize() + " meta="+ ret.getInf());
+					}
+				});
 				
 			put("trim",
 					new helper() {
@@ -122,7 +131,7 @@ public class CorfuShell {
 				}
 			});
 			
-			put("write",
+			put("writeat",
 					new helper() {
 					public void helperf(long length) throws CorfuException {
 						crf.write(offset,  new byte[(int)length]);

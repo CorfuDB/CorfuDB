@@ -61,7 +61,7 @@
  *
  */
 
-package com.microsoft.corfu;
+package com.microsoft.corfuapps;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;
@@ -76,7 +76,6 @@ import com.microsoft.corfu.CorfuClientImpl;
 import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuErrorCode;
 import com.microsoft.corfu.CorfuException;
-import com.microsoft.corfu.CorfuExtendedInterface;
 import com.microsoft.corfu.ExtntWrap;
 
 public class CorfuRWTputTester {
@@ -184,7 +183,7 @@ public class CorfuRWTputTester {
 	}
 
 	private void readerloop() {
-		CorfuExtendedInterface crf;
+		CorfuClientImpl crf;
 		
 		int rpt = 0;
 		ExtntWrap ret = null;
@@ -240,7 +239,7 @@ public class CorfuRWTputTester {
 	
 	private void writerloop() {
 		int rpt = 0;
-		CorfuExtendedInterface crf;
+		CorfuClientImpl crf;
 		CorfuConfigManager CM = null;
 		long off, lasthead;
 	

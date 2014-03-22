@@ -65,7 +65,7 @@ public class CorfuUtil {
      * @throws IOException 
      */
     public static int ExtntInfoSSize() throws IOException { 
-    	return ByteBuffer.wrap(ExtntInfoSerialize(new ExtntInfo(0, 0, ExtntMarkType.EX_BEGIN))).capacity();
+    	return ByteBuffer.wrap(ExtntInfoSerialize(new ExtntInfo(0, 0, ExtntMarkType.EX_FILLED))).capacity();
     }
     
 	public static byte[] ObjectSerialize(Object obj) throws IOException {

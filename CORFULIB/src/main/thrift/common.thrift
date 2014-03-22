@@ -11,21 +11,14 @@ enum CorfuErrorCode {
 	OK_SKIP
 }
 
-enum ExtntMarkType {	EX_EMPTY, EX_BEGIN, EX_MIDDLE, EX_SKIP }
+enum ExtntMarkType {	EX_EMPTY, EX_FILLED, EX_TRIMMED, EX_SKIP }
 
 struct ExtntInfo {
 	1: i64 metaFirstOff,
 	2: i32 metaLength,
-	3: ExtntMarkType flag=ExtntMarkType.EX_BEGIN
+	3: ExtntMarkType flag=ExtntMarkType.EX_FILLED
 }
 
-struct CorfuHeader {
-	1: ExtntInfo extntInf,
-	2: bool prefetch,
-	3: i64 prefetchOff,
-	4: CorfuErrorCode err,
-	}
-	
 typedef binary LogPayload
 
 struct ExtntWrap {

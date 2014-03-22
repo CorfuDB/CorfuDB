@@ -27,11 +27,11 @@ The `scripts` directory contains useful resources for deployment:
 
 Each storage unit is started by running
 
->    java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <unit num> -drivename <drivename> [-recover]
+>    java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <stripe#:replica#> -drivename <drivename> [-recover]
 
 Another option is to run in-memory, without persistence:
 
->	java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <unit num> <-rammode>
+>	java com.microsoft.corfu.sunit.CorfuUnitServerImpl -unit <stripe#:replica#> <-rammode>
        
 the sequencer is run by
 

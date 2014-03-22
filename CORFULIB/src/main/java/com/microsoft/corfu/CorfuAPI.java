@@ -11,7 +11,7 @@ import java.util.List;
  * @author dalia
  *
  */
-public interface CorfuExtendedInterface extends CorfuInterface {
+public interface CorfuAPI {
 	
 	/**
 	 * @return		a "grain" size, the equivalent of an individual Corfu log-page
@@ -79,6 +79,15 @@ public interface CorfuExtendedInterface extends CorfuInterface {
 	 * @throws CorfuException if the call to storage-units failed; in this case, there is no gaurantee regarding data persistence.
 	 */
 	public void sync() throws CorfuException;
+	
+	/**
+	 * trim a prefix of log up to the specified position
+	 * 
+	 * @param offset the position to trim to (excl)
+	 * 
+	 * @throws CorfuException
+	 */
+	public void trim(long offset) throws CorfuException;
 
 	/**
 	 * Query the log head. 

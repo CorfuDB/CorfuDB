@@ -4,11 +4,11 @@ include "common.thrift"
 
 service CorfuUnitServer {
 
-	common.CorfuErrorCode write(1:common.ExtntInfo inf, 2:list<common.LogPayload> ctnt),
+	common.CorfuErrorCode write(1:i64 off, 2:list<common.LogPayload> ctnt, 3:common.ExtntMarkType et),
 	
-	common.CorfuErrorCode fix(1:common.ExtntInfo inf),
+	common.CorfuErrorCode fix(1:i64 off),
 
-	common.ExtntWrap read(1:common.CorfuHeader hdr),
+	common.ExtntWrap read(1:i64 off),
 	
 	void sync(),
 	

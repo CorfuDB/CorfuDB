@@ -5,7 +5,7 @@
  * creates <wthreads> (param) writer threads. Each writer-thread appends <repeat> entries of size <size> to the log. 
  */
 
-package com.microsoft.corfu;
+package com.microsoft.corfuapps;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
