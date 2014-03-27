@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
 <!--Corfu Configuration-->
 <systemview LogID="0" SequenceNo="0" GlobalEpoch="0" NumConfigs="1">
-  <CONFIGURATION index="0" startoffset="0" tokenserver="localhost:9020" disksize="1000" grain="128" numgroups="2">
+  <CONFIGURATION index="0" startoffset="0" tokenserver="localhost:9020" disksize="10" grain="128" numgroups="1">
     <GROUP index="0" groupID="1" groupepoch="0" numnodes="1">
       <NODE index="0" nodeaddress="localhost:9040" startoffset="0" />
     </GROUP>
-    <GROUP index="1" groupID="2" groupepoch="0" numnodes="1">
-      <NODE index="0" nodeaddress="localhost:9045" startoffset="0" />
-    </GROUP>
+    <!-- GROUP index="1" groupID="2" groupepoch="0" numnodes="1" -->
+      <!-- NODE index="0" nodeaddress="localhost:9045" startoffset="0" /-->
+    <!-- /GROUP-->
   </CONFIGURATION>
 </systemview>

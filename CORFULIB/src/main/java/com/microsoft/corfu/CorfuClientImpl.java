@@ -372,9 +372,25 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuAPI, com.micros
 			throw new OutOfSpaceCorfuException("repairNext failed, log full");
 		}
 		return pos;
-	}	
-	
-	/**
+	}
+
+    /**
+     * recover the token server by moving it to a known lower-bound on filled position
+     * should only be used by administrative utilities
+     *
+     * @param lowbound
+     */
+    @Override
+    public void tokenserverrecover(long lowbound) throws CorfuException {
+        try {
+            sequencer.recover(lowbound);
+        } catch (TException e) {
+            e.printStackTrace();
+            throw new CorfuException("tokenserver recovery failed");
+        }
+    }
+
+    /**
 	 * force a delay until we are notified that previously invoked writes to the log have been safely forced to persistent store.
 	 * 
 	 * @throws CorfuException if the call to storage-units failed; in this case, there is no gaurantee regarding data persistence.

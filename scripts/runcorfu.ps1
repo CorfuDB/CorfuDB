@@ -1,3 +1,12 @@
+Param(
+    $nopush,
+    $rammode,
+    $recover
+)
+if ($nopush -ne $null) { write-host do not push updates to destinations } else { write-host push updates if found }
+if ($rammode -ne $null) { write-host ram mode }
+if ($recover -ne $null) { write-host recovery mode }
+
 function doicm {
 	write-host icm $args[0] -Scriptblock $args[1] -argumentList $args[2..($args.length-1)] -asjob
 	icm $args[0] -Scriptblock $args[1] -argumentList $args[2..($args.length-1)] -asjob
@@ -24,13 +33,6 @@ $cp = $examples.name + ";."
 write-host classpath will be $cp
 $uid = $env:username
 
-# parse commandline arguments
-#
-$pushflag = $true
-if ($args.count -gt 0 -and $args[0] -eq "-nopush") { $pushflag = $false }
-if ($pushflag) { write-host push updates to destinations } 
-	else   { write-host do not push updates to destinations }
-
 # parse XML configuration
 # 
 [xml]$CONFIG = gc $configFileName
@@ -46,7 +48,7 @@ write-host tokenserver on machine $rem port $port
 
 # push sequencer-jar to remote
 #
-if ($pushflag) { 
+if ($nopush -eq $null) { 
 	xcopy $examples \\$rem\c$\users\$uid\corfu-bin /Y /D 
 	xcopy $configFileName  \\$rem\c$\users\$uid\corfu-bin /Y /D
 	xcopy $loggingName  \\$rem\c$\users\$uid\corfu-bin /Y /D
@@ -76,10 +78,17 @@ $sunits | %{ $ind=0} {
 		xcopy $loggingName  \\$rem\c$\users\$uid\corfu-bin /Y /D
 	}
  
+	$unitind = "{0}:0" -f $ind
+        $drivename = "c:\temp\foo{0}.{1}.txt" -f $ind 0
 	# start unit server on remote
 	#
-	doicm $rem $sb $uid -classpath $cp $smainclass -unit $ind":0" -rammode
-#	doicm $rem $sb $uid -classpath $cp $smainclass -unit $ind":0" -drivename c:\temp\foo.txt -recover
+	if ($recover -ne $null) {
+		doicm $rem $sb $uid -classpath $cp $smainclass -unit $unitind -drivename $drivename -recover
+	} elseif ($rammode -ne $null) {
+		doicm $rem $sb $uid -classpath $cp $smainclass -unit $unitind -rammode
+	} else {
+		doicm $rem $sb $uid -classpath $cp $smainclass -unit $unitind -drivename $drivename
+	}
 
 	$ind++
 }

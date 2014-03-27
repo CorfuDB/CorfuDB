@@ -142,5 +142,11 @@ public interface CorfuAPI {
 	 * @return starting offset at the log of last (successful) checkpoint
 	 */
 	// public long checkpointLoc() throws CorfuException;
+
+    /**
+     * recover the token server by moving it to a known lower-bound on filled position
+     * should only be used by administrative utilities
+     */
+    public void tokenserverrecover(long lowbound) throws CorfuException;
 	
 }

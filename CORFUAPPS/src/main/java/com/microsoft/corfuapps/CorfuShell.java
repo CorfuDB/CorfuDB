@@ -15,133 +15,228 @@ import com.microsoft.corfu.ExtntWrap;
 public class CorfuShell {
 
 	static CorfuConfigManager CM = null;
-	static CorfuClientImpl crf = null;
-	static long offset = 0;
-	
+	CorfuClientImpl crf = null;
+
 	interface helper {
-		void helperf(long off) throws CorfuException ;
+		void helperf(long[] args) throws CorfuException ;
 	}
 	
-	static helper printhelp = 
+	helper printhelp = 
 			new helper() {
 			@Override
-			public void helperf(long dummy) {
-				System.out.println("------Usage:--------- ");
-				for (Iterator<String> it = debugger.keySet().iterator(); it.hasNext(); ) {
-					System.out.println(it.next());
+			public void helperf(long[] dummy) {
+				System.out.println("-- alias (full-cmd) params.. : ----- synopsis ------- ");
+				for (Iterator<String> it = alias.keySet().iterator(); it.hasNext(); ) {
+					String cmdname = it.next();
+                    String aliasname = alias.get(cmdname);
+                    System.out.print("   " + aliasname  + "   (" + cmdname + ") ");
+					info inf = infos.get(aliasname);
+					for (int i = 1; i <= inf.nparams; i++) System.out.print(" <param" + i + ">");
+					System.out.print("  -- ");
+					System.out.println("    " + inf.help);
 				}
-				for (Iterator<String> it = debugger2.keySet().iterator(); it.hasNext(); ) {
-					System.out.println(it.next() + " <offset or length>");
-				}
+                System.out.println("");
+                System.out.println("all commands can be repeated with 'rpt <n> cmd args...'");
 				System.out.println("-------------------- ");
 			}};
 	
-	static HashMap<String, helper> debugger = new HashMap<String, helper>(){  // all commands with no params
-
-		{
-			put("help", printhelp);
-			put("bounds",
+	HashMap<String, helper> debugger = new HashMap<String, helper>();
+	HashMap<String, String> alias = new HashMap<String, String>();
+	class info {
+		String help;
+		int nparams;
+		public info(String help, int nparams) {
+			super();
+			this.help = help;
+			this.nparams = nparams;
+		}
+	}
+	HashMap<String, info> infos = new HashMap<String, info>();
+	
+	void Init() {
+			debugger.put("h", printhelp);  alias.put("help",  "h");
+						infos.put("h",  new CorfuShell.info("print help menu", 0));
+			
+			debugger.put("b",
 					new helper() {
 					@Override
-					public void helperf(long dummy) throws CorfuException {
-						long head, tail, ctail;
+					public void helperf(long[] dummy) throws CorfuException {
+						long head, tail;
 						
 						head = crf.queryhead(); 
 						tail = crf.querytail(); 
 						System.out.println("Log[" + 
 						head + ".." + tail + "]");
 					}
-				});
+				});							alias.put("bounds", "b");
+						infos.put("b",  new CorfuShell.info("print log boundaries", 0));
 			
-			put("dbg", 
+			debugger.put("d", 
 					new helper() {
 					@Override
-					public void helperf(long dummy) throws CorfuException {
+					public void helperf(long[] args) throws CorfuException {
 						ExtntWrap di;
-						di = crf.dbg(offset);
+						di = crf.dbg(args[0]);
 						System.out.println("err=" + di.getErr());
 						System.out.println("meta: " + di.getInf());
 					}
-				});
+				});						alias.put("debug",  "d");
+						infos.put("d",  new CorfuShell.info("print meta info for offset ", 1));
 				
-			put("readat",
+			debugger.put("ra",
 				new helper() {
 				@Override
-				public void helperf(long dummy) throws CorfuException {
+				public void helperf(long[] args) throws CorfuException {
 					ExtntWrap ret;
-					ret = crf.readExtnt(offset);
+					ret = crf.readExtnt(args[0]);
 					System.out.println("read: size=" + ret.getCtntSize() + " meta="+ ret.getInf());
 				}
-			});
+			});							alias.put("readat",  "ra");
+						infos.put("ra",  new CorfuShell.info("read entry at offset", 1));
 				
-			put("read",
+			debugger.put("rn",
 					new helper() {
-					public void helperf(long length) throws CorfuException {
+					public void helperf(long[] dummy) throws CorfuException {
 						ExtntWrap ret;
 						ret = crf.readExtnt();
 						System.out.println("read: size=" + ret.getCtntSize() + " meta="+ ret.getInf());
 					}
-				});
+				});						alias.put("readnext",  "rn");
+						infos.put("rn",  new CorfuShell.info("read next log entry", 0));
 				
-			put("trim",
+			debugger.put("t",
 					new helper() {
 				@Override
-				public void helperf(long dummy) throws CorfuException {
-					crf.trim(offset);
+				public void helperf(long[] args) throws CorfuException {
+					crf.trim(args[0]);
 				}
-			});
-			
-			put("fix",
-					new helper() {
-					@Override
-					public void helperf(long dummy) throws CorfuException {
-						ExtntWrap ret;
-						if (offset > 0) {
-							System.out.println("setting reader mark to " + (offset-1));
-							ret = crf.readExtnt(offset-1);
-							System.out.println("read: size=" + ret.getCtntSize() + " meta="+ ret.getInf());
-						}
-						crf.repairNext();
-					}
-			});			
-			
-			put("quit", 
-					new helper() {
-					@Override
-					public void helperf(long dummy) { System.exit(0); }
-			});
-		}};
-		
-	static HashMap<String, helper> debugger2 = new HashMap<String, helper>(){ // all commands with one offset-param
+			});							alias.put("trim",  "t");
+						infos.put("t",  new CorfuShell.info("trim log to offset ", 1));
 
-		{
-			put("seek", 
+			debugger.put("q", 
 					new helper() {
 					@Override
-					public void helperf(long off) throws CorfuException {
-						offset = off;
-					} 
-			});
-			
-			put("append",
+					public void helperf(long[] dummy) { System.exit(0); }
+			});							alias.put("quit",  "q");
+						infos.put("q",  new CorfuShell.info("quit corfu shell", 0));
+		
+			debugger.put("a",
 				new helper() {
-				public void helperf(long length) throws CorfuException {
-					long off = crf.appendExtnt(new byte[(int)length], (int)length);
-					System.out.println("appended " + length + " bytes at " + off);
+				public void helperf(long[] args) throws CorfuException {
+					long off = crf.appendExtnt(new byte[(int)args[0]], (int)args[0]);
+					System.out.println("appended " + args[0] + " bytes at " + off);
 				}
-			});
+			});							alias.put("append",  "a");
+						infos.put("a",  new CorfuShell.info("append extent of specified length to log", 1));
 			
-			put("writeat",
+			debugger.put("w",
 					new helper() {
-					public void helperf(long length) throws CorfuException {
-						crf.write(offset,  new byte[(int)length]);
-						System.out.println("wrote " + length + " bytes at " + offset);
+					public void helperf(long[] args) throws CorfuException {
+						crf.write(args[0],  new byte[(int)args[1]]);
+						System.out.println("wrote " + args[1] + " bytes at " + args[0]);
 					}
 					
-				});
-	}};
+				});						alias.put("writeat",  "w");
+						infos.put("w",  new CorfuShell.info("write extent of specified length to log", 2));
+
+            debugger.put("tkn",
+                new helper() {
+                    public void helperf(long[] args) throws CorfuException {
+                        crf.tokenserverrecover(args[0]);
+                        System.out.println("token server set at  " + args[0]);
+                    }
+
+                });						alias.put("tokenrecover",  "tkn");
+                        infos.put("tkn",  new CorfuShell.info("recover token server position to the specified", 1));
+
+		BufferedReader c;
+		long off = -1; 
+		boolean hasparam = false;
+		helper h;
+		info inf;
+
+		try {
+			crf = new CorfuClientImpl();
+		} catch (CorfuException e) {
+			e.printStackTrace();
+			return;
+		}
+
+		c = new BufferedReader(new InputStreamReader(System.in));
+		for (;;) {
+			try {
+				long head, tail;
+				
+				head = crf.queryhead(); 
+				tail = crf.querytail(); 
+				System.out.print("Log[" + 
+				head + ".." + tail + "] ");
+			} catch (CorfuException ce) {
+				System.out.println("boundaries check failed");
+				System.out.println("Corfu err: " + ce.er);
+				ce.printStackTrace();
+			}
+			
+			StringTokenizer I;
+			try { I = new StringTokenizer(c.readLine()); } catch (Exception ie) { return; }
+			if (!I.hasMoreTokens()) continue;
+			
+			String cmd = I.nextToken();
+			int rpt = 1;
+            if (cmd.equals("rpt")) {
+                if (!I.hasMoreTokens()) {
+                    BadFormat("missing repeat count and command");
+                    continue;
+                }
+                rpt = Integer.valueOf(I.nextToken());
+                if (!I.hasMoreTokens()) {
+                    BadFormat("missing command");
+                    continue;
+                }
+                cmd = I.nextToken();
+            }
+
+			// look up command
+			h = debugger.get(cmd);
+			if (h == null) { 			// check if using full command?
+				cmd = alias.get(cmd); 
+				if (cmd != null) h = debugger.get(cmd);
+			}
+			if (h == null) {
+				BadFormat("unrecognized command!");
+				continue;
+			}
+			inf = infos.get(cmd);
+			
+			// get params
+            long[] args = new long[inf.nparams]; int j;
+			for (j = 0; j < inf.nparams; j++) {
+				if (!I.hasMoreTokens()) break;
+				String OffStr = I.nextToken();
+				args[j] = Long.parseLong(OffStr);
+			}
+            if (j < inf.nparams) {
+                BadFormat("this command requires a parameter!");
+                continue;
+            }
+
+			// dispatch command
+			try {
+                for (int r = 0; r < rpt; r++)
+    				h.helperf(args);
+			} catch (CorfuException ce) {
+				System.out.println("call failed (off=" + off + ")");
+				System.out.println("Corfu err: " + ce.er);
+				ce.printStackTrace();
+			}
+		}
+	}
 	
-	
+    void BadFormat(String msg) {
+        System.out.println(msg);
+        helper h = debugger.get("h");
+        try { if (h != null) h.helperf(null); } catch (CorfuException dummye) {}
+    }
 	/**
 	 * @param args
 	 */
@@ -150,68 +245,9 @@ public class CorfuShell {
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
-
-				BufferedReader c;
-				long off = -1; 
-				boolean hasparam = false;
-				helper h;
-
-				try {
-					crf = new CorfuClientImpl();
-				} catch (CorfuException e) {
-					e.printStackTrace();
-					return;
-				}
-		
-				c = new BufferedReader(new InputStreamReader(System.in));
-				for (;;) {
-					try {
-						long head, tail;
-						
-						head = crf.queryhead(); 
-						tail = crf.querytail(); 
-						System.out.print("Log[" + 
-						head + ".." + tail + "] ");
-					} catch (CorfuException ce) {
-						System.out.println("boundaries check failed");
-						System.out.println("Corfu err: " + ce.er);
-						ce.printStackTrace();
-					}
-					
-					StringTokenizer I;
-					try { I = new StringTokenizer(c.readLine()); } catch (Exception ie) { return; }
-					if (!I.hasMoreTokens()) continue;
-					
-					String cmd = I.nextToken();
-					if (I.hasMoreTokens()) {
-						hasparam = true;
-						String OffStr = I.nextToken();
-						off = Long.parseLong(OffStr);
-						h = debugger2.get(cmd);
-					} else {
-						hasparam = false;
-						h = debugger.get(cmd);
-					}
 				
-					if (h == null) {
-						System.out.println("unrecognized command!");
-					
-						h = debugger.get("help");
-						try { if (h != null) h.helperf(off); } catch (CorfuException dummye) {}
-						continue;
-					}
-
-					try {
-						h.helperf(off);
-					} catch (CorfuException ce) {
-						System.out.println("call failed (off=" + off + ")");
-						System.out.println("Corfu err: " + ce.er);
-						ce.printStackTrace();
-					}
-				}
-		
-			}
-		}).run();
+                new CorfuShell().Init();
+			}}).run();
 				
 	}
 }

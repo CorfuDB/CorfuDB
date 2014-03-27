@@ -3,6 +3,7 @@ package com.microsoft.corfu.sequencer;
 import java.io.File;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.thrift.TException;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
@@ -21,8 +22,13 @@ public class CorfuSequencerImpl implements CorfuSequencer.Iface {
 		long ret = pos.getAndAdd(range);
 		return ret;
 	}
-	
-	static class dorun implements Runnable {
+
+    @Override
+    public void recover(long lowbound) throws TException {
+        pos.set(lowbound);
+    }
+
+    static class dorun implements Runnable {
 		
 		CorfuSequencerImpl CI;
 		int port = 0;

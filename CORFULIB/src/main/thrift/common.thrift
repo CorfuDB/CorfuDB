@@ -8,6 +8,7 @@ enum CorfuErrorCode {
 	ERR_UNWRITTEN,
 	ERR_BADPARAM,
 	ERR_FULL,
+	ERR_IO,
 	OK_SKIP
 }
 
