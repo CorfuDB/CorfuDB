@@ -6,8 +6,11 @@ import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
+import com.microsoft.corfu.sunit.CorfuConfigServer;
+import com.microsoft.corfu.sunit.UnitWrap;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TMultiplexedProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
@@ -37,14 +40,24 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuAPI, com.micros
 		TTransport t = null;
 		CorfuUnitServer.Client cl = null;
 		TBinaryProtocol protocol = null;
-		
-		clientSunitEndpoint(CorfuNode cn) throws CorfuException {
+        CorfuConfigServer.Client configcl = null;
+
+        clientSunitEndpoint(CorfuNode cn) throws CorfuException {
+            TMultiplexedProtocol mprotocol = null, mprotocol2 = null;
+
 			try {
 				t = new TSocket(cn.hostname, cn.port);
+                t.open();
 				protocol = new TBinaryProtocol(t);
-				cl = new CorfuUnitServer.Client(protocol);
-				t.open();
-				log.info("client connection open with server  {}:{}" , cn.hostname , cn.port);
+
+                mprotocol = new TMultiplexedProtocol(protocol, "SUNIT");
+				cl = new CorfuUnitServer.Client(mprotocol);
+				log.info("client connection open with multiplexed server  {}:{}" , cn.hostname , cn.port);
+
+                mprotocol2 = new TMultiplexedProtocol(protocol, "CONFIG");
+                configcl = new CorfuConfigServer.Client(mprotocol2);
+                log.info("config  connection open with multiplexed server  {}:{}" , cn.hostname , cn.port);
+
 			} catch (TTransportException e) {
 				e.printStackTrace();
 				throw new CorfuException("could not set up connection(s)");
@@ -53,6 +66,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuAPI, com.micros
 		
 	}
 	CorfuUnitServer.Client getSUnit(Object ep) { return ((clientSunitEndpoint)ep).cl; }
+    CorfuConfigServer.Client getConfigServer(Object ep) { return ((clientSunitEndpoint)ep).configcl; }
 
 	class clientSequencerEndpoint {
 		TTransport t = null;
@@ -180,7 +194,7 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuAPI, com.micros
 		CorfuErrorCode er = null;
 		EntryLocation el = CM.getCurrentConfiguration().getLocationForOffset(offset);
 		CorfuUnitServer.Client sunit = getSUnit(el.group.replicas[0].getInfo());
-		
+
 		try {
 			log.debug("write({} size={} marktype={}", offset, ctnt.size(), ExtntMarkType.EX_FILLED);
 			er = sunit.write(offset, ctnt, ExtntMarkType.EX_FILLED);
@@ -551,5 +565,17 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuAPI, com.micros
 		for (int i = 0; i < numents; i++)
 			wbufs.add(ByteBuffer.wrap(buf, i*grainsize(), grainsize()));
 		writeExtnt(offset, wbufs, false);
-	}	
+	}
+
+    public UnitWrap rebuild(long offset) throws CorfuException {
+        EntryLocation el = CM.getCurrentConfiguration().getLocationForOffset(offset);
+        CorfuConfigServer.Client cnfg = getConfigServer(el.group.replicas[0].getInfo());
+        UnitWrap ret = null;
+        try {
+            ret = cnfg.rebuild();
+        } catch (TException t) {
+            throw new InternalCorfuException("rebuild failed");
+        }
+        return ret;
+    }
 }

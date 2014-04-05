@@ -11,6 +11,7 @@ import com.microsoft.corfu.CorfuClientImpl;
 import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.ExtntWrap;
+import com.microsoft.corfu.sunit.UnitWrap;
 
 public class CorfuShell {
 
@@ -82,8 +83,19 @@ public class CorfuShell {
 					}
 				});						alias.put("debug",  "d");
 						infos.put("d",  new CorfuShell.info("print meta info for offset ", 1));
-				
-			debugger.put("ra",
+
+        debugger.put("bu",
+                new helper() {
+                    @Override
+                    public void helperf(long[] args) throws CorfuException {
+                        UnitWrap ret;
+                        ret = crf.rebuild(args[0]);
+                        System.out.println("rebuild: lowwater=" + ret.getLowwater() + " highwater="+ ret.getHighwater());
+                    }
+                });							alias.put("rebuild",  "bu");
+        infos.put("bu",  new CorfuShell.info("invoke rebuilt from the unit holding the specific offset", 1));
+
+        debugger.put("ra",
 				new helper() {
 				@Override
 				public void helperf(long[] args) throws CorfuException {

@@ -21,6 +21,14 @@ import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.Lock;
 
+import org.apache.thrift.TMultiplexedProcessor;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TMultiplexedProtocol;
+import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.server.TSimpleServer;
+import org.apache.thrift.transport.TFramedTransport;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
 import org.slf4j.*;
 import org.apache.thrift.TException;
 import org.apache.thrift.server.TServer;
@@ -40,6 +48,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	private static String DRIVENAME = null; // command line argument: where to persist data (unless rammode is on)
 	private static boolean RAMMODE = false; // command line switch: work in memory (no data persistence)
 	private static boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
+    private static boolean REBUILD = false; private static String rebuildnode = null;
 
 	private long trimmark = 0; // log has been trimmed up to this position (excl)
 	private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
@@ -151,6 +160,13 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
         }
 		return wbufs;
 	}
+
+    public ArrayList<ByteBuffer> mirror() throws IOException {
+        if (highwater <= lowwater)
+            return get(lowwater, highwater+UNITCAPACITY-lowwater);
+        else
+            return get(lowwater, highwater-lowwater);
+    }
 	
 	public int getPhysOffset(long logOffset) { 
 		int mi = mapind(logOffset);
@@ -313,9 +329,11 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	}
 
     private void writetrimmark() throws IOException {
-        DriveChannel.position(UNITCAPACITY*ENTRYSIZE+ UNITCAPACITY*entsz);
-        byte[] ser = CorfuUtil.ObjectSerialize(new Long(trimmark));
-        DriveChannel.write(ByteBuffer.wrap(ser));
+        if (!RAMMODE) {
+            DriveChannel.position(UNITCAPACITY * ENTRYSIZE + UNITCAPACITY * entsz);
+            byte[] ser = CorfuUtil.ObjectSerialize(new Long(trimmark));
+            DriveChannel.write(ByteBuffer.wrap(ser));
+        }
     }
 
     private void recover() throws Exception {
@@ -326,9 +344,6 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
         DriveChannel.position(UNITCAPACITY*ENTRYSIZE);
         ByteBuffer bb = ByteBuffer.allocate(UNITCAPACITY*entsz);
         DriveChannel.read(bb);
-/*		log.debug("recovery bitmap: {}", bb);
-		for (int k = 0; k < bb.capacity(); k++) log.debug("bb[{}] {}", k, bb.get(k));
-*/
         ByteBuffer tb = ByteBuffer.allocate(sz);
         DriveChannel.position(UNITCAPACITY*ENTRYSIZE+ UNITCAPACITY*entsz);
         if (DriveChannel.read(tb) == sz) {
@@ -342,21 +357,33 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
         initLogStore(bb.array(), UNITCAPACITY);
     }
 
-/*
-	private void writeExtntMap(int from, int to) throws IOException {
-		if (to <= from) {
-			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+from*getMetaSZ());
-			DriveChannel.write( toArray(from, UNITCAPACITY) );
-	
-			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+0);
-			DriveChannel.write( toArray(0, to) );
-	
-		} else {
-			DriveChannel.position(UNITCAPACITY*ENTRYSIZE+from*getMetaSZ());
-			DriveChannel.write( toArray(from, to) );
-		}
-	}
-*/
+    private void rebuildfromnode() throws Exception {
+        CorfuNode cn = new CorfuNode(rebuildnode);
+        TTransport buildsock = new TSocket(cn.getHostname(), cn.getPort());
+        buildsock.open();
+        TProtocol prot = new TBinaryProtocol(buildsock);
+        TMultiplexedProtocol mprot = new TMultiplexedProtocol(prot, "CONFIG");
+
+        CorfuConfigServer.Client cl = new CorfuConfigServer.Client(mprot);
+        log.info("established connection with rebuild-node {}", rebuildnode);
+        UnitWrap wr = null;
+        try {
+            wr = cl.rebuild();
+            log.info("obtained mirror lowwater={} highwater={} trimmark={} ctnt-length={}",
+                    wr.getLowwater(), wr.getHighwater(), wr.getTrimmark(), wr.getCtntSize());
+            initLogStore(wr.getBmap(), UNITCAPACITY);
+            lowwater = highwater = wr.getLowwater();
+            trimmark = wr.getTrimmark();
+            ckmark = (int)wr.getCkmark();
+            put(wr.getCtnt());
+            if (highwater != wr.getHighwater())
+                log.error("rebuildfromnode lowwater={} highwater={} received ({},{})",
+                        lowwater, highwater,
+                        wr.getLowwater(), wr.getHighwater());
+        } catch (TException e) {
+            e.printStackTrace();
+        }
+    }
 
     /////////////////////////////////////////////////////////////////////////////////////////////
 	/* (non-Javadoc)
@@ -485,7 +512,39 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	}
 
     /**
-     * @param args
+     * class implementing the configServer service
+     */
+    class CorfuConfigServerImpl implements CorfuConfigServer.Iface {
+
+        @Override
+        synchronized public UnitWrap rebuild() throws TException {
+
+            UnitWrap wr = new UnitWrap(CorfuErrorCode.OK,
+                    lowwater, highwater,
+                    trimmark, ckmark,
+                    null,
+                    mapb);
+            log.info("respond to rebuild request. lowwater={}, highwater={}, trimmark={}",
+                    lowwater, highwater, trimmark);
+
+            try {
+                wr.setCtnt(mirror());
+            } catch (IOException e) {
+                log.error("rebuild request failed");
+                e.printStackTrace();
+                wr.setErr(CorfuErrorCode.ERR_IO);
+            }
+            return wr;
+        }
+    }
+    
+    //////////////////////////////////////////////////////////////////////////////
+
+    ////////////////////////////////////////////////////////////////////////////////////
+
+
+    /**
+     * @param args see Usage string definition for command line arguments usage
      * @throws Exception
      */
     public static void main(String[] args) throws Exception {
@@ -493,8 +552,8 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
         int sid = -1, rid = -1;
         ENTRYSIZE = CM.getGrain();
         UNITCAPACITY = CM.getUnitsize();
-        String Usage = "Usage: " + CorfuUnitServer.class.getName() + "-unit <stripe:replica> " +
-                "<-rammode> | <-drivename <name> [-recover]>";
+        String Usage = "\n Usage: " + CorfuUnitServer.class.getName() + "-unit <stripe:replica> " +
+                "<-rammode> | <-drivename <name> [-recover | -rebuild <hostname:port> ] ";
 
         for (int i = 0; i < args.length; ) {
             if (args[i].startsWith("-recover")) {
@@ -505,6 +564,11 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
                 RAMMODE = true;
                 slog.info("working in RAM mode");
                 i += 1;
+            } else if (args[i].startsWith("-rebuild") && i < args.length-1) {
+                REBUILD = true;
+                rebuildnode = args[i+1];
+                slog.info("rebuild from {}", rebuildnode);
+                i += 2;
             } else if (args[i].startsWith("-unit") && i < args.length-1) {
                 sid = Integer.parseInt(args[i+1].substring(0, args[i+1].indexOf(":")));
                 rid = Integer.parseInt(args[i+1].substring(args[i+1].indexOf(":")+1));
@@ -515,20 +579,19 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
                 slog.info("drivename: " + DRIVENAME);
                 i += 2;
             } else {
-                slog.error("unknown param: " + args[i]);
-                throw new Exception(Usage);
+                slog.error(Usage);
+                throw new Exception("unknown param: " + args[i]);
             }
         }
 
-        if ((!RAMMODE && DRIVENAME == null) || sid < 0 || rid < 0) {
-            slog.error("missing drive name or unit number!");
-            throw new Exception(Usage);
+        if ((!RAMMODE && DRIVENAME == null) ||
+                sid < 0 ||
+                rid < 0 ||
+                (RAMMODE && RECOVERY) ||
+                (REBUILD && RECOVERY)) {
+            slog.error(Usage);
+            throw new Exception("bad command line parameters, see usage instructions");
         }
-        if (RAMMODE && RECOVERY) {
-            slog.error("cannot do recovery in rammode!");
-            throw new Exception(Usage);
-        }
-
         if (CM.getNumGroups() <= sid) {
             slog.error("stripe # {} exceeds num of stripes in configuration {}; quitting", sid, CM.getNumGroups());
             throw new Exception("bad sunit #");
@@ -547,28 +610,13 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
         new Thread(new Runnable() {
             @Override
             public void run() {
-
-                TServer server;
-                TServerSocket serverTransport;
-                CorfuUnitServer.Processor<CorfuUnitServerImpl> processor;
-                System.out.println("run..");
-
                 try {
-                    serverTransport = new TServerSocket(CorfuUnitServerImpl.PORT);
-                    processor =
-                            new CorfuUnitServer.Processor<CorfuUnitServerImpl>(new CorfuUnitServerImpl());
-                    server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
-                    System.out.println("Starting Corfu storage unit server on port " + CorfuUnitServerImpl.PORT);
-
-                    server.serve();
+                    new CorfuUnitServerImpl();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }}).run();
-
     }
-
-    ////////////////////////////////////////////////////////////////////////////////////
 
     public CorfuUnitServerImpl() throws Exception {
 
@@ -593,29 +641,51 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    for(;;) {
+                    for (; ; ) {
                         try {
                             DriveChannel.force(false);
-                            synchronized(DriveLck) { DriveLck.notifyAll(); }
+                            synchronized (DriveLck) {
+                                DriveLck.notifyAll();
+                            }
                             Thread.sleep(1);
-                        } catch(Exception e) {
+                        } catch (Exception e) {
                             e.printStackTrace();
                         }
                     }
                 }
             }).start();
-        }
-        else {
+        } else {
             inmemoryStore = new ByteBuffer[UNITCAPACITY];
         }
 
         if (RECOVERY) {
             recover();
+        } else if (REBUILD) {
+            rebuildfromnode();
         } else {
             initLogStore(UNITCAPACITY);
             writetrimmark();
         }
-        // make storeMap a list of bitmaps, each one of MAXINT size
 
+        TServer server;
+        TServerSocket serverTransport;
+        System.out.println("run..");
+
+        try {
+            serverTransport = new TServerSocket(CorfuUnitServerImpl.PORT);
+
+            CorfuConfigServerImpl cnfg = new CorfuConfigServerImpl();
+
+            TMultiplexedProcessor mprocessor = new TMultiplexedProcessor();
+            mprocessor.registerProcessor("SUNIT", new CorfuUnitServer.Processor<CorfuUnitServerImpl>(this));
+            mprocessor.registerProcessor("CONFIG", new CorfuConfigServer.Processor<CorfuConfigServerImpl>(cnfg));
+
+            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(mprocessor));
+            System.out.println("Starting Corfu storage unit server on multiplexed port " + CorfuUnitServerImpl.PORT);
+
+            server.serve();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
