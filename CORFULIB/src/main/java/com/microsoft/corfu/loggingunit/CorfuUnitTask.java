@@ -1,10 +1,8 @@
 // @author Dahlia Malkhi
 //
 // implement a cyclic log store: logically infinite log sequence mapped onto a UNICAPACITY array of fixed-entrys	
-package com.microsoft.corfu.sunit;
+package com.microsoft.corfu.loggingunit;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -13,20 +11,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.StringTokenizer;
-import java.util.TreeMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.locks.Lock;
 
 import org.apache.thrift.TMultiplexedProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TMultiplexedProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.server.TSimpleServer;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.slf4j.*;
@@ -36,19 +25,17 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 
 import com.microsoft.corfu.*;
-import com.microsoft.corfu.sunit.CorfuUnitServer;
 
-public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
-	private static Logger slog = LoggerFactory.getLogger(CorfuUnitServerImpl.class);
-	private Logger log = LoggerFactory.getLogger(CorfuUnitServerImpl.class);
+public class CorfuUnitTask implements CorfuUnitServer.Iface {
+	private Logger log = LoggerFactory.getLogger(CorfuUnitTask.class);
 
-	private static int UNITCAPACITY; // taken from configuration: capacity in ENTRYSIZE units, i.e. UNITCAPACITY*ENTRYSIZE bytes
-	private static int ENTRYSIZE;	// taken from configuration: individual log-entry size in bytes
-	private static int PORT;		// taken from configuration: port number this unit listens on
-	private static String DRIVENAME = null; // command line argument: where to persist data (unless rammode is on)
-	private static boolean RAMMODE = false; // command line switch: work in memory (no data persistence)
-	private static boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
-    private static boolean REBUILD = false; private static String rebuildnode = null;
+	public static int UNITCAPACITY; // taken from configuration: capacity in ENTRYSIZE units, i.e. UNITCAPACITY*ENTRYSIZE bytes
+    public static int ENTRYSIZE;	// taken from configuration: individual log-entry size in bytes
+    public static int PORT;		// taken from configuration: port number this unit listens on
+    public static String DRIVENAME = null; // command line argument: where to persist data (unless rammode is on)
+    public static boolean RAMMODE = false; // command line switch: work in memory (no data persistence)
+    public static boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
+    public static boolean REBUILD = false; public static String rebuildnode = null;
 
 	private long trimmark = 0; // log has been trimmed up to this position (excl)
 	private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
@@ -364,7 +351,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
         TProtocol prot = new TBinaryProtocol(buildsock);
         TMultiplexedProtocol mprot = new TMultiplexedProtocol(prot, "CONFIG");
 
-        CorfuConfigServer.Client cl = new CorfuConfigServer.Client(mprot);
+        com.microsoft.corfu.loggingunit.CorfuConfigServer.Client cl = new com.microsoft.corfu.loggingunit.CorfuConfigServer.Client(mprot);
         log.info("established connection with rebuild-node {}", rebuildnode);
         UnitWrap wr = null;
         try {
@@ -388,7 +375,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
     /////////////////////////////////////////////////////////////////////////////////////////////
 	/* (non-Javadoc)
 	 * implements to CorfuUnitServer.Iface write() method.
-	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#write(com.microsoft.corfu.ExtntWrap)
+	 * @see CorfuUnitServer.Iface#write(com.microsoft.corfu.ExtntWrap)
 	 * 
 	 * we make great effort for the write to either succeed in full, or not leave any partial garbage behind. 
 	 * this means that we first check if all the pages to be written are free, and that the incoming entry contains content for each page.
@@ -421,7 +408,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	}
 		
 	/* (non-Javadoc)
-	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#read(com.microsoft.corfu.CorfuHeader, com.microsoft.corfu.ExtntInfo)
+	 * @see CorfuUnitServer.Iface#read(com.microsoft.corfu.CorfuHeader, com.microsoft.corfu.ExtntInfo)
 	 * 
 	 * this method performs actual reading of a range of pages.
 	 * it fails if any page within range has not been written.
@@ -450,7 +437,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
 	 *         The wrapping contains error code: UNWRITTEN if reading beyond the tail of the log
 	 * 
 	 * (non-Javadoc)
-	 * @see com.microsoft.corfu.sunit.CorfuUnitServer.Iface#readmeta(long)
+	 * @see CorfuUnitServer.Iface#readmeta(long)
 	 */
 	@Override
 	synchronized public ExtntWrap readmeta(long off) {
@@ -514,7 +501,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
     /**
      * class implementing the configServer service
      */
-    class CorfuConfigServerImpl implements CorfuConfigServer.Iface {
+    class CorfuConfigServerImpl implements com.microsoft.corfu.loggingunit.CorfuConfigServer.Iface {
 
         @Override
         synchronized public UnitWrap rebuild() throws TException {
@@ -543,82 +530,7 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
     ////////////////////////////////////////////////////////////////////////////////////
 
 
-    /**
-     * @param args see Usage string definition for command line arguments usage
-     * @throws Exception
-     */
-    public static void main(String[] args) throws Exception {
-        CorfuConfigManager CM = new CorfuConfigManager(new File("./corfu.xml"));
-        int sid = -1, rid = -1;
-        ENTRYSIZE = CM.getGrain();
-        UNITCAPACITY = CM.getUnitsize();
-        String Usage = "\n Usage: " + CorfuUnitServer.class.getName() + "-unit <stripe:replica> " +
-                "<-rammode> | <-drivename <name> [-recover | -rebuild <hostname:port> ] ";
-
-        for (int i = 0; i < args.length; ) {
-            if (args[i].startsWith("-recover")) {
-                RECOVERY = true;
-                slog.info("recovery mode");
-                i += 1;
-            } else if (args[i].startsWith("-rammode")) {
-                RAMMODE = true;
-                slog.info("working in RAM mode");
-                i += 1;
-            } else if (args[i].startsWith("-rebuild") && i < args.length-1) {
-                REBUILD = true;
-                rebuildnode = args[i+1];
-                slog.info("rebuild from {}", rebuildnode);
-                i += 2;
-            } else if (args[i].startsWith("-unit") && i < args.length-1) {
-                sid = Integer.parseInt(args[i+1].substring(0, args[i+1].indexOf(":")));
-                rid = Integer.parseInt(args[i+1].substring(args[i+1].indexOf(":")+1));
-                slog.info("stripe number: {} replica num: {}", sid, rid);
-                i += 2;
-            } else if (args[i].startsWith("-drivename") && i < args.length-1) {
-                DRIVENAME = args[i+1];
-                slog.info("drivename: " + DRIVENAME);
-                i += 2;
-            } else {
-                slog.error(Usage);
-                throw new Exception("unknown param: " + args[i]);
-            }
-        }
-
-        if ((!RAMMODE && DRIVENAME == null) ||
-                sid < 0 ||
-                rid < 0 ||
-                (RAMMODE && RECOVERY) ||
-                (REBUILD && RECOVERY)) {
-            slog.error(Usage);
-            throw new Exception("bad command line parameters, see usage instructions");
-        }
-        if (CM.getNumGroups() <= sid) {
-            slog.error("stripe # {} exceeds num of stripes in configuration {}; quitting", sid, CM.getNumGroups());
-            throw new Exception("bad sunit #");
-        }
-
-        CorfuNode[] cn = CM.getGroupByNumber(sid);
-        if (cn.length < rid) {
-            slog.error("replica # {} exceeds replica group size {}; quitting", rid, cn.length);
-            throw new Exception("bad sunit #");
-        }
-        PORT = cn[rid].getPort();
-
-        slog.info("unit server {}:{} starting; port={}, entsize={} capacity={}",
-                sid, rid, PORT, ENTRYSIZE, UNITCAPACITY);
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    new CorfuUnitServerImpl();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }}).run();
-    }
-
-    public CorfuUnitServerImpl() throws Exception {
+    public void serverloop() throws Exception {
 
         log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}",
                 log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
@@ -672,16 +584,16 @@ public class CorfuUnitServerImpl implements CorfuUnitServer.Iface {
         System.out.println("run..");
 
         try {
-            serverTransport = new TServerSocket(CorfuUnitServerImpl.PORT);
+            serverTransport = new TServerSocket(CorfuUnitTask.PORT);
 
             CorfuConfigServerImpl cnfg = new CorfuConfigServerImpl();
 
             TMultiplexedProcessor mprocessor = new TMultiplexedProcessor();
-            mprocessor.registerProcessor("SUNIT", new CorfuUnitServer.Processor<CorfuUnitServerImpl>(this));
-            mprocessor.registerProcessor("CONFIG", new CorfuConfigServer.Processor<CorfuConfigServerImpl>(cnfg));
+            mprocessor.registerProcessor("SUNIT", new CorfuUnitServer.Processor<CorfuUnitTask>(this));
+            mprocessor.registerProcessor("CONFIG", new com.microsoft.corfu.loggingunit.CorfuConfigServer.Processor<CorfuConfigServerImpl>(cnfg));
 
             server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(mprocessor));
-            System.out.println("Starting Corfu storage unit server on multiplexed port " + CorfuUnitServerImpl.PORT);
+            System.out.println("Starting Corfu storage unit server on multiplexed port " + CorfuUnitTask.PORT);
 
             server.serve();
         } catch (Exception e) {

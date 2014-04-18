@@ -1,13 +1,12 @@
 package com.microsoft.corfu;
 
-import java.util.HashMap;
 import java.util.List;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
-import com.microsoft.corfu.sunit.CorfuConfigServer;
-import com.microsoft.corfu.sunit.UnitWrap;
+import com.microsoft.corfu.loggingunit.CorfuConfigServer;
+import com.microsoft.corfu.loggingunit.UnitWrap;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TMultiplexedProtocol;
@@ -16,10 +15,8 @@ import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 import org.slf4j.*;
 
-import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.sequencer.CorfuSequencer;
-import com.microsoft.corfu.sunit.CorfuUnitServer;
-import com.microsoft.corfu.sunit.CorfuUnitServer.Client;
+import com.microsoft.corfu.loggingunit.CorfuUnitServer;
 
 public class CorfuClientImpl implements com.microsoft.corfu.CorfuAPI, com.microsoft.corfu.CorfuDbgInterface {
 	Logger log = LoggerFactory.getLogger(CorfuClientImpl.class);
@@ -27,7 +24,21 @@ public class CorfuClientImpl implements com.microsoft.corfu.CorfuAPI, com.micros
 	CorfuConfigManager CM;
 	CorfuSequencer.Client sequencer;
 	TTransport[] transports;
-	
+
+    public CorfuClientImpl(CorfuConfigManager CM) throws CorfuException {
+        log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}",
+                log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
+        this.CM = CM;
+        buildClientConnections();
+    }
+
+    public CorfuClientImpl(String configFilename) throws CorfuException {
+        log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}",
+                log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
+        CM = new CorfuConfigManager(new File("./corfu.xml"));
+        buildClientConnections();
+    }
+
 	public CorfuClientImpl() throws CorfuException {
 		
 		log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}", 
