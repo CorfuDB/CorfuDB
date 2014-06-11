@@ -11,7 +11,6 @@ package com.microsoft.corfuapps;
 import java.io.File;
 
 import com.microsoft.corfu.CorfuClientImpl;
-import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.ExtntWrap;
 

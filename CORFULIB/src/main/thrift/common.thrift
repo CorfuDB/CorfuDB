@@ -1,7 +1,7 @@
 namespace java com.microsoft.corfu
 
 
-enum CorfuErrorCode {
+enum ErrorCode {
 	OK,
 	ERR_OVERWRITE,
 	ERR_TRIMMED,
@@ -9,7 +9,8 @@ enum CorfuErrorCode {
 	ERR_BADPARAM,
 	ERR_FULL,
 	ERR_IO,
-	OK_SKIP
+	OK_SKIP,
+	ERR_STALEEPOCH,
 }
 
 enum ExtntMarkType {	EX_EMPTY, EX_FILLED, EX_TRIMMED, EX_SKIP }
@@ -23,9 +24,14 @@ struct ExtntInfo {
 typedef binary LogPayload
 
 struct ExtntWrap {
-	1: CorfuErrorCode err,
+	1: ErrorCode err,
 	2: ExtntInfo inf,
 	3: list<LogPayload> ctnt,
 	}
+
+struct UnitServerHdr {
+    1: i64 epoch,
+    2: i64 off,
+}
 	
 

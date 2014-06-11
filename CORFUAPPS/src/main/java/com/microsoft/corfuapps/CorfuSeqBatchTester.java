@@ -9,11 +9,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.microsoft.corfu.CorfuConfiguration;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 
-import com.microsoft.corfu.CorfuConfigManager;
 import com.microsoft.corfu.sequencer.CorfuSequencer;
 
 public class CorfuSeqBatchTester implements Runnable {
@@ -30,7 +30,7 @@ public class CorfuSeqBatchTester implements Runnable {
 	TTransport transport;
 	TBinaryProtocol protocol = null;
 
-	public CorfuSeqBatchTester(CorfuConfigManager CM) {
+	public CorfuSeqBatchTester(CorfuConfiguration CM) {
 			
 		int port = CM.getSequencer().getPort();
 		String sequencer = CM.getSequencer().getHostname();
@@ -79,7 +79,7 @@ public class CorfuSeqBatchTester implements Runnable {
 	 */
 	public static void main(String[] args) throws Exception {
 
-		CorfuConfigManager CM;
+		CorfuConfiguration CM;
 		String config = "./0.aux"; // default config file name
 		int nconsumerthreads = 1; // default
 		int nproducerthreads = 1;
@@ -113,7 +113,7 @@ public class CorfuSeqBatchTester implements Runnable {
 			}
 		}
 		
-		CM = new CorfuConfigManager(new File(config));
+		CM = new CorfuConfiguration(new File(config));
 		tokensneeded = new ArrayBlockingQueue<Integer>(1000);
 		tokens = new ArrayBlockingQueue<Integer>(1000);
 		

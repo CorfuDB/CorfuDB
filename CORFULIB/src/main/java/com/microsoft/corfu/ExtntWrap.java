@@ -47,9 +47,9 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
 
   /**
    * 
-   * @see CorfuErrorCode
+   * @see ErrorCode
    */
-  public CorfuErrorCode err; // required
+  public ErrorCode err; // required
   public ExtntInfo inf; // required
   public List<ByteBuffer> ctnt; // required
 
@@ -57,7 +57,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
     /**
      * 
-     * @see CorfuErrorCode
+     * @see ErrorCode
      */
     ERR((short)1, "err"),
     INF((short)2, "inf"),
@@ -126,7 +126,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
     tmpMap.put(_Fields.ERR, new org.apache.thrift.meta_data.FieldMetaData("err", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, CorfuErrorCode.class)));
+        new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ErrorCode.class)));
     tmpMap.put(_Fields.INF, new org.apache.thrift.meta_data.FieldMetaData("inf", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, ExtntInfo.class)));
     tmpMap.put(_Fields.CTNT, new org.apache.thrift.meta_data.FieldMetaData("ctnt", org.apache.thrift.TFieldRequirementType.DEFAULT, 
@@ -140,7 +140,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
   }
 
   public ExtntWrap(
-    CorfuErrorCode err,
+    ErrorCode err,
     ExtntInfo inf,
     List<ByteBuffer> ctnt)
   {
@@ -182,17 +182,17 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
 
   /**
    * 
-   * @see CorfuErrorCode
+   * @see ErrorCode
    */
-  public CorfuErrorCode getErr() {
+  public ErrorCode getErr() {
     return this.err;
   }
 
   /**
    * 
-   * @see CorfuErrorCode
+   * @see ErrorCode
    */
-  public ExtntWrap setErr(CorfuErrorCode err) {
+  public ExtntWrap setErr(ErrorCode err) {
     this.err = err;
     return this;
   }
@@ -281,7 +281,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
       if (value == null) {
         unsetErr();
       } else {
-        setErr((CorfuErrorCode)value);
+        setErr((ErrorCode)value);
       }
       break;
 
@@ -513,7 +513,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
         switch (schemeField.id) {
           case 1: // ERR
             if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
-              struct.err = CorfuErrorCode.findByValue(iprot.readI32());
+              struct.err = ErrorCode.findByValue(iprot.readI32());
               struct.setErrIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
@@ -633,7 +633,7 @@ public class ExtntWrap implements org.apache.thrift.TBase<ExtntWrap, ExtntWrap._
       TTupleProtocol iprot = (TTupleProtocol) prot;
       BitSet incoming = iprot.readBitSet(3);
       if (incoming.get(0)) {
-        struct.err = CorfuErrorCode.findByValue(iprot.readI32());
+        struct.err = ErrorCode.findByValue(iprot.readI32());
         struct.setErrIsSet(true);
       }
       if (incoming.get(1)) {

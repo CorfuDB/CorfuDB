@@ -8,14 +8,17 @@ import java.util.Iterator;
 import java.util.StringTokenizer;
 
 import com.microsoft.corfu.CorfuClientImpl;
-import com.microsoft.corfu.CorfuConfigManager;
+import com.microsoft.corfu.CorfuConfiguration;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.ExtntWrap;
-import com.microsoft.corfu.sunit.UnitWrap;
+import com.microsoft.corfu.loggingunit.UnitWrap;
+
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.TransformerException;
 
 public class CorfuShell {
 
-	static CorfuConfigManager CM = null;
+	static CorfuConfiguration CM = null;
 	CorfuClientImpl crf = null;
 
 	interface helper {
@@ -94,6 +97,32 @@ public class CorfuShell {
                     }
                 });							alias.put("rebuild",  "bu");
         infos.put("bu",  new CorfuShell.info("invoke rebuilt from the unit holding the specific offset", 1));
+
+        debugger.put("sl",
+                new helper() {
+                    @Override
+                    public void helperf(long[] dummy) throws CorfuException {
+                        crf.sealepoch();
+                        System.out.println("epoch 0 sealed");
+                    }
+                });							alias.put("seal",  "sl");
+        infos.put("sl",  new CorfuShell.info("seal epoch 0", 0));
+
+        debugger.put("fg",
+                new helper() {
+                    @Override
+                    public void helperf(long[] args) throws CorfuException {
+                        try {
+                            crf.getConfig().removeUnit(0, "localhost", (int)(args[0]));
+                        } catch (TransformerException e) {
+                            e.printStackTrace();
+                        } catch (ParserConfigurationException e) {
+                            e.printStackTrace();
+                        }
+                        System.out.println("epoch 0 sealed");
+                    }
+                });							alias.put("config",  "fg");
+        infos.put("fg",  new CorfuShell.info("remove localhost:<argument port> from configuration", 1));
 
         debugger.put("ra",
 				new helper() {

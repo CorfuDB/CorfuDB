@@ -65,7 +65,7 @@ $sunits | %{ $ind=0} {
 	$n = $_.nodeaddress
 
 	($rem, $port) = $n.split(":")
-	$smainclass = "com.microsoft.corfu.sunit.CorfuUnitServerImpl"
+	$smainclass = "com.microsoft.corfu.loggingunit.CorfuUnitServerImpl"
 
 	write-host unit-server on machine $rem port $port
 

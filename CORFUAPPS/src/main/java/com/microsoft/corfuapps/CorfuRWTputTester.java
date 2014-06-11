@@ -69,14 +69,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.microsoft.corfu.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.microsoft.corfu.CorfuClientImpl;
-import com.microsoft.corfu.CorfuConfigManager;
-import com.microsoft.corfu.CorfuErrorCode;
-import com.microsoft.corfu.CorfuException;
-import com.microsoft.corfu.ExtntWrap;
 
 public class CorfuRWTputTester {
 	static private Logger log = LoggerFactory.getLogger(CorfuRWTputTester.class);
@@ -189,7 +184,7 @@ public class CorfuRWTputTester {
 		ExtntWrap ret = null;
 		long trimpos = 0;
 		long nextread = 0;
-		CorfuConfigManager CM = null;
+		CorfuConfiguration CM = null;
 
 		try {
 			crf = new CorfuClientImpl();
@@ -240,7 +235,7 @@ public class CorfuRWTputTester {
 	private void writerloop() {
 		int rpt = 0;
 		CorfuClientImpl crf;
-		CorfuConfigManager CM = null;
+		CorfuConfiguration CM = null;
 		long off, lasthead;
 	
 		try {

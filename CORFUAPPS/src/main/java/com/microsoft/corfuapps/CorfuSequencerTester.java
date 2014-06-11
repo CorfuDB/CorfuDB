@@ -9,13 +9,13 @@ import org.apache.thrift.*;
 import org.apache.thrift.protocol.*;
 import org.apache.thrift.transport.*;
 
-import com.microsoft.corfu.CorfuConfigManager;
+import com.microsoft.corfu.CorfuConfiguration;
 import com.microsoft.corfu.sequencer.CorfuSequencer;
 
 
 public class CorfuSequencerTester implements Runnable {
 	
-	private CorfuConfigManager CM;
+	private CorfuConfiguration CM;
 	private int myid = -1;
 	private int nrequests = 100000;
 	
@@ -25,7 +25,7 @@ public class CorfuSequencerTester implements Runnable {
 	 */
 	public static void main(String[] args) throws Exception {
 
-		CorfuConfigManager CM;
+		CorfuConfiguration CM;
 		String config = "./0.aux"; // default config file name
 		int nthreads = 1; // default
 		int nrequests = 100000; // default
@@ -54,7 +54,7 @@ public class CorfuSequencerTester implements Runnable {
 			}
 		}
 		
-		CM = new CorfuConfigManager(new File(config));
+		CM = new CorfuConfiguration(new File(config));
 		
 		ExecutorService executor = Executors.newFixedThreadPool(nthreads);
 		for (int i = 0; i < nthreads; i++) {
@@ -66,7 +66,7 @@ public class CorfuSequencerTester implements Runnable {
 		executor.awaitTermination(1000, TimeUnit.SECONDS);
 	}
 		
-	public CorfuSequencerTester(int myind, int nrequests, CorfuConfigManager CM) {
+	public CorfuSequencerTester(int myind, int nrequests, CorfuConfiguration CM) {
 		super();
 		this.nrequests = nrequests;
 		this.CM = CM;
