@@ -10,7 +10,7 @@ import org.apache.thrift.protocol.*;
 import org.apache.thrift.transport.*;
 
 import com.microsoft.corfu.CorfuConfiguration;
-import com.microsoft.corfu.sequencer.CorfuSequencer;
+import com.microsoft.corfu.sequencer.SequencerService;
 
 
 public class CorfuSequencerTester implements Runnable {
@@ -49,7 +49,7 @@ public class CorfuSequencerTester implements Runnable {
 				System.out.println("use config file: " + config);
 				i += 2;
 			} else {
-				throw new Exception("Usage: " + CorfuSequencerTester.class.getName() + 
+				throw new Exception("Usage: " + CorfuSequencerTester.class.getName() +
 						" [-config <filename>] [-threads <numthreads>] [-repeat <nrepeat>]");
 			}
 		}
@@ -81,7 +81,7 @@ public class CorfuSequencerTester implements Runnable {
 		long elapsetime = 0;
 		long off;
 		
-		CorfuSequencer.Client seqclient;
+		SequencerService.Client seqclient;
 		TTransport transport;
 		TBinaryProtocol protocol = null;
 			
@@ -91,7 +91,7 @@ public class CorfuSequencerTester implements Runnable {
 		try {
 			transport = new TSocket(sequencer, port);
 			protocol = new TBinaryProtocol(transport);
-			seqclient = new CorfuSequencer.Client(protocol);
+			seqclient = new SequencerService.Client(protocol);
 			System.out.println("++" + myid + "++ open connection with sequencer on " + sequencer + " port " + port);
 			transport.open();
 

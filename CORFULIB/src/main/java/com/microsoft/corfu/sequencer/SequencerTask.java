@@ -8,7 +8,7 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
-public class SequencerTask implements CorfuSequencer.Iface {
+public class SequencerTask implements SequencerService.Iface {
 
     public static int port = 0;
 
@@ -30,13 +30,13 @@ public class SequencerTask implements CorfuSequencer.Iface {
 			
         TServer server;
         TServerSocket serverTransport;
-        CorfuSequencer.Processor<SequencerTask> processor;
+        SequencerService.Processor<SequencerTask> processor;
         System.out.println("run..");
 
         try {
             serverTransport = new TServerSocket(port);
             processor =
-                    new CorfuSequencer.Processor<SequencerTask>(this);
+                    new SequencerService.Processor<SequencerTask>(this);
             server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
             System.out.println("Starting sequencer on port " + port);
 

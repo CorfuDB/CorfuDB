@@ -5,7 +5,7 @@ import java.io.*;
 @SuppressWarnings("serial")
 public class CorfuException extends IOException
 {
-	public CorfuErrorCode er;
+	public ErrorCode er;
 	
 	public CorfuException(String desc)
 	{
@@ -20,7 +20,7 @@ class OverwriteCorfuException extends CorfuException
 	public OverwriteCorfuException(String desc)
 	{
 		super(desc);
-		this.er = CorfuErrorCode.ERR_OVERWRITE;
+		this.er = ErrorCode.ERR_OVERWRITE;
 	}
 }
 
@@ -30,7 +30,7 @@ class TrimmedCorfuException extends CorfuException
 	public TrimmedCorfuException(String desc)
 	{
 		super(desc);
-		this.er = CorfuErrorCode.ERR_TRIMMED;
+		this.er = ErrorCode.ERR_TRIMMED;
 	}
 }
 
@@ -41,7 +41,7 @@ class OutOfSpaceCorfuException extends CorfuException
 	public OutOfSpaceCorfuException(String desc)
 	{
 		super(desc);
-		this.er = CorfuErrorCode.ERR_FULL;
+		this.er = ErrorCode.ERR_FULL;
 	}
 }
 
@@ -52,7 +52,7 @@ class UnsupportedCorfuException extends CorfuException
 	public UnsupportedCorfuException(String desc)
 	{
 		super(desc);
-		this.er = CorfuErrorCode.ERR_BADPARAM;
+		this.er = ErrorCode.ERR_BADPARAM;
 	}
 }
 
@@ -62,7 +62,7 @@ class BadParamCorfuException extends CorfuException
 	public BadParamCorfuException(String desc)
 	{
 		super(desc);
-		this.er = CorfuErrorCode.ERR_BADPARAM;
+		this.er = ErrorCode.ERR_BADPARAM;
 	}
 }
 
@@ -73,7 +73,7 @@ class UnwrittenCorfuException extends CorfuException
 	public UnwrittenCorfuException(String desc)
 	{
 		super(desc);
-		this.er = CorfuErrorCode.ERR_UNWRITTEN;
+		this.er = ErrorCode.ERR_UNWRITTEN;
 	}
 }
 
@@ -83,7 +83,7 @@ class InternalCorfuException extends CorfuException
 	public InternalCorfuException(String desc)
 	{
 		super(desc);
-		this.er = CorfuErrorCode.ERR_BADPARAM;
+		this.er = ErrorCode.ERR_BADPARAM;
 	}
 }
 

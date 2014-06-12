@@ -7,11 +7,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.StringTokenizer;
 
-import com.microsoft.corfu.CorfuClientImpl;
-import com.microsoft.corfu.CorfuConfiguration;
-import com.microsoft.corfu.CorfuException;
-import com.microsoft.corfu.ExtntWrap;
-import com.microsoft.corfu.loggingunit.UnitWrap;
+import com.microsoft.corfu.*;
+import com.microsoft.corfu.loggingunit.LogUnitWrap;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerException;
@@ -19,7 +16,7 @@ import javax.xml.transform.TransformerException;
 public class CorfuShell {
 
 	static CorfuConfiguration CM = null;
-	CorfuClientImpl crf = null;
+	ClientLib crf = null;
 
 	interface helper {
 		void helperf(long[] args) throws CorfuException ;
@@ -91,7 +88,7 @@ public class CorfuShell {
                 new helper() {
                     @Override
                     public void helperf(long[] args) throws CorfuException {
-                        UnitWrap ret;
+                        LogUnitWrap ret;
                         ret = crf.rebuild(args[0]);
                         System.out.println("rebuild: lowwater=" + ret.getLowwater() + " highwater="+ ret.getHighwater());
                     }
@@ -108,21 +105,27 @@ public class CorfuShell {
                 });							alias.put("seal",  "sl");
         infos.put("sl",  new CorfuShell.info("seal epoch 0", 0));
 
-        debugger.put("fg",
+        debugger.put("rmg",
                 new helper() {
                     @Override
                     public void helperf(long[] args) throws CorfuException {
-                        try {
-                            crf.getConfig().removeUnit(0, "localhost", (int)(args[0]));
-                        } catch (TransformerException e) {
-                            e.printStackTrace();
-                        } catch (ParserConfigurationException e) {
-                            e.printStackTrace();
-                        }
-                        System.out.println("epoch 0 sealed");
+                        crf.proposeRemoveGroup((int)(args[0]));
+                        System.out.println("removed group " + args[0]);
                     }
-                });							alias.put("config",  "fg");
-        infos.put("fg",  new CorfuShell.info("remove localhost:<argument port> from configuration", 1));
+                });							alias.put("rmgroup",  "rmg");
+        infos.put("rmg",  new CorfuShell.info("remove the specified component from the stripe-set",  1));
+
+        debugger.put("addg",
+                new helper() {
+                    @Override
+                    public void helperf(long[] args) throws CorfuException {
+                        String endp = "localhost:" + String.valueOf(args[0]);
+                        System.out.println("adding stripe-group " + endp);
+                        Endpoint[] e = {new Endpoint(endp)};
+                        crf.proposeDeployGroup(e);
+                    }
+                });							alias.put("addgroup",  "addg");
+        infos.put("addg",  new CorfuShell.info("add the specified replica-set at the end of the stripe-set",  1));
 
         debugger.put("ra",
 				new helper() {
@@ -197,7 +200,7 @@ public class CorfuShell {
 		info inf;
 
 		try {
-			crf = new CorfuClientImpl();
+			crf = new ClientLib("localhost");
 		} catch (CorfuException e) {
 			e.printStackTrace();
 			return;

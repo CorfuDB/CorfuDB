@@ -178,7 +178,7 @@ public class CorfuRWTputTester {
 	}
 
 	private void readerloop() {
-		CorfuClientImpl crf;
+		ClientLib crf;
 		
 		int rpt = 0;
 		ExtntWrap ret = null;
@@ -187,7 +187,7 @@ public class CorfuRWTputTester {
 		CorfuConfiguration CM = null;
 
 		try {
-			crf = new CorfuClientImpl();
+			crf = new ClientLib("localhost");
 			CM = crf.getConfig();
 		} catch (CorfuException e) {
 			log.error("reader cannot set connection to Corfu service, quitting");
@@ -234,12 +234,12 @@ public class CorfuRWTputTester {
 	
 	private void writerloop() {
 		int rpt = 0;
-		CorfuClientImpl crf;
+		ClientLib crf;
 		CorfuConfiguration CM = null;
 		long off, lasthead;
 	
 		try {
-			crf = new CorfuClientImpl();
+			crf = new ClientLib("localhost");
 			CM = crf.getConfig();
 			lasthead = crf.queryhead();
 		} catch (CorfuException e) {
@@ -264,7 +264,7 @@ public class CorfuRWTputTester {
 				}
 
 			} catch (CorfuException e) {
-				if (e.er.equals(CorfuErrorCode.ERR_FULL)) {
+				if (e.er.equals(ErrorCode.ERR_FULL)) {
 					log.info("corfu append failed; out of space...........waiting for readers to consume the log and trim it...");
 					try {
 						do {
@@ -280,7 +280,7 @@ public class CorfuRWTputTester {
 						e1.printStackTrace();
 						break;
 					}
-				} else if (e.er.equals(CorfuErrorCode.ERR_OVERWRITE)) {
+				} else if (e.er.equals(ErrorCode.ERR_OVERWRITE)) {
 					log.warn("writeloop incurred OverwriteCorfuException; continuing");
 				} else { // all other errors may not be recoverable 
 					log.error("appendExtnt failed with bad error code, writerloop quitting");

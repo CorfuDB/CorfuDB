@@ -15,7 +15,7 @@ public class LogUnitDriver {
      * @throws Exception
      */
     public static void main(String[] args) throws Exception {
-        String Usage = "\n Usage: " + CorfuUnitServer.class.getName() + "<-port <port>> [-size <size>] [-grain <grain>]" +
+        String Usage = "\n Usage: " + LogUnitService.class.getName() + "<-port <port>> [-size <size>] [-grain <grain>]" +
                 "<-rammode> | <-drivename <name> [-recover | -rebuild <hostname:port> ] ";
 
         LogUnitTask.Builder cb = new LogUnitTask.Builder();

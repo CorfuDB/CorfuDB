@@ -10,18 +10,18 @@ package com.microsoft.corfuapps;
 
 import java.io.File;
 
-import com.microsoft.corfu.CorfuClientImpl;
+import com.microsoft.corfu.ClientLib;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.ExtntWrap;
 
 public class Helloworld {
 
 	public static void main(String[] args) {
-		CorfuClientImpl crf;
+		ClientLib crf;
 		
 		// establish client connection with Corfu service
 		try {
-			crf = new CorfuClientImpl();
+			crf = new ClientLib("localhost");
 		} catch (CorfuException e) {
 			System.out.println("cannot establish connection to Corfu service, quitting");
 			return;

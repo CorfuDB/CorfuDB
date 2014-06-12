@@ -5,6 +5,7 @@ package com.microsoft.corfu;
 
 import java.io.*;
 import java.util.ArrayList;
+import javax.security.auth.login.Configuration;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -96,7 +97,9 @@ public class CorfuConfiguration
     public int getGlobalEpoch() { return globalepoch; }
 
     public void changeEpoch(int ne) { globalepoch = ne; }
-	
+
+    SegmentView getActiveSegmentView() { return segmentlist.get(segmentlist.size()-1); }
+
 	public int getNumSegments() { return segmentlist.size(); }
 	
 	/** obtain the count of distinct replica-sets
@@ -164,7 +167,8 @@ public class CorfuConfiguration
             Endpoint tokenserver = new Endpoint(tokenserveraddress);
 
             GroupView[] grouplist = new GroupView[numgroups];
-            log.info("Segment {} with {} group(s) [{}..{}] grain={}",
+            log.info("globalepoch {}Segment {} with {} group(s) [{}..{}] grain={}",
+                    globalepoch,
                     segmentindex, numgroups, startoff, startoff + disksize, grain);
 
             for (int j = 0; j < segmentN.getChildNodes().getLength(); j++) {
@@ -177,7 +181,7 @@ public class CorfuConfiguration
                 int numnodes = Integer.parseInt(groupN.getAttributes().getNamedItem("numnodes").getNodeValue());
                 int groupID = Integer.parseInt(groupN.getAttributes().getNamedItem("groupID").getNodeValue());
 
-                if (numnodes > 0) {
+                if (numnodes > 1) {
                     log.error("replication not supported yet");
                     System.exit(0);
                 }
@@ -301,12 +305,12 @@ public class CorfuConfiguration
      * @param highOffset the highest log-offset reached up to now
      * @param hostname removed unit hostname
      * @param port removed unit port #
-     * @return a  String representation (in XML format) of the new configuration
+     * @return a proposed new configuration
      * @throws TransformerException when an internal problem occurs in transforming to XML string
      * @throws ParserConfigurationException when an internal problem occurs when parsing the configuration
      * @throws BadParamCorfuException when the unit to be removed is either not found, or is a single replica
      */
-    public String getRemoveUnitProposal(long highOffset, String hostname, int port)
+    public CorfuConfiguration getRemoveUnitProposal(long highOffset, String hostname, int port)
             throws CorfuException {
         CorfuConfiguration newC = new CorfuConfiguration(this);
         newC.changeEpoch(globalepoch+1);
@@ -336,8 +340,7 @@ public class CorfuConfiguration
         newseg.startoff = highOffset+1;
         log.info("new segment starts at offset {}", newseg.startoff);
         newC.segmentlist.add(newseg);
-
-        return newC.ConfToXMLString();
+        return newC;
     }
 
     /**
@@ -347,12 +350,12 @@ public class CorfuConfiguration
      * @param highOffset the highest log-offset reached up to now
      * @param groupind the index of the removed group (between 0..numgroups-1).
      *
-     * @return a  String representation (in XML format) of the new configuration
+     * @return a proposed new configuration
      * @throws TransformerException when an internal problem occurs in transforming to XML string
      * @throws ParserConfigurationException when an internal problem occurs when parsing the configuration
      * @throws BadParamCorfuException when the unit to be removed is either not found, or is a single replica
      */
-    public String getRemoveGroupProposal(long highOffset, int groupind)
+    public CorfuConfiguration getRemoveGroupProposal(long highOffset, int groupind)
             throws CorfuException {
 
         CorfuConfiguration newC = new CorfuConfiguration(this);
@@ -365,7 +368,7 @@ public class CorfuConfiguration
         s.startoff = highOffset+1;
         newC.segmentlist.add(s);
 
-        return ConfToXMLString();
+        return newC;
     }
 
     /**
@@ -375,12 +378,12 @@ public class CorfuConfiguration
      * @param highOffset the highest log-offset reached up to now
      * @param newgroup the list of logging-unit endpoints of the new replica-group.
      *
-     * @return a  String representation (in XML format) of the new configuration
+     * @return a proposed new configuration
      * @throws TransformerException when an internal problem occurs in transforming to XML string
      * @throws ParserConfigurationException when an internal problem occurs when parsing the configuration
      * @throws BadParamCorfuException when the unit to be removed is either not found, or is a single replica
      */
-    public String getDeployGroupProposal(long highOffset, Endpoint[] newgroup)
+    public CorfuConfiguration getDeployGroupProposal(long highOffset, Endpoint[] newgroup)
         throws CorfuException {
         CorfuConfiguration newC = new CorfuConfiguration(this);
         newC.getActiveSegmentView().setEndoff(highOffset);
@@ -391,13 +394,9 @@ public class CorfuConfiguration
         s.startoff = highOffset+1;
         newC.segmentlist.add(s);
 
-        return ConfToXMLString();
+        return newC;
     }
 
-	SegmentView getActiveSegmentView()
-	{
-		return segmentlist.get(segmentlist.size()-1);
-	}
 
 	SegmentView getSegmentForOffset(long offset)
 	{
@@ -420,17 +419,19 @@ public class CorfuConfiguration
 	EntryLocation getLocationForOffset(long offset)
 	{
 		EntryLocation ret = new EntryLocation();
-		
-		SegmentView sv = this.getSegmentForOffset(offset);
-		
+	    SegmentView sv = this.getSegmentForOffset(offset);
 		long reloff = offset - sv.startoff;
 		
 		//select the group using a simple modulo mapping function
 		int gnum = (int)(reloff%sv.numgroups);	
-		
 		ret.group = sv.groups[gnum];
-	
 		ret.relativeOff = reloff/sv.numgroups + ret.group.localstartoff;
+
+        log.info("location({}): seg.startOff={} gnum={} group-startOff={} relativeOff={} ",
+                offset,
+                sv.startoff,
+                gnum,
+                ret.group.localstartoff, ret.relativeOff);
 
 		return ret;
 	}

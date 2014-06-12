@@ -15,5 +15,6 @@ public interface ConfigAPI {
 
     public CorfuConfiguration pullConfig() throws CorfuException;
 
-    public void proposeDeployGroup(Endpoint[] newg) throws CorfuException, TransformerException, ParserConfigurationException;
+    public void proposeDeployGroup(Endpoint[] newg) throws CorfuException;
+    public void proposeRemoveGroup(int groupind) throws CorfuException;
 }

@@ -14,7 +14,7 @@ import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 
-import com.microsoft.corfu.sequencer.CorfuSequencer;
+import com.microsoft.corfu.sequencer.SequencerService;
 
 public class CorfuSeqBatchTester implements Runnable {
 
@@ -26,7 +26,7 @@ public class CorfuSeqBatchTester implements Runnable {
 	static ArrayBlockingQueue<Integer> tokens;
 	static AtomicInteger id = new AtomicInteger(0);
 	
-	CorfuSequencer.Client seqclient;
+	SequencerService.Client seqclient;
 	TTransport transport;
 	TBinaryProtocol protocol = null;
 
@@ -38,7 +38,7 @@ public class CorfuSeqBatchTester implements Runnable {
 		try {
 			transport = new TSocket(sequencer, port);
 			protocol = new TBinaryProtocol(transport);
-			seqclient = new CorfuSequencer.Client(protocol);
+			seqclient = new SequencerService.Client(protocol);
 			System.out.println("++ open connection with sequencer on " + sequencer + " port " + port);
 			transport.open();
 		} catch (Exception e) {
@@ -105,7 +105,7 @@ public class CorfuSeqBatchTester implements Runnable {
 				System.out.println("use config file: " + config);
 				i += 2;
 			} else {
-				throw new Exception("Usage: " + CorfuSequencerTester.class.getName() + 
+				throw new Exception("Usage: " + CorfuSeqBatchTester.class.getName() +
 						" [-config <filename>]" +
 						" [-consumerthreads <numthreads>]" + 
 						" [-producerthreads <numthreads>]" + 

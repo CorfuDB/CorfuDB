@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.microsoft.corfu.CorfuClientImpl;
+import com.microsoft.corfu.ClientLib;
 import com.microsoft.corfu.CorfuException;
 import com.microsoft.corfu.ExtntWrap;
 
@@ -67,11 +67,11 @@ public class CorfuReadTputTester {
 			executor.execute(new Runnable() {
 				@Override
 				public void run() {
-					CorfuClientImpl crf;
+					ClientLib crf;
 					
 					// establish client connection with Corfu service
 					try {
-						crf = new CorfuClientImpl();
+						crf = new ClientLib("localhost");
 					} catch (CorfuException e) {
 						System.out.println("cannot establish connection to Corfu service, quitting");
 						return;

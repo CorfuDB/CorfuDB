@@ -4,13 +4,12 @@ import com.microsoft.corfu.loggingunit.LogUnitConfigService;
 import com.microsoft.corfu.loggingunit.LogUnitService;
 import com.microsoft.corfu.loggingunit.LogUnitWrap;
 import com.microsoft.corfu.sequencer.SequencerService;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TMultiplexedProtocol;
@@ -628,7 +627,7 @@ public class ClientLib implements
     }
 
     public CorfuConfiguration pullConfig() throws CorfuException {
-        CloseableHttpClient httpclient = HttpClients.createDefault();
+        DefaultHttpClient httpclient = new DefaultHttpClient();
 
         CorfuConfiguration C = null;
 
@@ -636,7 +635,7 @@ public class ClientLib implements
             HttpGet httpget = new HttpGet("http://localhost:8000/corfu"); // TODO use 'master' for master-hostname
 
             System.out.println("Executing request: " + httpget.getRequestLine());
-            CloseableHttpResponse response = httpclient.execute(httpget);
+            HttpResponse response = httpclient.execute(httpget);
 
             log.info("pullConfig from master: {}" , response.getStatusLine());
 
@@ -650,31 +649,33 @@ public class ClientLib implements
     }
 
     public void proposeDeployGroup(Endpoint[] newg) throws CorfuException {
-        String proposal = CM.getDeployGroupProposal(0, newg); // TODO determine highOffset and use for proposal
-        proposeReconfig(proposal);
+        proposeReconfig(CM.getDeployGroupProposal(querytail(), newg));
     }
 
-    private void proposeReconfig(String proposal) throws CorfuException {
-        CloseableHttpClient httpclient = HttpClients.createDefault();
+    public void proposeRemoveGroup(int gind) throws CorfuException {
+        proposeReconfig(CM.getRemoveGroupProposal(querytail(), gind));
+    }
+
+    private void proposeReconfig(CorfuConfiguration proposal) throws CorfuException {
+        String strProposal = proposal.ConfToXMLString();
+
+        // TODO seal!
+        DefaultHttpClient httpclient = new DefaultHttpClient();
         try {
             HttpPost httppost = new HttpPost("http://localhost:8000/corfu");
-            httppost.setEntity(new StringEntity(proposal));
+            httppost.setEntity(new StringEntity(strProposal));
 
             // System.out.println("Executing request: " + httppost.getRequestLine());
-            CloseableHttpResponse response = httpclient.execute(httppost);
+            HttpResponse response = httpclient.execute(httppost);
 
             log.info("proposal master status  -- {}", response.getStatusLine());
             BufferedReader b = new BufferedReader(new InputStreamReader(response.getEntity().getContent()));
             String resp = b.readLine();
             log.info("proposal master response -- {}", resp);
-            if (resp.startsWith("approved")) {
-                CM  = new CorfuConfiguration(proposal);
+            if (resp.startsWith("approve")) {
+                CM  = proposal;
             }
 
-        } catch (ClientProtocolException e) {
-            throw new InternalCorfuException("cannot propose  configuration");
-        } catch (UnsupportedEncodingException e) {
-            throw new InternalCorfuException("cannot propose  configuration");
         } catch (IOException e) {
             throw new InternalCorfuException("cannot propose  configuration");
         }
