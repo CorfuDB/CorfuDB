@@ -216,7 +216,7 @@ public class ClientLib implements
 	public void writeExtnt(long offset, List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException {
 		ErrorCode er = null;
 		EntryLocation el = CM.getLocationForOffset(offset);
-		LogUnitService.Client sunit = getSUnit(el.group.replicas[0].getInfo());
+        LogUnitService.Client sunit = getSUnit(el.group.replicas[0].getInfo());
 
 		try {
 			log.debug("write({} size={} marktype={}", offset, ctnt.size(), ExtntMarkType.EX_FILLED);

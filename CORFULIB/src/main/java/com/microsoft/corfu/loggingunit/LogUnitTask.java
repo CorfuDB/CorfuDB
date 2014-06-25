@@ -266,7 +266,11 @@ public class LogUnitTask implements LogUnitService.Iface {
 	public ErrorCode appendExtntLogStore(long logOffset, List<ByteBuffer> wbufs, ExtntMarkType et)
             throws IOException {
 		if (logOffset < trimmark) return ErrorCode.ERR_OVERWRITE;
-        if ((logOffset-trimmark) >= UNITCAPACITY) return ErrorCode.ERR_FULL;
+        if ((logOffset-trimmark) >= UNITCAPACITY) {
+            setExtntInfo(logOffset, 0, 0, et);
+            return ErrorCode.ERR_FULL;
+        }
+
         ExtntMarkType oldet = getET(logOffset);
         if (oldet != ExtntMarkType.EX_EMPTY) {
             log.info("append would overwrite {} marked-{} trimmark={}", logOffset, oldet, trimmark);
@@ -275,6 +279,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 		int physOffset = highwater;
 		if (!put(wbufs)) {
 			log.info("no free space for append({})", logOffset);
+            setExtntInfo(logOffset, 0, 0, et);
 			return ErrorCode.ERR_FULL;
 		}
 		setExtntInfo(logOffset, physOffset, wbufs.size(), et);

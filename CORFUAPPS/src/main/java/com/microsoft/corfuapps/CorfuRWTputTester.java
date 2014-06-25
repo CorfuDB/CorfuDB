@@ -83,7 +83,8 @@ public class CorfuRWTputTester {
 	static private int nrepeat = 0;
 	static private int entsize = 0;
 	static private int printfreq = 1000;
-	
+    static int trimthresh = 1000;
+
 	/**
 	 * @param args
 	 * @throws Exception 
@@ -92,8 +93,14 @@ public class CorfuRWTputTester {
 		
 		int nwriterthreads = 5;
 		int nreaderthreads = 1;
+
 		String Usage = "Usage: " + CorfuRWTputTester.class.getName() + 
-				" [-rthreads <numreaderthreads>] [-wthreads <numwriterthreads>]-repeat <nrepeat> -size <entry-size> [-printfreq <frequency>]";
+			" [-rthreads <numreaderthreads>]" +
+            " [-wthreads <numwriterthreads>]" +
+            " -repeat <nrepeat> -size <entry-size> -trimthresh <trim-threshold>" +
+            " [-printfreq <frequency>]";
+
+
 		
 		// parse args
 		for (int i = 0; i < args.length; ) {
@@ -113,6 +120,10 @@ public class CorfuRWTputTester {
 				entsize = Integer.valueOf(args[i+1]);
 				System.out.println("entry size: " + entsize);
 				i += 2;
+            } else if (args[i].startsWith("-trimthresh") && i < args.length-1) {
+                trimthresh = Integer.valueOf(args[i+1]);
+                System.out.println("trim threshold: " + trimthresh);
+                i += 2;
 			} else if (args[i].startsWith("-printfreq") && i < args.length-1) {
 				printfreq = Integer.valueOf(args[i+1]);
 				System.out.println("print every # appends: " + printfreq);
@@ -184,11 +195,11 @@ public class CorfuRWTputTester {
 		ExtntWrap ret = null;
 		long trimpos = 0;
 		long nextread = 0;
-		CorfuConfiguration CM = null;
+		// CorfuConfiguration CM = null;
 
 		try {
 			crf = new ClientLib("localhost");
-			CM = crf.getConfig();
+			// CM = crf.getConfig();
 		} catch (CorfuException e) {
 			log.error("reader cannot set connection to Corfu service, quitting");
 			return;
@@ -203,7 +214,7 @@ public class CorfuRWTputTester {
 				rcommulative.incrementAndGet();
 				rpt++;
 
-				if (nextread - trimpos >= CM.getUnitsize()/2) {
+				if (nextread - trimpos >= trimthresh) {
 					trimpos = ret.getInf().getMetaFirstOff(); // no! crf.checkLogMark(CorfuLogMark.CONTIG);
 					log.info("reader consumed half-log ; trimming log to {}", trimpos);
 					crf.trim(trimpos);
@@ -235,12 +246,12 @@ public class CorfuRWTputTester {
 	private void writerloop() {
 		int rpt = 0;
 		ClientLib crf;
-		CorfuConfiguration CM = null;
+		// CorfuConfiguration CM = null;
 		long off, lasthead;
 	
 		try {
 			crf = new ClientLib("localhost");
-			CM = crf.getConfig();
+			// CM = crf.getConfig();
 			lasthead = crf.queryhead();
 		} catch (CorfuException e) {
 			log.error("reader cannot set connection to Corfu service, quitting");
@@ -258,7 +269,7 @@ public class CorfuRWTputTester {
 				wcommulative.incrementAndGet();
 				synchronized(this) { notify(); }
 				
-				if (off - lasthead > CM.getCapacity()/2) {
+				if (off - lasthead > trimthresh) {
 					log.info("checkpoint at {}", off);
 					crf.ckpoint(off);
 				}
@@ -270,7 +281,7 @@ public class CorfuRWTputTester {
 						do {
 							synchronized(this) { notify(); }
 							Thread.sleep(1);
-						} while (crf.querytail() - crf.queryhead() >= CM.getCapacity());
+						} while (crf.querytail() - crf.queryhead() >= trimthresh);
 						
 					} catch (InterruptedException e1) {
 						// TODO Auto-generated catch block

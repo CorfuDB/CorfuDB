@@ -95,6 +95,15 @@ public class CorfuShell {
                 });							alias.put("rebuild",  "bu");
         infos.put("bu",  new CorfuShell.info("invoke rebuilt from the unit holding the specific offset", 1));
 
+        debugger.put("cfg",
+                new helper() {
+                    @Override
+                    public void helperf(long[] dummy) throws CorfuException {
+                        CorfuConfiguration C = crf.pullConfig();
+                    }
+                });							alias.put("pullconfig",  "cfg");
+        infos.put("cfg",  new CorfuShell.info("pull configuration", 0));
+
         debugger.put("sl",
                 new helper() {
                     @Override
