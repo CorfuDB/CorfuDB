@@ -82,10 +82,24 @@ public class ClientLib implements
 				throw new CorfuException("could not set up connection(s)");
 			}		
 		}
-		
 	}
-	LogUnitService.Client getSUnit(Object ep) { return ((clientSunitEndpoint)ep).cl; }
-    LogUnitConfigService.Client getConfigServer(Object ep) { return ((clientSunitEndpoint)ep).configcl; }
+
+    LogUnitService.Client getSUnitOf(Endpoint cn) throws CorfuException {
+        clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
+        if (ep == null) {
+            ep = new clientSunitEndpoint(cn);
+            cn.setInfo(ep);
+        }
+        return ep.cl;
+    }
+    LogUnitConfigService.Client getCfgOf(Endpoint cn) throws CorfuException {
+        clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
+        if (ep == null) {
+            ep = new clientSunitEndpoint(cn);
+            cn.setInfo(ep);
+        }
+        return ep.configcl;
+    }
 
 	class clientSequencerEndpoint {
 		TTransport t = null;
@@ -107,10 +121,6 @@ public class ClientLib implements
 	}
 	
 	void buildClientConnections() throws CorfuException { 
-		// invoked at startup and every time configuration changes
-
-		// TODO for now, contains only startup code
-		//
 
 		for (int g = 0; g < CM.getNumGroups(); g++) {
 			
@@ -118,17 +128,14 @@ public class ClientLib implements
 			Endpoint[] rset = CM.getGroupByNumber(g);
 			
 			for (int r = 0; r < nreplicas; r++) {
-				Endpoint cn = rset[r];
-				Object o = new clientSunitEndpoint(cn);
-				cn.setInfo(o);
-
+                getSUnitOf(rset[r]);
 			}
 		}
 		
 		Endpoint sn = CM.getSequencer();
-		Object o = new clientSequencerEndpoint(sn);
-		sn.setInfo(o);
-		sequencer = ((clientSequencerEndpoint)o).cl;
+		clientSequencerEndpoint seq = new clientSequencerEndpoint(sn);
+        sn.setInfo(seq);
+		sequencer = seq.cl;
 	}
 
 	/**
@@ -216,7 +223,7 @@ public class ClientLib implements
 	public void writeExtnt(long offset, List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException {
 		ErrorCode er = null;
 		EntryLocation el = CM.getLocationForOffset(offset);
-        LogUnitService.Client sunit = getSUnit(el.group.replicas[0].getInfo());
+        LogUnitService.Client sunit = getSUnitOf(el.group.replicas[0]);
 
 		try {
 			log.debug("write({} size={} marktype={}", offset, ctnt.size(), ExtntMarkType.EX_FILLED);
@@ -267,7 +274,7 @@ public class ClientLib implements
 		ExtntWrap ret;
 	
 		EntryLocation el = CM.getLocationForOffset(offset);
-		LogUnitService.Client sunit = getSUnit(el.group.replicas[0].getInfo());
+		LogUnitService.Client sunit = getSUnitOf(el.group.replicas[0]);
 		try {
 			ret = sunit.readmeta(genHeader(offset));
 		} catch (TException e) {
@@ -379,7 +386,7 @@ public class ClientLib implements
 				
 		// next, try to read 'offset' to see what is the error value
 		EntryLocation el = CM.getLocationForOffset(offset);
-		LogUnitService.Client sunit = getSUnit(el.group.replicas[0].getInfo());
+		LogUnitService.Client sunit = getSUnitOf(el.group.replicas[0]);
 		try {
 			log.debug("repairNext read({})", offset);
 			ExtntWrap ret = sunit.read(genHeader(offset));
@@ -443,7 +450,7 @@ public class ClientLib implements
 		
 		for (int j = 0; j < ngroups; j++) {
 			for (int k = 0; k < nreplicas; k++) {
-				LogUnitService.Client sunit = getSUnit(CM.getGroupByNumber(j)[k].getInfo());					
+				LogUnitService.Client sunit = getSUnitOf(CM.getGroupByNumber(j)[k]);
 				try { sunit.sync(); } catch (TException e) {
 					throw new InternalCorfuException("sync() failed ");
 				}
@@ -459,17 +466,21 @@ public class ClientLib implements
 	 * @throws CorfuException
 	 */
 	public void trim(long offset) throws CorfuException {
-		int ngroups = CM.getNumGroups(); int nreplicas = CM.getGroupsizeByNumber(0);
-		
-		for (int j = 0; j < ngroups; j++) {
-			for (int k = 0; k < nreplicas; k++) {
-				LogUnitService.Client sunit = getSUnit(CM.getGroupByNumber(j)[k].getInfo());					
-				try { sunit.trim(genHeader(offset)); } catch (TException e) {
-					throw new InternalCorfuException("sync() failed ");
-				}
-			}
-		}		
-	}
+        for (SegmentView s : CM.segmentlist) {
+            if (offset <= s.startoff) break;
+
+            for (int j = 0; j < s.numgroups; j++) {
+                for (int k = 0; k < s.groups[j].numnodes; k++) {
+                    LogUnitService.Client sunit = getSUnitOf(s.groups[j].replicas[k]);
+                    try {
+                        sunit.trim(genHeader(offset));
+                    } catch (TException e) {
+                        throw new InternalCorfuException("sync() failed ");
+                    }
+                }
+            }
+        }
+    }
 
 	
 	
@@ -481,7 +492,7 @@ public class ClientLib implements
 	 */
 	@Override
 	public long queryhead() throws CorfuException {
-		LogUnitService.Client sunit = getSUnit(CM.getGroupByNumber(0)[0].getInfo());					
+		LogUnitService.Client sunit = getSUnitOf(CM.getGroupByNumber(0)[0]);
 		long r;
 		try {
 			r = sunit.querytrim();
@@ -557,7 +568,7 @@ public class ClientLib implements
 	@Override
 	public ExtntWrap dbg(long offset) throws CorfuException {
 		EntryLocation el = CM.getLocationForOffset(offset);
-		LogUnitService.Client sunit = getSUnit(el.group.replicas[0].getInfo());
+		LogUnitService.Client sunit = getSUnitOf(el.group.replicas[0]);
 		try {
 			return sunit.readmeta(genHeader(offset));
 		} catch (TException t) {
@@ -597,7 +608,7 @@ public class ClientLib implements
 
     public LogUnitWrap rebuild(long offset) throws CorfuException {
         EntryLocation el = CM.getLocationForOffset(offset);
-        LogUnitConfigService.Client cnfg = getConfigServer(el.group.replicas[0].getInfo());
+        LogUnitConfigService.Client cnfg = getCfgOf(el.group.replicas[0]);
         LogUnitWrap ret = null;
         try {
             ret = cnfg.rebuild();
@@ -616,7 +627,7 @@ public class ClientLib implements
         for (int i = 0; i < ngroups; i++) {
             int gsize = CM.getGroupsizeByNumber(i);
             for (int j = 0; j < gsize; j++) {
-                LogUnitConfigService.Client cnfg = getConfigServer(CM.getGroupByNumber(i)[j].getInfo());
+                LogUnitConfigService.Client cnfg = getCfgOf(CM.getGroupByNumber(i)[j]);
                 try {
                     cnfg.epochchange(genHeader(0));
                 } catch (TException e) {

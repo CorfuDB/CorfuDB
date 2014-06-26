@@ -11,6 +11,7 @@ public class Endpoint {
 	{
 		hostname = fullname.substring(0, fullname.indexOf(":"));
 		port = Integer.parseInt(fullname.substring(fullname.indexOf(":")+1));
+        info = null;
 	}
 
 	@Override

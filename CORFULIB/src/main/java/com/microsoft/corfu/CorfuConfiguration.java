@@ -412,9 +412,9 @@ public class CorfuConfiguration
 		ret.group = sv.groups[gnum];
 		ret.relativeOff = reloff/sv.numgroups + ret.group.localstartoff;
 
-        log.info("location({}): seg.startOff={} gnum={} group-startOff={} relativeOff={} ",
+        log.info("location({}): seg=({}..{}) gnum={} group-startOff={} relativeOff={} ",
                 offset,
-                sv.startoff,
+                sv.startoff, sv.endoff,
                 gnum,
                 ret.group.localstartoff, ret.relativeOff);
 
@@ -460,7 +460,7 @@ class SegmentView
 		this.grain = grain;
 		this.groups = groups;
 		this.tokenserver = tokenserver;
-        this.endoff = -1;
+        this.endoff = endoff;
 	}
     public long getEndoff() {
         return endoff;
@@ -482,7 +482,8 @@ class SegmentView
     }
 
     static public SegmentView genRemoveGroup(SegmentView current, int groupind, long newoff) {
-        GroupView[] newgroups = new GroupView[current.numgroups-1];
+        int newsz = current.numgroups-1;
+        GroupView[] newgroups = new GroupView[newsz];
 
         long groupSealSize = (current.endoff - current.startoff + current.numgroups-1) / current.numgroups;
             // groupSealSize is the amount of entries per replica-group which was used up in the current segment
@@ -495,33 +496,38 @@ class SegmentView
             newgroups[i].localstartoff += groupSealSize;
             i++;
         }
-        SegmentView news = new SegmentView(current.startoff,
+        SegmentView news = new SegmentView(newoff,
                 current.numgroups-1,
-                current.endoff,
+                -1,
                 current.grain,
                 newgroups,
                 current.tokenserver);
-        news.startoff = newoff;
         return news;
     }
 
     static public SegmentView genAddGroup(SegmentView current, Endpoint[] newgroup, long newoff) {
         int newsz = current.numgroups+1;
         GroupView[] newgroups = new GroupView[newsz];
-        System.arraycopy(current.groups, 0, newgroups, 0, newsz-1);
+        long groupSealSize = (current.endoff - current.startoff + current.numgroups-1) / current.numgroups;
 
-        newgroups[current.numgroups] = new GroupView(0 /* TODO */,
+        int i = 0;
+        for (GroupView group : current.groups) {
+            newgroups[i] = new GroupView(group);
+            newgroups[i].localstartoff += groupSealSize;
+            i++;
+        }
+
+        newgroups[newsz-1] = new GroupView(0 /* TODO */,
                 newgroup,
                 current.groups[0].localepoch /* TODO*/,
                 newgroup.length,
                 newsz-1);
-        SegmentView news = new SegmentView(current.startoff,
+        SegmentView news = new SegmentView(newoff,
                 newsz,
-                current.endoff,
+                -1,
                 current.grain,
                 newgroups,
                 current.tokenserver);
-        news.startoff = newoff;
         return news;
     }
 }
