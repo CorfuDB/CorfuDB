@@ -5,6 +5,7 @@ package com.microsoft.corfu;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Vector;
 import javax.security.auth.login.Configuration;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -21,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 /**
@@ -30,8 +32,26 @@ public class CorfuConfiguration
 {
 	Logger log = LoggerFactory.getLogger(CorfuConfiguration.class);
 
-    int globalepoch;
-    ArrayList<SegmentView> segmentlist = new ArrayList<SegmentView>();
+    protected int epoch;
+    protected int pagesize;
+    protected ArrayList<SegmentView> segmentlist = new ArrayList<SegmentView>();
+    protected Endpoint sequencer;
+
+    public Endpoint getSequencer() {
+        return sequencer;
+    }
+
+    public int getPagesize() {
+        return pagesize;
+    }
+
+    public int getEpoch() {
+        return epoch;
+    }
+
+    public void setEpoch(int epoch) {
+        this.epoch = epoch;
+    }
 
     /** Constructor from a general input-source
      * @param is
@@ -78,196 +98,147 @@ public class CorfuConfiguration
         this(new InputSource(new FileReader(bootstraplocation)));
     }
 
-    /**
-     * copy constructor
-     * @param cloned
-     */
-    public CorfuConfiguration(CorfuConfiguration cloned) {
-        globalepoch = cloned.globalepoch;
-        segmentlist = new ArrayList<SegmentView>();
-        for (SegmentView s : cloned.segmentlist) {
-            segmentlist.add(new SegmentView(s));
-        }
-    }
-    /**
-     * @return the global epoch of this configuration
-     * Individual segments of the configuration may have lower epochs than the global configuration, 
-     * if they never changed. (unused for now) 
-     */
-    public int getGlobalEpoch() { return globalepoch; }
-
-    public void changeEpoch(int ne) { globalepoch = ne; }
-
     SegmentView getActiveSegmentView() { return segmentlist.get(segmentlist.size()-1); }
 
-	public int getNumSegments() { return segmentlist.size(); }
-	
 	/** obtain the count of distinct replica-sets
 	 * @return the number of replica-sets in the currently-active segment
 	 */
-	public int getNumGroups() { return getActiveSegmentView().groups.length; }
+	public int getNumGroups() { return getActiveSegmentView().getNgroups(); }
 	
 	/** Obtain an array of replicas
 	 * @param ind : is the index of the replica-set within in the currently-active segment
 	 * @return the array of Endpoint's of the requested replica-set
 	 */
-	public Endpoint[] getGroupByNumber(int ind) { return getActiveSegmentView().groups[ind].replicas; }
+	public Vector<Endpoint> getGroupByNumber(int ind) { return getActiveSegmentView().groups.elementAt(ind); }
 	
 	/** Obtain the size of a replica-set
 	 * @param ind : is the index of the replica-set within in the currently-active segment
 	 * @return the number of Endpoint's in the requested replica-set
 	 */
-	public int getGroupsizeByNumber(int ind) { return getActiveSegmentView().groups[ind].numnodes; }
-	
-	/** Obtain the sequencer of the currently active segment
-	 * @return Endpoint of the sequencer
-	 */
-	public Endpoint getSequencer() { return getActiveSegmentView().tokenserver; }
-	
-	/** Obtain the grain size of the currently active segment 
-	 * (TODO shouldn't this permanent and not change with each segment??)
-	 * @return grain-size of current segment
-	 */
-	public int getGrain() { return getActiveSegmentView().grain; }
-	
+	public int getNumReplicas(int ind) { return getActiveSegmentView().getNreplicas(); }
+
+    /**
+     * import the current configuration in XML format
+     *
+     * The XML input has the following template structure:
+    <CONFIGURATION corfuID="0" epoch="0" sequencer="localhost:9020" pagesize="128">
+    <SEGMENT startoffset="0" sealedoffset="-1" ngroups="2" nreplicas="2">
+    <GROUP>
+    <NODE nodeaddress="localhost:9040" />
+    <NODE nodeaddress="localhost:9042" />
+    </GROUP>
+    <GROUP>
+    <NODE nodeaddress="localhost:9045" />
+    <NODE nodeaddress="localhost:9048" />
+    </GROUP>
+    </SEGMENT>
+    </CONFIGURATION>
+     */
     void DOMToConf(Document doc) throws Exception {
 
-        Node N = doc.getElementsByTagName("systemview").item(0);
-        int numsegments = Integer.parseInt(N.getAttributes().getNamedItem("NumConfigs").getNodeValue());
+        log.info("parsing XML configuration");
 
-        globalepoch = Integer.parseInt(N.getAttributes().getNamedItem("GlobalEpoch").getNodeValue());
+        Node N = doc.getElementsByTagName("CONFIGURATION").item(0);
+        epoch = Integer.parseInt(N.getAttributes().getNamedItem("epoch").getNodeValue());
+        pagesize = Integer.parseInt(N.getAttributes().getNamedItem("pagesize").getNodeValue());
+
+        // get sequencer
+        String sequenceraddress = N.getAttributes().getNamedItem("sequencer").getNodeValue();
+        sequencer = Endpoint.genEndpoint(sequenceraddress);
+        log.info("epoch={} pagesize={} sequencer={}", epoch, pagesize, sequenceraddress);
 
         // log is mapped onto
         // - list of SegmentView's
-        //   -- each segment striped over a list of replicas GroupViews
-        //      -- each group has a list of ChildNodes
+        //   -- each segment striped over a list of replica-groups
+        //      -- each group has a list of nodes
         //
+        NodeList snodes = N.getChildNodes();
+        for (int sind = 0; sind < snodes.getLength(); sind++) {
+            Node seg = snodes.item(sind);
+            if (!seg.hasAttributes()) continue;
+            log.info("segment node has {} attributes", seg.getAttributes().getLength());
+            int ngroups = Integer.parseInt(seg.getAttributes().getNamedItem("ngroups").getNodeValue());
+            int nreplicas = Integer.parseInt(seg.getAttributes().getNamedItem("nreplicas").getNodeValue());
+            int startoff = Integer.parseInt(seg.getAttributes().getNamedItem("startoffset").getNodeValue());
+            long sealedoff = Long.parseLong(seg.getAttributes().getNamedItem("sealedoffset").getNodeValue());
 
-        for (int i = 0; i < numsegments; i++) {
-            Node segmentN = doc.getElementsByTagName("CONFIGURATION").item(i);
-            int segmentindex = Integer.parseInt(segmentN.getAttributes().getNamedItem("index").getNodeValue());
-            int numgroups = Integer.parseInt(segmentN.getAttributes().getNamedItem("numgroups").getNodeValue());
-            int startoff = Integer.parseInt(segmentN.getAttributes().getNamedItem("startoffset").getNodeValue());
-            long endoff = Long.parseLong(segmentN.getAttributes().getNamedItem("endoffset").getNodeValue());
-            int grain = Integer.parseInt(segmentN.getAttributes().getNamedItem("grain").getNodeValue());
-            String tokenserveraddress = segmentN.getAttributes().getNamedItem("tokenserver").getNodeValue();
-            Endpoint tokenserver = new Endpoint(tokenserveraddress);
-
-            GroupView[] grouplist = new GroupView[numgroups];
-            log.info("globalepoch {} Segment {} with {} group(s) [{}..{}] grain={}",
-                    globalepoch,
-                    segmentindex, numgroups, startoff, endoff, grain);
-
-            for (int j = 0; j < segmentN.getChildNodes().getLength(); j++) {
-                long localstartoff = 0;
-                Node groupN = segmentN.getChildNodes().item(j);
-
-                if (!(groupN.getNodeType() == Node.ELEMENT_NODE && groupN.hasAttributes())) continue;
-                int gindex = Integer.parseInt(groupN.getAttributes().getNamedItem("index").getNodeValue());
-                int groupepoch = Integer.parseInt(groupN.getAttributes().getNamedItem("groupepoch").getNodeValue());
-                int numnodes = Integer.parseInt(groupN.getAttributes().getNamedItem("numnodes").getNodeValue());
-
-                if (numnodes > 1) {
-                    log.error("replication not supported yet");
-                    System.exit(0);
+            Vector<Vector<Endpoint>> groups = new Vector<Vector<Endpoint>>();
+            NodeList gnodes = seg.getChildNodes();
+            log.info("segment has {} child group nodes", gnodes.getLength());
+            for (int gind = 0; gind < gnodes.getLength(); gind++) {
+                Node group = gnodes.item(gind);
+                // if (!group.hasAttributes()) continue;
+                if (!group.hasChildNodes()) continue;
+                log.info("group node has {} childnodes",
+                        group.getChildNodes().getLength());
+                Vector<Endpoint> replicas = new Vector<Endpoint>();
+                NodeList rnodes = group.getChildNodes();
+                for (int rind = 0; rind < rnodes.getLength(); rind++) {
+                    Node nnode = rnodes.item(rind);
+                    if (! nnode.hasAttributes()) continue;
+                    log.info("Node node has {} attributes", nnode.getAttributes().getLength());
+                    replicas.add(Endpoint.genEndpoint(
+                            nnode.getAttributes().getNamedItem("nodeaddress").getNodeValue()
+                    ));
                 }
-                log.info("group {} has {} units", gindex, numnodes);
-
-                Endpoint[] corfunodes = new Endpoint[numnodes];
-                for (int k = 0; k < groupN.getChildNodes().getLength(); k++) {
-                    Node nodeN = groupN.getChildNodes().item(k);
-                    if (!(nodeN.getNodeType() == Node.ELEMENT_NODE && nodeN.hasAttributes())) continue;
-                    String nodeaddress = nodeN.getAttributes().getNamedItem("nodeaddress").getNodeValue();
-                    int nindex = Integer.parseInt(nodeN.getAttributes().getNamedItem("index").getNodeValue());
-                    log.info("node[{}]: {}", nindex, nodeaddress);
-
-                    int curlocalstartoff = Integer.parseInt(nodeN.getAttributes().getNamedItem("startoffset").getNodeValue());
-                    if (j != 0 && curlocalstartoff != localstartoff)
-                        throw new Exception("Bad config format: replicas must have same startoff");
-                    else localstartoff = curlocalstartoff;
-                    corfunodes[nindex] = new Endpoint(nodeaddress);
-                }
-                grouplist[gindex] = new GroupView(localstartoff, corfunodes, groupepoch, numnodes, gindex);
+                groups.add(replicas);
             }
 
-            segmentlist.add(new SegmentView(startoff, numgroups, endoff, grain, grouplist, tokenserver));
-
+            segmentlist.add(new SegmentView(ngroups, nreplicas, startoff, sealedoff, false, groups));
         }
+        segmentlist.get(segmentlist.size()-1).setIsactive(true);
     }
 
     /**
-     * export the current configuration in XML format into a DOM
+     * export the current configuration in XML format into a string
      * @return a Document representation of the history of configuration-segments
      *
      * The XML result has the following template structure:
-     * <systemview LogID="0" SequenceNo="0" GlobalEpoch="0" NumConfigs="1">
-    <CONFIGURATION index="0" startoffset="0" tokenserver="localhost:9020" disksize="1000" grain="128" numgroups="2">
-    <GROUP index="0" groupepoch="0" numnodes="1">
-    <NODE index="0" nodeaddress="localhost:9040" startoffset="0" />
+    <CONFIGURATION corfuID="0" epoch="0" sequencer="localhost:9020" pagesize="128">
+    <SEGMENT startoffset="0" sealedoffset="-1" ngroups="2" nreplicas="2">
+    <GROUP>
+    <NODE nodeaddress="localhost:9040" />
+    <NODE nodeaddress="localhost:9042" />
     </GROUP>
-    <GROUP index="1" groupepoch="0" numnodes="1">
-    <NODE index="0" nodeaddress="localhost:9045" startoffset="0" />
+    <GROUP>
+    <NODE nodeaddress="localhost:9045" />
+    <NODE nodeaddress="localhost:9048" />
     </GROUP>
+    </SEGMENT>
     </CONFIGURATION>
-    </systemview>
      */
-    public Document ConfToDOM() throws ParserConfigurationException {
-        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-        dbf.setNamespaceAware(true);
+    public String ConfToXMLString() throws CorfuException {
+        return ConfToXMLString(CONFCHANGE.NORMAL, -1, -1, -1, -1, null, -1);
+    }
 
-        Document doc = null;
-        doc = dbf.newDocumentBuilder().newDocument();
-        Element rootElement = doc.createElement("systemview");
-        rootElement.setAttribute("GlobalEpoch", Integer.toString(globalepoch));
-        rootElement.setAttribute("NumConfigs", Integer.toString(getNumSegments()));
-        doc.appendChild(rootElement);
-
-        int sind = 0;
-        for (SegmentView s: segmentlist) {
-            Element conf = doc.createElement("CONFIGURATION");
-            rootElement.appendChild(conf);
-
-            conf.setAttribute("index", Integer.toString(sind));
-            sind++;
-            conf.setAttribute("startoffset", Long.toString(s.startoff));
-            conf.setAttribute("tokenserver", s.tokenserver.toString());
-            conf.setAttribute("endoffset", Long.toString(s.endoff));
-            conf.setAttribute("grain", Integer.toString(s.grain));
-            conf.setAttribute("numgroups", Integer.toString(s.numgroups));
-
-            int gind = 0;
-            for (GroupView gv : s.groups) {
-                Element grp = doc.createElement("GROUP");
-                conf.appendChild(grp);
-                grp.setAttribute("index", Integer.toString(gind));
-                grp.setAttribute("groupepoch", Integer.toString(gv.localepoch));
-                grp.setAttribute("numnodes", Integer.toString(gv.numnodes));
-                gind++;
-
-                int nind = 0;
-                for (Endpoint nd : gv.replicas) {
-                    Element node = doc.createElement("NODE");
-                    grp.appendChild(node);
-                    node.setAttribute("index", Integer.toString(nind));
-                    node.setAttribute("nodeaddress", nd.toString());
-                    node.setAttribute("startoffset", Long.toString(gv.localstartoff)); // TODO do we need a per node startoffset?
-                    nind++;
-                }
-            }
-        }
-        return doc;
+    enum CONFCHANGE  {
+        NORMAL,
+        REMOVE,
+        DEPLOY
     }
 
     /**
-     * export the current configuration in XML format into a String
-     * @return An String representation in XML format of the series of segements
-     * @throws TransformerException
-     * @throws ParserConfigurationException
+     * export the configuration into XMK string with a proposed modification for
+     * removal or deployment of a logging unit.
+     *
+     * @param flag tells what type of modification to apply to configuration
+     * @param segStartOff the starting offset of relevance to this change
+     * @param segSealOff tells if part of the segment is to be sealed for use
+     * @param segGind the group-index for applying the modification to
+     * @param segRind the replica-index for applying the modification to
+     * @param hostname the hostname of a new deployed node (if relevant)
+     * @param port the port of the new deployed node (if relevant)
+     * @return an XML string representation of the modified configuration proposal
+     * @throws CorfuException if any of the modifications fails during parsing/generation
      */
-    public String ConfToXMLString() throws CorfuException {
+    public String ConfToXMLString(CONFCHANGE flag,
+                                  long segStartOff, long segSealOff, int segGind, int segRind,
+                                  String hostname, int port)
+            throws CorfuException {
         String s = null;
         try {
-            Document doc = ConfToDOM();
+            Document doc = convertConfToDOM(flag, segStartOff, segSealOff, segGind, segRind, hostname, port);
+
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
             DOMSource src = new DOMSource(doc);
             StringWriter writer = new StringWriter();
@@ -281,109 +252,103 @@ public class CorfuConfiguration
             throw new InternalCorfuException("failed to convert configuration to DOM");
         }
         return s;
+
     }
 
-    /**
-     * Remove a single logging unit from configuration.
-     * We create a new segment which succeeds the current sequence segment-history. The new segments starts at 'startOffset'
-     * and excludes the removed unit.
-     * @param startOffset the offset past the highest log-offset reached up to now
-     * @param hostname removed unit hostname
-     * @param port removed unit port #
-     * @return a proposed new configuration
-     * @throws TransformerException when an internal problem occurs in transforming to XML string
-     * @throws ParserConfigurationException when an internal problem occurs when parsing the configuration
-     * @throws BadParamCorfuException when the unit to be removed is either not found, or is a single replica
-     */
-    public CorfuConfiguration getRemoveUnitProposal(long startOffset, String hostname, int port)
-            throws CorfuException {
-        CorfuConfiguration newC = new CorfuConfiguration(this);
-        newC.changeEpoch(globalepoch+1);
+    protected Document convertConfToDOM(CONFCHANGE flag,
+                                        long segStartOff, long segSealOff, int segGind, int segRind,
+                                        String hostname, int port)
+            throws ParserConfigurationException {
 
-        boolean found = false;
-        for (SegmentView s : newC.segmentlist) {
-            for (GroupView g : s.groups) {
-                if (g.numnodes <= 1) {
-                    throw new BadParamCorfuException("cannot remove a unit from a single-replica group!");
-                }
-                int ind = 0;
-                for (Endpoint n : g.replicas) {
-                    log.debug("node {}: {}", ind, n.toString());
-                    if (n.getHostname().equals(hostname) && n.getPort() == port) {
-                        log.info("found unit to remove groupin={} node index={}", g.gindex, ind);
-                        g.removeUnit(ind);
-                        found = true;
-                    }
-                    ind++;
-                }
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        dbf.setNamespaceAware(true);
+
+        Document doc = null;
+        doc = dbf.newDocumentBuilder().newDocument();
+        Element rootElement = doc.createElement("CONFIGURATION");
+        rootElement.setAttribute("epoch", Integer.toString(epoch));
+        rootElement.setAttribute("nsegments", Integer.toString(segmentlist.size()));
+        rootElement.setAttribute("pagesize", Integer.toString(pagesize));
+        rootElement.setAttribute("sequencer", sequencer.toString());
+        doc.appendChild(rootElement);
+
+        for (SegmentView s: segmentlist) {
+            Element seg = doc.createElement("SEGMENT");
+            rootElement.appendChild(seg);
+
+            seg.setAttribute("startoffset", Long.toString(s.getStartOff()));
+            seg.setAttribute("ngroups", Integer.toString(s.getNgroups()));
+            seg.setAttribute("nreplicas", Integer.toString(s.getNreplicas()));
+
+            if (flag.equals(CONFCHANGE.REMOVE) && segStartOff == s.getStartOff())
+               SegRemovalToDOM(doc, seg, s, segGind, segRind);
+            else if (flag.equals(CONFCHANGE.DEPLOY) && segStartOff == s.getStartOff())
+                SegDeployToDOM(doc, seg, s, segSealOff, segGind, segRind, hostname, port);
+            else
+                SegToDOM(doc, seg, s);
+        }
+
+        return doc;
+    }
+
+    protected void SegToDOM(Document doc, Element seg, SegmentView s)             {
+        seg.setAttribute("sealedoffset", Long.toString(s.getSealedOff()));
+        for (int gind = 0; gind < s.getNgroups(); gind++) {
+            Vector<Endpoint> gv = s.groups.elementAt(gind);
+            Element grp = doc.createElement("GROUP");
+            seg.appendChild(grp);
+            for (Endpoint nd : gv) {
+                Element node = doc.createElement("NODE");
+                grp.appendChild(node);
+                node.setAttribute("nodeaddress", nd.toString());
             }
         }
-        if (!found) throw new BadParamCorfuException(" unit to be removed is not found");
-        newC.getActiveSegmentView().setEndoff(startOffset-1);
-        log.info("concatenate new segment");
-        SegmentView newseg = new SegmentView(newC.getActiveSegmentView());
-        newseg.startoff = startOffset;
-        log.info("new segment starts at offset {}", newseg.startoff);
-        newC.segmentlist.add(newseg);
-        return newC;
     }
 
-    /**
-     * Remove an entire replica-group from configuration.
-     * We create a new segment which succeeds the current sequence segment-history. The new segments starts at 'startOffset+1'
-     * and excludes the removed group.
-     * @param startOffset the highest log-offset reached up to now
-     * @param groupind the index of the removed group (between 0..numgroups-1).
-     *
-     * @return a proposed new configuration
-     * @throws TransformerException when an internal problem occurs in transforming to XML string
-     * @throws ParserConfigurationException when an internal problem occurs when parsing the configuration
-     * @throws BadParamCorfuException when the unit to be removed is either not found, or is a single replica
-     */
-    public CorfuConfiguration getRemoveGroupProposal(long startOffset, int groupind)
-            throws CorfuException {
+    protected void SegRemovalToDOM(Document doc, Element seg, SegmentView s, int segGind, int segRind) {
+        seg.setAttribute("sealedoffset", Long.toString(s.getSealedOff()));
+        for (int gind = 0; gind < s.getNgroups(); gind++) {
+            Vector<Endpoint> gv = s.groups.elementAt(gind);
+            Element grp = doc.createElement("GROUP");
+            seg.appendChild(grp);
+            for (int rind = 0; rind < gv.size(); rind++) {
+                Endpoint nd = gv.elementAt(rind);
+                Element node = doc.createElement("NODE");
+                grp.appendChild(node);
+                if (gind == segGind && segRind == rind)
+                    node.setAttribute("nodeaddress", "TBD:-1");
+                else
+                    node.setAttribute("nodeaddress", nd.toString());
+            }
+        }
 
-        CorfuConfiguration newC = new CorfuConfiguration(this);
-        newC.changeEpoch(globalepoch+1);
-        SegmentView s = newC.getActiveSegmentView();
-        if (s.numgroups < groupind) throw new BadParamCorfuException("replica-group to be removed is not found in current segment");
-
-        s.setEndoff(startOffset);
-        s = SegmentView.genRemoveGroup(s, groupind, startOffset);
-        newC.segmentlist.add(s);
-        return newC;
     }
 
-    /**
-     * Deploy a new replica-group at the end of configuration.
-     * We create a new segment which succeeds the current sequence segment-history. The new segments starts at 'startOffset+1'
-     * and includes the new group.
-     * @param startOffset the highest log-offset reached up to now
-     * @param newgroup the list of logging-unit endpoints of the new replica-group.
-     *
-     * @return a proposed new configuration
-     * @throws TransformerException when an internal problem occurs in transforming to XML string
-     * @throws ParserConfigurationException when an internal problem occurs when parsing the configuration
-     * @throws BadParamCorfuException when the unit to be removed is either not found, or is a single replica
-     */
-    public CorfuConfiguration getDeployGroupProposal(long startOffset, Endpoint[] newgroup)
-        throws CorfuException {
-        CorfuConfiguration newC = new CorfuConfiguration(this);
-        newC.changeEpoch(globalepoch+1);
-        SegmentView s = newC.getActiveSegmentView();
+    protected void SegDeployToDOM(Document doc, Element seg, SegmentView s,
+                                  long segSealOff, int segGind, int segRind, String hostname, int port) {
+        seg.setAttribute("sealedoffset", Long.toString(segSealOff));
+        for (int gind = 0; gind < s.getNgroups(); gind++) {
+            Vector<Endpoint> gv = s.groups.elementAt(gind);
+            Element grp = doc.createElement("GROUP");
+            seg.appendChild(grp);
+            for (int rind = 0; rind < gv.size(); rind++) {
+                Endpoint nd = gv.elementAt(rind);
+                Element node = doc.createElement("NODE");
+                grp.appendChild(node);
+                if (gind == segGind && segRind == rind)
+                    node.setAttribute("nodeaddress", hostname + ":" + Integer.toString(port));
+                else
+                    node.setAttribute("nodeaddress", nd.toString());
+            }
+        }
 
-        s.setEndoff(startOffset);
-        s = SegmentView.genAddGroup(s, newgroup, startOffset);
-        newC.segmentlist.add(s);
-        return newC;
     }
-
 
 	SegmentView getSegmentForOffset(long offset)
 	{
         for (SegmentView s : segmentlist) {
-            if (s.endoff == -1 || offset < s.endoff) {
-                if (offset >= s.startoff) return s;
+            if (s.sealedOff == -1 || offset < s.sealedOff) {
+                if (offset >= s.startOff) return s;
                 else return null;
             }
         }
@@ -391,7 +356,7 @@ public class CorfuConfiguration
 	}
 
     /**
-     * This is a core part of configuration management: The mapping of an absolute log-offset to a tuple (logging-unit, physical-offset)
+     * This is a core part of configuration management: The mapping of an absolute log-offset to a tuple (replica-set, physical-offset)
      * @param offset an absolute log-position
      * @return an EntryLocation object (@see EntryLocation). It contains
      *  - a groupView object, which holds the replica-group of logging-units for the relevant offset
@@ -405,18 +370,17 @@ public class CorfuConfiguration
 	    SegmentView sv = this.getSegmentForOffset(offset);
         if (sv == null) throw new TrimmedCorfuException("cannot get location for offset " + offset);
 
-		long reloff = offset - sv.startoff;
+		long reloff = offset - sv.getStartOff();
 		
 		//select the group using a simple modulo mapping function
-		int gnum = (int)(reloff%sv.numgroups);	
-		ret.group = sv.groups[gnum];
-		ret.relativeOff = reloff/sv.numgroups + ret.group.localstartoff;
+		int gnum = (int)(reloff%sv.getNgroups());
+		ret.group = sv.groups.elementAt(gnum);
+		ret.relativeOff = reloff/sv.getNgroups();
 
-        log.info("location({}): seg=({}..{}) gnum={} group-startOff={} relativeOff={} ",
+        log.info("location({}): seg=({}..{}) gnum={} relativeOff={} ",
                 offset,
-                sv.startoff, sv.endoff,
-                gnum,
-                ret.group.localstartoff, ret.relativeOff);
+                sv.getStartOff(), sv.getSealedOff(),
+                gnum, ret.relativeOff);
 
 		return ret;
 	}
@@ -425,148 +389,85 @@ public class CorfuConfiguration
 /**
  * Holds information on where a single log-entry is stores.
  * @field relativeOff holds  the relative offset of the entry within each one of the units
+ * @field group describes the replica-set of logging-units which stores the  log entry
  */
 class EntryLocation
 {
-    /* @field group describes the replica-set of logging-units which stores the  log entry,*/
-
-    /**
-     *
-     */
-    GroupView group;
+    Vector<Endpoint> group;
 	long relativeOff;
 };
 
 /**
- * A SegmentView represents the view for a segment of the global address space of the Corfu log. It consists of a list of GroupViews;
- * entries are distributed across the GroupViews round-robin.
- * @author maheshba
- *
+ * A SegmentView represents the view for a segment of the global address space of the Corfu log. It consists of a list of replica-groups
+ * the logg is distributed across the groups in a round-robin manner.
  */
 class SegmentView
 {
-	long startoff;
-    long endoff;
-	int numgroups;
-	int grain;
-	GroupView[] groups;
-	Endpoint tokenserver;
-	public SegmentView(long startoff, int numgroups, long endoff, int grain,
-			GroupView[] groups, Endpoint tokenserver) {
-		super();
-		this.startoff = startoff;
-		this.numgroups = numgroups;
-		this.endoff = endoff;
-		this.grain = grain;
-		this.groups = groups;
-		this.tokenserver = tokenserver;
-        this.endoff = endoff;
-	}
-    public long getEndoff() {
-        return endoff;
+    protected int ngroups, nreplicas; // the pair (ngroups, nreplicas) determine how the log is striped and replicated
+    protected long startOff;  // the starting log-offset for which this segment is responsible
+    protected long sealedOff; // marks the point of this segment that has already been sealed for appending
+    protected boolean isactive; // flag, indicating whether appending is allowed in this segment
+    protected Vector<Vector<Endpoint>> groups;
+
+    SegmentView(int ngroups,
+                int nreplicas,
+                long startOff,
+                long sealedOff,
+                boolean isactive,
+                Vector<Vector<Endpoint>> groups) {
+        this.ngroups = ngroups;
+        this.nreplicas = nreplicas;
+        this.startOff = startOff;
+        this.sealedOff = sealedOff;
+        this.isactive = isactive;
+        this.groups = groups;
     }
 
-    public void setEndoff(long endoff) {
-        this.endoff = endoff;
+    public Vector<Vector<Endpoint>> getGroups() {
+        return groups;
     }
 
-    public SegmentView(SegmentView cloned) {
-        this(cloned.startoff,
-                cloned.numgroups,
-                cloned.endoff,
-                cloned.grain,
-                new GroupView[cloned.numgroups],
-                cloned.tokenserver);
-        for (int i = 0; i < numgroups; i++)
-            groups[i] = new GroupView(cloned.groups[i]);
+    public void setGroups(Vector<Vector<Endpoint>> groups) {
+        this.groups = groups;
     }
 
-    static public SegmentView genRemoveGroup(SegmentView current, int groupind, long newoff) {
-        int newsz = current.numgroups-1;
-        GroupView[] newgroups = new GroupView[newsz];
-
-        long groupSealSize = (current.endoff - current.startoff + current.numgroups-1) / current.numgroups;
-            // groupSealSize is the amount of entries per replica-group which was used up in the current segment
-            // it is needed in order to compute a relative startoffset of the groups remaining in the next segment
-
-        int i = 0;
-        for (GroupView group : current.groups) {
-            if (group.gindex == groupind) continue;
-            newgroups[i] = new GroupView(group);
-            newgroups[i].localstartoff += groupSealSize;
-            i++;
-        }
-        SegmentView news = new SegmentView(newoff,
-                current.numgroups-1,
-                -1,
-                current.grain,
-                newgroups,
-                current.tokenserver);
-        return news;
+    public int getNgroups() {
+        return ngroups;
     }
 
-    static public SegmentView genAddGroup(SegmentView current, Endpoint[] newgroup, long newoff) {
-        int newsz = current.numgroups+1;
-        GroupView[] newgroups = new GroupView[newsz];
-        long groupSealSize = (current.endoff - current.startoff + current.numgroups-1) / current.numgroups;
-
-        int i = 0;
-        for (GroupView group : current.groups) {
-            newgroups[i] = new GroupView(group);
-            newgroups[i].localstartoff += groupSealSize;
-            i++;
-        }
-
-        newgroups[newsz-1] = new GroupView(0 /* TODO */,
-                newgroup,
-                current.groups[0].localepoch /* TODO*/,
-                newgroup.length,
-                newsz-1);
-        SegmentView news = new SegmentView(newoff,
-                newsz,
-                -1,
-                current.grain,
-                newgroups,
-                current.tokenserver);
-        return news;
-    }
-}
-
-
-/**
- * A GroupView represents a replica set of nodes and a local start offset within each replica (which is equal across all the replicas).
- * For example, a GroupView of A,B,C with a localstartoff of 50 means that the first entry in this group resides at A:50, B:50 and C:50.
- * @author maheshba
- *
- */
-class GroupView
-{	
-	long localstartoff;
-	Endpoint[] replicas;
-	int localepoch;
-	int numnodes;
-	int gindex;
-
-	public GroupView(long localstartoff2, Endpoint[] replicas, int localepoch,
-			int numnodes, int gindex) {
-		super();
-		this.localstartoff = localstartoff2;
-		this.replicas = replicas;
-		this.localepoch = localepoch;
-		this.numnodes = numnodes;
-		this.gindex = gindex;		
-	}
-
-    public GroupView(GroupView cloned) {
-        this(cloned.localstartoff, new Endpoint[cloned.numnodes], cloned.localepoch, cloned.numnodes, cloned.gindex);
-        System.arraycopy(cloned.replicas, 0, replicas, 0, cloned.replicas.length);
+    public void setNgroups(int ngroups) {
+        this.ngroups = ngroups;
     }
 
-    void removeUnit(int ind) {
-        Endpoint[] tempr = new Endpoint[replicas.length-1];
-        if (ind > 0) System.arraycopy(replicas, 0, tempr, 0, ind);
-        if (ind < replicas.length-1) System.arraycopy(replicas, ind+1, tempr, ind, replicas.length-1-ind);
-        replicas = tempr;
-        numnodes--;
+    public int getNreplicas() {
+        return nreplicas;
+    }
+
+    public void setNreplicas(int nreplicas) {
+        this.nreplicas = nreplicas;
+    }
+
+    public long getStartOff() {
+        return startOff;
+    }
+
+    public void setStartOff(long startOff) {
+        this.startOff = startOff;
+    }
+
+    public long getSealedOff() {
+        return sealedOff;
+    }
+
+    public void setSealedOff(long sealedOff) {
+        this.sealedOff = sealedOff;
+    }
+
+    public boolean isIsactive() {
+        return isactive;
+    }
+
+    public void setIsactive(boolean isactive) {
+        this.isactive = isactive;
     }
 }

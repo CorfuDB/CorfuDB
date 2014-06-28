@@ -39,7 +39,7 @@ $uid = $env:username
 
 # sequencer 
 # ################################################################################################################
-$t = $CONFIG.systemview.CONFIGURATION.tokenserver
+$t = $CONFIG.CONFIGURATION.sequencer
 # write-host tokenserver is $t
 ($rem, $port) = $t.split(":")
 $smainclass = "com.microsoft.corfu.sequencer.CorfuSequencerImpl"
@@ -60,7 +60,7 @@ doicm $rem $sb $uid -classpath $cp $smainclass
 
 # sunit servers 
 # ################################################################################################################
-$sunits = $CONFIG.systemview.CONFIGURATION.GROUP.NODE
+$sunits = $CONFIG.CONFIGURATION.SEGMENT.GROUP.NODE
 $sunits | %{ $ind=0} {
 	$n = $_.nodeaddress
 
@@ -79,7 +79,7 @@ $sunits | %{ $ind=0} {
 	}
  
 	$unitind = "{0}:0" -f $ind
-        $drivename = "c:\temp\foo{0}.{1}.txt" -f $ind 0
+        # TODO $drivename = "c:\temp\foo{0}.{1}.txt" -f $ind 0
 	# start unit server on remote
 	#
 	if ($recover -ne $null) {

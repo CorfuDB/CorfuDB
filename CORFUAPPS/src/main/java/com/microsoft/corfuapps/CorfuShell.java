@@ -114,6 +114,16 @@ public class CorfuShell {
                 });							alias.put("seal",  "sl");
         infos.put("sl",  new CorfuShell.info("seal epoch 0", 0));
 
+        debugger.put("rm",
+                new helper() {
+                    @Override
+                    public void helperf(long[] args) throws CorfuException {
+                        crf.proposeRemoveUnit("localhost", (int)(args[0]));
+                        System.out.println("removed unit localhost:" + args[0]);
+                    }
+                });							alias.put("remove",  "rm");
+        infos.put("rm",  new CorfuShell.info("remove the specified logging unit from all segments",  1));
+
         debugger.put("rmg",
                 new helper() {
                     @Override

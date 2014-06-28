@@ -48,7 +48,7 @@ public class ConfigClnt {
                     continue;
                 }
 
-                C.changeEpoch(C.getGlobalEpoch() + 1);
+                C.setEpoch(C.getEpoch() + 1);
 
                 HttpPost httppost = new HttpPost("http://localhost:8000/corfu");
                 httppost.setEntity(new StringEntity(C.ConfToXMLString()));

@@ -1,12 +1,14 @@
 <?xml version="1.0"?>
 <!--Corfu Configuration-->
-<systemview LogID="0" SequenceNo="0" GlobalEpoch="0" NumConfigs="1">
-  <CONFIGURATION index="0" startoffset="0" tokenserver="localhost:9020" endoffset="-1" grain="128" numgroups="2">
-    <GROUP index="0" groupepoch="0" numnodes="1">
-      <NODE index="0" nodeaddress="localhost:9040" startoffset="0" />
+<CONFIGURATION corfuID="0" epoch="0" sequencer="localhost:9020" pagesize="128">
+  <SEGMENT startoffset="0" sealedoffset="-1" ngroups="2" nreplicas="2">
+    <GROUP>
+      <NODE nodeaddress="localhost:9040" />
+      <NODE nodeaddress="localhost:9042" />
     </GROUP>
-    <GROUP index="1" groupepoch="0" numnodes="1">
-      <NODE index="0" nodeaddress="localhost:9045" startoffset="0" />
+    <GROUP>
+      <NODE nodeaddress="localhost:9045" />
+      <NODE nodeaddress="localhost:9048" />
     </GROUP>
-  </CONFIGURATION>
-</systemview>
+  </SEGMENT>
+</CONFIGURATION>

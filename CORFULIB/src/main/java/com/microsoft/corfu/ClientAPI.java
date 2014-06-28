@@ -43,13 +43,8 @@ public interface ClientAPI {
 	/**
 	 * Appends an extent to the log. Extent will be written to consecutive log offsets.
 	 * 
-	 * if autoTrim is set, and the log is full, this call trims to the latest checkpoint-mark (and possibly fills 
-	 * holes to make the log contiguous up to that point). if autoTrim is set, this method will not leave a hole in the log. 
-	 * Conversely, if autoTrim is false and appendExtent() fails, any log-offsets assigned by the sequencers will remain holes. 
-	 *
 	 * @param ctnt          list of ByteBuffers to be written
-	 * @param autoTrim		flag, indicating whether to automatically trim the log to latest checkpoint if full
-	 * @return              the first log-offset of the written range 
+	 * @return              the first log-offset of the written range
 	 * @throws CorfuException
 	 * <UL>
 	 * <LI>		OutOfSpaceCorfuException indicates an attempt to append failed because storage unit(s) are full; user may try trim()
@@ -57,20 +52,17 @@ public interface ClientAPI {
 	 * <LI>		BadParamCorfuException or a general CorfuException indicate an internal problem, such as a server crash. Might not be recoverable
 	 * </UL>
 	 */
-	public long appendExtnt(List<ByteBuffer> ctnt, boolean autoTrim) throws CorfuException;
 	public long appendExtnt(List<ByteBuffer> ctnt) throws CorfuException;
 
 	/**
 	 * Breaks the bytebuffer is gets as parameter into grain-size buffers, and invokes appendExtnt(List<ByteBuffer>);
-	 * @see #appendExtnt(List, boolean) appendExtnt(List<ByteBuffer> ctnt, boolean autoTrim).
+	 * @see #appendExtnt(List) appendExtnt(List<ByteBuffer> ctnt).
 	 *
 	 * @param	buf	the buffer to append to the log
 	 * @param	reqsize	size of buffer to append
-	 * @param autoTrim		flag, indicating whether to automatically trim the log to latest checkpoint if full
-	 * @return		the first log-offset of the written range 
+	 * @return		the first log-offset of the written range
 	 * @throws CorfuException
 	 */
-	public long appendExtnt(byte[] buf, int reqsize, boolean autoTrim) throws CorfuException;
 	public long appendExtnt(byte[] buf, int reqsize) throws CorfuException;
 	
 	/**

@@ -262,8 +262,7 @@ public class CorfuRWTputTester {
 		while(rpt < nrepeat) {
 			try {
 				off = crf.appendExtnt(bb, 	 // the buffer
-								entsize, // buffer size
-								true	 // if log is full, request auto-trimming to last checkpoint
+								entsize // buffer size
 								);
 				rpt++;
 				wcommulative.incrementAndGet();

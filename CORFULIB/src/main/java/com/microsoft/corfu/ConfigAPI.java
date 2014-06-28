@@ -15,6 +15,6 @@ public interface ConfigAPI {
 
     public CorfuConfiguration pullConfig() throws CorfuException;
 
-    public void proposeDeployGroup(Endpoint[] newg) throws CorfuException;
-    public void proposeRemoveGroup(int groupind) throws CorfuException;
+    public void proposeRemoveUnit(int gind, int rind) throws CorfuException;
+    public void proposeDeployUnit(int gind, int rind, String hostname, int port) throws CorfuException;
 }

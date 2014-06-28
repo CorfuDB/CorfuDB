@@ -366,7 +366,7 @@ public class LogUnitTask implements LogUnitService.Iface {
     }
 
     private void rebuildfromnode() throws Exception {
-        Endpoint cn = new Endpoint(rebuildnode);
+        Endpoint cn = Endpoint.genEndpoint(rebuildnode);
         TTransport buildsock = new TSocket(cn.getHostname(), cn.getPort());
         buildsock.open();
         TProtocol prot = new TBinaryProtocol(buildsock);

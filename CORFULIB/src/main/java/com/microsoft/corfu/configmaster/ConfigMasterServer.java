@@ -39,7 +39,7 @@ public class ConfigMasterServer {
                 CorfuConfiguration NEWC = null;
                 try {
                     NEWC = new CorfuConfiguration(t.getRequestBody());
-                    if (NEWC.getGlobalEpoch() <= C.getGlobalEpoch()) {
+                    if (NEWC.getEpoch() <= C.getEpoch()) {
                         response = "deny";
                     } else {
                         C = NEWC;
