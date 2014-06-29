@@ -32,10 +32,12 @@ public class ConfigMasterServer {
 
             String response = null;
             if (t.getRequestMethod().startsWith("GET")) {
+                System.out.println("*GET---------------------*");
                 response = C.ConfToXMLString();
             }
 
             else {
+                System.out.println("*PUT---------------------*");
                 CorfuConfiguration NEWC = null;
                 try {
                     NEWC = new CorfuConfiguration(t.getRequestBody());

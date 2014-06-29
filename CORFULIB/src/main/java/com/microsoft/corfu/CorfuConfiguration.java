@@ -36,6 +36,15 @@ public class CorfuConfiguration
     protected int pagesize;
     protected ArrayList<SegmentView> segmentlist = new ArrayList<SegmentView>();
     protected Endpoint sequencer;
+    protected long trimmark;
+
+    public long getTrimmark() {
+        return trimmark;
+    }
+
+    public void setTrimmark(long trimmark) {
+        this.trimmark = trimmark;
+    }
 
     public Endpoint getSequencer() {
         return sequencer;
@@ -147,6 +156,13 @@ public class CorfuConfiguration
         sequencer = Endpoint.genEndpoint(sequenceraddress);
         log.info("epoch={} pagesize={} sequencer={}", epoch, pagesize, sequenceraddress);
 
+        // get trim-mark
+        Node T = N.getAttributes().getNamedItem("trim");
+        if (T != null)
+            trimmark = Long.parseLong(T.getNodeValue());
+        else
+            trimmark = 0;
+
         // log is mapped onto
         // - list of SegmentView's
         //   -- each segment striped over a list of replica-groups
@@ -156,30 +172,26 @@ public class CorfuConfiguration
         for (int sind = 0; sind < snodes.getLength(); sind++) {
             Node seg = snodes.item(sind);
             if (!seg.hasAttributes()) continue;
-            log.info("segment node has {} attributes", seg.getAttributes().getLength());
             int ngroups = Integer.parseInt(seg.getAttributes().getNamedItem("ngroups").getNodeValue());
             int nreplicas = Integer.parseInt(seg.getAttributes().getNamedItem("nreplicas").getNodeValue());
             int startoff = Integer.parseInt(seg.getAttributes().getNamedItem("startoffset").getNodeValue());
             long sealedoff = Long.parseLong(seg.getAttributes().getNamedItem("sealedoffset").getNodeValue());
+            log.info("segment [{}..{}]: {} groups {} replicas", startoff, sealedoff, ngroups, nreplicas);
 
             Vector<Vector<Endpoint>> groups = new Vector<Vector<Endpoint>>();
             NodeList gnodes = seg.getChildNodes();
-            log.info("segment has {} child group nodes", gnodes.getLength());
             for (int gind = 0; gind < gnodes.getLength(); gind++) {
                 Node group = gnodes.item(gind);
-                // if (!group.hasAttributes()) continue;
                 if (!group.hasChildNodes()) continue;
-                log.info("group node has {} childnodes",
-                        group.getChildNodes().getLength());
+                log.info("group nodes:");
                 Vector<Endpoint> replicas = new Vector<Endpoint>();
                 NodeList rnodes = group.getChildNodes();
                 for (int rind = 0; rind < rnodes.getLength(); rind++) {
                     Node nnode = rnodes.item(rind);
                     if (! nnode.hasAttributes()) continue;
-                    log.info("Node node has {} attributes", nnode.getAttributes().getLength());
-                    replicas.add(Endpoint.genEndpoint(
-                            nnode.getAttributes().getNamedItem("nodeaddress").getNodeValue()
-                    ));
+                    String nodeaddr = nnode.getAttributes().getNamedItem("nodeaddress").getNodeValue();
+                    log.info("   node {} ", nodeaddr);
+                    replicas.add(Endpoint.genEndpoint(nodeaddr));
                 }
                 groups.add(replicas);
             }
@@ -266,10 +278,14 @@ public class CorfuConfiguration
         Document doc = null;
         doc = dbf.newDocumentBuilder().newDocument();
         Element rootElement = doc.createElement("CONFIGURATION");
-        rootElement.setAttribute("epoch", Integer.toString(epoch));
+        if (flag.equals(CONFCHANGE.NORMAL))
+            rootElement.setAttribute("epoch", Integer.toString(epoch));
+        else
+            rootElement.setAttribute("epoch", Integer.toString(epoch+1)); // TODO is this the right place for this?
         rootElement.setAttribute("nsegments", Integer.toString(segmentlist.size()));
         rootElement.setAttribute("pagesize", Integer.toString(pagesize));
         rootElement.setAttribute("sequencer", sequencer.toString());
+        rootElement.setAttribute("trimmark", Long.toString(trimmark));
         doc.appendChild(rootElement);
 
         for (SegmentView s: segmentlist) {
@@ -300,7 +316,10 @@ public class CorfuConfiguration
             for (Endpoint nd : gv) {
                 Element node = doc.createElement("NODE");
                 grp.appendChild(node);
-                node.setAttribute("nodeaddress", nd.toString());
+                if (nd == null)
+                    node.setAttribute("nodeaddress", "TBD:-1");
+                else
+                    node.setAttribute("nodeaddress", nd.toString());
             }
         }
     }
@@ -315,7 +334,7 @@ public class CorfuConfiguration
                 Endpoint nd = gv.elementAt(rind);
                 Element node = doc.createElement("NODE");
                 grp.appendChild(node);
-                if (gind == segGind && segRind == rind)
+                if ((gind == segGind && segRind == rind) || nd== null)
                     node.setAttribute("nodeaddress", "TBD:-1");
                 else
                     node.setAttribute("nodeaddress", nd.toString());
@@ -337,6 +356,8 @@ public class CorfuConfiguration
                 grp.appendChild(node);
                 if (gind == segGind && segRind == rind)
                     node.setAttribute("nodeaddress", hostname + ":" + Integer.toString(port));
+                else if (nd == null)
+                    node.setAttribute("nodeaddress", "TBD:-1");
                 else
                     node.setAttribute("nodeaddress", nd.toString());
             }

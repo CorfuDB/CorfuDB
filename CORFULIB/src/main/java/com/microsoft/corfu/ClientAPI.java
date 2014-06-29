@@ -19,11 +19,6 @@ public interface ClientAPI {
 	public int grainsize() throws CorfuException;
 	
 	/**
-	 * @return an object describing the configuration, @see CorfuConfiguration
-	 */
-	public CorfuConfiguration getConfig();
-
-	/**
 	 * Reads the next extent; it remembers the last read extent (starting with zero).
 	 * 
 	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page

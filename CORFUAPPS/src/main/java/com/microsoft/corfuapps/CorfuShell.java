@@ -114,37 +114,25 @@ public class CorfuShell {
                 });							alias.put("seal",  "sl");
         infos.put("sl",  new CorfuShell.info("seal epoch 0", 0));
 
-        debugger.put("rm",
+        debugger.put("rmunit",
                 new helper() {
                     @Override
                     public void helperf(long[] args) throws CorfuException {
-                        crf.proposeRemoveUnit("localhost", (int)(args[0]));
-                        System.out.println("removed unit localhost:" + args[0]);
+                        crf.proposeRemoveUnit((int)(args[0]), (int)(args[1]));
+                        System.out.println("removed unit" + args[0] + "," + args[1]);
                     }
-                });							alias.put("remove",  "rm");
-        infos.put("rm",  new CorfuShell.info("remove the specified logging unit from all segments",  1));
+                });							alias.put("removeunit",  "rmunit");
+        infos.put("rmunit",  new CorfuShell.info("remove the specified logging unit",  2));
 
-        debugger.put("rmg",
+        debugger.put("addunit",
                 new helper() {
                     @Override
                     public void helperf(long[] args) throws CorfuException {
-                        crf.proposeRemoveGroup((int)(args[0]));
-                        System.out.println("removed group " + args[0]);
+                        crf.proposeDeployUnit((int) (args[0]), (int) (args[1]), "localhost", (int) (args[2]));
+                        System.out.println("deployed unit localhost:" + args[2] + " at " + args[0] + "," + args[1]);
                     }
-                });							alias.put("rmgroup",  "rmg");
-        infos.put("rmg",  new CorfuShell.info("remove the specified component from the stripe-set",  1));
-
-        debugger.put("addg",
-                new helper() {
-                    @Override
-                    public void helperf(long[] args) throws CorfuException {
-                        String endp = "localhost:" + String.valueOf(args[0]);
-                        System.out.println("adding stripe-group " + endp);
-                        Endpoint[] e = {new Endpoint(endp)};
-                        crf.proposeDeployGroup(e);
-                    }
-                });							alias.put("addgroup",  "addg");
-        infos.put("addg",  new CorfuShell.info("add the specified replica-set at the end of the stripe-set",  1));
+                });							alias.put("addunit",  "addunit");
+        infos.put("addunit",  new CorfuShell.info("add the specified logging unit",  3));
 
         debugger.put("ra",
 				new helper() {

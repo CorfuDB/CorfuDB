@@ -24,6 +24,7 @@ public class Endpoint {
             return epmap.get(fullname);
         else {
             Endpoint ep = new Endpoint(fullname);
+            if (ep.getPort() <0) return null;
             epmap.put(fullname, ep);
             return ep;
         }

@@ -26,6 +26,7 @@ import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Vector;
 
 public class ClientLib implements
@@ -143,15 +144,6 @@ public class ClientLib implements
 	}
 
 	/**
-	 * @return an object describing the configuration, @see CorfuConfiguration
-	 */
-	public CorfuConfiguration getConfig() { return CM; }
-
-    UnitServerHdr genHeader(long offset) {
-        return new UnitServerHdr(CM.getEpoch(), offset);
-    }
-
-	/**
 	 * Breaks the bytebuffer is gets as parameter into grain-size buffers, and invokes appendExtnt(List<ByteBuffer>);
 	 * 	see appendExtnt(List<ByteBuffer>, boolean) for more details
 	 *
@@ -202,36 +194,41 @@ public class ClientLib implements
 		ErrorCode er = null;
 		EntryLocation el = CM.getLocationForOffset(offset);
         Vector<Endpoint> replicas = el.group;
+        int retrycnt = 0;
 
         LogUnitService.Client sunit;
 
-		try {
-			log.debug("write({} size={} marktype={}", offset, ctnt.size(), ExtntMarkType.EX_FILLED);
-            for (Endpoint ep : replicas) {
-                sunit = getSUnitOf(ep);
-    			er = sunit.write(genHeader(offset), ctnt, ExtntMarkType.EX_FILLED);
+        while (retrycnt < 5) {
+            try {
+                log.debug("write({} size={} marktype={}", offset, ctnt.size(), ExtntMarkType.EX_FILLED);
+                for (Endpoint ep : replicas) {
+                    if (ep == null) continue; // fault unit, removed from configuration
+                    sunit = getSUnitOf(ep);
+                    er = sunit.write(new UnitServerHdr(CM.getEpoch(), offset), ctnt, ExtntMarkType.EX_FILLED);
+                }
+            } catch (TException e) {
+                e.printStackTrace();
+                throw new CorfuException("append() failed");
             }
-		} catch (TException e) {
-			e.printStackTrace();
-			throw new CorfuException("append() failed");
-		}
 
-        if (er.equals(ErrorCode.ERR_STALEEPOCH)) {
-            log.info("appendExtnt fails, stale epoch {}; pulling new epoch from Config manager", CM.getEpoch());
-            pullConfig();
-            writeExtnt(offset, ctnt); // redo
+            if (er.equals(ErrorCode.ERR_STALEEPOCH)) {
+                log.info("appendExtnt fails, stale epoch {}; pulling new epoch from Config manager", CM.getEpoch());
+                pullConfig();
+                retrycnt++; continue; //retry
+            }
+
+            if (er.equals(ErrorCode.ERR_FULL)) {
+                throw new OutOfSpaceCorfuException("append() failed: full");
+            } else if (er.equals(ErrorCode.ERR_OVERWRITE)) {
+                throw new OverwriteCorfuException("append() failed: overwritten");
+            } else if (er.equals(ErrorCode.ERR_BADPARAM)) {
+                throw new BadParamCorfuException("append() failed: bad parameter passed");
+            }
+
+            return;
         }
-
-		if (er.equals(ErrorCode.ERR_FULL)) {
-			throw new OutOfSpaceCorfuException("append() failed: full");
-		} else
-		if (er.equals(ErrorCode.ERR_OVERWRITE)) {
-			throw new OverwriteCorfuException("append() failed: overwritten");
-		} else
-		if (er.equals(ErrorCode.ERR_BADPARAM)) {
-			throw new BadParamCorfuException("append() failed: bad parameter passed");
-		} 
-	}
+        throw new CorfuException("append() failed: too many retries");
+    }
 	
 	long lastReadOffset = -1;
 		
@@ -247,33 +244,49 @@ public class ClientLib implements
 		
 		ExtntWrap ret;
 		EntryLocation el = CM.getLocationForOffset(offset);
-		LogUnitService.Client cl = getSUnitOf(el.group.lastElement()); // read from tail of replica-chain
-		
-		try {
-			log.debug("read offset {} now", offset);
-			ret = cl.read(genHeader(offset));
-		} catch (TException e) {
-			e.printStackTrace();
-			throw new CorfuException("read() failed");
-		}
+        Endpoint ep;
+        LogUnitService.Client sunit = null;
+        int retrycnt=0;
 
-		if (ret.getErr().equals(ErrorCode.ERR_UNWRITTEN)) {
-			log.info("readExtnt({}) fails, unwritten", offset);
-			throw new UnwrittenCorfuException("read(" + offset +") failed: unwritten");
-		} else 
-		if (ret.getErr().equals(ErrorCode.ERR_TRIMMED)) {
-			lastReadOffset = offset;
-			log.info("readExtnt({}) fails, trimmed", offset);
-			throw new TrimmedCorfuException("read(" + offset +") failed: trimmed");
-		} else
-		if (ret.getErr().equals(ErrorCode.ERR_BADPARAM)) {
-			log.info("readExtnt({}) fails, bad param", offset);
-			throw new OutOfSpaceCorfuException("read(" + offset +") failed: bad parameter");
-		} 
+        while(retrycnt < 5) {
 
-		log.debug("read succeeds {}", offset);
-		lastReadOffset = offset;
-		return ret;
+            ListIterator<Endpoint> it = el.group.listIterator(el.group.size());
+            while (it.hasPrevious()) {
+                ep = it.previous();
+                if (ep == null) continue;
+                sunit = getSUnitOf(ep); // read from tail of replica-chain
+                break;
+            }
+
+            try {
+                log.debug("read offset {} now", offset);
+                ret = sunit.read(new UnitServerHdr(CM.getEpoch(), offset));
+            } catch (TException e) {
+                e.printStackTrace();
+                throw new CorfuException("read() failed");
+            }
+
+            if (ret.getErr().equals(ErrorCode.ERR_STALEEPOCH)) {
+                log.info("readExtnt({}) fails, epoch changed", offset);
+                pullConfig();
+                retrycnt++; continue; // retry
+            } else if (ret.getErr().equals(ErrorCode.ERR_UNWRITTEN)) {
+                log.info("readExtnt({}) fails, unwritten", offset);
+                throw new UnwrittenCorfuException("read(" + offset + ") failed: unwritten");
+            } else if (ret.getErr().equals(ErrorCode.ERR_TRIMMED)) {
+                lastReadOffset = offset;
+                log.info("readExtnt({}) fails, trimmed", offset);
+                throw new TrimmedCorfuException("read(" + offset + ") failed: trimmed");
+            } else if (ret.getErr().equals(ErrorCode.ERR_BADPARAM)) {
+                log.info("readExtnt({}) fails, bad param", offset);
+                throw new OutOfSpaceCorfuException("read(" + offset + ") failed: bad parameter");
+            }
+
+            log.debug("read succeeds {}", offset);
+            lastReadOffset = offset;
+            return ret;
+        }
+        throw new CorfuException("read(" + offset + ") failed: too many retries");
 	}
 		
 	/**
@@ -378,10 +391,10 @@ public class ClientLib implements
 	 */
 	@Override
 	public void sync() throws CorfuException {
-		int ngroups = CM.getNumGroups();
-		
-		for (int j = 0; j < ngroups; j++) {
-            for (Endpoint ep : CM.getGroupByNumber(j)) {
+
+        for (Vector<Endpoint> grp : CM.getActiveSegmentView().getGroups()) {
+            for (Endpoint ep : grp) {
+                if (ep == null) continue; // fault unit, removed from configuration
 				LogUnitService.Client sunit = getSUnitOf(ep);
 				try { sunit.sync(); } catch (TException e) {
 					throw new InternalCorfuException("sync() failed ");
@@ -393,7 +406,7 @@ public class ClientLib implements
 	/**
 	 * trim a prefix of log up to the specified position
 	 * 
-	 * @param offset the position to trim to (excl)
+	 * @param offset the position to trim to (exclusive)
 	 * 
 	 * @throws CorfuException
 	 */
@@ -403,15 +416,17 @@ public class ClientLib implements
 
             for (Vector<Endpoint> rset : s.getGroups()) {
                 for (Endpoint ep : rset) {
+                    if (ep == null) continue; // fault unit, removed from configuration
                     LogUnitService.Client sunit = getSUnitOf(ep);
                     try {
-                        sunit.trim(genHeader(offset));
+                        sunit.trim(new UnitServerHdr(CM.getEpoch(), offset));
                     } catch (TException e) {
-                        throw new InternalCorfuException("sync() failed ");
+                        throw new InternalCorfuException("trim() failed ");
                     }
                 }
             }
         }
+        // TODO proposeTrim(long offset);
     }
 
 	
@@ -423,17 +438,7 @@ public class ClientLib implements
 	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
 	 */
 	@Override
-	public long queryhead() throws CorfuException {
-		LogUnitService.Client sunit = getSUnitOf(CM.getGroupByNumber(0).elementAt(0));
-		long r;
-		try {
-			r = sunit.querytrim();
-		} catch (TException t) {
-			throw new InternalCorfuException("queryhead() failed ");
-		}
-		if (r < 0) throw new InternalCorfuException("queryhead() call returned negative value, shouldn't happen");
-		return r;
-	}
+	public long queryhead() throws CorfuException { return CM.trimmark; }
 	
 	/**
 	 * Query the log tail. 
@@ -502,7 +507,7 @@ public class ClientLib implements
 		EntryLocation el = CM.getLocationForOffset(offset);
 		LogUnitService.Client sunit = getSUnitOf(el.group.elementAt(0));
 		try {
-			return sunit.readmeta(genHeader(offset));
+			return sunit.readmeta(new UnitServerHdr(CM.getEpoch(), offset));
 		} catch (TException t) {
 			throw new InternalCorfuException("dbg() failed ");
 		}
@@ -554,16 +559,31 @@ public class ClientLib implements
     // ==========================================================
 
     public void sealepoch() throws CorfuException {
-        CM.setEpoch(CM.getEpoch()+1); // TODO
         for (Vector<Endpoint> grp : CM.getActiveSegmentView().getGroups())
             for (Endpoint ep : grp) {
                 LogUnitConfigService.Client cnfg = getCfgOf(ep);
                 try {
-                    cnfg.epochchange(genHeader(0));
+                    cnfg.epochchange(new UnitServerHdr(CM.getEpoch()+1, 0));
                 } catch (TException e) {
                     throw new InternalCorfuException("sealepoch failed");
                 }
             }
+    }
+
+    public void sealepoch(int gind, int excludeind) throws CorfuException {
+        Vector<Endpoint> grp = CM.getGroupByNumber(gind);
+        for (int rind = 0; rind < grp.size(); rind++) {
+            if (rind == excludeind) continue;
+            Endpoint ep = grp.elementAt(rind);
+            if (ep == null) continue;
+            LogUnitConfigService.Client cfg = getCfgOf(ep);
+            try {
+                cfg.epochchange(new UnitServerHdr(CM.getEpoch()+1, 0));
+
+            } catch (TException e) {
+                throw new InternalCorfuException("sealepoch failed");
+            }
+        }
     }
 
     public CorfuConfiguration pullConfig() throws CorfuException {
@@ -589,6 +609,8 @@ public class ClientLib implements
     }
 
     public void proposeRemoveUnit(int gind, int rind) throws CorfuException {
+        sealepoch(gind, rind);
+
         proposeReconfig(CM.ConfToXMLString(
                 CorfuConfiguration.CONFCHANGE.REMOVE,
                 CM.getActiveSegmentView().getStartOff(),
@@ -614,7 +636,6 @@ public class ClientLib implements
 
     private void proposeReconfig(String proposal) throws CorfuException {
 
-        // TODO seal!
         DefaultHttpClient httpclient = new DefaultHttpClient();
         try {
             HttpPost httppost = new HttpPost("http://localhost:8000/corfu");
