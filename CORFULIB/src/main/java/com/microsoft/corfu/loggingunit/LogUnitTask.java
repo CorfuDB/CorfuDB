@@ -29,21 +29,23 @@ public class LogUnitTask implements LogUnitService.Iface {
 	private Logger log = LoggerFactory.getLogger(LogUnitTask.class);
 
     private LogUnitTask(Builder b) { // this is private; use build() to generate objects of this class
+        CM = b.getCM();
         epoch = b.getEpoch();
         UNITCAPACITY = b.getUNITCAPACITY();
-        ENTRYSIZE = b.getENTRYSIZE();
+        PAGESIZE = b.getPAGESIZE();
         PORT = b.getPORT();
         DRIVENAME = b.getDRIVENAME();
         RAMMODE = b.isRAMMODE();
         RECOVERY = b.isRECOVERY();
         REBUILD = b.isREBUILD();
         rebuildnode = b.getRebuildnode();
+        trimmark = b.getTrim();
     }
 
 
     private long epoch = 0;
-    private int UNITCAPACITY = 100000; // capacity in ENTRYSIZE units, i.e. UNITCAPACITY*ENTRYSIZE bytes
-    private int ENTRYSIZE = 128;	// unit size in bytes
+    private int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
+    private int PAGESIZE = 128;	// unit size in bytes
     private int PORT=-1;	// REQUIRED: port number this unit listens on
     private String DRIVENAME = null; // where to persist data (unless rammode is on)
     private boolean RAMMODE = true; // command line switch: work in memory (no data persistence)
@@ -52,8 +54,10 @@ public class LogUnitTask implements LogUnitService.Iface {
     private boolean REBUILD = false;
 
     private String rebuildnode = null;
+    private long trimmark = 0; // log has been trimmed up to this position (excl)
 
-	private long trimmark = 0; // log has been trimmed up to this position (excl)
+    CorfuConfiguration CM = null;
+
 	private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
 
 	private FileChannel DriveChannel = null;
@@ -116,7 +120,7 @@ public class LogUnitTask implements LogUnitService.Iface {
         if (RAMMODE) {
             inmemoryStore[ind] = buf;
         } else {
-            DriveChannel.position(ind*ENTRYSIZE);
+            DriveChannel.position(ind*PAGESIZE);
             DriveChannel.write(buf);
         }
 	}
@@ -145,20 +149,20 @@ public class LogUnitTask implements LogUnitService.Iface {
             }
         } else {
             if (pos + sz > UNITCAPACITY) {
-                ByteBuffer buf1 = ByteBuffer.allocate((UNITCAPACITY - pos) * ENTRYSIZE),
-                        buf2 = ByteBuffer.allocate(((pos + sz) % UNITCAPACITY) * ENTRYSIZE);
-                DriveChannel.read(buf1, pos * ENTRYSIZE);
+                ByteBuffer buf1 = ByteBuffer.allocate((UNITCAPACITY - pos) * PAGESIZE),
+                        buf2 = ByteBuffer.allocate(((pos + sz) % UNITCAPACITY) * PAGESIZE);
+                DriveChannel.read(buf1, pos * PAGESIZE);
                 for (int i = 0; i < (UNITCAPACITY - pos); i++)
-                    wbufs.add(ByteBuffer.wrap(buf1.array(), i * ENTRYSIZE, ENTRYSIZE));
+                    wbufs.add(ByteBuffer.wrap(buf1.array(), i * PAGESIZE, PAGESIZE));
                 DriveChannel.read(buf2, 0);
                 for (int i = 0; i < (pos + sz) % UNITCAPACITY; i++)
-                    wbufs.add(ByteBuffer.wrap(buf2.array(), i * ENTRYSIZE, ENTRYSIZE));
+                    wbufs.add(ByteBuffer.wrap(buf2.array(), i * PAGESIZE, PAGESIZE));
 
             } else {
-                ByteBuffer buf = ByteBuffer.allocate(sz * ENTRYSIZE);
-                DriveChannel.read(buf, pos * ENTRYSIZE);
+                ByteBuffer buf = ByteBuffer.allocate(sz * PAGESIZE);
+                DriveChannel.read(buf, pos * PAGESIZE);
                 for (int i = 0; i < sz; i++)
-                    wbufs.add(ByteBuffer.wrap(buf.array(), i * ENTRYSIZE, ENTRYSIZE));
+                    wbufs.add(ByteBuffer.wrap(buf.array(), i * PAGESIZE, PAGESIZE));
             }
         }
 		return wbufs;
@@ -196,7 +200,7 @@ public class LogUnitTask implements LogUnitService.Iface {
         length |= et.getValue();
 		mapb.putInt(length);
         if (!RAMMODE) {
-            DriveChannel.position(UNITCAPACITY * ENTRYSIZE + mi);
+            DriveChannel.position(UNITCAPACITY * PAGESIZE + mi);
             DriveChannel.write(toArray(logOffset, 1));
         }
 	}
@@ -338,7 +342,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 
     private void writetrimmark() throws IOException {
         if (!RAMMODE) {
-            DriveChannel.position(UNITCAPACITY * ENTRYSIZE + UNITCAPACITY * entsz);
+            DriveChannel.position(UNITCAPACITY * PAGESIZE + UNITCAPACITY * entsz);
             byte[] ser = Util.ObjectSerialize(new Long(trimmark));
             DriveChannel.write(ByteBuffer.wrap(ser));
         }
@@ -349,11 +353,11 @@ public class LogUnitTask implements LogUnitService.Iface {
         long filesz =  DriveChannel.size();
         int sz = Util.ObjectSerialize(new Long(0)).length; // size of extra info after bitmap
 
-        DriveChannel.position(UNITCAPACITY*ENTRYSIZE);
+        DriveChannel.position(UNITCAPACITY*PAGESIZE);
         ByteBuffer bb = ByteBuffer.allocate(UNITCAPACITY*entsz);
         DriveChannel.read(bb);
         ByteBuffer tb = ByteBuffer.allocate(sz);
-        DriveChannel.position(UNITCAPACITY*ENTRYSIZE+ UNITCAPACITY*entsz);
+        DriveChannel.position(UNITCAPACITY*PAGESIZE+ UNITCAPACITY*entsz);
         if (DriveChannel.read(tb) == sz) {
             trimmark = ((Long) Util.ObjectDeserialize(tb.array())).longValue();
             log.debug("trimmark recovered: {}", trimmark);
@@ -493,7 +497,8 @@ public class LogUnitTask implements LogUnitService.Iface {
 	
 	@Override
 	synchronized public ErrorCode trim(UnitServerHdr hdr) throws org.apache.thrift.TException {
-        if (hdr.getEpoch() < epoch) return ErrorCode.ERR_STALEEPOCH;
+        if (hdr.getEpoch() <= epoch) return ErrorCode.ERR_STALEEPOCH;
+        epoch = hdr.epoch;
 
         try {
             trimLogStore(hdr.off);
@@ -534,6 +539,33 @@ public class LogUnitTask implements LogUnitService.Iface {
     class LogUnitConfigServiceImpl implements LogUnitConfigService.Iface {
 
         @Override
+        synchronized public void setConfig(String xmlconfig) {
+            // TODO persist?
+            try {
+                CM = new CorfuConfiguration(xmlconfig);
+                if (CM.getEpoch() > epoch)
+                    log.info("set new configuration: {}", xmlconfig);
+                epoch = CM.getEpoch();
+                trimmark = CM.getTrimmark();
+            } catch (CorfuException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        synchronized public String getConfig() {
+            String s = null;
+            if (CM != null) {
+                try {
+                    s = CM.ConfToXMLString();
+                } catch (CorfuException e) {
+                    e.printStackTrace();
+                }
+            }
+            return s;
+        }
+
+        @Override
         synchronized public LogUnitWrap rebuild() throws TException {
 
             LogUnitWrap wr = new LogUnitWrap(ErrorCode.OK,
@@ -560,6 +592,13 @@ public class LogUnitTask implements LogUnitService.Iface {
             epoch = hdr.epoch;
             return ErrorCode.OK;
         }
+
+        @Override
+        synchronized public void kill() {
+            log.warn("@C@ bye bye!");
+            // throw new ThreadDeath();
+            System.exit(1);
+        }
     }
     
     //////////////////////////////////////////////////////////////////////////////
@@ -569,8 +608,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 
     public void serverloop() throws Exception {
 
-        log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}",
-                log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
+        log.warn("@C@ CorfuLoggingUnit starting");
 
         if (!RAMMODE) {
             try {
@@ -641,24 +679,34 @@ public class LogUnitTask implements LogUnitService.Iface {
     public static class Builder {
 
         private long epoch = 0;
-        private int UNITCAPACITY = 100000; // capacity in ENTRYSIZE units, i.e. UNITCAPACITY*ENTRYSIZE bytes
-        private int ENTRYSIZE = 128;	// unit size in bytes
+        private int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
+        private int PAGESIZE = 128;	// unit size in bytes
         private int PORT=-1;	// REQUIRED: port number this unit listens on
         private String DRIVENAME = null; // where to persist data (unless rammode is on)
         private boolean RAMMODE = true; // command line switch: work in memory (no data persistence)
         private boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
-
         private boolean REBUILD = false;
-
         private String rebuildnode = null;
+        private long trim = 0;
+        private CorfuConfiguration CM = null;
 
         public LogUnitTask build() {
+            if (getCM() == null)
+                throw new RuntimeException("initial configuration must be provided");
             if (getPORT() < 0)
-                throw new RuntimeException("CorfUUnitTask port must be initialized");
+                throw new RuntimeException("port must be initialized");
             if (!isRAMMODE() && getDRIVENAME() == null)
-                throw new RuntimeException("LogUnitTask must have a drivename");
+                throw new RuntimeException("must have a drivename");
 
             return new LogUnitTask(this);
+        }
+
+        public CorfuConfiguration getCM() {
+            return CM;
+        }
+
+        public void setCM(CorfuConfiguration CM) {
+            this.CM = CM;
         }
 
         public int getUNITCAPACITY() {
@@ -670,12 +718,12 @@ public class LogUnitTask implements LogUnitService.Iface {
             return this;
         }
 
-        public int getENTRYSIZE() {
-            return ENTRYSIZE;
+        public int getPAGESIZE() {
+            return PAGESIZE;
         }
 
-        public Builder setENTRYSIZE(int ENTRYSIZE) {
-            this.ENTRYSIZE = ENTRYSIZE;
+        public Builder setPAGESIZE(int PAGESIZE) {
+            this.PAGESIZE = PAGESIZE;
             return this;
         }
 
@@ -742,8 +790,14 @@ public class LogUnitTask implements LogUnitService.Iface {
             return this;
         }
 
+        public long getTrim() {
+            return trim;
+        }
+
+        public void setTrim(long trim) {
+            this.trim = trim;
+        }
+
     }
-
-
 
 }

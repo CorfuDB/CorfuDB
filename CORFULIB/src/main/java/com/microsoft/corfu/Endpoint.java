@@ -1,5 +1,14 @@
 package com.microsoft.corfu;
 
+import com.microsoft.corfu.loggingunit.LogUnitConfigService;
+import com.microsoft.corfu.loggingunit.LogUnitService;
+import com.microsoft.corfu.sequencer.SequencerService;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TMultiplexedProtocol;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
+
 import java.util.HashMap;
 
 // This is a Corfu endpoint
@@ -30,7 +39,77 @@ public class Endpoint {
         }
     }
 
-	@Override
+    static class clientSunitEndpoint {
+        TTransport t = null;
+        LogUnitService.Client cl = null;
+        TBinaryProtocol protocol = null;
+        LogUnitConfigService.Client configcl = null;
+
+        clientSunitEndpoint(Endpoint cn) throws CorfuException {
+            TMultiplexedProtocol mprotocol = null, mprotocol2 = null;
+
+            try {
+                t = new TSocket(cn.getHostname(), cn.getPort());
+                t.open();
+                protocol = new TBinaryProtocol(t);
+
+                mprotocol = new TMultiplexedProtocol(protocol, "SUNIT");
+                cl = new LogUnitService.Client(mprotocol);
+
+                mprotocol2 = new TMultiplexedProtocol(protocol, "CONFIG");
+                configcl = new LogUnitConfigService.Client(mprotocol2);
+
+            } catch (TTransportException e) {
+                e.printStackTrace();
+                throw new CorfuException("could not set up connection(s)");
+            }
+        }
+    }
+
+    static public LogUnitService.Client getSUnitOf(Endpoint cn) throws CorfuException {
+        clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
+        if (ep == null) {
+            ep = new clientSunitEndpoint(cn);
+            cn.setInfo(ep);
+        }
+        return ep.cl;
+    }
+    static public LogUnitConfigService.Client getCfgOf(Endpoint cn) throws CorfuException {
+        clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
+        if (ep == null) {
+            ep = new clientSunitEndpoint(cn);
+            cn.setInfo(ep);
+        }
+        return ep.configcl;
+    }
+
+    static class clientSequencerEndpoint {
+        TTransport t = null;
+        SequencerService.Client cl = null;
+        TBinaryProtocol protocol = null;
+
+        clientSequencerEndpoint(Endpoint cn) throws CorfuException {
+            try {
+                t = new TSocket(cn.getHostname(), cn.getPort());
+                protocol = new TBinaryProtocol(t);
+                cl = new SequencerService.Client(protocol);
+                t.open();
+            } catch (TTransportException e) {
+                e.printStackTrace();
+                throw new CorfuException("could not set up connection(s)");
+            }
+        }
+    }
+    static public SequencerService.Client getSequencer(Endpoint cn) throws CorfuException {
+        clientSequencerEndpoint ep = (clientSequencerEndpoint) cn.getInfo();
+        if (ep == null) {
+            ep = new clientSequencerEndpoint(cn);
+            cn.setInfo(ep);
+        }
+        return ep.cl;
+    }
+
+    @Override
 	public String toString()
 	{
 		return hostname + ":" + port;

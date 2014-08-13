@@ -13,6 +13,9 @@ struct LogUnitWrap {
 	}
 
 service LogUnitConfigService {
+    void setConfig(1:string config),
+    string getConfig(),
     LogUnitWrap rebuild(),
 	Common.ErrorCode epochchange(1:Common.UnitServerHdr hdr),
+	void kill(),
 }

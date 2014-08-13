@@ -1,5 +1,8 @@
 package com.microsoft.corfu.loggingunit;
 
+import com.microsoft.corfu.ClientLib;
+import com.microsoft.corfu.CorfuConfiguration;
+import com.microsoft.corfu.CorfuException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,24 +18,38 @@ public class LogUnitDriver {
      * @throws Exception
      */
     public static void main(String[] args) throws Exception {
-        String Usage = "\n Usage: " + LogUnitService.class.getName() + "<-port <port>> [-size <size>] [-grain <grain>]" +
-                "<-rammode> | <-drivename <name> [-recover | -rebuild <hostname:port> ] ";
+        String Usage = "\n Usage: " + LogUnitService.class.getName() +
+                " <-port portnum>" +
+                " <group-index> <replica-index>" +
+                " [-size <size>]" +
+                " <-rammode> | <-drivename name>" +
+                " [-recover | -rebuild hostname:port ]";
 
         LogUnitTask.Builder cb = new LogUnitTask.Builder();
+
+
+        CorfuConfiguration CM = null;
+        while (CM == null) {
+            try {
+                CM = ClientLib.pullConfig();
+            } catch (CorfuException e) {
+                slog.warn("cannot pull configuration; sleep 1 sec");
+                Thread.sleep(1000);
+            }
+        }
+        cb.setCM(CM);
+
+        cb.setPAGESIZE(CM.getPagesize());
+        cb.setEpoch(CM.getEpoch());
+        cb.setTrim(CM.getTrimmark());
+
+        // cb.setPORT(CM.getGroupByNumber(gind)[rind].port)
 
         for (int i = 0; i < args.length; ) {
             if (args[i].startsWith("-port")) {
                 cb.setPORT(Integer.parseInt(args[i+1]));
                 slog.info("port: " + args[i+1]);
                 i += 2;
-            } else if (args[i].startsWith("-size")) {
-                cb.setPORT(Integer.parseInt(args[i + 1]));
-                slog.info("port: " + args[i+1]);
-                i += 2;
-//            } else if (args[i].startsWith("-grain")) {
-//                cb.setGRAIN(Integer.getInteger(args[i+1]));
-//                slog.info("grain: " + args[i+1]);
-//                i += 1;
             } else if (args[i].startsWith("-recover")) {
                 cb.setRECOVERY(true);
                 slog.info("recovery mode");

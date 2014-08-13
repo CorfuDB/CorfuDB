@@ -87,3 +87,13 @@ class InternalCorfuException extends CorfuException
 	}
 }
 
+
+@SuppressWarnings("serial")
+class ConfigCorfuException extends CorfuException
+{
+    public ConfigCorfuException(String desc)
+    {
+        super(desc);
+        this.er = ErrorCode.ERR_STALEEPOCH;
+    }
+}

@@ -36,102 +36,57 @@ public class ClientLib implements
 
 	Logger log = LoggerFactory.getLogger(ClientLib.class);
 
-    String master;
-	CorfuConfiguration CM;
-	SequencerService.Client sequencer;
-	TTransport[] transports;
+    static String master = "http://localhost:8000/corfu";
+	static CorfuConfiguration CM;
+    static public CorfuConfiguration pullConfig() throws CorfuException {
+        DefaultHttpClient httpclient = new DefaultHttpClient();
 
-    public ClientLib(CorfuConfiguration CM) throws CorfuException {
-        log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}",
-                log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
-        this.CM = CM;
-        buildClientConnections();
+        try {
+            HttpGet httpget = new HttpGet(master);
+
+            System.out.println("Executing request: " + httpget.getRequestLine());
+            HttpResponse response = httpclient.execute(httpget);
+
+            System.out.println("pullConfig from master: " + response.getStatusLine());
+
+            CM = new CorfuConfiguration(response.getEntity().getContent());
+        } catch (ClientProtocolException e) {
+            throw new InternalCorfuException("cannot pull configuration");
+        } catch (IOException e) {
+            throw new InternalCorfuException("cannot pull configuration");
+        }
+        return CM;
     }
 
-	public ClientLib(String master) throws CorfuException {
-		
-		log.warn("CurfuClientImpl logging level = dbg?{} info?{} warn?{} err?{}", 
-				log.isDebugEnabled(), log.isInfoEnabled(), log.isWarnEnabled(), log.isErrorEnabled());
+
+    SequencerService.Client sequencer;
+
+    public ClientLib(String master) throws CorfuException {
         this.master = master;
-		CM = pullConfig();
+		pullConfig();
 		buildClientConnections();
-	}
-	
-	class clientSunitEndpoint {
-		TTransport t = null;
-		LogUnitService.Client cl = null;
-		TBinaryProtocol protocol = null;
-        LogUnitConfigService.Client configcl = null;
-
-        clientSunitEndpoint(Endpoint cn) throws CorfuException {
-            TMultiplexedProtocol mprotocol = null, mprotocol2 = null;
-
-			try {
-				t = new TSocket(cn.getHostname(), cn.getPort());
-                t.open();
-				protocol = new TBinaryProtocol(t);
-
-                mprotocol = new TMultiplexedProtocol(protocol, "SUNIT");
-				cl = new LogUnitService.Client(mprotocol);
-				log.info("client connection open with multiplexed server  {}:{}" , cn.getHostname() , cn.getPort());
-
-                mprotocol2 = new TMultiplexedProtocol(protocol, "CONFIG");
-                configcl = new LogUnitConfigService.Client(mprotocol2);
-                log.info("config  connection open with multiplexed server  {}:{}" , cn.getHostname() , cn.getPort());
-
-			} catch (TTransportException e) {
-				e.printStackTrace();
-				throw new CorfuException("could not set up connection(s)");
-			}		
-		}
-	}
-
-    LogUnitService.Client getSUnitOf(Endpoint cn) throws CorfuException {
-        clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
-        if (ep == null) {
-            ep = new clientSunitEndpoint(cn);
-            cn.setInfo(ep);
-        }
-        return ep.cl;
-    }
-    LogUnitConfigService.Client getCfgOf(Endpoint cn) throws CorfuException {
-        clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
-        if (ep == null) {
-            ep = new clientSunitEndpoint(cn);
-            cn.setInfo(ep);
-        }
-        return ep.configcl;
-    }
-
-	class clientSequencerEndpoint {
-		TTransport t = null;
-		SequencerService.Client cl = null;
-		TBinaryProtocol protocol = null;
-		
-		clientSequencerEndpoint(Endpoint cn) throws CorfuException {
-			try {
-				t = new TSocket(cn.getHostname(), cn.getPort());
-				protocol = new TBinaryProtocol(t);
-				cl = new SequencerService.Client(protocol);
-				t.open();
-				log.info("client connection open with sequencer {}:{}", cn.getHostname(), cn.getPort());
-			} catch (TTransportException e) {
-				e.printStackTrace();
-				throw new CorfuException("could not set up connection(s)");
-			}		
-		}
 	}
 	
 	void buildClientConnections() throws CorfuException {
 
-		for (int g = 0; g < CM.getNumGroups(); g++)
-            for (Endpoint cn : CM.getGroupByNumber(g)) getSUnitOf(cn);
+		for (int g = 0; g < CM.getNumGroups(); g++) {
+            for (Endpoint cn : CM.getGroupByNumber(g)) {
+                if (cn == null) continue;
+                try {
+                    Endpoint.getSUnitOf(cn);
+                } catch (CorfuException e) {
+                    throw new CorfuException("buildConnections to sunits failed");
+                }
+            }
+        }
 		
 		Endpoint sn = CM.getSequencer();
-		clientSequencerEndpoint seq = new clientSequencerEndpoint(sn);
-        sn.setInfo(seq);
-		sequencer = seq.cl;
-	}
+        try {
+            sequencer = Endpoint.getSequencer(sn);
+        } catch (CorfuException e) {
+            throw new CorfuException("buildConnections to sequencer failed");
+        }
+    }
 
 	/**
 	 * Returns the size of a single Corfu entry
@@ -185,6 +140,7 @@ public class ClientLib implements
 			writeExtnt(offset, ctnt);
 		} catch (TException e) {
 			e.printStackTrace();
+            // TODO should we invoke a monitor handler here if monitor != null ??
 			throw new CorfuException("append() failed");
 		}
 		return offset;
@@ -192,42 +148,43 @@ public class ClientLib implements
 	
 	public void writeExtnt(long offset, List<ByteBuffer> ctnt) throws CorfuException {
 		ErrorCode er = null;
-		EntryLocation el = CM.getLocationForOffset(offset);
+		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
         Vector<Endpoint> replicas = el.group;
-        int retrycnt = 0;
 
         LogUnitService.Client sunit;
 
-        while (retrycnt < 5) {
-            try {
-                log.debug("write({} size={} marktype={}", offset, ctnt.size(), ExtntMarkType.EX_FILLED);
-                for (Endpoint ep : replicas) {
-                    if (ep == null) continue; // fault unit, removed from configuration
-                    sunit = getSUnitOf(ep);
-                    er = sunit.write(new UnitServerHdr(CM.getEpoch(), offset), ctnt, ExtntMarkType.EX_FILLED);
-                }
-            } catch (TException e) {
-                e.printStackTrace();
-                throw new CorfuException("append() failed");
+        try {
+            log.debug("write({} size={} marktype={}", offset, ctnt.size(), ExtntMarkType.EX_FILLED);
+            for (Endpoint ep : replicas) {
+                if (ep == null) continue; // fault unit, removed from configuration
+                sunit = Endpoint.getSUnitOf(ep);
+                er = sunit.write(new UnitServerHdr(CM.getEpoch(), offset), ctnt, ExtntMarkType.EX_FILLED);
             }
-
-            if (er.equals(ErrorCode.ERR_STALEEPOCH)) {
-                log.info("appendExtnt fails, stale epoch {}; pulling new epoch from Config manager", CM.getEpoch());
-                pullConfig();
-                retrycnt++; continue; //retry
-            }
-
-            if (er.equals(ErrorCode.ERR_FULL)) {
-                throw new OutOfSpaceCorfuException("append() failed: full");
-            } else if (er.equals(ErrorCode.ERR_OVERWRITE)) {
-                throw new OverwriteCorfuException("append() failed: overwritten");
-            } else if (er.equals(ErrorCode.ERR_BADPARAM)) {
-                throw new BadParamCorfuException("append() failed: bad parameter passed");
-            }
-
-            return;
+        } catch (TException e) {
+            e.printStackTrace();
+            // TODO should we invoke a monitor handler here in case monitor != null ??
         }
-        throw new CorfuException("append() failed: too many retries");
+
+        if (er == null || er.equals(ErrorCode.ERR_STALEEPOCH)) {
+            int curepoch = CM.getEpoch();
+            pullConfig();
+            if (CM.getEpoch() > curepoch) // retry
+                writeExtnt(offset, ctnt);
+            else                            // TODO perhaps sleep and retry one more time??
+                throw new ConfigCorfuException("append() failed: configuration changed");
+        } else
+        if (er.equals(ErrorCode.ERR_FULL)) {
+            throw new OutOfSpaceCorfuException("append() failed: full");
+        } else
+        if (er.equals(ErrorCode.ERR_OVERWRITE)) {
+            throw new OverwriteCorfuException("append() failed: overwritten");
+        } else
+        if (er.equals(ErrorCode.ERR_BADPARAM)) {
+            throw new BadParamCorfuException("append() failed: bad parameter passed");
+        } else
+        if (er.equals(ErrorCode.ERR_STALEEPOCH)) {
+            throw new BadParamCorfuException("append() failed: stale epoch");
+        }
     }
 	
 	long lastReadOffset = -1;
@@ -242,51 +199,42 @@ public class ClientLib implements
 	@Override
 	public ExtntWrap readExtnt(long offset) throws CorfuException {
 		
-		ExtntWrap ret;
-		EntryLocation el = CM.getLocationForOffset(offset);
-        Endpoint ep;
+		ExtntWrap ret = null;
+		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
+        Endpoint ep = null;
         LogUnitService.Client sunit = null;
-        int retrycnt=0;
 
-        while(retrycnt < 5) {
+        for (ListIterator<Endpoint> it = el.group.listIterator(el.group.size());
+             it.hasPrevious() && ep == null;
+             ep = it.previous() )
+            ;                                   // for-loop to find the tail of replica-chain to read from
+        sunit = Endpoint.getSUnitOf(ep);
 
-            ListIterator<Endpoint> it = el.group.listIterator(el.group.size());
-            while (it.hasPrevious()) {
-                ep = it.previous();
-                if (ep == null) continue;
-                sunit = getSUnitOf(ep); // read from tail of replica-chain
-                break;
-            }
-
-            try {
-                log.debug("read offset {} now", offset);
-                ret = sunit.read(new UnitServerHdr(CM.getEpoch(), offset));
-            } catch (TException e) {
-                e.printStackTrace();
-                throw new CorfuException("read() failed");
-            }
-
-            if (ret.getErr().equals(ErrorCode.ERR_STALEEPOCH)) {
-                log.info("readExtnt({}) fails, epoch changed", offset);
-                pullConfig();
-                retrycnt++; continue; // retry
-            } else if (ret.getErr().equals(ErrorCode.ERR_UNWRITTEN)) {
-                log.info("readExtnt({}) fails, unwritten", offset);
-                throw new UnwrittenCorfuException("read(" + offset + ") failed: unwritten");
-            } else if (ret.getErr().equals(ErrorCode.ERR_TRIMMED)) {
-                lastReadOffset = offset;
-                log.info("readExtnt({}) fails, trimmed", offset);
-                throw new TrimmedCorfuException("read(" + offset + ") failed: trimmed");
-            } else if (ret.getErr().equals(ErrorCode.ERR_BADPARAM)) {
-                log.info("readExtnt({}) fails, bad param", offset);
-                throw new OutOfSpaceCorfuException("read(" + offset + ") failed: bad parameter");
-            }
-
-            log.debug("read succeeds {}", offset);
-            lastReadOffset = offset;
-            return ret;
+        try {
+            log.debug("read offset {}", offset);
+            ret = sunit.read(new UnitServerHdr(CM.getEpoch(), offset));
+        } catch (TException e) {
+            e.printStackTrace();
         }
-        throw new CorfuException("read(" + offset + ") failed: too many retries");
+
+        if (ret == null || ret.getErr().equals(ErrorCode.ERR_STALEEPOCH) ) {
+            int curepoch = CM.getEpoch();
+            pullConfig();
+            if (curepoch < CM.getEpoch()) // retry
+                readExtnt(offset);
+            else                        // TODO perhaps sleep and retry one more time??
+                throw new ConfigCorfuException("read(" + offset + ") failed: configuration issue");
+        } else if (ret.getErr().equals(ErrorCode.ERR_UNWRITTEN)) {
+            throw new UnwrittenCorfuException("read(" + offset + ") failed: unwritten");
+        } else if (ret.getErr().equals(ErrorCode.ERR_TRIMMED)) {
+            lastReadOffset = CM.getTrimmark();
+            throw new TrimmedCorfuException("read(" + offset + ") failed: trimmed");
+        } else if (ret.getErr().equals(ErrorCode.ERR_BADPARAM)) {
+            throw new OutOfSpaceCorfuException("read(" + offset + ") failed: bad parameter");
+        }
+
+        lastReadOffset = offset;
+        return ret;
 	}
 		
 	/**
@@ -305,85 +253,6 @@ public class ClientLib implements
 		return r;
 	}
 
-	
-	@Override
-	public long repairNext() throws CorfuException {
-		long head, tail;
-		long offset = -1;
-/* 		ErrorCode readErr = ErrorCode.OK;
-		boolean skip = false;
-		
-		// check current log bounds
-		head = queryhead(); 
-		tail = querytail(); 
-		
-		offset = lastReadOffset+1;
-		
-		if (offset < head) {
-			log.info("repairNext repositioning to head={}", head);
-			offset = head;
-		}
-		if (offset >= tail) {
-			log.info("repairNext reached log tail, finishing");
-			return offset; // TODO do something??
-		}
-				
-		// next, try to read 'offset' to see what is the error value
-		EntryLocation el = CM.getLocationForOffset(offset);
-		LogUnitService.Client sunit = getSUnitOf(el.group.replicas[0]);
-		try {
-			log.debug("repairNext read({})", offset);
-			ExtntWrap ret = sunit.read(genHeader(offset));
-			readErr = ret.getErr();
-			if (!readErr.equals(ErrorCode.OK)) skip = true;
-		} catch (TException e) {
-			e.printStackTrace();
-			throw new CorfuException("repairNext read() failed, communication problem; quitting");
-		}
-		
-		// finally, if either the meta-info was broken, or the content was broken, skip will be ==true.
-		// in that case, we mark this entry for skipping, and we also try to mark it for skip on the storage units
-		
-		if (!skip) {
-			lastReadOffset = offset;
-			return offset;
-		}
-		
-		lastReadOffset = offset;
-			
-		// now we try to fix 'inf'
-		ErrorCode er;
-		log.debug("repairNext fix {}", offset);
-		try {
-			er = sunit.fix(genHeader(offset));
-		} catch (TException e1) {
-			e1.printStackTrace();
-			throw new CorfuException("repairNext() fix failed, communication problem; quitting");
-		}
-		if (er.equals(ErrorCode.ERR_FULL)) {
-			// TODO should we try to trim the log to the latest checkpoint and/or check if the extent range exceeds the log capacity??
-			throw new OutOfSpaceCorfuException("repairNext failed, log full");
-		}
-*/
-        return offset;
-	}
-
-    /**
-     * recover the token server by moving it to a known lower-bound on filled position
-     * should only be used by administrative utilities
-     *
-     * @param lowbound
-     */
-    @Override
-    public void tokenserverrecover(long lowbound) throws CorfuException {
-        try {
-            sequencer.recover(lowbound);
-        } catch (TException e) {
-            e.printStackTrace();
-            throw new CorfuException("tokenserver recovery failed");
-        }
-    }
-
     /**
 	 * force a delay until we are notified that previously invoked writes to the log have been safely forced to persistent store.
 	 * 
@@ -395,41 +264,13 @@ public class ClientLib implements
         for (Vector<Endpoint> grp : CM.getActiveSegmentView().getGroups()) {
             for (Endpoint ep : grp) {
                 if (ep == null) continue; // fault unit, removed from configuration
-				LogUnitService.Client sunit = getSUnitOf(ep);
+				LogUnitService.Client sunit = Endpoint.getSUnitOf(ep);
 				try { sunit.sync(); } catch (TException e) {
 					throw new InternalCorfuException("sync() failed ");
 				}
 			}
 		}
 	}
-	
-	/**
-	 * trim a prefix of log up to the specified position
-	 * 
-	 * @param offset the position to trim to (exclusive)
-	 * 
-	 * @throws CorfuException
-	 */
-	public void trim(long offset) throws CorfuException {
-        for (SegmentView s : CM.segmentlist) {
-            if (offset <= s.getStartOff()) break;
-
-            for (Vector<Endpoint> rset : s.getGroups()) {
-                for (Endpoint ep : rset) {
-                    if (ep == null) continue; // fault unit, removed from configuration
-                    LogUnitService.Client sunit = getSUnitOf(ep);
-                    try {
-                        sunit.trim(new UnitServerHdr(CM.getEpoch(), offset));
-                    } catch (TException e) {
-                        throw new InternalCorfuException("trim() failed ");
-                    }
-                }
-            }
-        }
-        // TODO proposeTrim(long offset);
-    }
-
-	
 	
 	/**
 	 * Query the log head. 
@@ -504,8 +345,8 @@ public class ClientLib implements
 	 */
 	@Override
 	public ExtntWrap dbg(long offset) throws CorfuException {
-		EntryLocation el = CM.getLocationForOffset(offset);
-		LogUnitService.Client sunit = getSUnitOf(el.group.elementAt(0));
+		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
+		LogUnitService.Client sunit = Endpoint.getSUnitOf(el.group.elementAt(0));
 		try {
 			return sunit.readmeta(new UnitServerHdr(CM.getEpoch(), offset));
 		} catch (TException t) {
@@ -543,9 +384,38 @@ public class ClientLib implements
 		writeExtnt(offset, wbufs);
 	}
 
+    // from here down, implement ConfigAPI interface for administration:
+    // ==========================================================
+
+    /**
+     * trim a prefix of log up to the specified position
+     *
+     * @param offset the position to trim to (exclusive)
+     *
+     * @throws CorfuException
+     */
+    public void trim(long offset) throws CorfuException {
+        for (CorfuConfiguration.SegmentView s : CM.segmentlist) {
+            if (offset <= s.getStartOff()) break;
+
+            for (Vector<Endpoint> rset : s.getGroups()) {
+                for (Endpoint ep : rset) {
+                    if (ep == null) continue; // faulty unit, removed from configuration
+                    LogUnitService.Client sunit = Endpoint.getSUnitOf(ep);
+                    try {
+                        sunit.trim(new UnitServerHdr(CM.getEpoch()+1, offset));
+                    } catch (TException e) {
+                        throw new InternalCorfuException("trim() failed ");
+                    }
+                }
+            }
+        }
+        proposeReconfig(CM.ConfTrim(offset));
+    }
+
     public LogUnitWrap rebuild(long offset) throws CorfuException {
-        EntryLocation el = CM.getLocationForOffset(offset);
-        LogUnitConfigService.Client cnfg = getCfgOf(el.group.elementAt(0));
+        CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
+        LogUnitConfigService.Client cnfg = Endpoint.getCfgOf(el.group.elementAt(0));
         LogUnitWrap ret = null;
         try {
             ret = cnfg.rebuild();
@@ -555,13 +425,10 @@ public class ClientLib implements
         return ret;
     }
 
-    // from here down, implement ConfigAPI interface for administration:
-    // ==========================================================
-
     public void sealepoch() throws CorfuException {
         for (Vector<Endpoint> grp : CM.getActiveSegmentView().getGroups())
             for (Endpoint ep : grp) {
-                LogUnitConfigService.Client cnfg = getCfgOf(ep);
+                LogUnitConfigService.Client cnfg = Endpoint.getCfgOf(ep);
                 try {
                     cnfg.epochchange(new UnitServerHdr(CM.getEpoch()+1, 0));
                 } catch (TException e) {
@@ -576,7 +443,7 @@ public class ClientLib implements
             if (rind == excludeind) continue;
             Endpoint ep = grp.elementAt(rind);
             if (ep == null) continue;
-            LogUnitConfigService.Client cfg = getCfgOf(ep);
+            LogUnitConfigService.Client cfg = Endpoint.getCfgOf(ep);
             try {
                 cfg.epochchange(new UnitServerHdr(CM.getEpoch()+1, 0));
 
@@ -586,59 +453,21 @@ public class ClientLib implements
         }
     }
 
-    public CorfuConfiguration pullConfig() throws CorfuException {
-        DefaultHttpClient httpclient = new DefaultHttpClient();
-
-        CorfuConfiguration C = null;
-
-        try {
-            HttpGet httpget = new HttpGet("http://localhost:8000/corfu"); // TODO use 'master' for master-hostname
-
-            System.out.println("Executing request: " + httpget.getRequestLine());
-            HttpResponse response = httpclient.execute(httpget);
-
-            log.info("pullConfig from master: {}" , response.getStatusLine());
-
-            C = new CorfuConfiguration(response.getEntity().getContent());
-        } catch (ClientProtocolException e) {
-            throw new InternalCorfuException("cannot pull configuration");
-        } catch (IOException e) {
-            throw new InternalCorfuException("cannot pull configuration");
-        }
-        return C;
-    }
-
     public void proposeRemoveUnit(int gind, int rind) throws CorfuException {
         sealepoch(gind, rind);
-
-        proposeReconfig(CM.ConfToXMLString(
-                CorfuConfiguration.CONFCHANGE.REMOVE,
-                CM.getActiveSegmentView().getStartOff(),
-                -1,
-                gind,
-                rind,
-                null,
-                -1
-                ) );
+        proposeReconfig(CM.ConfRemove(CM.getActiveSegmentView(), gind, rind) );
     }
 
     public void proposeDeployUnit(int gind, int rind, String hostname, int port) throws CorfuException {
-        proposeReconfig(CM.ConfToXMLString(
-                CorfuConfiguration.CONFCHANGE.DEPLOY,
-                CM.getActiveSegmentView().getStartOff(),
-                -1, // TODO: later, use this to allow lazy recovery of deployed unit by sealing off a prefix of the segment
-                gind,
-                rind,
-                hostname,
-                port
-        ) );
+        sealepoch(gind, -1);
+        proposeReconfig(CM.ConfDeploy(CM.getActiveSegmentView(), gind, rind, hostname, port));
     }
 
     private void proposeReconfig(String proposal) throws CorfuException {
 
         DefaultHttpClient httpclient = new DefaultHttpClient();
         try {
-            HttpPost httppost = new HttpPost("http://localhost:8000/corfu");
+            HttpPost httppost = new HttpPost(master);
             httppost.setEntity(new StringEntity(proposal));
 
             // System.out.println("Executing request: " + httppost.getRequestLine());
@@ -656,4 +485,33 @@ public class ClientLib implements
             throw new InternalCorfuException("cannot propose  configuration");
         }
     }
+
+    public void killUnit(int gind, int rind) throws CorfuException {
+        Endpoint ep = CM.getEP(gind, rind);
+        if (ep == null) throw new ConfigCorfuException("nothing to kill");
+
+        try {
+            Endpoint.getCfgOf(ep).kill();
+        } catch (TException e) {
+            e.printStackTrace();
+            throw new ConfigCorfuException("cannot kill");
+        }
+    }
+
+    /**
+     * recover the token server by moving it to a known lower-bound on filled position
+     * should only be used by administrative utilities
+     *
+     * @param lowbound
+     */
+    @Override
+    public void tokenserverrecover(long lowbound) throws CorfuException {
+        try {
+            sequencer.recover(lowbound);
+        } catch (TException e) {
+            e.printStackTrace();
+            throw new CorfuException("tokenserver recovery failed");
+        }
+    }
+
 }

@@ -27,7 +27,8 @@ public interface ClientAPI {
 	public ExtntWrap readExtnt() throws CorfuException;
 
 	/**
-	 * a variant of readnext that takes the first log-offset position to read next extent from.
+	 * a variant of readExtnt that takes the log-offset to read an extent from.
+     * The last-read position is remembered for future readExtnt() calls
 	 * 
 	 * @param pos           starting position to read
 	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
@@ -68,16 +69,7 @@ public interface ClientAPI {
 	public void sync() throws CorfuException;
 	
 	/**
-	 * trim a prefix of log up to the specified position
-	 * 
-	 * @param offset the position to trim to (excl)
-	 * 
-	 * @throws CorfuException
-	 */
-	public void trim(long offset) throws CorfuException;
-
-	/**
-	 * Query the log head. 
+	 * Query the log head (the last trimmed position).
 	 *  
 	 * @return the current head's index 
 	 * @throws CorfuException if the call fails or returns illegal (negative) value 
@@ -116,24 +108,10 @@ public interface ClientAPI {
 	 * @throws CorfuException
 	 */
 	public void setMark(long pos);
-		
-	/**
-	 * Try to fix the log so that the next invocation of readExtnt() succeeds.
-	 * 
-	 * @return the next position to read from
-	 * @throws CorfuException
-	 */
-	public long repairNext() throws CorfuException;
 
 	/**
 	 * @return starting offset at the log of last (successful) checkpoint
 	 */
 	// public long checkpointLoc() throws CorfuException;
 
-    /**
-     * recover the token server by moving it to a known lower-bound on filled position
-     * should only be used by administrative utilities
-     */
-    public void tokenserverrecover(long lowbound) throws CorfuException;
-	
 }
