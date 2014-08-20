@@ -11,18 +11,12 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.thrift.TException;
-import org.apache.thrift.protocol.TBinaryProtocol;
-import org.apache.thrift.protocol.TMultiplexedProtocol;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
-import org.apache.thrift.transport.TTransportException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -154,24 +148,32 @@ public class ClientLib implements
         LogUnitService.Client sunit;
 
         try {
-            log.debug("write({} size={} marktype={}", offset, ctnt.size(), ExtntMarkType.EX_FILLED);
             for (Endpoint ep : replicas) {
                 if (ep == null) continue; // fault unit, removed from configuration
                 sunit = Endpoint.getSUnitOf(ep);
-                er = sunit.write(new UnitServerHdr(CM.getEpoch(), offset), ctnt, ExtntMarkType.EX_FILLED);
+                er = sunit.write(new UnitServerHdr(CM.getIncarnation(), offset), ctnt, ExtntMarkType.EX_FILLED);
+                log.info("err={} write{} replica={} size={} marktype={}",
+                        er,
+                        offset,
+                        ep,
+                        ctnt.size(),
+                        ExtntMarkType.EX_FILLED);
+                if (!er.equals(ErrorCode.OK)) break;
             }
         } catch (TException e) {
             e.printStackTrace();
-            // TODO should we invoke a monitor handler here in case monitor != null ??
         }
 
         if (er == null || er.equals(ErrorCode.ERR_STALEEPOCH)) {
-            int curepoch = CM.getEpoch();
+            List<Integer> curepoch = new ArrayList<Integer>(CM.getIncarnation());
             pullConfig();
-            if (CM.getEpoch() > curepoch) // retry
+            if (Util.compareIncarnations(CM.getIncarnation(), curepoch) > 0) // obtained new configuration, worth a retry
                 writeExtnt(offset, ctnt);
             else                            // TODO perhaps sleep and retry one more time??
-                throw new ConfigCorfuException("append() failed: configuration changed");
+                throw new ConfigCorfuException("append() failed: incarnation "
+                        + curepoch
+                        + " not responding, err="
+                        + er);
         } else
         if (er.equals(ErrorCode.ERR_FULL)) {
             throw new OutOfSpaceCorfuException("append() failed: full");
@@ -212,16 +214,16 @@ public class ClientLib implements
 
         try {
             log.debug("read offset {}", offset);
-            ret = sunit.read(new UnitServerHdr(CM.getEpoch(), offset));
+            ret = sunit.read(new UnitServerHdr(CM.getIncarnation(), offset));
         } catch (TException e) {
             e.printStackTrace();
         }
 
         if (ret == null || ret.getErr().equals(ErrorCode.ERR_STALEEPOCH) ) {
-            int curepoch = CM.getEpoch();
+            List<Integer> curepoch = new ArrayList<Integer>(CM.getIncarnation());
             pullConfig();
-            if (curepoch < CM.getEpoch()) // retry
-                readExtnt(offset);
+            if (Util.compareIncarnations(CM.getIncarnation(), curepoch) > 0) // obtained new configuration, worth a retry
+                return readExtnt(offset);
             else                        // TODO perhaps sleep and retry one more time??
                 throw new ConfigCorfuException("read(" + offset + ") failed: configuration issue");
         } else if (ret.getErr().equals(ErrorCode.ERR_UNWRITTEN)) {
@@ -348,7 +350,7 @@ public class ClientLib implements
 		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
 		LogUnitService.Client sunit = Endpoint.getSUnitOf(el.group.elementAt(0));
 		try {
-			return sunit.readmeta(new UnitServerHdr(CM.getEpoch(), offset));
+			return sunit.readmeta(new UnitServerHdr(CM.getIncarnation(), offset));
 		} catch (TException t) {
 			throw new InternalCorfuException("dbg() failed ");
 		}
@@ -395,21 +397,6 @@ public class ClientLib implements
      * @throws CorfuException
      */
     public void trim(long offset) throws CorfuException {
-        for (CorfuConfiguration.SegmentView s : CM.segmentlist) {
-            if (offset <= s.getStartOff()) break;
-
-            for (Vector<Endpoint> rset : s.getGroups()) {
-                for (Endpoint ep : rset) {
-                    if (ep == null) continue; // faulty unit, removed from configuration
-                    LogUnitService.Client sunit = Endpoint.getSUnitOf(ep);
-                    try {
-                        sunit.trim(new UnitServerHdr(CM.getEpoch()+1, offset));
-                    } catch (TException e) {
-                        throw new InternalCorfuException("trim() failed ");
-                    }
-                }
-            }
-        }
         proposeReconfig(CM.ConfTrim(offset));
     }
 
@@ -425,41 +412,11 @@ public class ClientLib implements
         return ret;
     }
 
-    public void sealepoch() throws CorfuException {
-        for (Vector<Endpoint> grp : CM.getActiveSegmentView().getGroups())
-            for (Endpoint ep : grp) {
-                LogUnitConfigService.Client cnfg = Endpoint.getCfgOf(ep);
-                try {
-                    cnfg.epochchange(new UnitServerHdr(CM.getEpoch()+1, 0));
-                } catch (TException e) {
-                    throw new InternalCorfuException("sealepoch failed");
-                }
-            }
-    }
-
-    public void sealepoch(int gind, int excludeind) throws CorfuException {
-        Vector<Endpoint> grp = CM.getGroupByNumber(gind);
-        for (int rind = 0; rind < grp.size(); rind++) {
-            if (rind == excludeind) continue;
-            Endpoint ep = grp.elementAt(rind);
-            if (ep == null) continue;
-            LogUnitConfigService.Client cfg = Endpoint.getCfgOf(ep);
-            try {
-                cfg.epochchange(new UnitServerHdr(CM.getEpoch()+1, 0));
-
-            } catch (TException e) {
-                throw new InternalCorfuException("sealepoch failed");
-            }
-        }
-    }
-
     public void proposeRemoveUnit(int gind, int rind) throws CorfuException {
-        sealepoch(gind, rind);
         proposeReconfig(CM.ConfRemove(CM.getActiveSegmentView(), gind, rind) );
     }
 
     public void proposeDeployUnit(int gind, int rind, String hostname, int port) throws CorfuException {
-        sealepoch(gind, -1);
         proposeReconfig(CM.ConfDeploy(CM.getActiveSegmentView(), gind, rind, hostname, port));
     }
 

@@ -5,6 +5,7 @@ package com.microsoft.corfu;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.Vector;
 import javax.security.auth.login.Configuration;
@@ -29,12 +30,17 @@ import org.xml.sax.InputSource;
 public class CorfuConfiguration {
     Logger log = LoggerFactory.getLogger(CorfuConfiguration.class);
 
-    protected int epoch;
+    protected List<Integer> incarnation = new ArrayList<Integer>();
+
     protected int pagesize;
     protected ArrayList<SegmentView> segmentlist = new ArrayList<SegmentView>();
     protected Endpoint sequencer;
     protected long trimmark;
 
+    public List<Integer> getIncarnation() { return incarnation; }
+    public void setIncarnation(List<Integer> incarnation) {
+        this.incarnation = incarnation;
+    }
     public long getTrimmark() {
         return trimmark;
     }
@@ -49,14 +55,6 @@ public class CorfuConfiguration {
 
     public int getPagesize() {
         return pagesize;
-    }
-
-    public int getEpoch() {
-        return epoch;
-    }
-
-    public void setEpoch(int epoch) {
-        this.epoch = epoch;
     }
 
     /**
@@ -105,7 +103,12 @@ public class CorfuConfiguration {
      * @param bootstraplocation
      */
     public CorfuConfiguration(File bootstraplocation) throws CorfuException, FileNotFoundException {
+
         this(new InputSource(new FileReader(bootstraplocation)));
+    }
+
+    public void incIncarnation(int masterid) {
+        Util.incMasterEpoch(incarnation, masterid);
     }
 
     public SegmentView getActiveSegmentView() {
@@ -148,7 +151,7 @@ public class CorfuConfiguration {
      * import the current configuration in XML format
      * <p/>
      * The XML input has the following template structure:
-     * <CONFIGURATION corfuID="0" epoch="0" sequencer="localhost:9020" pagesize="128">
+     * <CONFIGURATION corfuID="0" masterepoch="0" epoch="0" sequencer="localhost:9020" pagesize="128">
      * <SEGMENT startoffset="0" sealedoffset="-1" ngroups="2" nreplicas="2">
      * <GROUP>
      * <NODE nodeaddress="localhost:9040" />
@@ -166,7 +169,18 @@ public class CorfuConfiguration {
         log.debug("@C@ parsing XML configuration");
 
         Node N = doc.getElementsByTagName("CONFIGURATION").item(0);
-        epoch = Integer.parseInt(N.getAttributes().getNamedItem("epoch").getNodeValue());
+
+        int epoch = Integer.parseInt(N.getAttributes().getNamedItem("epoch").getNodeValue());
+        Node T = N.getAttributes().getNamedItem("masterepoch");
+        int masterIncarnation = 0;
+        if (T != null)
+            masterIncarnation = Integer.parseInt(T.getNodeValue());
+        T = N.getAttributes().getNamedItem("masterid");
+        int masterId = 0;
+        if (T != null)
+            masterId = Integer.parseInt(T.getNodeValue());
+        Util.setIncarnation(incarnation, masterIncarnation, masterId, epoch);
+
         pagesize = Integer.parseInt(N.getAttributes().getNamedItem("pagesize").getNodeValue());
 
         // get sequencer
@@ -174,13 +188,13 @@ public class CorfuConfiguration {
         sequencer = Endpoint.genEndpoint(sequenceraddress);
 
         // get trim-mark
-        Node T = N.getAttributes().getNamedItem("trimmark");
+        T = N.getAttributes().getNamedItem("trimmark");
         if (T != null)
             trimmark = Long.parseLong(T.getNodeValue());
         else
             trimmark = 0;
 
-        log.debug("@C@ epoch={} pagesize={} trimmark={} sequencer={}", epoch, pagesize, trimmark, sequenceraddress);
+        log.info("@C@ incarnation={} pagesize={} trimmark={} sequencer={}", incarnation, pagesize, trimmark, sequenceraddress);
 
         // log is mapped onto
         // - list of SegmentView's
@@ -195,21 +209,21 @@ public class CorfuConfiguration {
             int nreplicas = Integer.parseInt(seg.getAttributes().getNamedItem("nreplicas").getNodeValue());
             int startoff = Integer.parseInt(seg.getAttributes().getNamedItem("startoffset").getNodeValue());
             long sealedoff = Long.parseLong(seg.getAttributes().getNamedItem("sealedoffset").getNodeValue());
-            log.debug("@C@ segment [{}..{}]: {} groups {} replicas", startoff, sealedoff, ngroups, nreplicas);
+            log.info("@C@ segment [{}..{}]: {} groups {} replicas", startoff, sealedoff, ngroups, nreplicas);
 
             Vector<Vector<Endpoint>> groups = new Vector<Vector<Endpoint>>();
             NodeList gnodes = seg.getChildNodes();
             for (int gind = 0; gind < gnodes.getLength(); gind++) {
                 Node group = gnodes.item(gind);
                 if (!group.hasChildNodes()) continue;
-                log.debug("@C@ group nodes:");
+                log.info("@C@ group nodes:");
                 Vector<Endpoint> replicas = new Vector<Endpoint>();
                 NodeList rnodes = group.getChildNodes();
                 for (int rind = 0; rind < rnodes.getLength(); rind++) {
                     Node nnode = rnodes.item(rind);
                     if (!nnode.hasAttributes()) continue;
                     String nodeaddr = nnode.getAttributes().getNamedItem("nodeaddress").getNodeValue();
-                    log.debug("@C@    node {} ", nodeaddr);
+                    log.info("@C@    node {} ", nodeaddr);
                     replicas.add(Endpoint.genEndpoint(nodeaddr));
                 }
                 groups.add(replicas);
@@ -225,7 +239,7 @@ public class CorfuConfiguration {
      * @return a Document representation of the history of configuration-segments
      * <p/>
      * The XML result has the following template structure:
-     * <CONFIGURATION corfuID="0" epoch="0" sequencer="localhost:9020" pagesize="128">
+     * <CONFIGURATION corfuID="0" masterepoch="0" epoch="0" sequencer="localhost:9020" pagesize="128">
      * <SEGMENT startoffset="0" sealedoffset="-1" ngroups="2" nreplicas="2">
      * <GROUP>
      * <NODE nodeaddress="localhost:9040" />
@@ -253,13 +267,15 @@ public class CorfuConfiguration {
             }
         }
 
-        void addGlobalParams(int epoch, int nsegments) {
+        void addGlobalParams(List<Integer> epoch, int nsegments) {
             addGlobalParams(epoch, nsegments, trimmark);
         }
 
-        void addGlobalParams(int epoch, int nsegments, long newtrim) {
+        void addGlobalParams(List<Integer> epoch, int nsegments, long newtrim) {
             rootElement = doc.createElement("CONFIGURATION");
-            rootElement.setAttribute("epoch", Integer.toString(epoch));
+            rootElement.setAttribute("masterepoch", Integer.toString(Util.getMasterEpoch(epoch)));
+            rootElement.setAttribute("masterid", Integer.toString(Util.getMasterId(epoch)));
+            rootElement.setAttribute("epoch", Integer.toString(Util.getEpoch(epoch)));
             rootElement.setAttribute("nsegments", Integer.toString(nsegments));
             rootElement.setAttribute("pagesize", Integer.toString(pagesize));
             rootElement.setAttribute("sequencer", sequencer.toString());
@@ -340,7 +356,7 @@ public class CorfuConfiguration {
     public String ConfToXMLString() throws CorfuException {
         ConfToXMLConverter converter = new ConfToXMLConverter();
         converter.init();
-        converter.addGlobalParams(getEpoch(), segmentlist.size());
+        converter.addGlobalParams(incarnation, segmentlist.size());
         for (SegmentView s : segmentlist) converter.addNormalSegment(s);
         return converter.toXMLString();
     }
@@ -348,7 +364,8 @@ public class CorfuConfiguration {
     public String ConfTrim(long newtrim) throws CorfuException {
         ConfToXMLConverter converter = new ConfToXMLConverter();
         converter.init();
-        converter.addGlobalParams(getEpoch() + 1, segmentlist.size(), newtrim);
+        Util.incEpoch(incarnation);
+        converter.addGlobalParams(incarnation, segmentlist.size(), newtrim);
         for (SegmentView s : segmentlist) converter.addNormalSegment(s);
         return converter.toXMLString();
     }
@@ -358,7 +375,8 @@ public class CorfuConfiguration {
 
         ConfToXMLConverter converter = new ConfToXMLConverter();
         converter.init();
-        converter.addGlobalParams(getEpoch() + 1, segmentlist.size());
+        Util.incEpoch(incarnation);
+        converter.addGlobalParams(incarnation, segmentlist.size());
         for (SegmentView s : segmentlist) {
             if (s.equals(rs))
                 converter.addSegmentRemoval(s, gind, rind);
@@ -373,7 +391,8 @@ public class CorfuConfiguration {
 
         ConfToXMLConverter converter = new ConfToXMLConverter();
         converter.init();
-        converter.addGlobalParams(getEpoch()+1, segmentlist.size());
+        Util.incEpoch(incarnation);
+        converter.addGlobalParams(incarnation, segmentlist.size());
         for (SegmentView s : segmentlist) {
             if (s.equals(rs))
                 converter.addSegmentDeploy(s, gind, rind, hostname, port);
@@ -388,7 +407,8 @@ public class CorfuConfiguration {
 
         ConfToXMLConverter converter = new ConfToXMLConverter();
         converter.init();
-        converter.addGlobalParams(getEpoch()+1, segmentlist.size()+1);
+        Util.incEpoch(incarnation);
+        converter.addGlobalParams(incarnation, segmentlist.size()+1);
         SegmentView as = getActiveSegmentView();
         for (SegmentView s : segmentlist) {
             if (s.equals(as))

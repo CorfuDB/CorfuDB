@@ -27,7 +27,6 @@ public class LogUnitDriver {
 
         LogUnitTask.Builder cb = new LogUnitTask.Builder();
 
-
         CorfuConfiguration CM = null;
         while (CM == null) {
             try {
@@ -40,7 +39,6 @@ public class LogUnitDriver {
         cb.setCM(CM);
 
         cb.setPAGESIZE(CM.getPagesize());
-        cb.setEpoch(CM.getEpoch());
         cb.setTrim(CM.getTrimmark());
 
         // cb.setPORT(CM.getGroupByNumber(gind)[rind].port)

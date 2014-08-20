@@ -36,13 +36,13 @@ public class LogUnitConfigService {
 
   public interface Iface {
 
-    public void setConfig(String config) throws org.apache.thrift.TException;
+    public void probe() throws org.apache.thrift.TException;
 
-    public String getConfig() throws org.apache.thrift.TException;
+    public com.microsoft.corfu.ErrorCode phase2b(String config) throws org.apache.thrift.TException;
+
+    public String phase1b(int masterid) throws org.apache.thrift.TException;
 
     public LogUnitWrap rebuild() throws org.apache.thrift.TException;
-
-    public com.microsoft.corfu.ErrorCode epochchange(com.microsoft.corfu.UnitServerHdr hdr) throws org.apache.thrift.TException;
 
     public void kill() throws org.apache.thrift.TException;
 
@@ -50,13 +50,13 @@ public class LogUnitConfigService {
 
   public interface AsyncIface {
 
-    public void setConfig(String config, org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException;
+    public void probe(org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException;
 
-    public void getConfig(org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException;
+    public void phase2b(String config, org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException;
+
+    public void phase1b(int masterid, org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException;
 
     public void rebuild(org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException;
-
-    public void epochchange(com.microsoft.corfu.UnitServerHdr hdr, org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException;
 
     public void kill(org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException;
 
@@ -82,46 +82,69 @@ public class LogUnitConfigService {
       super(iprot, oprot);
     }
 
-    public void setConfig(String config) throws org.apache.thrift.TException
+    public void probe() throws org.apache.thrift.TException
     {
-      send_setConfig(config);
-      recv_setConfig();
+      send_probe();
+      recv_probe();
     }
 
-    public void send_setConfig(String config) throws org.apache.thrift.TException
+    public void send_probe() throws org.apache.thrift.TException
     {
-      setConfig_args args = new setConfig_args();
-      args.setConfig(config);
-      sendBase("setConfig", args);
+      probe_args args = new probe_args();
+      sendBase("probe", args);
     }
 
-    public void recv_setConfig() throws org.apache.thrift.TException
+    public void recv_probe() throws org.apache.thrift.TException
     {
-      setConfig_result result = new setConfig_result();
-      receiveBase(result, "setConfig");
+      probe_result result = new probe_result();
+      receiveBase(result, "probe");
       return;
     }
 
-    public String getConfig() throws org.apache.thrift.TException
+    public com.microsoft.corfu.ErrorCode phase2b(String config) throws org.apache.thrift.TException
     {
-      send_getConfig();
-      return recv_getConfig();
+      send_phase2b(config);
+      return recv_phase2b();
     }
 
-    public void send_getConfig() throws org.apache.thrift.TException
+    public void send_phase2b(String config) throws org.apache.thrift.TException
     {
-      getConfig_args args = new getConfig_args();
-      sendBase("getConfig", args);
+      phase2b_args args = new phase2b_args();
+      args.setConfig(config);
+      sendBase("phase2b", args);
     }
 
-    public String recv_getConfig() throws org.apache.thrift.TException
+    public com.microsoft.corfu.ErrorCode recv_phase2b() throws org.apache.thrift.TException
     {
-      getConfig_result result = new getConfig_result();
-      receiveBase(result, "getConfig");
+      phase2b_result result = new phase2b_result();
+      receiveBase(result, "phase2b");
       if (result.isSetSuccess()) {
         return result.success;
       }
-      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "getConfig failed: unknown result");
+      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "phase2b failed: unknown result");
+    }
+
+    public String phase1b(int masterid) throws org.apache.thrift.TException
+    {
+      send_phase1b(masterid);
+      return recv_phase1b();
+    }
+
+    public void send_phase1b(int masterid) throws org.apache.thrift.TException
+    {
+      phase1b_args args = new phase1b_args();
+      args.setMasterid(masterid);
+      sendBase("phase1b", args);
+    }
+
+    public String recv_phase1b() throws org.apache.thrift.TException
+    {
+      phase1b_result result = new phase1b_result();
+      receiveBase(result, "phase1b");
+      if (result.isSetSuccess()) {
+        return result.success;
+      }
+      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "phase1b failed: unknown result");
     }
 
     public LogUnitWrap rebuild() throws org.apache.thrift.TException
@@ -144,29 +167,6 @@ public class LogUnitConfigService {
         return result.success;
       }
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "rebuild failed: unknown result");
-    }
-
-    public com.microsoft.corfu.ErrorCode epochchange(com.microsoft.corfu.UnitServerHdr hdr) throws org.apache.thrift.TException
-    {
-      send_epochchange(hdr);
-      return recv_epochchange();
-    }
-
-    public void send_epochchange(com.microsoft.corfu.UnitServerHdr hdr) throws org.apache.thrift.TException
-    {
-      epochchange_args args = new epochchange_args();
-      args.setHdr(hdr);
-      sendBase("epochchange", args);
-    }
-
-    public com.microsoft.corfu.ErrorCode recv_epochchange() throws org.apache.thrift.TException
-    {
-      epochchange_result result = new epochchange_result();
-      receiveBase(result, "epochchange");
-      if (result.isSetSuccess()) {
-        return result.success;
-      }
-      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "epochchange failed: unknown result");
     }
 
     public void kill() throws org.apache.thrift.TException
@@ -206,24 +206,21 @@ public class LogUnitConfigService {
       super(protocolFactory, clientManager, transport);
     }
 
-    public void setConfig(String config, org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException {
+    public void probe(org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException {
       checkReady();
-      setConfig_call method_call = new setConfig_call(config, resultHandler, this, ___protocolFactory, ___transport);
+      probe_call method_call = new probe_call(resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
       ___manager.call(method_call);
     }
 
-    public static class setConfig_call extends org.apache.thrift.async.TAsyncMethodCall {
-      private String config;
-      public setConfig_call(String config, org.apache.thrift.async.AsyncMethodCallback resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+    public static class probe_call extends org.apache.thrift.async.TAsyncMethodCall {
+      public probe_call(org.apache.thrift.async.AsyncMethodCallback resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
         super(client, protocolFactory, transport, resultHandler, false);
-        this.config = config;
       }
 
       public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
-        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("setConfig", org.apache.thrift.protocol.TMessageType.CALL, 0));
-        setConfig_args args = new setConfig_args();
-        args.setConfig(config);
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("probe", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        probe_args args = new probe_args();
         args.write(prot);
         prot.writeMessageEnd();
       }
@@ -234,25 +231,60 @@ public class LogUnitConfigService {
         }
         org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
         org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
-        (new Client(prot)).recv_setConfig();
+        (new Client(prot)).recv_probe();
       }
     }
 
-    public void getConfig(org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException {
+    public void phase2b(String config, org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException {
       checkReady();
-      getConfig_call method_call = new getConfig_call(resultHandler, this, ___protocolFactory, ___transport);
+      phase2b_call method_call = new phase2b_call(config, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
       ___manager.call(method_call);
     }
 
-    public static class getConfig_call extends org.apache.thrift.async.TAsyncMethodCall {
-      public getConfig_call(org.apache.thrift.async.AsyncMethodCallback resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+    public static class phase2b_call extends org.apache.thrift.async.TAsyncMethodCall {
+      private String config;
+      public phase2b_call(String config, org.apache.thrift.async.AsyncMethodCallback resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
         super(client, protocolFactory, transport, resultHandler, false);
+        this.config = config;
       }
 
       public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
-        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("getConfig", org.apache.thrift.protocol.TMessageType.CALL, 0));
-        getConfig_args args = new getConfig_args();
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("phase2b", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        phase2b_args args = new phase2b_args();
+        args.setConfig(config);
+        args.write(prot);
+        prot.writeMessageEnd();
+      }
+
+      public com.microsoft.corfu.ErrorCode getResult() throws org.apache.thrift.TException {
+        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
+          throw new IllegalStateException("Method call not finished!");
+        }
+        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
+        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
+        return (new Client(prot)).recv_phase2b();
+      }
+    }
+
+    public void phase1b(int masterid, org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException {
+      checkReady();
+      phase1b_call method_call = new phase1b_call(masterid, resultHandler, this, ___protocolFactory, ___transport);
+      this.___currentMethod = method_call;
+      ___manager.call(method_call);
+    }
+
+    public static class phase1b_call extends org.apache.thrift.async.TAsyncMethodCall {
+      private int masterid;
+      public phase1b_call(int masterid, org.apache.thrift.async.AsyncMethodCallback resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+        super(client, protocolFactory, transport, resultHandler, false);
+        this.masterid = masterid;
+      }
+
+      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("phase1b", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        phase1b_args args = new phase1b_args();
+        args.setMasterid(masterid);
         args.write(prot);
         prot.writeMessageEnd();
       }
@@ -263,7 +295,7 @@ public class LogUnitConfigService {
         }
         org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
         org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
-        return (new Client(prot)).recv_getConfig();
+        return (new Client(prot)).recv_phase1b();
       }
     }
 
@@ -293,38 +325,6 @@ public class LogUnitConfigService {
         org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
         org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
         return (new Client(prot)).recv_rebuild();
-      }
-    }
-
-    public void epochchange(com.microsoft.corfu.UnitServerHdr hdr, org.apache.thrift.async.AsyncMethodCallback resultHandler) throws org.apache.thrift.TException {
-      checkReady();
-      epochchange_call method_call = new epochchange_call(hdr, resultHandler, this, ___protocolFactory, ___transport);
-      this.___currentMethod = method_call;
-      ___manager.call(method_call);
-    }
-
-    public static class epochchange_call extends org.apache.thrift.async.TAsyncMethodCall {
-      private com.microsoft.corfu.UnitServerHdr hdr;
-      public epochchange_call(com.microsoft.corfu.UnitServerHdr hdr, org.apache.thrift.async.AsyncMethodCallback resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
-        super(client, protocolFactory, transport, resultHandler, false);
-        this.hdr = hdr;
-      }
-
-      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
-        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("epochchange", org.apache.thrift.protocol.TMessageType.CALL, 0));
-        epochchange_args args = new epochchange_args();
-        args.setHdr(hdr);
-        args.write(prot);
-        prot.writeMessageEnd();
-      }
-
-      public com.microsoft.corfu.ErrorCode getResult() throws org.apache.thrift.TException {
-        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
-          throw new IllegalStateException("Method call not finished!");
-        }
-        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
-        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
-        return (new Client(prot)).recv_epochchange();
       }
     }
 
@@ -370,50 +370,70 @@ public class LogUnitConfigService {
     }
 
     private static <I extends Iface> Map<String,  org.apache.thrift.ProcessFunction<I, ? extends  org.apache.thrift.TBase>> getProcessMap(Map<String,  org.apache.thrift.ProcessFunction<I, ? extends  org.apache.thrift.TBase>> processMap) {
-      processMap.put("setConfig", new setConfig());
-      processMap.put("getConfig", new getConfig());
+      processMap.put("probe", new probe());
+      processMap.put("phase2b", new phase2b());
+      processMap.put("phase1b", new phase1b());
       processMap.put("rebuild", new rebuild());
-      processMap.put("epochchange", new epochchange());
       processMap.put("kill", new kill());
       return processMap;
     }
 
-    public static class setConfig<I extends Iface> extends org.apache.thrift.ProcessFunction<I, setConfig_args> {
-      public setConfig() {
-        super("setConfig");
+    public static class probe<I extends Iface> extends org.apache.thrift.ProcessFunction<I, probe_args> {
+      public probe() {
+        super("probe");
       }
 
-      public setConfig_args getEmptyArgsInstance() {
-        return new setConfig_args();
+      public probe_args getEmptyArgsInstance() {
+        return new probe_args();
       }
 
       protected boolean isOneway() {
         return false;
       }
 
-      public setConfig_result getResult(I iface, setConfig_args args) throws org.apache.thrift.TException {
-        setConfig_result result = new setConfig_result();
-        iface.setConfig(args.config);
+      public probe_result getResult(I iface, probe_args args) throws org.apache.thrift.TException {
+        probe_result result = new probe_result();
+        iface.probe();
         return result;
       }
     }
 
-    public static class getConfig<I extends Iface> extends org.apache.thrift.ProcessFunction<I, getConfig_args> {
-      public getConfig() {
-        super("getConfig");
+    public static class phase2b<I extends Iface> extends org.apache.thrift.ProcessFunction<I, phase2b_args> {
+      public phase2b() {
+        super("phase2b");
       }
 
-      public getConfig_args getEmptyArgsInstance() {
-        return new getConfig_args();
+      public phase2b_args getEmptyArgsInstance() {
+        return new phase2b_args();
       }
 
       protected boolean isOneway() {
         return false;
       }
 
-      public getConfig_result getResult(I iface, getConfig_args args) throws org.apache.thrift.TException {
-        getConfig_result result = new getConfig_result();
-        result.success = iface.getConfig();
+      public phase2b_result getResult(I iface, phase2b_args args) throws org.apache.thrift.TException {
+        phase2b_result result = new phase2b_result();
+        result.success = iface.phase2b(args.config);
+        return result;
+      }
+    }
+
+    public static class phase1b<I extends Iface> extends org.apache.thrift.ProcessFunction<I, phase1b_args> {
+      public phase1b() {
+        super("phase1b");
+      }
+
+      public phase1b_args getEmptyArgsInstance() {
+        return new phase1b_args();
+      }
+
+      protected boolean isOneway() {
+        return false;
+      }
+
+      public phase1b_result getResult(I iface, phase1b_args args) throws org.apache.thrift.TException {
+        phase1b_result result = new phase1b_result();
+        result.success = iface.phase1b(args.masterid);
         return result;
       }
     }
@@ -434,26 +454,6 @@ public class LogUnitConfigService {
       public rebuild_result getResult(I iface, rebuild_args args) throws org.apache.thrift.TException {
         rebuild_result result = new rebuild_result();
         result.success = iface.rebuild();
-        return result;
-      }
-    }
-
-    public static class epochchange<I extends Iface> extends org.apache.thrift.ProcessFunction<I, epochchange_args> {
-      public epochchange() {
-        super("epochchange");
-      }
-
-      public epochchange_args getEmptyArgsInstance() {
-        return new epochchange_args();
-      }
-
-      protected boolean isOneway() {
-        return false;
-      }
-
-      public epochchange_result getResult(I iface, epochchange_args args) throws org.apache.thrift.TException {
-        epochchange_result result = new epochchange_result();
-        result.success = iface.epochchange(args.hdr);
         return result;
       }
     }
@@ -491,28 +491,28 @@ public class LogUnitConfigService {
     }
 
     private static <I extends AsyncIface> Map<String,  org.apache.thrift.AsyncProcessFunction<I, ? extends  org.apache.thrift.TBase,?>> getProcessMap(Map<String,  org.apache.thrift.AsyncProcessFunction<I, ? extends  org.apache.thrift.TBase, ?>> processMap) {
-      processMap.put("setConfig", new setConfig());
-      processMap.put("getConfig", new getConfig());
+      processMap.put("probe", new probe());
+      processMap.put("phase2b", new phase2b());
+      processMap.put("phase1b", new phase1b());
       processMap.put("rebuild", new rebuild());
-      processMap.put("epochchange", new epochchange());
       processMap.put("kill", new kill());
       return processMap;
     }
 
-    public static class setConfig<I extends AsyncIface> extends org.apache.thrift.AsyncProcessFunction<I, setConfig_args, Void> {
-      public setConfig() {
-        super("setConfig");
+    public static class probe<I extends AsyncIface> extends org.apache.thrift.AsyncProcessFunction<I, probe_args, Void> {
+      public probe() {
+        super("probe");
       }
 
-      public setConfig_args getEmptyArgsInstance() {
-        return new setConfig_args();
+      public probe_args getEmptyArgsInstance() {
+        return new probe_args();
       }
 
       public AsyncMethodCallback<Void> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
         return new AsyncMethodCallback<Void>() { 
           public void onComplete(Void o) {
-            setConfig_result result = new setConfig_result();
+            probe_result result = new probe_result();
             try {
               fcall.sendResponse(fb,result, org.apache.thrift.protocol.TMessageType.REPLY,seqid);
               return;
@@ -524,7 +524,7 @@ public class LogUnitConfigService {
           public void onError(Exception e) {
             byte msgType = org.apache.thrift.protocol.TMessageType.REPLY;
             org.apache.thrift.TBase msg;
-            setConfig_result result = new setConfig_result();
+            probe_result result = new probe_result();
             {
               msgType = org.apache.thrift.protocol.TMessageType.EXCEPTION;
               msg = (org.apache.thrift.TBase)new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.INTERNAL_ERROR, e.getMessage());
@@ -544,25 +544,25 @@ public class LogUnitConfigService {
         return false;
       }
 
-      public void start(I iface, setConfig_args args, org.apache.thrift.async.AsyncMethodCallback<Void> resultHandler) throws TException {
-        iface.setConfig(args.config,resultHandler);
+      public void start(I iface, probe_args args, org.apache.thrift.async.AsyncMethodCallback<Void> resultHandler) throws TException {
+        iface.probe(resultHandler);
       }
     }
 
-    public static class getConfig<I extends AsyncIface> extends org.apache.thrift.AsyncProcessFunction<I, getConfig_args, String> {
-      public getConfig() {
-        super("getConfig");
+    public static class phase2b<I extends AsyncIface> extends org.apache.thrift.AsyncProcessFunction<I, phase2b_args, com.microsoft.corfu.ErrorCode> {
+      public phase2b() {
+        super("phase2b");
       }
 
-      public getConfig_args getEmptyArgsInstance() {
-        return new getConfig_args();
+      public phase2b_args getEmptyArgsInstance() {
+        return new phase2b_args();
       }
 
-      public AsyncMethodCallback<String> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+      public AsyncMethodCallback<com.microsoft.corfu.ErrorCode> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
         final org.apache.thrift.AsyncProcessFunction fcall = this;
-        return new AsyncMethodCallback<String>() { 
-          public void onComplete(String o) {
-            getConfig_result result = new getConfig_result();
+        return new AsyncMethodCallback<com.microsoft.corfu.ErrorCode>() { 
+          public void onComplete(com.microsoft.corfu.ErrorCode o) {
+            phase2b_result result = new phase2b_result();
             result.success = o;
             try {
               fcall.sendResponse(fb,result, org.apache.thrift.protocol.TMessageType.REPLY,seqid);
@@ -575,7 +575,7 @@ public class LogUnitConfigService {
           public void onError(Exception e) {
             byte msgType = org.apache.thrift.protocol.TMessageType.REPLY;
             org.apache.thrift.TBase msg;
-            getConfig_result result = new getConfig_result();
+            phase2b_result result = new phase2b_result();
             {
               msgType = org.apache.thrift.protocol.TMessageType.EXCEPTION;
               msg = (org.apache.thrift.TBase)new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.INTERNAL_ERROR, e.getMessage());
@@ -595,8 +595,59 @@ public class LogUnitConfigService {
         return false;
       }
 
-      public void start(I iface, getConfig_args args, org.apache.thrift.async.AsyncMethodCallback<String> resultHandler) throws TException {
-        iface.getConfig(resultHandler);
+      public void start(I iface, phase2b_args args, org.apache.thrift.async.AsyncMethodCallback<com.microsoft.corfu.ErrorCode> resultHandler) throws TException {
+        iface.phase2b(args.config,resultHandler);
+      }
+    }
+
+    public static class phase1b<I extends AsyncIface> extends org.apache.thrift.AsyncProcessFunction<I, phase1b_args, String> {
+      public phase1b() {
+        super("phase1b");
+      }
+
+      public phase1b_args getEmptyArgsInstance() {
+        return new phase1b_args();
+      }
+
+      public AsyncMethodCallback<String> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
+        final org.apache.thrift.AsyncProcessFunction fcall = this;
+        return new AsyncMethodCallback<String>() { 
+          public void onComplete(String o) {
+            phase1b_result result = new phase1b_result();
+            result.success = o;
+            try {
+              fcall.sendResponse(fb,result, org.apache.thrift.protocol.TMessageType.REPLY,seqid);
+              return;
+            } catch (Exception e) {
+              LOGGER.error("Exception writing to internal frame buffer", e);
+            }
+            fb.close();
+          }
+          public void onError(Exception e) {
+            byte msgType = org.apache.thrift.protocol.TMessageType.REPLY;
+            org.apache.thrift.TBase msg;
+            phase1b_result result = new phase1b_result();
+            {
+              msgType = org.apache.thrift.protocol.TMessageType.EXCEPTION;
+              msg = (org.apache.thrift.TBase)new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.INTERNAL_ERROR, e.getMessage());
+            }
+            try {
+              fcall.sendResponse(fb,msg,msgType,seqid);
+              return;
+            } catch (Exception ex) {
+              LOGGER.error("Exception writing to internal frame buffer", ex);
+            }
+            fb.close();
+          }
+        };
+      }
+
+      protected boolean isOneway() {
+        return false;
+      }
+
+      public void start(I iface, phase1b_args args, org.apache.thrift.async.AsyncMethodCallback<String> resultHandler) throws TException {
+        iface.phase1b(args.masterid,resultHandler);
       }
     }
 
@@ -648,57 +699,6 @@ public class LogUnitConfigService {
 
       public void start(I iface, rebuild_args args, org.apache.thrift.async.AsyncMethodCallback<LogUnitWrap> resultHandler) throws TException {
         iface.rebuild(resultHandler);
-      }
-    }
-
-    public static class epochchange<I extends AsyncIface> extends org.apache.thrift.AsyncProcessFunction<I, epochchange_args, com.microsoft.corfu.ErrorCode> {
-      public epochchange() {
-        super("epochchange");
-      }
-
-      public epochchange_args getEmptyArgsInstance() {
-        return new epochchange_args();
-      }
-
-      public AsyncMethodCallback<com.microsoft.corfu.ErrorCode> getResultHandler(final AsyncFrameBuffer fb, final int seqid) {
-        final org.apache.thrift.AsyncProcessFunction fcall = this;
-        return new AsyncMethodCallback<com.microsoft.corfu.ErrorCode>() { 
-          public void onComplete(com.microsoft.corfu.ErrorCode o) {
-            epochchange_result result = new epochchange_result();
-            result.success = o;
-            try {
-              fcall.sendResponse(fb,result, org.apache.thrift.protocol.TMessageType.REPLY,seqid);
-              return;
-            } catch (Exception e) {
-              LOGGER.error("Exception writing to internal frame buffer", e);
-            }
-            fb.close();
-          }
-          public void onError(Exception e) {
-            byte msgType = org.apache.thrift.protocol.TMessageType.REPLY;
-            org.apache.thrift.TBase msg;
-            epochchange_result result = new epochchange_result();
-            {
-              msgType = org.apache.thrift.protocol.TMessageType.EXCEPTION;
-              msg = (org.apache.thrift.TBase)new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.INTERNAL_ERROR, e.getMessage());
-            }
-            try {
-              fcall.sendResponse(fb,msg,msgType,seqid);
-              return;
-            } catch (Exception ex) {
-              LOGGER.error("Exception writing to internal frame buffer", ex);
-            }
-            fb.close();
-          }
-        };
-      }
-
-      protected boolean isOneway() {
-        return false;
-      }
-
-      public void start(I iface, epochchange_args args, org.apache.thrift.async.AsyncMethodCallback<com.microsoft.corfu.ErrorCode> resultHandler) throws TException {
-        iface.epochchange(args.hdr,resultHandler);
       }
     }
 
@@ -754,15 +754,507 @@ public class LogUnitConfigService {
 
   }
 
-  public static class setConfig_args implements org.apache.thrift.TBase<setConfig_args, setConfig_args._Fields>, java.io.Serializable, Cloneable, Comparable<setConfig_args>   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("setConfig_args");
+  public static class probe_args implements org.apache.thrift.TBase<probe_args, probe_args._Fields>, java.io.Serializable, Cloneable, Comparable<probe_args>   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("probe_args");
+
+
+    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
+    static {
+      schemes.put(StandardScheme.class, new probe_argsStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new probe_argsTupleSchemeFactory());
+    }
+
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+;
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(probe_args.class, metaDataMap);
+    }
+
+    public probe_args() {
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public probe_args(probe_args other) {
+    }
+
+    public probe_args deepCopy() {
+      return new probe_args(this);
+    }
+
+    @Override
+    public void clear() {
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof probe_args)
+        return this.equals((probe_args)that);
+      return false;
+    }
+
+    public boolean equals(probe_args that) {
+      if (that == null)
+        return false;
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+
+    @Override
+    public int compareTo(probe_args other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
+    }
+
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("probe_args(");
+      boolean first = true;
+
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+      // check for sub-struct validity
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private static class probe_argsStandardSchemeFactory implements SchemeFactory {
+      public probe_argsStandardScheme getScheme() {
+        return new probe_argsStandardScheme();
+      }
+    }
+
+    private static class probe_argsStandardScheme extends StandardScheme<probe_args> {
+
+      public void read(org.apache.thrift.protocol.TProtocol iprot, probe_args struct) throws org.apache.thrift.TException {
+        org.apache.thrift.protocol.TField schemeField;
+        iprot.readStructBegin();
+        while (true)
+        {
+          schemeField = iprot.readFieldBegin();
+          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
+            break;
+          }
+          switch (schemeField.id) {
+            default:
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+          }
+          iprot.readFieldEnd();
+        }
+        iprot.readStructEnd();
+
+        // check for required fields of primitive type, which can't be checked in the validate method
+        struct.validate();
+      }
+
+      public void write(org.apache.thrift.protocol.TProtocol oprot, probe_args struct) throws org.apache.thrift.TException {
+        struct.validate();
+
+        oprot.writeStructBegin(STRUCT_DESC);
+        oprot.writeFieldStop();
+        oprot.writeStructEnd();
+      }
+
+    }
+
+    private static class probe_argsTupleSchemeFactory implements SchemeFactory {
+      public probe_argsTupleScheme getScheme() {
+        return new probe_argsTupleScheme();
+      }
+    }
+
+    private static class probe_argsTupleScheme extends TupleScheme<probe_args> {
+
+      @Override
+      public void write(org.apache.thrift.protocol.TProtocol prot, probe_args struct) throws org.apache.thrift.TException {
+        TTupleProtocol oprot = (TTupleProtocol) prot;
+      }
+
+      @Override
+      public void read(org.apache.thrift.protocol.TProtocol prot, probe_args struct) throws org.apache.thrift.TException {
+        TTupleProtocol iprot = (TTupleProtocol) prot;
+      }
+    }
+
+  }
+
+  public static class probe_result implements org.apache.thrift.TBase<probe_result, probe_result._Fields>, java.io.Serializable, Cloneable, Comparable<probe_result>   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("probe_result");
+
+
+    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
+    static {
+      schemes.put(StandardScheme.class, new probe_resultStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new probe_resultTupleSchemeFactory());
+    }
+
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+;
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(probe_result.class, metaDataMap);
+    }
+
+    public probe_result() {
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public probe_result(probe_result other) {
+    }
+
+    public probe_result deepCopy() {
+      return new probe_result(this);
+    }
+
+    @Override
+    public void clear() {
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof probe_result)
+        return this.equals((probe_result)that);
+      return false;
+    }
+
+    public boolean equals(probe_result that) {
+      if (that == null)
+        return false;
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+
+    @Override
+    public int compareTo(probe_result other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
+    }
+
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
+      }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("probe_result(");
+      boolean first = true;
+
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+      // check for sub-struct validity
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private static class probe_resultStandardSchemeFactory implements SchemeFactory {
+      public probe_resultStandardScheme getScheme() {
+        return new probe_resultStandardScheme();
+      }
+    }
+
+    private static class probe_resultStandardScheme extends StandardScheme<probe_result> {
+
+      public void read(org.apache.thrift.protocol.TProtocol iprot, probe_result struct) throws org.apache.thrift.TException {
+        org.apache.thrift.protocol.TField schemeField;
+        iprot.readStructBegin();
+        while (true)
+        {
+          schemeField = iprot.readFieldBegin();
+          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
+            break;
+          }
+          switch (schemeField.id) {
+            default:
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+          }
+          iprot.readFieldEnd();
+        }
+        iprot.readStructEnd();
+
+        // check for required fields of primitive type, which can't be checked in the validate method
+        struct.validate();
+      }
+
+      public void write(org.apache.thrift.protocol.TProtocol oprot, probe_result struct) throws org.apache.thrift.TException {
+        struct.validate();
+
+        oprot.writeStructBegin(STRUCT_DESC);
+        oprot.writeFieldStop();
+        oprot.writeStructEnd();
+      }
+
+    }
+
+    private static class probe_resultTupleSchemeFactory implements SchemeFactory {
+      public probe_resultTupleScheme getScheme() {
+        return new probe_resultTupleScheme();
+      }
+    }
+
+    private static class probe_resultTupleScheme extends TupleScheme<probe_result> {
+
+      @Override
+      public void write(org.apache.thrift.protocol.TProtocol prot, probe_result struct) throws org.apache.thrift.TException {
+        TTupleProtocol oprot = (TTupleProtocol) prot;
+      }
+
+      @Override
+      public void read(org.apache.thrift.protocol.TProtocol prot, probe_result struct) throws org.apache.thrift.TException {
+        TTupleProtocol iprot = (TTupleProtocol) prot;
+      }
+    }
+
+  }
+
+  public static class phase2b_args implements org.apache.thrift.TBase<phase2b_args, phase2b_args._Fields>, java.io.Serializable, Cloneable, Comparable<phase2b_args>   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("phase2b_args");
 
     private static final org.apache.thrift.protocol.TField CONFIG_FIELD_DESC = new org.apache.thrift.protocol.TField("config", org.apache.thrift.protocol.TType.STRING, (short)1);
 
     private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
     static {
-      schemes.put(StandardScheme.class, new setConfig_argsStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new setConfig_argsTupleSchemeFactory());
+      schemes.put(StandardScheme.class, new phase2b_argsStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new phase2b_argsTupleSchemeFactory());
     }
 
     public String config; // required
@@ -832,13 +1324,13 @@ public class LogUnitConfigService {
       tmpMap.put(_Fields.CONFIG, new org.apache.thrift.meta_data.FieldMetaData("config", org.apache.thrift.TFieldRequirementType.DEFAULT, 
           new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(setConfig_args.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(phase2b_args.class, metaDataMap);
     }
 
-    public setConfig_args() {
+    public phase2b_args() {
     }
 
-    public setConfig_args(
+    public phase2b_args(
       String config)
     {
       this();
@@ -848,14 +1340,14 @@ public class LogUnitConfigService {
     /**
      * Performs a deep copy on <i>other</i>.
      */
-    public setConfig_args(setConfig_args other) {
+    public phase2b_args(phase2b_args other) {
       if (other.isSetConfig()) {
         this.config = other.config;
       }
     }
 
-    public setConfig_args deepCopy() {
-      return new setConfig_args(this);
+    public phase2b_args deepCopy() {
+      return new phase2b_args(this);
     }
 
     @Override
@@ -867,7 +1359,7 @@ public class LogUnitConfigService {
       return this.config;
     }
 
-    public setConfig_args setConfig(String config) {
+    public phase2b_args setConfig(String config) {
       this.config = config;
       return this;
     }
@@ -926,12 +1418,12 @@ public class LogUnitConfigService {
     public boolean equals(Object that) {
       if (that == null)
         return false;
-      if (that instanceof setConfig_args)
-        return this.equals((setConfig_args)that);
+      if (that instanceof phase2b_args)
+        return this.equals((phase2b_args)that);
       return false;
     }
 
-    public boolean equals(setConfig_args that) {
+    public boolean equals(phase2b_args that) {
       if (that == null)
         return false;
 
@@ -953,7 +1445,7 @@ public class LogUnitConfigService {
     }
 
     @Override
-    public int compareTo(setConfig_args other) {
+    public int compareTo(phase2b_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
@@ -987,7 +1479,7 @@ public class LogUnitConfigService {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder("setConfig_args(");
+      StringBuilder sb = new StringBuilder("phase2b_args(");
       boolean first = true;
 
       sb.append("config:");
@@ -1022,15 +1514,15 @@ public class LogUnitConfigService {
       }
     }
 
-    private static class setConfig_argsStandardSchemeFactory implements SchemeFactory {
-      public setConfig_argsStandardScheme getScheme() {
-        return new setConfig_argsStandardScheme();
+    private static class phase2b_argsStandardSchemeFactory implements SchemeFactory {
+      public phase2b_argsStandardScheme getScheme() {
+        return new phase2b_argsStandardScheme();
       }
     }
 
-    private static class setConfig_argsStandardScheme extends StandardScheme<setConfig_args> {
+    private static class phase2b_argsStandardScheme extends StandardScheme<phase2b_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, setConfig_args struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol iprot, phase2b_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -1059,7 +1551,7 @@ public class LogUnitConfigService {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, setConfig_args struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol oprot, phase2b_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -1074,16 +1566,16 @@ public class LogUnitConfigService {
 
     }
 
-    private static class setConfig_argsTupleSchemeFactory implements SchemeFactory {
-      public setConfig_argsTupleScheme getScheme() {
-        return new setConfig_argsTupleScheme();
+    private static class phase2b_argsTupleSchemeFactory implements SchemeFactory {
+      public phase2b_argsTupleScheme getScheme() {
+        return new phase2b_argsTupleScheme();
       }
     }
 
-    private static class setConfig_argsTupleScheme extends TupleScheme<setConfig_args> {
+    private static class phase2b_argsTupleScheme extends TupleScheme<phase2b_args> {
 
       @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, setConfig_args struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol prot, phase2b_args struct) throws org.apache.thrift.TException {
         TTupleProtocol oprot = (TTupleProtocol) prot;
         BitSet optionals = new BitSet();
         if (struct.isSetConfig()) {
@@ -1096,7 +1588,7 @@ public class LogUnitConfigService {
       }
 
       @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, setConfig_args struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol prot, phase2b_args struct) throws org.apache.thrift.TException {
         TTupleProtocol iprot = (TTupleProtocol) prot;
         BitSet incoming = iprot.readBitSet(1);
         if (incoming.get(0)) {
@@ -1108,20 +1600,30 @@ public class LogUnitConfigService {
 
   }
 
-  public static class setConfig_result implements org.apache.thrift.TBase<setConfig_result, setConfig_result._Fields>, java.io.Serializable, Cloneable, Comparable<setConfig_result>   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("setConfig_result");
+  public static class phase2b_result implements org.apache.thrift.TBase<phase2b_result, phase2b_result._Fields>, java.io.Serializable, Cloneable, Comparable<phase2b_result>   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("phase2b_result");
 
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.I32, (short)0);
 
     private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
     static {
-      schemes.put(StandardScheme.class, new setConfig_resultStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new setConfig_resultTupleSchemeFactory());
+      schemes.put(StandardScheme.class, new phase2b_resultStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new phase2b_resultTupleSchemeFactory());
     }
 
+    /**
+     * 
+     * @see com.microsoft.corfu.ErrorCode
+     */
+    public com.microsoft.corfu.ErrorCode success; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-;
+      /**
+       * 
+       * @see com.microsoft.corfu.ErrorCode
+       */
+      SUCCESS((short)0, "success");
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -1136,6 +1638,8 @@ public class LogUnitConfigService {
        */
       public static _Fields findByThriftId(int fieldId) {
         switch(fieldId) {
+          case 0: // SUCCESS
+            return SUCCESS;
           default:
             return null;
         }
@@ -1174,37 +1678,95 @@ public class LogUnitConfigService {
         return _fieldName;
       }
     }
+
+    // isset id assignments
     public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
       Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, com.microsoft.corfu.ErrorCode.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(setConfig_result.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(phase2b_result.class, metaDataMap);
     }
 
-    public setConfig_result() {
+    public phase2b_result() {
+    }
+
+    public phase2b_result(
+      com.microsoft.corfu.ErrorCode success)
+    {
+      this();
+      this.success = success;
     }
 
     /**
      * Performs a deep copy on <i>other</i>.
      */
-    public setConfig_result(setConfig_result other) {
+    public phase2b_result(phase2b_result other) {
+      if (other.isSetSuccess()) {
+        this.success = other.success;
+      }
     }
 
-    public setConfig_result deepCopy() {
-      return new setConfig_result(this);
+    public phase2b_result deepCopy() {
+      return new phase2b_result(this);
     }
 
     @Override
     public void clear() {
+      this.success = null;
+    }
+
+    /**
+     * 
+     * @see com.microsoft.corfu.ErrorCode
+     */
+    public com.microsoft.corfu.ErrorCode getSuccess() {
+      return this.success;
+    }
+
+    /**
+     * 
+     * @see com.microsoft.corfu.ErrorCode
+     */
+    public phase2b_result setSuccess(com.microsoft.corfu.ErrorCode success) {
+      this.success = success;
+      return this;
+    }
+
+    public void unsetSuccess() {
+      this.success = null;
+    }
+
+    /** Returns true if field success is set (has been assigned a value) and false otherwise */
+    public boolean isSetSuccess() {
+      return this.success != null;
+    }
+
+    public void setSuccessIsSet(boolean value) {
+      if (!value) {
+        this.success = null;
+      }
     }
 
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
+      case SUCCESS:
+        if (value == null) {
+          unsetSuccess();
+        } else {
+          setSuccess((com.microsoft.corfu.ErrorCode)value);
+        }
+        break;
+
       }
     }
 
     public Object getFieldValue(_Fields field) {
       switch (field) {
+      case SUCCESS:
+        return getSuccess();
+
       }
       throw new IllegalStateException();
     }
@@ -1216,6 +1778,8 @@ public class LogUnitConfigService {
       }
 
       switch (field) {
+      case SUCCESS:
+        return isSetSuccess();
       }
       throw new IllegalStateException();
     }
@@ -1224,14 +1788,23 @@ public class LogUnitConfigService {
     public boolean equals(Object that) {
       if (that == null)
         return false;
-      if (that instanceof setConfig_result)
-        return this.equals((setConfig_result)that);
+      if (that instanceof phase2b_result)
+        return this.equals((phase2b_result)that);
       return false;
     }
 
-    public boolean equals(setConfig_result that) {
+    public boolean equals(phase2b_result that) {
       if (that == null)
         return false;
+
+      boolean this_present_success = true && this.isSetSuccess();
+      boolean that_present_success = true && that.isSetSuccess();
+      if (this_present_success || that_present_success) {
+        if (!(this_present_success && that_present_success))
+          return false;
+        if (!this.success.equals(that.success))
+          return false;
+      }
 
       return true;
     }
@@ -1242,13 +1815,23 @@ public class LogUnitConfigService {
     }
 
     @Override
-    public int compareTo(setConfig_result other) {
+    public int compareTo(phase2b_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
 
+      lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(other.isSetSuccess());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetSuccess()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.success, other.success);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
       return 0;
     }
 
@@ -1266,9 +1849,16 @@ public class LogUnitConfigService {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder("setConfig_result(");
+      StringBuilder sb = new StringBuilder("phase2b_result(");
       boolean first = true;
 
+      sb.append("success:");
+      if (this.success == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.success);
+      }
+      first = false;
       sb.append(")");
       return sb.toString();
     }
@@ -1294,15 +1884,15 @@ public class LogUnitConfigService {
       }
     }
 
-    private static class setConfig_resultStandardSchemeFactory implements SchemeFactory {
-      public setConfig_resultStandardScheme getScheme() {
-        return new setConfig_resultStandardScheme();
+    private static class phase2b_resultStandardSchemeFactory implements SchemeFactory {
+      public phase2b_resultStandardScheme getScheme() {
+        return new phase2b_resultStandardScheme();
       }
     }
 
-    private static class setConfig_resultStandardScheme extends StandardScheme<setConfig_result> {
+    private static class phase2b_resultStandardScheme extends StandardScheme<phase2b_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, setConfig_result struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol iprot, phase2b_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -1312,6 +1902,14 @@ public class LogUnitConfigService {
             break;
           }
           switch (schemeField.id) {
+            case 0: // SUCCESS
+              if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
+                struct.success = com.microsoft.corfu.ErrorCode.findByValue(iprot.readI32());
+                struct.setSuccessIsSet(true);
+              } else { 
+                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+              }
+              break;
             default:
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
           }
@@ -1323,51 +1921,71 @@ public class LogUnitConfigService {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, setConfig_result struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol oprot, phase2b_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
+        if (struct.success != null) {
+          oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
+          oprot.writeI32(struct.success.getValue());
+          oprot.writeFieldEnd();
+        }
         oprot.writeFieldStop();
         oprot.writeStructEnd();
       }
 
     }
 
-    private static class setConfig_resultTupleSchemeFactory implements SchemeFactory {
-      public setConfig_resultTupleScheme getScheme() {
-        return new setConfig_resultTupleScheme();
+    private static class phase2b_resultTupleSchemeFactory implements SchemeFactory {
+      public phase2b_resultTupleScheme getScheme() {
+        return new phase2b_resultTupleScheme();
       }
     }
 
-    private static class setConfig_resultTupleScheme extends TupleScheme<setConfig_result> {
+    private static class phase2b_resultTupleScheme extends TupleScheme<phase2b_result> {
 
       @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, setConfig_result struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol prot, phase2b_result struct) throws org.apache.thrift.TException {
         TTupleProtocol oprot = (TTupleProtocol) prot;
+        BitSet optionals = new BitSet();
+        if (struct.isSetSuccess()) {
+          optionals.set(0);
+        }
+        oprot.writeBitSet(optionals, 1);
+        if (struct.isSetSuccess()) {
+          oprot.writeI32(struct.success.getValue());
+        }
       }
 
       @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, setConfig_result struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol prot, phase2b_result struct) throws org.apache.thrift.TException {
         TTupleProtocol iprot = (TTupleProtocol) prot;
+        BitSet incoming = iprot.readBitSet(1);
+        if (incoming.get(0)) {
+          struct.success = com.microsoft.corfu.ErrorCode.findByValue(iprot.readI32());
+          struct.setSuccessIsSet(true);
+        }
       }
     }
 
   }
 
-  public static class getConfig_args implements org.apache.thrift.TBase<getConfig_args, getConfig_args._Fields>, java.io.Serializable, Cloneable, Comparable<getConfig_args>   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("getConfig_args");
+  public static class phase1b_args implements org.apache.thrift.TBase<phase1b_args, phase1b_args._Fields>, java.io.Serializable, Cloneable, Comparable<phase1b_args>   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("phase1b_args");
 
+    private static final org.apache.thrift.protocol.TField MASTERID_FIELD_DESC = new org.apache.thrift.protocol.TField("masterid", org.apache.thrift.protocol.TType.I32, (short)1);
 
     private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
     static {
-      schemes.put(StandardScheme.class, new getConfig_argsStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new getConfig_argsTupleSchemeFactory());
+      schemes.put(StandardScheme.class, new phase1b_argsStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new phase1b_argsTupleSchemeFactory());
     }
 
+    public int masterid; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-;
+      MASTERID((short)1, "masterid");
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -1382,6 +2000,8 @@ public class LogUnitConfigService {
        */
       public static _Fields findByThriftId(int fieldId) {
         switch(fieldId) {
+          case 1: // MASTERID
+            return MASTERID;
           default:
             return null;
         }
@@ -1420,37 +2040,89 @@ public class LogUnitConfigService {
         return _fieldName;
       }
     }
+
+    // isset id assignments
+    private static final int __MASTERID_ISSET_ID = 0;
+    private byte __isset_bitfield = 0;
     public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
       Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.MASTERID, new org.apache.thrift.meta_data.FieldMetaData("masterid", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(getConfig_args.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(phase1b_args.class, metaDataMap);
     }
 
-    public getConfig_args() {
+    public phase1b_args() {
+    }
+
+    public phase1b_args(
+      int masterid)
+    {
+      this();
+      this.masterid = masterid;
+      setMasteridIsSet(true);
     }
 
     /**
      * Performs a deep copy on <i>other</i>.
      */
-    public getConfig_args(getConfig_args other) {
+    public phase1b_args(phase1b_args other) {
+      __isset_bitfield = other.__isset_bitfield;
+      this.masterid = other.masterid;
     }
 
-    public getConfig_args deepCopy() {
-      return new getConfig_args(this);
+    public phase1b_args deepCopy() {
+      return new phase1b_args(this);
     }
 
     @Override
     public void clear() {
+      setMasteridIsSet(false);
+      this.masterid = 0;
+    }
+
+    public int getMasterid() {
+      return this.masterid;
+    }
+
+    public phase1b_args setMasterid(int masterid) {
+      this.masterid = masterid;
+      setMasteridIsSet(true);
+      return this;
+    }
+
+    public void unsetMasterid() {
+      __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __MASTERID_ISSET_ID);
+    }
+
+    /** Returns true if field masterid is set (has been assigned a value) and false otherwise */
+    public boolean isSetMasterid() {
+      return EncodingUtils.testBit(__isset_bitfield, __MASTERID_ISSET_ID);
+    }
+
+    public void setMasteridIsSet(boolean value) {
+      __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __MASTERID_ISSET_ID, value);
     }
 
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
+      case MASTERID:
+        if (value == null) {
+          unsetMasterid();
+        } else {
+          setMasterid((Integer)value);
+        }
+        break;
+
       }
     }
 
     public Object getFieldValue(_Fields field) {
       switch (field) {
+      case MASTERID:
+        return Integer.valueOf(getMasterid());
+
       }
       throw new IllegalStateException();
     }
@@ -1462,6 +2134,8 @@ public class LogUnitConfigService {
       }
 
       switch (field) {
+      case MASTERID:
+        return isSetMasterid();
       }
       throw new IllegalStateException();
     }
@@ -1470,14 +2144,23 @@ public class LogUnitConfigService {
     public boolean equals(Object that) {
       if (that == null)
         return false;
-      if (that instanceof getConfig_args)
-        return this.equals((getConfig_args)that);
+      if (that instanceof phase1b_args)
+        return this.equals((phase1b_args)that);
       return false;
     }
 
-    public boolean equals(getConfig_args that) {
+    public boolean equals(phase1b_args that) {
       if (that == null)
         return false;
+
+      boolean this_present_masterid = true;
+      boolean that_present_masterid = true;
+      if (this_present_masterid || that_present_masterid) {
+        if (!(this_present_masterid && that_present_masterid))
+          return false;
+        if (this.masterid != that.masterid)
+          return false;
+      }
 
       return true;
     }
@@ -1488,13 +2171,23 @@ public class LogUnitConfigService {
     }
 
     @Override
-    public int compareTo(getConfig_args other) {
+    public int compareTo(phase1b_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
 
+      lastComparison = Boolean.valueOf(isSetMasterid()).compareTo(other.isSetMasterid());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetMasterid()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.masterid, other.masterid);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
       return 0;
     }
 
@@ -1512,9 +2205,12 @@ public class LogUnitConfigService {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder("getConfig_args(");
+      StringBuilder sb = new StringBuilder("phase1b_args(");
       boolean first = true;
 
+      sb.append("masterid:");
+      sb.append(this.masterid);
+      first = false;
       sb.append(")");
       return sb.toString();
     }
@@ -1534,21 +2230,23 @@ public class LogUnitConfigService {
 
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
       try {
+        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
+        __isset_bitfield = 0;
         read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
       } catch (org.apache.thrift.TException te) {
         throw new java.io.IOException(te);
       }
     }
 
-    private static class getConfig_argsStandardSchemeFactory implements SchemeFactory {
-      public getConfig_argsStandardScheme getScheme() {
-        return new getConfig_argsStandardScheme();
+    private static class phase1b_argsStandardSchemeFactory implements SchemeFactory {
+      public phase1b_argsStandardScheme getScheme() {
+        return new phase1b_argsStandardScheme();
       }
     }
 
-    private static class getConfig_argsStandardScheme extends StandardScheme<getConfig_args> {
+    private static class phase1b_argsStandardScheme extends StandardScheme<phase1b_args> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, getConfig_args struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol iprot, phase1b_args struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -1558,6 +2256,14 @@ public class LogUnitConfigService {
             break;
           }
           switch (schemeField.id) {
+            case 1: // MASTERID
+              if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
+                struct.masterid = iprot.readI32();
+                struct.setMasteridIsSet(true);
+              } else { 
+                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+              }
+              break;
             default:
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
           }
@@ -1569,46 +2275,62 @@ public class LogUnitConfigService {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, getConfig_args struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol oprot, phase1b_args struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
+        oprot.writeFieldBegin(MASTERID_FIELD_DESC);
+        oprot.writeI32(struct.masterid);
+        oprot.writeFieldEnd();
         oprot.writeFieldStop();
         oprot.writeStructEnd();
       }
 
     }
 
-    private static class getConfig_argsTupleSchemeFactory implements SchemeFactory {
-      public getConfig_argsTupleScheme getScheme() {
-        return new getConfig_argsTupleScheme();
+    private static class phase1b_argsTupleSchemeFactory implements SchemeFactory {
+      public phase1b_argsTupleScheme getScheme() {
+        return new phase1b_argsTupleScheme();
       }
     }
 
-    private static class getConfig_argsTupleScheme extends TupleScheme<getConfig_args> {
+    private static class phase1b_argsTupleScheme extends TupleScheme<phase1b_args> {
 
       @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, getConfig_args struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol prot, phase1b_args struct) throws org.apache.thrift.TException {
         TTupleProtocol oprot = (TTupleProtocol) prot;
+        BitSet optionals = new BitSet();
+        if (struct.isSetMasterid()) {
+          optionals.set(0);
+        }
+        oprot.writeBitSet(optionals, 1);
+        if (struct.isSetMasterid()) {
+          oprot.writeI32(struct.masterid);
+        }
       }
 
       @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, getConfig_args struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol prot, phase1b_args struct) throws org.apache.thrift.TException {
         TTupleProtocol iprot = (TTupleProtocol) prot;
+        BitSet incoming = iprot.readBitSet(1);
+        if (incoming.get(0)) {
+          struct.masterid = iprot.readI32();
+          struct.setMasteridIsSet(true);
+        }
       }
     }
 
   }
 
-  public static class getConfig_result implements org.apache.thrift.TBase<getConfig_result, getConfig_result._Fields>, java.io.Serializable, Cloneable, Comparable<getConfig_result>   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("getConfig_result");
+  public static class phase1b_result implements org.apache.thrift.TBase<phase1b_result, phase1b_result._Fields>, java.io.Serializable, Cloneable, Comparable<phase1b_result>   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("phase1b_result");
 
     private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRING, (short)0);
 
     private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
     static {
-      schemes.put(StandardScheme.class, new getConfig_resultStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new getConfig_resultTupleSchemeFactory());
+      schemes.put(StandardScheme.class, new phase1b_resultStandardSchemeFactory());
+      schemes.put(TupleScheme.class, new phase1b_resultTupleSchemeFactory());
     }
 
     public String success; // required
@@ -1678,13 +2400,13 @@ public class LogUnitConfigService {
       tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
           new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(getConfig_result.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(phase1b_result.class, metaDataMap);
     }
 
-    public getConfig_result() {
+    public phase1b_result() {
     }
 
-    public getConfig_result(
+    public phase1b_result(
       String success)
     {
       this();
@@ -1694,14 +2416,14 @@ public class LogUnitConfigService {
     /**
      * Performs a deep copy on <i>other</i>.
      */
-    public getConfig_result(getConfig_result other) {
+    public phase1b_result(phase1b_result other) {
       if (other.isSetSuccess()) {
         this.success = other.success;
       }
     }
 
-    public getConfig_result deepCopy() {
-      return new getConfig_result(this);
+    public phase1b_result deepCopy() {
+      return new phase1b_result(this);
     }
 
     @Override
@@ -1713,7 +2435,7 @@ public class LogUnitConfigService {
       return this.success;
     }
 
-    public getConfig_result setSuccess(String success) {
+    public phase1b_result setSuccess(String success) {
       this.success = success;
       return this;
     }
@@ -1772,12 +2494,12 @@ public class LogUnitConfigService {
     public boolean equals(Object that) {
       if (that == null)
         return false;
-      if (that instanceof getConfig_result)
-        return this.equals((getConfig_result)that);
+      if (that instanceof phase1b_result)
+        return this.equals((phase1b_result)that);
       return false;
     }
 
-    public boolean equals(getConfig_result that) {
+    public boolean equals(phase1b_result that) {
       if (that == null)
         return false;
 
@@ -1799,7 +2521,7 @@ public class LogUnitConfigService {
     }
 
     @Override
-    public int compareTo(getConfig_result other) {
+    public int compareTo(phase1b_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
@@ -1833,7 +2555,7 @@ public class LogUnitConfigService {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder("getConfig_result(");
+      StringBuilder sb = new StringBuilder("phase1b_result(");
       boolean first = true;
 
       sb.append("success:");
@@ -1868,15 +2590,15 @@ public class LogUnitConfigService {
       }
     }
 
-    private static class getConfig_resultStandardSchemeFactory implements SchemeFactory {
-      public getConfig_resultStandardScheme getScheme() {
-        return new getConfig_resultStandardScheme();
+    private static class phase1b_resultStandardSchemeFactory implements SchemeFactory {
+      public phase1b_resultStandardScheme getScheme() {
+        return new phase1b_resultStandardScheme();
       }
     }
 
-    private static class getConfig_resultStandardScheme extends StandardScheme<getConfig_result> {
+    private static class phase1b_resultStandardScheme extends StandardScheme<phase1b_result> {
 
-      public void read(org.apache.thrift.protocol.TProtocol iprot, getConfig_result struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol iprot, phase1b_result struct) throws org.apache.thrift.TException {
         org.apache.thrift.protocol.TField schemeField;
         iprot.readStructBegin();
         while (true)
@@ -1905,7 +2627,7 @@ public class LogUnitConfigService {
         struct.validate();
       }
 
-      public void write(org.apache.thrift.protocol.TProtocol oprot, getConfig_result struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol oprot, phase1b_result struct) throws org.apache.thrift.TException {
         struct.validate();
 
         oprot.writeStructBegin(STRUCT_DESC);
@@ -1920,16 +2642,16 @@ public class LogUnitConfigService {
 
     }
 
-    private static class getConfig_resultTupleSchemeFactory implements SchemeFactory {
-      public getConfig_resultTupleScheme getScheme() {
-        return new getConfig_resultTupleScheme();
+    private static class phase1b_resultTupleSchemeFactory implements SchemeFactory {
+      public phase1b_resultTupleScheme getScheme() {
+        return new phase1b_resultTupleScheme();
       }
     }
 
-    private static class getConfig_resultTupleScheme extends TupleScheme<getConfig_result> {
+    private static class phase1b_resultTupleScheme extends TupleScheme<phase1b_result> {
 
       @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, getConfig_result struct) throws org.apache.thrift.TException {
+      public void write(org.apache.thrift.protocol.TProtocol prot, phase1b_result struct) throws org.apache.thrift.TException {
         TTupleProtocol oprot = (TTupleProtocol) prot;
         BitSet optionals = new BitSet();
         if (struct.isSetSuccess()) {
@@ -1942,7 +2664,7 @@ public class LogUnitConfigService {
       }
 
       @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, getConfig_result struct) throws org.apache.thrift.TException {
+      public void read(org.apache.thrift.protocol.TProtocol prot, phase1b_result struct) throws org.apache.thrift.TException {
         TTupleProtocol iprot = (TTupleProtocol) prot;
         BitSet incoming = iprot.readBitSet(1);
         if (incoming.get(0)) {
@@ -2552,735 +3274,6 @@ public class LogUnitConfigService {
         if (incoming.get(0)) {
           struct.success = new LogUnitWrap();
           struct.success.read(iprot);
-          struct.setSuccessIsSet(true);
-        }
-      }
-    }
-
-  }
-
-  public static class epochchange_args implements org.apache.thrift.TBase<epochchange_args, epochchange_args._Fields>, java.io.Serializable, Cloneable, Comparable<epochchange_args>   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("epochchange_args");
-
-    private static final org.apache.thrift.protocol.TField HDR_FIELD_DESC = new org.apache.thrift.protocol.TField("hdr", org.apache.thrift.protocol.TType.STRUCT, (short)1);
-
-    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
-    static {
-      schemes.put(StandardScheme.class, new epochchange_argsStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new epochchange_argsTupleSchemeFactory());
-    }
-
-    public com.microsoft.corfu.UnitServerHdr hdr; // required
-
-    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-      HDR((short)1, "hdr");
-
-      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
-
-      static {
-        for (_Fields field : EnumSet.allOf(_Fields.class)) {
-          byName.put(field.getFieldName(), field);
-        }
-      }
-
-      /**
-       * Find the _Fields constant that matches fieldId, or null if its not found.
-       */
-      public static _Fields findByThriftId(int fieldId) {
-        switch(fieldId) {
-          case 1: // HDR
-            return HDR;
-          default:
-            return null;
-        }
-      }
-
-      /**
-       * Find the _Fields constant that matches fieldId, throwing an exception
-       * if it is not found.
-       */
-      public static _Fields findByThriftIdOrThrow(int fieldId) {
-        _Fields fields = findByThriftId(fieldId);
-        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
-        return fields;
-      }
-
-      /**
-       * Find the _Fields constant that matches name, or null if its not found.
-       */
-      public static _Fields findByName(String name) {
-        return byName.get(name);
-      }
-
-      private final short _thriftId;
-      private final String _fieldName;
-
-      _Fields(short thriftId, String fieldName) {
-        _thriftId = thriftId;
-        _fieldName = fieldName;
-      }
-
-      public short getThriftFieldId() {
-        return _thriftId;
-      }
-
-      public String getFieldName() {
-        return _fieldName;
-      }
-    }
-
-    // isset id assignments
-    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
-    static {
-      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.HDR, new org.apache.thrift.meta_data.FieldMetaData("hdr", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, com.microsoft.corfu.UnitServerHdr.class)));
-      metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(epochchange_args.class, metaDataMap);
-    }
-
-    public epochchange_args() {
-    }
-
-    public epochchange_args(
-      com.microsoft.corfu.UnitServerHdr hdr)
-    {
-      this();
-      this.hdr = hdr;
-    }
-
-    /**
-     * Performs a deep copy on <i>other</i>.
-     */
-    public epochchange_args(epochchange_args other) {
-      if (other.isSetHdr()) {
-        this.hdr = new com.microsoft.corfu.UnitServerHdr(other.hdr);
-      }
-    }
-
-    public epochchange_args deepCopy() {
-      return new epochchange_args(this);
-    }
-
-    @Override
-    public void clear() {
-      this.hdr = null;
-    }
-
-    public com.microsoft.corfu.UnitServerHdr getHdr() {
-      return this.hdr;
-    }
-
-    public epochchange_args setHdr(com.microsoft.corfu.UnitServerHdr hdr) {
-      this.hdr = hdr;
-      return this;
-    }
-
-    public void unsetHdr() {
-      this.hdr = null;
-    }
-
-    /** Returns true if field hdr is set (has been assigned a value) and false otherwise */
-    public boolean isSetHdr() {
-      return this.hdr != null;
-    }
-
-    public void setHdrIsSet(boolean value) {
-      if (!value) {
-        this.hdr = null;
-      }
-    }
-
-    public void setFieldValue(_Fields field, Object value) {
-      switch (field) {
-      case HDR:
-        if (value == null) {
-          unsetHdr();
-        } else {
-          setHdr((com.microsoft.corfu.UnitServerHdr)value);
-        }
-        break;
-
-      }
-    }
-
-    public Object getFieldValue(_Fields field) {
-      switch (field) {
-      case HDR:
-        return getHdr();
-
-      }
-      throw new IllegalStateException();
-    }
-
-    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
-      if (field == null) {
-        throw new IllegalArgumentException();
-      }
-
-      switch (field) {
-      case HDR:
-        return isSetHdr();
-      }
-      throw new IllegalStateException();
-    }
-
-    @Override
-    public boolean equals(Object that) {
-      if (that == null)
-        return false;
-      if (that instanceof epochchange_args)
-        return this.equals((epochchange_args)that);
-      return false;
-    }
-
-    public boolean equals(epochchange_args that) {
-      if (that == null)
-        return false;
-
-      boolean this_present_hdr = true && this.isSetHdr();
-      boolean that_present_hdr = true && that.isSetHdr();
-      if (this_present_hdr || that_present_hdr) {
-        if (!(this_present_hdr && that_present_hdr))
-          return false;
-        if (!this.hdr.equals(that.hdr))
-          return false;
-      }
-
-      return true;
-    }
-
-    @Override
-    public int hashCode() {
-      return 0;
-    }
-
-    @Override
-    public int compareTo(epochchange_args other) {
-      if (!getClass().equals(other.getClass())) {
-        return getClass().getName().compareTo(other.getClass().getName());
-      }
-
-      int lastComparison = 0;
-
-      lastComparison = Boolean.valueOf(isSetHdr()).compareTo(other.isSetHdr());
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-      if (isSetHdr()) {
-        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.hdr, other.hdr);
-        if (lastComparison != 0) {
-          return lastComparison;
-        }
-      }
-      return 0;
-    }
-
-    public _Fields fieldForId(int fieldId) {
-      return _Fields.findByThriftId(fieldId);
-    }
-
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
-      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
-    }
-
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
-      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
-    }
-
-    @Override
-    public String toString() {
-      StringBuilder sb = new StringBuilder("epochchange_args(");
-      boolean first = true;
-
-      sb.append("hdr:");
-      if (this.hdr == null) {
-        sb.append("null");
-      } else {
-        sb.append(this.hdr);
-      }
-      first = false;
-      sb.append(")");
-      return sb.toString();
-    }
-
-    public void validate() throws org.apache.thrift.TException {
-      // check for required fields
-      // check for sub-struct validity
-      if (hdr != null) {
-        hdr.validate();
-      }
-    }
-
-    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
-      try {
-        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
-      } catch (org.apache.thrift.TException te) {
-        throw new java.io.IOException(te);
-      }
-    }
-
-    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
-      try {
-        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
-      } catch (org.apache.thrift.TException te) {
-        throw new java.io.IOException(te);
-      }
-    }
-
-    private static class epochchange_argsStandardSchemeFactory implements SchemeFactory {
-      public epochchange_argsStandardScheme getScheme() {
-        return new epochchange_argsStandardScheme();
-      }
-    }
-
-    private static class epochchange_argsStandardScheme extends StandardScheme<epochchange_args> {
-
-      public void read(org.apache.thrift.protocol.TProtocol iprot, epochchange_args struct) throws org.apache.thrift.TException {
-        org.apache.thrift.protocol.TField schemeField;
-        iprot.readStructBegin();
-        while (true)
-        {
-          schemeField = iprot.readFieldBegin();
-          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
-            break;
-          }
-          switch (schemeField.id) {
-            case 1: // HDR
-              if (schemeField.type == org.apache.thrift.protocol.TType.STRUCT) {
-                struct.hdr = new com.microsoft.corfu.UnitServerHdr();
-                struct.hdr.read(iprot);
-                struct.setHdrIsSet(true);
-              } else { 
-                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-              }
-              break;
-            default:
-              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-          }
-          iprot.readFieldEnd();
-        }
-        iprot.readStructEnd();
-
-        // check for required fields of primitive type, which can't be checked in the validate method
-        struct.validate();
-      }
-
-      public void write(org.apache.thrift.protocol.TProtocol oprot, epochchange_args struct) throws org.apache.thrift.TException {
-        struct.validate();
-
-        oprot.writeStructBegin(STRUCT_DESC);
-        if (struct.hdr != null) {
-          oprot.writeFieldBegin(HDR_FIELD_DESC);
-          struct.hdr.write(oprot);
-          oprot.writeFieldEnd();
-        }
-        oprot.writeFieldStop();
-        oprot.writeStructEnd();
-      }
-
-    }
-
-    private static class epochchange_argsTupleSchemeFactory implements SchemeFactory {
-      public epochchange_argsTupleScheme getScheme() {
-        return new epochchange_argsTupleScheme();
-      }
-    }
-
-    private static class epochchange_argsTupleScheme extends TupleScheme<epochchange_args> {
-
-      @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, epochchange_args struct) throws org.apache.thrift.TException {
-        TTupleProtocol oprot = (TTupleProtocol) prot;
-        BitSet optionals = new BitSet();
-        if (struct.isSetHdr()) {
-          optionals.set(0);
-        }
-        oprot.writeBitSet(optionals, 1);
-        if (struct.isSetHdr()) {
-          struct.hdr.write(oprot);
-        }
-      }
-
-      @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, epochchange_args struct) throws org.apache.thrift.TException {
-        TTupleProtocol iprot = (TTupleProtocol) prot;
-        BitSet incoming = iprot.readBitSet(1);
-        if (incoming.get(0)) {
-          struct.hdr = new com.microsoft.corfu.UnitServerHdr();
-          struct.hdr.read(iprot);
-          struct.setHdrIsSet(true);
-        }
-      }
-    }
-
-  }
-
-  public static class epochchange_result implements org.apache.thrift.TBase<epochchange_result, epochchange_result._Fields>, java.io.Serializable, Cloneable, Comparable<epochchange_result>   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("epochchange_result");
-
-    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.I32, (short)0);
-
-    private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
-    static {
-      schemes.put(StandardScheme.class, new epochchange_resultStandardSchemeFactory());
-      schemes.put(TupleScheme.class, new epochchange_resultTupleSchemeFactory());
-    }
-
-    /**
-     * 
-     * @see com.microsoft.corfu.ErrorCode
-     */
-    public com.microsoft.corfu.ErrorCode success; // required
-
-    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
-      /**
-       * 
-       * @see com.microsoft.corfu.ErrorCode
-       */
-      SUCCESS((short)0, "success");
-
-      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
-
-      static {
-        for (_Fields field : EnumSet.allOf(_Fields.class)) {
-          byName.put(field.getFieldName(), field);
-        }
-      }
-
-      /**
-       * Find the _Fields constant that matches fieldId, or null if its not found.
-       */
-      public static _Fields findByThriftId(int fieldId) {
-        switch(fieldId) {
-          case 0: // SUCCESS
-            return SUCCESS;
-          default:
-            return null;
-        }
-      }
-
-      /**
-       * Find the _Fields constant that matches fieldId, throwing an exception
-       * if it is not found.
-       */
-      public static _Fields findByThriftIdOrThrow(int fieldId) {
-        _Fields fields = findByThriftId(fieldId);
-        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
-        return fields;
-      }
-
-      /**
-       * Find the _Fields constant that matches name, or null if its not found.
-       */
-      public static _Fields findByName(String name) {
-        return byName.get(name);
-      }
-
-      private final short _thriftId;
-      private final String _fieldName;
-
-      _Fields(short thriftId, String fieldName) {
-        _thriftId = thriftId;
-        _fieldName = fieldName;
-      }
-
-      public short getThriftFieldId() {
-        return _thriftId;
-      }
-
-      public String getFieldName() {
-        return _fieldName;
-      }
-    }
-
-    // isset id assignments
-    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
-    static {
-      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, com.microsoft.corfu.ErrorCode.class)));
-      metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(epochchange_result.class, metaDataMap);
-    }
-
-    public epochchange_result() {
-    }
-
-    public epochchange_result(
-      com.microsoft.corfu.ErrorCode success)
-    {
-      this();
-      this.success = success;
-    }
-
-    /**
-     * Performs a deep copy on <i>other</i>.
-     */
-    public epochchange_result(epochchange_result other) {
-      if (other.isSetSuccess()) {
-        this.success = other.success;
-      }
-    }
-
-    public epochchange_result deepCopy() {
-      return new epochchange_result(this);
-    }
-
-    @Override
-    public void clear() {
-      this.success = null;
-    }
-
-    /**
-     * 
-     * @see com.microsoft.corfu.ErrorCode
-     */
-    public com.microsoft.corfu.ErrorCode getSuccess() {
-      return this.success;
-    }
-
-    /**
-     * 
-     * @see com.microsoft.corfu.ErrorCode
-     */
-    public epochchange_result setSuccess(com.microsoft.corfu.ErrorCode success) {
-      this.success = success;
-      return this;
-    }
-
-    public void unsetSuccess() {
-      this.success = null;
-    }
-
-    /** Returns true if field success is set (has been assigned a value) and false otherwise */
-    public boolean isSetSuccess() {
-      return this.success != null;
-    }
-
-    public void setSuccessIsSet(boolean value) {
-      if (!value) {
-        this.success = null;
-      }
-    }
-
-    public void setFieldValue(_Fields field, Object value) {
-      switch (field) {
-      case SUCCESS:
-        if (value == null) {
-          unsetSuccess();
-        } else {
-          setSuccess((com.microsoft.corfu.ErrorCode)value);
-        }
-        break;
-
-      }
-    }
-
-    public Object getFieldValue(_Fields field) {
-      switch (field) {
-      case SUCCESS:
-        return getSuccess();
-
-      }
-      throw new IllegalStateException();
-    }
-
-    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
-    public boolean isSet(_Fields field) {
-      if (field == null) {
-        throw new IllegalArgumentException();
-      }
-
-      switch (field) {
-      case SUCCESS:
-        return isSetSuccess();
-      }
-      throw new IllegalStateException();
-    }
-
-    @Override
-    public boolean equals(Object that) {
-      if (that == null)
-        return false;
-      if (that instanceof epochchange_result)
-        return this.equals((epochchange_result)that);
-      return false;
-    }
-
-    public boolean equals(epochchange_result that) {
-      if (that == null)
-        return false;
-
-      boolean this_present_success = true && this.isSetSuccess();
-      boolean that_present_success = true && that.isSetSuccess();
-      if (this_present_success || that_present_success) {
-        if (!(this_present_success && that_present_success))
-          return false;
-        if (!this.success.equals(that.success))
-          return false;
-      }
-
-      return true;
-    }
-
-    @Override
-    public int hashCode() {
-      return 0;
-    }
-
-    @Override
-    public int compareTo(epochchange_result other) {
-      if (!getClass().equals(other.getClass())) {
-        return getClass().getName().compareTo(other.getClass().getName());
-      }
-
-      int lastComparison = 0;
-
-      lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(other.isSetSuccess());
-      if (lastComparison != 0) {
-        return lastComparison;
-      }
-      if (isSetSuccess()) {
-        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.success, other.success);
-        if (lastComparison != 0) {
-          return lastComparison;
-        }
-      }
-      return 0;
-    }
-
-    public _Fields fieldForId(int fieldId) {
-      return _Fields.findByThriftId(fieldId);
-    }
-
-    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
-      schemes.get(iprot.getScheme()).getScheme().read(iprot, this);
-    }
-
-    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
-      schemes.get(oprot.getScheme()).getScheme().write(oprot, this);
-      }
-
-    @Override
-    public String toString() {
-      StringBuilder sb = new StringBuilder("epochchange_result(");
-      boolean first = true;
-
-      sb.append("success:");
-      if (this.success == null) {
-        sb.append("null");
-      } else {
-        sb.append(this.success);
-      }
-      first = false;
-      sb.append(")");
-      return sb.toString();
-    }
-
-    public void validate() throws org.apache.thrift.TException {
-      // check for required fields
-      // check for sub-struct validity
-    }
-
-    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
-      try {
-        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
-      } catch (org.apache.thrift.TException te) {
-        throw new java.io.IOException(te);
-      }
-    }
-
-    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
-      try {
-        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
-      } catch (org.apache.thrift.TException te) {
-        throw new java.io.IOException(te);
-      }
-    }
-
-    private static class epochchange_resultStandardSchemeFactory implements SchemeFactory {
-      public epochchange_resultStandardScheme getScheme() {
-        return new epochchange_resultStandardScheme();
-      }
-    }
-
-    private static class epochchange_resultStandardScheme extends StandardScheme<epochchange_result> {
-
-      public void read(org.apache.thrift.protocol.TProtocol iprot, epochchange_result struct) throws org.apache.thrift.TException {
-        org.apache.thrift.protocol.TField schemeField;
-        iprot.readStructBegin();
-        while (true)
-        {
-          schemeField = iprot.readFieldBegin();
-          if (schemeField.type == org.apache.thrift.protocol.TType.STOP) { 
-            break;
-          }
-          switch (schemeField.id) {
-            case 0: // SUCCESS
-              if (schemeField.type == org.apache.thrift.protocol.TType.I32) {
-                struct.success = com.microsoft.corfu.ErrorCode.findByValue(iprot.readI32());
-                struct.setSuccessIsSet(true);
-              } else { 
-                org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-              }
-              break;
-            default:
-              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
-          }
-          iprot.readFieldEnd();
-        }
-        iprot.readStructEnd();
-
-        // check for required fields of primitive type, which can't be checked in the validate method
-        struct.validate();
-      }
-
-      public void write(org.apache.thrift.protocol.TProtocol oprot, epochchange_result struct) throws org.apache.thrift.TException {
-        struct.validate();
-
-        oprot.writeStructBegin(STRUCT_DESC);
-        if (struct.success != null) {
-          oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
-          oprot.writeI32(struct.success.getValue());
-          oprot.writeFieldEnd();
-        }
-        oprot.writeFieldStop();
-        oprot.writeStructEnd();
-      }
-
-    }
-
-    private static class epochchange_resultTupleSchemeFactory implements SchemeFactory {
-      public epochchange_resultTupleScheme getScheme() {
-        return new epochchange_resultTupleScheme();
-      }
-    }
-
-    private static class epochchange_resultTupleScheme extends TupleScheme<epochchange_result> {
-
-      @Override
-      public void write(org.apache.thrift.protocol.TProtocol prot, epochchange_result struct) throws org.apache.thrift.TException {
-        TTupleProtocol oprot = (TTupleProtocol) prot;
-        BitSet optionals = new BitSet();
-        if (struct.isSetSuccess()) {
-          optionals.set(0);
-        }
-        oprot.writeBitSet(optionals, 1);
-        if (struct.isSetSuccess()) {
-          oprot.writeI32(struct.success.getValue());
-        }
-      }
-
-      @Override
-      public void read(org.apache.thrift.protocol.TProtocol prot, epochchange_result struct) throws org.apache.thrift.TException {
-        TTupleProtocol iprot = (TTupleProtocol) prot;
-        BitSet incoming = iprot.readBitSet(1);
-        if (incoming.get(0)) {
-          struct.success = com.microsoft.corfu.ErrorCode.findByValue(iprot.readI32());
           struct.setSuccessIsSet(true);
         }
       }

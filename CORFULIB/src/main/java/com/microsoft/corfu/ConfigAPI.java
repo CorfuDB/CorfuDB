@@ -17,8 +17,6 @@ public interface ConfigAPI {
      */
     public void trim(long offset) throws CorfuException;
 
-    public void sealepoch() throws CorfuException;
-
     public void proposeRemoveUnit(int gind, int rind) throws CorfuException;
     public void proposeDeployUnit(int gind, int rind, String hostname, int port) throws CorfuException;
     public void killUnit(int gind, int rind) throws CorfuException;

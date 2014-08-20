@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
+import java.util.List;
 
 public class Util {
 
@@ -82,5 +83,60 @@ public class Util {
 			return oi.readObject();
 		}
 
-    
+    /**
+     * Epoch management utils
+     */
+
+    /**
+     * compare two incarnation values. Simply do a lexicographic comparison.
+     *
+     * @param e1
+     * @param e2
+     * @return the result of the comparison, encoded as follows:
+     *          0: equal.
+     *          -1: first parameter smaller than second.
+     *          1: first param greater than second.
+     */
+    public static int compareIncarnations(List<Integer> e1, List<Integer> e2) {
+        for (int j = 0; j < e1.size(); j++) {
+            if (e1.get(j) < e2.get(j)) return -1;
+            if (e1.get(j) > e2.get(j)) return 1;
+        }
+        return 0;
+    }
+
+    public static void incEpoch(List<Integer> e) {
+        int epochind = e.size()-1;
+        e.set(epochind, e.get(epochind)+1);
+    }
+
+    public static void incMasterEpoch(List<Integer> e, int masterid) {
+        e.set(0, e.get(0)+1);
+        e.set(1, masterid);
+        e.set(2, 0);
+    }
+
+    public static void setIncarnation(List<Integer> e, int masterEpoch, int masterId, int epoch) {
+        e.add(0, masterEpoch);
+        e.add(1, masterId);
+        e.add(2, epoch);
+    }
+
+    public static void setEpoch(List<Integer> e, int epoch) {
+        int epochind = e.size()-1;
+        e.set(epochind, epoch);
+    }
+
+    public static void setMasterEpoch(List<Integer> e, int masterEpoch, int masterid) {
+        e.set(0, masterEpoch);
+        e.set(1, masterid);
+    }
+
+    public static Integer getEpoch(List<Integer> e) {
+        int epochind = e.size()-1;
+        return e.get(epochind);
+    }
+
+    public static Integer getMasterEpoch(List<Integer> e) { return e.get(0); }
+    public static Integer getMasterId(List<Integer> e) { return e.get(1); }
 }

@@ -10,6 +10,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Vector;
 
 import org.apache.thrift.TMultiplexedProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -30,39 +31,38 @@ public class LogUnitTask implements LogUnitService.Iface {
 
     private LogUnitTask(Builder b) { // this is private; use build() to generate objects of this class
         CM = b.getCM();
-        epoch = b.getEpoch();
+        masterIncarnation = CM.getIncarnation();
         UNITCAPACITY = b.getUNITCAPACITY();
-        PAGESIZE = b.getPAGESIZE();
         PORT = b.getPORT();
         DRIVENAME = b.getDRIVENAME();
         RAMMODE = b.isRAMMODE();
         RECOVERY = b.isRECOVERY();
         REBUILD = b.isREBUILD();
         rebuildnode = b.getRebuildnode();
-        trimmark = b.getTrim();
+
+        PAGESIZE = CM.getPagesize();
+        gcmark = CM.getTrimmark();
     }
 
-
-    private long epoch = 0;
+    List<Integer> masterIncarnation = null;
+    CorfuConfiguration CM = null;
     private int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
-    private int PAGESIZE = 128;	// unit size in bytes
     private int PORT=-1;	// REQUIRED: port number this unit listens on
     private String DRIVENAME = null; // where to persist data (unless rammode is on)
     private boolean RAMMODE = true; // command line switch: work in memory (no data persistence)
     private boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
-
     private boolean REBUILD = false;
-
     private String rebuildnode = null;
-    private long trimmark = 0; // log has been trimmed up to this position (excl)
 
-    CorfuConfiguration CM = null;
+    private int PAGESIZE;
+
 
 	private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
 
 	private FileChannel DriveChannel = null;
 	private Object DriveLck = new Object();
-	
+
+    private long gcmark = 0; // pages up to 'gcmark' have been evicted; note, we must have gcmark <= CM.trimmark
 	private int lowwater = 0, highwater = 0, freewater = -1;
 	private ByteBuffer[] inmemoryStore; // use in rammode
 	private byte map[] = null;
@@ -206,10 +206,10 @@ public class LogUnitTask implements LogUnitService.Iface {
 	}
 	
 	public void trimLogStore(long toOffset) throws IOException {
-		long lasttrim = trimmark, lastcontig = lasttrim;
+		long lasttrim = gcmark, lastcontig = lasttrim;
 		
-		log.info("=== trim({}) trimmark={} freewater={} lowwater/highwater={}/{} ===",
-				toOffset, trimmark, freewater, lowwater, highwater);
+		log.info("=== trim({}) gcmark={} freewater={} lowwater/highwater={}/{} ===",
+				toOffset, gcmark, freewater, lowwater, highwater);
 
 		// this loop keeps advancing two markers, lasttrim and lastcontig.
         //
@@ -217,8 +217,8 @@ public class LogUnitTask implements LogUnitService.Iface {
 		// lastcontig marks the point that we stop freeing up contiguous space, until we can advance lowwater again.
 		// when we can move lowwater again, we go back to sweeping entries from the lastcontig mark.
         //
-        // eventually, trimmark is set to the highest contiguous mark which we have freed.
-        // entries above trimmark which were freed are marked internally with EX_TRIMMMED, but trimmark remains below them
+        // eventually, gcmark is set to the highest contiguous mark which we have freed.
+        // entries above gcmark which were freed are marked internally with EX_TRIMMMED, but gcmark remains below them
         //
 		while (lasttrim < toOffset) {
             mapInfo minf = new mapInfo(lasttrim);
@@ -259,25 +259,25 @@ public class LogUnitTask implements LogUnitService.Iface {
             lasttrim++;
         }
 
-		trimmark = lastcontig;
-        writetrimmark();
+		gcmark = lastcontig;
+        writegcmark();
 
-		log.info("=== done trim({}) new trimmark={} freewater={} lowwater/highwater={}/{} ===",
-				toOffset, trimmark, freewater, lowwater, highwater);
+		log.info("=== done trim({}) new gcmark={} freewater={} lowwater/highwater={}/{} ===",
+				toOffset, gcmark, freewater, lowwater, highwater);
 
 	}
 
 	public ErrorCode appendExtntLogStore(long logOffset, List<ByteBuffer> wbufs, ExtntMarkType et)
             throws IOException {
-		if (logOffset < trimmark) return ErrorCode.ERR_OVERWRITE;
-        if ((logOffset-trimmark) >= UNITCAPACITY) {
+		if (logOffset < CM.getTrimmark())             return ErrorCode.ERR_OVERWRITE;
+        if ((logOffset-CM.getTrimmark()) >= UNITCAPACITY) {
             setExtntInfo(logOffset, 0, 0, et);
             return ErrorCode.ERR_FULL;
         }
 
         ExtntMarkType oldet = getET(logOffset);
         if (oldet != ExtntMarkType.EX_EMPTY) {
-            log.info("append would overwrite {} marked-{} trimmark={}", logOffset, oldet, trimmark);
+            log.info("append would overwrite {} marked-{}", logOffset, oldet);
             return ErrorCode.ERR_OVERWRITE;
         }
 		int physOffset = highwater;
@@ -293,10 +293,10 @@ public class LogUnitTask implements LogUnitService.Iface {
 	public ExtntWrap getExtntLogStore(long logOffset) throws IOException {
 		ExtntWrap wr = new ExtntWrap();
 
-		if (logOffset < trimmark) {
+		if (logOffset < CM.getTrimmark()) {
 			wr.setErr(ErrorCode.ERR_TRIMMED);
 			wr.setCtnt(new ArrayList<ByteBuffer>());
-		} else if ((logOffset-trimmark) >= UNITCAPACITY) {
+		} else if ((logOffset-CM.getTrimmark()) >= UNITCAPACITY) {
 			wr.setErr(ErrorCode.ERR_UNWRITTEN);
 			wr.setCtnt(new ArrayList<ByteBuffer>());
 		} else {
@@ -319,10 +319,10 @@ public class LogUnitTask implements LogUnitService.Iface {
 	}
 
 	public ErrorCode getExtntInfoLogStore(long logOffset, ExtntInfo inf) {
-		if (logOffset < trimmark) {
+		if (logOffset < CM.getTrimmark()) {
 			inf.setFlag(ExtntMarkType.EX_TRIMMED);
             return ErrorCode.ERR_TRIMMED;
-		} else if ((logOffset-trimmark) >= UNITCAPACITY) {
+		} else if ((logOffset-CM.getTrimmark()) >= UNITCAPACITY) {
 			inf.setFlag(ExtntMarkType.EX_EMPTY);
             return ErrorCode.ERR_UNWRITTEN;
 		} else {
@@ -340,10 +340,11 @@ public class LogUnitTask implements LogUnitService.Iface {
 		}
 	}
 
-    private void writetrimmark() throws IOException {
+    private void writegcmark() throws IOException {
+        // TODO what about persisting the configuration??
         if (!RAMMODE) {
             DriveChannel.position(UNITCAPACITY * PAGESIZE + UNITCAPACITY * entsz);
-            byte[] ser = Util.ObjectSerialize(new Long(trimmark));
+            byte[] ser = Util.ObjectSerialize(new Long(gcmark));
             DriveChannel.write(ByteBuffer.wrap(ser));
         }
     }
@@ -359,12 +360,12 @@ public class LogUnitTask implements LogUnitService.Iface {
         ByteBuffer tb = ByteBuffer.allocate(sz);
         DriveChannel.position(UNITCAPACITY*PAGESIZE+ UNITCAPACITY*entsz);
         if (DriveChannel.read(tb) == sz) {
-            trimmark = ((Long) Util.ObjectDeserialize(tb.array())).longValue();
-            log.debug("trimmark recovered: {}", trimmark);
+            gcmark = ((Long) Util.ObjectDeserialize(tb.array())).longValue();
+            log.debug("trimmark recovered: {}", gcmark);
         } else {
-            log.info("no trimmark saved, setting initial trim=0");
-            trimmark=0;
-            writetrimmark();
+            log.info("no gcmark saved, setting initial trim=0");
+            gcmark=0;
+            writegcmark();
         }
         initLogStore(bb.array(), UNITCAPACITY);
     }
@@ -385,7 +386,7 @@ public class LogUnitTask implements LogUnitService.Iface {
                     wr.getLowwater(), wr.getHighwater(), wr.getTrimmark(), wr.getCtntSize());
             initLogStore(wr.getBmap(), UNITCAPACITY);
             lowwater = highwater = wr.getLowwater();
-            trimmark = wr.getTrimmark();
+            gcmark = wr.getTrimmark();
             ckmark = (int)wr.getCkmark();
             put(wr.getCtnt());
             if (highwater != wr.getHighwater())
@@ -409,7 +410,12 @@ public class LogUnitTask implements LogUnitService.Iface {
 	@Override
 	synchronized public ErrorCode write(UnitServerHdr hdr, List<ByteBuffer> ctnt, ExtntMarkType et) throws org.apache.thrift.TException {
 
-        if (hdr.getEpoch() < epoch) return ErrorCode.ERR_STALEEPOCH;
+        if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) {
+            log.info("write request has stale incarnation={} cur incarnation={}",
+                    hdr.getEpoch(), masterIncarnation);
+            return ErrorCode.ERR_STALEEPOCH;
+        }
+
 		log.debug("write({} size={} marktype={})", hdr.off, ctnt.size(), et);
         try {
             return appendExtntLogStore(hdr.off, ctnt, et);
@@ -451,8 +457,8 @@ public class LogUnitTask implements LogUnitService.Iface {
 	 */
 	@Override
 	synchronized public ExtntWrap read(UnitServerHdr hdr) throws org.apache.thrift.TException {
-        if (hdr.getEpoch() < epoch) return genWrap(ErrorCode.ERR_STALEEPOCH);
-		log.debug("read({}) trim={} CAPACITY={}", hdr.off, trimmark, UNITCAPACITY);
+        if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return genWrap(ErrorCode.ERR_STALEEPOCH);
+		log.debug("read({})", hdr.off);
         try {
             return getExtntLogStore(hdr.off);
         } catch (IOException e) {
@@ -472,7 +478,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 	 */
 	@Override
 	synchronized public ExtntWrap readmeta(UnitServerHdr hdr) {
-        if (hdr.getEpoch() < epoch) return genWrap(ErrorCode.ERR_STALEEPOCH);
+        if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return genWrap(ErrorCode.ERR_STALEEPOCH);
 		log.debug("readmeta({})", hdr.off);
 		ExtntInfo inf = new ExtntInfo();
 		return new ExtntWrap(getExtntInfoLogStore(hdr.off, inf), inf, new ArrayList<ByteBuffer>());
@@ -490,35 +496,30 @@ public class LogUnitTask implements LogUnitService.Iface {
     }
 
 	@Override
-	synchronized public long querytrim() {	return trimmark; } 
+	synchronized public long querytrim() {	return CM.getTrimmark(); }
 	
 	@Override
 	synchronized public long queryck() {	return ckmark; } 
 	
-	@Override
-	synchronized public ErrorCode trim(UnitServerHdr hdr) throws org.apache.thrift.TException {
-        if (hdr.getEpoch() <= epoch) return ErrorCode.ERR_STALEEPOCH;
-        epoch = hdr.epoch;
-
+	ErrorCode trim(long toOffset) {
         try {
-            trimLogStore(hdr.off);
+            trimLogStore(toOffset);
         } catch (IOException e) {
             e.printStackTrace();
             return ErrorCode.ERR_IO;
         }
         if (!RAMMODE) {
 	    	try {
-	    	   	log.debug("forcing bitmap and trimmark to disk");
+	    	   	log.debug("forcing bitmap and gcmark to disk");
 	    	   	synchronized(DriveLck) {
 	    	   		try { DriveLck.wait(); } catch (InterruptedException e) {	    	   	
 		        		log.error("forcing sync to persistent store failed, quitting");
 		        		System.exit(1);
 	    	   		}
 	        	}
-	    	    writetrimmark();
-	        	log.info("trimmark persisted to disk");
+	    	    writegcmark();
 			} catch (IOException e) {
-				log.error("writing trimmark failed");
+				log.error("writing gcmark failed");
 				e.printStackTrace();
 				return ErrorCode.ERR_IO;
 			}
@@ -539,21 +540,34 @@ public class LogUnitTask implements LogUnitService.Iface {
     class LogUnitConfigServiceImpl implements LogUnitConfigService.Iface {
 
         @Override
-        synchronized public void setConfig(String xmlconfig) {
-            // TODO persist?
+        public void probe() throws TException {
+            ;
+        }
+
+        @Override
+        synchronized public ErrorCode phase2b(String xmlconfig) {
             try {
-                CM = new CorfuConfiguration(xmlconfig);
-                if (CM.getEpoch() > epoch)
-                    log.info("set new configuration: {}", xmlconfig);
-                epoch = CM.getEpoch();
-                trimmark = CM.getTrimmark();
+                CorfuConfiguration nc = new CorfuConfiguration(xmlconfig);
+                int cmp = Util.compareIncarnations(masterIncarnation, nc.getIncarnation());
+                if (cmp > 0)
+                    return ErrorCode.ERR_STALEEPOCH;
+                if (cmp == 0)
+                    return ErrorCode.OK;
+
+                log.info("set new configuration: {}", xmlconfig);
+                if (nc.getTrimmark() > CM.getTrimmark())
+                    trim(nc.getTrimmark());
+                CM = nc;
+                // TODO persist?
+                return ErrorCode.OK;
             } catch (CorfuException e) {
                 e.printStackTrace();
+                return ErrorCode.ERR_IO;
             }
         }
 
         @Override
-        synchronized public String getConfig() {
+        synchronized public String phase1b(int masterid) {
             String s = null;
             if (CM != null) {
                 try {
@@ -562,6 +576,8 @@ public class LogUnitTask implements LogUnitService.Iface {
                     e.printStackTrace();
                 }
             }
+            if (!Util.getMasterId(masterIncarnation).equals(masterid))
+                Util.incMasterEpoch(masterIncarnation, masterid);
             return s;
         }
 
@@ -570,11 +586,11 @@ public class LogUnitTask implements LogUnitService.Iface {
 
             LogUnitWrap wr = new LogUnitWrap(ErrorCode.OK,
                     lowwater, highwater,
-                    trimmark, ckmark,
+                    gcmark, ckmark,
                     null,
                     mapb);
             log.info("respond to rebuild request. lowwater={}, highwater={}, trimmark={}",
-                    lowwater, highwater, trimmark);
+                    lowwater, highwater, gcmark);
 
             try {
                 wr.setCtnt(mirror());
@@ -584,13 +600,6 @@ public class LogUnitTask implements LogUnitService.Iface {
                 wr.setErr(ErrorCode.ERR_IO);
             }
             return wr;
-        }
-
-        @Override
-        synchronized public ErrorCode epochchange(UnitServerHdr hdr) {
-            if (hdr.getEpoch() <= epoch) return ErrorCode.ERR_STALEEPOCH;
-            epoch = hdr.epoch;
-            return ErrorCode.OK;
         }
 
         @Override
@@ -651,7 +660,7 @@ public class LogUnitTask implements LogUnitService.Iface {
             rebuildfromnode();
         } else {
             initLogStore(UNITCAPACITY);
-            writetrimmark();
+            writegcmark();
         }
 
         TServer server;
@@ -778,15 +787,6 @@ public class LogUnitTask implements LogUnitService.Iface {
 
         public Builder setRebuildnode(String rebuildnode) {
             this.rebuildnode = rebuildnode;
-            return this;
-        }
-
-        public long getEpoch() {
-            return epoch;
-        }
-
-        public Builder setEpoch(long epoch) {
-            this.epoch = epoch;
             return this;
         }
 

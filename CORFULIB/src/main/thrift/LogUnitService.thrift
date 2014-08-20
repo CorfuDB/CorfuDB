@@ -20,6 +20,4 @@ service LogUnitService {
 	
 	void ckpoint(1:Common.UnitServerHdr hdr),
 		
-	Common.ErrorCode trim (1:Common.UnitServerHdr hdr),
-
 }

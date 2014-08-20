@@ -22,6 +22,7 @@ struct ExtntInfo {
 }
 
 typedef binary LogPayload
+typedef list<i32> Epoch
 
 struct ExtntWrap {
 	1: ErrorCode err,
@@ -30,7 +31,7 @@ struct ExtntWrap {
 	}
 
 struct UnitServerHdr {
-    1: i64 epoch,
+    1: Epoch epoch,
     2: i64 off,
 }
 	

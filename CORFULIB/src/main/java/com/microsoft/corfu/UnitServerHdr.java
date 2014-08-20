@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
 public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, UnitServerHdr._Fields>, java.io.Serializable, Cloneable, Comparable<UnitServerHdr> {
   private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("UnitServerHdr");
 
-  private static final org.apache.thrift.protocol.TField EPOCH_FIELD_DESC = new org.apache.thrift.protocol.TField("epoch", org.apache.thrift.protocol.TType.I64, (short)1);
+  private static final org.apache.thrift.protocol.TField EPOCH_FIELD_DESC = new org.apache.thrift.protocol.TField("epoch", org.apache.thrift.protocol.TType.LIST, (short)1);
   private static final org.apache.thrift.protocol.TField OFF_FIELD_DESC = new org.apache.thrift.protocol.TField("off", org.apache.thrift.protocol.TType.I64, (short)2);
 
   private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
@@ -44,7 +44,7 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
     schemes.put(TupleScheme.class, new UnitServerHdrTupleSchemeFactory());
   }
 
-  public long epoch; // required
+  public List<Integer> epoch; // required
   public long off; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
@@ -109,14 +109,13 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
   }
 
   // isset id assignments
-  private static final int __EPOCH_ISSET_ID = 0;
-  private static final int __OFF_ISSET_ID = 1;
+  private static final int __OFF_ISSET_ID = 0;
   private byte __isset_bitfield = 0;
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
     Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
     tmpMap.put(_Fields.EPOCH, new org.apache.thrift.meta_data.FieldMetaData("epoch", org.apache.thrift.TFieldRequirementType.DEFAULT, 
-        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
+        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.LIST        , "Epoch")));
     tmpMap.put(_Fields.OFF, new org.apache.thrift.meta_data.FieldMetaData("off", org.apache.thrift.TFieldRequirementType.DEFAULT, 
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
@@ -127,12 +126,11 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
   }
 
   public UnitServerHdr(
-    long epoch,
+    List<Integer> epoch,
     long off)
   {
     this();
     this.epoch = epoch;
-    setEpochIsSet(true);
     this.off = off;
     setOffIsSet(true);
   }
@@ -142,7 +140,9 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
    */
   public UnitServerHdr(UnitServerHdr other) {
     __isset_bitfield = other.__isset_bitfield;
-    this.epoch = other.epoch;
+    if (other.isSetEpoch()) {
+      this.epoch = other.epoch;
+    }
     this.off = other.off;
   }
 
@@ -152,33 +152,48 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
 
   @Override
   public void clear() {
-    setEpochIsSet(false);
-    this.epoch = 0;
+    this.epoch = null;
     setOffIsSet(false);
     this.off = 0;
   }
 
-  public long getEpoch() {
+  public int getEpochSize() {
+    return (this.epoch == null) ? 0 : this.epoch.size();
+  }
+
+  public java.util.Iterator<Integer> getEpochIterator() {
+    return (this.epoch == null) ? null : this.epoch.iterator();
+  }
+
+  public void addToEpoch(int elem) {
+    if (this.epoch == null) {
+      this.epoch = new ArrayList<Integer>();
+    }
+    this.epoch.add(elem);
+  }
+
+  public List<Integer> getEpoch() {
     return this.epoch;
   }
 
-  public UnitServerHdr setEpoch(long epoch) {
+  public UnitServerHdr setEpoch(List<Integer> epoch) {
     this.epoch = epoch;
-    setEpochIsSet(true);
     return this;
   }
 
   public void unsetEpoch() {
-    __isset_bitfield = EncodingUtils.clearBit(__isset_bitfield, __EPOCH_ISSET_ID);
+    this.epoch = null;
   }
 
   /** Returns true if field epoch is set (has been assigned a value) and false otherwise */
   public boolean isSetEpoch() {
-    return EncodingUtils.testBit(__isset_bitfield, __EPOCH_ISSET_ID);
+    return this.epoch != null;
   }
 
   public void setEpochIsSet(boolean value) {
-    __isset_bitfield = EncodingUtils.setBit(__isset_bitfield, __EPOCH_ISSET_ID, value);
+    if (!value) {
+      this.epoch = null;
+    }
   }
 
   public long getOff() {
@@ -210,7 +225,7 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
       if (value == null) {
         unsetEpoch();
       } else {
-        setEpoch((Long)value);
+        setEpoch((List<Integer>)value);
       }
       break;
 
@@ -228,7 +243,7 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
   public Object getFieldValue(_Fields field) {
     switch (field) {
     case EPOCH:
-      return Long.valueOf(getEpoch());
+      return getEpoch();
 
     case OFF:
       return Long.valueOf(getOff());
@@ -265,12 +280,12 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
     if (that == null)
       return false;
 
-    boolean this_present_epoch = true;
-    boolean that_present_epoch = true;
+    boolean this_present_epoch = true && this.isSetEpoch();
+    boolean that_present_epoch = true && that.isSetEpoch();
     if (this_present_epoch || that_present_epoch) {
       if (!(this_present_epoch && that_present_epoch))
         return false;
-      if (this.epoch != that.epoch)
+      if (!this.epoch.equals(that.epoch))
         return false;
     }
 
@@ -340,7 +355,11 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
     boolean first = true;
 
     sb.append("epoch:");
-    sb.append(this.epoch);
+    if (this.epoch == null) {
+      sb.append("null");
+    } else {
+      sb.append(this.epoch);
+    }
     first = false;
     if (!first) sb.append(", ");
     sb.append("off:");
@@ -392,8 +411,18 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
         }
         switch (schemeField.id) {
           case 1: // EPOCH
-            if (schemeField.type == org.apache.thrift.protocol.TType.I64) {
-              struct.epoch = iprot.readI64();
+            if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
+              {
+                org.apache.thrift.protocol.TList _list8 = iprot.readListBegin();
+                struct.epoch = new ArrayList<Integer>(_list8.size);
+                for (int _i9 = 0; _i9 < _list8.size; ++_i9)
+                {
+                  int _elem10;
+                  _elem10 = iprot.readI32();
+                  struct.epoch.add(_elem10);
+                }
+                iprot.readListEnd();
+              }
               struct.setEpochIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
@@ -422,9 +451,18 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
       struct.validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
-      oprot.writeFieldBegin(EPOCH_FIELD_DESC);
-      oprot.writeI64(struct.epoch);
-      oprot.writeFieldEnd();
+      if (struct.epoch != null) {
+        oprot.writeFieldBegin(EPOCH_FIELD_DESC);
+        {
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.I32, struct.epoch.size()));
+          for (int _iter11 : struct.epoch)
+          {
+            oprot.writeI32(_iter11);
+          }
+          oprot.writeListEnd();
+        }
+        oprot.writeFieldEnd();
+      }
       oprot.writeFieldBegin(OFF_FIELD_DESC);
       oprot.writeI64(struct.off);
       oprot.writeFieldEnd();
@@ -454,7 +492,13 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
       }
       oprot.writeBitSet(optionals, 2);
       if (struct.isSetEpoch()) {
-        oprot.writeI64(struct.epoch);
+        {
+          oprot.writeI32(struct.epoch.size());
+          for (int _iter12 : struct.epoch)
+          {
+            oprot.writeI32(_iter12);
+          }
+        }
       }
       if (struct.isSetOff()) {
         oprot.writeI64(struct.off);
@@ -466,7 +510,16 @@ public class UnitServerHdr implements org.apache.thrift.TBase<UnitServerHdr, Uni
       TTupleProtocol iprot = (TTupleProtocol) prot;
       BitSet incoming = iprot.readBitSet(2);
       if (incoming.get(0)) {
-        struct.epoch = iprot.readI64();
+        {
+          org.apache.thrift.protocol.TList _list13 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.I32, iprot.readI32());
+          struct.epoch = new ArrayList<Integer>(_list13.size);
+          for (int _i14 = 0; _i14 < _list13.size; ++_i14)
+          {
+            int _elem15;
+            _elem15 = iprot.readI32();
+            struct.epoch.add(_elem15);
+          }
+        }
         struct.setEpochIsSet(true);
       }
       if (incoming.get(1)) {
