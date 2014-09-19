@@ -1,19 +1,19 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-  <parent>
-    <groupId>com.microsoft.corfu</groupId>
-    <artifactId>corfu</artifactId>
+    <parent>
+        <groupId>com.microsoft.corfu</groupId>
+        <artifactId>corfu</artifactId>
+        <version>0.1-SNAPSHOT</version>
+    </parent>
+
+    <groupId>com.microsoft.corfuapps</groupId>
+    <artifactId>corfu-examples</artifactId>
     <version>0.1-SNAPSHOT</version>
-  </parent>
+    <packaging>jar</packaging>
 
-  <groupId>com.microsoft.corfuapps</groupId>
-  <artifactId>corfu-examples</artifactId>
-  <version>0.1-SNAPSHOT</version>
-  <packaging>jar</packaging>
-
-  <name>CORFUAPPS</name>
+    <name>CORFUAPPS</name>
 
 
     <organization>
@@ -21,16 +21,30 @@
         <url>http://www.microsoft.com</url>
     </organization>
 
-  <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-  </properties>
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
 
-  <dependencies>
-    <dependency>
-      <groupId>com.microsoft.corfu</groupId>
-      <artifactId>corfu-lib</artifactId>
-      <version>0.1-SNAPSHOT</version>
-    </dependency>
-  </dependencies>
+    <dependencies>
+        <dependency>
+            <groupId>com.microsoft.corfu</groupId>
+            <artifactId>corfu-lib</artifactId>
+            <version>0.1-SNAPSHOT</version>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <!-- Add a license to all files using mvn license:format -->
+            <plugin>
+                <groupId>com.mycila.maven-license-plugin</groupId>
+                <artifactId>maven-license-plugin</artifactId>
+                <configuration>
+                    <header>LICENSE.txt</header>
+                    <strictCheck>true</strictCheck>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
 
 </project>
