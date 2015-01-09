@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.microsoft.corfu</groupId>
+    <groupId>org.corfudb</groupId>
     <artifactId>corfu-lib</artifactId>
     <version>0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
@@ -11,8 +11,8 @@
 
 
     <organization>
-        <name>Microsoft</name>
-        <url>http://www.microsoft.com</url>
+        <name>CorfuDB</name>
+        <url>http://www.corfudb.org</url>
     </organization>
 
     <properties>

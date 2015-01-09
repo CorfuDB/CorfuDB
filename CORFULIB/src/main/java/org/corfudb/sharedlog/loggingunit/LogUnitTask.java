@@ -458,7 +458,7 @@ public class LogUnitTask implements LogUnitService.Iface {
     }
 		
 	/* (non-Javadoc)
-	 * @see CorfuUnitServer.Iface#read(com.microsoft.corfu.CorfuHeader, ExtntInfo)
+	 * @see CorfuUnitServer.Iface#read(org.corfudb.CorfuHeader, ExtntInfo)
 	 * 
 	 * this method performs actual reading of a range of pages.
 	 * it fails if any page within range has not been written.

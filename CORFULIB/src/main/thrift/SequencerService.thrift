@@ -1,4 +1,4 @@
-namespace java com.microsoft.corfu.sequencer
+namespace java org.corfudb.sequencer
 
 
 service SequencerService {

@@ -1,4 +1,4 @@
-namespace java com.microsoft.corfu
+namespace java org.corfudb
 
 
 enum ErrorCode {
