@@ -35,7 +35,7 @@ public class CorfuDBRuntime
 
 		try
 		{
-			crf = new ClientLib(masternode); //hardcoded
+			crf = new ClientLib(masternode);
 		}
 		catch (CorfuException e)
 		{
@@ -45,26 +45,37 @@ public class CorfuDBRuntime
 		//CorfuDBRuntime TR = new CorfuDBRuntime(new DummyStreamFactoryImpl());
 		CorfuDBRuntime TR = new CorfuDBRuntime(new CorfuStreamFactoryImpl(crf));
 
-		Thread T = new Thread(new CorfuDBTester(TR));
-		T.start();
+		CorfuDBCounter ctr = new CorfuDBCounter(TR, 1234);
+		
+		int numthreads = 2;
+		for(int i=0;i<numthreads;i++)
+		{
+			Thread T = new Thread(new CorfuDBTester(ctr));
+			T.start();
+		}
 	}
 
 	Map<Long, CorfuDBObject> objectmap;
 	Map<Long, Stream> streammap;
 	StreamFactory sf;
 
-	public void registerObject(CorfuDBObject to)
+
+	/**
+	 * Registers an object with the runtime
+	 *
+	 * @param  obj  the object to register
+	 */
+	public void registerObject(CorfuDBObject obj)
 	{
-		//todo: check if the object already exists
 		synchronized(objectmap)
 		{
-			if(objectmap.containsKey(to.getID()))
+			if(objectmap.containsKey(obj.getID()))
 			{
 				System.out.println("object ID already registered!");
 				throw new RuntimeException();
 			}
-			objectmap.put(to.getID(), to);
-			streammap.put(to.getID(), sf.new_stream(to.getID()));
+			objectmap.put(obj.getID(), obj);
+			streammap.put(obj.getID(), sf.new_stream(obj.getID()));
 		}
 	}
 
@@ -78,20 +89,21 @@ public class CorfuDBRuntime
 	void queryhelper(long sid)
 	{
 		//later, asynchronously invoke the sync() thread
+		//so that there's only one outstanding sync at a time
 		sync(sid);
 	}
 
 	void updatehelper(byte[] update, long sid)
 	{
 		Stream curstream = streammap.get(sid);
-		//todo: stream doesn't exist
+		if(curstream==null) throw new RuntimeException("stream doesn't exist");
 		curstream.append(new LogEntry(update, sid));
 	}
 
 	void sync(long sid)
 	{
 		Stream curstream = streammap.get(sid);
-		//todo: stream doesn't exist
+		if(curstream==null) throw new RuntimeException("stream doesn't exist");
 		long curtail = curstream.checkTail();
 		LogEntry update = curstream.readNext(curtail);
 		while(update!=null)
@@ -99,7 +111,12 @@ public class CorfuDBRuntime
 //			System.out.println(update.streamid);
 			synchronized(objectmap)
 			{
-				objectmap.get(update.streamid).upcall(update.payload); //todo: check for non-existence
+				if(objectmap.containsKey(update.streamid))
+				{
+					objectmap.get(update.streamid).upcall(update.payload);
+				}
+				else
+					throw new RuntimeException("entry for stream with no registered object");
 			}
 			update = curstream.readNext(curtail);
 		}
@@ -107,23 +124,28 @@ public class CorfuDBRuntime
 
 }
 
+/**
+ * Tester for CorfuDBCounter
+ *
+ * @author mbalakrishnan
+ *
+ */
+
 class CorfuDBTester implements Runnable
 {
-
-	CorfuDBRuntime TR;
-	public CorfuDBTester(CorfuDBRuntime tTR)
+	CorfuDBCounter ctr;
+	public CorfuDBTester(CorfuDBCounter tctr)
 	{
-		TR = tTR;
+		ctr = tctr;
 	}
 
 	public void run()
 	{
 		System.out.println("starting thread");
-		CorfuDBCounter tr = new CorfuDBCounter(TR, 1234);
 		while(true)
 		{
-			tr.increment();
-			System.out.println("counter value = " + tr.read());
+			ctr.increment();
+			System.out.println("counter value = " + ctr.read());
 			try
 			{
 				Thread.sleep((int)(Math.random()*1000.0));
@@ -148,13 +170,24 @@ interface CorfuDBObject
 
 class CorfuDBCounter implements CorfuDBObject
 {
+	//state of the counter
 	int registervalue;
+	
 	CorfuDBRuntime TR;
+	
+	//object ID -- corresponds to stream ID used underneath
 	long oid;
+	
+	//constants used in serialization
+	static final int CMD_INC = 0;
+	static final int CMD_DEC = 1;
+	
+	
 	public long getID()
 	{
 		return oid;
 	}
+	
 	public CorfuDBCounter(CorfuDBRuntime tTR, long toid)
 	{
 		registervalue = 0;
@@ -166,24 +199,26 @@ class CorfuDBCounter implements CorfuDBObject
 	{
 		//System.out.println("dummyupcall");
 		System.out.println("CorfuDBCounter received upcall");
-		if(update[0]==0) //increment
+		if(update[0]==CMD_INC) //increment
 			registervalue++;
-		else
+		else if(update[0]==CMD_DEC) //decrement
 			registervalue--;
+		else
+			throw new RuntimeException("Unrecognized command in stream!");
 		System.out.println("Setting value to " + registervalue);
 	}
 	public void increment()
 	{
 		//System.out.println("dummyinc");
-		byte b[] = new byte[minbufsize]; //hardcoded
-		b[0] = 0;
+		byte b[] = new byte[minbufsize];
+		b[0] = CMD_INC;
 		TR.updatehelper(b, oid);
 	}
 	public void decrement()
 	{
 		//System.out.println("dummydec");
-		byte b[] = new byte[minbufsize]; //hardcoded
-		b[0] = 1;
+		byte b[] = new byte[minbufsize];
+		b[0] = CMD_DEC;
 		TR.updatehelper(b, oid);
 	}
 	public int read()
@@ -262,8 +297,31 @@ class LogEntry
 interface Stream
 {
 	long append(LogEntry le); //todo: should append be in the stream interface, since we'll eventually append to multiple streams?
+	
+	/**
+	 * reads the next entry in the stream
+	 *
+	 * @return       the next log entry 
+	 */
 	LogEntry readNext();
+	
+	/**
+	 * reads the next entry in the stream that has a position strictly lower than stoppos.
+	 * this is required so that the runtime can check the current tail of the log and 
+	 * then play the log until that tail position and no further, in order to get linearizable
+	 * semantics with a minimum number of reads. 
+	 *
+	 * @param  stoppos  the stopping position for the read
+	 * @return          the next log entry
+	 */
 	LogEntry readNext(long stoppos);
+	
+	/**
+	 * returns the current tail position of the log (this is exclusive, so a checkTail
+	 * on an empty stream returns 0).
+	 *
+	 * @return          the current tail of the stream
+	 */
 	long checkTail();
 }
 
@@ -328,7 +386,7 @@ class CorfuStreamImpl implements Stream
 	}
 
 	@Override
-	public synchronized LogEntry readNext(long stoppos) //for now, locking on this
+	public synchronized LogEntry readNext(long stoppos) //for now, locking on 'this' to guard curtail/curpos
 	{
 		if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
 		{
@@ -359,7 +417,7 @@ class CorfuStreamImpl implements Stream
 	}
 
 	@Override
-	public synchronized long checkTail() //for now, locking on this
+	public synchronized long checkTail() //for now, locking on 'this' to guard curtail
 	{
 		System.out.println("Checking tail...");
 		try
