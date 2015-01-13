@@ -1,13 +1,15 @@
 #!/usr/bin/python
+import sys
+import os
+import subprocess
 
 # global params
 dbg = False
 package = 'org.corfudb.sharedlog'
-cp = '/Users/dalia/gitroot/CorfuDB/CORFULIB/target/corfu-lib-0.1-SNAPSHOT-shaded.jar'
 
-import sys
-import os
-import subprocess
+					# get the parent dir of the script, the .jar is relative to it
+parentpath,junk = os.path.split(os.path.dirname(os.path.realpath(sys.argv[0])))  
+cp = parentpath+'/CORFULIB/target/corfu-lib-0.1-SNAPSHOT-shaded.jar'
 
 # parse command-line arguments:
 #   [-rammode] [-recover]
