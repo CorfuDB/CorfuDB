@@ -21,23 +21,21 @@ public class CorfuDBRuntime
 	 */
 	public static void main(String[] args) throws Exception
 	{
-		System.out.println("Hello World!");
 
-		//append a few entries to the stream
-	/*	long ssid = 5;
-		Stream smrstream = new DummyStreamImpl(ssid);
-		smrstream.append(new LogEntry(("AAA").getBytes(), ssid));
-		smrstream.append(new LogEntry(("BBB").getBytes(), ssid));
-		smrstream.append(new LogEntry(("CCC").getBytes(), ssid));
-		System.out.println(new String(smrstream.readNext().payload));
-		System.out.println(new String(smrstream.readNext().payload));
-		System.out.println(new String(smrstream.readNext().payload));*/
+		if(args.length==0)
+		{
+			System.out.println("usage: java CorfuDBRuntime masterURL");
+			System.out.println("e.g. masterURL: http://localhost:8000/corfu");
+			return;
+		}
+
+		String masternode = args[0];
 
 		ClientLib crf;
 
 		try
 		{
-			crf = new ClientLib("http://localhost:8000/corfu"); //hardcoded
+			crf = new ClientLib(masternode); //hardcoded
 		}
 		catch (CorfuException e)
 		{
