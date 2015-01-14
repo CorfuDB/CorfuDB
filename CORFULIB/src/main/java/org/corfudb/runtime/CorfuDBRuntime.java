@@ -1,9 +1,12 @@
 package org.corfudb.runtime;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.Stack;
+import java.util.Iterator;
 
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
@@ -42,12 +45,13 @@ public class CorfuDBRuntime
 			throw e;
 		}
 
-		//CorfuDBRuntime TR = new CorfuDBRuntime(new DummyStreamFactoryImpl());
-		CorfuDBRuntime TR = new CorfuDBRuntime(new CorfuStreamFactoryImpl(crf));
+		List<Long> streams = new LinkedList<Long>();
+		streams.add(new Long(1234)); //hardcoded hack
+		CorfuDBRuntime TR = new CorfuDBRuntime(new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf)));
 
 		CorfuDBCounter ctr = new CorfuDBCounter(TR, 1234);
 		
-		int numthreads = 2;
+		int numthreads = 1;
 		for(int i=0;i<numthreads;i++)
 		{
 			Thread T = new Thread(new CorfuDBTester(ctr));
@@ -56,8 +60,7 @@ public class CorfuDBRuntime
 	}
 
 	Map<Long, CorfuDBObject> objectmap;
-	Map<Long, Stream> streammap;
-	StreamFactory sf;
+	StreamBundle curbundle;
 
 
 	/**
@@ -75,40 +78,35 @@ public class CorfuDBRuntime
 				throw new RuntimeException();
 			}
 			objectmap.put(obj.getID(), obj);
-			streammap.put(obj.getID(), sf.new_stream(obj.getID()));
 		}
 	}
 
-	public CorfuDBRuntime(StreamFactory tsf)
+	public CorfuDBRuntime(StreamBundle sb)
 	{
-		sf = tsf;
 		objectmap = new HashMap<Long, CorfuDBObject>();
-		streammap = new HashMap<Long, Stream>();
+		curbundle = sb;
 	}
 
 	void queryhelper(long sid)
 	{
 		//later, asynchronously invoke the sync() thread
 		//so that there's only one outstanding sync at a time
-		sync(sid);
+		sync();
 	}
 
-	void updatehelper(byte[] update, long sid)
+	void updatehelper(BufferStack update, long sid)
 	{
-		Stream curstream = streammap.get(sid);
-		if(curstream==null) throw new RuntimeException("stream doesn't exist");
-		curstream.append(new LogEntry(update, sid));
+		List<Long> streams = new LinkedList<Long>();
+		streams.add(sid);
+		curbundle.append(update, streams);
 	}
 
-	void sync(long sid)
+	void sync()
 	{
-		Stream curstream = streammap.get(sid);
-		if(curstream==null) throw new RuntimeException("stream doesn't exist");
-		long curtail = curstream.checkTail();
-		LogEntry update = curstream.readNext(curtail);
+		long curtail = curbundle.checkTail();
+		LogEntry update = curbundle.readNext(curtail);
 		while(update!=null)
 		{
-//			System.out.println(update.streamid);
 			synchronized(objectmap)
 			{
 				if(objectmap.containsKey(update.streamid))
@@ -118,11 +116,57 @@ public class CorfuDBRuntime
 				else
 					throw new RuntimeException("entry for stream with no registered object");
 			}
-			update = curstream.readNext(curtail);
+			update = curbundle.readNext(curtail);
 		}
 	}
-
 }
+
+class BufferStack
+{
+	private Stack<byte[]> buffers;
+	private int totalsize;
+	public BufferStack()
+	{
+		buffers = new Stack<byte[]>();
+		totalsize = 0;
+	}
+	public BufferStack(byte[] initialbuf)
+	{
+		this();
+		buffers.push(initialbuf);
+	}
+	public void push(byte[] buf)
+	{
+		buffers.push(buf);
+		totalsize += buf.length;
+	}
+	public byte[] pop()
+	{
+		return buffers.pop();
+	}
+	public byte[] peek()
+	{
+		return buffers.peek();
+	}
+	public byte[] flatten()
+	{
+		if(buffers.size()==1) return buffers.peek();
+		else throw new RuntimeException("unimplemented");
+	}
+	public int numBufs()
+	{
+		return buffers.size();
+	}
+	public int numBytes()
+	{
+		return totalsize;
+	}
+	public java.util.Iterator<byte[]> iterator()
+	{
+		return buffers.iterator();
+	}
+}
+
 
 /**
  * Tester for CorfuDBCounter
@@ -163,8 +207,7 @@ class CorfuDBTester implements Runnable
 
 interface CorfuDBObject
 {
-	int minbufsize = 128; //quickfix to handle min buffer size requirement of logging layer
-	public void upcall(byte[] update);
+	public void upcall(BufferStack update);
 	public long getID();
 }
 
@@ -195,10 +238,13 @@ class CorfuDBCounter implements CorfuDBObject
 		oid = toid;
 		TR.registerObject(this);
 	}
-	public void upcall(byte update[])
+	public void upcall(BufferStack bs)
 	{
 		//System.out.println("dummyupcall");
 		System.out.println("CorfuDBCounter received upcall");
+		if(bs.numBufs()!=1)
+			throw new RuntimeException("too few or too many bufs!");
+		byte[] update = bs.pop();
 		if(update[0]==CMD_INC) //increment
 			registervalue++;
 		else if(update[0]==CMD_DEC) //decrement
@@ -210,16 +256,16 @@ class CorfuDBCounter implements CorfuDBObject
 	public void increment()
 	{
 		//System.out.println("dummyinc");
-		byte b[] = new byte[minbufsize];
+		byte b[] = new byte[1];
 		b[0] = CMD_INC;
-		TR.updatehelper(b, oid);
+		TR.updatehelper(new BufferStack(b), oid);
 	}
 	public void decrement()
 	{
 		//System.out.println("dummydec");
-		byte b[] = new byte[minbufsize];
+		byte b[] = new byte[1];
 		b[0] = CMD_DEC;
-		TR.updatehelper(b, oid);
+		TR.updatehelper(new BufferStack(b), oid);
 	}
 	public int read()
 	{
@@ -229,7 +275,7 @@ class CorfuDBCounter implements CorfuDBObject
 
 }
 
-class CorfuDBRegister implements CorfuDBObject
+/*class CorfuDBRegister implements CorfuDBObject
 {
 	ByteBuffer converter;
 	int registervalue;
@@ -248,10 +294,10 @@ class CorfuDBRegister implements CorfuDBObject
 		oid = toid;
 		TR.registerObject(this);
 	}
-	public void upcall(byte update[])
+	public void upcall(BufferStack update)
 	{
 //		System.out.println("dummyupcall");
-		converter.put(update);
+		converter.put(update.pop());
 		converter.rewind();
 		registervalue = converter.getInt();
 		converter.rewind();
@@ -264,7 +310,7 @@ class CorfuDBRegister implements CorfuDBObject
 		converter.rewind();
 		converter.get(b);
 		converter.rewind();
-		TR.updatehelper(b, oid);
+		TR.updatehelper(new BufferStack(b), oid);
 	}
 	public int read()
 	{
@@ -277,7 +323,7 @@ class CorfuDBRegister implements CorfuDBObject
 		return registervalue;
 	}
 }
-
+*/
 
 
 
@@ -286,39 +332,44 @@ class CorfuDBRegister implements CorfuDBObject
 class LogEntry
 {
 	public long streamid;
-	public byte[] payload;
-	public LogEntry(byte[] tpayload, long tstreamid)
+	BufferStack payload;
+	public LogEntry(BufferStack tpayload, long tstreamid)
 	{
 		streamid = tstreamid;
 		payload = tpayload;
 	}
 }
 
-interface Stream
+
+
+
+interface StreamBundle
 {
-	long append(LogEntry le); //todo: should append be in the stream interface, since we'll eventually append to multiple streams?
-	
+	long append(BufferStack bs, List<Long> streams);
+
 	/**
-	 * reads the next entry in the stream
+	 * reads the next entry in the stream bundle
 	 *
-	 * @return       the next log entry 
+	 * @return       the next log entry
 	 */
 	LogEntry readNext();
-	
+
 	/**
-	 * reads the next entry in the stream that has a position strictly lower than stoppos.
-	 * this is required so that the runtime can check the current tail of the log and 
+	 * reads the next entry in the stream bundle that has a position strictly lower than stoppos.
+	 * stoppos is required so that the runtime can check the current tail of the log using checkTail() and
 	 * then play the log until that tail position and no further, in order to get linearizable
-	 * semantics with a minimum number of reads. 
+	 * semantics with a minimum number of reads.
 	 *
 	 * @param  stoppos  the stopping position for the read
-	 * @return          the next log entry
+	 * @return          the next entry in the stream bundle
 	 */
 	LogEntry readNext(long stoppos);
-	
+
 	/**
-	 * returns the current tail position of the log (this is exclusive, so a checkTail
-	 * on an empty stream returns 0).
+	 * returns the current tail position of the stream bundle (this is exclusive, so a checkTail
+	 * on an empty stream returns 0). this also synchronizes local stream metadata with the underlying
+	 * log and establishes a linearization point for subsequent readNexts; any subsequent readnext will
+	 * reflect entries that were appended before the checkTail was issued.
 	 *
 	 * @return          the current tail of the stream
 	 */
@@ -326,51 +377,25 @@ interface Stream
 }
 
 
-interface StreamFactory
+interface StreamingSequencer
 {
-	public Stream new_stream(long streamid);
+	long get_slot(List<Long> streams);
+	long check_tail();
 }
 
-class DummyStreamFactoryImpl implements StreamFactory
-{
-	public Stream new_stream(long streamid)
-	{
-		return new DummyStreamImpl(streamid);
-	}
-}
-
-class CorfuStreamFactoryImpl implements StreamFactory
+class CorfuStreamingSequencer implements StreamingSequencer
 {
 	ClientLib cl;
-	public CorfuStreamFactoryImpl(ClientLib tcl)
+	public CorfuStreamingSequencer(ClientLib tcl)
 	{
 		cl = tcl;
 	}
-	public Stream new_stream(long streamid)
-	{
-		return new CorfuStreamImpl(cl);
-	}
-}
-
-class CorfuStreamImpl implements Stream
-{
-	long curpos;
-	long curtail;
-	ClientLib cl;
-	public CorfuStreamImpl(ClientLib tcl)
-	{
-		cl = tcl;
-		curpos = 0;
-		curtail = 0;
-	}
-
-	@Override
-	public long append(LogEntry le)
+	public long get_slot(List<Long> streams)
 	{
 		long ret;
 		try
 		{
-			ret = cl.appendExtnt(le.payload, le.payload.length);
+			ret = cl.grabtokens(1);
 		}
 		catch(CorfuException ce)
 		{
@@ -378,25 +403,66 @@ class CorfuStreamImpl implements Stream
 		}
 		return ret;
 	}
-
-	@Override
-	public LogEntry readNext()
+	public long check_tail()
 	{
-		return readNext(0);
+		try
+		{
+			return cl.querytail();
+		}
+		catch(CorfuException ce)
+		{
+			throw new RuntimeException(ce);
+		}
+	}
+}
+
+interface LogAddressSpace
+{
+	void write(long pos, BufferStack bs);
+	BufferStack read(long pos);
+}
+
+class CorfuLogAddressSpace implements LogAddressSpace
+{
+	ClientLib cl;
+
+	public CorfuLogAddressSpace(ClientLib tcl)
+	{
+		cl = tcl;
 	}
 
-	@Override
-	public synchronized LogEntry readNext(long stoppos) //for now, locking on 'this' to guard curtail/curpos
+	public void write(long pos, BufferStack bs)
 	{
-		if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
+		try
 		{
-			return null;
+			//convert to a linked list of extent-sized bytebuffers, which is what the logging layer wants
+			if(bs.numBytes()>cl.grainsize())
+				throw new RuntimeException("multi-entry writes not yet implemented");
+			LinkedList<ByteBuffer> buflist = new LinkedList<ByteBuffer>();
+			//buflist.add(ByteBuffer.wrap(bs.flatten())); //this doesn't work since the logging layer wants extent-sized buffers
+			byte[] payload = new byte[cl.grainsize()];
+			ByteBuffer bb = ByteBuffer.wrap(payload);
+
+			java.util.Iterator<byte[]> it = bs.iterator();
+			while(it.hasNext())
+				bb.put(it.next());
+			buflist.add(bb);
+
+			cl.writeExtnt(pos, buflist);
 		}
-		System.out.println("Reading..." + curpos);
+		catch(CorfuException ce)
+		{
+			throw new RuntimeException(ce);
+		}
+	}
+
+	public BufferStack read(long pos)
+	{
+		System.out.println("Reading..." + pos);
 		byte[] ret = null;
 		try
 		{
-			ExtntWrap ew = cl.readExtnt();
+			ExtntWrap ew = cl.readExtnt(pos);
 			//for now, copy to a byte array and return
 			System.out.println("read back " + ew.getCtntSize() + " bytes");
 			ret = new byte[4096*10]; //hack --- fix this
@@ -412,66 +478,57 @@ class CorfuStreamImpl implements Stream
 		{
 			throw new RuntimeException(e);
 		}
-		curpos++;
-		return new LogEntry(ret, 1234); //hack --- faking streamid
-	}
+		return new BufferStack(ret);
 
-	@Override
-	public synchronized long checkTail() //for now, locking on 'this' to guard curtail
-	{
-		System.out.println("Checking tail...");
-		try
-		{
-			curtail = cl.querytail();
-		}
-		catch (CorfuException e)
-		{
-			throw new RuntimeException(e);
-		}
-		System.out.println("tail is " + curtail);
-		return curtail;
 	}
 }
 
-class DummyStreamImpl implements Stream
+class StreamBundleImpl implements StreamBundle
 {
-	ArrayList<LogEntry> log;
-	long curpos; //first unread entry
-	long curtail; //total number of entries in log
+	List<Long> mystreams;
 
-	public synchronized long append(LogEntry entry)
+	LogAddressSpace las;
+	StreamingSequencer ss;
+
+	long curpos;
+	long curtail;
+
+
+	public StreamBundleImpl(List<Long> streamids, StreamingSequencer tss, LogAddressSpace tlas)
 	{
-//		System.out.println("Dummy append");
-		log.add(entry);
-		return curtail++;
+		las = tlas;
+		ss = tss;
+		mystreams = streamids;
 	}
 
-	public synchronized LogEntry readNext()
+	public long append(BufferStack bs, List<Long> streamids)
+	{
+		long ret = ss.get_slot(streamids);
+		las.write(ret, bs);
+		return ret;
+
+	}
+
+	public synchronized long checkTail() //for now, using 'this' to synchronize curtail
+	{
+		System.out.println("Checking tail...");
+		curtail = ss.check_tail();
+		System.out.println("tail is " + curtail);
+		return curtail;
+
+	}
+	public LogEntry readNext()
 	{
 		return readNext(0);
 	}
 
-	public synchronized LogEntry readNext(long stoppos)
+	public synchronized LogEntry readNext(long stoppos) //for now, using 'this' to synchronize curpos/curtail
 	{
-//		System.out.println("Dummy read");
-		if(curpos<curtail && (stoppos==0 || curpos<stoppos))
+		if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
 		{
-			LogEntry ret = log.get((int)curpos);
-			curpos++;
-			return ret;
+			return null;
 		}
-		return null;
-	}
-
-	public synchronized long checkTail()
-	{
-		return curtail;
-	}
-
-	public DummyStreamImpl(long streamid)
-	{
-		log = new ArrayList<LogEntry>();
-		curpos = 0;
-		curtail = 0;
+		BufferStack ret = las.read(curpos++);
+		return new LogEntry(ret, 1234); //hack --- faking streamid
 	}
 }
