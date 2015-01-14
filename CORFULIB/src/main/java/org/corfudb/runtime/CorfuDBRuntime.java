@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
+import org.corfudb.sharedlog.ExtntWrap;
 
 /**
  * @author mbalakrishnan
@@ -20,30 +21,29 @@ public class CorfuDBRuntime
 	 */
 	public static void main(String[] args) throws Exception
 	{
-		System.out.println("Hello World!");
 
-		//append a few entries to the stream
-	/*	long ssid = 5;
-		Stream smrstream = new DummyStreamImpl(ssid);
-		smrstream.append(new LogEntry(("AAA").getBytes(), ssid));
-		smrstream.append(new LogEntry(("BBB").getBytes(), ssid));
-		smrstream.append(new LogEntry(("CCC").getBytes(), ssid));
-		System.out.println(new String(smrstream.readNext().payload));
-		System.out.println(new String(smrstream.readNext().payload));
-		System.out.println(new String(smrstream.readNext().payload));*/
+		if(args.length==0)
+		{
+			System.out.println("usage: java CorfuDBRuntime masterURL");
+			System.out.println("e.g. masterURL: http://localhost:8000/corfu");
+			return;
+		}
+
+		String masternode = args[0];
 
 		ClientLib crf;
 
 		try
 		{
-			crf = new ClientLib("http://localhost:8000/corfu");
+			crf = new ClientLib(masternode); //hardcoded
 		}
 		catch (CorfuException e)
 		{
 			throw e;
 		}
 
-		CorfuDBRuntime TR = new CorfuDBRuntime(new DummyStreamFactoryImpl());
+		//CorfuDBRuntime TR = new CorfuDBRuntime(new DummyStreamFactoryImpl());
+		CorfuDBRuntime TR = new CorfuDBRuntime(new CorfuStreamFactoryImpl(crf));
 
 		Thread T = new Thread(new CorfuDBTester(TR));
 		T.start();
@@ -120,10 +120,20 @@ class CorfuDBTester implements Runnable
 	{
 		System.out.println("starting thread");
 		CorfuDBCounter tr = new CorfuDBCounter(TR, 1234);
-		tr.increment();
-		tr.increment();
-		tr.increment();
-		System.out.println("counter value = " + tr.read());
+		while(true)
+		{
+			tr.increment();
+			System.out.println("counter value = " + tr.read());
+			try
+			{
+				Thread.sleep((int)(Math.random()*1000.0));
+			}
+			catch(Exception e)
+			{
+				throw new RuntimeException(e);
+			}
+
+		}
 	}
 
 }
@@ -131,6 +141,7 @@ class CorfuDBTester implements Runnable
 
 interface CorfuDBObject
 {
+	int minbufsize = 128; //quickfix to handle min buffer size requirement of logging layer
 	public void upcall(byte[] update);
 	public long getID();
 }
@@ -154,6 +165,7 @@ class CorfuDBCounter implements CorfuDBObject
 	public void upcall(byte update[])
 	{
 		//System.out.println("dummyupcall");
+		System.out.println("CorfuDBCounter received upcall");
 		if(update[0]==0) //increment
 			registervalue++;
 		else
@@ -163,14 +175,14 @@ class CorfuDBCounter implements CorfuDBObject
 	public void increment()
 	{
 		//System.out.println("dummyinc");
-		byte b[] = new byte[1]; //hardcoded
+		byte b[] = new byte[minbufsize]; //hardcoded
 		b[0] = 0;
 		TR.updatehelper(b, oid);
 	}
 	public void decrement()
 	{
 		//System.out.println("dummydec");
-		byte b[] = new byte[1]; //hardcoded
+		byte b[] = new byte[minbufsize]; //hardcoded
 		b[0] = 1;
 		TR.updatehelper(b, oid);
 	}
@@ -197,7 +209,7 @@ class CorfuDBRegister implements CorfuDBObject
 	{
 		registervalue = 0;
 		TR = tTR;
-		converter = ByteBuffer.wrap(new byte[4]); //hardcoded
+		converter = ByteBuffer.wrap(new byte[minbufsize]); //hardcoded
 		oid = toid;
 		TR.registerObject(this);
 	}
@@ -213,7 +225,7 @@ class CorfuDBRegister implements CorfuDBObject
 	{
 //		System.out.println("dummywrite");
 		converter.putInt(newvalue);
-		byte b[] = new byte[4]; //hardcoded
+		byte b[] = new byte[minbufsize]; //hardcoded
 		converter.rewind();
 		converter.get(b);
 		converter.rewind();
@@ -284,10 +296,14 @@ class CorfuStreamFactoryImpl implements StreamFactory
 
 class CorfuStreamImpl implements Stream
 {
+	long curpos;
+	long curtail;
 	ClientLib cl;
 	public CorfuStreamImpl(ClientLib tcl)
 	{
 		cl = tcl;
+		curpos = 0;
+		curtail = 0;
 	}
 
 	@Override
@@ -308,21 +324,54 @@ class CorfuStreamImpl implements Stream
 	@Override
 	public LogEntry readNext()
 	{
-		return null;
+		return readNext(0);
 	}
 
 	@Override
-	public LogEntry readNext(long stoppos)
+	public synchronized LogEntry readNext(long stoppos) //for now, locking on this
 	{
-		System.out.println("unimplemented");
-		return null;
+		if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
+		{
+			return null;
+		}
+		System.out.println("Reading..." + curpos);
+		byte[] ret = null;
+		try
+		{
+			ExtntWrap ew = cl.readExtnt();
+			//for now, copy to a byte array and return
+			System.out.println("read back " + ew.getCtntSize() + " bytes");
+			ret = new byte[4096*10]; //hack --- fix this
+			ByteBuffer bb = ByteBuffer.wrap(ret);
+			java.util.Iterator<ByteBuffer> it = ew.getCtntIterator();
+			while(it.hasNext())
+			{
+				ByteBuffer btemp = it.next();
+				bb.put(btemp);
+			}
+		}
+		catch (CorfuException e)
+		{
+			throw new RuntimeException(e);
+		}
+		curpos++;
+		return new LogEntry(ret, 1234); //hack --- faking streamid
 	}
 
 	@Override
-	public long checkTail()
+	public synchronized long checkTail() //for now, locking on this
 	{
-		System.out.println("unimplemented");
-		return 0;
+		System.out.println("Checking tail...");
+		try
+		{
+			curtail = cl.querytail();
+		}
+		catch (CorfuException e)
+		{
+			throw new RuntimeException(e);
+		}
+		System.out.println("tail is " + curtail);
+		return curtail;
 	}
 }
 
