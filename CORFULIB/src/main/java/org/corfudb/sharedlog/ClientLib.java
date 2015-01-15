@@ -377,12 +377,14 @@ public class ClientLib implements
 	 * @throws CorfuException is thrown in case of unexpected communication problem with the sequencer
 	 */
 	@Override
-	public void grabtokens(int tcnt) throws CorfuException {
-		try {
-			sequencer.nextpos(tcnt);
+	public long grabtokens(int tcnt) throws CorfuException {
+		long ret;
+        try {
+			ret = sequencer.nextpos(tcnt);
 		} catch (TException t) {
 			throw new InternalCorfuException("grabtoken failed");
 		}
+        return ret;
 	}
 
 	/* (non-Javadoc)

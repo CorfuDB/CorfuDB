@@ -31,7 +31,7 @@ public interface DbgAPI {
 	 * @param tcnt the number of tokens to grab from sequencer
 	 * @throws CorfuException is thrown in case of unexpected communication problem with the sequencer
 	 */
-	public void grabtokens(int tcnt) throws CorfuException;
+	public long grabtokens(int tcnt) throws CorfuException;
 	
 	/**
 	 * write a byte-buffer at the specified offset. used for debugging.
