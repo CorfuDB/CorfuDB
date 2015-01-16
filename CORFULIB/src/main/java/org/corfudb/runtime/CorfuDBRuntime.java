@@ -15,6 +15,12 @@
 
 package org.corfudb.runtime;
 
+import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.io.ObjectInputStream;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
@@ -108,47 +114,9 @@ public class CorfuDBRuntime
 	List<Object> curqueue;
 
 	final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
-
-	class Pair<X, Y>
-	{
-		final X first;
-		final Y second;
-		Pair(X f, Y s)
-		{
-			if(f==null || s==null) throw new RuntimeException("null values not allowed in pair");
-			first = f;
-			second = s;
-		}
-
-		public boolean equals(X cf, Y cs)
-		{
-			//neither first nor second is allowed to be null
-			if(first.equals(cf) && second.equals(cs))
-				return true;
-			return false;
-		}
-	}
-
-	class TxInt
-	{
-		List<BufferStack> bufferedupdates;
-		Set<Long> streamset;
-		Set<Pair<Long, Long>> readset;
-		TxInt()
-		{
-			bufferedupdates = new LinkedList<BufferStack>();
-			readset = new HashSet<Pair<Long, Long>>();
-		}
-		void buffer_update(BufferStack bs, long stream)
-		{
-			bufferedupdates.add(bs);
-			streamset.add(stream);
-		}
-		void mark_read(long object, long version)
-		{
-			readset.add(new Pair(object, version));
-		}
-	}
+	
+	//used to communicate decisions from the sync thread to waiting endtx calls
+	final Map<Long, Boolean> decisionmap;
 
 	/**
 	 * Registers an object with the runtime
@@ -176,6 +144,8 @@ public class CorfuDBRuntime
 		queuelock = new ReentrantLock();
 		curqueue = new LinkedList<Object>();
 
+		decisionmap = new HashMap<Long, Boolean>();
+
 		//start the sync thread
 		new Thread(new Runnable()
 		{
@@ -183,7 +153,7 @@ public class CorfuDBRuntime
 			{
 				while(true)
 				{
-					sync();
+					playback();
 				}
 			}
 		}).start();
@@ -197,10 +167,60 @@ public class CorfuDBRuntime
 			throw new RuntimeException("tx already executing!"); //should we do something different to support nested txes?
 		curtx.set(new TxInt());
 	}
+	
 
 	boolean EndTX()
 	{
-		return false;
+		long txpos = -1;
+		//append the transaction intention
+		txpos = curbundle.append(curtx.get().serialize(), curtx.get().get_streams());
+		//now that we appended the intention, we need to play the bundle until the append point
+		sync(txpos);
+		//at this point there should be a decision
+		//if not, for now we throw an error (but with decision records we'll keep syncing
+		//until we find the decision)
+		synchronized(decisionmap)
+		{
+			if(decisionmap.containsKey(txpos))
+			{
+				boolean dec = decisionmap.get(txpos);
+				decisionmap.remove(txpos);
+				return dec;
+			}
+			else
+				throw new RuntimeException("decision not found!");
+		}
+	}
+	
+	/** returns once log has been played by playback thread
+	* until current tail.
+	*/
+	void sync()
+	{
+		sync(-1);
+	}
+	
+	/** returns once log has been played by playback thread
+	* until syncpos.
+	* todo: right now syncpos is ignored
+	*/
+	void sync(long syncpos)
+	{
+		final Object syncobj = new Object();
+		synchronized (syncobj)
+		{
+			queuelock.lock();
+			curqueue.add(syncobj);
+			queuelock.unlock();
+			try
+			{
+				syncobj.wait();
+			}
+			catch (InterruptedException ie)
+			{
+				throw new RuntimeException(ie);
+			}
+		}
 	}
 
 
@@ -208,21 +228,7 @@ public class CorfuDBRuntime
 	{
 		if(curtx.get()==null) //not in a transactional context, sync immediately
 		{
-			Object syncobj = new Object();
-			synchronized (syncobj)
-			{
-				queuelock.lock();
-				curqueue.add(syncobj);
-				queuelock.unlock();
-				try
-				{
-					syncobj.wait();
-				}
-				catch (InterruptedException ie)
-				{
-					throw new RuntimeException(ie);
-				}
-			}
+			sync();
 		}
 		else //transactional context, update read set of tx intention
 		{
@@ -234,21 +240,22 @@ public class CorfuDBRuntime
 	{
 		if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle
 		{
-			List<Long> streams = new LinkedList<Long>();
-			streams.add(sid);
-			curbundle.append(update, streams);
+			//create a singleton transaction
+			TxInt tx = new TxInt();
+			tx.buffer_update(update, sid);
+			curbundle.append(tx.serialize(), tx.get_streams());
 		}
 		else //in a transactional context, buffer for now
 			curtx.get().buffer_update(update, sid);
 	}
 
 	//runs in a single thread
-	//todo: currently sync keeps running even if there are no queries; we need to run it on demand
-	void sync()
+	//todo: currently playback keeps running even if there are no queries; we need to run it on demand
+	void playback()
 	{
 		queuelock.lock();
 		//to ensure linearizability, any pending queries have to wait for the conclusion
-		//a checkTail that started *after* they were issued. accordingly, when sync starts up,
+		//a checkTail that started *after* they were issued. accordingly, when playback starts up,
 		//it rotates out the current queue of pending requests to stop new requests from entering it
 		List<Object> procqueue = curqueue;
 		curqueue = new LinkedList<Object>();
@@ -260,15 +267,8 @@ public class CorfuDBRuntime
 		LogEntry update = curbundle.readNext(curtail);
 		while(update!=null)
 		{
-			synchronized(objectmap)
-			{
-				if(objectmap.containsKey(update.streamid))
-				{
-					objectmap.get(update.streamid).upcall(update.payload);
-				}
-				else
-					throw new RuntimeException("entry for stream with no registered object");
-			}
+			TxInt newtx = TxInt.deserialize(update.payload);
+			process_txint(newtx);
 			update = curbundle.readNext(curtail);
 		}
 
@@ -284,9 +284,122 @@ public class CorfuDBRuntime
 			}
 		}
 	}
+	
+	void process_txint(TxInt newtx)
+	{
+		//is it a singleton write?
+		if(newtx.get_readset().size()==0 && newtx.get_bufferedupdates().size()==1)
+		{
+			Pair<BufferStack, Long> P = newtx.get_bufferedupdates().get(0);
+			synchronized(objectmap)
+			{
+				if(objectmap.containsKey(P.second))
+				{
+					objectmap.get(P.second).upcall(P.first);
+				}
+				else
+					throw new RuntimeException("entry for stream with no registered object");
+			}
+		}
+		else
+			throw new RuntimeException("unimplemented");
+	}
 }
 
-class BufferStack
+//todo: custom serialization
+class Pair<X, Y> implements Serializable
+{
+	final X first;
+	final Y second;
+	Pair(X f, Y s)
+	{
+		if(f==null || s==null) throw new RuntimeException("null values not allowed in pair");
+		first = f;
+		second = s;
+	}
+
+	public boolean equals(X cf, Y cs)
+	{
+		//neither first nor second is allowed to be null
+		if(first.equals(cf) && second.equals(cs))
+			return true;
+		return false;
+	}
+}
+
+
+class TxInt implements Serializable //todo: custom serialization
+{
+	List<Pair<BufferStack, Long>> bufferedupdates;
+	Set<Long> streamset;
+	Set<Pair<Long, Long>> readset;
+	TxInt()
+	{
+		bufferedupdates = new LinkedList<Pair<BufferStack, Long>>();
+		readset = new HashSet<Pair<Long, Long>>();
+		streamset = new HashSet<Long>();
+	}
+	void buffer_update(BufferStack bs, long stream)
+	{
+		bufferedupdates.add(new Pair<BufferStack, Long>(bs, stream));
+		streamset.add(stream);
+	}
+	void mark_read(long object, long version)
+	{
+		readset.add(new Pair(object, version));
+	}
+	Set<Long> get_streams()
+	{
+		return streamset;
+	}
+	Set<Pair<Long, Long>> get_readset()
+	{
+		return readset;
+	}
+	List<Pair<BufferStack, Long>> get_bufferedupdates()
+	{
+		return bufferedupdates;
+	}
+	BufferStack serialize()
+	{
+		try
+		{
+			//todo: custom serialization
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			ObjectOutputStream oos = new ObjectOutputStream(baos);
+			oos.writeObject(this);
+			byte b[] = baos.toByteArray();
+			oos.close();
+			return new BufferStack(b);
+		}
+		catch(IOException e)
+		{
+			throw new RuntimeException(e);
+		}
+	}
+	static TxInt deserialize(BufferStack bs)
+	{
+		try
+		{
+			//todo: custom deserialization
+			ByteArrayInputStream bais = new ByteArrayInputStream(bs.flatten());
+			ObjectInputStream ois = new ObjectInputStream(bais);
+			TxInt curtx = (TxInt)ois.readObject();
+			return curtx;
+		}
+		catch(IOException e)
+		{
+			throw new RuntimeException(e);
+		}
+		catch(ClassNotFoundException ce)
+		{
+			throw new RuntimeException(ce);
+		}
+	}
+}
+
+
+class BufferStack implements Serializable //todo: custom serialization
 {
 	private Stack<byte[]> buffers;
 	private int totalsize;
@@ -298,7 +411,7 @@ class BufferStack
 	public BufferStack(byte[] initialbuf)
 	{
 		this();
-		buffers.push(initialbuf);
+		push(initialbuf);
 	}
 	public void push(byte[] buf)
 	{
@@ -307,11 +420,22 @@ class BufferStack
 	}
 	public byte[] pop()
 	{
-		return buffers.pop();
+		byte[] ret = buffers.pop();
+		if(ret!=null)
+			totalsize -= ret.length;
+		return ret;
 	}
 	public byte[] peek()
 	{
 		return buffers.peek();
+	}
+	public int flatten(byte[] buf)
+	{
+		if(buffers.size()==0) return 0;
+		if(buf.length<totalsize) throw new RuntimeException("buffer not big enough!");
+		if(buffers.size()>1) throw new RuntimeException("unimplemented");
+		System.arraycopy(buffers.peek(), 0, buf, 0, buffers.peek().length);
+		return buffers.peek().length;
 	}
 	public byte[] flatten()
 	{
@@ -418,7 +542,7 @@ class StreamBundleTester implements Runnable
 			if(op==0)
 			{
 				byte x[] = new byte[5];
-				List<Long> T = new LinkedList<Long>();
+				Set<Long> T = new HashSet<Long>();
 				T.add(new Long(5));
 				sb.append(new BufferStack(x), T);
 			}
@@ -568,7 +692,7 @@ class LogEntry
 
 interface StreamBundle
 {
-	long append(BufferStack bs, List<Long> streams);
+	long append(BufferStack bs, Set<Long> streams);
 
 	/**
 	 * reads the next entry in the stream bundle
@@ -602,7 +726,7 @@ interface StreamBundle
 
 interface StreamingSequencer
 {
-	long get_slot(List<Long> streams);
+	long get_slot(Set<Long> streams);
 	long check_tail();
 }
 
@@ -613,7 +737,7 @@ class CorfuStreamingSequencer implements StreamingSequencer
 	{
 		cl = tcl;
 	}
-	public long get_slot(List<Long> streams)
+	public long get_slot(Set<Long> streams)
 	{
 		long ret;
 		try
@@ -660,17 +784,11 @@ class CorfuLogAddressSpace implements LogAddressSpace
 		{
 			//convert to a linked list of extent-sized bytebuffers, which is what the logging layer wants
 			if(bs.numBytes()>cl.grainsize())
-				throw new RuntimeException("multi-entry writes not yet implemented");
+				throw new RuntimeException("entry too big at " + bs.numBytes() + " bytes; multi-entry writes not yet implemented");
 			LinkedList<ByteBuffer> buflist = new LinkedList<ByteBuffer>();
-			//buflist.add(ByteBuffer.wrap(bs.flatten())); //this doesn't work since the logging layer wants extent-sized buffers
 			byte[] payload = new byte[cl.grainsize()];
-			ByteBuffer bb = ByteBuffer.wrap(payload);
-
-			java.util.Iterator<byte[]> it = bs.iterator();
-			while(it.hasNext())
-				bb.put(it.next());
-			buflist.add(bb);
-
+			bs.flatten(payload);
+			buflist.add(ByteBuffer.wrap(payload));
 			cl.writeExtnt(pos, buflist);
 		}
 		catch(CorfuException ce)
@@ -726,7 +844,7 @@ class StreamBundleImpl implements StreamBundle
 
 	//todo we are currently synchronizing on 'this' because ClientLib crashes on concurrent access;
 	//once ClientLib is fixed, we need to clean up StreamBundle's locking
-	public synchronized long append(BufferStack bs, List<Long> streamids)
+	public synchronized long append(BufferStack bs, Set<Long> streamids)
 	{
 		long ret = ss.get_slot(streamids);
 		las.write(ret, bs);
