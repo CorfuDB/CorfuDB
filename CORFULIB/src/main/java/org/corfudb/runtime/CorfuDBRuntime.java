@@ -191,20 +191,25 @@ public class CorfuDBRuntime
 				throw new RuntimeException("decision not found!");
 		}
 	}
-	
+
+	void sync()
+	{
+		sync(null, -1);
+	}
+
 	/** returns once log has been played by playback thread
 	* until current tail.
 	*/
-	void sync()
+	void sync(Object localcommand)
 	{
-		sync(-1);
+		sync(localcommand, -1);
 	}
 	
 	/** returns once log has been played by playback thread
 	* until syncpos.
 	* todo: right now syncpos is ignored
 	*/
-	void sync(long syncpos)
+	void sync(Object localcommand, long syncpos)
 	{
 		final Object syncobj = new Object();
 		synchronized (syncobj)
@@ -224,29 +229,34 @@ public class CorfuDBRuntime
 	}
 
 
-	void queryhelper(long sid)
+	void queryhelper(Object command, CorfuDBObject cob)
 	{
 		if(curtx.get()==null) //not in a transactional context, sync immediately
 		{
-			sync();
+			sync(command);
 		}
 		else //transactional context, update read set of tx intention
 		{
-			curtx.get().mark_read(sid, -1); //todo: what should the version number be?
+			curtx.get().mark_read(cob.getID(), -1); //todo: what should the version number be?
 		}
 	}
 
-	void updatehelper(BufferStack update, long sid)
+	void propose(BufferStack update, Set<Long> streams)
+	{
+		curbundle.append(update, streams);
+	}
+
+	void updatehelper(Serializable update, CorfuDBObject cob)
 	{
 		if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle
 		{
 			//create a singleton transaction
 			TxInt tx = new TxInt();
-			tx.buffer_update(update, sid);
-			curbundle.append(tx.serialize(), tx.get_streams());
+			tx.buffer_update(update, cob.getID());
+			propose(tx.serialize(), tx.get_streams());
 		}
 		else //in a transactional context, buffer for now
-			curtx.get().buffer_update(update, sid);
+			curtx.get().buffer_update(update, cob.getID());
 	}
 
 	//runs in a single thread
@@ -290,12 +300,12 @@ public class CorfuDBRuntime
 		//is it a singleton write?
 		if(newtx.get_readset().size()==0 && newtx.get_bufferedupdates().size()==1)
 		{
-			Pair<BufferStack, Long> P = newtx.get_bufferedupdates().get(0);
+			Pair<Serializable, Long> P = newtx.get_bufferedupdates().get(0);
 			synchronized(objectmap)
 			{
 				if(objectmap.containsKey(P.second))
 				{
-					objectmap.get(P.second).upcall(P.first);
+					objectmap.get(P.second).apply(P.first);
 				}
 				else
 					throw new RuntimeException("entry for stream with no registered object");
@@ -327,21 +337,20 @@ class Pair<X, Y> implements Serializable
 	}
 }
 
-
 class TxInt implements Serializable //todo: custom serialization
 {
-	List<Pair<BufferStack, Long>> bufferedupdates;
+	List<Pair<Serializable, Long>> bufferedupdates;
 	Set<Long> streamset;
 	Set<Pair<Long, Long>> readset;
 	TxInt()
 	{
-		bufferedupdates = new LinkedList<Pair<BufferStack, Long>>();
+		bufferedupdates = new LinkedList<Pair<Serializable, Long>>();
 		readset = new HashSet<Pair<Long, Long>>();
 		streamset = new HashSet<Long>();
 	}
-	void buffer_update(BufferStack bs, long stream)
+	void buffer_update(Serializable bs, long stream)
 	{
-		bufferedupdates.add(new Pair<BufferStack, Long>(bs, stream));
+		bufferedupdates.add(new Pair<Serializable, Long>(bs, stream));
 		streamset.add(stream);
 	}
 	void mark_read(long object, long version)
@@ -356,7 +365,7 @@ class TxInt implements Serializable //todo: custom serialization
 	{
 		return readset;
 	}
-	List<Pair<BufferStack, Long>> get_bufferedupdates()
+	List<Pair<Serializable, Long>> get_bufferedupdates()
 	{
 		return bufferedupdates;
 	}
@@ -554,7 +563,7 @@ class StreamBundleTester implements Runnable
 
 interface CorfuDBObject
 {
-	public void upcall(BufferStack update);
+	public void apply(Serializable update);
 	public long getID();
 }
 
@@ -585,42 +594,62 @@ class CorfuDBCounter implements CorfuDBObject
 		oid = toid;
 		TR.registerObject(this);
 	}
-	public void upcall(BufferStack bs)
+	public void apply(Serializable bs)
 	{
 		//System.out.println("dummyupcall");
 		System.out.println("CorfuDBCounter received upcall");
-		if(bs.numBufs()!=1)
-			throw new RuntimeException("too few or too many bufs!");
-		byte[] update = bs.pop();
-		if(update[0]==CMD_INC) //increment
-			registervalue++;
-		else if(update[0]==CMD_DEC) //decrement
+		CounterCommand cc = (CounterCommand)bs;
+		if(cc.getCmdType()==CounterCommand.CMD_DEC)
 			registervalue--;
+		else if(cc.getCmdType()==CounterCommand.CMD_INC)
+			registervalue++;
+		else if(cc.getCmdType()==CounterCommand.CMD_READ)
+			cc.setReturnValue(registervalue);
 		else
 			throw new RuntimeException("Unrecognized command in stream!");
-		System.out.println("Setting value to " + registervalue);
+		System.out.println("Counter value is " + registervalue);
 	}
 	public void increment()
 	{
-		//System.out.println("dummyinc");
-		byte b[] = new byte[1];
-		b[0] = CMD_INC;
-		TR.updatehelper(new BufferStack(b), oid);
+		TR.updatehelper(new CounterCommand(CounterCommand.CMD_INC), this);
 	}
 	public void decrement()
 	{
-		//System.out.println("dummydec");
-		byte b[] = new byte[1];
-		b[0] = CMD_DEC;
-		TR.updatehelper(new BufferStack(b), oid);
+		TR.updatehelper(new CounterCommand(CounterCommand.CMD_DEC), this);
 	}
 	public int read()
 	{
-		TR.queryhelper(oid);
-		return registervalue;
+		TR.queryhelper(new CounterCommand(CounterCommand.CMD_READ), this);
+		return 0;
 	}
 
 }
+
+class CounterCommand implements Serializable
+{
+	Object returnvalue;
+	Object getReturnValue()
+	{
+		return returnvalue;
+	}
+	void setReturnValue(Object val)
+	{
+		returnvalue = val;
+	}
+
+	int cmdtype;
+	static final int CMD_DEC = 0;
+	static final int CMD_INC = 1;
+	static final int CMD_READ = 2;
+	public CounterCommand(int tcmdtype)
+	{
+		cmdtype = tcmdtype;
+	}
+	public int getCmdType()
+	{
+		return cmdtype;
+	}
+};
 
 /*class CorfuDBRegister implements CorfuDBObject
 {
