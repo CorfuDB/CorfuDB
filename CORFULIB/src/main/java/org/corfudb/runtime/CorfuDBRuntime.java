@@ -24,7 +24,9 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
@@ -96,12 +98,16 @@ public class CorfuDBRuntime
 
 		CorfuDBRuntime TR = new CorfuDBRuntime(sb);
 
-		CorfuDBCounter ctr = new CorfuDBCounter(TR, 1234);
+		//counter test
+		//CorfuDBObject cob = new CorfuDBCounter(TR, 1234);
+		//map test
+		CorfuDBObject cob = new CorfuDBMap<Integer, String>(TR, 2345);
+
 
 		numthreads = 2;
 		for(int i=0;i<numthreads;i++)
 		{
-			Thread T = new Thread(new CorfuDBTester(ctr));
+			Thread T = new Thread(new CorfuDBTester(cob));
 			T.start();
 		}
 	}
@@ -192,24 +198,20 @@ public class CorfuDBRuntime
 		}
 	}
 
+	/** returns once log has been played by playback thread
+	 * until current tail.
+	 */
 	void sync()
 	{
-		sync(null, -1);
+		sync(-1);
 	}
 
-	/** returns once log has been played by playback thread
-	* until current tail.
-	*/
-	void sync(Object localcommand)
-	{
-		sync(localcommand, -1);
-	}
-	
+
 	/** returns once log has been played by playback thread
 	* until syncpos.
 	* todo: right now syncpos is ignored
 	*/
-	void sync(Object localcommand, long syncpos)
+	void sync(long syncpos)
 	{
 		final Object syncobj = new Object();
 		synchronized (syncobj)
@@ -229,11 +231,11 @@ public class CorfuDBRuntime
 	}
 
 
-	void queryhelper(Object command, CorfuDBObject cob)
+	void queryhelper(CorfuDBObject cob)
 	{
 		if(curtx.get()==null) //not in a transactional context, sync immediately
 		{
-			sync(command);
+			sync();
 		}
 		else //transactional context, update read set of tx intention
 		{
@@ -475,10 +477,10 @@ class BufferStack implements Serializable //todo: custom serialization
 
 class CorfuDBTester implements Runnable
 {
-	CorfuDBCounter ctr;
-	public CorfuDBTester(CorfuDBCounter tctr)
+	CorfuDBObject cob;
+	public CorfuDBTester(CorfuDBObject tcob)
 	{
-		ctr = tctr;
+		cob = tcob;
 	}
 
 	public void run()
@@ -486,8 +488,19 @@ class CorfuDBTester implements Runnable
 		System.out.println("starting thread");
 		while(true)
 		{
-			ctr.increment();
-			System.out.println("counter value = " + ctr.read());
+			if(cob instanceof CorfuDBCounter)
+			{
+				CorfuDBCounter ctr = (CorfuDBCounter)cob;
+				ctr.increment();
+				System.out.println("counter value = " + ctr.read());
+			}
+			else if(cob instanceof CorfuDBMap)
+			{
+				CorfuDBMap<Integer, String> cmap = (CorfuDBMap<Integer, String>)cob; //can't do instanceof on generics, have to guess
+				int x = (int) (Math.random() * 1000.0);
+				cmap.put(x, "ABCD");
+				System.out.println(cmap.get(x));
+			}
 			try
 			{
 				Thread.sleep((int)(Math.random()*1000.0));
@@ -567,21 +580,104 @@ interface CorfuDBObject
 	public long getID();
 }
 
+class CorfuDBMap<K,V> implements CorfuDBObject
+{
+	//backing state of the map
+	Map<K, V> backingmap;
+	ReadWriteLock maplock;
+	CorfuDBRuntime TR;
+	//object ID -- corresponds to stream ID used underneath
+	long oid;
+
+	public long getID()
+	{
+		return oid;
+	}
+
+	public CorfuDBMap(CorfuDBRuntime tTR, long toid)
+	{
+		maplock = new ReentrantReadWriteLock();
+		backingmap = new HashMap<K,V>();
+		TR = tTR;
+		oid = toid;
+		TR.registerObject(this);
+	}
+
+	public void apply(Serializable bs)
+	{
+		//System.out.println("dummyupcall");
+		System.out.println("CorfuDBCounter received upcall");
+		MapCommand<K,V> cc = (MapCommand<K,V>)bs;
+		maplock.writeLock().lock();
+		if(cc.getCmdType()==MapCommand.CMD_PUT)
+			backingmap.put(cc.getKey(), cc.getVal());
+		else
+		{
+			maplock.writeLock().unlock();
+			throw new RuntimeException("Unrecognized command in stream!");
+		}
+		System.out.println("Map size is " + backingmap.size());
+		maplock.writeLock().unlock();
+	}
+	public void put(K key, V val)
+	{
+		TR.updatehelper(new MapCommand<K,V>(MapCommand.CMD_PUT, key, val), this);
+	}
+	public V get(K key)
+	{
+		TR.queryhelper(this);
+		//what if the value changes between queryhelper and the actual read?
+		//in the linearizable case, we are safe because we see a later version that strictly required
+		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
+		//todo: is there a more elegant API?
+		maplock.readLock().lock();
+		V val = backingmap.get(key);
+		maplock.readLock().unlock();
+		return val;
+	}
+}
+
+class MapCommand<K,V> implements Serializable
+{
+	int cmdtype;
+	static final int CMD_PUT = 0;
+	K key;
+	V val;
+	public K getKey()
+	{
+		return key;
+	}
+	public V getVal()
+	{
+		return val;
+	}
+
+
+	public MapCommand(int tcmdtype, K tkey, V tval)
+	{
+		cmdtype = tcmdtype;
+		key = tkey;
+		val = tval;
+	}
+	public int getCmdType()
+	{
+		return cmdtype;
+	}
+};
+
+
 class CorfuDBCounter implements CorfuDBObject
 {
-	//state of the counter
-	int registervalue;
+	//backing state of the counter
+	int value;
+
+	ReadWriteLock valuelock;
 	
 	CorfuDBRuntime TR;
 	
 	//object ID -- corresponds to stream ID used underneath
 	long oid;
-	
-	//constants used in serialization
-	static final int CMD_INC = 0;
-	static final int CMD_DEC = 1;
-	
-	
+
 	public long getID()
 	{
 		return oid;
@@ -589,7 +685,8 @@ class CorfuDBCounter implements CorfuDBObject
 	
 	public CorfuDBCounter(CorfuDBRuntime tTR, long toid)
 	{
-		registervalue = 0;
+		valuelock = new ReentrantReadWriteLock();
+		value = 0;
 		TR = tTR;
 		oid = toid;
 		TR.registerObject(this);
@@ -599,15 +696,18 @@ class CorfuDBCounter implements CorfuDBObject
 		//System.out.println("dummyupcall");
 		System.out.println("CorfuDBCounter received upcall");
 		CounterCommand cc = (CounterCommand)bs;
+		valuelock.writeLock().lock();
 		if(cc.getCmdType()==CounterCommand.CMD_DEC)
-			registervalue--;
+			value--;
 		else if(cc.getCmdType()==CounterCommand.CMD_INC)
-			registervalue++;
-		else if(cc.getCmdType()==CounterCommand.CMD_READ)
-			cc.setReturnValue(registervalue);
+			value++;
 		else
+		{
+			valuelock.writeLock().unlock();
 			throw new RuntimeException("Unrecognized command in stream!");
-		System.out.println("Counter value is " + registervalue);
+		}
+		valuelock.writeLock().unlock();
+		System.out.println("Counter value is " + value);
 	}
 	public void increment()
 	{
@@ -619,28 +719,24 @@ class CorfuDBCounter implements CorfuDBObject
 	}
 	public int read()
 	{
-		TR.queryhelper(new CounterCommand(CounterCommand.CMD_READ), this);
-		return 0;
+		TR.queryhelper(this);
+		//what if the value changes between queryhelper and the actual read?
+		//in the linearizable case, we are safe because we see a later version that strictly required
+		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
+		//todo: is there a more elegant API?
+		valuelock.readLock().lock();
+		int ret = value;
+		valuelock.readLock().unlock();
+		return ret;
 	}
 
 }
 
 class CounterCommand implements Serializable
 {
-	Object returnvalue;
-	Object getReturnValue()
-	{
-		return returnvalue;
-	}
-	void setReturnValue(Object val)
-	{
-		returnvalue = val;
-	}
-
 	int cmdtype;
 	static final int CMD_DEC = 0;
 	static final int CMD_INC = 1;
-	static final int CMD_READ = 2;
 	public CounterCommand(int tcmdtype)
 	{
 		cmdtype = tcmdtype;
