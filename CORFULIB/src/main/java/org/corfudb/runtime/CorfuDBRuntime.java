@@ -38,14 +38,8 @@ import org.corfudb.sharedlog.ExtntWrap;
  * @author mbalakrishnan
  *
  */
-public class CorfuDBRuntime extends AbstractRuntime
+public class CorfuDBRuntime extends SimpleRuntime
 {
-
-	void apply(LogEntry update)
-	{
-		TxInt newtx = TxInt.deserialize(update.payload);
-		process_txint(newtx);
-	}
 
 	/**
 	 * @param args
@@ -76,19 +70,10 @@ public class CorfuDBRuntime extends AbstractRuntime
 
 		int numthreads;
 
-		//turn on to test ClientLib in isolation
-/*		numthreads = 2;
-		for(int i=0;i<numthreads;i++)
-		{
-			Thread T = new Thread(new ClientLibTester(masternode));
-			T.start();
-		}
-		Thread.sleep(10000);
-		if(true) return;
-*/
 
 		List<Long> streams = new LinkedList<Long>();
 		streams.add(new Long(1234)); //hardcoded hack
+		streams.add(new Long(2345)); //hardcoded hack
 
 		StreamBundle sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
 
@@ -105,6 +90,8 @@ public class CorfuDBRuntime extends AbstractRuntime
 */
 
 		CorfuDBRuntime TR = new CorfuDBRuntime(sb);
+//		SimpleRuntime TR = new SimpleRuntime(sb);
+
 
 		//counter test
 		//CorfuDBObject cob = new CorfuDBCounter(TR, 1234);
@@ -120,8 +107,6 @@ public class CorfuDBRuntime extends AbstractRuntime
 		}
 	}
 
-	Map<Long, CorfuDBObject> objectmap;
-
 
 
 	final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
@@ -129,32 +114,21 @@ public class CorfuDBRuntime extends AbstractRuntime
 	//used to communicate decisions from the sync thread to waiting endtx calls
 	final Map<Long, Boolean> decisionmap;
 
-	/**
-	 * Registers an object with the runtime
-	 *
-	 * @param  obj  the object to register
-	 */
-	public void registerObject(CorfuDBObject obj)
-	{
-		synchronized(objectmap)
-		{
-			if(objectmap.containsKey(obj.getID()))
-			{
-				System.out.println("object ID already registered!");
-				throw new RuntimeException();
-			}
-			objectmap.put(obj.getID(), obj);
-		}
-	}
 
 	public CorfuDBRuntime(StreamBundle sb)
 	{
 		super(sb);
-		objectmap = new HashMap<Long, CorfuDBObject>();
 
 		decisionmap = new HashMap<Long, Boolean>();
 
 
+	}
+
+
+	void apply(LogEntry update)
+	{
+		TxInt newtx = (TxInt)update.payload.deserialize();
+		process_txint(newtx);
 	}
 
 
@@ -171,7 +145,7 @@ public class CorfuDBRuntime extends AbstractRuntime
 	{
 		long txpos = -1;
 		//append the transaction intention
-		txpos = curbundle.append(curtx.get().serialize(), curtx.get().get_streams());
+		txpos = curbundle.append(BufferStack.serialize(curtx.get()), curtx.get().get_streams());
 		//now that we appended the intention, we need to play the bundle until the append point
 		sync(txpos);
 		//at this point there should be a decision
@@ -192,29 +166,31 @@ public class CorfuDBRuntime extends AbstractRuntime
 
 
 
-	void queryhelper(CorfuDBObject cob)
+	public void sync()
 	{
 		if(curtx.get()==null) //not in a transactional context, sync immediately
 		{
-			sync();
+			super.sync();
 		}
 		else //transactional context, update read set of tx intention
 		{
-			curtx.get().mark_read(cob.getID(), -1); //todo: what should the version number be?
+//			curtx.get().mark_read(cob.getID(), -1); //todo: what should the version number be?
 		}
 	}
 
-	void updatehelper(Serializable update, CorfuDBObject cob)
+	public void propose(Serializable update, Set<Long> streams)
 	{
+		if(streams.size()!=1) throw new RuntimeException("wrong number of streams!");
+
 		if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle
 		{
 			//create a singleton transaction
 			TxInt tx = new TxInt();
-			tx.buffer_update(update, cob.getID());
-			propose(tx.serialize(), tx.get_streams());
+			tx.buffer_update(update, streams.iterator().next());
+			super.propose(tx, tx.get_streams());
 		}
 		else //in a transactional context, buffer for now
-			curtx.get().buffer_update(update, cob.getID());
+			curtx.get().buffer_update(update, streams.iterator().next());
 	}
 
 	
@@ -240,18 +216,54 @@ public class CorfuDBRuntime extends AbstractRuntime
 }
 
 
-//this class performs state machine replication over a bundle of streams
-//it's unaware of transactions.
-abstract class AbstractRuntime
+interface AbstractRuntime
+{
+	void sync();
+	void sync(long stoppos);
+	void propose(Serializable update, Set<Long> streams);
+	void registerObject(CorfuDBObject obj);
+}
+
+/**
+ * This class performs state machine replication over a bundle of streams. It's unaware of transactions.
+ * It can be directly used to implement SMR objects.
+ *
+ */
+class SimpleRuntime implements AbstractRuntime
 {
 	//used to coordinate between querying threads and the sync thread
 	Lock queuelock;
 	List<Object> curqueue;
 	
 	StreamBundle curbundle;
-	
-	public AbstractRuntime(StreamBundle sb)
+
+
+	Map<Long, CorfuDBObject> objectmap;
+	/**
+	 * Registers an object with the runtime
+	 *
+	 * @param  obj  the object to register
+	 */
+	public void registerObject(CorfuDBObject obj)
 	{
+		synchronized(objectmap)
+		{
+			if(objectmap.containsKey(obj.getID()))
+			{
+				System.out.println("object ID already registered!");
+				throw new RuntimeException();
+			}
+			System.out.println("registering object ID " + obj.getID());
+			objectmap.put(obj.getID(), obj);
+		}
+	}
+
+
+
+	public SimpleRuntime(StreamBundle sb)
+	{
+		objectmap = new HashMap<Long, CorfuDBObject>();
+
 		curbundle = sb;
 			
 		queuelock = new ReentrantLock();
@@ -272,16 +284,16 @@ abstract class AbstractRuntime
 	}
 	
 	
-	void propose(BufferStack update, Set<Long> streams)
+	public void propose(Serializable update, Set<Long> streams)
 	{
-		curbundle.append(update, streams);
+		curbundle.append(BufferStack.serialize(update), streams);
 	}
 
 
 	/** returns once log has been played by playback thread
 	 * until current tail.
 	 */
-	void sync()
+	public void sync()
 	{
 		sync(-1);
 	}
@@ -290,7 +302,7 @@ abstract class AbstractRuntime
 	* until syncpos.
 	* todo: right now syncpos is ignored
 	*/
-	void sync(long syncpos)
+	public void sync(long syncpos)
 	{
 		final Object syncobj = new Object();
 		synchronized (syncobj)
@@ -309,8 +321,20 @@ abstract class AbstractRuntime
 		}
 	}
 
-	//implement this abstract method to create a concrete runtime
-	abstract void apply(LogEntry update);
+
+	void apply(LogEntry update)
+	{
+		synchronized(objectmap)
+		{
+			if(objectmap.containsKey(update.streamid))
+			{
+				objectmap.get(update.streamid).apply(update.payload.deserialize());
+			}
+			else
+				throw new RuntimeException("entry for stream " + update.streamid + " with no registered object");
+		}
+
+	}
 
 	//runs in a single thread
 	//todo: currently playback keeps running even if there are no queries; we need to run it on demand
@@ -401,42 +425,6 @@ class TxInt implements Serializable //todo: custom serialization
 	{
 		return bufferedupdates;
 	}
-	BufferStack serialize()
-	{
-		try
-		{
-			//todo: custom serialization
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			ObjectOutputStream oos = new ObjectOutputStream(baos);
-			oos.writeObject(this);
-			byte b[] = baos.toByteArray();
-			oos.close();
-			return new BufferStack(b);
-		}
-		catch(IOException e)
-		{
-			throw new RuntimeException(e);
-		}
-	}
-	static TxInt deserialize(BufferStack bs)
-	{
-		try
-		{
-			//todo: custom deserialization
-			ByteArrayInputStream bais = new ByteArrayInputStream(bs.flatten());
-			ObjectInputStream ois = new ObjectInputStream(bais);
-			TxInt curtx = (TxInt)ois.readObject();
-			return curtx;
-		}
-		catch(IOException e)
-		{
-			throw new RuntimeException(e);
-		}
-		catch(ClassNotFoundException ce)
-		{
-			throw new RuntimeException(ce);
-		}
-	}
 }
 
 
@@ -495,6 +483,42 @@ class BufferStack implements Serializable //todo: custom serialization
 	{
 		return buffers.iterator();
 	}
+	public static BufferStack serialize(Serializable obj)
+	{
+		try
+		{
+			//todo: custom serialization
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			ObjectOutputStream oos = new ObjectOutputStream(baos);
+			oos.writeObject(obj);
+			byte b[] = baos.toByteArray();
+			oos.close();
+			return new BufferStack(b);
+		}
+		catch(IOException e)
+		{
+			throw new RuntimeException(e);
+		}
+	}
+	public Object deserialize()
+	{
+		try
+		{
+			//todo: custom deserialization
+			ByteArrayInputStream bais = new ByteArrayInputStream(this.flatten());
+			ObjectInputStream ois = new ObjectInputStream(bais);
+			Object obj = ois.readObject();
+			return obj;
+		}
+		catch(IOException e)
+		{
+			throw new RuntimeException(e);
+		}
+		catch(ClassNotFoundException ce)
+		{
+			throw new RuntimeException(ce);
+		}
+	}
 }
 
 
@@ -545,39 +569,6 @@ class CorfuDBTester implements Runnable
 
 }
 
-class ClientLibTester implements Runnable
-{
-	ClientLib cl;
-	public ClientLibTester(String master) throws Exception
-	{
-		cl = new ClientLib(master);
-	}
-	public void run()
-	{
-		try
-		{
-			System.out.println("starting cb tester thread");
-			while (true)
-			{
-				int op = 0;
-				if (op == 0)
-				{
-					byte x[] = new byte[cl.grainsize()];
-					List<Long> T = new LinkedList<Long>();
-					T.add(new Long(5));
-					cl.appendExtnt(x,x.length);
-				}
-				else
-					continue;
-			}
-		}
-		catch(CorfuException ce)
-		{
-			throw new RuntimeException(ce);
-		}
-	}
-}
-
 class StreamBundleTester implements Runnable
 {
 	StreamBundle sb;
@@ -606,7 +597,7 @@ class StreamBundleTester implements Runnable
 
 interface CorfuDBObject
 {
-	public void apply(Serializable update);
+	public void apply(Object update);
 	public long getID();
 }
 
@@ -615,7 +606,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 	//backing state of the map
 	Map<K, V> backingmap;
 	ReadWriteLock maplock;
-	CorfuDBRuntime TR;
+	AbstractRuntime TR;
 	//object ID -- corresponds to stream ID used underneath
 	long oid;
 
@@ -624,7 +615,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 		return oid;
 	}
 
-	public CorfuDBMap(CorfuDBRuntime tTR, long toid)
+	public CorfuDBMap(AbstractRuntime tTR, long toid)
 	{
 		maplock = new ReentrantReadWriteLock();
 		backingmap = new HashMap<K,V>();
@@ -633,10 +624,10 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 		TR.registerObject(this);
 	}
 
-	public void apply(Serializable bs)
+	public void apply(Object bs)
 	{
 		//System.out.println("dummyupcall");
-		System.out.println("CorfuDBCounter received upcall");
+		System.out.println("CorfuDBMap received upcall");
 		MapCommand<K,V> cc = (MapCommand<K,V>)bs;
 		maplock.writeLock().lock();
 		if(cc.getCmdType()==MapCommand.CMD_PUT)
@@ -651,12 +642,14 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 	}
 	public void put(K key, V val)
 	{
-		TR.updatehelper(new MapCommand<K,V>(MapCommand.CMD_PUT, key, val), this);
+		HashSet<Long> H = new HashSet<Long>();
+		H.add(this.getID());
+		TR.propose(new MapCommand<K, V>(MapCommand.CMD_PUT, key, val), H);
 	}
 	public V get(K key)
 	{
-		TR.queryhelper(this);
-		//what if the value changes between queryhelper and the actual read?
+		TR.sync();
+		//what if the value changes between sync and the actual read?
 		//in the linearizable case, we are safe because we see a later version that strictly required
 		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
 		//todo: is there a more elegant API?
@@ -668,13 +661,8 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 }
 
 
-abstract class Command
-{
-	
-}
-
 //this is not inserted into the log
-abstract class QueryCommand extends Command
+abstract class LocalCommand
 {
 	Object returnvalue;
 	public void setReturnValue(Object X)
@@ -688,12 +676,12 @@ abstract class QueryCommand extends Command
 }
 
 //this cannot have a return value
-abstract class UpdateCommand extends Command implements Serializable
+abstract class SMRCommand implements Serializable
 {
 	
 }
 
-class MapCommand<K,V> extends UpdateCommand
+class MapCommand<K,V> extends SMRCommand
 {
 	int cmdtype;
 	static final int CMD_PUT = 0;
@@ -729,7 +717,7 @@ class CorfuDBCounter implements CorfuDBObject
 
 	ReadWriteLock valuelock;
 	
-	CorfuDBRuntime TR;
+	AbstractRuntime TR;
 	
 	//object ID -- corresponds to stream ID used underneath
 	long oid;
@@ -739,7 +727,7 @@ class CorfuDBCounter implements CorfuDBObject
 		return oid;
 	}
 	
-	public CorfuDBCounter(CorfuDBRuntime tTR, long toid)
+	public CorfuDBCounter(AbstractRuntime tTR, long toid)
 	{
 		valuelock = new ReentrantReadWriteLock();
 		value = 0;
@@ -747,7 +735,7 @@ class CorfuDBCounter implements CorfuDBObject
 		oid = toid;
 		TR.registerObject(this);
 	}
-	public void apply(Serializable bs)
+	public void apply(Object bs)
 	{
 		//System.out.println("dummyupcall");
 		System.out.println("CorfuDBCounter received upcall");
@@ -767,15 +755,12 @@ class CorfuDBCounter implements CorfuDBObject
 	}
 	public void increment()
 	{
-		TR.updatehelper(new CounterCommand(CounterCommand.CMD_INC), this);
-	}
-	public void decrement()
-	{
-		TR.updatehelper(new CounterCommand(CounterCommand.CMD_DEC), this);
+		HashSet<Long> H = new HashSet<Long>(); H.add(this.getID());
+		TR.propose(new CounterCommand(CounterCommand.CMD_INC), H);
 	}
 	public int read()
 	{
-		TR.queryhelper(this);
+		TR.sync();
 		//what if the value changes between queryhelper and the actual read?
 		//in the linearizable case, we are safe because we see a later version that strictly required
 		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
@@ -1053,6 +1038,6 @@ class StreamBundleImpl implements StreamBundle
 			return null;
 		}
 		BufferStack ret = las.read(curpos++);
-		return new LogEntry(ret, 1234); //hack --- faking streamid
+		return new LogEntry(ret, 2345); //hack --- faking streamid
 	}
 }
