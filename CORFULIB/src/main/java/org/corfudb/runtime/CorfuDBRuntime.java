@@ -32,12 +32,20 @@ import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
 import org.corfudb.sharedlog.ExtntWrap;
 
+
+
 /**
  * @author mbalakrishnan
  *
  */
-public class CorfuDBRuntime
+public class CorfuDBRuntime extends AbstractRuntime
 {
+
+	void apply(LogEntry update)
+	{
+		TxInt newtx = TxInt.deserialize(update.payload);
+		process_txint(newtx);
+	}
 
 	/**
 	 * @param args
@@ -113,11 +121,8 @@ public class CorfuDBRuntime
 	}
 
 	Map<Long, CorfuDBObject> objectmap;
-	StreamBundle curbundle;
 
-	//used to coordinate between querying threads and the sync thread
-	Lock queuelock;
-	List<Object> curqueue;
+
 
 	final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 	
@@ -144,25 +149,12 @@ public class CorfuDBRuntime
 
 	public CorfuDBRuntime(StreamBundle sb)
 	{
+		super(sb);
 		objectmap = new HashMap<Long, CorfuDBObject>();
-		curbundle = sb;
-
-		queuelock = new ReentrantLock();
-		curqueue = new LinkedList<Object>();
 
 		decisionmap = new HashMap<Long, Boolean>();
 
-		//start the sync thread
-		new Thread(new Runnable()
-		{
-			public void run()
-			{
-				while(true)
-				{
-					playback();
-				}
-			}
-		}).start();
+
 	}
 
 
@@ -198,6 +190,94 @@ public class CorfuDBRuntime
 		}
 	}
 
+
+
+	void queryhelper(CorfuDBObject cob)
+	{
+		if(curtx.get()==null) //not in a transactional context, sync immediately
+		{
+			sync();
+		}
+		else //transactional context, update read set of tx intention
+		{
+			curtx.get().mark_read(cob.getID(), -1); //todo: what should the version number be?
+		}
+	}
+
+	void updatehelper(Serializable update, CorfuDBObject cob)
+	{
+		if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle
+		{
+			//create a singleton transaction
+			TxInt tx = new TxInt();
+			tx.buffer_update(update, cob.getID());
+			propose(tx.serialize(), tx.get_streams());
+		}
+		else //in a transactional context, buffer for now
+			curtx.get().buffer_update(update, cob.getID());
+	}
+
+	
+	void process_txint(TxInt newtx)
+	{
+		//is it a singleton write?
+		if(newtx.get_readset().size()==0 && newtx.get_bufferedupdates().size()==1)
+		{
+			Pair<Serializable, Long> P = newtx.get_bufferedupdates().get(0);
+			synchronized(objectmap)
+			{
+				if(objectmap.containsKey(P.second))
+				{
+					objectmap.get(P.second).apply(P.first);
+				}
+				else
+					throw new RuntimeException("entry for stream with no registered object");
+			}
+		}
+		else
+			throw new RuntimeException("unimplemented");
+	}
+}
+
+
+//this class performs state machine replication over a bundle of streams
+//it's unaware of transactions.
+abstract class AbstractRuntime
+{
+	//used to coordinate between querying threads and the sync thread
+	Lock queuelock;
+	List<Object> curqueue;
+	
+	StreamBundle curbundle;
+	
+	public AbstractRuntime(StreamBundle sb)
+	{
+		curbundle = sb;
+			
+		queuelock = new ReentrantLock();
+		curqueue = new LinkedList<Object>();
+
+		//start the playback thread
+		new Thread(new Runnable()
+		{
+			public void run()
+			{
+				while(true)
+				{
+					playback();
+				}
+			}
+		}).start();
+
+	}
+	
+	
+	void propose(BufferStack update, Set<Long> streams)
+	{
+		curbundle.append(update, streams);
+	}
+
+
 	/** returns once log has been played by playback thread
 	 * until current tail.
 	 */
@@ -205,7 +285,6 @@ public class CorfuDBRuntime
 	{
 		sync(-1);
 	}
-
 
 	/** returns once log has been played by playback thread
 	* until syncpos.
@@ -230,36 +309,8 @@ public class CorfuDBRuntime
 		}
 	}
 
-
-	void queryhelper(CorfuDBObject cob)
-	{
-		if(curtx.get()==null) //not in a transactional context, sync immediately
-		{
-			sync();
-		}
-		else //transactional context, update read set of tx intention
-		{
-			curtx.get().mark_read(cob.getID(), -1); //todo: what should the version number be?
-		}
-	}
-
-	void propose(BufferStack update, Set<Long> streams)
-	{
-		curbundle.append(update, streams);
-	}
-
-	void updatehelper(Serializable update, CorfuDBObject cob)
-	{
-		if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle
-		{
-			//create a singleton transaction
-			TxInt tx = new TxInt();
-			tx.buffer_update(update, cob.getID());
-			propose(tx.serialize(), tx.get_streams());
-		}
-		else //in a transactional context, buffer for now
-			curtx.get().buffer_update(update, cob.getID());
-	}
+	//implement this abstract method to create a concrete runtime
+	abstract void apply(LogEntry update);
 
 	//runs in a single thread
 	//todo: currently playback keeps running even if there are no queries; we need to run it on demand
@@ -279,8 +330,7 @@ public class CorfuDBRuntime
 		LogEntry update = curbundle.readNext(curtail);
 		while(update!=null)
 		{
-			TxInt newtx = TxInt.deserialize(update.payload);
-			process_txint(newtx);
+			apply(update);
 			update = curbundle.readNext(curtail);
 		}
 
@@ -295,26 +345,6 @@ public class CorfuDBRuntime
 				syncobj.notifyAll();
 			}
 		}
-	}
-	
-	void process_txint(TxInt newtx)
-	{
-		//is it a singleton write?
-		if(newtx.get_readset().size()==0 && newtx.get_bufferedupdates().size()==1)
-		{
-			Pair<Serializable, Long> P = newtx.get_bufferedupdates().get(0);
-			synchronized(objectmap)
-			{
-				if(objectmap.containsKey(P.second))
-				{
-					objectmap.get(P.second).apply(P.first);
-				}
-				else
-					throw new RuntimeException("entry for stream with no registered object");
-			}
-		}
-		else
-			throw new RuntimeException("unimplemented");
 	}
 }
 
@@ -637,7 +667,33 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 	}
 }
 
-class MapCommand<K,V> implements Serializable
+
+abstract class Command
+{
+	
+}
+
+//this is not inserted into the log
+abstract class QueryCommand extends Command
+{
+	Object returnvalue;
+	public void setReturnValue(Object X)
+	{
+		returnvalue = X;
+	}
+	public Object getReturnValue()
+	{
+		return returnvalue;
+	}
+}
+
+//this cannot have a return value
+abstract class UpdateCommand extends Command implements Serializable
+{
+	
+}
+
+class MapCommand<K,V> extends UpdateCommand
 {
 	int cmdtype;
 	static final int CMD_PUT = 0;
