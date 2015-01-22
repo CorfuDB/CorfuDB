@@ -1,9 +1,0 @@
-<?xml version="1.0"?>
-<!--Corfu Configuration-->
-<CONFIGURATION corfuID="0" epoch="0" sequencer="localhost:9020" pagesize="4096">
-  <SEGMENT startoffset="0" sealedoffset="-1" ngroups="1" nreplicas="1">
-    <GROUP>
-      <NODE nodeaddress="localhost:9040" />
-    </GROUP>
-  </SEGMENT>
-</CONFIGURATION>
