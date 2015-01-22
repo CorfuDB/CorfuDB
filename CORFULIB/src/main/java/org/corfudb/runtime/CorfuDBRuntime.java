@@ -31,7 +31,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
 import org.corfudb.sharedlog.ExtntWrap;
-
+import org.corfudb.sharedlog.UnwrittenCorfuException;
 
 
 /**
@@ -94,7 +94,8 @@ public class CorfuDBRuntime extends SimpleRuntime {
 
 
 		numthreads = 2;
-		for (int i = 0; i < numthreads; i++) {
+		for (int i = 0; i < numthreads; i++)
+		{
 			Thread T = new Thread(new CorfuDBTester(cob));
 			T.start();
 		}
@@ -1119,23 +1120,31 @@ class CorfuLogAddressSpace implements LogAddressSpace
 	{
 		System.out.println("Reading..." + pos);
 		byte[] ret = null;
-		try
+		while(true)
 		{
-			ExtntWrap ew = cl.readExtnt(pos);
-			//for now, copy to a byte array and return
-			System.out.println("read back " + ew.getCtntSize() + " bytes");
-			ret = new byte[4096*10]; //hack --- fix this
-			ByteBuffer bb = ByteBuffer.wrap(ret);
-			java.util.Iterator<ByteBuffer> it = ew.getCtntIterator();
-			while(it.hasNext())
+			try
 			{
-				ByteBuffer btemp = it.next();
-				bb.put(btemp);
+				ExtntWrap ew = cl.readExtnt(pos);
+				//for now, copy to a byte array and return
+				System.out.println("read back " + ew.getCtntSize() + " bytes");
+				ret = new byte[4096 * 10]; //hack --- fix this
+				ByteBuffer bb = ByteBuffer.wrap(ret);
+				java.util.Iterator<ByteBuffer> it = ew.getCtntIterator();
+				while (it.hasNext())
+				{
+					ByteBuffer btemp = it.next();
+					bb.put(btemp);
+				}
+				break;
 			}
-		}
-		catch (CorfuException e)
-		{
-			throw new RuntimeException(e);
+			catch (UnwrittenCorfuException uce)
+			{
+				//encountered a hole -- try again
+			}
+			catch (CorfuException e)
+			{
+				throw new RuntimeException(e);
+			}
 		}
 		return new BufferStack(ret);
 
