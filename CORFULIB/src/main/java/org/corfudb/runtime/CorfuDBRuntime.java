@@ -633,7 +633,7 @@ interface CorfuDBObject
 	public long getID();
 }
 
-class CorfuDBMap<K,V> implements CorfuDBObject
+class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 {
 	//backing state of the map
 	Map<K, V> backingmap;
@@ -641,6 +641,28 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 	AbstractRuntime TR;
 	//object ID -- corresponds to stream ID used underneath
 	long oid;
+
+	public void lock()
+	{
+		lock(false);
+	}
+
+	public void unlock()
+	{
+		unlock(false);
+	}
+
+	public void lock(boolean write)
+	{
+		if(write) maplock.writeLock().lock();
+		else maplock.readLock().lock();
+	}
+
+	public void unlock(boolean write)
+	{
+		if(write) maplock.writeLock().unlock();
+		else maplock.readLock().unlock();
+	}
 
 	public long getID()
 	{
@@ -670,6 +692,14 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 		{
 			cc.setReturnValue(backingmap.get(cc.getKey()));
 		}
+		else if(cc.getCmdType()==MapCommand.CMD_REMOVE)
+		{
+			backingmap.remove(cc.getKey());
+		}
+		else if(cc.getCmdType()==MapCommand.CMD_CLEAR)
+		{
+			backingmap.clear();
+		}
 		else
 		{
 			maplock.writeLock().unlock();
@@ -678,6 +708,60 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 		System.out.println("Map size is " + backingmap.size());
 		maplock.writeLock().unlock();
 	}
+
+	@Override
+	public int size()
+	{
+		TR.sync();
+		//what if the value changes between sync and the actual read?
+		//in the linearizable case, we are safe because we see a later version that strictly required
+		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
+		lock();
+		int x = backingmap.size();
+		unlock();
+		return x;
+	}
+
+	@Override
+	public boolean isEmpty()
+	{
+		TR.sync();
+		lock();
+		boolean x = backingmap.isEmpty();
+		unlock();
+		return x;
+	}
+
+	@Override
+	public boolean containsKey(Object o)
+	{
+		TR.sync();
+		lock();
+		boolean x = backingmap.containsKey(o);
+		unlock();
+		return x;
+	}
+
+	@Override
+	public boolean containsValue(Object o)
+	{
+		TR.sync();
+		lock();
+		boolean x = backingmap.containsValue(o);
+		unlock();
+		return x;
+	}
+
+	@Override
+	public V get(Object o)
+	{
+		TR.sync();
+		lock();
+		V x = backingmap.get(o);
+		unlock();
+		return x;
+	}
+
 	public V put(K key, V val)
 	{
 		HashSet<Long> H = new HashSet<Long>();
@@ -687,18 +771,53 @@ class CorfuDBMap<K,V> implements CorfuDBObject
 		TR.sync();
 		return (V)precmd.getReturnValue();
 	}
-	public V get(K key)
+
+	@Override
+	public V remove(Object o)
 	{
+		//will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
+		HashSet<Long> H = new HashSet<Long>();
+		H.add(this.getID());
+		MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, (K)o);
+		TR.propose(new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K)o), H, precmd);
 		TR.sync();
-		//what if the value changes between sync and the actual read?
-		//in the linearizable case, we are safe because we see a later version that strictly required
-		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
-		//todo: is there a more elegant API?
-		maplock.readLock().lock();
-		V val = backingmap.get(key);
-		maplock.readLock().unlock();
-		return val;
+		return (V)precmd.getReturnValue();
 	}
+
+	@Override
+	public void putAll(Map<? extends K, ? extends V> map)
+	{
+		throw new RuntimeException("unimplemented");
+	}
+
+	@Override
+	public void clear()
+	{
+		//will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
+		HashSet<Long> H = new HashSet<Long>();
+		H.add(this.getID());
+		TR.propose(new MapCommand<K, V>(MapCommand.CMD_CLEAR), H);
+	}
+
+	@Override
+	public Set<K> keySet()
+	{
+		throw new RuntimeException("unimplemented");
+	}
+
+	@Override
+	public Collection<V> values()
+	{
+		throw new RuntimeException("unimplemented");
+
+	}
+
+	@Override
+	public Set<Entry<K, V>> entrySet()
+	{
+		throw new RuntimeException("unimplemented");
+	}
+
 }
 
 
@@ -712,6 +831,8 @@ class MapCommand<K,V> extends SMRCommand
 	int cmdtype;
 	static final int CMD_PUT = 0;
 	static final int CMD_PREPUT = 1;
+	static final int CMD_REMOVE = 2;
+	static final int CMD_CLEAR = 3;
 	K key;
 	V val;
 	public K getKey()
@@ -731,10 +852,13 @@ class MapCommand<K,V> extends SMRCommand
 	{
 		retval = obj;
 	}
+	public MapCommand(int tcmdtype)
+	{
+		this(tcmdtype, null, null);
+	}
 	public MapCommand(int tcmdtype, K tkey)
 	{
-		cmdtype = tcmdtype;
-		key = tkey;
+		this(tcmdtype, tkey, null);
 	}
 
 	public MapCommand(int tcmdtype, K tkey, V tval)
