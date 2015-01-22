@@ -82,16 +82,6 @@ class BadParamCorfuException extends CorfuException
 
 
 @SuppressWarnings("serial")
-class UnwrittenCorfuException extends CorfuException
-{
-	public UnwrittenCorfuException(String desc)
-	{
-		super(desc);
-		this.er = ErrorCode.ERR_UNWRITTEN;
-	}
-}
-
-@SuppressWarnings("serial")
 class InternalCorfuException extends CorfuException
 {
 	public InternalCorfuException(String desc)
