@@ -1,5 +1,4 @@
 /**
- * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,16 +80,6 @@ class BadParamCorfuException extends CorfuException
 	}
 }
 
-
-@SuppressWarnings("serial")
-class UnwrittenCorfuException extends CorfuException
-{
-	public UnwrittenCorfuException(String desc)
-	{
-		super(desc);
-		this.er = ErrorCode.ERR_UNWRITTEN;
-	}
-}
 
 @SuppressWarnings("serial")
 class InternalCorfuException extends CorfuException

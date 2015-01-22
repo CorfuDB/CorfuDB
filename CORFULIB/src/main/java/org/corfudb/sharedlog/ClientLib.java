@@ -1,5 +1,4 @@
 /**
- * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -378,12 +377,14 @@ public class ClientLib implements
 	 * @throws CorfuException is thrown in case of unexpected communication problem with the sequencer
 	 */
 	@Override
-	public void grabtokens(int tcnt) throws CorfuException {
-		try {
-			sequencer.nextpos(tcnt);
+	public long grabtokens(int tcnt) throws CorfuException {
+		long ret;
+        try {
+			ret = sequencer.nextpos(tcnt);
 		} catch (TException t) {
 			throw new InternalCorfuException("grabtoken failed");
 		}
+        return ret;
 	}
 
 	/* (non-Javadoc)
