@@ -173,7 +173,7 @@ class TXRuntime extends SimpleRuntime
 		//txpos = curbundle.append(BufferStack.serialize(curtx.get()), curtx.get().get_streams());
 		txpos = super.propose(null, curtx.get(), curtx.get().get_streams(), null);
 		//now that we appended the intention, we need to play the bundle until the append point
-		super.sync(txpos);
+		super.sync(null, txpos);
 		//at this point there should be a decision
 		//if not, for now we throw an error (but with decision records we'll keep syncing
 		//until we find the decision)
