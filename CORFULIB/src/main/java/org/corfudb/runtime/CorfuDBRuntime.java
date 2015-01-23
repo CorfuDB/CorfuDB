@@ -23,6 +23,7 @@ import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -38,14 +39,17 @@ import org.corfudb.sharedlog.UnwrittenCorfuException;
  * @author mbalakrishnan
  *
  */
-public class CorfuDBRuntime extends SimpleRuntime {
+public class CorfuDBRuntime
+{
 
 	/**
 	 * @param args
 	 */
-	public static void main(String[] args) throws Exception {
+	public static void main(String[] args) throws Exception
+	{
 
-		if (args.length == 0) {
+		if (args.length == 0)
+		{
 			System.out.println("usage: java CorfuDBRuntime masterURL");
 			System.out.println("e.g. masterURL: http://localhost:8000/corfu");
 			return;
@@ -55,9 +59,12 @@ public class CorfuDBRuntime extends SimpleRuntime {
 
 		ClientLib crf;
 
-		try {
+		try
+		{
 			crf = new ClientLib(masternode);
-		} catch (CorfuException e) {
+		}
+		catch (CorfuException e)
+		{
 			throw e;
 		}
 
@@ -83,133 +90,36 @@ public class CorfuDBRuntime extends SimpleRuntime {
 		if(true) return;
 */
 
-//		CorfuDBRuntime TR = new CorfuDBRuntime(sb);
-		SimpleRuntime TR = new SimpleRuntime(sb);
+		TXRuntime TR = new TXRuntime(sb);
+		//SimpleRuntime TR = new SimpleRuntime(sb);
 
 
 		//counter test
 		//CorfuDBObject cob = new CorfuDBCounter(TR, 1234);
 		//map test
-		CorfuDBObject cob = new CorfuDBMap<Integer, String>(TR, 2345);
+		CorfuDBMap<Integer, String> cob1 = new CorfuDBMap<Integer, String>(TR, 2345);
+		CorfuDBMap<Integer, String> cob2 = new CorfuDBMap<Integer, String>(TR, 2346);
 
 
 		numthreads = 2;
 		for (int i = 0; i < numthreads; i++)
 		{
-			Thread T = new Thread(new CorfuDBTester(cob));
+			//linearizable tester
+			//Thread T = new Thread(new CorfuDBTester(cob));
+			//transactional tester
+			Thread T = new Thread(new CorfuDBTXTester(cob1, cob2, TR));
 			T.start();
 		}
-	}
-
-
-	final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
-
-	//used to communicate decisions from the sync thread to waiting endtx calls
-	final Map<Long, Boolean> decisionmap;
-
-
-	public CorfuDBRuntime(StreamBundle sb) {
-		super(sb);
-
-		decisionmap = new HashMap<Long, Boolean>();
-
-
-	}
-
-
-/*	void apply(LogEntry update) {
-		TxInt newtx = (TxInt) update.payload.deserialize();
-		process_txint(newtx);
-	}
-*/
-
-	void BeginTX() {
-		if (curtx.get() != null) //there's already an executing tx
-			throw new RuntimeException("tx already executing!"); //should we do something different to support nested txes?
-		curtx.set(new TxInt());
-	}
-
-
-	boolean EndTX() {
-		long txpos = -1;
-		//append the transaction intention
-		txpos = curbundle.append(BufferStack.serialize(curtx.get()), curtx.get().get_streams());
-		//now that we appended the intention, we need to play the bundle until the append point
-		sync(txpos);
-		//at this point there should be a decision
-		//if not, for now we throw an error (but with decision records we'll keep syncing
-		//until we find the decision)
-		synchronized (decisionmap) {
-			if (decisionmap.containsKey(txpos)) {
-				boolean dec = decisionmap.get(txpos);
-				decisionmap.remove(txpos);
-				return dec;
-			} else
-				throw new RuntimeException("decision not found!");
-		}
-	}
-
-
-	public void sync()
-	{
-		if (curtx.get() == null) //not in a transactional context, sync immediately
-		{
-			super.sync();
-		} else //transactional context, update read set of tx intention
-		{
-//			curtx.get().mark_read(cob.getID(), -1); //todo: what should the version number be?
-		}
-	}
-
-	public void propose(Serializable update, Set<Long> streams, Object precommand)
-	{
-		throw new RuntimeException("unimplemented");
-	}
-
-	public void propose(Serializable update, Set<Long> streams)
-	{
-		if(streams.size()!=1) throw new RuntimeException("wrong number of streams!");
-
-		if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle
-		{
-			//create a singleton transaction
-			TxInt tx = new TxInt();
-			tx.buffer_update(update, streams.iterator().next());
-			super.propose(tx, tx.get_streams());
-		}
-		else //in a transactional context, buffer for now
-			curtx.get().buffer_update(update, streams.iterator().next());
-	}
-
-	
-	void process_txint(TxInt newtx)
-	{
-		//is it a singleton write?
-		if(newtx.get_readset().size()==0 && newtx.get_bufferedupdates().size()==1)
-		{
-			Pair<Serializable, Long> P = newtx.get_bufferedupdates().get(0);
-			synchronized(objectmap)
-			{
-				if(objectmap.containsKey(P.second))
-				{
-					objectmap.get(P.second).apply(P.first);
-				}
-				else
-					throw new RuntimeException("entry for stream with no registered object");
-			}
-		}
-		else
-			throw new RuntimeException("unimplemented");
 	}
 }
 
 
 interface AbstractRuntime
 {
-	void sync();
-	void sync(long stoppos);
-	void propose(Serializable update, Set<Long> streams);
-	void propose(Serializable update, Set<Long> streams, Object precommand);
+	void sync(CorfuDBObject cob);
+	void sync(CorfuDBObject cob, long stoppos);
+	long propose(CorfuDBObject cob, Serializable update, Set<Long> streams);
+	long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand);
 	void registerObject(CorfuDBObject obj);
 }
 
@@ -225,6 +135,137 @@ class CommandWrapper implements Serializable
 		//todo: for now, uniqueid is just a local counter; this won't work with multiple clients!
 		uniqueid = ctr++;
 		streams = tstreams;
+	}
+}
+
+
+/**
+ * This class is a transactional runtime, implementing the AbstractRuntime interface
+ * plus BeginTX/EndTX calls. It extends SimpleRuntime and overloads apply, propose and sync.
+ */
+class TXRuntime extends SimpleRuntime
+{
+
+	final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
+
+	//used to communicate decisions from the sync thread to waiting endtx calls
+	final Map<Long, Boolean> decisionmap;
+
+	public TXRuntime(StreamBundle sb)
+	{
+		super(sb);
+		decisionmap = new HashMap<Long, Boolean>();
+	}
+
+	void BeginTX()
+	{
+		if (curtx.get() != null) //there's already an executing tx
+			throw new RuntimeException("tx already executing!"); //should we do something different to support nested txes?
+		curtx.set(new TxInt());
+	}
+
+
+	boolean EndTX()
+	{
+		System.out.println("EndTX");
+		long txpos = -1;
+		//append the transaction intention
+		//txpos = curbundle.append(BufferStack.serialize(curtx.get()), curtx.get().get_streams());
+		txpos = super.propose(null, curtx.get(), curtx.get().get_streams(), null);
+		//now that we appended the intention, we need to play the bundle until the append point
+		super.sync(txpos);
+		//at this point there should be a decision
+		//if not, for now we throw an error (but with decision records we'll keep syncing
+		//until we find the decision)
+		System.out.println("appended endtx at position " + txpos);
+		synchronized (decisionmap)
+		{
+			if (decisionmap.containsKey(txpos))
+			{
+				boolean dec = decisionmap.get(txpos);
+				decisionmap.remove(txpos);
+				curtx.set(null);
+				return dec;
+			}
+			else
+				throw new RuntimeException("decision not found!");
+		}
+	}
+
+	public void sync(CorfuDBObject cob)
+	{
+		if(curtx.get()==null) //non-transactional, pass through
+		{
+			super.sync(cob);
+		}
+		else
+		{
+			curtx.get().mark_read(cob.getID(), cob.getTimestamp());
+		}
+	}
+
+	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand)
+	{
+		if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle as a singleton tx
+		{
+			//what about the weird case where the application proposes a TxInt? Can we assume
+			//this won't happen since TxInt is not a public class?
+			if(update instanceof TxInt) throw new RuntimeException("app cant propose a txint");
+			return super.propose(cob, update, streams, precommand);
+		}
+		else //in a transactional context, buffer for now
+		{
+			if(precommand!=null)
+			{
+				//mark the read set
+				sync(cob);
+				//apply the precommand to the object
+				apply(precommand, streams, TIMESTAMP_INVALID);
+			}
+			curtx.get().buffer_update(update, streams.iterator().next());
+			return TIMESTAMP_INVALID;
+		}
+
+	}
+
+	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams)
+	{
+		return propose(cob, update, streams, null);
+	}
+
+	void apply(Object command, Set<Long> streams, long timestamp)
+	{
+		if (command instanceof TxInt)
+		{
+			TxInt T = (TxInt)command;
+			if(process_txint(T, timestamp))
+			{
+				Iterator<Pair<Serializable, Long>> it = T.bufferedupdates.iterator();
+				while(it.hasNext())
+				{
+					Pair<Serializable, Long> P = it.next();
+					Set<Long> tstreams = new HashSet<Long>();
+					tstreams.add(P.second);
+					//todo: do we have to do 2-phase locking?
+					//since all updates are funnelled through the apply thread
+					//the only bad thing that can happen is that reads see a non-transactional state
+					//but this can happen anyway, and in this case the transaction will abort
+					super.apply(P.first, tstreams, timestamp);
+				}
+			}
+		}
+		else
+			super.apply(command, streams, timestamp);
+	}
+
+	boolean process_txint(TxInt newtx, long timestamp)
+	{
+		synchronized(decisionmap)
+		{
+			System.out.println("decided position " + timestamp);
+			decisionmap.put(timestamp, true);
+			return true;
+		}
 	}
 }
 
@@ -290,34 +331,37 @@ class SimpleRuntime implements AbstractRuntime
 	Lock pendinglock = new ReentrantLock();
 	HashMap<Long, Pair<Serializable, Object>> pendingcommands = new HashMap<Long, Pair<Serializable, Object>>();
 
-	public void propose(Serializable update, Set<Long> streams, Object precommand)
+	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand)
 	{
 		CommandWrapper cmd = new CommandWrapper(update, streams);
 		pendinglock.lock();
 		pendingcommands.put(cmd.uniqueid, new Pair(update, precommand));
 		pendinglock.unlock();
-		curbundle.append(BufferStack.serialize(cmd), streams);
+		long pos = curbundle.append(BufferStack.serialize(cmd), streams);
+		if(precommand!=null) //block until precommand is played
+		sync(cob, pos);
+		return pos;
 	}
 	
-	public void propose(Serializable update, Set<Long> streams)
+	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams)
 	{
-		propose(update, streams, null);
+		return propose(cob, update, streams, null);
 	}
 
 
 	/** returns once log has been played by playback thread
 	 * until current tail.
 	 */
-	public void sync()
+	public void sync(CorfuDBObject cob)
 	{
-		sync(-1);
+		sync(cob, -1);
 	}
 
 	/** returns once log has been played by playback thread
 	* until syncpos.
 	* todo: right now syncpos is ignored
 	*/
-	public void sync(long syncpos)
+	public void sync(CorfuDBObject cob, long syncpos)
 	{
 		final Object syncobj = new Object();
 		synchronized (syncobj)
@@ -336,8 +380,9 @@ class SimpleRuntime implements AbstractRuntime
 		}
 	}
 
+	static final long TIMESTAMP_INVALID = -1;
 
-	void apply(Object command, Set<Long> streams)
+	void apply(Object command, Set<Long> streams, long timestamp)
 	{
 		if(streams.size()!=1) throw new RuntimeException("unimplemented");
 		Long streamid = streams.iterator().next();
@@ -345,7 +390,16 @@ class SimpleRuntime implements AbstractRuntime
 		{
 			if(objectmap.containsKey(streamid))
 			{
-				objectmap.get(streamid).apply(command);
+				CorfuDBObject cob = objectmap.get(streamid);
+				cob.apply(command);
+				//todo: verify that it's okay for this to not be atomic with the apply
+				//in the worst case, the object thinks it has an older version that it really does
+				//but all that should cause is spurious aborts
+				//the alternative is to have the apply in the object always call a superclass version of apply
+				//that sets the timestamp
+				//only the apply thread sets the timestamp, so we only have to worry about concurrent reads
+				if(timestamp!=TIMESTAMP_INVALID)
+					cob.setTimestamp(timestamp);
 			}
 			else
 				throw new RuntimeException("entry for stream " + streamid + " with no registered object");
@@ -368,10 +422,10 @@ class SimpleRuntime implements AbstractRuntime
 
 		//check the current tail of the bundle, and then read the bundle until that position
 		long curtail = curbundle.checkTail();
-		BufferStack update = curbundle.readNext();
+		StreamEntry update = curbundle.readNext();
 		while(update!=null)
 		{
-			CommandWrapper cmdw = (CommandWrapper)update.deserialize();
+			CommandWrapper cmdw = (CommandWrapper)update.getPayload().deserialize();
 			//if this command was generated by us, swap out the version we read back with the local version
 			//this allows return values to be transmitted via the local command object
 			pendinglock.lock();
@@ -383,12 +437,12 @@ class SimpleRuntime implements AbstractRuntime
 			{
 				if (localcmds.second != null)
 				{
-					apply(localcmds.second, cmdw.streams);
+					apply(localcmds.second, cmdw.streams, TIMESTAMP_INVALID);
 				}
-				apply(localcmds.first, cmdw.streams);
+				apply(localcmds.first, cmdw.streams, update.getLogpos());
 			}
 			else
-				apply(cmdw.cmd, cmdw.streams);
+				apply(cmdw.cmd, cmdw.streams, update.getLogpos());
 			update = curbundle.readNext(curtail);
 		}
 
@@ -602,6 +656,43 @@ class CorfuDBTester implements Runnable
 
 }
 
+class CorfuDBTXTester implements Runnable
+{
+	TXRuntime cr;
+	CorfuDBMap map1;
+	CorfuDBMap map2;
+	public CorfuDBTXTester(CorfuDBMap tmap1, CorfuDBMap tmap2, TXRuntime tcr)
+	{
+		map1 = tmap1;
+		map2 = tmap2;
+		cr = tcr;
+	}
+
+	public void run()
+	{
+		System.out.println("starting thread");
+		while(true)
+		{
+			int x = (int) (Math.random() * 1000.0);
+			System.out.println("adding key " + x + " to both maps");
+			cr.BeginTX();
+			map1.put(x, "ABCD");
+			map2.put(x, "XYZ");
+			cr.EndTX();
+			try
+			{
+				Thread.sleep((int)(Math.random()*1000.0));
+			}
+			catch(Exception e)
+			{
+				throw new RuntimeException(e);
+			}
+		}
+	}
+
+}
+
+
 class StreamBundleTester implements Runnable
 {
 	StreamBundle sb;
@@ -628,20 +719,24 @@ class StreamBundleTester implements Runnable
 }
 
 
-interface CorfuDBObject
+abstract class CorfuDBObject
 {
-	public void apply(Object update);
-	public long getID();
-}
-
-class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
-{
-	//backing state of the map
-	Map<K, V> backingmap;
-	ReadWriteLock maplock;
-	AbstractRuntime TR;
 	//object ID -- corresponds to stream ID used underneath
 	long oid;
+	ReadWriteLock maplock;
+	AbstractRuntime TR;
+
+	AtomicLong timestamp;
+
+	public long getTimestamp()
+	{
+		return timestamp.get();
+	}
+
+	public void setTimestamp(long newts)
+	{
+		timestamp.set(newts);
+	}
 
 	public void lock()
 	{
@@ -665,13 +760,30 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 		else maplock.readLock().unlock();
 	}
 
+	abstract public void apply(Object update);
+
 	public long getID()
 	{
 		return oid;
 	}
 
+	public CorfuDBObject(AbstractRuntime tTR, long tobjectid)
+	{
+		TR = tTR;
+		oid = tobjectid;
+		timestamp = new AtomicLong();
+	}
+
+}
+
+class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
+{
+	//backing state of the map
+	Map<K, V> backingmap;
+
 	public CorfuDBMap(AbstractRuntime tTR, long toid)
 	{
+		super(tTR, toid);
 		maplock = new ReentrantReadWriteLock();
 		backingmap = new HashMap<K,V>();
 		TR = tTR;
@@ -713,7 +825,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 	@Override
 	public int size()
 	{
-		TR.sync();
+		TR.sync(this);
 		//what if the value changes between sync and the actual read?
 		//in the linearizable case, we are safe because we see a later version that strictly required
 		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
@@ -726,7 +838,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 	@Override
 	public boolean isEmpty()
 	{
-		TR.sync();
+		TR.sync(this);
 		lock();
 		boolean x = backingmap.isEmpty();
 		unlock();
@@ -736,7 +848,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 	@Override
 	public boolean containsKey(Object o)
 	{
-		TR.sync();
+		TR.sync(this);
 		lock();
 		boolean x = backingmap.containsKey(o);
 		unlock();
@@ -746,7 +858,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 	@Override
 	public boolean containsValue(Object o)
 	{
-		TR.sync();
+		TR.sync(this);
 		lock();
 		boolean x = backingmap.containsValue(o);
 		unlock();
@@ -756,7 +868,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 	@Override
 	public V get(Object o)
 	{
-		TR.sync();
+		TR.sync(this);
 		lock();
 		V x = backingmap.get(o);
 		unlock();
@@ -768,8 +880,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 		HashSet<Long> H = new HashSet<Long>();
 		H.add(this.getID());
 		MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, key);
-		TR.propose(new MapCommand<K, V>(MapCommand.CMD_PUT, key, val), H, precmd);
-		TR.sync();
+		TR.propose(this, new MapCommand<K, V>(MapCommand.CMD_PUT, key, val), H, precmd);
 		return (V)precmd.getReturnValue();
 	}
 
@@ -780,8 +891,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 		HashSet<Long> H = new HashSet<Long>();
 		H.add(this.getID());
 		MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, (K)o);
-		TR.propose(new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K)o), H, precmd);
-		TR.sync();
+		TR.propose(this, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o), H, precmd);
 		return (V)precmd.getReturnValue();
 	}
 
@@ -797,7 +907,7 @@ class CorfuDBMap<K,V> implements CorfuDBObject, Map<K,V>
 		//will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
 		HashSet<Long> H = new HashSet<Long>();
 		H.add(this.getID());
-		TR.propose(new MapCommand<K, V>(MapCommand.CMD_CLEAR), H);
+		TR.propose(this, new MapCommand<K, V>(MapCommand.CMD_CLEAR), H);
 	}
 
 	@Override
@@ -875,26 +985,15 @@ class MapCommand<K,V> extends SMRCommand
 };
 
 
-class CorfuDBCounter implements CorfuDBObject
+class CorfuDBCounter extends CorfuDBObject
 {
 	//backing state of the counter
 	int value;
 
-	ReadWriteLock valuelock;
-	
-	AbstractRuntime TR;
-	
-	//object ID -- corresponds to stream ID used underneath
-	long oid;
 
-	public long getID()
-	{
-		return oid;
-	}
-	
 	public CorfuDBCounter(AbstractRuntime tTR, long toid)
 	{
-		valuelock = new ReentrantReadWriteLock();
+		super(tTR, toid);
 		value = 0;
 		TR = tTR;
 		oid = toid;
@@ -905,34 +1004,34 @@ class CorfuDBCounter implements CorfuDBObject
 		//System.out.println("dummyupcall");
 		System.out.println("CorfuDBCounter received upcall");
 		CounterCommand cc = (CounterCommand)bs;
-		valuelock.writeLock().lock();
+		lock(true);
 		if(cc.getCmdType()==CounterCommand.CMD_DEC)
 			value--;
 		else if(cc.getCmdType()==CounterCommand.CMD_INC)
 			value++;
 		else
 		{
-			valuelock.writeLock().unlock();
+			unlock(true);
 			throw new RuntimeException("Unrecognized command in stream!");
 		}
-		valuelock.writeLock().unlock();
+		unlock(true);
 		System.out.println("Counter value is " + value);
 	}
 	public void increment()
 	{
 		HashSet<Long> H = new HashSet<Long>(); H.add(this.getID());
-		TR.propose(new CounterCommand(CounterCommand.CMD_INC), H);
+		TR.propose(this, new CounterCommand(CounterCommand.CMD_INC), H);
 	}
 	public int read()
 	{
-		TR.sync();
+		TR.sync(this);
 		//what if the value changes between queryhelper and the actual read?
 		//in the linearizable case, we are safe because we see a later version that strictly required
 		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
 		//todo: is there a more elegant API?
-		valuelock.readLock().lock();
+		lock(false);
 		int ret = value;
-		valuelock.readLock().unlock();
+		unlock(false);
 		return ret;
 	}
 
@@ -1018,7 +1117,7 @@ interface StreamBundle
 	 *
 	 * @return       the next log entry
 	 */
-	BufferStack readNext();
+	StreamEntry readNext();
 
 	/**
 	 * reads the next entry in the stream bundle that has a position strictly lower than stoppos.
@@ -1029,7 +1128,7 @@ interface StreamBundle
 	 * @param  stoppos  the stopping position for the read
 	 * @return          the next entry in the stream bundle
 	 */
-	BufferStack readNext(long stoppos);
+	StreamEntry readNext(long stoppos);
 
 	/**
 	 * returns the current tail position of the stream bundle (this is exclusive, so a checkTail
@@ -1151,6 +1250,28 @@ class CorfuLogAddressSpace implements LogAddressSpace
 	}
 }
 
+class StreamEntry
+{
+	private long logpos;
+	private BufferStack payload;
+
+	public long getLogpos()
+	{
+		return logpos;
+	}
+
+	public BufferStack getPayload()
+	{
+		return payload;
+	}
+
+	public StreamEntry(BufferStack tbs, long position)
+	{
+		logpos = position;
+		payload = tbs;
+	}
+}
+
 class StreamBundleImpl implements StreamBundle
 {
 	List<Long> mystreams;
@@ -1187,18 +1308,19 @@ class StreamBundleImpl implements StreamBundle
 		return curtail;
 
 	}
-	public BufferStack readNext()
+	public StreamEntry readNext()
 	{
 		return readNext(0);
 	}
 
-	public synchronized BufferStack readNext(long stoppos) //for now, using 'this' to synchronize curpos/curtail
+	public synchronized StreamEntry readNext(long stoppos) //for now, using 'this' to synchronize curpos/curtail
 	{
 		if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
 		{
 			return null;
 		}
-		BufferStack ret = las.read(curpos++);
-		return ret;
+		long readpos = curpos++;
+		BufferStack ret = las.read(readpos);
+		return new StreamEntry(ret, readpos);
 	}
 }
