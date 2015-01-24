@@ -29,7 +29,7 @@ $ bin/corfuDBsingle.sh start
 ```
 
 You may have to run the script as superuser (i.e., with `sudo`).
-To stop the deployment, simple call the script with `stop` as
+To stop the deployment, simply call the script with `stop` as
 an argument. Other options include `restart` and `status`.
 
 ## Bringing up a custom CorfuDB deployment
