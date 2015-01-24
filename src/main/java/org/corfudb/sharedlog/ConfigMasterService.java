@@ -48,6 +48,7 @@ public class ConfigMasterService implements Runnable, ICorfuDBServer {
     {
         //use the config
         this.config = config;
+        this.C = new CorfuConfiguration(config);
         return this;
     }
 
