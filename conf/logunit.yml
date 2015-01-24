@@ -22,3 +22,4 @@ capacity: 100000
 ramdisk: true
 pagesize: 4096
 trim: 0
+master: http://localhost:8002/corfu

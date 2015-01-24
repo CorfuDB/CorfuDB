@@ -128,6 +128,22 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
             lut.RECOVERY = (Boolean) config.get("recovery");
         }
 
+        // We also need a configuration
+        // TODO: eliminate this dependency.
+        CorfuConfiguration CM = null;
+        while (CM == null) {
+            try {
+                CM = ClientLib.pullConfig((String)config.get("master"));
+            } catch (CorfuException e) {
+                try {
+                log.warn("cannot pull configuration; sleep 1 sec");
+                Thread.sleep(1000);}
+                catch (InterruptedException ie) {}
+            }
+        }
+        lut.CM = CM;
+        lut.masterIncarnation = CM.getIncarnation();
+
         return new Runnable() {
             @Override
             public void run() {

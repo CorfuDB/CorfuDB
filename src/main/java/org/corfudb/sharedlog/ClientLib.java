@@ -46,7 +46,12 @@ public class ClientLib implements
 
     static String master = "http://localhost:8000/corfu";
 	static CorfuConfiguration CM;
+
     static public CorfuConfiguration pullConfig() throws CorfuException {
+        return pullConfig(master);
+    }
+
+    static public CorfuConfiguration pullConfig(String master) throws CorfuException {
         DefaultHttpClient httpclient = new DefaultHttpClient();
 
         try {
