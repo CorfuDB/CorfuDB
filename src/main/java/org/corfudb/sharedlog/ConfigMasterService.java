@@ -32,15 +32,23 @@ import java.util.*;
 /**
  * Created by dalia on 6/9/2014.
  */
-public class ConfigMasterService implements Runnable {
+public class ConfigMasterService implements Runnable, ICorfuDBServer {
     org.slf4j.Logger log = LoggerFactory.getLogger(ConfigMasterService.class);
 
     CorfuConfiguration C = null;
     String cnfg = null;
+    Map<String,Object> config;
+
     int masterid = new SecureRandom().nextInt();
 
-    public ConfigMasterService() throws CorfuException, FileNotFoundException {
-        this("./corfu.xml");
+    public ConfigMasterService() {
+    }
+
+    public Runnable getInstance(final Map<String,Object> config)
+    {
+        //use the config
+        this.config = config;
+        return this;
     }
 
     public ConfigMasterService(String configfile) throws CorfuException, FileNotFoundException {

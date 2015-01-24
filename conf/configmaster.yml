@@ -1,0 +1,24 @@
+---
+# CorfuDB configmaster sample configuration
+#
+# This simple configuration file spawns a simple configuration master
+# on port 8002.
+#
+# Required:
+# role (string) - org.corfudb.sharedlog.ConfigMasterService selects the configuration master
+# port (number) - the port number to run on
+#
+# Optional:
+
+role: org.corfudb.sharedlog.ConfigMasterService
+port: 8002
+sequencer:
+    - address: localhost
+      port: 8000
+layout:
+    - segment:
+        - start: 0
+          sealed: -1
+          groups:
+              - { address: localhost, port: 8001 }
+          replicas: 1
