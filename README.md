@@ -19,7 +19,20 @@ directory, run:
 $ mvn install
 ```
 
-## Bringing up a CorfuDB deployment
+## CorfuDB quick deployment
+
+The default configuration files will start a single-node deployment
+of corfuDB. To start this default deployment, run:
+
+```
+$ bin/corfuDBsingle.sh start
+```
+
+You may have to run the script as superuser (i.e., with `sudo`).
+To stop the deployment, simple call the script with `stop` as
+an argument. Other options include `restart` and `status`.
+
+## Bringing up a custom CorfuDB deployment
 
 A CorfuDB deployment requires a Sequencer, one or more logging units,
 and a configuration master.
@@ -48,14 +61,11 @@ For example, running:
 
 Will look for a file `conf/sequencer.yml`, and start the service.
 
-The default configuration files will start a single-node deployment
-of corfuDB. To start this default deployment, run:
+For example, running the simple deployment script
+`bin/corfuDBsingle.sh start` runs:
 
 ```
 $ bin/corfuDBLaunch.sh sequencer start
 $ bin/corfuDBLaunch.sh logunit start
 $ bin/corfuDBLaunch.sh configmaster start
 ```
-
-You may have to run the script as superuser (i.e., with `sudo`).
-
