@@ -59,9 +59,9 @@ public class ClientLib implements
 
             CM = new CorfuConfiguration(response.getEntity().getContent());
         } catch (ClientProtocolException e) {
-            throw new InternalCorfuException("cannot pull configuration");
+            throw new InternalCorfuException("cannot pull configuration: " + e.getMessage());
         } catch (IOException e) {
-            throw new InternalCorfuException("cannot pull configuration");
+            throw new InternalCorfuException("cannot pull configuration: "  + e.getMessage());
         }
         return CM;
     }
@@ -74,7 +74,7 @@ public class ClientLib implements
 		pullConfig();
 		buildClientConnections();
 	}
-	
+
 	void buildClientConnections() throws CorfuException {
 
 		for (int g = 0; g < CM.getNumGroups(); g++) {
@@ -87,7 +87,7 @@ public class ClientLib implements
                 }
             }
         }
-		
+
 		Endpoint sn = CM.getSequencer();
         try {
             sequencer = Endpoint.getSequencer(sn);
@@ -117,7 +117,7 @@ public class ClientLib implements
 	 */
 	@Override
 	public long appendExtnt(byte[] buf, int reqsize) throws CorfuException {
-		
+
 		if (reqsize % grainsize() != 0) {
 			throw new BadParamCorfuException("appendExtnt must be in multiples of log-entry size (" + grainsize() + ")");
 		}
@@ -142,9 +142,9 @@ public class ClientLib implements
 	@Override
 	public long appendExtnt(List<ByteBuffer> ctnt) throws CorfuException {
 		long offset = -1;
-		
+
 		try {
-			offset = sequencer.nextpos(1); 
+			offset = sequencer.nextpos(1);
 			writeExtnt(offset, ctnt);
 		} catch (TException e) {
 			e.printStackTrace();
@@ -153,7 +153,7 @@ public class ClientLib implements
 		}
 		return offset;
 	}
-	
+
 	public void writeExtnt(long offset, List<ByteBuffer> ctnt) throws CorfuException {
 		ErrorCode er = null;
 		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
@@ -202,19 +202,19 @@ public class ClientLib implements
             throw new BadParamCorfuException("append() failed: stale epoch");
         }
     }
-	
+
 	long lastReadOffset = -1;
-		
+
 	/**
 	 * a variant of readExtnt that takes the first log-offset position to read the extent from.
-	 * 
+	 *
 	 * @param offset           starting position to read
 	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
 	 * @throws CorfuException
 	 */
 	@Override
 	public ExtntWrap readExtnt(long offset) throws CorfuException {
-		
+
 		ExtntWrap ret = null;
 		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
         Endpoint ep = null;
@@ -252,16 +252,16 @@ public class ClientLib implements
         lastReadOffset = offset;
         return ret;
 	}
-		
+
 	/**
 	 * Reads the next extent; it remembers the last read extent (starting with zero).
-	 * 
+	 *
 	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
 	 * @throws CorfuException
 	 */
 	@Override
 	public ExtntWrap readExtnt() throws CorfuException {
-		
+
 		ExtntWrap r;
 		do {
 			r = readExtnt(lastReadOffset+1);
@@ -271,7 +271,7 @@ public class ClientLib implements
 
     /**
 	 * force a delay until we are notified that previously invoked writes to the log have been safely forced to persistent store.
-	 * 
+	 *
 	 * @throws CorfuException if the call to storage-units failed; in this case, there is no gaurantee regarding data persistence.
 	 */
 	@Override
@@ -287,21 +287,21 @@ public class ClientLib implements
 			}
 		}
 	}
-	
+
 	/**
-	 * Query the log head. 
-	 *  
-	 * @return the current head's index 
-	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
+	 * Query the log head.
+	 *
+	 * @return the current head's index
+	 * @throws CorfuException if the check() call fails or returns illegal (negative) value
 	 */
 	@Override
 	public long queryhead() throws CorfuException { return CM.trimmark; }
-	
+
 	/**
-	 * Query the log tail. 
-	 *  
-	 * @return the current tail's index 
-	 * @throws CorfuException if the check() call fails or returns illegal (negative) value 
+	 * Query the log tail.
+	 *
+	 * @return the current tail's index
+	 * @throws CorfuException if the check() call fails or returns illegal (negative) value
 	 */
 	@Override
 	public long querytail() throws CorfuException {
@@ -316,44 +316,44 @@ public class ClientLib implements
 	}
 
 	/**
-	 * Query the last known checkpoint position. 
-	 *  
+	 * Query the last known checkpoint position.
+	 *
 	 * @return the last known checkpoint position.
-	 * @throws CorfuException if the call fails or returns illegal (negative) value 
+	 * @throws CorfuException if the call fails or returns illegal (negative) value
 	 */
 	@Override
 	public long queryck() throws CorfuException {
 		throw new BadParamCorfuException("queryck() not implemented yet");
 	}
-	
+
 	/**
-	 * inform about a new checkpoint mark. 
-	 *  
+	 * inform about a new checkpoint mark.
+	 *
 	 * @param off the offset of the new checkpoint
-	 * @throws CorfuException if the call fails 
+	 * @throws CorfuException if the call fails
 	 */
 	@Override
 	public void ckpoint(long off) throws CorfuException {
 		throw new BadParamCorfuException("ckpoint() not implemented yet");
 	}
-	
+
 	/**
-	 * set the read mark to the requested position. 
+	 * set the read mark to the requested position.
 	 * after this, invoking readExtnt will perform at the specified position.
-	 * 
+	 *
 	 * @param offset move the read mark to this log position
 	 */
 	@Override
 	public void setMark(long offset) {
 		lastReadOffset = offset-1;
 	}
-		
+
 	// from here down, implement DbgAPI for debugging:
 	// ==========================================================
-	
+
 	/**
 	 * return the meta-info record associated with the specified offset. used for debugging.
-	 * 
+	 *
 	 * @param offset the inquired position
 	 * @return an ExtntInfo object
 	 * @throws CorfuException
@@ -369,10 +369,10 @@ public class ClientLib implements
 			throw new InternalCorfuException("dbg() failed ");
 		}
 	}
-	
+
 	/**
 	 * utility function to grab tcnt tokens from the sequencer. used for debugging.
-	 * 
+	 *
 	 * @param tcnt the number of tokens to grab from sequencer
 	 * @throws CorfuException is thrown in case of unexpected communication problem with the sequencer
 	 */
