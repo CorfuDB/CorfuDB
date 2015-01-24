@@ -1,0 +1,13 @@
+---
+# CorfuDB sequencer sample configuration
+#
+# This simple configuration file spawns a simple sequencer
+# on port 8000.
+#
+# Required:
+# role - org.corfudb.sharedlog.sequencer.SequencerTask selects the sequencer
+# port - the port number to run on
+
+role: org.corfudb.sharedlog.sequencer.SequencerTask
+port: 8000
+
