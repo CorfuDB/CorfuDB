@@ -261,6 +261,7 @@ public class ConfigMasterService implements Runnable, ICorfuDBServer {
 
             if (t.getRequestMethod().startsWith("GET")) {
                 log.info("@C@ GET");
+                cnfg = C.ConfToXMLString();
                 log.info("@C@ response={}", cnfg);
                 response = cnfg;
             } else {
