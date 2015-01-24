@@ -42,7 +42,7 @@ import org.apache.thrift.transport.TServerSocket;
 import org.corfudb.sharedlog.ICorfuDBServer;
 
 
-public class LogUnitTask implements LogUnitService.Iface {
+public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
 	private Logger log = LoggerFactory.getLogger(LogUnitTask.class);
 
     private LogUnitTask(Builder b) { // this is private; use build() to generate objects of this class
@@ -62,15 +62,15 @@ public class LogUnitTask implements LogUnitService.Iface {
 
     List<Integer> masterIncarnation = null;
     CorfuConfiguration CM = null;
-    private int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
-    private int PORT=-1;	// REQUIRED: port number this unit listens on
-    private String DRIVENAME = null; // where to persist data (unless rammode is on)
-    private boolean RAMMODE = true; // command line switch: work in memory (no data persistence)
-    private boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
-    private boolean REBUILD = false;
-    private String rebuildnode = null;
+    protected int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
+    protected int PORT=-1;	// REQUIRED: port number this unit listens on
+    protected String DRIVENAME = null; // where to persist data (unless rammode is on)
+    protected boolean RAMMODE = true; // command line switch: work in memory (no data persistence)
+    protected boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
+    protected boolean REBUILD = false;
+    protected String rebuildnode = null;
 
-    private int PAGESIZE;
+    protected int PAGESIZE;
 
 
 	private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
@@ -102,6 +102,45 @@ public class LogUnitTask implements LogUnitService.Iface {
 		map = initmap;
 		mapb = ByteBuffer.wrap(map);
 	}
+
+    public LogUnitTask() {
+        //default constructor
+    }
+
+    public Runnable getInstance (final Map<String,Object> config)
+    {
+        final LogUnitTask lut = this;
+
+        //These are required and will throw an exception if not defined.
+        lut.RAMMODE = (Boolean) config.get("ramdisk");
+        lut.UNITCAPACITY = (Integer) config.get("capacity");
+        lut.PORT = (Integer) config.get("port");
+        lut.PAGESIZE = (Integer) config.get("pagesize");
+        lut.gcmark = (Integer) config.get("trim");
+
+        //These are not required and will be only populated if given
+        if (config.containsKey("drive"))
+        {
+            lut.DRIVENAME = (String) config.get("drive");
+        }
+        if (config.containsKey("recovery"))
+        {
+            lut.RECOVERY = (Boolean) config.get("recovery");
+        }
+
+        return new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    lut.serverloop();
+                }
+                catch (Exception e)
+                {
+                    e.printStackTrace();
+                }
+            }
+        };
+    }
 
 	class mapInfo {
 
