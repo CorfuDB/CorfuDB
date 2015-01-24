@@ -14,7 +14,7 @@
  */
 // @author Dahlia Malkhi
 //
-// implement a cyclic log store: logically infinite log sequence mapped onto a UNICAPACITY array of fixed-entrys	
+// implement a cyclic log store: logically infinite log sequence mapped onto a UNICAPACITY array of fixed-entrys
 package org.corfudb.sharedlog.loggingunit;
 
 import java.io.FileNotFoundException;
@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.thrift.TMultiplexedProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -37,6 +38,8 @@ import org.apache.thrift.TException;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
+
+import org.corfudb.sharedlog.ICorfuDBServer;
 
 
 public class LogUnitTask implements LogUnitService.Iface {
@@ -82,7 +85,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 	private ByteBuffer mapb = null;
 	// private static final int longsz = Long.SIZE / Byte.SIZE;
 	private static final int intsz = Integer.SIZE / Byte.SIZE;
-	private static final int entsz = 2*intsz; 
+	private static final int entsz = 2*intsz;
 
 	public void initLogStore(int sz) {
         if (RAMMODE) {
@@ -92,8 +95,8 @@ public class LogUnitTask implements LogUnitService.Iface {
 		map = new byte[sz * (entsz)];
 		mapb = ByteBuffer.wrap(map);
 	}
-	
-	public void initLogStore(byte[] initmap, int sz) throws Exception { 
+
+	public void initLogStore(byte[] initmap, int sz) throws Exception {
 		if (RAMMODE) inmemoryStore = new ByteBuffer[sz];
 		UNITCAPACITY = freewater = sz;
 		map = initmap;
@@ -101,33 +104,33 @@ public class LogUnitTask implements LogUnitService.Iface {
 	}
 
 	class mapInfo {
-		
+
 		int physOffset;
 		int length;
 		ExtntMarkType et;
 
 		public mapInfo(long logOffset) {
-			
+
 			int mi = mapind(logOffset);
 			mapb.position(mi);
 			physOffset = mapb.getInt();
-			
+
 			length = mapb.getInt();
 			et = ExtntMarkType.findByValue(length & 0x3); length >>= 2;
-		}		
+		}
 	}
-	
+
 	public byte[] toArray() { return map; }
 	public ByteBuffer toArray(long fr, int length) {
 		return ByteBuffer.wrap(map, mapind(fr), length*entsz);
 	}
-	
+
 	private int mapind(long logOffset) { // the cyclic-index converter
 
-		int cind = (int)((logOffset+UNITCAPACITY) % UNITCAPACITY); 
+		int cind = (int)((logOffset+UNITCAPACITY) % UNITCAPACITY);
 		return cind * entsz;
-	} 		
-	
+	}
+
 	private void put(int ind, ByteBuffer buf) throws IOException {
 
         if (RAMMODE) {
@@ -137,9 +140,9 @@ public class LogUnitTask implements LogUnitService.Iface {
             DriveChannel.write(buf);
         }
 	}
-	
+
 	private boolean put(List<ByteBuffer> wbufs) throws IOException {
-		
+
 		if (wbufs.size() > freewater) {
 			return false;
 		}
@@ -151,7 +154,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 		freewater -= wbufs.size();
 		return true;
 	}
-	
+
 	private ArrayList<ByteBuffer> get(int pos, int sz) throws IOException {
 		ArrayList<ByteBuffer> wbufs = new ArrayList<ByteBuffer>();
 
@@ -187,24 +190,24 @@ public class LogUnitTask implements LogUnitService.Iface {
         else
             return get(lowwater, highwater-lowwater);
     }
-	
-	public int getPhysOffset(long logOffset) { 
+
+	public int getPhysOffset(long logOffset) {
 		int mi = mapind(logOffset);
 		return mapb.getInt(mi);
 	}
-	
+
 	public int getLength(long logOffset) {
 		int mi = mapind(logOffset) + intsz;
 		return mapb.getInt(mi);
 	}
-	
+
 	public ExtntMarkType getET(long logOffset) {
 		int mi = mapind(logOffset) + intsz;
 		mapb.position(mi);
 		int length = mapb.getInt();
 		return ExtntMarkType.findByValue(length & 0x3);
 	}
-	
+
 	public void setExtntInfo(long logOffset, int physOffset, int length, ExtntMarkType et) throws IOException {
 		int mi = mapind(logOffset);
 		mapb.position(mi);
@@ -217,10 +220,10 @@ public class LogUnitTask implements LogUnitService.Iface {
             DriveChannel.write(toArray(logOffset, 1));
         }
 	}
-	
+
 	public void trimLogStore(long toOffset) throws IOException {
 		long lasttrim = gcmark, lastcontig = lasttrim;
-		
+
 		log.info("=== trim({}) gcmark={} freewater={} lowwater/highwater={}/{} ===",
 				toOffset, gcmark, freewater, lowwater, highwater);
 
@@ -302,7 +305,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 		setExtntInfo(logOffset, physOffset, wbufs.size(), et);
 		return ErrorCode.OK;
 	}
-	
+
 	public ExtntWrap getExtntLogStore(long logOffset) throws IOException {
 		ExtntWrap wr = new ExtntWrap();
 
@@ -327,7 +330,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 			} else if (minf.et == ExtntMarkType.EX_TRIMMED) {
 				wr.setErr(ErrorCode.ERR_TRIMMED);
 			}
-		}	
+		}
 		return wr;
 	}
 
@@ -415,8 +418,8 @@ public class LogUnitTask implements LogUnitService.Iface {
 	/* (non-Javadoc)
 	 * implements to CorfuUnitServer.Iface write() method.
 	 * @see CorfuUnitServer.Iface#write(ExtntWrap)
-	 * 
-	 * we make great effort for the write to either succeed in full, or not leave any partial garbage behind. 
+	 *
+	 * we make great effort for the write to either succeed in full, or not leave any partial garbage behind.
 	 * this means that we first check if all the pages to be written are free, and that the incoming entry contains content for each page.
 	 * in the event of some error in the middle, we reset any values we already set.
 	 */
@@ -437,7 +440,7 @@ public class LogUnitTask implements LogUnitService.Iface {
             return ErrorCode.ERR_IO;
         }
     }
-	
+
 	/**
 	 * mark an extent 'skipped'
 	 * @param hdr epoch and offset of the extent
@@ -445,7 +448,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 	 * 		ERROR_TRIMMED if the extent-range has already been trimmed
 	 * 		ERROR_OVERWRITE if the extent is occupied (could be a good thing)
 	 * 		ERROR_FULL if the extent spills over the capacity of the log
-	 * @throws TException 
+	 * @throws TException
 	 */
 	@Override
 	synchronized public ErrorCode fix(UnitServerHdr hdr) throws TException {
@@ -455,17 +458,17 @@ public class LogUnitTask implements LogUnitService.Iface {
     private ExtntWrap genWrap(ErrorCode err) {
         return  new ExtntWrap(err, new ExtntInfo(), new ArrayList<ByteBuffer>());
     }
-		
+
 	/* (non-Javadoc)
 	 * @see CorfuUnitServer.Iface#read(org.corfudb.CorfuHeader, ExtntInfo)
-	 * 
+	 *
 	 * this method performs actual reading of a range of pages.
 	 * it fails if any page within range has not been written.
 	 * it returns OK_SKIP if it finds any page within range which has been junk-filled (i.e., the entire range becomes junked).
-	 * 
+	 *
 	 * the method also reads-ahead the subsequent meta-info entry if hdr.readnext is set.
 	 * if the next meta info record is not available, it returns the current meta-info structure
-	 * 
+	 *
 	 *  @param a CorfuHeader describing the range to read
 	 */
 	@Override
@@ -479,13 +482,13 @@ public class LogUnitTask implements LogUnitService.Iface {
             return genWrap(ErrorCode.ERR_IO);
         }
     }
-	
+
 	/* read the meta-info record at specified offset
-	 * 
+	 *
 	 * @param off- the offset to read from
-	 * @return the meta-info record "wrapped" in ExtntWrap. 
+	 * @return the meta-info record "wrapped" in ExtntWrap.
 	 *         The wrapping contains error code: UNWRITTEN if reading beyond the tail of the log
-	 * 
+	 *
 	 * (non-Javadoc)
 	 * @see CorfuUnitServer.Iface#readmeta(long)
 	 */
@@ -510,10 +513,10 @@ public class LogUnitTask implements LogUnitService.Iface {
 
 	@Override
 	synchronized public long querytrim() {	return CM.getTrimmark(); }
-	
+
 	@Override
-	synchronized public long queryck() {	return ckmark; } 
-	
+	synchronized public long queryck() {	return ckmark; }
+
 	ErrorCode trim(long toOffset) {
         try {
             trimLogStore(toOffset);
@@ -525,7 +528,7 @@ public class LogUnitTask implements LogUnitService.Iface {
 	    	try {
 	    	   	log.debug("forcing bitmap and gcmark to disk");
 	    	   	synchronized(DriveLck) {
-	    	   		try { DriveLck.wait(); } catch (InterruptedException e) {	    	   	
+	    	   		try { DriveLck.wait(); } catch (InterruptedException e) {
 		        		log.error("forcing sync to persistent store failed, quitting");
 		        		System.exit(1);
 	    	   		}
@@ -539,7 +542,7 @@ public class LogUnitTask implements LogUnitService.Iface {
     	}
     	return ErrorCode.OK;
 	}
-	
+
 	@Override
     synchronized public void ckpoint(UnitServerHdr hdr) throws org.apache.thrift.TException {
         // if (hdr.getEpoch() < epoch) return ErrorCode.ERR_STALEEPOCH;
@@ -622,7 +625,7 @@ public class LogUnitTask implements LogUnitService.Iface {
             System.exit(1);
         }
     }
-    
+
     //////////////////////////////////////////////////////////////////////////////
 
     ////////////////////////////////////////////////////////////////////////////////////

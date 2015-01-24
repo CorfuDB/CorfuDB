@@ -22,12 +22,15 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
-public class SequencerTask implements SequencerService.Iface {
+import org.corfudb.sharedlog.ICorfuDBServer;
+import java.util.Map;
 
-    public static int port = 0;
+public class SequencerTask implements SequencerService.Iface, ICorfuDBServer {
+
+    public int port = 0;
 
 	AtomicLong pos = new AtomicLong(0);
-	
+
 	@Override
 	public long nextpos(int range) throws org.apache.thrift.TException {
 		// if (pos % 10000 == 0) System.out.println("issue token " + pos + "...");
@@ -40,8 +43,21 @@ public class SequencerTask implements SequencerService.Iface {
         pos.set(lowbound);
     }
 
+    public Runnable getInstance(final Map<String,Object> config)
+    {
+        final SequencerTask st = this;
+        return new Runnable()
+        {
+            @Override
+            public void run() {
+                st.port = (Integer) config.get("port");
+                st.serverloop();
+            }
+        };
+    }
+
 	public void serverloop() {
-			
+
         TServer server;
         TServerSocket serverTransport;
         SequencerService.Processor<SequencerTask> processor;

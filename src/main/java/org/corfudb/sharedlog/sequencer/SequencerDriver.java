@@ -58,8 +58,8 @@ public class SequencerDriver {
     public static void main(String[] args) throws Exception {
 
         int port = Integer.valueOf(args[0]);
-        SequencerTask.port = port;
         final SequencerTask CI = new SequencerTask();
+        CI.port = port;
         System.out.println("sequencer started with port " + port);
         new Thread(new Runnable() {
             @Override

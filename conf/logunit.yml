@@ -1,0 +1,13 @@
+---
+# CorfuDB sequencer sample configuration
+#
+# This simple configuration file spawns a simple sequencer
+# on port 8000.
+#
+# Required:
+# role - org.corfudb.sharedlog.loggingunit.LogUnitTask selects the log unit
+# port - the port number to run on
+
+role: org.corfudb.sharedlog.loggingunit.LogUnitTask
+port: 8001
+
