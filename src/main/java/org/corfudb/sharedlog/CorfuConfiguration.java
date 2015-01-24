@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 /**
- * 
+ *
  */
 package org.corfudb.sharedlog;
 
@@ -36,6 +36,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
+import java.util.Map;
 /**
  *
  */
@@ -67,6 +68,23 @@ public class CorfuConfiguration {
 
     public int getPagesize() {
         return pagesize;
+    }
+
+    //build from map
+    public CorfuConfiguration(Map<String,Object> config)
+    {
+        int epoch = (Integer) config.get("epoch");
+        int masterIncarnation = 0;
+        int masterId = 0;
+        Util.setIncarnation(incarnation, masterIncarnation, masterId, epoch);
+        pagesize = (Integer) config.get("pagesize");
+        Map<String,Object> sequencerAddr = (Map<String,Object>)config.get("sequencer");
+        String sequenceraddress = sequencerAddr.get("address") + ":" + sequencerAddr.get("port");
+        sequencer = Endpoint.genEndpoint(sequenceraddress);
+
+        log.info("@C@ incarnation={} pagesize={} trimmark={} sequencer={}", incarnation, pagesize, trimmark, sequenceraddress);
+
+
     }
 
     /**

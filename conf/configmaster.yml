@@ -12,6 +12,8 @@
 
 role: org.corfudb.sharedlog.ConfigMasterService
 port: 8002
+pagesize: 4096
+epoch: 0
 sequencer:
     - address: localhost
       port: 8000
