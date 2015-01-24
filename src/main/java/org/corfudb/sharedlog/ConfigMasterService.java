@@ -49,6 +49,7 @@ public class ConfigMasterService implements Runnable, ICorfuDBServer {
         //use the config
         this.config = config;
         this.C = new CorfuConfiguration(config);
+        webservice();
         return this;
     }
 
@@ -69,7 +70,7 @@ public class ConfigMasterService implements Runnable, ICorfuDBServer {
 
     public void webservice() {
         try {
-            HttpServer server = HttpServer.create(new InetSocketAddress(8000), 0);
+            HttpServer server = HttpServer.create(new InetSocketAddress((Integer)config.get("port")), 0);
             server.createContext("/corfu", new MyHandler());
             server.setExecutor(null);
             server.start();
