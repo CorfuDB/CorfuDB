@@ -84,7 +84,36 @@ public class CorfuConfiguration {
 
         log.info("@C@ incarnation={} pagesize={} trimmark={} sequencer={}", incarnation, pagesize, trimmark, sequenceraddress);
 
+        ArrayList<Map<String,Object>> segmentList = (ArrayList<Map<String,Object>>) ((Map<String,Object>)config.get("layout")).get("segments");
 
+        for (Map<String,Object> segment : segmentList)
+        {
+            ArrayList<Map<String,Object>> groupList = (ArrayList<Map<String,Object>>) segment.get("groups");
+            int ngroups = groupList.size();
+            int nreplicas = (Integer) segment.get("replicas");
+            int startoff = (Integer) segment.get("start");
+            //needed for longs...
+            Object seg = segment.get("sealed");
+            long sealedoff = seg.getClass() == Long.class ? (Long) seg : (Integer) seg;
+
+            log.info("@C@ segment [{}..{}]: {} groups {} replicas", startoff, sealedoff, ngroups, nreplicas);
+
+            Vector<Vector<Endpoint>> groups = new Vector<Vector<Endpoint>>();
+            for (Map<String,Object> group : groupList)
+            {
+                ArrayList<Map<String,Object>> nodeList = (ArrayList<Map<String,Object>>) group.get("nodes");
+                Vector<Endpoint> replicas = new Vector<Endpoint>();
+                for (Map<String,Object> node: nodeList)
+                {
+                    String nodeaddr = (String) node.get("address") + ":" + node.get("port");
+                    log.info("@C@    node {} ", nodeaddr);
+                    replicas.add(Endpoint.genEndpoint(nodeaddr));
+                }
+                groups.add(replicas);
+            }
+
+            segmentlist.add(new SegmentView(ngroups, nreplicas, startoff, sealedoff, false, groups));
+        }
     }
 
     /**

@@ -18,9 +18,10 @@ sequencer:
     address: localhost
     port: 8000
 layout:
-    - segment:
+    segments:
         - start: 0
           sealed: -1
           groups:
-              - { address: localhost, port: 8001 }
+              - nodes:
+                    - { address: localhost, port: 8001 }
           replicas: 1
