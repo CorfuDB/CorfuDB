@@ -1,4 +1,4 @@
-# CORFU
+# CorfuDB
 
 CorfuDB is a consistency platform designed around the abstraction
 of a shared log. CorfuDB objects are in-memory, highly available
