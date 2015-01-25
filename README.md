@@ -4,8 +4,8 @@ CorfuDB is a consistency platform designed around the abstraction
 of a shared log. CorfuDB objects are in-memory, highly available
 data structures providing linearizable read/write operations and
 strictly serializable transactions. CorfuDB is based on
-peer-reviewed research published at SOSP[^ref-tango-sosp],
-TOCS[^ref-corfu-tocs], and NSDI[^ref-corfu-nsdi].
+peer-reviewed research published at [SOSP](#References),
+[TOCS](#References), and [NSDI](#References).
 
 CorfuDB consists of two layers: a logging layer in org.corfudb.logging,
 which implements a distributed, fault-tolerant shared log; and a
@@ -92,17 +92,17 @@ $ bin/corfuDBLaunch.sh configmaster start
 
 ## References
 
-[^ref-tango-sosp] Tango: Distributed Data Structures over a Shared Log.
-**Mahesh Balakrishnan, Dahlia Malkhi, Ted Wobber, Ming Wu, Vijayan Prabhakaran,
-Michael Wei, John D. Davis, Sriram Rao, Tao Zou, Aviad Zuck.**
+Tango: Distributed Data Structures over a Shared Log.
+*Mahesh Balakrishnan, Dahlia Malkhi, Ted Wobber, Ming Wu, Vijayan Prabhakaran,
+Michael Wei, John D. Davis, Sriram Rao, Tao Zou, Aviad Zuck.*
 SOSP 2013: The 24th ACM Symposium on Operating Systems Principles.
 
-[^ref-corfu-tocs] CORFU: A Shared Log Design for Flash Clusters.
+CORFU: A Shared Log Design for Flash Clusters.
 *Mahesh Balakrishnan, Dahlia Malkhi, Vijayan Prabhakaran, Ted Wobber,
 Michael Wei, and John Davis.*
 ACM Transactions on Computer Systems (TOCS). December 2013.
 
-[^ref-corfu-nsdi] CORFU: A Shared Log Design for Flash Clusters.
+CORFU: A Shared Log Design for Flash Clusters.
 *Mahesh Balakrishnan, Dahlia Malkhi, Vijayan Prabhakaran, Ted Wobber,
 Michael Wei, and John Davis.*
 9th USENIX Symposium on Networked Systems Design and Implementation (NSDI '12).
