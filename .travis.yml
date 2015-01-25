@@ -6,6 +6,6 @@ before_install:
     - sudo apt-add-repository -y ppa:wnoronha/thrift
     - sudo apt-get update -qq
 install:
-    - sudo apt-get install -qq thrift
+    - sudo apt-get install -qq thrift-compiler
     - mvn clean install
 script: mvn -e verify
