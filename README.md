@@ -4,8 +4,8 @@ CorfuDB is a consistency platform designed around the abstraction
 of a shared log. CorfuDB objects are in-memory, highly available
 data structures providing linearizable read/write operations and
 strictly serializable transactions. CorfuDB is based on
-peer-reviewed research published at [SOSP](#References),
-[TOCS](#References), and [NSDI](#References).
+peer-reviewed research published at [SOSP](#references),
+[TOCS](#references), and [NSDI](#references).
 
 CorfuDB consists of two layers: a logging layer in org.corfudb.logging,
 which implements a distributed, fault-tolerant shared log; and a
