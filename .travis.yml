@@ -5,6 +5,6 @@ language: java
 before_install:
     - sudo apt-get update
 install:
-    - sudo apt-get install thrift
+    - sudo apt-get install thrift-compiler
     - mvn clean install
 script: mvn -e verify
