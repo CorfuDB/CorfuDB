@@ -1,0 +1,10 @@
+---
+# TravisCI Configuration
+# This file is used by the TravisCI continuous integration platform
+language: java
+before_install:
+    - sudo apt-get update
+install:
+    - sudo apt-get install thrift
+    - mvn clean install
+script: mvn -e verify
