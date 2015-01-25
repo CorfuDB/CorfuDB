@@ -116,10 +116,9 @@ public class CorfuDBRuntime
 
 interface AbstractRuntime
 {
-	void sync(CorfuDBObject cob);
-	void sync(CorfuDBObject cob, long stoppos);
-	long propose(CorfuDBObject cob, Serializable update, Set<Long> streams);
-	long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand);
+	void query_helper(CorfuDBObject cob);
+	void update_helper(CorfuDBObject cob, Serializable update, Set<Long> streams);
+	void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Set<Long> streams);
 	void registerObject(CorfuDBObject obj);
 }
 
@@ -141,14 +140,14 @@ class CommandWrapper implements Serializable
 
 /**
  * This class is a transactional runtime, implementing the AbstractRuntime interface
- * plus BeginTX/EndTX calls. It extends SimpleRuntime and overloads apply, propose and sync.
+ * plus BeginTX/EndTX calls. It extends SimpleRuntime and overloads apply, update_helper and query_helper.
  */
 class TXRuntime extends SimpleRuntime
 {
 
 	final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 
-	//used to communicate decisions from the sync thread to waiting endtx calls
+	//used to communicate decisions from the query_helper thread to waiting endtx calls
 	final Map<Long, Boolean> decisionmap;
 
 	public TXRuntime(SMREngine smre)
@@ -171,9 +170,10 @@ class TXRuntime extends SimpleRuntime
 		long txpos = -1;
 		//append the transaction intention
 		//txpos = curbundle.append(BufferStack.serialize(curtx.get()), curtx.get().get_streams());
-		txpos = super.propose(null, curtx.get(), curtx.get().get_streams(), null);
+		//txpos = super.query_then_update_helper(null, null, curtx.get(), curtx.get().get_streams());
+		txpos = smre.propose(curtx.get(), curtx.get().get_streams());
 		//now that we appended the intention, we need to play the bundle until the append point
-		super.sync(null, txpos);
+		smre.sync(txpos);
 		//at this point there should be a decision
 		//if not, for now we throw an error (but with decision records we'll keep syncing
 		//until we find the decision)
@@ -192,11 +192,11 @@ class TXRuntime extends SimpleRuntime
 		}
 	}
 
-	public void sync(CorfuDBObject cob)
+	public void query_helper(CorfuDBObject cob)
 	{
 		if(curtx.get()==null) //non-transactional, pass through
 		{
-			super.sync(cob);
+			super.query_helper(cob);
 		}
 		else
 		{
@@ -204,33 +204,33 @@ class TXRuntime extends SimpleRuntime
 		}
 	}
 
-	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand)
+	public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Set<Long> streams)
 	{
 		if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle as a singleton tx
 		{
 			//what about the weird case where the application proposes a TxInt? Can we assume
 			//this won't happen since TxInt is not a public class?
-			if(update instanceof TxInt) throw new RuntimeException("app cant propose a txint");
-			return super.propose(cob, update, streams, precommand);
+			if(update instanceof TxInt) throw new RuntimeException("app cant update_helper a txint");
+			//return super.query_then_update_helper(cob, query, update, streams);
+			smre.propose(update, streams, query);
 		}
 		else //in a transactional context, buffer for now
 		{
-			if(precommand!=null)
+			if(query !=null)
 			{
 				//mark the read set
-				sync(cob);
+				query_helper(cob);
 				//apply the precommand to the object
-				apply(precommand, streams, SMREngine.TIMESTAMP_INVALID);
+				apply(query, streams, SMREngine.TIMESTAMP_INVALID);
 			}
 			curtx.get().buffer_update(update, streams.iterator().next());
-			return SMREngine.TIMESTAMP_INVALID;
 		}
 
 	}
 
-	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams)
+	public void update_helper(CorfuDBObject cob, Serializable update, Set<Long> streams)
 	{
-		return propose(cob, update, streams, null);
+		query_then_update_helper(cob, null, update, streams);
 	}
 
 	public void apply(Object command, Set<Long> streams, long timestamp)
@@ -274,7 +274,7 @@ class TXRuntime extends SimpleRuntime
  * It can be directly used to implement SMR objects.
  *
  */
-class SimpleRuntime implements AbstractRuntime, Learner
+class SimpleRuntime implements AbstractRuntime, SMRLearner
 {
 	SMREngine smre;
 	Map<Long, CorfuDBObject> objectmap;
@@ -307,32 +307,24 @@ class SimpleRuntime implements AbstractRuntime, Learner
 
 	}
 
-	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand)
+	public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Set<Long> streams)
 	{
-		return smre.propose(cob, update, streams, precommand);
+		smre.propose(update, streams, query);
 	}
 	
-	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams)
+	public void update_helper(CorfuDBObject cob, Serializable update, Set<Long> streams)
 	{
-		return propose(cob, update, streams, null);
+		query_then_update_helper(cob, null, update, streams);
 	}
 
 
 	/** returns once log has been played by playback thread
 	 * until current tail.
 	 */
-	public void sync(CorfuDBObject cob)
+	public void query_helper(CorfuDBObject cob)
 	{
-		sync(cob, -1);
-	}
 
-	/** returns once log has been played by playback thread
-	* until syncpos.
-	* todo: right now syncpos is ignored
-	*/
-	public void sync(CorfuDBObject cob, long syncpos)
-	{
-		smre.sync(cob, syncpos);
+		smre.sync();
 	}
 
 	public void apply(Object command, Set<Long> streams, long timestamp)
@@ -362,7 +354,7 @@ class SimpleRuntime implements AbstractRuntime, Learner
 
 }
 
-interface Learner
+interface SMRLearner
 {
 	void apply(Object command, Set<Long> streams, long timestamp);
 }
@@ -372,9 +364,9 @@ interface Learner
  */
 class SMREngine
 {
-	Learner smrlearner;
+	SMRLearner smrlearner;
 
-	//used to coordinate between querying threads and the sync thread
+	//used to coordinate between querying threads and the query_helper thread
 	Lock queuelock;
 	List<Object> curqueue;
 
@@ -384,7 +376,7 @@ class SMREngine
 	Lock pendinglock = new ReentrantLock();
 	HashMap<Long, Pair<Serializable, Object>> pendingcommands = new HashMap<Long, Pair<Serializable, Object>>();
 
-	public void setLearner(Learner tlearner)
+	public void setLearner(SMRLearner tlearner)
 	{
 		smrlearner = tlearner;
 	}
@@ -412,7 +404,7 @@ class SMREngine
 	}
 
 
-	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand)
+	public long propose(Serializable update, Set<Long> streams, Object precommand)
 	{
 		CommandWrapper cmd = new CommandWrapper(update, streams);
 		pendinglock.lock();
@@ -420,13 +412,13 @@ class SMREngine
 		pendinglock.unlock();
 		long pos = curbundle.append(BufferStack.serialize(cmd), streams);
 		if(precommand!=null) //block until precommand is played
-			sync(cob, pos);
+			sync(pos);
 		return pos;
 	}
 
-	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams)
+	public long propose(Serializable update, Set<Long> streams)
 	{
-		return propose(cob, update, streams, null);
+		return propose(update, streams, null);
 	}
 
 
@@ -434,7 +426,7 @@ class SMREngine
 	 * until syncpos.
 	 * todo: right now syncpos is ignored
 	 */
-	public void sync(CorfuDBObject cob, long syncpos)
+	public void sync(long syncpos)
 	{
 		final Object syncobj = new Object();
 		synchronized (syncobj)
@@ -451,6 +443,11 @@ class SMREngine
 				throw new RuntimeException(ie);
 			}
 		}
+	}
+
+	public void sync()
+	{
+		sync(-1);
 	}
 
 	//runs in a single thread
@@ -479,6 +476,7 @@ class SMREngine
 			if(pendingcommands.containsKey(cmdw.uniqueid))
 				localcmds = pendingcommands.remove(cmdw.uniqueid);
 			pendinglock.unlock();
+			if(smrlearner==null) throw new RuntimeException("smr learner not set!");
 			if(localcmds!=null)
 			{
 				if (localcmds.second != null)
@@ -877,8 +875,8 @@ class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 	@Override
 	public int size()
 	{
-		TR.sync(this);
-		//what if the value changes between sync and the actual read?
+		TR.query_helper(this);
+		//what if the value changes between query_helper and the actual read?
 		//in the linearizable case, we are safe because we see a later version that strictly required
 		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
 		lock();
@@ -890,7 +888,7 @@ class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 	@Override
 	public boolean isEmpty()
 	{
-		TR.sync(this);
+		TR.query_helper(this);
 		lock();
 		boolean x = backingmap.isEmpty();
 		unlock();
@@ -900,7 +898,7 @@ class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 	@Override
 	public boolean containsKey(Object o)
 	{
-		TR.sync(this);
+		TR.query_helper(this);
 		lock();
 		boolean x = backingmap.containsKey(o);
 		unlock();
@@ -910,7 +908,7 @@ class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 	@Override
 	public boolean containsValue(Object o)
 	{
-		TR.sync(this);
+		TR.query_helper(this);
 		lock();
 		boolean x = backingmap.containsValue(o);
 		unlock();
@@ -920,7 +918,7 @@ class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 	@Override
 	public V get(Object o)
 	{
-		TR.sync(this);
+		TR.query_helper(this);
 		lock();
 		V x = backingmap.get(o);
 		unlock();
@@ -932,7 +930,7 @@ class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 		HashSet<Long> H = new HashSet<Long>();
 		H.add(this.getID());
 		MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, key);
-		TR.propose(this, new MapCommand<K, V>(MapCommand.CMD_PUT, key, val), H, precmd);
+		TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_PUT, key, val), H);
 		return (V)precmd.getReturnValue();
 	}
 
@@ -943,7 +941,7 @@ class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 		HashSet<Long> H = new HashSet<Long>();
 		H.add(this.getID());
 		MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, (K)o);
-		TR.propose(this, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o), H, precmd);
+		TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o), H);
 		return (V)precmd.getReturnValue();
 	}
 
@@ -959,7 +957,7 @@ class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 		//will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
 		HashSet<Long> H = new HashSet<Long>();
 		H.add(this.getID());
-		TR.propose(this, new MapCommand<K, V>(MapCommand.CMD_CLEAR), H);
+		TR.update_helper(this, new MapCommand<K, V>(MapCommand.CMD_CLEAR), H);
 	}
 
 	@Override
@@ -1072,11 +1070,11 @@ class CorfuDBCounter extends CorfuDBObject
 	public void increment()
 	{
 		HashSet<Long> H = new HashSet<Long>(); H.add(this.getID());
-		TR.propose(this, new CounterCommand(CounterCommand.CMD_INC), H);
+		TR.update_helper(this, new CounterCommand(CounterCommand.CMD_INC), H);
 	}
 	public int read()
 	{
-		TR.sync(this);
+		TR.query_helper(this);
 		//what if the value changes between queryhelper and the actual read?
 		//in the linearizable case, we are safe because we see a later version that strictly required
 		//in the transactional case, the tx will spuriously abort, but safety will not be violated...
