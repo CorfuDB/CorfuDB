@@ -1,0 +1,9 @@
+Package: [[name]]-common
+Version: [[version]]
+Section: misc
+Priority: optional
+Architecture: all
+Depends: openjdk-7-jre
+Maintainer: Michael Wei <mwei@cs.ucsd.edu>
+Description: CorfuDB is a consistency platform designed around the abstraction of a shared log.
+Distribution: development
