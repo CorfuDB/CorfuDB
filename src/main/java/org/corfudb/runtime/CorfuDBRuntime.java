@@ -90,7 +90,7 @@ public class CorfuDBRuntime
 		if(true) return;
 */
 
-		TXRuntime TR = new TXRuntime(sb);
+		TXRuntime TR = new TXRuntime(new SMREngine(sb));
 		//SimpleRuntime TR = new SimpleRuntime(sb);
 
 
@@ -151,9 +151,9 @@ class TXRuntime extends SimpleRuntime
 	//used to communicate decisions from the sync thread to waiting endtx calls
 	final Map<Long, Boolean> decisionmap;
 
-	public TXRuntime(StreamBundle sb)
+	public TXRuntime(SMREngine smre)
 	{
-		super(sb);
+		super(smre);
 		decisionmap = new HashMap<Long, Boolean>();
 	}
 
@@ -220,10 +220,10 @@ class TXRuntime extends SimpleRuntime
 				//mark the read set
 				sync(cob);
 				//apply the precommand to the object
-				apply(precommand, streams, TIMESTAMP_INVALID);
+				apply(precommand, streams, SMREngine.TIMESTAMP_INVALID);
 			}
 			curtx.get().buffer_update(update, streams.iterator().next());
-			return TIMESTAMP_INVALID;
+			return SMREngine.TIMESTAMP_INVALID;
 		}
 
 	}
@@ -233,7 +233,7 @@ class TXRuntime extends SimpleRuntime
 		return propose(cob, update, streams, null);
 	}
 
-	void apply(Object command, Set<Long> streams, long timestamp)
+	public void apply(Object command, Set<Long> streams, long timestamp)
 	{
 		if (command instanceof TxInt)
 		{
@@ -274,15 +274,9 @@ class TXRuntime extends SimpleRuntime
  * It can be directly used to implement SMR objects.
  *
  */
-class SimpleRuntime implements AbstractRuntime
+class SimpleRuntime implements AbstractRuntime, Learner
 {
-	//used to coordinate between querying threads and the sync thread
-	Lock queuelock;
-	List<Object> curqueue;
-	
-	StreamBundle curbundle;
-
-
+	SMREngine smre;
 	Map<Long, CorfuDBObject> objectmap;
 	/**
 	 * Registers an object with the runtime
@@ -305,42 +299,17 @@ class SimpleRuntime implements AbstractRuntime
 
 
 
-	public SimpleRuntime(StreamBundle sb)
+	public SimpleRuntime(SMREngine tsmre)
 	{
+		smre = tsmre;
+		smre.setLearner(this);
 		objectmap = new HashMap<Long, CorfuDBObject>();
-
-		curbundle = sb;
-			
-		queuelock = new ReentrantLock();
-		curqueue = new LinkedList<Object>();
-
-		//start the playback thread
-		new Thread(new Runnable()
-		{
-			public void run()
-			{
-				while(true)
-				{
-					playback();
-				}
-			}
-		}).start();
 
 	}
 
-	Lock pendinglock = new ReentrantLock();
-	HashMap<Long, Pair<Serializable, Object>> pendingcommands = new HashMap<Long, Pair<Serializable, Object>>();
-
 	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand)
 	{
-		CommandWrapper cmd = new CommandWrapper(update, streams);
-		pendinglock.lock();
-		pendingcommands.put(cmd.uniqueid, new Pair(update, precommand));
-		pendinglock.unlock();
-		long pos = curbundle.append(BufferStack.serialize(cmd), streams);
-		if(precommand!=null) //block until precommand is played
-		sync(cob, pos);
-		return pos;
+		return smre.propose(cob, update, streams, precommand);
 	}
 	
 	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams)
@@ -363,26 +332,10 @@ class SimpleRuntime implements AbstractRuntime
 	*/
 	public void sync(CorfuDBObject cob, long syncpos)
 	{
-		final Object syncobj = new Object();
-		synchronized (syncobj)
-		{
-			queuelock.lock();
-			curqueue.add(syncobj);
-			queuelock.unlock();
-			try
-			{
-				syncobj.wait();
-			}
-			catch (InterruptedException ie)
-			{
-				throw new RuntimeException(ie);
-			}
-		}
+		smre.sync(cob, syncpos);
 	}
 
-	static final long TIMESTAMP_INVALID = -1;
-
-	void apply(Object command, Set<Long> streams, long timestamp)
+	public void apply(Object command, Set<Long> streams, long timestamp)
 	{
 		if(streams.size()!=1) throw new RuntimeException("unimplemented");
 		Long streamid = streams.iterator().next();
@@ -398,13 +351,106 @@ class SimpleRuntime implements AbstractRuntime
 				//the alternative is to have the apply in the object always call a superclass version of apply
 				//that sets the timestamp
 				//only the apply thread sets the timestamp, so we only have to worry about concurrent reads
-				if(timestamp!=TIMESTAMP_INVALID)
+				if(timestamp!=SMREngine.TIMESTAMP_INVALID)
 					cob.setTimestamp(timestamp);
 			}
 			else
 				throw new RuntimeException("entry for stream " + streamid + " with no registered object");
 		}
 
+	}
+
+}
+
+interface Learner
+{
+	void apply(Object command, Set<Long> streams, long timestamp);
+}
+
+/**
+ * This class is an SMR engine. It's unaware of objects.
+ */
+class SMREngine
+{
+	Learner smrlearner;
+
+	//used to coordinate between querying threads and the sync thread
+	Lock queuelock;
+	List<Object> curqueue;
+
+	StreamBundle curbundle;
+
+	static final long TIMESTAMP_INVALID = -1;
+	Lock pendinglock = new ReentrantLock();
+	HashMap<Long, Pair<Serializable, Object>> pendingcommands = new HashMap<Long, Pair<Serializable, Object>>();
+
+	public void setLearner(Learner tlearner)
+	{
+		smrlearner = tlearner;
+	}
+
+	public SMREngine(StreamBundle sb)
+	{
+		curbundle = sb;
+
+		queuelock = new ReentrantLock();
+		curqueue = new LinkedList<Object>();
+
+		//start the playback thread
+		new Thread(new Runnable()
+		{
+			public void run()
+			{
+				while(true)
+				{
+					playback();
+				}
+			}
+		}).start();
+
+
+	}
+
+
+	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams, Object precommand)
+	{
+		CommandWrapper cmd = new CommandWrapper(update, streams);
+		pendinglock.lock();
+		pendingcommands.put(cmd.uniqueid, new Pair(update, precommand));
+		pendinglock.unlock();
+		long pos = curbundle.append(BufferStack.serialize(cmd), streams);
+		if(precommand!=null) //block until precommand is played
+			sync(cob, pos);
+		return pos;
+	}
+
+	public long propose(CorfuDBObject cob, Serializable update, Set<Long> streams)
+	{
+		return propose(cob, update, streams, null);
+	}
+
+
+	/** returns once log has been played by playback thread
+	 * until syncpos.
+	 * todo: right now syncpos is ignored
+	 */
+	public void sync(CorfuDBObject cob, long syncpos)
+	{
+		final Object syncobj = new Object();
+		synchronized (syncobj)
+		{
+			queuelock.lock();
+			curqueue.add(syncobj);
+			queuelock.unlock();
+			try
+			{
+				syncobj.wait();
+			}
+			catch (InterruptedException ie)
+			{
+				throw new RuntimeException(ie);
+			}
+		}
 	}
 
 	//runs in a single thread
@@ -437,12 +483,12 @@ class SimpleRuntime implements AbstractRuntime
 			{
 				if (localcmds.second != null)
 				{
-					apply(localcmds.second, cmdw.streams, TIMESTAMP_INVALID);
+					smrlearner.apply(localcmds.second, cmdw.streams, TIMESTAMP_INVALID);
 				}
-				apply(localcmds.first, cmdw.streams, update.getLogpos());
+				smrlearner.apply(localcmds.first, cmdw.streams, update.getLogpos());
 			}
 			else
-				apply(cmdw.cmd, cmdw.streams, update.getLogpos());
+				smrlearner.apply(cmdw.cmd, cmdw.streams, update.getLogpos());
 			update = curbundle.readNext(curtail);
 		}
 
@@ -458,7 +504,13 @@ class SimpleRuntime implements AbstractRuntime
 			}
 		}
 	}
+
 }
+
+
+
+
+
 
 //todo: custom serialization
 class Pair<X, Y> implements Serializable
