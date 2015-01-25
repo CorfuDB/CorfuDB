@@ -24,7 +24,7 @@ On Linux (Debian/Ubuntu), run:
 $ sudo apt-get install openjdk-7-jdk maven
 ```
 
-On Mac OS X, the homebrew[http://brew.sh] package manager should help.
+On Mac OS X, the [homebrew](http://brew.sh) package manager should help.
 After installing homebrew, run:
 ```
 $ brew install maven
