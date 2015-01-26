@@ -18,8 +18,8 @@ import java.io.Serializable;
 import java.util.*;
 
 /**
- * This class is a transactional runtime, implementing the AbstractRuntime interface
- * plus BeginTX/EndTX calls. It extends SimpleRuntime and overloads apply, update_helper and query_helper.
+ * This class is a transactional runtime implementing the AbstractRuntime interface.
+ * It extends SimpleRuntime and overloads apply, update_helper and query_helper.
  *
  */
 public class TXRuntime extends SimpleRuntime

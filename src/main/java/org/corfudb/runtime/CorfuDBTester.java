@@ -90,8 +90,8 @@ public class CorfuDBTester
         //counter test
         //CorfuDBObject cob = new CorfuDBCounter(TR, 1234);
         //map test
-        CorfuDBMap<Integer, String> cob1 = new CorfuDBMap<Integer, String>(TR, 2345);
-        CorfuDBMap<Integer, String> cob2 = new CorfuDBMap<Integer, String>(TR, 2346);
+        CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, 2345);
+        CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap<Integer, Integer>(TR, 2346);
 
 
         numthreads = 2;
@@ -106,11 +106,121 @@ public class CorfuDBTester
         }
         for(int i=0;i<numthreads;i++)
             threads[i].join();
-        System.out.println("Test done!");
+        System.out.println("Test done! Checking consistency...");
+        TXTesterThread tx = new TXTesterThread(cob1, cob2, TR);
+        if(tx.check_consistency())
+            System.out.println("Consistency check passed --- test successful!");
+        else
+            System.out.println("Consistency check failed!");
+
+        System.exit(0);
+
     }
 
 
 }
+
+
+/**
+ * This tester implements a bipartite graph over two maps, where an edge exists between integers map1:X and map2:Y
+ * iff map1:X == Y and map2:Y==X. The code uses transactions across the maps to add and remove edges,
+ * ensuring that the graph is always in a consistent state.
+ */
+class TXTesterThread implements Runnable
+{
+    TXRuntime cr;
+    CorfuDBMap<Integer, Integer> map1;
+    CorfuDBMap<Integer, Integer> map2;
+    int numkeys;
+    int numops;
+
+    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, TXRuntime tcr)
+    {
+        this(tmap1, tmap2, tcr, 10, 100);
+    }
+
+    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, TXRuntime tcr, int tnumkeys, int tnumops)
+    {
+        map1 = tmap1;
+        map2 = tmap2;
+        cr = tcr;
+        numkeys = tnumkeys;
+        numops = tnumops;
+    }
+
+    public boolean check_consistency()
+    {
+        boolean consistent = true;
+        cr.BeginTX();
+        for(int i=0;i<numkeys;i++)
+        {
+            if(map1.containsKey(i))
+            {
+                if(!map2.containsKey(map1.get(i)) || map2.get(map1.get(i))!=i)
+                {
+                    consistent = false;
+                    break;
+                }
+            }
+            if(map2.containsKey(i))
+            {
+                if(!map1.containsKey(map2.get(i)) || map1.get(map2.get(i))!=i)
+                {
+                    consistent = false;
+                    break;
+                }
+            }
+        }
+        //todo: fix this -- it'll fail with multiple clients
+        if(!cr.EndTX()) throw new RuntimeException("Consistency check aborted...");
+        return consistent;
+    }
+
+    public void run()
+    {
+        int numcommits = 0;
+        System.out.println("starting thread");
+        if(numkeys<2) throw new RuntimeException("minimum number of keys for test is 2");
+        for(int i=0;i<numops;i++)
+        {
+            int x = (int) (Math.random() * numkeys);
+            int y = x;
+            while(y==x)
+                y = (int) (Math.random() * numkeys);
+            System.out.println("Creating an edge between " + x + " and " + y);
+            cr.BeginTX();
+            if(map1.containsKey(x)) //if x is occupied, delete the edge from x
+            {
+                map2.remove(map1.get(x));
+                map1.remove(x);
+            }
+            else if(map2.containsKey(y)) //if y is occupied, delete the edge from y
+            {
+                map1.remove(map2.get(y));
+                map2.remove(y);
+            }
+            else
+            {
+                map1.put(x, y);
+                map2.put(y, x);
+            }
+            if(cr.EndTX()) numcommits++;
+/*            try
+            {
+                Thread.sleep((int)(Math.random()*1000.0));
+            }
+            catch(Exception e)
+            {
+                throw new RuntimeException(e);
+            }*/
+        }
+        System.out.println("Tester thread is done: " + numcommits + " commits out of " + numops);
+    }
+
+}
+
+
+
 
 class TesterThread implements Runnable
 {
@@ -265,55 +375,6 @@ class BufferStack implements Serializable //todo: custom serialization
     }
 }
 
-
-
-class TXTesterThread implements Runnable
-{
-    TXRuntime cr;
-    CorfuDBMap map1;
-    CorfuDBMap map2;
-    int numkeys;
-    int numops;
-
-    public TXTesterThread(CorfuDBMap tmap1, CorfuDBMap tmap2, TXRuntime tcr)
-    {
-        this(tmap1, tmap2, tcr, 10, 100);
-    }
-
-    public TXTesterThread(CorfuDBMap tmap1, CorfuDBMap tmap2, TXRuntime tcr, int tnumkeys, int tnumops)
-    {
-        map1 = tmap1;
-        map2 = tmap2;
-        cr = tcr;
-        numkeys = tnumkeys;
-        numops = tnumops;
-    }
-
-    public void run()
-    {
-        int numcommits = 0;
-        System.out.println("starting thread");
-        for(int i=0;i<numops;i++)
-        {
-            int x = (int) (Math.random() * numkeys);
-            System.out.println("adding key " + x + " to both maps");
-            cr.BeginTX();
-            map1.put(x, "ABCD");
-            map2.put(x, "XYZ");
-            if(cr.EndTX()) numcommits++;
-            try
-            {
-                Thread.sleep((int)(Math.random()*1000.0));
-            }
-            catch(Exception e)
-            {
-                throw new RuntimeException(e);
-            }
-        }
-        System.out.println("Tester thread is done: " + numcommits + " commits out of " + numops);
-    }
-
-}
 
 
 class StreamBundleTester implements Runnable
