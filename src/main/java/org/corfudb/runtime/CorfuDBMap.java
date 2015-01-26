@@ -122,7 +122,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         HashSet<Long> H = new HashSet<Long>();
         H.add(this.getID());
         MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, key);
-        TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_PUT, key, val), H);
+        TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_PUT, key, val));
         return (V)precmd.getReturnValue();
     }
 
@@ -133,7 +133,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         HashSet<Long> H = new HashSet<Long>();
         H.add(this.getID());
         MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, (K)o);
-        TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o), H);
+        TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o));
         return (V)precmd.getReturnValue();
     }
 
@@ -149,7 +149,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         //will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
         HashSet<Long> H = new HashSet<Long>();
         H.add(this.getID());
-        TR.update_helper(this, new MapCommand<K, V>(MapCommand.CMD_CLEAR), H);
+        TR.update_helper(this, new MapCommand<K, V>(MapCommand.CMD_CLEAR));
     }
 
     @Override

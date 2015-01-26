@@ -36,7 +36,7 @@ public class TXRuntime extends SimpleRuntime
         decisionmap = new HashMap<Long, Boolean>();
     }
 
-    void BeginTX()
+    public void BeginTX()
     {
         if (curtx.get() != null) //there's already an executing tx
             throw new RuntimeException("tx already executing!"); //should we do something different to support nested txes?
@@ -44,7 +44,7 @@ public class TXRuntime extends SimpleRuntime
     }
 
 
-    boolean EndTX()
+    public boolean EndTX()
     {
         System.out.println("EndTX");
         long txpos = -1;
@@ -53,7 +53,7 @@ public class TXRuntime extends SimpleRuntime
         //txpos = super.query_then_update_helper(null, null, curtx.get(), curtx.get().get_streams());
         txpos = smre.propose(curtx.get(), curtx.get().get_streams());
         //now that we appended the intention, we need to play the bundle until the append point
-        smre.sync(txpos);
+        smre.sync(txpos); //this results in a number of calls to apply, as each intervening intention is processed
         //at this point there should be a decision
         //if not, for now we throw an error (but with decision records we'll keep syncing
         //until we find the decision)
@@ -84,9 +84,11 @@ public class TXRuntime extends SimpleRuntime
         }
     }
 
-    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Set<Long> streams)
+    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update)
     {
-        if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle as a singleton tx
+        Set<Long> streams = new HashSet<Long>();
+        streams.add(cob.getID());
+        if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle
         {
             //what about the weird case where the application proposes a TxInt? Can we assume
             //this won't happen since TxInt is not a public class?
@@ -108,9 +110,9 @@ public class TXRuntime extends SimpleRuntime
 
     }
 
-    public void update_helper(CorfuDBObject cob, Serializable update, Set<Long> streams)
+    public void update_helper(CorfuDBObject cob, Serializable update)
     {
-        query_then_update_helper(cob, null, update, streams);
+        query_then_update_helper(cob, null, update);
     }
 
     public void apply(Object command, Set<Long> streams, long timestamp)
@@ -118,7 +120,14 @@ public class TXRuntime extends SimpleRuntime
         if (command instanceof TxInt)
         {
             TxInt T = (TxInt)command;
-            if(process_txint(T, timestamp))
+            boolean decision = validate(T);
+            synchronized(decisionmap)
+            {
+                System.out.println("decided position " + timestamp);
+                decisionmap.put(timestamp, true);
+
+            }
+            if(decision)
             {
                 Iterator<Pair<Serializable, Long>> it = T.bufferedupdates.iterator();
                 while(it.hasNext())
@@ -128,9 +137,10 @@ public class TXRuntime extends SimpleRuntime
                     tstreams.add(P.second);
                     //todo: do we have to do 2-phase locking?
                     //since all updates are funnelled through the apply thread
-                    //the only bad thing that can happen is that reads see a non-transactional state
+                    //the only bad thing that can happen is that reads see an inconsistent state
                     //but this can happen anyway, and in this case the transaction will abort
-                    super.apply(P.first, tstreams, timestamp);
+                    //todo: think about providing tx opacity across the board
+                    super.apply(P.first, tstreams, timestamp); //let SimpleRuntime do the object multiplexing
                 }
             }
         }
@@ -138,14 +148,23 @@ public class TXRuntime extends SimpleRuntime
             super.apply(command, streams, timestamp);
     }
 
-    boolean process_txint(TxInt newtx, long timestamp)
+    boolean validate(TxInt newtx)
     {
-        synchronized(decisionmap)
+        // to enforce strict serializability, we use a simple rule:
+        // has anything the transaction read changed since it was read?
+        // if not, the transaction commits since the state it viewed is
+        // essentially the same state it would have seen had it acquired
+        // locks pessimistically.
+
+        boolean abort = false;
+        Iterator<Pair<Long, Long>> readsit = newtx.get_readset().iterator();
+        while(readsit.hasNext())
         {
-            System.out.println("decided position " + timestamp);
-            decisionmap.put(timestamp, true);
-            return true;
+            Pair<Long, Long> curread = readsit.next();
+            if(getObject(curread.first).getTimestamp()>curread.second)
+                abort = true;
         }
+        return !abort;
     }
 }
 

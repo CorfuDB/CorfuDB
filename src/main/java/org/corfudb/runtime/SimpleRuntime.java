@@ -16,6 +16,7 @@ package org.corfudb.runtime;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -52,6 +53,12 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
         }
     }
 
+    CorfuDBObject getObject(long objectid)
+    {
+        if(!objectmap.containsKey(objectid)) throw new RuntimeException("object not registered!");
+        return objectmap.get(objectid);
+    }
+
 
     /**
      * Creates a SimpleRuntime with an underlying SMR engine. Registers itself
@@ -67,14 +74,26 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
 
     }
 
-    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Set<Long> streams)
+    public void BeginTX()
     {
+        throw new RuntimeException("SimpleRuntime does not support transactions.");
+    }
+
+    public boolean EndTX()
+    {
+        throw new RuntimeException("SimpleRuntime does not support transactions.");
+    }
+
+    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update)
+    {
+        Set<Long> streams = new HashSet<Long>();
+        streams.add(cob.getID());
         smre.propose(update, streams, query);
     }
 
-    public void update_helper(CorfuDBObject cob, Serializable update, Set<Long> streams)
+    public void update_helper(CorfuDBObject cob, Serializable update)
     {
-        query_then_update_helper(cob, null, update, streams);
+        query_then_update_helper(cob, null, update);
     }
 
 

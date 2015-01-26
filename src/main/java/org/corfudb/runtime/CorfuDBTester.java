@@ -363,7 +363,7 @@ class CorfuDBCounter extends CorfuDBObject
     public void increment()
     {
         HashSet<Long> H = new HashSet<Long>(); H.add(this.getID());
-        TR.update_helper(this, new CounterCommand(CounterCommand.CMD_INC), H);
+        TR.update_helper(this, new CounterCommand(CounterCommand.CMD_INC));
     }
     public int read()
     {
