@@ -65,17 +65,6 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.1</version>
-                <configuration>
-                    <source>1.6</source>
-                    <target>1.6</target>
-                    <showDeprecation>true</showDeprecation>
-                    <encoding>${project.build.sourceEncoding}</encoding>
-                </configuration>
-            </plugin>
             <!-- Make a folder `target/libs/` with all the dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -90,10 +79,22 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${project.build.directory}/libs/</outputDirectory>
-                            <excludeArtifactIds>jdk.tools-1.6.jar</excludeArtifactIds>
+                            <excludeArtifactIds>jdk.tools-1.7.jar</excludeArtifactIds>
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.1</version>
+                <configuration>
+                    <compilerVersion>1.7</compilerVersion>
+                    <source>1.7</source>
+                    <target>1.7</target>
+                    <showDeprecation>true</showDeprecation>
+                    <encoding>${project.build.sourceEncoding}</encoding>
+                </configuration>
             </plugin>
             <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
             <plugin>
@@ -117,6 +118,7 @@
             <plugin>
                 <groupId>com.mycila.maven-license-plugin</groupId>
                 <artifactId>maven-license-plugin</artifactId>
+                <version>1.8</version>
                 <configuration>
                     <header>LICENSE.txt</header>
                     <strictCheck>true</strictCheck>
@@ -127,7 +129,6 @@
                 <artifactId>maven-thrift-plugin</artifactId>
                 <version>0.1.10</version>
                 <configuration>
-                    <thriftExecutable>/usr/local/bin/thrift</thriftExecutable>
                 </configuration>
                 <executions>
                     <execution>
