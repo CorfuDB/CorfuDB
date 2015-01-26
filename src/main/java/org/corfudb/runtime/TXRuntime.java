@@ -124,8 +124,7 @@ public class TXRuntime extends SimpleRuntime
             synchronized(decisionmap)
             {
                 System.out.println("decided position " + timestamp);
-                decisionmap.put(timestamp, true);
-
+                decisionmap.put(timestamp, decision);
             }
             if(decision)
             {
@@ -164,6 +163,7 @@ public class TXRuntime extends SimpleRuntime
             if(getObject(curread.first).getTimestamp()>curread.second)
                 abort = true;
         }
+        System.out.println("ABORT = " + abort);
         return !abort;
     }
 }

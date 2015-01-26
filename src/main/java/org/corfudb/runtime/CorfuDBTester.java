@@ -95,14 +95,18 @@ public class CorfuDBTester
 
 
         numthreads = 2;
+        Thread[] threads = new Thread[numthreads];
         for (int i = 0; i < numthreads; i++)
         {
             //linearizable tester
             //Thread T = new Thread(new CorfuDBTester(cob));
             //transactional tester
-            Thread T = new Thread(new TXTesterThread(cob1, cob2, TR));
-            T.start();
+            threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
+            threads[i].start();
         }
+        for(int i=0;i<numthreads;i++)
+            threads[i].join();
+        System.out.println("Test done!");
     }
 
 
@@ -268,24 +272,35 @@ class TXTesterThread implements Runnable
     TXRuntime cr;
     CorfuDBMap map1;
     CorfuDBMap map2;
+    int numkeys;
+    int numops;
+
     public TXTesterThread(CorfuDBMap tmap1, CorfuDBMap tmap2, TXRuntime tcr)
+    {
+        this(tmap1, tmap2, tcr, 10, 100);
+    }
+
+    public TXTesterThread(CorfuDBMap tmap1, CorfuDBMap tmap2, TXRuntime tcr, int tnumkeys, int tnumops)
     {
         map1 = tmap1;
         map2 = tmap2;
         cr = tcr;
+        numkeys = tnumkeys;
+        numops = tnumops;
     }
 
     public void run()
     {
+        int numcommits = 0;
         System.out.println("starting thread");
-        while(true)
+        for(int i=0;i<numops;i++)
         {
-            int x = (int) (Math.random() * 1000.0);
+            int x = (int) (Math.random() * numkeys);
             System.out.println("adding key " + x + " to both maps");
             cr.BeginTX();
             map1.put(x, "ABCD");
             map2.put(x, "XYZ");
-            cr.EndTX();
+            if(cr.EndTX()) numcommits++;
             try
             {
                 Thread.sleep((int)(Math.random()*1000.0));
@@ -295,6 +310,7 @@ class TXTesterThread implements Runnable
                 throw new RuntimeException(e);
             }
         }
+        System.out.println("Tester thread is done: " + numcommits + " commits out of " + numops);
     }
 
 }
