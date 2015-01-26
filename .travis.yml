@@ -7,5 +7,6 @@ before_install:
     - sudo apt-get update -qq
 install:
     - sudo apt-get install -qq thrift-compiler
+    - which thrift
     - mvn clean install
 script: mvn -e verify
