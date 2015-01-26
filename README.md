@@ -21,7 +21,7 @@ Thrift and Maven.
 
 On Linux (Debian/Ubuntu), run:
 ```
-$ sudo apt-get install openjdk-7-jdk maven thrift
+$ sudo apt-get install openjdk-7-jdk maven thrift-compiler
 ```
 
 On Mac OS X, the [homebrew](http://brew.sh) package manager should help.

@@ -1,0 +1,9 @@
+Package: [[name]]-logunit
+Version: [[version]]
+Section: misc
+Priority: optional
+Architecture: all
+Depends: openjdk-7-jre [[name]]-common
+Maintainer: Michael Wei <mwei@cs.ucsd.edu>
+Description: The [[name]] logunit provides storages for a distributed log.
+Distribution: development
