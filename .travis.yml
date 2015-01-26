@@ -4,7 +4,7 @@
 language: java
 before_install:
     - sudo apt-get update -qq
-    - wget http://www.apache.org/dyn/closer.cgi?path=/thrift/0.9.2/thrift-0.9.2.tar.gz -O thrift.tar.gz
+    - wget http://apache.mirrors.tds.net/thrift/0.9.2/thrift-0.9.2.tar.gz -O thrift.tar.gz
     - tar -xzf thrift.tar.gz
     - cd thrift-0.9.2 && ./configure --prefix=/usr && make && sudo make install
 install:
