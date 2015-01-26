@@ -3,7 +3,7 @@
 # This file is used by the TravisCI continuous integration platform
 language: java
 before_install:
-    - sudo apt-add-repository -y ppa:wnoronha/thrift
+    - sudo apt-add-repository "deb mirror://mirrors.ubuntu.com/mirrors.txt trusty main restricted multiverse" -y
     - sudo apt-get update -qq
 install:
     - sudo apt-get install -qq thrift-compiler
