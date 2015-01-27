@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.*;
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
@@ -70,6 +71,9 @@ public class CorfuDBTester
         streams.add(new Long(2345)); //hardcoded hack
 
         StreamBundle sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
+
+        //trim the stream to get rid of entries from previous tests
+        sb.prefixTrim(sb.checkTail());
 
         //turn on to test stream bundle in isolation
 /*
@@ -333,10 +337,6 @@ class BufferStack implements Serializable //todo: custom serialization
     {
         return totalsize;
     }
-    public java.util.Iterator<byte[]> iterator()
-    {
-        return buffers.iterator();
-    }
     public static BufferStack serialize(Serializable obj)
     {
         try
@@ -372,6 +372,15 @@ class BufferStack implements Serializable //todo: custom serialization
         {
             throw new RuntimeException(ce);
         }
+    }
+    //todo: this is a terribly inefficient translation from the buffer
+    //representation at the runtime layer to the one used by the logging layer
+    //we need a unified representation
+    public List<ByteBuffer> asList()
+    {
+        List<ByteBuffer> L = new LinkedList<ByteBuffer>();
+        L.add(ByteBuffer.wrap(this.flatten()));
+        return L;
     }
 }
 

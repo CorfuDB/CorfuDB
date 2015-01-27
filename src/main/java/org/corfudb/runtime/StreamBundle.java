@@ -61,6 +61,15 @@ interface StreamBundle
      * @return          the current tail of the stream
      */
     long checkTail();
+
+    /**
+     * trims all entries in the stream bundle until the passed in position (exclusive). the space
+     * may not be reclaimed immediately if the underlying address space only supports a prefix trim.
+     *
+     * @param   trimpos the position strictly before which all entries belonging to the bundle's
+     *                  streams are trimmed
+     */
+    void prefixTrim(long trimpos);
 }
 
 
@@ -113,16 +122,37 @@ class CorfuStreamingSequencer implements StreamingSequencer
 /**
  * This is the write-once address space providing storage for the shared log.
  */
-interface LogAddressSpace
+interface WriteOnceAddressSpace
 {
-    void write(long pos, BufferStack bs);
-    BufferStack read(long pos);
+    /**
+     * Writes an entry at a particular position. Throws an exception if
+     * the entry is already written to.
+     *
+     * @param pos
+     * @param bs
+     */
+    void write(long pos, BufferStack bs); //todo: throw exception
+
+    /**
+     * Reads the entry at a particular position. Throws exceptions if the entry
+     * is unwritten or trimmed.
+     *
+     * @param pos
+     */
+    BufferStack read(long pos); //todo: throw exception
+
+    /**
+     * Trims the prefix of the address space before the passed in position.
+     *
+     * @param pos position before which all entries are trimmed
+     */
+    void prefixTrim(long pos);
 }
 
 /**
  * Implements the write-once address space over the default Corfu shared log implementation.
  */
-class CorfuLogAddressSpace implements LogAddressSpace
+class CorfuLogAddressSpace implements WriteOnceAddressSpace
 {
     ClientLib cl;
 
@@ -183,6 +213,19 @@ class CorfuLogAddressSpace implements LogAddressSpace
         return new BufferStack(ret);
 
     }
+
+    @Override
+    public void prefixTrim(long pos)
+    {
+        try
+        {
+            cl.trim(pos);
+        }
+        catch (CorfuException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
 }
 
 /**
@@ -221,14 +264,14 @@ class StreamBundleImpl implements StreamBundle
 {
     List<Long> mystreams;
 
-    LogAddressSpace las;
+    WriteOnceAddressSpace las;
     StreamingSequencer ss;
 
     long curpos;
     long curtail;
 
 
-    public StreamBundleImpl(List<Long> streamids, StreamingSequencer tss, LogAddressSpace tlas)
+    public StreamBundleImpl(List<Long> streamids, StreamingSequencer tss, WriteOnceAddressSpace tlas)
     {
         las = tlas;
         ss = tss;
@@ -253,6 +296,14 @@ class StreamBundleImpl implements StreamBundle
         return curtail;
 
     }
+
+    @Override
+    public void prefixTrim(long trimpos)
+    {
+        //todo: do something smarter where we track the individual trim points of all streams
+        las.prefixTrim(trimpos);
+    }
+
     public StreamEntry readNext()
     {
         return readNext(0);
