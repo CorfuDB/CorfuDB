@@ -29,7 +29,7 @@ then
   if [ -e "${CORFUDB_PREFIX}/conf" ]; then
     CORFUDBCFGDIR="$CORFUDBBINDIR/../conf"
   else
-    CORFUDBCFGDIR="$CORFUDBBINDIR/../etc/corfudb"
+    CORFUDBCFGDIR="/etc/corfudb"
   fi
 fi
 

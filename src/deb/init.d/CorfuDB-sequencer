@@ -12,19 +12,12 @@
 umask 022
 
 ROLE=sequencer
-ROLENAME=CorfuDB Sequencer
+ROLENAME="CorfuDB Sequencer"
 PIDFILE=/var/run/corfudb.${ROLE}.pid
 
 . /lib/lsb/init-functions
 
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
-        log_daemon_msg "Stopping $ROLENAME" "CorfuDB-$ROLE"
-        if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
-            log_end_msg 0
-        else
-            log_end_msg 1
-        fi
-        ;;
 
 case "$1" in
     start)
@@ -60,16 +53,20 @@ case "$1" in
             1)
                 log_progress_msg "(not running)"
                 log_end_msg 0
+                ;;
             *)
-                log_progress_msg ("failed to stop")
+                log_progress_msg "(failed to stop)"
                 log_end_msg 1
-            ;;
+                ;;
+            esac
+        ;;
     status)
         status_of_proc -p $PIDFILE ${JAVA_HOME}/bin/java && exit 0 || exit $?
         ;;
     *)
         log_action_msg "Usage $0 {start|stop|restart|status}"
         exit 1
+        ;;
 esac
 
 exit 0
