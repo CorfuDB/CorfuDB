@@ -3,12 +3,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.corfudb</groupId>
-    <artifactId>corfu-lib</artifactId>
+    <artifactId>corfudb</artifactId>
     <version>0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>CORFULIB</name>
-
+    <name>CorfuDB</name>
 
     <organization>
         <name>CorfuDB</name>

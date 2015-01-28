@@ -1,9 +1,9 @@
-Package: [[name]]-sequencer
+Package: [[artifactId]]-sequencer
 Version: [[version]]
 Section: misc
 Priority: optional
 Architecture: all
-Depends: openjdk-7-jre, [[name]]-common
+Depends: openjdk-7-jre, [[artifactId]]-common
 Maintainer: Michael Wei <mwei@cs.ucsd.edu>
 Description: A sequencer for [[name]] which provides unique sequence numbers to clients.
 Distribution: development
