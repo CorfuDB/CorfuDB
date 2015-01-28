@@ -167,6 +167,25 @@
                               <prefix>/usr/share/corfudb/lib</prefix>
                             </mapper>
                           </data>
+                          <data>
+                            <src>bin</src>
+                            <type>directory</type>
+                            <mapper>
+                                <type>perm</type>
+                                <prefix>/usr/share/corfudb/bin</prefix>
+                                <filemode>755</filemode>
+                            </mapper>
+                           </data>
+                           <data>
+                               <type>link</type>
+                               <linkName>/usr/bin/corfuDBLaunch</linkName>
+                               <linkTarget>/usr/share/corfudb/bin/corfuDBLaunch.sh</linkTarget>
+                               <symlink>true</symlink>
+                               <mapper>
+                                   <type>perm</type>
+                                   <filemode>755</filemode>
+                                </mapper>
+                           </data>
                         </dataSet>
                       </configuration>
                   </execution>
