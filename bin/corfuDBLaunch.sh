@@ -4,8 +4,8 @@ CORFUDBBIN="${BASH_SOURCE-$0}"
 CORFUDBBIN="$(dirname "${CORFUDBBIN}")"
 CORFUDBBINDIR="$(cd "${CORFUDBBIN}"; pwd)"
 
-if [ -e "$CORFUDBBIN/../libexec/corfuDBEnv.sh" ]; then
-    . "$CORFUDBBINDIR"/../libexec/corfuDBEnv.sh
+if [ -e "$CORFUDBBIN/../share/corfudb/bin/corfuDBEnv.sh" ]; then
+    . "$CORFUDBBINDIR"/../share/corfudb/bin/corfuDBEnv.sh
 else
     . "$CORFUDBBINDIR"/corfuDBEnv.sh
 fi
