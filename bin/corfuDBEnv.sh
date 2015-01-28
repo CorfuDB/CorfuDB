@@ -64,39 +64,15 @@ fi
 #add the corfudbcfg dir to classpath
 CLASSPATH="$CORFUDBCFGDIR:$CLASSPATH"
 
-for i in "$CORFUDBBINDIR"/../src/java/lib/*.jar
-do
-    CLASSPATH="$i:$CLASSPATH"
-done
-
-#make it work in the binary package
-#(use array for LIBPATH to account for spaces within wildcard expansion)
-if ls "${CORFUDB_PREFIX}"/share/corfudb/corfudb-*.jar > /dev/null 2>&1; then 
-  LIBPATH=("${CORFUDB_PREFIX}"/share/corfudb/*.jar)
-else
-  #release tarball format
-  for i in "$CORFUDBDIR"/../corfudb-*.jar
-  do
-    CLASSPATH="$i:$CLASSPATH"
-  done
-  LIBPATH=("${CORFUDBBINDIR}"/../lib/*.jar)
+if ls "$CORFUDBBINDIR"/../target/*.jar > /dev/null 2>&1; then
+  echo "Running from development source"
+  CLASSPATH=("$CORFUDBBINDIR"/../target/corfudb-*.jar)
+elif ls "${CORFUDB_PREFIX}"/share/corfudb/lib/corfudb-*.jar > /dev/null 2>&1; then
+  CLASSPATH=("${CORFUDB_PREFIX}"/share/corfudb/lib/*.jar)
 fi
 
-for i in "${LIBPATH[@]}"
-do
-    CLASSPATH="$i:$CLASSPATH"
-done
+echo $CLASSPATH
 
-#make it work for developers
-#for d in "$CORFUDBBINDIR"/../target/lib/*.jar
-#do
-#   CLASSPATH="$d:$CLASSPATH"
-#done
-
-#make it work for developers
-#CLASSPATH="$CORFUDBBINDIR/../target/classes:$CLASSPATH"
-
-CLASSPATH="$CORFUDBBINDIR/../target/corfu-lib-0.1-SNAPSHOT-shaded.jar:$CLASSPATH"
 case "`uname`" in
     CYGWIN*) cygwin=true ;;
     *) cygwin=false ;;
