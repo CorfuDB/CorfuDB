@@ -91,6 +91,18 @@ $ bin/corfuDBLaunch.sh logunit start
 $ bin/corfuDBLaunch.sh configmaster start
 ```
 
+## Common Issues
+
+Q: *I get a bunch of errors that look like*
+```
+[ERROR] /tmp/CorfuDB/target/generated-sources/thrift/org/corfudb/loggingunit/LogUnitConfigService.java:[2566,7] cannot find symbol
+  symbol:   class HashCodeBuilder
+  location: class org.corfudb.loggingunit.LogUnitConfigService.rebuild_args
+```
+*when I run mvn install.*
+
+A: Make sure your version of Thrift matches the version of Thrift in the pom.xml file (currently 0.9.2)
+
 ## References
 
 Tango: Distributed Data Structures over a Shared Log.
