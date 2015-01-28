@@ -237,7 +237,7 @@
                             </mapper>
                             </data>
                             <data>
-                                <src>src/deb/init.d/CorfuDB-sequencer</src>
+                                <src>src/deb/init.d/CorfuDB-logunit</src>
                                 <type>file</type>
                                 <mapper>
                                     <type>perm</type>
@@ -267,7 +267,7 @@
                             </mapper>
                             </data>
                             <data>
-                                <src>src/deb/init.d/CorfuDB-logunit</src>
+                                <src>src/deb/init.d/CorfuDB-configmaster</src>
                                 <type>file</type>
                                 <mapper>
                                     <type>perm</type>
