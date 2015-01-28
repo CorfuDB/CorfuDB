@@ -185,7 +185,7 @@
                                    <type>perm</type>
                                    <filemode>755</filemode>
                                 </mapper>
-                           </data>
+                            </data>
                         </dataSet>
                       </configuration>
                   </execution>
@@ -206,7 +206,16 @@
                               <type>perm</type>
                               <prefix>/etc/corfudb</prefix>
                             </mapper>
-                          </data>
+                            </data>
+                            <data>
+                                <src>src/deb/init.d/CorfuDB-sequencer</src>
+                                <type>file</type>
+                                <mapper>
+                                    <type>perm</type>
+                                    <prefix>/etc/init.d</prefix>
+                                    <filemode>755</filemode>
+                                </mapper>
+                            </data>
                         </dataSet>
                       </configuration>
                   </execution>
