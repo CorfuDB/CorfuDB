@@ -23,23 +23,28 @@ import java.lang.Thread;
 
 public class CorfuShell {
 
-     /**
-	 * @param args
-	 */
-	public static void main(String[] args) {
-		
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
-				
+    /**
+     * @param args
+     */
+    public static void main(String[] args) {
+        if(args.length==0)
+        {
+            System.out.println("Usage: java org.corfudb.sharedlog.examples.CorfuShell [masternode]");
+            System.out.println("master node example = http://localhost:8002/corfu");
+        }
+        final String masternode = args[0];
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+
                 CommandParser prompt = new CommandParser();
                 try {
-                    prompt.Init("http://localhost:8000/corfu");
+                    prompt.Init(masternode);
                 } catch (CorfuException e) {
                     return;
                 }
                 prompt.Console();
-			}}).run();
-				
-	}
+            }}).run();
+
+    }
 }
