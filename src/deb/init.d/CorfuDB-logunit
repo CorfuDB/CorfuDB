@@ -14,6 +14,7 @@ umask 022
 ROLE=logunit
 ROLENAME="CorfuDB Log Unit"
 PIDFILE=/var/run/corfudb.${ROLE}.pid
+PREFIX=/usr/bin
 
 . /lib/lsb/init-functions
 
@@ -22,7 +23,7 @@ export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 case "$1" in
     start)
         log_daemon_msg "Starting $ROLENAME" "CorfuDB-$ROLE"
-        if start-stop-daemon --start --quiet  --oknodo --pidfile $PIDFILE -c CorfuDB-$ROLE -x corfuDBLaunch $ROLE start; then
+        if start-stop-daemon --start --quiet  --oknodo --pidfile $PIDFILE -x $PREFIX/corfuDBLaunch $ROLE start; then
             log_end_msg 0
         else
             log_end_msg 1
@@ -44,7 +45,7 @@ case "$1" in
         set -e
         case $RET in
             0)
-                if start-stop-daemon --start --quiet  --oknodo --pidfile $PIDFILE -c CorfuDB-$ROLE -x corfuDBLaunch $ROLE start; then
+                if start-stop-daemon --start --quiet  --oknodo --pidfile $PIDFILE -x $PREFIX/corfuDBLaunch $ROLE start; then
                     log_end_msg 0
                 else
                     log_end_msg 1
