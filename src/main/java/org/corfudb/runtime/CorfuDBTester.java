@@ -70,7 +70,7 @@ public class CorfuDBTester
         streams.add(new Long(1234)); //hardcoded hack
         streams.add(new Long(2345)); //hardcoded hack
 
-        StreamBundle sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
+        Stream sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
 
         //trim the stream to get rid of entries from previous tests
         sb.prefixTrim(sb.checkTail());
@@ -388,8 +388,8 @@ class BufferStack implements Serializable //todo: custom serialization
 
 class StreamBundleTester implements Runnable
 {
-    StreamBundle sb;
-    public StreamBundleTester(StreamBundle tsb)
+    Stream sb;
+    public StreamBundleTester(Stream tsb)
     {
         sb = tsb;
     }

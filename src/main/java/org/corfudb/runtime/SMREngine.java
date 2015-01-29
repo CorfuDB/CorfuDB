@@ -34,7 +34,7 @@ public class SMREngine
     Lock queuelock;
     List<Object> curqueue;
 
-    StreamBundle curbundle;
+    Stream curbundle;
 
     static final long TIMESTAMP_INVALID = -1;
     Lock pendinglock = new ReentrantLock();
@@ -45,7 +45,7 @@ public class SMREngine
         smrlearner = tlearner;
     }
 
-    public SMREngine(StreamBundle sb)
+    public SMREngine(Stream sb)
     {
         curbundle = sb;
 

@@ -113,7 +113,7 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
                 CorfuDBObject cob = objectmap.get(streamid);
                 cob.apply(command);
                 //todo: verify that it's okay for this to not be atomic with the apply
-                //in the worst case, the object thinks it has an older version that it really does
+                //in the worst case, the object thinks it has an older version than it really does
                 //but all that should cause is spurious aborts
                 //the alternative is to have the apply in the object always call a superclass version of apply
                 //that sets the timestamp

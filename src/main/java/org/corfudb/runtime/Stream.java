@@ -14,12 +14,6 @@
  */
 package org.corfudb.runtime;
 
-import org.corfudb.sharedlog.ClientLib;
-import org.corfudb.sharedlog.CorfuException;
-import org.corfudb.sharedlog.ExtntWrap;
-import org.corfudb.sharedlog.UnwrittenCorfuException;
-
-import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -29,12 +23,12 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
- * A StreamBundle is a set of intertwined streams residing in a single
+ * A Stream is a set of intertwined streams residing in a single
  * underlying log (i.e., a global ordering exists across all the streams).
- * The StreamBundle allows appends to arbitrary streams (even those not in the bundle).
+ * The Stream allows appends to arbitrary streams (even those not in the bundle).
  * It enables playback of entries in the union of all the streams in strict log order.
  */
-interface StreamBundle
+interface Stream
 {
     long append(BufferStack bs, Set<Long> streams);
 
@@ -81,7 +75,7 @@ interface StreamBundle
 
 
 /**
- * Used by StreamBundle to wrap read values, so that some metadata
+ * Used by Stream to wrap read values, so that some metadata
  * (e.g., the position of the entry in the underlying log) can be returned
  * along with the payload.
  */
@@ -107,34 +101,91 @@ class StreamEntry
     }
 }
 
+
+class StreamImpl implements Stream
+{
+    long streamid;
+
+    StreamingSequencer seq;
+    WriteOnceAddressSpace addrspace;
+
+    Lock biglock;
+    long curpos;
+    long curtail;
+
+
+
+    public long getStreamID()
+    {
+        return streamid;
+    }
+
+    StreamImpl(long tstreamid, StreamingSequencer tss, WriteOnceAddressSpace tlas)
+    {
+        streamid = tstreamid;
+        seq = tss;
+        addrspace = tlas;
+        biglock = new ReentrantLock();
+
+    }
+
+    @Override
+    public long append(BufferStack bs, Set<Long> streams)
+    {
+        long ret = seq.get_slot(streams);
+        addrspace.write(ret, bs);
+        return ret;
+    }
+
+    @Override
+    public StreamEntry readNext()
+    {
+            return readNext(0);
+    }
+
+    @Override
+    public StreamEntry readNext(long stoppos)
+    {
+        biglock.lock();
+        if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
+        {
+            biglock.unlock();
+            return null;
+        }
+        long readpos = curpos++;
+        biglock.unlock();
+        BufferStack ret = addrspace.read(readpos);
+        return new StreamEntry(ret, readpos);
+    }
+
+    @Override
+    public long checkTail()
+    {
+        long tcurtail = seq.check_tail();
+        biglock.lock();
+        if(tcurtail>curtail) curtail = tcurtail;
+        biglock.unlock();
+        return tcurtail;
+    }
+
+    @Override
+    public void prefixTrim(long trimpos)
+    {
+        throw new RuntimeException("unimplemented");
+    }
+}
+
+
+
 /**
- * Simple implementation of the StreamBundle interface. Implements
+ * Simple implementation of the Stream interface. Implements
  * streaming by playing back all entries and discarding those
  * that belong to other streams.
  */
-class StreamBundleImpl implements StreamBundle
+class StreamBundleImpl implements Stream
 {
 
-    class StreamInfo
-    {
-        LinkedList<Long> entries;
-
-        long streamid;
-
-        public long getStreamID()
-        {
-            return streamid;
-        }
-
-        StreamInfo(long tstreamid)
-        {
-            streamid = tstreamid;
-        }
-    }
-
-
-
-    List<StreamInfo> mystreams;
+    List<Long> mystreams;
 
     WriteOnceAddressSpace las;
     StreamingSequencer ss;
@@ -151,9 +202,7 @@ class StreamBundleImpl implements StreamBundle
 
         biglock = new ReentrantLock();
 
-        Iterator<Long> it = streamids.iterator();
-        while(it.hasNext())
-           mystreams.add(new StreamInfo(it.next()));
+        mystreams = streamids;
     }
 
     public long append(BufferStack bs, Set<Long> streamids)
