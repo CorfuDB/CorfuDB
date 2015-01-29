@@ -57,7 +57,7 @@ an argument. Other options include `restart` and `status`.
 
 You will probably want to test if your deployment is working. The
 `bin/corfuDBTest.sh` script provides an easy way to access built-in
-tests and examples. A very simple test in called CorfuHello.
+tests and examples. A very simple test is called CorfuHello.
 To call it, run:
 
 ```
