@@ -20,9 +20,13 @@ import org.corfudb.sharedlog.ExtntWrap;
 import org.corfudb.sharedlog.UnwrittenCorfuException;
 
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 
 /**
  * A StreamBundle is a set of intertwined streams residing in a single
@@ -73,160 +77,8 @@ interface StreamBundle
 }
 
 
-/**
- * This is an interface to a stream-aware sequencer.
- */
-interface StreamingSequencer
-{
-    long get_slot(Set<Long> streams);
-    long check_tail();
-}
 
-/**
- * A trivial implementation of a stream-aware sequencer that passes commands through
- * to the default stream-unaware sequencer.
- */
-class CorfuStreamingSequencer implements StreamingSequencer
-{
-    ClientLib cl;
-    public CorfuStreamingSequencer(ClientLib tcl)
-    {
-        cl = tcl;
-    }
-    public long get_slot(Set<Long> streams)
-    {
-        long ret;
-        try
-        {
-            ret = cl.grabtokens(1);
-        }
-        catch(CorfuException ce)
-        {
-            throw new RuntimeException(ce);
-        }
-        return ret;
-    }
-    public long check_tail()
-    {
-        try
-        {
-            return cl.querytail();
-        }
-        catch(CorfuException ce)
-        {
-            throw new RuntimeException(ce);
-        }
-    }
-}
 
-/**
- * This is the write-once address space providing storage for the shared log.
- */
-interface WriteOnceAddressSpace
-{
-    /**
-     * Writes an entry at a particular position. Throws an exception if
-     * the entry is already written to.
-     *
-     * @param pos
-     * @param bs
-     */
-    void write(long pos, BufferStack bs); //todo: throw exception
-
-    /**
-     * Reads the entry at a particular position. Throws exceptions if the entry
-     * is unwritten or trimmed.
-     *
-     * @param pos
-     */
-    BufferStack read(long pos); //todo: throw exception
-
-    /**
-     * Trims the prefix of the address space before the passed in position.
-     *
-     * @param pos position before which all entries are trimmed
-     */
-    void prefixTrim(long pos);
-}
-
-/**
- * Implements the write-once address space over the default Corfu shared log implementation.
- */
-class CorfuLogAddressSpace implements WriteOnceAddressSpace
-{
-    ClientLib cl;
-
-    public CorfuLogAddressSpace(ClientLib tcl)
-    {
-        cl = tcl;
-    }
-
-    public void write(long pos, BufferStack bs)
-    {
-        try
-        {
-            //convert to a linked list of extent-sized bytebuffers, which is what the logging layer wants
-            if(bs.numBytes()>cl.grainsize())
-                throw new RuntimeException("entry too big at " + bs.numBytes() + " bytes; multi-entry writes not yet implemented");
-            LinkedList<ByteBuffer> buflist = new LinkedList<ByteBuffer>();
-            byte[] payload = new byte[cl.grainsize()];
-            bs.flatten(payload);
-            buflist.add(ByteBuffer.wrap(payload));
-            cl.writeExtnt(pos, buflist);
-        }
-        catch(CorfuException ce)
-        {
-            throw new RuntimeException(ce);
-        }
-    }
-
-    public BufferStack read(long pos)
-    {
-        System.out.println("Reading..." + pos);
-        byte[] ret = null;
-        while(true)
-        {
-            try
-            {
-                ExtntWrap ew = cl.readExtnt(pos);
-                //for now, copy to a byte array and return
-                System.out.println("read back " + ew.getCtntSize() + " bytes");
-                ret = new byte[4096 * 10]; //hack --- fix this
-                ByteBuffer bb = ByteBuffer.wrap(ret);
-                java.util.Iterator<ByteBuffer> it = ew.getCtntIterator();
-                while (it.hasNext())
-                {
-                    ByteBuffer btemp = it.next();
-                    bb.put(btemp);
-                }
-                break;
-            }
-            catch (UnwrittenCorfuException uce)
-            {
-                //encountered a hole -- try again
-            }
-            catch (CorfuException e)
-            {
-                throw new RuntimeException(e);
-            }
-        }
-        return new BufferStack(ret);
-
-    }
-
-    @Override
-    public void prefixTrim(long pos)
-    {
-        try
-        {
-            cl.trim(pos);
-        }
-        catch (CorfuException e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-}
 
 /**
  * Used by StreamBundle to wrap read values, so that some metadata
@@ -262,11 +114,32 @@ class StreamEntry
  */
 class StreamBundleImpl implements StreamBundle
 {
-    List<Long> mystreams;
+
+    class StreamInfo
+    {
+        LinkedList<Long> entries;
+
+        long streamid;
+
+        public long getStreamID()
+        {
+            return streamid;
+        }
+
+        StreamInfo(long tstreamid)
+        {
+            streamid = tstreamid;
+        }
+    }
+
+
+
+    List<StreamInfo> mystreams;
 
     WriteOnceAddressSpace las;
     StreamingSequencer ss;
 
+    Lock biglock;
     long curpos;
     long curtail;
 
@@ -275,12 +148,15 @@ class StreamBundleImpl implements StreamBundle
     {
         las = tlas;
         ss = tss;
-        mystreams = streamids;
+
+        biglock = new ReentrantLock();
+
+        Iterator<Long> it = streamids.iterator();
+        while(it.hasNext())
+           mystreams.add(new StreamInfo(it.next()));
     }
 
-    //todo we are currently synchronizing on 'this' because ClientLib crashes on concurrent access;
-    //once ClientLib is fixed, we need to clean up StreamBundle's locking
-    public synchronized long append(BufferStack bs, Set<Long> streamids)
+    public long append(BufferStack bs, Set<Long> streamids)
     {
         long ret = ss.get_slot(streamids);
         las.write(ret, bs);
@@ -288,12 +164,13 @@ class StreamBundleImpl implements StreamBundle
 
     }
 
-    public synchronized long checkTail() //for now, using 'this' to synchronize curtail
+    public long checkTail()
     {
-//		System.out.println("Checking tail...");
-        curtail = ss.check_tail();
-//		System.out.println("tail is " + curtail);
-        return curtail;
+        long tcurtail = ss.check_tail();
+        biglock.lock();
+        if(tcurtail>curtail) curtail = tcurtail;
+        biglock.unlock();
+        return tcurtail;
 
     }
 
@@ -309,13 +186,16 @@ class StreamBundleImpl implements StreamBundle
         return readNext(0);
     }
 
-    public synchronized StreamEntry readNext(long stoppos) //for now, using 'this' to synchronize curpos/curtail
+    public StreamEntry readNext(long stoppos)
     {
+        biglock.lock();
         if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
         {
+            biglock.unlock();
             return null;
         }
         long readpos = curpos++;
+        biglock.unlock();
         BufferStack ret = las.read(readpos);
         return new StreamEntry(ret, readpos);
     }
