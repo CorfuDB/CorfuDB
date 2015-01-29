@@ -14,8 +14,7 @@
  */
 package org.corfudb.runtime;
 
-import java.util.Iterator;
-import java.util.LinkedList;
+import java.io.Serializable;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
@@ -30,7 +29,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 interface Stream
 {
-    long append(BufferStack bs, Set<Long> streams);
+    long append(Serializable s, Set<Long> streams);
 
     /**
      * reads the next entry in the stream bundle
@@ -79,28 +78,56 @@ interface Stream
  * (e.g., the position of the entry in the underlying log) can be returned
  * along with the payload.
  */
-class StreamEntry
+class StreamEntry implements Serializable
 {
-    private long logpos;
-    private BufferStack payload;
+    private long logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
+    private Object payload;
+    private Set<Long> streams;
 
     public long getLogpos()
     {
         return logpos;
     }
 
-    public BufferStack getPayload()
+    public Object getPayload()
     {
         return payload;
     }
 
-    public StreamEntry(BufferStack tbs, long position)
+    public Set<Long> getStreams()
+    {
+        return streams;
+    }
+
+    public StreamEntry(Object tbs, long position, Set<Long> tstreams)
     {
         logpos = position;
         payload = tbs;
+        streams = tstreams;
     }
 }
 
+
+interface StreamFactory
+{
+    public Stream newStream(long streamid);
+}
+
+class StreamFactoryImpl implements StreamFactory
+{
+    WriteOnceAddressSpace was;
+    StreamingSequencer ss;
+    public StreamFactoryImpl(WriteOnceAddressSpace twas, StreamingSequencer tss)
+    {
+        was = twas;
+        ss = tss;
+    }
+    public Stream newStream(long streamid)
+    {
+        return new StreamImpl(streamid, ss, was);
+    }
+
+}
 
 class StreamImpl implements Stream
 {
@@ -112,7 +139,6 @@ class StreamImpl implements Stream
     Lock biglock;
     long curpos;
     long curtail;
-
 
 
     public long getStreamID()
@@ -130,32 +156,43 @@ class StreamImpl implements Stream
     }
 
     @Override
-    public long append(BufferStack bs, Set<Long> streams)
+    public long append(Serializable payload, Set<Long> streams)
     {
         long ret = seq.get_slot(streams);
-        addrspace.write(ret, bs);
+        System.out.println("reserved slot " + ret);
+        StreamEntry S = new StreamEntry(payload, ret, streams);
+        addrspace.write(ret, BufferStack.serialize(S));
+        System.out.println("wrote slot " + ret);
         return ret;
     }
 
     @Override
     public StreamEntry readNext()
     {
-            return readNext(0);
+        return readNext(0);
     }
 
     @Override
     public StreamEntry readNext(long stoppos)
     {
-        biglock.lock();
-        if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
+        StreamEntry ret = null;
+        while(true)
         {
+            biglock.lock();
+            if (!(curpos < curtail && (stoppos == 0 || curpos < stoppos)))
+            {
+                biglock.unlock();
+                return null;
+            }
+            long readpos = curpos++;
             biglock.unlock();
-            return null;
+            BufferStack bs = addrspace.read(readpos);
+            ret = (StreamEntry) bs.deserialize();
+            if(ret.getStreams().contains(this.getStreamID()))
+                break;
+            System.out.println("skipping...");
         }
-        long readpos = curpos++;
-        biglock.unlock();
-        BufferStack ret = addrspace.read(readpos);
-        return new StreamEntry(ret, readpos);
+        return ret;
     }
 
     @Override
@@ -205,10 +242,10 @@ class StreamBundleImpl implements Stream
         mystreams = streamids;
     }
 
-    public long append(BufferStack bs, Set<Long> streamids)
+    public long append(Serializable S, Set<Long> streamids)
     {
         long ret = ss.get_slot(streamids);
-        las.write(ret, bs);
+        las.write(ret, BufferStack.serialize(S));
         return ret;
 
     }
@@ -245,7 +282,8 @@ class StreamBundleImpl implements Stream
         }
         long readpos = curpos++;
         biglock.unlock();
-        BufferStack ret = las.read(readpos);
-        return new StreamEntry(ret, readpos);
+        BufferStack bs = las.read(readpos);
+        StreamEntry ret = (StreamEntry)bs.deserialize();
+        return ret;
     }
 }

@@ -44,12 +44,22 @@ public class CorfuDBTester
 
         if (args.length == 0)
         {
-            System.out.println("usage: java CorfuDBTester masterURL");
+            System.out.println("usage: java CorfuDBTester masterURL [0==TXTest(default)|1==LinearizableTest");
             System.out.println("e.g. masterURL: http://localhost:8000/corfu");
             return;
         }
 
         String masternode = args[0];
+
+        final int TXTEST=0;
+        final int LINTEST=1;
+
+
+        int testnum = TXTEST;
+        if(args.length==2)
+            testnum = Integer.parseInt(args[1]);
+
+
 
         ClientLib crf;
 
@@ -66,14 +76,58 @@ public class CorfuDBTester
         int numthreads;
 
 
-        List<Long> streams = new LinkedList<Long>();
-        streams.add(new Long(1234)); //hardcoded hack
-        streams.add(new Long(2345)); //hardcoded hack
+        if(testnum==LINTEST)
+        {
+            SimpleRuntime TR = new SimpleRuntime(new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf)));
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, 2345);
+            numthreads = 2;
+            Thread[] threads = new Thread[numthreads];
+            for (int i = 0; i < numthreads; i++)
+            {
+                //linearizable tester
+                threads[i] = new Thread(new TesterThread(cob1));
+                threads[i].start();
+            }
+            for(int i=0;i<numthreads;i++)
+                threads[i].join();
+            System.out.println("Test succeeded!");
+        }
+        else if(testnum==TXTEST)
+        {
+            TXRuntime TR = new TXRuntime(new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf)));
 
-        Stream sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, 2345);
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap<Integer, Integer>(TR, 2346);
+
+
+            numthreads = 2;
+            Thread[] threads = new Thread[numthreads];
+            for (int i = 0; i < numthreads; i++)
+            {
+                //linearizable tester
+                //Thread T = new Thread(new CorfuDBTester(cob));
+                //transactional tester
+                threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
+                threads[i].start();
+            }
+            for(int i=0;i<numthreads;i++)
+                threads[i].join();
+            System.out.println("Test done! Checking consistency...");
+            TXTesterThread tx = new TXTesterThread(cob1, cob2, TR);
+            if(tx.check_consistency())
+                System.out.println("Consistency check passed --- test successful!");
+            else
+                System.out.println("Consistency check failed!");
+        }
+
+  //      List<Long> streams = new LinkedList<Long>();
+  //      streams.add(new Long(1234)); //hardcoded hack
+  //      streams.add(new Long(2345)); //hardcoded hack
+
+//        Stream sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
 
         //trim the stream to get rid of entries from previous tests
-        sb.prefixTrim(sb.checkTail());
+  //      sb.prefixTrim(sb.checkTail());
 
         //turn on to test stream bundle in isolation
 /*
@@ -87,35 +141,13 @@ public class CorfuDBTester
 		if(true) return;
 */
 
-        TXRuntime TR = new TXRuntime(new SMREngine(sb));
-        //SimpleRuntime TR = new SimpleRuntime(sb);
+
+
 
 
         //counter test
         //CorfuDBObject cob = new CorfuDBCounter(TR, 1234);
         //map test
-        CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, 2345);
-        CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap<Integer, Integer>(TR, 2346);
-
-
-        numthreads = 2;
-        Thread[] threads = new Thread[numthreads];
-        for (int i = 0; i < numthreads; i++)
-        {
-            //linearizable tester
-            //Thread T = new Thread(new CorfuDBTester(cob));
-            //transactional tester
-            threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
-            threads[i].start();
-        }
-        for(int i=0;i<numthreads;i++)
-            threads[i].join();
-        System.out.println("Test done! Checking consistency...");
-        TXTesterThread tx = new TXTesterThread(cob1, cob2, TR);
-        if(tx.check_consistency())
-            System.out.println("Consistency check passed --- test successful!");
-        else
-            System.out.println("Consistency check failed!");
 
         System.exit(0);
 
@@ -238,7 +270,7 @@ class TesterThread implements Runnable
     public void run()
     {
         System.out.println("starting thread");
-        while(true)
+        for(int i=0;i<100;i++)
         {
             if(cob instanceof CorfuDBCounter)
             {

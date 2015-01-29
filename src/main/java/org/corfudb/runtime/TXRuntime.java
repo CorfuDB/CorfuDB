@@ -30,9 +30,9 @@ public class TXRuntime extends SimpleRuntime
     //used to communicate decisions from the query_helper thread to waiting endtx calls
     final Map<Long, Boolean> decisionmap;
 
-    public TXRuntime(SMREngine smre)
+    public TXRuntime(StreamFactory fact)
     {
-        super(smre);
+        super(fact);
         decisionmap = new HashMap<Long, Boolean>();
     }
 
@@ -49,10 +49,27 @@ public class TXRuntime extends SimpleRuntime
         System.out.println("EndTX");
         long txpos = -1;
         //append the transaction intention
-        //txpos = curbundle.append(BufferStack.serialize(curtx.get()), curtx.get().get_streams());
-        //txpos = super.query_then_update_helper(null, null, curtx.get(), curtx.get().get_streams());
+        if(curtx.get()==null) throw new RuntimeException("no current transaction!");
+        if(curtx.get().get_streams().size()==0)
+        {
+            if(curtx.get().get_readset().size()==0) // empty transaction
+            {
+                curtx.set(null);
+                return true;
+            }
+            //read-only transaction
+            else
+            {
+                boolean ret = validate(curtx.get());
+                curtx.set(null);
+                if (ret) return true;
+            }
+//            throw new RuntimeException("empty transaction!"); //todo: do something more sensible here
+        }
+        SMREngine smre = getEngine(curtx.get().get_streams().iterator().next());
         txpos = smre.propose(curtx.get(), curtx.get().get_streams());
-        //now that we appended the intention, we need to play the bundle until the append point
+        //now that we appended the intention, we need to play the stream until the append point
+        //todo: sync each smre involved
         smre.sync(txpos); //this results in a number of calls to apply, as each intervening intention is processed
         //at this point there should be a decision
         //if not, for now we throw an error (but with decision records we'll keep syncing
@@ -88,13 +105,13 @@ public class TXRuntime extends SimpleRuntime
     {
         Set<Long> streams = new HashSet<Long>();
         streams.add(cob.getID());
-        if(curtx.get()==null) //not in a transactional context, append immediately to the streambundle
+        if(curtx.get()==null) //not in a transactional context, append immediately to the stream
         {
             //what about the weird case where the application proposes a TxInt? Can we assume
             //this won't happen since TxInt is not a public class?
             if(update instanceof TxInt) throw new RuntimeException("app cant update_helper a txint");
             //return super.query_then_update_helper(cob, query, update, streams);
-            smre.propose(update, streams, query);
+            getEngine(cob.getID()).propose(update, streams, query);
         }
         else //in a transactional context, buffer for now
         {

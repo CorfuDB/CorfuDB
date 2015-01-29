@@ -64,8 +64,8 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
         cl = tcl;
     }
 
-    //todo we are currently synchronizing on 'this' because ClientLib crashes on concurrent access;
-    public synchronized void write(long pos, BufferStack bs)
+    //todo we are currently synchronizing on 'cl' because ClientLib crashes on concurrent access;
+    public void write(long pos, BufferStack bs)
     {
         try
         {
@@ -76,7 +76,10 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
             byte[] payload = new byte[cl.grainsize()];
             bs.flatten(payload);
             buflist.add(ByteBuffer.wrap(payload));
-            cl.writeExtnt(pos, buflist);
+            synchronized(cl)
+            {
+                cl.writeExtnt(pos, buflist);
+            }
         }
         catch(CorfuException ce)
         {
@@ -84,15 +87,21 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
         }
     }
 
-    public synchronized BufferStack read(long pos)
+    public BufferStack read(long pos)
     {
         System.out.println("Reading..." + pos);
         byte[] ret = null;
+        int retrycounter = 0;
+        final int retrymax = 1000;
         while(true)
         {
             try
             {
-                ExtntWrap ew = cl.readExtnt(pos);
+                ExtntWrap ew = null;
+                synchronized(cl)
+                {
+                    ew = cl.readExtnt(pos);
+                }
                 //for now, copy to a byte array and return
                 System.out.println("read back " + ew.getCtntSize() + " bytes");
                 ret = new byte[4096 * 10]; //hack --- fix this
@@ -108,22 +117,37 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
             catch (UnwrittenCorfuException uce)
             {
                 //encountered a hole -- try again
+//                System.out.println("Hole..." + pos);
+                try
+                {
+                    Thread.sleep(1000);
+                }
+                catch(InterruptedException e)
+                {
+                    //ignore
+                }
+                retrycounter++;
+                if(retrycounter==retrymax) throw new RuntimeException("Encountered non-transient hole at " + pos + "...");
             }
             catch (CorfuException e)
             {
                 throw new RuntimeException(e);
             }
         }
+        System.out.println("Done Reading..." + pos);
         return new BufferStack(ret);
 
     }
 
     @Override
-    public synchronized void prefixTrim(long pos)
+    public void prefixTrim(long pos)
     {
         try
         {
-            cl.trim(pos);
+            synchronized(cl)
+            {
+                cl.trim(pos);
+            }
         }
         catch (CorfuException e)
         {

@@ -28,8 +28,10 @@ import java.util.Set;
  */
 public class SimpleRuntime implements AbstractRuntime, SMRLearner
 {
-    //underlying SMREngine
-    SMREngine smre;
+    StreamFactory streamfactory;
+
+    //underlying SMREngines
+    Map<Long, SMREngine> enginemap;
 
     //map from object IDs to object instances; used for multiplexing
     Map<Long, CorfuDBObject> objectmap;
@@ -43,20 +45,38 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
     {
         synchronized(objectmap)
         {
-            if(objectmap.containsKey(obj.getID()))
+            synchronized(enginemap)
             {
-                System.out.println("object ID already registered!");
-                throw new RuntimeException();
+                if (objectmap.containsKey(obj.getID()))
+                {
+                    System.out.println("object ID already registered!");
+                    throw new RuntimeException();
+                }
+                System.out.println("registering object ID " + obj.getID());
+                objectmap.put(obj.getID(), obj);
+                SMREngine smre = new SMREngine(streamfactory.newStream(obj.getID()));
+                smre.registerLearner(this);
+                enginemap.put(obj.getID(), smre);
             }
-            System.out.println("registering object ID " + obj.getID());
-            objectmap.put(obj.getID(), obj);
         }
     }
 
     CorfuDBObject getObject(long objectid)
     {
-        if(!objectmap.containsKey(objectid)) throw new RuntimeException("object not registered!");
-        return objectmap.get(objectid);
+        synchronized(objectmap)
+        {
+            if (!objectmap.containsKey(objectid)) throw new RuntimeException("object not registered!");
+            return objectmap.get(objectid);
+        }
+    }
+
+    SMREngine getEngine(long objectid)
+    {
+        synchronized(enginemap)
+        {
+            if(!enginemap.containsKey(objectid)) throw new RuntimeException("engine doesnt exist");
+            return enginemap.get(objectid);
+        }
     }
 
 
@@ -66,11 +86,11 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
      *
      * @param  tsmre  the object to register
      */
-    public SimpleRuntime(SMREngine tsmre)
+    public SimpleRuntime(StreamFactory fact)
     {
-        smre = tsmre;
-        smre.registerLearner(this);
-        objectmap = new HashMap<Long, CorfuDBObject>();
+        streamfactory = fact;
+        objectmap = new HashMap();
+        enginemap = new HashMap();
 
     }
 
@@ -88,7 +108,7 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
     {
         Set<Long> streams = new HashSet<Long>();
         streams.add(cob.getID());
-        smre.propose(update, streams, query);
+        getEngine(cob.getID()).propose(update, streams, query);
     }
 
     public void update_helper(CorfuDBObject cob, Serializable update)
@@ -99,7 +119,7 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
 
     public void query_helper(CorfuDBObject cob)
     {
-        smre.sync();
+        getEngine(cob.getID()).sync();
     }
 
     public void apply(Object command, Set<Long> streams, long timestamp)
