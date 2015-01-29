@@ -201,6 +201,17 @@
                                    <filemode>755</filemode>
                                 </mapper>
                             </data>
+                           <data>
+                               <type>link</type>
+                               <linkName>/usr/bin/corfuDBTest</linkName>
+                               <linkTarget>/usr/share/corfudb/bin/corfuDBTest.sh</linkTarget>
+                               <symlink>true</symlink>
+                               <mapper>
+                                   <type>perm</type>
+                                   <filemode>755</filemode>
+                                </mapper>
+                            </data>
+
                         </dataSet>
                       </configuration>
                   </execution>
