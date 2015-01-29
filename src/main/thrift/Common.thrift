@@ -1,4 +1,4 @@
-namespace java org.corfudb
+namespace java org.corfudb.sharedlog
 
 
 enum ErrorCode {

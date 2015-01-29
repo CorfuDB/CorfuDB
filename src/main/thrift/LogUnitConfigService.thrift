@@ -1,4 +1,4 @@
-namespace java org.corfudb.loggingunit
+namespace java org.corfudb.sharedlog.loggingunit
 
 include "Common.thrift"
 

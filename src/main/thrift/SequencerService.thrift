@@ -1,4 +1,4 @@
-namespace java org.corfudb.sequencer
+namespace java org.corfudb.sharedlog.sequencer
 
 
 service SequencerService {
