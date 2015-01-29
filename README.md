@@ -53,6 +53,20 @@ You may have to run the script as superuser (i.e., with `sudo`).
 To stop the deployment, simply call the script with `stop` as
 an argument. Other options include `restart` and `status`.
 
+## Checking if the deployment is working
+
+You will probably want to test if your deployment is working. The
+`bin/corfuDBTest.sh` script provides an easy way to access built-in
+tests and examples. A very simple test in called CorfuHello.
+To call it, run:
+
+```
+$ bin/corfuDBTest.sh CorfuHello <master-address>
+```
+
+Where `<master-address>` is the full address of the master, for example,
+http://localhost:8002/corfu.
+
 ## Bringing up a custom CorfuDB deployment
 
 A CorfuDB deployment requires a Sequencer, one or more logging units,
@@ -90,6 +104,13 @@ $ bin/corfuDBLaunch.sh sequencer start
 $ bin/corfuDBLaunch.sh logunit start
 $ bin/corfuDBLaunch.sh configmaster start
 ```
+
+## Deployment Tools
+
+The maven build scripts currently generate Debian packages, which should work
+on most Debian-based systems. Furthermore, the [CorfuDB-Ansible](https://github.com/CorfuDB/CorfuDB-Ansible)
+repository provides a Ansible playbook to configure, deploy and orchestrate
+complex multi-node CorfuDB deployments.
 
 ## Common Issues
 
