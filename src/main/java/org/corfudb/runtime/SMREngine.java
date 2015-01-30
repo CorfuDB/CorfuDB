@@ -145,12 +145,12 @@ public class SMREngine
             {
                 if (localcmds.second != null)
                 {
-                    smrlearner.apply(localcmds.second, cmdw.streams, TIMESTAMP_INVALID);
+                    smrlearner.apply(localcmds.second, curstream.getStreamID(), cmdw.streams, TIMESTAMP_INVALID);
                 }
-                smrlearner.apply(localcmds.first, cmdw.streams, update.getLogpos());
+                smrlearner.apply(localcmds.first, curstream.getStreamID(), cmdw.streams, update.getLogpos());
             }
             else
-                smrlearner.apply(cmdw.cmd, cmdw.streams, update.getLogpos());
+                smrlearner.apply(cmdw.cmd, curstream.getStreamID(), cmdw.streams, update.getLogpos());
             update = curstream.readNext(curtail);
         }
 
@@ -175,7 +175,7 @@ public class SMREngine
  */
 interface SMRLearner
 {
-    void apply(Object command, Set<Long> streams, long timestamp);
+    void apply(Object command, long curstream, Set<Long> allstreams, long timestamp);
 }
 
 /**

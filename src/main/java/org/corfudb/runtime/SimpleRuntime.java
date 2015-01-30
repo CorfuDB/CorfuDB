@@ -122,7 +122,7 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
         getEngine(cob.getID()).sync();
     }
 
-    public void apply(Object command, Set<Long> streams, long timestamp)
+    public void apply(Object command, long curstream, Set<Long> streams, long timestamp)
     {
         if(streams.size()!=1) throw new RuntimeException("unimplemented");
         Long streamid = streams.iterator().next();

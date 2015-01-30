@@ -67,6 +67,8 @@ interface Stream
      *                  streams are trimmed
      */
     void prefixTrim(long trimpos);
+
+    long getStreamID();
 }
 
 
@@ -215,9 +217,8 @@ class StreamImpl implements Stream
 
 
 /**
- * Simple implementation of the Stream interface. Implements
- * streaming by playing back all entries and discarding those
- * that belong to other streams.
+ * This class is deprecated for now --- use StreamImpl instead!
+ * Bundle implementation of the Stream interface.
  */
 class StreamBundleImpl implements Stream
 {
@@ -230,6 +231,11 @@ class StreamBundleImpl implements Stream
     Lock biglock;
     long curpos;
     long curtail;
+
+    public long getStreamID()
+    {
+        throw new RuntimeException("unimplemented");
+    }
 
 
     public StreamBundleImpl(List<Long> streamids, StreamingSequencer tss, WriteOnceAddressSpace tlas)
