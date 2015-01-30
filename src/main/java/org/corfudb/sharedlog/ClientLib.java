@@ -45,13 +45,30 @@ public class ClientLib implements
 	Logger log = LoggerFactory.getLogger(ClientLib.class);
 
     static String master = "http://localhost:8000/corfu";
-	static CorfuConfiguration CM;
+	CorfuConfiguration CM;
 
-    static public CorfuConfiguration pullConfig() throws CorfuException {
-        return pullConfig(master);
+    static public CorfuConfiguration pullConfigUtil() throws CorfuException {
+        CorfuConfiguration pullCM = null;
+        DefaultHttpClient httpclient = new DefaultHttpClient();
+
+        try {
+            HttpGet httpget = new HttpGet(master);
+
+            System.out.println("Executing request: " + httpget.getRequestLine());
+            HttpResponse response = httpclient.execute(httpget);
+
+            System.out.println("pullConfig from master: " + response.getStatusLine());
+
+            pullCM = new CorfuConfiguration(response.getEntity().getContent());
+        } catch (ClientProtocolException e) {
+            throw new InternalCorfuException("cannot pull configuration");
+        } catch (IOException e) {
+            throw new InternalCorfuException("cannot pull configuration");
+        }
+        return pullCM;
     }
 
-    static public CorfuConfiguration pullConfig(String master) throws CorfuException {
+    public CorfuConfiguration pullConfig() throws CorfuException {
         DefaultHttpClient httpclient = new DefaultHttpClient();
 
         try {
