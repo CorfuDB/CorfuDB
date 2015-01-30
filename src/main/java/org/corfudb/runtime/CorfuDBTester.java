@@ -23,6 +23,9 @@ import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
 
@@ -118,6 +121,7 @@ public class CorfuDBTester
                 System.out.println("Consistency check passed --- test successful!");
             else
                 System.out.println("Consistency check failed!");
+            System.out.println(TR);
         }
 
   //      List<Long> streams = new LinkedList<Long>();
@@ -563,4 +567,27 @@ class CounterCommand implements Serializable
 }
 */
 
-
+/*class PerfCounter
+{
+    String description;
+    AtomicLong sum;
+    AtomicInteger num;
+    public PerfCounter(String desc)
+    {
+        sum = new AtomicLong();
+        num = new AtomicInteger();
+        description = desc;
+    }
+    public long incrementAndGet()
+    {
+        //it's okay for this to be non-atomic, since these are just perf counters
+        //but we do need to get exact numbers eventually, hence the use of atomiclong/integer
+        num.incrementAndGet();
+        return sum.incrementAndGet();
+    }
+    public long addAndGet(long val)
+    {
+        num.incrementAndGet();
+        return sum.addAndGet(val);
+    }
+}*/

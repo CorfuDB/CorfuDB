@@ -14,8 +14,12 @@
  */
 package org.corfudb.runtime;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class is a transactional runtime implementing the AbstractRuntime interface.
@@ -24,6 +28,15 @@ import java.util.*;
  */
 public class TXRuntime extends SimpleRuntime
 {
+
+    Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
+
+    final boolean trackstats = true;
+    AtomicLong ctr_numcommits = new AtomicLong();
+    AtomicLong ctr_numaborts = new AtomicLong();
+    AtomicLong ctr_numappliestx = new AtomicLong();
+    AtomicLong ctr_numapplieslin = new AtomicLong();
+    AtomicLong ctr_numapplieslocal = new AtomicLong();
 
     final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 
@@ -46,7 +59,7 @@ public class TXRuntime extends SimpleRuntime
 
     public boolean EndTX()
     {
-        System.out.println("EndTX");
+        dbglog.info("EndTX");
         long txpos = -1;
         //append the transaction intention
         if(curtx.get()==null) throw new RuntimeException("no current transaction!");
@@ -74,7 +87,7 @@ public class TXRuntime extends SimpleRuntime
         //at this point there should be a decision
         //if not, for now we throw an error (but with decision records we'll keep syncing
         //until we find the decision)
-        System.out.println("appended endtx at position " + txpos);
+        dbglog.debug("appended endtx at position {}", txpos);
         synchronized (decisionmap)
         {
             if (decisionmap.containsKey(txpos))
@@ -120,7 +133,7 @@ public class TXRuntime extends SimpleRuntime
                 //mark the read set
                 query_helper(cob);
                 //apply the precommand to the object
-                apply(query, streams, SMREngine.TIMESTAMP_INVALID);
+                apply(query, cob.getID(), streams, SMREngine.TIMESTAMP_INVALID);
             }
             curtx.get().buffer_update(update, streams.iterator().next());
         }
@@ -132,15 +145,27 @@ public class TXRuntime extends SimpleRuntime
         query_then_update_helper(cob, null, update);
     }
 
-    public void apply(Object command, Set<Long> streams, long timestamp)
+    public void apply(Object command, long curstream, Set<Long> streams, long timestamp)
     {
-        if (command instanceof TxInt)
+        dbglog.info("apply {}", timestamp);
+
+        if (command instanceof TxInt) //is the command a transaction or a linearizable singleton?
         {
+            if(trackstats)
+            {
+                ctr_numappliestx.incrementAndGet();
+            }
+
             TxInt T = (TxInt)command;
             boolean decision = validate(T);
+            if(trackstats)
+            {
+                if(decision) ctr_numcommits.incrementAndGet();
+                else ctr_numaborts.incrementAndGet();
+            }
             synchronized(decisionmap)
             {
-                System.out.println("decided position " + timestamp);
+                dbglog.info("decided position {}", timestamp);
                 decisionmap.put(timestamp, decision);
             }
             if(decision)
@@ -156,12 +181,21 @@ public class TXRuntime extends SimpleRuntime
                     //the only bad thing that can happen is that reads see an inconsistent state
                     //but this can happen anyway, and in this case the transaction will abort
                     //todo: think about providing tx opacity across the board
-                    super.apply(P.first, tstreams, timestamp); //let SimpleRuntime do the object multiplexing
+                    super.apply(P.first, curstream, tstreams, timestamp); //let SimpleRuntime do the object multiplexing
                 }
             }
         }
         else
-            super.apply(command, streams, timestamp);
+        {
+            if(trackstats)
+            {
+                if(timestamp!=SMREngine.TIMESTAMP_INVALID)
+                    ctr_numapplieslin.incrementAndGet();
+                else
+                    ctr_numapplieslocal.incrementAndGet();
+            }
+            super.apply(command, curstream, streams, timestamp);
+        }
     }
 
     boolean validate(TxInt newtx)
@@ -180,9 +214,18 @@ public class TXRuntime extends SimpleRuntime
             if(getObject(curread.first).getTimestamp()>curread.second)
                 abort = true;
         }
-        System.out.println("ABORT = " + abort);
+        dbglog.info("ABORT = {}", abort);
         return !abort;
     }
+
+    public String toString()
+    {
+        String x = "TXRuntime: " + ctr_numappliestx.get() + " tx applies; " + ctr_numcommits.get() + " commits; "
+                + ctr_numaborts.get() + " aborts; " + ctr_numapplieslin.get() + " lin applies; "
+                + ctr_numapplieslocal.get() + " local applies;";
+        return x;
+    }
+
 }
 
 class TxInt implements Serializable //todo: custom serialization
