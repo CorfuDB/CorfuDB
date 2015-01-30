@@ -48,7 +48,7 @@ public class CorfuTestService {
         long startTime = System.currentTimeMillis();
         long appends = 0;
         long failures = 0;
-        while (System.currentTimeMillis() < startTime + 60000)
+        while (System.currentTimeMillis() < startTime + 15000)
         {
             try {
                 appendString(cl, "CORFUTEST");
@@ -70,7 +70,7 @@ public class CorfuTestService {
         long startTime = System.currentTimeMillis();
         long reads = 0;
         long failures = 0;
-        while (System.currentTimeMillis() < startTime + 30000)
+        while (System.currentTimeMillis() < startTime + 5000)
         {
             try {
                 extentToString(cl.readExtnt());
@@ -114,20 +114,20 @@ public class CorfuTestService {
                     {
                         System.out.println("Test token for test encountered, starting test.");
                         ArrayList<String> phaseString = new ArrayList<String>();
-                        System.out.println("- Phase 1: WARM UP (60s)");
+                        System.out.println("- Phase 1: WARM UP (15s)");
                         phaseString.add(writeTestPhase(1, cl));
-                        System.out.println("- Phase 2: MEASUREMENT (60s)");
+                        System.out.println("- Phase 2: MEASUREMENT (15s)");
                         phaseString.add(writeTestPhase(2, cl));
-                        System.out.println("- Phase 3: COOL DOWN (60s)");
+                        System.out.println("- Phase 3: COOL DOWN (15s)");
                         phaseString.add(writeTestPhase(3, cl));
 
                         //set to 0, in the unfortunate case that we write WAY
                         //faster than we read.
-                        System.out.println("- Phase 1: WARM UP (30s)");
+                        System.out.println("- Phase 1: WARM UP (5s)");
                         phaseString.add(readTestPhase(1, cl));
-                        System.out.println("- Phase 2: MEASUREMENT (30s)");
+                        System.out.println("- Phase 2: MEASUREMENT (5s)");
                         phaseString.add(readTestPhase(2, cl));
-                        System.out.println("- Phase 3: COOL DOWN (30s)");
+                        System.out.println("- Phase 3: COOL DOWN (5s)");
                         phaseString.add(readTestPhase(3, cl));
 
                         //oh dear, java doesn't have a string join
@@ -149,7 +149,7 @@ public class CorfuTestService {
                     }
                 } catch(CorfuException e) {
                     System.out.println("Waiting for TEST token.");
-                    Thread.sleep(1000);
+                    Thread.sleep(100);
                 }
             }
         } catch(CorfuException e) {
