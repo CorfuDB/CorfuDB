@@ -11,3 +11,6 @@ install:
     - which thrift
     - mvn clean install
 script: mvn -e verify
+notifications:
+    email:
+        - corfudb-dev@googlegroups.com
