@@ -44,7 +44,7 @@ public class LogUnitDriver {
         CorfuConfiguration CM = null;
         while (CM == null) {
             try {
-                CM = ClientLib.pullConfig();
+                CM = ClientLib.pullConfigUtil();
             } catch (CorfuException e) {
                 slog.warn("cannot pull configuration; sleep 1 sec");
                 Thread.sleep(1000);
