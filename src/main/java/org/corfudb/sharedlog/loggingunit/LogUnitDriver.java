@@ -40,11 +40,13 @@ public class LogUnitDriver {
                 " [-recover | -rebuild hostname:port ]";
 
         LogUnitTask.Builder cb = new LogUnitTask.Builder();
+        String masteraddress = "http://localhost:8000/corfu";
+
 
         CorfuConfiguration CM = null;
         while (CM == null) {
             try {
-                CM = ClientLib.pullConfigUtil();
+                CM = ClientLib.pullConfigUtil(masteraddress);
             } catch (CorfuException e) {
                 slog.warn("cannot pull configuration; sleep 1 sec");
                 Thread.sleep(1000);

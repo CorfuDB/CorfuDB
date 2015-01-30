@@ -133,7 +133,7 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
         CorfuConfiguration CM = null;
         while (CM == null) {
             try {
-                CM = ClientLib.pullConfig((String)config.get("master"));
+                CM = ClientLib.pullConfigUtil((String) config.get("master"));
             } catch (CorfuException e) {
                 try {
                 log.warn("cannot pull configuration; sleep 1 sec");
@@ -758,7 +758,6 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
 
     public static class Builder {
 
-        private long epoch = 0;
         private int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
         private int PAGESIZE = 128;	// unit size in bytes
         private int PORT=-1;	// REQUIRED: port number this unit listens on

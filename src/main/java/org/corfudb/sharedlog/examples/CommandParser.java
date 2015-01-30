@@ -73,7 +73,7 @@ public class CommandParser {
 
     HashMap<String, info> infos = new HashMap<String, info>();
 
-    public void Init(String masteraddress) throws CorfuException {
+    public void Init(final String masteraddress) throws CorfuException {
         debugger.put("h", printhelp);
         alias.put("help", "h");
         infos.put("h", new CommandParser.info("print help menu", 0));
@@ -125,7 +125,7 @@ public class CommandParser {
                 new helper() {
                     @Override
                     public void helperf(long[] dummy) throws CorfuException {
-                        crf.pullConfig();
+                        crf.pullConfig(masteraddress);
                     }
                 }
         );

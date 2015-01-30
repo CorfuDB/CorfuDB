@@ -44,10 +44,9 @@ public class ClientLib implements
 
 	Logger log = LoggerFactory.getLogger(ClientLib.class);
 
-    static String master = "http://localhost:8000/corfu";
 	CorfuConfiguration CM;
 
-    static public CorfuConfiguration pullConfigUtil() throws CorfuException {
+    static public CorfuConfiguration pullConfigUtil(String master) throws CorfuException {
         CorfuConfiguration pullCM = null;
         DefaultHttpClient httpclient = new DefaultHttpClient();
 
@@ -68,7 +67,7 @@ public class ClientLib implements
         return pullCM;
     }
 
-    public CorfuConfiguration pullConfig() throws CorfuException {
+    public CorfuConfiguration pullConfig(String master) throws CorfuException {
         DefaultHttpClient httpclient = new DefaultHttpClient();
 
         try {
@@ -90,10 +89,11 @@ public class ClientLib implements
 
 
     SequencerService.Client sequencer;
+    String master;
 
     public ClientLib(String master) throws CorfuException {
         this.master = master;
-		pullConfig();
+		pullConfig(master);
 		buildClientConnections();
 	}
 
@@ -202,7 +202,7 @@ public class ClientLib implements
 
         if (er == null || er.equals(ErrorCode.ERR_STALEEPOCH)) {
             List<Integer> curepoch = new ArrayList<Integer>(CM.getIncarnation());
-            pullConfig();
+            pullConfig(master);
             if (Util.compareIncarnations(CM.getIncarnation(), curepoch) > 0) // obtained new configuration, worth a retry
                 writeExtnt(offset, ctnt);
             else                            // TODO perhaps sleep and retry one more time??
@@ -240,7 +240,7 @@ public class ClientLib implements
 		ExtntWrap ret = null;
 		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
         Endpoint ep = null;
-        LogUnitService.Client sunit = null;
+        LogUnitService.Client sunit;
 
         for (ListIterator<Endpoint> it = el.group.listIterator(el.group.size());
              it.hasPrevious() && ep == null;
@@ -257,7 +257,7 @@ public class ClientLib implements
 
         if (ret == null || ret.getErr().equals(ErrorCode.ERR_STALEEPOCH) ) {
             List<Integer> curepoch = new ArrayList<Integer>(CM.getIncarnation());
-            pullConfig();
+            pullConfig(master);
             if (Util.compareIncarnations(CM.getIncarnation(), curepoch) > 0) // obtained new configuration, worth a retry
                 return readExtnt(offset);
             else                        // TODO perhaps sleep and retry one more time??
