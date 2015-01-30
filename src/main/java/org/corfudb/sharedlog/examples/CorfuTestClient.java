@@ -66,12 +66,6 @@ public class CorfuTestClient {
             Thread.sleep(60000);
             System.out.println("Waiting for test to complete...");
             Thread.sleep(60000);
-            System.out.println("Waiting for test to complete...");
-            Thread.sleep(60000);
-            System.out.println("Waiting for test to complete...");
-            Thread.sleep(60000);
-            System.out.println("Waiting for test to complete...");
-            Thread.sleep(60000);
 
             long reads  = 0;
             long appends = 0;
