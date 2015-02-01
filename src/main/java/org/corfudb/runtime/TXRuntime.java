@@ -73,9 +73,11 @@ public class TXRuntime extends SimpleRuntime
             //read-only transaction
             else
             {
-                boolean ret = validate(curtx.get());
-                curtx.set(null);
-                if (ret) return true;
+                //todo: this doesn't work anymore!
+//                boolean ret = validate(curtx.get());
+//                curtx.set(null);
+//                if (ret) return true;
+                return true;
             }
 //            throw new RuntimeException("empty transaction!"); //todo: do something more sensible here
         }
@@ -104,17 +106,32 @@ public class TXRuntime extends SimpleRuntime
 
     public void query_helper(CorfuDBObject cob)
     {
+        query_helper(cob, null);
+    }
+
+    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update)
+    {
+        query_then_update_helper(cob, query, update, null);
+    }
+
+    public void update_helper(CorfuDBObject cob, Serializable update)
+    {
+        update_helper(cob, update);
+    }
+
+    public void query_helper(CorfuDBObject cob, Serializable key)
+    {
         if(curtx.get()==null) //non-transactional, pass through
         {
             super.query_helper(cob);
         }
         else
         {
-            curtx.get().mark_read(cob.getID(), cob.getTimestamp());
+            curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
         }
     }
 
-    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update)
+    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Serializable key)
     {
         Set<Long> streams = new HashSet<Long>();
         streams.add(cob.getID());
@@ -131,7 +148,7 @@ public class TXRuntime extends SimpleRuntime
             if(query !=null)
             {
                 //mark the read set
-                query_helper(cob);
+                query_helper(cob, key);
                 //apply the precommand to the object
                 apply(query, cob.getID(), streams, SMREngine.TIMESTAMP_INVALID);
             }
@@ -140,7 +157,7 @@ public class TXRuntime extends SimpleRuntime
 
     }
 
-    public void update_helper(CorfuDBObject cob, Serializable update)
+    public void update_helper(CorfuDBObject cob, Serializable update, Serializable key)
     {
         query_then_update_helper(cob, null, update);
     }
@@ -157,20 +174,27 @@ public class TXRuntime extends SimpleRuntime
             }
 
             TxInt T = (TxInt)command;
-            boolean decision = validate(T);
+
+            //should the transaction commit or abort?
+            boolean decision = validate(T, curstream);
+
             if(trackstats)
             {
                 if(decision) ctr_numcommits.incrementAndGet();
                 else ctr_numaborts.incrementAndGet();
             }
+
+            //update the decision map
             synchronized(decisionmap)
             {
                 dbglog.info("decided position {}", timestamp);
                 decisionmap.put(timestamp, decision);
             }
+
+            //if decision is a commit, apply the changes
             if(decision)
             {
-                Iterator<Pair<Serializable, Long>> it = T.bufferedupdates.iterator();
+                Iterator<Pair<Serializable, Long>> it = T.get_bufferedupdates().iterator();
                 while(it.hasNext())
                 {
                     Pair<Serializable, Long> P = it.next();
@@ -198,7 +222,9 @@ public class TXRuntime extends SimpleRuntime
         }
     }
 
-    boolean validate(TxInt newtx)
+    Map<Long, BitSet> decisions = new HashMap<Long, BitSet>();
+
+    boolean validate(TxInt newtx, long curstream)
     {
         // to enforce strict serializability, we use a simple rule:
         // has anything the transaction read changed since it was read?
@@ -207,11 +233,12 @@ public class TXRuntime extends SimpleRuntime
         // locks pessimistically.
 
         boolean abort = false;
-        Iterator<Pair<Long, Long>> readsit = newtx.get_readset().iterator();
+        Iterator<Triple<Long, Long, Serializable>> readsit = newtx.get_readset().iterator();
         while(readsit.hasNext())
         {
-            Pair<Long, Long> curread = readsit.next();
-            if(getObject(curread.first).getTimestamp()>curread.second)
+            Triple<Long, Long, Serializable> curread = readsit.next();
+            if(curread.first!=curstream) continue; //validate only the current stream
+            if(getObject(curread.first).getTimestamp(curread.third)>curread.second)
                 abort = true;
         }
         dbglog.info("ABORT = {}", abort);
@@ -230,13 +257,13 @@ public class TXRuntime extends SimpleRuntime
 
 class TxInt implements Serializable //todo: custom serialization
 {
-    List<Pair<Serializable, Long>> bufferedupdates;
-    Set<Long> streamset;
-    Set<Pair<Long, Long>> readset;
+    private List<Pair<Serializable, Long>> bufferedupdates;
+    private Set<Long> streamset;
+    private Set<Triple<Long, Long, Serializable>> readset;
     TxInt()
     {
         bufferedupdates = new LinkedList<Pair<Serializable, Long>>();
-        readset = new HashSet<Pair<Long, Long>>();
+        readset = new HashSet();
         streamset = new HashSet<Long>();
     }
     void buffer_update(Serializable bs, long stream)
@@ -244,15 +271,15 @@ class TxInt implements Serializable //todo: custom serialization
         bufferedupdates.add(new Pair<Serializable, Long>(bs, stream));
         streamset.add(stream);
     }
-    void mark_read(long object, long version)
+    void mark_read(long object, long version, Serializable key)
     {
-        readset.add(new Pair(object, version));
+        readset.add(new Triple(object, version, key));
     }
     Set<Long> get_streams()
     {
         return streamset;
     }
-    Set<Pair<Long, Long>> get_readset()
+    Set<Triple<Long, Long, Serializable>> get_readset()
     {
         return readset;
     }

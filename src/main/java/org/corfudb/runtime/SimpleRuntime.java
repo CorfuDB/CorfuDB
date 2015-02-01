@@ -104,7 +104,13 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
         throw new RuntimeException("SimpleRuntime does not support transactions.");
     }
 
+
     public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update)
+    {
+        query_then_update_helper(cob, query, update, null);
+    }
+
+    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Serializable key)
     {
         Set<Long> streams = new HashSet<Long>();
         streams.add(cob.getID());
@@ -113,11 +119,19 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
 
     public void update_helper(CorfuDBObject cob, Serializable update)
     {
+        update_helper(cob, update, null);
+    }
+
+    public void update_helper(CorfuDBObject cob, Serializable update, Serializable key)
+    {
         query_then_update_helper(cob, null, update);
     }
 
-
     public void query_helper(CorfuDBObject cob)
+    {
+        query_helper(cob, null);
+    }
+    public void query_helper(CorfuDBObject cob, Serializable key)
     {
         getEngine(cob.getID()).sync();
     }

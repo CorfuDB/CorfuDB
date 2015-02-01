@@ -37,6 +37,9 @@ public interface AbstractRuntime
      */
     void query_helper(CorfuDBObject cob);
 
+
+    void query_helper(CorfuDBObject cob, Serializable key);
+
     /**
      * This function is to be called within any mutator method in the CorfuDB object.
      *
@@ -49,6 +52,9 @@ public interface AbstractRuntime
      * @param update a serializable description of the update
      */
     void update_helper(CorfuDBObject cob, Serializable update);
+
+
+    void update_helper(CorfuDBObject cob, Serializable update, Serializable key);
 
 
     /**
@@ -70,6 +76,8 @@ public interface AbstractRuntime
      * @param update a serializable description of the update
      */
     void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update);
+
+    void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Serializable key);
 
     /**
      * This function is used to register a CorfuDB object with the runtime. Future updates that

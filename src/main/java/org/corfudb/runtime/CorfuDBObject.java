@@ -14,6 +14,7 @@
  */
 package org.corfudb.runtime;
 
+import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 
@@ -33,10 +34,20 @@ public abstract class CorfuDBObject
 
     public long getTimestamp()
     {
+        return getTimestamp(null);
+    }
+
+    public long getTimestamp(Serializable key)
+    {
         return timestamp.get();
     }
 
     public void setTimestamp(long newts)
+    {
+        setTimestamp(newts, null);
+    }
+
+    public void setTimestamp(long newts, Serializable key)
     {
         timestamp.set(newts);
     }
