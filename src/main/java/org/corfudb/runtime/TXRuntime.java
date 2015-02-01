@@ -34,6 +34,7 @@ public class TXRuntime extends SimpleRuntime
     final boolean trackstats = true;
     AtomicLong ctr_numcommits = new AtomicLong();
     AtomicLong ctr_numaborts = new AtomicLong();
+    AtomicLong ctr_numundecided = new AtomicLong();
     AtomicLong ctr_numappliestx = new AtomicLong();
     AtomicLong ctr_numapplieslin = new AtomicLong();
     AtomicLong ctr_numapplieslocal = new AtomicLong();
@@ -63,7 +64,7 @@ public class TXRuntime extends SimpleRuntime
         long txpos = -1;
         //append the transaction intention
         if(curtx.get()==null) throw new RuntimeException("no current transaction!");
-        if(curtx.get().get_streams().size()==0)
+        if(curtx.get().get_updatestreams().size()==0)
         {
             if(curtx.get().get_readset().size()==0) // empty transaction
             {
@@ -81,11 +82,20 @@ public class TXRuntime extends SimpleRuntime
             }
 //            throw new RuntimeException("empty transaction!"); //todo: do something more sensible here
         }
-        SMREngine smre = getEngine(curtx.get().get_streams().iterator().next());
-        txpos = smre.propose(curtx.get(), curtx.get().get_streams());
+        SMREngine smre = getEngine();
+        if(smre==null) throw new RuntimeException("no engine found for appending tx!");
+        txpos = smre.propose(curtx.get(), curtx.get().get_updatestreams());
         //now that we appended the intention, we need to play the stream until the append point
-        //todo: sync each smre involved
-        smre.sync(txpos); //this results in a number of calls to apply, as each intervening intention is processed
+        //todo: sync each read stream smre involved
+        Iterator<Triple<Long, Long, Serializable>> it = curtx.get().get_readset().iterator();
+        while(it.hasNext())
+        {
+            long streamid = it.next().first;
+            smre = getEngine(streamid);
+            if(smre==null) throw new RuntimeException("no engine found for read stream!");
+            smre.sync(txpos); //this results in a number of calls to apply, as each intervening intention is processed
+        }
+
         //at this point there should be a decision
         //if not, for now we throw an error (but with decision records we'll keep syncing
         //until we find the decision)
@@ -141,7 +151,7 @@ public class TXRuntime extends SimpleRuntime
             //this won't happen since TxInt is not a public class?
             if(update instanceof TxInt) throw new RuntimeException("app cant update_helper a txint");
             //return super.query_then_update_helper(cob, query, update, streams);
-            getEngine(cob.getID()).propose(update, streams, query);
+            getEngine(cob.getID()).propose(update, streams, query); //todo: check return value of getEngine?
         }
         else //in a transactional context, buffer for now
         {
@@ -176,23 +186,27 @@ public class TXRuntime extends SimpleRuntime
             TxInt T = (TxInt)command;
 
             //should the transaction commit or abort?
-            boolean decision = validate(T, curstream);
+            int decision = validate(T, curstream, timestamp);
 
             if(trackstats)
             {
-                if(decision) ctr_numcommits.incrementAndGet();
-                else ctr_numaborts.incrementAndGet();
+                if(decision==VAL_COMMIT) ctr_numcommits.incrementAndGet();
+                else if(decision==VAL_ABORT) ctr_numaborts.incrementAndGet();
+                else if(decision==VAL_UNDECIDED) ctr_numundecided.incrementAndGet();
             }
 
             //update the decision map
-            synchronized(decisionmap)
+            if(decision==VAL_COMMIT || decision==VAL_ABORT)
             {
-                dbglog.info("decided position {}", timestamp);
-                decisionmap.put(timestamp, decision);
+                synchronized (decisionmap)
+                {
+                    dbglog.info("decided position {}", timestamp);
+                    decisionmap.put(timestamp, decision==VAL_COMMIT);
+                }
             }
 
             //if decision is a commit, apply the changes
-            if(decision)
+            if(decision==VAL_COMMIT)
             {
                 Iterator<Pair<Serializable, Long>> it = T.get_bufferedupdates().iterator();
                 while(it.hasNext())
@@ -222,9 +236,15 @@ public class TXRuntime extends SimpleRuntime
         }
     }
 
-    Map<Long, BitSet> decisions = new HashMap<Long, BitSet>();
+    //the first bitset indicates whether the decision has been made or not
+    //the second bitset indicates whether the decision is a commit or an abort
+    Map<Long, Pair<BitSet, BitSet>> decisionbits = new HashMap();
 
-    boolean validate(TxInt newtx, long curstream)
+    final int VAL_ABORT = 0;
+    final int VAL_COMMIT = 1;
+    final int VAL_UNDECIDED = 2;
+
+    int validate(TxInt newtx, long curstream, long timestamp)
     {
         // to enforce strict serializability, we use a simple rule:
         // has anything the transaction read changed since it was read?
@@ -232,23 +252,66 @@ public class TXRuntime extends SimpleRuntime
         // essentially the same state it would have seen had it acquired
         // locks pessimistically.
 
-        boolean abort = false;
-        Iterator<Triple<Long, Long, Serializable>> readsit = newtx.get_readset().iterator();
-        while(readsit.hasNext())
+        if(timestamp==SMREngine.TIMESTAMP_INVALID) throw new RuntimeException("validation timestamp cannot be invalid!");
+
+        Pair<BitSet, BitSet> P = null;
+        if(decisionbits.containsKey(timestamp))
+            P = decisionbits.get(timestamp);
+        else
         {
-            Triple<Long, Long, Serializable> curread = readsit.next();
-            if(curread.first!=curstream) continue; //validate only the current stream
-            if(getObject(curread.first).getTimestamp(curread.third)>curread.second)
-                abort = true;
+            P = new Pair<BitSet, BitSet>(new BitSet(), new BitSet());
+            decisionbits.put(timestamp, P);
         }
-        dbglog.info("ABORT = {}", abort);
-        return !abort;
+        BitSet decided = P.first;
+        BitSet committed = P.second;
+
+
+        if(decided.cardinality()==committed.cardinality())
+        {
+            boolean partialabort = false;
+            Iterator<Triple<Long, Long, Serializable>> readsit = newtx.get_readset().iterator();
+            while (readsit.hasNext())
+            {
+                Triple<Long, Long, Serializable> curread = readsit.next();
+                if (curread.first != curstream) continue; //validate only the current stream
+                if (getObject(curread.first).getTimestamp(curread.third) > curread.second)
+                {
+                    partialabort = true;
+                    break;
+                }
+            }
+            int streampos = newtx.get_readstreams().get(curstream);
+            decided.set(streampos);
+            if (!partialabort) committed.set(streampos);
+        }
+
+        int ret;
+        if(decided.cardinality()!=committed.cardinality())
+        {
+            //transaction is an abort
+            ret = VAL_ABORT;
+        }
+        else if(decided.cardinality()==newtx.get_readstreams().size()) //all streams have been decided
+        {
+            //transaction is a commit
+            ret = VAL_COMMIT;
+        }
+        else
+        {
+            //not enough information yet
+            ret = VAL_UNDECIDED;
+        }
+        dbglog.info("DECISION = {}", ret);
+        return ret;
     }
 
     public String toString()
     {
-        String x = "TXRuntime: " + ctr_numappliestx.get() + " tx applies; " + ctr_numcommits.get() + " commits; "
-                + ctr_numaborts.get() + " aborts; " + ctr_numapplieslin.get() + " lin applies; "
+        String x = "TXRuntime: " + ctr_numappliestx.get() + " tx applies; "
+                + ctr_numcommits.get() + " commits; "
+                + ctr_numaborts.get() + " aborts; "
+                + ctr_numundecided.get() + " undecided; "
+                + ctr_numapplieslin.get() + " lin applies; "
                 + ctr_numapplieslocal.get() + " local applies;";
         return x;
     }
@@ -258,26 +321,34 @@ public class TXRuntime extends SimpleRuntime
 class TxInt implements Serializable //todo: custom serialization
 {
     private List<Pair<Serializable, Long>> bufferedupdates;
-    private Set<Long> streamset;
+    private Set<Long> updatestreamset;
     private Set<Triple<Long, Long, Serializable>> readset;
+    private Map<Long, Integer> readstreammap; //maps from a stream id to a number denoting the insertion order of that id
     TxInt()
     {
         bufferedupdates = new LinkedList<Pair<Serializable, Long>>();
         readset = new HashSet();
-        streamset = new HashSet<Long>();
+        updatestreamset = new HashSet<Long>();
+        readstreammap = new HashMap();
     }
     void buffer_update(Serializable bs, long stream)
     {
         bufferedupdates.add(new Pair<Serializable, Long>(bs, stream));
-        streamset.add(stream);
+        updatestreamset.add(stream);
     }
     void mark_read(long object, long version, Serializable key)
     {
         readset.add(new Triple(object, version, key));
+        if(!readstreammap.containsKey(object))
+            readstreammap.put(object, readstreammap.size());
     }
-    Set<Long> get_streams()
+    Set<Long> get_updatestreams()
     {
-        return streamset;
+        return updatestreamset;
+    }
+    Map<Long, Integer> get_readstreams()
+    {
+        return readstreammap;
     }
     Set<Triple<Long, Long, Serializable>> get_readset()
     {

@@ -70,11 +70,21 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
         }
     }
 
+    //returns any engine
+    SMREngine getEngine()
+    {
+        synchronized(enginemap)
+        {
+            if(enginemap.size()==0) return null;
+            return enginemap.values().iterator().next();
+        }
+    }
+
     SMREngine getEngine(long objectid)
     {
         synchronized(enginemap)
         {
-            if(!enginemap.containsKey(objectid)) throw new RuntimeException("engine doesnt exist");
+            if(!enginemap.containsKey(objectid)) return null;
             return enginemap.get(objectid);
         }
     }
