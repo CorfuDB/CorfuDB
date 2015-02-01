@@ -26,7 +26,6 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     public CorfuDBMap(AbstractRuntime tTR, long toid)
     {
         super(tTR, toid);
-        maplock = new ReentrantReadWriteLock();
         backingmap = new HashMap<K,V>();
         TR = tTR;
         oid = toid;
@@ -38,7 +37,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         //System.out.println("dummyupcall");
         System.out.println("CorfuDBMap received upcall");
         MapCommand<K,V> cc = (MapCommand<K,V>)bs;
-        maplock.writeLock().lock();
+        lock(true);
         if(cc.getCmdType()==MapCommand.CMD_PUT)
         {
             backingmap.put(cc.getKey(), cc.getVal());
@@ -57,11 +56,11 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         }
         else
         {
-            maplock.writeLock().unlock();
+            unlock(true);
             throw new RuntimeException("Unrecognized command in stream!");
         }
         System.out.println("Map size is " + backingmap.size());
-        maplock.writeLock().unlock();
+        unlock(true);
     }
 
     @Override

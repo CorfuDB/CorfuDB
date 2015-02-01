@@ -82,7 +82,9 @@ public class CorfuDBTester
         if(testnum==LINTEST)
         {
             SimpleRuntime TR = new SimpleRuntime(new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf)));
-            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, 2345);
+            CorfuDBCounter idcounter = new CorfuDBCounter(TR, 0);
+            idcounter.increment();
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, idcounter.read());
             numthreads = 2;
             Thread[] threads = new Thread[numthreads];
             for (int i = 0; i < numthreads; i++)
@@ -99,8 +101,11 @@ public class CorfuDBTester
         {
             TXRuntime TR = new TXRuntime(new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf)));
 
-            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, 2345);
-            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap<Integer, Integer>(TR, 2346);
+            CorfuDBCounter idcounter = new CorfuDBCounter(TR, 0);
+            idcounter.increment();
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, idcounter.read());
+            idcounter.increment();
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap<Integer, Integer>(TR, idcounter.read());
 
 
             numthreads = 2;

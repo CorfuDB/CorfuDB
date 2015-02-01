@@ -126,14 +126,14 @@ public class TXRuntime extends SimpleRuntime
 
     public void update_helper(CorfuDBObject cob, Serializable update)
     {
-        update_helper(cob, update);
+        update_helper(cob, update, null);
     }
 
     public void query_helper(CorfuDBObject cob, Serializable key)
     {
         if(curtx.get()==null) //non-transactional, pass through
         {
-            super.query_helper(cob);
+            super.query_helper(cob, key);
         }
         else
         {

@@ -17,6 +17,7 @@ package org.corfudb.runtime;
 import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * This class must be sub-classed by any new CorfuDB object class. It provides
@@ -27,7 +28,7 @@ public abstract class CorfuDBObject
 {
     //object ID -- corresponds to stream ID used underneath
     long oid;
-    ReadWriteLock maplock;
+    ReadWriteLock statelock;
     AbstractRuntime TR;
 
     AtomicLong timestamp;
@@ -64,14 +65,14 @@ public abstract class CorfuDBObject
 
     public void lock(boolean write)
     {
-        if(write) maplock.writeLock().lock();
-        else maplock.readLock().lock();
+        if(write) statelock.writeLock().lock();
+        else statelock.readLock().lock();
     }
 
     public void unlock(boolean write)
     {
-        if(write) maplock.writeLock().unlock();
-        else maplock.readLock().unlock();
+        if(write) statelock.writeLock().unlock();
+        else statelock.readLock().unlock();
     }
 
     abstract public void apply(Object update);
@@ -86,6 +87,7 @@ public abstract class CorfuDBObject
         TR = tTR;
         oid = tobjectid;
         timestamp = new AtomicLong();
+        statelock = new ReentrantReadWriteLock();
     }
 
 }
