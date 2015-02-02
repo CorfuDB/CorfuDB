@@ -14,6 +14,9 @@
  */
 package org.corfudb.runtime;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Serializable;
 import java.util.List;
 import java.util.Set;
@@ -133,6 +136,8 @@ class StreamFactoryImpl implements StreamFactory
 
 class StreamImpl implements Stream
 {
+    static Logger dbglog = LoggerFactory.getLogger(StreamImpl.class);
+
     long streamid;
 
     StreamingSequencer seq;
@@ -161,10 +166,10 @@ class StreamImpl implements Stream
     public long append(Serializable payload, Set<Long> streams)
     {
         long ret = seq.get_slot(streams);
-        System.out.println("reserved slot " + ret);
+        dbglog.debug("reserved slot {}", ret);
         StreamEntry S = new StreamEntry(payload, ret, streams);
         addrspace.write(ret, BufferStack.serialize(S));
-        System.out.println("wrote slot " + ret);
+        dbglog.debug("wrote slot {}", ret);
         return ret;
     }
 
@@ -192,7 +197,7 @@ class StreamImpl implements Stream
             ret = (StreamEntry) bs.deserialize();
             if(ret.getStreams().contains(this.getStreamID()))
                 break;
-            System.out.println("skipping...");
+            dbglog.debug("skipping...");
         }
         return ret;
     }

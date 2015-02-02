@@ -14,12 +14,16 @@
  */
 package org.corfudb.runtime;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 {
+    static Logger dbglog = LoggerFactory.getLogger(CorfuDBMap.class);
     //backing state of the map
     Map<K, V> backingmap;
 
@@ -34,8 +38,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 
     public void apply(Object bs)
     {
-        //System.out.println("dummyupcall");
-        System.out.println("CorfuDBMap received upcall");
+        dbglog.debug("CorfuDBMap received upcall");
         MapCommand<K,V> cc = (MapCommand<K,V>)bs;
         lock(true);
         if(cc.getCmdType()==MapCommand.CMD_PUT)
@@ -59,7 +62,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
             unlock(true);
             throw new RuntimeException("Unrecognized command in stream!");
         }
-        System.out.println("Map size is " + backingmap.size());
+        dbglog.debug("Map size is {}", backingmap.size());
         unlock(true);
     }
 

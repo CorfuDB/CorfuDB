@@ -18,6 +18,8 @@ import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
 import org.corfudb.sharedlog.ExtntWrap;
 import org.corfudb.sharedlog.UnwrittenCorfuException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
@@ -57,6 +59,9 @@ interface WriteOnceAddressSpace
  */
 class CorfuLogAddressSpace implements WriteOnceAddressSpace
 {
+    Logger dbglog = LoggerFactory.getLogger(CorfuLogAddressSpace.class);
+
+
     ClientLib cl;
 
     public CorfuLogAddressSpace(ClientLib tcl)
@@ -89,21 +94,25 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
 
     public BufferStack read(long pos)
     {
-        System.out.println("Reading..." + pos);
+        dbglog.debug("Reading {}", pos);
         byte[] ret = null;
         int retrycounter = 0;
-        final int retrymax = 1000;
+        final int retrymax = 12;
         while(true)
         {
             try
             {
                 ExtntWrap ew = null;
+                long difftime = -1;
                 synchronized(cl)
                 {
+                    long startts = System.currentTimeMillis();
                     ew = cl.readExtnt(pos);
+                    long stopts = System.currentTimeMillis();
+                    difftime = stopts-startts;
                 }
                 //for now, copy to a byte array and return
-                System.out.println("read back " + ew.getCtntSize() + " bytes");
+                dbglog.debug("read back {} bytes, took {} ms", ew.getCtntSize(), difftime);
                 ret = new byte[4096 * 10]; //hack --- fix this
                 ByteBuffer bb = ByteBuffer.wrap(ret);
                 java.util.Iterator<ByteBuffer> it = ew.getCtntIterator();
@@ -118,23 +127,26 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
             {
                 //encountered a hole -- try again
 //                System.out.println("Hole..." + pos);
+                retrycounter++;
+                if(retrycounter==retrymax) throw new RuntimeException("Encountered non-transient hole at " + pos + "...");
                 try
                 {
-                    Thread.sleep(1000);
+                    int sleepms = (int)Math.pow(2, retrycounter);
+                    dbglog.debug("Encountered hole; sleeping for {} ms...", sleepms);
+                    //exponential backoff
+                    Thread.sleep(sleepms);
                 }
                 catch(InterruptedException e)
                 {
                     //ignore
                 }
-                retrycounter++;
-                if(retrycounter==retrymax) throw new RuntimeException("Encountered non-transient hole at " + pos + "...");
             }
             catch (CorfuException e)
             {
                 throw new RuntimeException(e);
             }
         }
-        System.out.println("Done Reading..." + pos);
+        dbglog.debug("Done Reading {}", pos);
         return new BufferStack(ret);
 
     }

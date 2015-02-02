@@ -14,6 +14,9 @@
  */
 package org.corfudb.runtime;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
@@ -28,6 +31,8 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class SMREngine
 {
+    private static Logger dbglog = LoggerFactory.getLogger(SMREngine.class);
+
     SMRLearner smrlearner;
 
     //used to coordinate between querying threads and the query_helper thread
@@ -126,9 +131,13 @@ public class SMREngine
         curqueue = new LinkedList<Object>();
         queuelock.unlock();
 
+        if(procqueue.size()==0) return;
 
         //check the current tail of the stream, and then read the stream until that position
         long curtail = curstream.checkTail();
+
+        dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
+
         StreamEntry update = curstream.readNext();
         while(update!=null)
         {
@@ -153,6 +162,8 @@ public class SMREngine
                 smrlearner.apply(cmdw.cmd, curstream.getStreamID(), cmdw.streams, update.getLogpos());
             update = curstream.readNext(curtail);
         }
+
+        dbglog.debug("done with applying sync batch... wake up syncing threads...");
 
         //wake up all waiting query threads; they will now see a state that incorporates all updates
         //that finished before they started

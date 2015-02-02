@@ -23,12 +23,12 @@ import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.impl.SimpleLogger;
 
 
 /**
@@ -39,16 +39,21 @@ import org.corfudb.sharedlog.CorfuException;
 
 public class CorfuDBTester
 {
+
+    static Logger dbglog = LoggerFactory.getLogger(CorfuDBTester.class);
+
     /**
      * @param args
      */
     public static void main(String[] args) throws Exception
     {
-
         if (args.length == 0)
         {
             System.out.println("usage: java CorfuDBTester masterURL [0==TXTest(default)|1==LinearizableTest");
             System.out.println("e.g. masterURL: http://localhost:8000/corfu");
+            if(dbglog instanceof SimpleLogger)
+                System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
+                        "enable debug printouts");
             return;
         }
 
@@ -56,6 +61,7 @@ public class CorfuDBTester
 
         final int TXTEST=0;
         final int LINTEST=1;
+        final int STREAMTEST=2;
 
 
         int testnum = TXTEST;
@@ -77,6 +83,8 @@ public class CorfuDBTester
 
 
         int numthreads;
+        numthreads = 2;
+        Thread[] threads = new Thread[numthreads];
 
 
         if(testnum==LINTEST)
@@ -85,8 +93,6 @@ public class CorfuDBTester
             CorfuDBCounter idcounter = new CorfuDBCounter(TR, 0);
             idcounter.increment();
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, idcounter.read());
-            numthreads = 2;
-            Thread[] threads = new Thread[numthreads];
             for (int i = 0; i < numthreads; i++)
             {
                 //linearizable tester
@@ -108,8 +114,6 @@ public class CorfuDBTester
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap<Integer, Integer>(TR, idcounter.read());
 
 
-            numthreads = 2;
-            Thread[] threads = new Thread[numthreads];
             for (int i = 0; i < numthreads; i++)
             {
                 //linearizable tester
@@ -128,36 +132,25 @@ public class CorfuDBTester
                 System.out.println("Consistency check failed!");
             System.out.println(TR);
         }
+        else if(testnum==STREAMTEST)
+        {
+            List<Long> streams = new LinkedList<Long>();
+            streams.add(new Long(1234)); //hardcoded hack
+            streams.add(new Long(2345)); //hardcoded hack
 
-  //      List<Long> streams = new LinkedList<Long>();
-  //      streams.add(new Long(1234)); //hardcoded hack
-  //      streams.add(new Long(2345)); //hardcoded hack
+            Stream sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
 
-//        Stream sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
-
-        //trim the stream to get rid of entries from previous tests
-  //      sb.prefixTrim(sb.checkTail());
-
-        //turn on to test stream bundle in isolation
-/*
-		numthreads = 2;
-		for(int i=0;i<numthreads;i++)
-		{
-			Thread T = new Thread(new StreamBundleTester(sb));
-			T.start();
-		}
-		Thread.sleep(10000);
-		if(true) return;
-*/
-
-
-
-
-
-        //counter test
-        //CorfuDBObject cob = new CorfuDBCounter(TR, 1234);
-        //map test
-
+            //trim the stream to get rid of entries from previous tests
+            sb.prefixTrim(sb.checkTail());
+            for(int i=0;i<numthreads;i++)
+            {
+                threads[i] = new Thread(new StreamTester(sb));
+                threads[i].start();
+            }
+            for(int i=0;i<numthreads;i++)
+                threads[i].join();
+            System.out.println("Test done!");
+        }
         System.exit(0);
 
     }
@@ -173,6 +166,8 @@ public class CorfuDBTester
  */
 class TXTesterThread implements Runnable
 {
+    private static Logger dbglog = LoggerFactory.getLogger(TXTesterThread.class);
+
     TXRuntime cr;
     CorfuDBMap<Integer, Integer> map1;
     CorfuDBMap<Integer, Integer> map2;
@@ -228,6 +223,8 @@ class TXTesterThread implements Runnable
         if(numkeys<2) throw new RuntimeException("minimum number of keys for test is 2");
         for(int i=0;i<numops;i++)
         {
+            long curtime = System.currentTimeMillis();
+            dbglog.debug("Tx starting...");
             int x = (int) (Math.random() * numkeys);
             int y = x;
             while(y==x)
@@ -250,6 +247,7 @@ class TXTesterThread implements Runnable
                 map2.put(y, x);
             }
             if(cr.EndTX()) numcommits++;
+            dbglog.debug("Tx took {}", (System.currentTimeMillis()-curtime));
 /*            try
             {
                 Thread.sleep((int)(Math.random()*1000.0));
@@ -451,27 +449,22 @@ class BufferStack implements Serializable //todo: custom serialization
 
 
 
-class StreamBundleTester implements Runnable
+class StreamTester implements Runnable
 {
     Stream sb;
-    public StreamBundleTester(Stream tsb)
+    public StreamTester(Stream tsb)
     {
         sb = tsb;
     }
     public void run()
     {
         System.out.println("starting sb tester thread");
-        while(true)
+        for(int i=0;i<10000;i++)
         {
-            int op = 0;
-            if(op==0)
-            {
-                byte x[] = new byte[5];
-                Set<Long> T = new HashSet<Long>();
-                T.add(new Long(5));
-                sb.append(new BufferStack(x), T);
-            }
-            else continue;
+            byte x[] = new byte[5];
+            Set<Long> T = new HashSet<Long>();
+            T.add(new Long(5));
+            sb.append(new BufferStack(x), T);
         }
     }
 }

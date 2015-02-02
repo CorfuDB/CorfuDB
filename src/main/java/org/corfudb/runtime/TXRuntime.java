@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class TXRuntime extends SimpleRuntime
 {
 
-    Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
+    static Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
 
     final boolean trackstats = true;
     AtomicLong ctr_numcommits = new AtomicLong();
@@ -60,7 +60,7 @@ public class TXRuntime extends SimpleRuntime
 
     public boolean EndTX()
     {
-        dbglog.info("EndTX");
+        dbglog.debug("EndTX");
         long txpos = -1;
         //append the transaction intention
         if(curtx.get()==null) throw new RuntimeException("no current transaction!");
@@ -85,8 +85,10 @@ public class TXRuntime extends SimpleRuntime
         SMREngine smre = getEngine();
         if(smre==null) throw new RuntimeException("no engine found for appending tx!");
         txpos = smre.propose(curtx.get(), curtx.get().get_updatestreams());
+        dbglog.debug("appended endtx at position {}; now syncing...", txpos);
         //now that we appended the intention, we need to play the stream until the append point
-        //todo: sync each read stream smre involved
+        //todo: do this more efficiently so that each sync doesn't need to establish
+        //a brand new linearization point by independently checking the tail of the underlying stream
         Iterator<Triple<Long, Long, Serializable>> it = curtx.get().get_readset().iterator();
         while(it.hasNext())
         {
@@ -94,12 +96,13 @@ public class TXRuntime extends SimpleRuntime
             smre = getEngine(streamid);
             if(smre==null) throw new RuntimeException("no engine found for read stream!");
             smre.sync(txpos); //this results in a number of calls to apply, as each intervening intention is processed
+            dbglog.debug("synced stream ", streamid);
         }
 
+        dbglog.debug("EndTX checking for decision...");
         //at this point there should be a decision
         //if not, for now we throw an error (but with decision records we'll keep syncing
         //until we find the decision)
-        dbglog.debug("appended endtx at position {}", txpos);
         synchronized (decisionmap)
         {
             if (decisionmap.containsKey(txpos))
@@ -174,7 +177,7 @@ public class TXRuntime extends SimpleRuntime
 
     public void apply(Object command, long curstream, Set<Long> streams, long timestamp)
     {
-        dbglog.info("apply {}", timestamp);
+        dbglog.debug("apply {}", timestamp);
 
         if (command instanceof TxInt) //is the command a transaction or a linearizable singleton?
         {
@@ -200,7 +203,7 @@ public class TXRuntime extends SimpleRuntime
             {
                 synchronized (decisionmap)
                 {
-                    dbglog.info("decided position {}", timestamp);
+                    dbglog.debug("decided position {}", timestamp);
                     decisionmap.put(timestamp, decision==VAL_COMMIT);
                 }
             }
@@ -234,6 +237,8 @@ public class TXRuntime extends SimpleRuntime
             }
             super.apply(command, curstream, streams, timestamp);
         }
+
+        dbglog.debug("done with apply {}", timestamp);
     }
 
     //the first bitset indicates whether the decision has been made or not
@@ -301,7 +306,7 @@ public class TXRuntime extends SimpleRuntime
             //not enough information yet
             ret = VAL_UNDECIDED;
         }
-        dbglog.info("DECISION = {}", ret);
+        dbglog.debug("DECISION = {}", ret);
         return ret;
     }
 
