@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -52,9 +53,13 @@ public class SMREngine
         smrlearner = tlearner;
     }
 
-    public SMREngine(Stream sb)
+    long uniquenodeid;
+
+    public SMREngine(Stream sb, long tuniquenodeid)
     {
         curstream = sb;
+        uniquenodeid = tuniquenodeid;
+        SMRCommandWrapper.initialize(uniquenodeid);
 
         queuelock = new Object();
         curqueue = new LinkedList();
@@ -80,7 +85,7 @@ public class SMREngine
     {
         SMRCommandWrapper cmd = new SMRCommandWrapper(update, streams);
         pendinglock.lock();
-        pendingcommands.put(cmd.uniqueid, new Pair(update, precommand));
+        pendingcommands.put(cmd.uniqueid.second, new Pair(update, precommand));
         pendinglock.unlock();
         long pos = curstream.append(cmd, streams);
         if(precommand!=null) //block until precommand is played
@@ -165,7 +170,8 @@ public class SMREngine
             //this allows return values to be transmitted via the local command object
             pendinglock.lock();
             Pair<Serializable, Object> localcmds = null;
-            if(pendingcommands.containsKey(cmdw.uniqueid))
+            //did we generate this command, and is it pending?
+            if(cmdw.uniqueid.first==uniquenodeid && pendingcommands.containsKey(cmdw.uniqueid.second))
                 localcmds = pendingcommands.remove(cmdw.uniqueid);
             pendinglock.unlock();
             if(smrlearner==null) throw new RuntimeException("smr learner not set!");
@@ -216,16 +222,25 @@ interface SMRLearner
  */
 class SMRCommandWrapper implements Serializable
 {
-    static long ctr=0;
-    long uniqueid;
+    static boolean init = false;
+    static long uniquenodeid = Long.MAX_VALUE;
+    static AtomicLong ctr;
+    Pair<Long, Long> uniqueid;
     Serializable cmd;
     Set<Long> streams;
     public SMRCommandWrapper(Serializable tcmd, Set<Long> tstreams)
     {
+        if(!init) throw new RuntimeException("SMRCommandWrapper not initialized with unique node ID!");
         cmd = tcmd;
-        //todo: for now, uniqueid is just a local counter; this won't work with multiple clients!
-        uniqueid = ctr++;
+        uniqueid = new Pair(uniquenodeid, ctr.incrementAndGet());
         streams = tstreams;
+    }
+    public synchronized static void initialize(long tuniquenodeid)
+    {
+        if(init) return;
+        uniquenodeid = tuniquenodeid;
+        ctr = new AtomicLong();
+        init = true;
     }
 }
 

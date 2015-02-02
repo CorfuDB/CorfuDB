@@ -36,6 +36,9 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
     //map from object IDs to object instances; used for multiplexing
     Map<Long, CorfuDBObject> objectmap;
 
+    //unique node id
+    long uniquenodeid;
+
     /**
      * Registers an object with the runtime
      *
@@ -54,7 +57,7 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
                 }
                 System.out.println("registering object ID " + obj.getID());
                 objectmap.put(obj.getID(), obj);
-                SMREngine smre = new SMREngine(streamfactory.newStream(obj.getID()));
+                SMREngine smre = new SMREngine(streamfactory.newStream(obj.getID()), uniquenodeid);
                 smre.registerLearner(this);
                 enginemap.put(obj.getID(), smre);
             }
@@ -91,17 +94,17 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
 
 
     /**
-     * Creates a SimpleRuntime with an underlying SMR engine. Registers itself
-     * as the SMR engine's learner.
+     * Creates a SimpleRuntime
      *
-     * @param  tsmre  the object to register
+     * @param  fact  a factory for creating new Stream objects
+     * @param  tuniquenodeid    an identifier unique to this client process
      */
-    public SimpleRuntime(StreamFactory fact)
+    public SimpleRuntime(StreamFactory fact, long tuniquenodeid)
     {
         streamfactory = fact;
         objectmap = new HashMap();
         enginemap = new HashMap();
-
+        uniquenodeid = tuniquenodeid;
     }
 
     public void BeginTX()

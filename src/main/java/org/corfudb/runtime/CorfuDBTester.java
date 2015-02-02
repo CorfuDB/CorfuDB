@@ -86,13 +86,12 @@ public class CorfuDBTester
         numthreads = 2;
         Thread[] threads = new Thread[numthreads];
 
+        StreamFactory sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf));
 
         if(testnum==LINTEST)
         {
-            SimpleRuntime TR = new SimpleRuntime(new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf)));
-            CorfuDBCounter idcounter = new CorfuDBCounter(TR, 0);
-            idcounter.increment();
-            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, idcounter.read());
+            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf));
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
             for (int i = 0; i < numthreads; i++)
             {
                 //linearizable tester
@@ -105,14 +104,11 @@ public class CorfuDBTester
         }
         else if(testnum==TXTEST)
         {
-            TXRuntime TR = new TXRuntime(new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf)));
+            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf));
 
-            CorfuDBCounter idcounter = new CorfuDBCounter(TR, 0);
-            idcounter.increment();
-            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, idcounter.read());
-            idcounter.increment();
-            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap<Integer, Integer>(TR, idcounter.read());
-
+            DirectoryService DS = new DirectoryService(TR);
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToID("testmap1"));
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToID("testmap2"));
 
             for (int i = 0; i < numthreads; i++)
             {
@@ -155,6 +151,62 @@ public class CorfuDBTester
 
     }
 
+
+}
+
+
+/**
+ * This is a directory service that maps from human-readable names to CorfuDB object IDs.
+ * It's built using CorfuDB objects that run over hardcoded IDs (MAX_LONG and MAX_LONG-1).
+ */
+class DirectoryService
+{
+    AbstractRuntime TR;
+    CorfuDBMap<String, Long> names;
+    CorfuDBCounter idctr;
+    public DirectoryService(AbstractRuntime tTR)
+    {
+        TR = tTR;
+        names = new CorfuDBMap(TR, Long.MAX_VALUE);
+        idctr = new CorfuDBCounter(TR, Long.MAX_VALUE-1);
+
+    }
+
+    public static long getUniqueID(StreamFactory sf)
+    {
+        Stream S = sf.newStream(Long.MAX_VALUE-2);
+        HashSet hs = new HashSet(); hs.add(Long.MAX_VALUE-2);
+        return S.append("DummyString", hs);
+    }
+
+
+    /**
+     * Maps human-readable name to object ID. If no such human-readable name exists already,
+     * a new mapping is created.
+     *
+     * @param X
+     * @return
+     */
+    public long nameToID(String X)
+    {
+        System.out.println("Mapping " + X);
+        long ret;
+        while(true)
+        {
+            TR.BeginTX();
+            if (names.containsKey(X))
+                ret = names.get(X);
+            else
+            {
+                ret = idctr.read();
+                idctr.increment();
+                names.put(X, ret);
+            }
+            if(TR.EndTX()) break;
+        }
+        System.out.println("Mapped " + X + " to " + ret);
+        return ret;
+    }
 
 }
 

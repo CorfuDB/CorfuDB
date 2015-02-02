@@ -44,9 +44,9 @@ public class TXRuntime extends SimpleRuntime
     //used to communicate decisions from the query_helper thread to waiting endtx calls
     final Map<Long, Boolean> decisionmap;
 
-    public TXRuntime(StreamFactory fact)
+    public TXRuntime(StreamFactory fact, long uniquenodeid)
     {
-        super(fact);
+        super(fact, uniquenodeid);
         decisionmap = new HashMap<Long, Boolean>();
     }
 
@@ -78,6 +78,7 @@ public class TXRuntime extends SimpleRuntime
 //                boolean ret = validate(curtx.get());
 //                curtx.set(null);
 //                if (ret) return true;
+                curtx.set(null);
                 return true;
             }
 //            throw new RuntimeException("empty transaction!"); //todo: do something more sensible here
