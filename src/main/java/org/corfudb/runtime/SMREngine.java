@@ -36,8 +36,10 @@ public class SMREngine
     SMRLearner smrlearner;
 
     //used to coordinate between querying threads and the query_helper thread
-    Lock queuelock;
+    final Object queuelock;
+    //pair of queues that get rotated between the playback thread and the sync threads
     List<Object> curqueue;
+    List<Object> procqueue;
 
     Stream curstream;
 
@@ -54,8 +56,9 @@ public class SMREngine
     {
         curstream = sb;
 
-        queuelock = new ReentrantLock();
-        curqueue = new LinkedList<Object>();
+        queuelock = new Object();
+        curqueue = new LinkedList();
+        procqueue = new LinkedList();
 
         //start the playback thread
         new Thread(new Runnable()
@@ -100,9 +103,12 @@ public class SMREngine
         final Object syncobj = new Object();
         synchronized (syncobj)
         {
-            queuelock.lock();
-            curqueue.add(syncobj);
-            queuelock.unlock();
+            synchronized(queuelock)
+            {
+                curqueue.add(syncobj);
+                if(curqueue.size()==1) //first item, may need to wake up playback thread
+                    queuelock.notify();
+            }
             try
             {
                 syncobj.wait();
@@ -120,18 +126,31 @@ public class SMREngine
     }
 
     //runs in a single thread
-    //todo: currently playback keeps running even if there are no queries; we need to run it on demand
     void playback()
     {
-        queuelock.lock();
-        //to ensure linearizability, any pending queries have to wait for the conclusion
-        //a checkTail that started *after* they were issued. accordingly, when playback starts up,
-        //it rotates out the current queue of pending requests to stop new requests from entering it
-        List<Object> procqueue = curqueue;
-        curqueue = new LinkedList<Object>();
-        queuelock.unlock();
+        List<Object> tqueue;
+        synchronized(queuelock)
+        {
+            while(curqueue.size()==0)
+            {
+                try
+                {
+                    queuelock.wait();
+                }
+                catch(InterruptedException e)
+                {
+                    //do nothing
+                }
+            }
+            //to ensure linearizability, any pending queries have to wait for the conclusion of
+            //a checkTail that started *after* they were issued. accordingly, when playback starts up,
+            //it rotates out the current queue of pending requests to stop new requests from entering it
+            tqueue = procqueue;
+            procqueue = curqueue;
+            curqueue = tqueue;
+        }
 
-        if(procqueue.size()==0) return;
+        if(procqueue.size()==0) throw new RuntimeException("queue cannot be empty at this point!");
 
         //check the current tail of the stream, and then read the stream until that position
         long curtail = curstream.checkTail();
@@ -176,6 +195,7 @@ public class SMREngine
                 syncobj.notifyAll();
             }
         }
+        procqueue.clear();
     }
 
 }
