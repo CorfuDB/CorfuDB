@@ -27,9 +27,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public abstract class CorfuDBObject
 {
     //object ID -- corresponds to stream ID used underneath
-    long oid;
+    public long oid;
     ReadWriteLock statelock;
-    AbstractRuntime TR;
+    public AbstractRuntime TR;
 
     AtomicLong timestamp;
 

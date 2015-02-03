@@ -24,12 +24,13 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.corfudb.runtime.collections.CorfuDBMap;
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.impl.SimpleLogger;
-
+import org.corfudb.runtime.collections.CorfuDBCounter;
 
 /**
  * Tester code for the CorfuDB runtime stack
@@ -559,72 +560,7 @@ class StreamTester implements Runnable
 
 
 
-class CorfuDBCounter extends CorfuDBObject
-{
-    //backing state of the counter
-    int value;
 
-
-    public CorfuDBCounter(AbstractRuntime tTR, long toid)
-    {
-        super(tTR, toid);
-        value = 0;
-        TR = tTR;
-        oid = toid;
-        TR.registerObject(this);
-    }
-    public void apply(Object bs)
-    {
-        //System.out.println("dummyupcall");
-        System.out.println("CorfuDBCounter received upcall");
-        CounterCommand cc = (CounterCommand)bs;
-        lock(true);
-        if(cc.getCmdType()==CounterCommand.CMD_DEC)
-            value--;
-        else if(cc.getCmdType()==CounterCommand.CMD_INC)
-            value++;
-        else
-        {
-            unlock(true);
-            throw new RuntimeException("Unrecognized command in stream!");
-        }
-        unlock(true);
-        System.out.println("Counter value is " + value);
-    }
-    public void increment()
-    {
-        HashSet<Long> H = new HashSet<Long>(); H.add(this.getID());
-        TR.update_helper(this, new CounterCommand(CounterCommand.CMD_INC));
-    }
-    public int read()
-    {
-        TR.query_helper(this);
-        //what if the value changes between queryhelper and the actual read?
-        //in the linearizable case, we are safe because we see a later version that strictly required
-        //in the transactional case, the tx will spuriously abort, but safety will not be violated...
-        //todo: is there a more elegant API?
-        lock(false);
-        int ret = value;
-        unlock(false);
-        return ret;
-    }
-
-}
-
-class CounterCommand implements Serializable
-{
-    int cmdtype;
-    static final int CMD_DEC = 0;
-    static final int CMD_INC = 1;
-    public CounterCommand(int tcmdtype)
-    {
-        cmdtype = tcmdtype;
-    }
-    public int getCmdType()
-    {
-        return cmdtype;
-    }
-};
 
 /*class CorfuDBRegister implements CorfuDBObject
 {
