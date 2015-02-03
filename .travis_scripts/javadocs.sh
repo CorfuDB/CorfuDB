@@ -3,6 +3,7 @@
 if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
     echo -e "Publishing javadocs..."
 
+    mvn javadoc:javadoc
     cp -R target/site/apidocs $HOME/javadoc
     cd $HOME
     git config --global user.email "travis@travis-ci.org"
