@@ -1,16 +1,18 @@
----
-# TravisCI Configuration
-# This file is used by the TravisCI continuous integration platform
 language: java
 before_install:
-    - sudo apt-get update -qq
-    - wget http://apache.mirrors.tds.net/thrift/0.9.2/thrift-0.9.2.tar.gz -O thrift.tar.gz
-    - tar -xzf thrift.tar.gz
-    - cd thrift-0.9.2 && ./configure --prefix=/usr --without-ruby --without-python --without-c --without-erlang --without-go --without-nodejs && make && sudo make install && cd ..
+- sudo apt-get update -qq
+- wget http://apache.mirrors.tds.net/thrift/0.9.2/thrift-0.9.2.tar.gz -O thrift.tar.gz
+- tar -xzf thrift.tar.gz
+- cd thrift-0.9.2 && ./configure --prefix=/usr --without-ruby --without-python --without-c
+  --without-erlang --without-go --without-nodejs && make && sudo make install && cd
+  ..
 install:
-    - which thrift
-    - mvn clean install
+- which thrift
+- mvn clean install
 script: mvn -e verify
 notifications:
-    email:
-        - corfudb-dev@googlegroups.com
+  email:
+  - corfudb-dev@googlegroups.com
+env:
+  global:
+    secure: WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
