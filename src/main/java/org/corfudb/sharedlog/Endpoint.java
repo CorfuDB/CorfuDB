@@ -28,6 +28,12 @@ import java.util.HashMap;
 // This is a Corfu endpoint
 //
 public class Endpoint {
+
+    // caching endpoint objects disables different ClientLib instances
+    // from being able to have their own connection, which in turn exposes
+    // thread safety problems in thrift. Disable caching for now--it's not clear
+    // what the intended benefit was...
+    static public boolean bCacheEndpoints = false;
 	static private HashMap<String, Endpoint> epmap = new HashMap<String, Endpoint>();
 
     private String hostname;
@@ -43,14 +49,20 @@ public class Endpoint {
 	}
 
     public static Endpoint genEndpoint(String fullname) {
-        if (epmap.containsKey(fullname))
-            return epmap.get(fullname);
-        else {
-            Endpoint ep = new Endpoint(fullname);
-            if (ep.getPort() <0) return null;
-            epmap.put(fullname, ep);
-            return ep;
+        if (bCacheEndpoints) {
+            synchronized (epmap){
+                if(epmap.containsKey(fullname))
+                    return epmap.get(fullname);
+            }
         }
+        Endpoint ep = new Endpoint(fullname);
+        if (ep.getPort() <0) return null;
+        if(bCacheEndpoints) {
+            synchronized (epmap) {
+                epmap.put(fullname, ep);
+            }
+        }
+        return ep;
     }
 
     static class clientSunitEndpoint {

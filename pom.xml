@@ -60,6 +60,11 @@
             <artifactId>snakeyaml</artifactId>
             <version>1.15-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>gnu.getopt</groupId>
+            <artifactId>java-getopt</artifactId>
+            <version>1.0.13</version>
+        </dependency>		
     </dependencies>
 
     <build>
@@ -122,6 +127,18 @@
                         <goals>
                             <goal>shade</goal>
                         </goals>
+						<configuration>
+							<filters>
+								<filter>
+								<artifact>*:*</artifact>
+								<excludes>
+									<exclude>META-INF/*.SF</exclude>
+									<exclude>META-INF/*.DSA</exclude>
+									<exclude>META-INF/*.RSA</exclude>
+								</excludes>
+								</filter>
+							</filters>						
+						</configuration>
                     </execution>
                 </executions>
                 <configuration>

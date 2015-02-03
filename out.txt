@@ -1,0 +1,172 @@
+Running from development source:
+Running test: CorfuStreamStress
+master = http://localhost:8002/corfu
+numappends = 10
+numthreads = 8
+Executing request: GET http://localhost:8002/corfu HTTP/1.1
+pullConfig from master: HTTP/1.1 200 OK
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ incarnation=[0, 0, 0] pagesize=4096 trimmark=0 sequencer=localhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ segment [0..-1]: 1 groups 1 replicas
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ group nodes:
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@    node localhost:8001 
+Executing request: GET http://localhost:8002/corfu HTTP/1.1
+stream tester thread 0: issuing 10 appends...
+pullConfig from master: HTTP/1.1 200 OK
+already have an endpoint forlocalhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ incarnation=[0, 0, 0] pagesize=4096 trimmark=0 sequencer=localhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ segment [0..-1]: 1 groups 1 replicas
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ group nodes:
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@    node localhost:8001 
+already have an endpoint forlocalhost:8001
+Executing request: GET http://localhost:8002/corfu HTTP/1.1
+stream tester thread 1: issuing 10 appends...
+pullConfig from master: HTTP/1.1 200 OK
+already have an endpoint forlocalhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ incarnation=[0, 0, 0] pagesize=4096 trimmark=0 sequencer=localhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ segment [0..-1]: 1 groups 1 replicas
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ group nodes:
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@    node localhost:8001 
+already have an endpoint forlocalhost:8001
+Executing request: GET http://localhost:8002/corfu HTTP/1.1
+stream tester thread 2: issuing 10 appends...
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write82 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write80 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write83 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write81 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write85 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write87 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write86 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write84 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write88 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write90 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write92 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write91 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write93 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write89 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write95 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write94 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write96 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-3] INFO org.corfudb.sharedlog.ClientLib - err=OK write97 replica=localhost:8001 size=1 marktype=EX_FILLED
+stream tester thread 2: starting test[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write98 replica=localhost:8001 size=1 marktype=EX_FILLED
+
+stream tester thread 2: exiting test[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write99 replica=localhost:8001 size=1 marktype=EX_FILLED
+
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write101 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write100 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write102 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write103 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write104 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write105 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write107 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write106 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-2] INFO org.corfudb.sharedlog.ClientLib - err=OK write108 replica=localhost:8001 size=1 marktype=EX_FILLED
+stream tester thread 1: starting test
+[Thread-1] INFO org.corfudb.sharedlog.ClientLib - err=OK write109 replica=localhost:8001 size=1 marktype=EX_FILLEDstream tester thread 1: exiting test
+
+stream tester thread 0: starting test
+stream tester thread 0: exiting test
+pullConfig from master: HTTP/1.1 200 OK
+already have an endpoint forlocalhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ incarnation=[0, 0, 0] pagesize=4096 trimmark=0 sequencer=localhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ segment [0..-1]: 1 groups 1 replicas
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ group nodes:
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@    node localhost:8001 
+already have an endpoint forlocalhost:8001
+Executing request: GET http://localhost:8002/corfu HTTP/1.1
+stream tester thread 3: issuing 10 appends...
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write110 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write111 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write112 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write113 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write114 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write115 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write116 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write117 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write118 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-4] INFO org.corfudb.sharedlog.ClientLib - err=OK write119 replica=localhost:8001 size=1 marktype=EX_FILLED
+stream tester thread 3: starting test
+stream tester thread 3: exiting test
+pullConfig from master: HTTP/1.1 200 OK
+already have an endpoint forlocalhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ incarnation=[0, 0, 0] pagesize=4096 trimmark=0 sequencer=localhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ segment [0..-1]: 1 groups 1 replicas
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ group nodes:
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@    node localhost:8001 
+already have an endpoint forlocalhost:8001
+Executing request: GET http://localhost:8002/corfu HTTP/1.1
+stream tester thread 4: issuing 10 appends...
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write120 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write121 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write122 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write123 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write124 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write125 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write126 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write127 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write128 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-5] INFO org.corfudb.sharedlog.ClientLib - err=OK write129 replica=localhost:8001 size=1 marktype=EX_FILLED
+stream tester thread 4: starting test
+stream tester thread 4: exiting test
+pullConfig from master: HTTP/1.1 200 OK
+already have an endpoint forlocalhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ incarnation=[0, 0, 0] pagesize=4096 trimmark=0 sequencer=localhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ segment [0..-1]: 1 groups 1 replicas
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ group nodes:
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@    node localhost:8001 
+already have an endpoint forlocalhost:8001
+Executing request: GET http://localhost:8002/corfu HTTP/1.1
+stream tester thread 5: issuing 10 appends...
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write130 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write131 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write132 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write133 replica=localhost:8001 size=1 marktype=EX_FILLED
+pullConfig from master: HTTP/1.1 200 OK
+already have an endpoint forlocalhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ incarnation=[0, 0, 0] pagesize=4096 trimmark=0 sequencer=localhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ segment [0..-1]: 1 groups 1 replicas
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ group nodes:
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@    node localhost:8001 
+already have an endpoint forlocalhost:8001
+Executing request: GET http://localhost:8002/corfu HTTP/1.1
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write134 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write135 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write136 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write137 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write138 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-6] INFO org.corfudb.sharedlog.ClientLib - err=OK write139 replica=localhost:8001 size=1 marktype=EX_FILLED
+stream tester thread 5: starting test
+stream tester thread 5: exiting test
+stream tester thread 6: issuing 10 appends...
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write140 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write141 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write142 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write143 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write144 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write145 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write146 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write147 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write148 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-7] INFO org.corfudb.sharedlog.ClientLib - err=OK write149 replica=localhost:8001 size=1 marktype=EX_FILLED
+stream tester thread 6: starting test
+stream tester thread 6: exiting test
+pullConfig from master: HTTP/1.1 200 OK
+already have an endpoint forlocalhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ incarnation=[0, 0, 0] pagesize=4096 trimmark=0 sequencer=localhost:8000
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ segment [0..-1]: 1 groups 1 replicas
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@ group nodes:
+[main] INFO org.corfudb.sharedlog.CorfuConfiguration - @C@    node localhost:8001 
+already have an endpoint forlocalhost:8001
+stream tester thread 7: issuing 10 appends...
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write150 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write151 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write152 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write153 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write154 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write155 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write156 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write157 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write158 replica=localhost:8001 size=1 marktype=EX_FILLED
+[Thread-8] INFO org.corfudb.sharedlog.ClientLib - err=OK write159 replica=localhost:8001 size=1 marktype=EX_FILLED
+stream tester thread 7: starting test
+stream tester thread 7: exiting test
+Test complete.

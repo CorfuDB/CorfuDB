@@ -21,4 +21,12 @@ fi
 CORFUDB_DAEMON_OUT="/var/log/corfudb.${1}.log"
 CORFUDBMAIN="org.corfudb.sharedlog.examples.${1}"
 
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" "${*:2}" 2>&1 < /dev/null
+# cjr: 2/3/2015: enclosing the ${*:2} argument in quotes as
+# in the original code below causes all the arguments to be flattened
+# into a single string, which frustrates the process of unpacking arguments
+# with standard tools (gnu getopt won't parse it).
+#
+#"$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" "${*:2}" 2>&1 < /dev/null
+#
+
+"$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" ${*:2} 2>&1 < /dev/null

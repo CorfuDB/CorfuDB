@@ -52,7 +52,7 @@ start)
     then
         if /bin/echo -n $! > "$CORFUDBPIDFILE"
         then
-            sleep 2
+            #sleep 2
             # The server may have failed to start. Let's make sure it did
             if kill -0 $! > /dev/null 2>&1;
             then
