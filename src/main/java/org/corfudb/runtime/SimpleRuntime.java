@@ -144,10 +144,18 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
     {
         query_helper(cob, null);
     }
+
     public void query_helper(CorfuDBObject cob, Serializable key)
     {
-        getEngine(cob.getID()).sync();
+        query_helper(cob, key, null);
     }
+
+
+    public void query_helper(CorfuDBObject cob, Serializable key, Object command)
+    {
+        getEngine(cob.getID()).sync(SMREngine.TIMESTAMP_INVALID, command); //check getEngine return value?
+    }
+
 
     public void apply(Object command, long curstream, Set<Long> streams, long timestamp)
     {

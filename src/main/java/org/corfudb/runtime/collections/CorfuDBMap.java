@@ -56,6 +56,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         unlock(true);
     }
 
+    //accessor
     @Override
     public int size()
     {
@@ -69,6 +70,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         return x;
     }
 
+    //accessor
     @Override
     public boolean isEmpty()
     {
@@ -79,6 +81,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         return x;
     }
 
+    //accessor
     @Override
     public boolean containsKey(Object o)
     {
@@ -89,6 +92,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         return x;
     }
 
+    //accessor
     @Override
     public boolean containsValue(Object o)
     {
@@ -99,6 +103,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         return x;
     }
 
+    //accessor
     @Override
     public V get(Object o)
     {
@@ -109,6 +114,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         return x;
     }
 
+    //accessor+mutator
     public V put(K key, V val)
     {
         HashSet<Long> H = new HashSet<Long>();
@@ -118,6 +124,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         return (V)precmd.getReturnValue();
     }
 
+    //accessor+mutator
     @Override
     public V remove(Object o)
     {
@@ -135,6 +142,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         throw new RuntimeException("unimplemented");
     }
 
+    //mutator
     @Override
     public void clear()
     {
@@ -165,7 +173,20 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 
 }
 
-class MapCommand<K,V> implements Serializable
+class CorfuDBObjectCommand implements Serializable
+{
+    Object retval;
+    public Object getReturnValue()
+    {
+        return retval;
+    }
+    public void setReturnValue(Object obj)
+    {
+        retval = obj;
+    }
+}
+
+class MapCommand<K,V> extends CorfuDBObjectCommand
 {
     int cmdtype;
     static final int CMD_PUT = 0;
@@ -181,15 +202,6 @@ class MapCommand<K,V> implements Serializable
     public V getVal()
     {
         return val;
-    }
-    Object retval;
-    public Object getReturnValue()
-    {
-        return retval;
-    }
-    public void setReturnValue(Object obj)
-    {
-        retval = obj;
     }
     public MapCommand(int tcmdtype)
     {

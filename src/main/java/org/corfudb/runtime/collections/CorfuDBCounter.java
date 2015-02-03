@@ -11,6 +11,7 @@ public class CorfuDBCounter extends CorfuDBObject
     //backing state of the counter
     int value;
 
+    boolean optimizereads = false;
 
     public CorfuDBCounter(AbstractRuntime tTR, long toid)
     {
@@ -25,17 +26,20 @@ public class CorfuDBCounter extends CorfuDBObject
         //System.out.println("dummyupcall");
         System.out.println("CorfuDBCounter received upcall");
         CounterCommand cc = (CounterCommand)bs;
-        lock(true);
+        if(optimizereads)
+            lock(true);
         if(cc.getCmdType()==CounterCommand.CMD_DEC)
             value--;
         else if(cc.getCmdType()==CounterCommand.CMD_INC)
             value++;
+        else if(cc.getCmdType()==CounterCommand.CMD_READ)
+            cc.setReturnValue(value);
         else
         {
-            unlock(true);
             throw new RuntimeException("Unrecognized command in stream!");
         }
-        unlock(true);
+        if(optimizereads)
+            unlock(true);
         System.out.println("Counter value is " + value);
     }
     public void increment()
@@ -43,7 +47,7 @@ public class CorfuDBCounter extends CorfuDBObject
         HashSet<Long> H = new HashSet<Long>(); H.add(this.getID());
         TR.update_helper(this, new CounterCommand(CounterCommand.CMD_INC));
     }
-    public int read()
+    public int read_optimized()
     {
         TR.query_helper(this);
         //what if the value changes between queryhelper and the actual read?
@@ -55,14 +59,22 @@ public class CorfuDBCounter extends CorfuDBObject
         unlock(false);
         return ret;
     }
-
+    public int read()
+    {
+        if(optimizereads)
+            return read_optimized();
+        CounterCommand readcmd = new CounterCommand(CounterCommand.CMD_READ);
+        TR.query_helper(this, null, readcmd);
+        return (Integer)readcmd.getReturnValue();
+    }
 }
 
-class CounterCommand implements Serializable
+class CounterCommand extends CorfuDBObjectCommand
 {
     int cmdtype;
     static final int CMD_DEC = 0;
     static final int CMD_INC = 1;
+    static final int CMD_READ = 2;
     public CounterCommand(int tcmdtype)
     {
         cmdtype = tcmdtype;
@@ -72,3 +84,4 @@ class CounterCommand implements Serializable
         return cmdtype;
     }
 };
+
