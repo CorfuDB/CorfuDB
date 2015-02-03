@@ -25,35 +25,36 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
- * A Stream is a set of intertwined streams residing in a single
- * underlying log (i.e., a global ordering exists across all the streams).
- * The Stream allows appends to arbitrary streams (even those not in the bundle).
- * It enables playback of entries in the union of all the streams in strict log order.
+ * A Stream is a subsequence of entries residing in a single
+ * underlying log.
+ * It enables playback of entries in the stream in strict log order.
+ * Entries can belong to multiple streams.
+ * The Stream object allows appends to arbitrary other streams.
  */
 interface Stream
 {
     long append(Serializable s, Set<Long> streams);
 
     /**
-     * reads the next entry in the stream bundle
+     * reads the next entry in the stream
      *
      * @return       the next log entry
      */
     StreamEntry readNext();
 
     /**
-     * reads the next entry in the stream bundle that has a position strictly lower than stoppos.
+     * reads the next entry in the stream that has a position strictly lower than stoppos.
      * stoppos is required so that the runtime can check the current tail of the log using checkTail() and
      * then play the log until that tail position and no further, in order to get linearizable
      * semantics with a minimum number of reads.
      *
      * @param  stoppos  the stopping position for the read
-     * @return          the next entry in the stream bundle
+     * @return          the next entry in the stream
      */
     StreamEntry readNext(long stoppos);
 
     /**
-     * returns the current tail position of the stream bundle (this is exclusive, so a checkTail
+     * returns the current tail position of the stream (this is exclusive, so a checkTail
      * on an empty stream returns 0). this also synchronizes local stream metadata with the underlying
      * log and establishes a linearization point for subsequent readNexts; any subsequent readnext will
      * reflect entries that were appended before the checkTail was issued.
@@ -63,14 +64,20 @@ interface Stream
     long checkTail();
 
     /**
-     * trims all entries in the stream bundle until the passed in position (exclusive). the space
+     * trims all entries in the stream until the passed in position (exclusive); so
+     * trimming at timestamp T trims all entries with a timestamp lower than T. the space
      * may not be reclaimed immediately if the underlying address space only supports a prefix trim.
      *
-     * @param   trimpos the position strictly before which all entries belonging to the bundle's
-     *                  streams are trimmed
+     * @param   trimpos the position strictly before which all entries belonging to the
+     *                  stream are trimmed
      */
     void prefixTrim(long trimpos);
 
+    /**
+     * returns this stream's ID
+     *
+     * @return this stream's ID
+     */
     long getStreamID();
 }
 
@@ -216,85 +223,5 @@ class StreamImpl implements Stream
     public void prefixTrim(long trimpos)
     {
         throw new RuntimeException("unimplemented");
-    }
-}
-
-
-
-/**
- * This class is deprecated for now --- use StreamImpl instead!
- * Bundle implementation of the Stream interface.
- */
-class StreamBundleImpl implements Stream
-{
-
-    List<Long> mystreams;
-
-    WriteOnceAddressSpace las;
-    StreamingSequencer ss;
-
-    Lock biglock;
-    long curpos;
-    long curtail;
-
-    public long getStreamID()
-    {
-        throw new RuntimeException("unimplemented");
-    }
-
-
-    public StreamBundleImpl(List<Long> streamids, StreamingSequencer tss, WriteOnceAddressSpace tlas)
-    {
-        las = tlas;
-        ss = tss;
-
-        biglock = new ReentrantLock();
-
-        mystreams = streamids;
-    }
-
-    public long append(Serializable S, Set<Long> streamids)
-    {
-        long ret = ss.get_slot(streamids);
-        las.write(ret, BufferStack.serialize(S));
-        return ret;
-
-    }
-
-    public long checkTail()
-    {
-        long tcurtail = ss.check_tail();
-        biglock.lock();
-        if(tcurtail>curtail) curtail = tcurtail;
-        biglock.unlock();
-        return tcurtail;
-
-    }
-
-    @Override
-    public void prefixTrim(long trimpos)
-    {
-        //todo: do something smarter where we track the individual trim points of all streams
-        las.prefixTrim(trimpos);
-    }
-
-    public StreamEntry readNext()
-    {
-        return readNext(0);
-    }
-
-    public StreamEntry readNext(long stoppos)
-    {
-        biglock.lock();
-        if(!(curpos<curtail && (stoppos==0 || curpos<stoppos)))
-        {
-            biglock.unlock();
-            return null;
-        }
-        long readpos = curpos++;
-        biglock.unlock();
-        BufferStack bs = las.read(readpos);
-        StreamEntry ret = (StreamEntry)bs.deserialize();
-        return ret;
     }
 }

@@ -47,27 +47,22 @@ public class CorfuDBTester
      */
     public static void main(String[] args) throws Exception
     {
-        if (args.length == 0)
+        if (args.length<2)
         {
-            System.out.println("usage: java CorfuDBTester masterURL [0==TXTest(default)|1==LinearizableTest");
-            System.out.println("e.g. masterURL: http://localhost:8000/corfu");
+            System.out.println("usage: java CorfuDBTester testtype (0==TXTest|1==LinearizableTest|2==StreamTest) masternode");
+            System.out.println("e.g. java CorfuDBTester 0 http://localhost:8002/corfu");
             if(dbglog instanceof SimpleLogger)
                 System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
                         "enable debug printouts");
             return;
         }
 
-        String masternode = args[0];
+        int testnum = Integer.parseInt(args[0]);
+        String masternode = args[1];
 
         final int TXTEST=0;
         final int LINTEST=1;
         final int STREAMTEST=2;
-
-
-        int testnum = TXTEST;
-        if(args.length==2)
-            testnum = Integer.parseInt(args[1]);
-
 
 
         ClientLib crf;
@@ -130,14 +125,10 @@ public class CorfuDBTester
         }
         else if(testnum==STREAMTEST)
         {
-            List<Long> streams = new LinkedList<Long>();
-            streams.add(new Long(1234)); //hardcoded hack
-            streams.add(new Long(2345)); //hardcoded hack
-
-            Stream sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
+            Stream sb = sf.newStream(1234);
 
             //trim the stream to get rid of entries from previous tests
-            sb.prefixTrim(sb.checkTail());
+            //sb.prefixTrim(sb.checkTail()); //todo: turning off, trim not yet implemented at log level
             for(int i=0;i<numthreads;i++)
             {
                 threads[i] = new Thread(new StreamTester(sb));
