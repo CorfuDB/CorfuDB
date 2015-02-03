@@ -21,4 +21,5 @@ fi
 CORFUDB_DAEMON_OUT="/var/log/corfudb.${1}.log"
 CORFUDBMAIN="org.corfudb.sharedlog.examples.${1}"
 
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" "${*:2}" 2>&1 < /dev/null
+#"$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" "${*:2}" 2>&1 < /dev/null
+"$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" ${*:2} 2>&1 < /dev/null

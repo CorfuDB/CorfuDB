@@ -31,6 +31,12 @@ After installing homebrew, run:
 $ brew install maven thrift
 ```
 
+On Windows, you can get thrift here:
+http://www.apache.org/dyn/closer.cgi?path=/thrift/0.9.2/thrift-0.9.2.exe
+You can run it directly, but you'll need to add it to your path to play nicely 
+with maven; assuming you're using cygwin, you'll need to create an alias for
+it so that command line calls to 'thrift' do the right thing. 
+
 ## Building CorfuDB
 
 CorfuDB uses Apache maven for building. To build, from the root

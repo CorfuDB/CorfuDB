@@ -4,6 +4,7 @@ CORFUDBBIN="${BASH_SOURCE-$0}"
 CORFUDBBIN="$(dirname "${CORFUDBBIN}")"
 CORFUDBBINDIR="$(cd "${CORFUDBBIN}"; pwd)"
 
+
 if [ -e "$CORFUDBBIN/../share/corfudb/bin/corfuDBEnv.sh" ]; then
     . "$CORFUDBBINDIR"/../share/corfudb/bin/corfuDBEnv.sh
 else
@@ -12,6 +13,7 @@ fi
 
 if [ "x$1" != "x" ]
 then
+    echo $1
     CORFUDBCFG="$CORFUDBCFGDIR/$1.yml"
 else
     echo "Usage: $0 [--config <conf-dir>] <node-name> {start|stop|restart|status}" >&2
@@ -19,7 +21,8 @@ fi
 
 if $cygwin
 then
-    CORFUDBCFG=`cygpath -wp "$CORFUDBCFGDIR"`
+    #CORFUDBCFG=`cygpath -wp "$CORFUDBCFGDIR"`
+    CORFUDBCFG=`cygpath -wp "$CORFUDBCFG"`
     KILL=/bin/kill
 else
     KILL=kill
@@ -52,7 +55,7 @@ start)
     then
         if /bin/echo -n $! > "$CORFUDBPIDFILE"
         then
-            sleep 2
+            # sleep 2
             # The server may have failed to start. Let's make sure it did
             if kill -0 $! > /dev/null 2>&1;
             then
