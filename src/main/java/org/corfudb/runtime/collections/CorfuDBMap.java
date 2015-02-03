@@ -1,26 +1,16 @@
-/**
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-package org.corfudb.runtime;
+package org.corfudb.runtime.collections;
 
+import org.corfudb.runtime.AbstractRuntime;
+import org.corfudb.runtime.CorfuDBObject;
+import org.corfudb.runtime.MapCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+/**
+ * Created by mahesh on 2/2/15.
+ */
 public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 {
     static Logger dbglog = LoggerFactory.getLogger(CorfuDBMap.class);
@@ -174,51 +164,3 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     }
 
 }
-
-
-class MapCommand<K,V> implements Serializable
-{
-    int cmdtype;
-    static final int CMD_PUT = 0;
-    static final int CMD_PREPUT = 1;
-    static final int CMD_REMOVE = 2;
-    static final int CMD_CLEAR = 3;
-    K key;
-    V val;
-    public K getKey()
-    {
-        return key;
-    }
-    public V getVal()
-    {
-        return val;
-    }
-    Object retval;
-    public Object getReturnValue()
-    {
-        return retval;
-    }
-    public void setReturnValue(Object obj)
-    {
-        retval = obj;
-    }
-    public MapCommand(int tcmdtype)
-    {
-        this(tcmdtype, null, null);
-    }
-    public MapCommand(int tcmdtype, K tkey)
-    {
-        this(tcmdtype, tkey, null);
-    }
-
-    public MapCommand(int tcmdtype, K tkey, V tval)
-    {
-        cmdtype = tcmdtype;
-        key = tkey;
-        val = tval;
-    }
-    public int getCmdType()
-    {
-        return cmdtype;
-    }
-};
