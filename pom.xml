@@ -26,6 +26,21 @@
         </repository>
    </repositories>
 
+    <reporting>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <configuration>
+                        <links>
+                            <link>http://docs.oracle.com/javase7/docs/api</link>
+                        </links>
+                        <failOnError>false</failOnError>
+                        <additionalparam>-Xdoclint:none</additionalparam>
+                    </configuration>
+                </plugin>
+            </plugins>
+    </reporting>
     <pluginRepositories>
         <pluginRepository>
         <id>davidtrott</id>
@@ -138,6 +153,14 @@
                     <header>LICENSE.txt</header>
                     <strictCheck>true</strictCheck>
                 </configuration>
+            </plugin>
+            <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>2.10.1</version>
+            <configuration>
+                <additionalparam>-Xdoclint:none</additionalparam>
+            </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.thrift.tools</groupId>
