@@ -19,7 +19,7 @@ fi
 
 if $cygwin
 then
-    CORFUDBCFG=`cygpath -wp "$CORFUDBCFGDIR"`
+    CORFUDBCFG=`cygpath -wp "$CORFUDBCFGDIR/$1.yml"`
     KILL=/bin/kill
 else
     KILL=kill

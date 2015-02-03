@@ -22,7 +22,7 @@ public class CorfuHello {
             masteraddress = "http://localhost:8000/corfu";
         }
 
-        final int numthreads = 2;
+        final int numthreads = 1;
 
         Thread[] allthreads = new Thread[numthreads];
         for(int i=0;i<numthreads;i++)
