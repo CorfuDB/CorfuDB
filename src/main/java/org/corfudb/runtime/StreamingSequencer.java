@@ -22,7 +22,7 @@ import java.util.Set;
 /**
  * This is an interface to a stream-aware sequencer.
  */
-interface StreamingSequencer
+public interface StreamingSequencer
 {
     long get_slot(Set<Long> streams);
     long check_tail();

@@ -24,12 +24,13 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.corfudb.runtime.collections.CorfuDBMap;
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.impl.SimpleLogger;
-
+import org.corfudb.runtime.collections.CorfuDBCounter;
 
 /**
  * Tester code for the CorfuDB runtime stack
@@ -42,31 +43,48 @@ public class CorfuDBTester
 
     static Logger dbglog = LoggerFactory.getLogger(CorfuDBTester.class);
 
+
+    static void print_usage()
+    {
+        System.out.println("usage: java CorfuDBTester testtype (0==TXTest|1==LinearizableTest|2==StreamTest) masternode");
+        System.out.println("usage: java CorfuDBTester testtype (3==MultiClientTXTest) masternode numclients");
+        System.out.println("e.g. java CorfuDBTester 0 http://localhost:8002/corfu");
+        if(dbglog instanceof SimpleLogger)
+            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
+                    "enable debug printouts");
+    }
+
     /**
      * @param args
      */
     public static void main(String[] args) throws Exception
     {
-        if (args.length == 0)
+        if (args.length<2)
         {
-            System.out.println("usage: java CorfuDBTester masterURL [0==TXTest(default)|1==LinearizableTest");
-            System.out.println("e.g. masterURL: http://localhost:8000/corfu");
-            if(dbglog instanceof SimpleLogger)
-                System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
-                        "enable debug printouts");
+            print_usage();
             return;
         }
 
-        String masternode = args[0];
+        int testnum = Integer.parseInt(args[0]);
+        String masternode = args[1];
 
         final int TXTEST=0;
         final int LINTEST=1;
         final int STREAMTEST=2;
+        final int MULTICLIENTTXTEST=3;
 
-
-        int testnum = TXTEST;
-        if(args.length==2)
-            testnum = Integer.parseInt(args[1]);
+        int numclients = 1;
+        int expernum = 1;
+        if(testnum==MULTICLIENTTXTEST)
+        {
+            if(args.length<4)
+            {
+                print_usage();
+                return;
+            }
+            numclients = Integer.parseInt(args[2]);
+            expernum = Integer.parseInt(args[3]);
+        }
 
 
 
@@ -88,6 +106,18 @@ public class CorfuDBTester
 
         StreamFactory sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf));
 
+
+        if(testnum==MULTICLIENTTXTEST)
+        {
+            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf));
+            DirectoryService DS = new DirectoryService(TR);
+            CorfuDBCounter barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
+            barrier.increment();
+            while(barrier.read()<numclients);
+            dbglog.debug("Barrier reached; starting test...");
+            testnum = TXTEST;
+        }
+
         if(testnum==LINTEST)
         {
             SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf));
@@ -107,13 +137,11 @@ public class CorfuDBTester
             TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf));
 
             DirectoryService DS = new DirectoryService(TR);
-            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToID("testmap1"));
-            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToID("testmap2"));
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
 
             for (int i = 0; i < numthreads; i++)
             {
-                //linearizable tester
-                //Thread T = new Thread(new CorfuDBTester(cob));
                 //transactional tester
                 threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
                 threads[i].start();
@@ -130,14 +158,10 @@ public class CorfuDBTester
         }
         else if(testnum==STREAMTEST)
         {
-            List<Long> streams = new LinkedList<Long>();
-            streams.add(new Long(1234)); //hardcoded hack
-            streams.add(new Long(2345)); //hardcoded hack
-
-            Stream sb = new StreamBundleImpl(streams, new CorfuStreamingSequencer(crf), new CorfuLogAddressSpace(crf));
+            Stream sb = sf.newStream(1234);
 
             //trim the stream to get rid of entries from previous tests
-            sb.prefixTrim(sb.checkTail());
+            //sb.prefixTrim(sb.checkTail()); //todo: turning off, trim not yet implemented at log level
             for(int i=0;i<numthreads;i++)
             {
                 threads[i] = new Thread(new StreamTester(sb));
@@ -153,7 +177,6 @@ public class CorfuDBTester
 
 
 }
-
 
 /**
  * This is a directory service that maps from human-readable names to CorfuDB object IDs.
@@ -172,6 +195,19 @@ class DirectoryService
 
     }
 
+    /**
+     * Returns a unique ID. This ID is guaranteed to be unique
+     * system-wide with respect to other IDs generated across the system
+     * by the getUniqueID call parameterized with a streamfactory running over
+     * the same log address space. It's implemented by appending an entry
+     * to the underlying log and returning the timestamp/position.
+     *
+     * Note: it is not guaranteed to be unique with respect to IDs returned
+     * by nameToStreamID.
+     *
+     * @param sf StreamFactory to use
+     * @return system-wide unique ID
+     */
     public static long getUniqueID(StreamFactory sf)
     {
         Stream S = sf.newStream(Long.MAX_VALUE-2);
@@ -187,7 +223,7 @@ class DirectoryService
      * @param X
      * @return
      */
-    public long nameToID(String X)
+    public long nameToStreamID(String X)
     {
         System.out.println("Mapping " + X);
         long ret;
@@ -524,72 +560,7 @@ class StreamTester implements Runnable
 
 
 
-class CorfuDBCounter extends CorfuDBObject
-{
-    //backing state of the counter
-    int value;
 
-
-    public CorfuDBCounter(AbstractRuntime tTR, long toid)
-    {
-        super(tTR, toid);
-        value = 0;
-        TR = tTR;
-        oid = toid;
-        TR.registerObject(this);
-    }
-    public void apply(Object bs)
-    {
-        //System.out.println("dummyupcall");
-        System.out.println("CorfuDBCounter received upcall");
-        CounterCommand cc = (CounterCommand)bs;
-        lock(true);
-        if(cc.getCmdType()==CounterCommand.CMD_DEC)
-            value--;
-        else if(cc.getCmdType()==CounterCommand.CMD_INC)
-            value++;
-        else
-        {
-            unlock(true);
-            throw new RuntimeException("Unrecognized command in stream!");
-        }
-        unlock(true);
-        System.out.println("Counter value is " + value);
-    }
-    public void increment()
-    {
-        HashSet<Long> H = new HashSet<Long>(); H.add(this.getID());
-        TR.update_helper(this, new CounterCommand(CounterCommand.CMD_INC));
-    }
-    public int read()
-    {
-        TR.query_helper(this);
-        //what if the value changes between queryhelper and the actual read?
-        //in the linearizable case, we are safe because we see a later version that strictly required
-        //in the transactional case, the tx will spuriously abort, but safety will not be violated...
-        //todo: is there a more elegant API?
-        lock(false);
-        int ret = value;
-        unlock(false);
-        return ret;
-    }
-
-}
-
-class CounterCommand implements Serializable
-{
-    int cmdtype;
-    static final int CMD_DEC = 0;
-    static final int CMD_INC = 1;
-    public CounterCommand(int tcmdtype)
-    {
-        cmdtype = tcmdtype;
-    }
-    public int getCmdType()
-    {
-        return cmdtype;
-    }
-};
 
 /*class CorfuDBRegister implements CorfuDBObject
 {

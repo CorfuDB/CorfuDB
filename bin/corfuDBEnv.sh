@@ -65,9 +65,8 @@ fi
 CLASSPATH="$CORFUDBCFGDIR:$CLASSPATH"
 
 if ls "$CORFUDBBINDIR"/../target/*.jar > /dev/null 2>&1; then
+  echo "Running from development source"
   CLASSPATH=("$CORFUDBBINDIR"/../target/corfudb-*-shaded.jar)
-  echo "Running from development source:"
-  # echo "provisional classpath = $CLASSPATH..."
 elif ls "${CORFUDB_PREFIX}"/share/corfudb/lib/corfudb-*.jar > /dev/null 2>&1; then
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfudb/lib/*.jar)
 fi

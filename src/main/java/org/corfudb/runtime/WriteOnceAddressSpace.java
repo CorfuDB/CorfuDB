@@ -27,7 +27,7 @@ import java.util.LinkedList;
 /**
  * This is the write-once address space providing storage for the shared log.
  */
-interface WriteOnceAddressSpace
+public interface WriteOnceAddressSpace
 {
     /**
      * Writes an entry at a particular position. Throws an exception if
