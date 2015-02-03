@@ -42,6 +42,17 @@ public class CorfuDBTester
 
     static Logger dbglog = LoggerFactory.getLogger(CorfuDBTester.class);
 
+
+    static void print_usage()
+    {
+        System.out.println("usage: java CorfuDBTester testtype (0==TXTest|1==LinearizableTest|2==StreamTest) masternode");
+        System.out.println("usage: java CorfuDBTester testtype (3==MultiClientTXTest) masternode numclients");
+        System.out.println("e.g. java CorfuDBTester 0 http://localhost:8002/corfu");
+        if(dbglog instanceof SimpleLogger)
+            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
+                    "enable debug printouts");
+    }
+
     /**
      * @param args
      */
@@ -49,11 +60,7 @@ public class CorfuDBTester
     {
         if (args.length<2)
         {
-            System.out.println("usage: java CorfuDBTester testtype (0==TXTest|1==LinearizableTest|2==StreamTest) masternode");
-            System.out.println("e.g. java CorfuDBTester 0 http://localhost:8002/corfu");
-            if(dbglog instanceof SimpleLogger)
-                System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
-                        "enable debug printouts");
+            print_usage();
             return;
         }
 
@@ -63,6 +70,21 @@ public class CorfuDBTester
         final int TXTEST=0;
         final int LINTEST=1;
         final int STREAMTEST=2;
+        final int MULTICLIENTTXTEST=3;
+
+        int numclients = 1;
+        int expernum = 1;
+        if(testnum==MULTICLIENTTXTEST)
+        {
+            if(args.length<4)
+            {
+                print_usage();
+                return;
+            }
+            numclients = Integer.parseInt(args[2]);
+            expernum = Integer.parseInt(args[3]);
+        }
+
 
 
         ClientLib crf;
@@ -83,6 +105,18 @@ public class CorfuDBTester
 
         StreamFactory sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf));
 
+
+        if(testnum==MULTICLIENTTXTEST)
+        {
+            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf));
+            DirectoryService DS = new DirectoryService(TR);
+            CorfuDBCounter barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
+            barrier.increment();
+            while(barrier.read()<numclients);
+            dbglog.debug("Barrier reached; starting test...");
+            testnum = TXTEST;
+        }
+
         if(testnum==LINTEST)
         {
             SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf));
@@ -102,13 +136,11 @@ public class CorfuDBTester
             TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf));
 
             DirectoryService DS = new DirectoryService(TR);
-            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToID("testmap1"));
-            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToID("testmap2"));
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
 
             for (int i = 0; i < numthreads; i++)
             {
-                //linearizable tester
-                //Thread T = new Thread(new CorfuDBTester(cob));
                 //transactional tester
                 threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
                 threads[i].start();
@@ -145,7 +177,6 @@ public class CorfuDBTester
 
 }
 
-
 /**
  * This is a directory service that maps from human-readable names to CorfuDB object IDs.
  * It's built using CorfuDB objects that run over hardcoded IDs (MAX_LONG and MAX_LONG-1).
@@ -163,6 +194,19 @@ class DirectoryService
 
     }
 
+    /**
+     * Returns a unique ID. This ID is guaranteed to be unique
+     * system-wide with respect to other IDs generated across the system
+     * by the getUniqueID call parameterized with a streamfactory running over
+     * the same log address space. It's implemented by appending an entry
+     * to the underlying log and returning the timestamp/position.
+     *
+     * Note: it is not guaranteed to be unique with respect to IDs returned
+     * by nameToStreamID.
+     *
+     * @param sf StreamFactory to use
+     * @return system-wide unique ID
+     */
     public static long getUniqueID(StreamFactory sf)
     {
         Stream S = sf.newStream(Long.MAX_VALUE-2);
@@ -178,7 +222,7 @@ class DirectoryService
      * @param X
      * @return
      */
-    public long nameToID(String X)
+    public long nameToStreamID(String X)
     {
         System.out.println("Mapping " + X);
         long ret;

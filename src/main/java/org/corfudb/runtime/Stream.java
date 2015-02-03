@@ -31,7 +31,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * Entries can belong to multiple streams.
  * The Stream object allows appends to arbitrary other streams.
  */
-interface Stream
+public interface Stream
 {
     long append(Serializable s, Set<Long> streams);
 
