@@ -54,11 +54,7 @@ start)
     then
         if /bin/echo -n $! > "$CORFUDBPIDFILE"
         then
-<<<<<<< HEAD
-            #sleep 2
-=======
-            # sleep 2
->>>>>>> newbranch
+            sleep 2
             # The server may have failed to start. Let's make sure it did
             if kill -0 $! > /dev/null 2>&1;
             then
@@ -78,7 +74,7 @@ start)
     ;;
 stop)
     echo -n "Stopping CorfuDB role ${1}..."
-    if [ ! -f "$CORFUDBPIDFILE" ]; 
+    if [ ! -f "$CORFUDBPIDFILE" ];
     then
         echo "Could not find a PID file to stop..."
         exit 0 #should this be exit 1, maybe?
@@ -95,7 +91,7 @@ restart)
     "$0" "$1" start
     ;;
 status)
-    if [ ! -f "$CORFUDBPIDFILE" ]; 
+    if [ ! -f "$CORFUDBPIDFILE" ];
     then
         echo "Could not find a PID file..."
         exit 0 #should this be exit 1, maybe?

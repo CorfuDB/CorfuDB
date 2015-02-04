@@ -24,6 +24,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import gnu.getopt.Getopt;
 import org.corfudb.runtime.collections.CorfuDBMap;
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
@@ -59,15 +60,6 @@ public class CorfuDBTester
      */
     public static void main(String[] args) throws Exception
     {
-        if (args.length<2)
-        {
-            print_usage();
-            return;
-        }
-
-        int testnum = Integer.parseInt(args[0]);
-        String masternode = args[1];
-
         final int TXTEST=0;
         final int LINTEST=1;
         final int STREAMTEST=2;
@@ -75,7 +67,52 @@ public class CorfuDBTester
         final int LINCTRTEST=4;
 
         int numclients = 1;
-        int expernum = 1;
+        int expernum = 1; //used by the barrier code
+
+        int c;
+        String strArg;
+        int numthreads = 1;
+        int numops = 1000;
+        int testnum = 0;
+        String masternode = null;
+
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:");
+        while ((c = g.getopt()) != -1)
+        {
+            switch(c)
+            {
+                case 'a':
+                    strArg = g.getOptarg();
+                    System.out.println("testtype = "+ strArg);
+                    testnum = Integer.parseInt(strArg);
+                    break;
+                case 'm':
+                    masternode = g.getOptarg();
+                    masternode = masternode.trim();
+                    System.out.println("master = " + masternode);
+                    break;
+                case 't':
+                    strArg = g.getOptarg();
+                    System.out.println("numthreads = "+ strArg);
+                    numthreads = Integer.parseInt(strArg);
+                    break;
+                case 'n':
+                    strArg = g.getOptarg();
+                    System.out.println("numops = "+ strArg);
+                    numops = Integer.parseInt(strArg);
+                    break;
+                default:
+                    System.out.print("getopt() returned " + c + "\n");
+            }
+        }
+
+        if(masternode == null)
+            throw new Exception("must provide master http address using -m flag");
+        if(numthreads < 1)
+            throw new Exception("need at least one thread!");
+        if(numops < 1)
+            throw new Exception("need at least one op!");
+
         if(testnum==MULTICLIENTTXTEST)
         {
             if(args.length<4)
@@ -101,8 +138,6 @@ public class CorfuDBTester
         }
 
 
-        int numthreads;
-        numthreads = 32;
         Thread[] threads = new Thread[numthreads];
 
         StreamFactory sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf));
