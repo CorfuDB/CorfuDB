@@ -47,12 +47,15 @@ public class CorfuDBTester
 
     static void print_usage()
     {
-        System.out.println("usage: java CorfuDBTester testtype (0==TXTest|1==LinMapTest|2==StreamTest|4==LinCounterTest) masternode");
-        System.out.println("usage: java CorfuDBTester testtype (3==MultiClientTXTest) masternode numclients");
-        System.out.println("e.g. java CorfuDBTester 0 http://localhost:8002/corfu");
-        if(dbglog instanceof SimpleLogger)
-            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
-                    "enable debug printouts");
+        System.out.println("usage: java CorfuDBTester");
+        System.out.println("\t-m masternode");
+        System.out.println("\t[-a testtype] (0==TXTest|1==LinMapTest|2==StreamTest|3==MultiClientTXTest|4==LinCounterTest)");
+        System.out.println("\t[-t number of threads]");
+        System.out.println("\t[-n number of ops]");
+        System.out.println("\t[-d enable debug printouts]");
+//        if(dbglog instanceof SimpleLogger)
+//            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
+//                    "enable debug printouts");
     }
 
     /**
@@ -75,6 +78,11 @@ public class CorfuDBTester
         int numops = 1000;
         int testnum = 0;
         String masternode = null;
+        if(args.length==0)
+        {
+            print_usage();
+            return;
+        }
 
         Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:");
         while ((c = g.getopt()) != -1)
