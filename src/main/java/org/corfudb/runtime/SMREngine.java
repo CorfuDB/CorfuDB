@@ -110,7 +110,7 @@ public class SMREngine
         pendinglock.lock();
         pendingcommands.put(cmd.uniqueid.second, new Pair(update, precommand));
         pendinglock.unlock();
-        long pos = curstream.append(cmd, streams);
+        long pos = (Long)curstream.append(cmd, streams); //todo: remove the cast
         if (precommand != null) //block until precommand is played
             sync(pos);
         return pos;
@@ -200,7 +200,7 @@ public class SMREngine
         if(procqueue.size()==0) throw new RuntimeException("queue cannot be empty at this point!");
 
         //check the current tail of the stream, and then read the stream until that position
-        long curtail = curstream.checkTail();
+        long curtail = (Long)curstream.checkTail(); //todo: remove the cast
 
         dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
 
@@ -223,10 +223,10 @@ public class SMREngine
                 {
                     smrlearner.apply(localcmds.second, curstream.getStreamID(), cmdw.streams, TIMESTAMP_INVALID);
                 }
-                smrlearner.apply(localcmds.first, curstream.getStreamID(), cmdw.streams, update.getLogpos());
+                smrlearner.apply(localcmds.first, curstream.getStreamID(), cmdw.streams, (Long)update.getLogpos()); //todo: remove the cast
             }
             else
-                smrlearner.apply(cmdw.cmd, curstream.getStreamID(), cmdw.streams, update.getLogpos());
+                smrlearner.apply(cmdw.cmd, curstream.getStreamID(), cmdw.streams, (Long)update.getLogpos()); //todo: remove the cast
             update = curstream.readNext(curtail);
         }
 

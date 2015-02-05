@@ -274,7 +274,7 @@ class DirectoryService
     {
         Stream S = sf.newStream(Long.MAX_VALUE-2);
         HashSet hs = new HashSet(); hs.add(Long.MAX_VALUE-2);
-        return S.append("DummyString", hs);
+        return (Long)S.append("DummyString", hs); //todo: remove the cast
     }
 
 

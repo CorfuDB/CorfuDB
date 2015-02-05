@@ -33,7 +33,19 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public interface Stream
 {
-    long append(Serializable s, Set<Long> streams);
+
+    /**
+     * Appends the entry to multiple streams. Results in a single write to a single underlying
+     * address space that appears in multiple streams. Does not guarantee success --- i.e.,
+     * if the client subsequently plays the streams forward, it may not encounter the entry
+     * in one or all of the streams.
+     * //todo: should this strictly be in the Stream object, since it impacts multiple streams?
+     *
+     * @param s entry to append
+     * @param streams set of streams to append the entry to
+     * @return Timestamp of the appended entry
+     */
+    Comparable append(Serializable s, Set<Long> streams);
 
     /**
      * reads the next entry in the stream
@@ -51,7 +63,7 @@ public interface Stream
      * @param  stoppos  the stopping position for the read
      * @return          the next entry in the stream
      */
-    StreamEntry readNext(long stoppos);
+    StreamEntry readNext(Comparable stoppos);
 
     /**
      * returns the current tail position of the stream (this is exclusive, so a checkTail
@@ -61,7 +73,7 @@ public interface Stream
      *
      * @return          the current tail of the stream
      */
-    long checkTail();
+    Comparable checkTail();
 
     /**
      * trims all entries in the stream until the passed in position (exclusive); so
@@ -71,7 +83,7 @@ public interface Stream
      * @param   trimpos the position strictly before which all entries belonging to the
      *                  stream are trimmed
      */
-    void prefixTrim(long trimpos);
+    void prefixTrim(Comparable trimpos);
 
     /**
      * returns this stream's ID
@@ -82,146 +94,22 @@ public interface Stream
 }
 
 
-
-
-
 /**
  * Used by Stream to wrap read values, so that some metadata
  * (e.g., the position of the entry in the underlying log) can be returned
  * along with the payload.
  */
-class StreamEntry implements Serializable
+
+interface StreamEntry extends Serializable
 {
-    private long logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
-    private Object payload;
-    private Set<Long> streams;
-
-    public long getLogpos()
-    {
-        return logpos;
-    }
-
-    public Object getPayload()
-    {
-        return payload;
-    }
-
-    public Set<Long> getStreams()
-    {
-        return streams;
-    }
-
-    public StreamEntry(Object tbs, long position, Set<Long> tstreams)
-    {
-        logpos = position;
-        payload = tbs;
-        streams = tstreams;
-    }
+    public Comparable getLogpos();
+    public Object getPayload();
+    public Set<Long> getStreams();
 }
-
 
 interface StreamFactory
 {
     public Stream newStream(long streamid);
 }
 
-class StreamFactoryImpl implements StreamFactory
-{
-    WriteOnceAddressSpace was;
-    StreamingSequencer ss;
-    public StreamFactoryImpl(WriteOnceAddressSpace twas, StreamingSequencer tss)
-    {
-        was = twas;
-        ss = tss;
-    }
-    public Stream newStream(long streamid)
-    {
-        return new StreamImpl(streamid, ss, was);
-    }
 
-}
-
-class StreamImpl implements Stream
-{
-    static Logger dbglog = LoggerFactory.getLogger(StreamImpl.class);
-
-    long streamid;
-
-    StreamingSequencer seq;
-    WriteOnceAddressSpace addrspace;
-
-    Lock biglock;
-    long curpos;
-    long curtail;
-
-
-    public long getStreamID()
-    {
-        return streamid;
-    }
-
-    StreamImpl(long tstreamid, StreamingSequencer tss, WriteOnceAddressSpace tlas)
-    {
-        streamid = tstreamid;
-        seq = tss;
-        addrspace = tlas;
-        biglock = new ReentrantLock();
-
-    }
-
-    @Override
-    public long append(Serializable payload, Set<Long> streams)
-    {
-        long ret = seq.get_slot(streams);
-        dbglog.debug("reserved slot {}", ret);
-        StreamEntry S = new StreamEntry(payload, ret, streams);
-        addrspace.write(ret, BufferStack.serialize(S));
-        dbglog.debug("wrote slot {}", ret);
-        return ret;
-    }
-
-    @Override
-    public StreamEntry readNext()
-    {
-        return readNext(0);
-    }
-
-    @Override
-    public StreamEntry readNext(long stoppos)
-    {
-        StreamEntry ret = null;
-        while(true)
-        {
-            biglock.lock();
-            if (!(curpos < curtail && (stoppos == 0 || curpos < stoppos)))
-            {
-                biglock.unlock();
-                return null;
-            }
-            long readpos = curpos++;
-            biglock.unlock();
-            BufferStack bs = addrspace.read(readpos);
-            ret = (StreamEntry) bs.deserialize();
-            if(ret.getStreams().contains(this.getStreamID()))
-                break;
-            dbglog.debug("skipping...");
-        }
-        return ret;
-    }
-
-    @Override
-    public long checkTail()
-    {
-        long tcurtail = seq.check_tail();
-        biglock.lock();
-        if(tcurtail>curtail) curtail = tcurtail;
-        biglock.unlock();
-        return tcurtail;
-    }
-
-    @Override
-    public void prefixTrim(long trimpos)
-    {
-        throw new RuntimeException("unimplemented");
-    }
-}
