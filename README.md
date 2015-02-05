@@ -8,7 +8,7 @@ strictly serializable transactions. CorfuDB is based on
 peer-reviewed research published at [SOSP](#references),
 [TOCS](#references), and [NSDI](#references).
 
-CorfuDB consists of two layers: a logging layer in org.corfudb.logging,
+CorfuDB consists of two layers: a logging layer
 which implements a distributed, fault-tolerant shared log; and a
 runtime layer that implements transactional services over the shared log.
 
@@ -137,7 +137,7 @@ Tango: Distributed Data Structures over a Shared Log.
 Michael Wei, John D. Davis, Sriram Rao, Tao Zou, Aviad Zuck.*
 SOSP 2013: The 24th ACM Symposium on Operating Systems Principles.
 
-CORFU: A Shared Log Design for Flash Clusters.
+CORFU: A Distributed Shared Log
 *Mahesh Balakrishnan, Dahlia Malkhi, Vijayan Prabhakaran, Ted Wobber,
 Michael Wei, and John Davis.*
 ACM Transactions on Computer Systems (TOCS). December 2013.
