@@ -17,6 +17,8 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     //backing state of the map
     Map<K, V> backingmap;
 
+    boolean optimizereads = false;
+
     public CorfuDBMap(AbstractRuntime tTR, long toid)
     {
         super(tTR, toid);
@@ -30,7 +32,8 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     {
         dbglog.debug("CorfuDBMap received upcall");
         MapCommand<K,V> cc = (MapCommand<K,V>)bs;
-        lock(true);
+        if(optimizereads)
+            lock(true);
         if(cc.getCmdType()==MapCommand.CMD_PUT)
         {
             backingmap.put(cc.getKey(), cc.getVal());
@@ -47,18 +50,48 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         {
             backingmap.clear();
         }
+        else if(cc.getCmdType()==MapCommand.CMD_GET)
+        {
+            cc.setReturnValue(backingmap.get(cc.getKey()));
+        }
+        else if(cc.getCmdType()==MapCommand.CMD_SIZE)
+        {
+            cc.setReturnValue(backingmap.size());
+        }
+        else if(cc.getCmdType()==MapCommand.CMD_CONTAINSKEY)
+        {
+            cc.setReturnValue(backingmap.containsKey(cc.getKey()));
+        }
+        else if(cc.getCmdType()==MapCommand.CMD_CONTAINSVALUE)
+        {
+            cc.setReturnValue(backingmap.containsValue(cc.getVal()));
+        }
+        else if(cc.getCmdType()==MapCommand.CMD_ISEMPTY)
+        {
+            cc.setReturnValue(backingmap.isEmpty());
+        }
         else
         {
-            unlock(true);
+            //need to unlock?
             throw new RuntimeException("Unrecognized command in stream!");
         }
         dbglog.debug("Map size is {}", backingmap.size());
-        unlock(true);
+        if(optimizereads)
+            unlock(true);
     }
 
     //accessor
     @Override
     public int size()
+    {
+        if(optimizereads)
+            return size_optimized();
+        MapCommand sizecmd = new MapCommand(MapCommand.CMD_SIZE);
+        TR.query_helper(this, null, sizecmd);
+        return (Integer)sizecmd.getReturnValue();
+    }
+
+    public int size_optimized()
     {
         TR.query_helper(this);
         //what if the value changes between query_helper and the actual read?
@@ -74,6 +107,15 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     @Override
     public boolean isEmpty()
     {
+        if(optimizereads)
+            return isEmpty_optimized();
+        MapCommand isemptycmd = new MapCommand(MapCommand.CMD_ISEMPTY);
+        TR.query_helper(this, null, isemptycmd);
+        return (Boolean)isemptycmd.getReturnValue();
+    }
+
+    public boolean isEmpty_optimized()
+    {
         TR.query_helper(this);
         lock();
         boolean x = backingmap.isEmpty();
@@ -84,6 +126,15 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     //accessor
     @Override
     public boolean containsKey(Object o)
+    {
+        if (optimizereads)
+            return containsKey_optimized(o);
+        MapCommand containskeycmd = new MapCommand(MapCommand.CMD_CONTAINSKEY, o);
+        TR.query_helper(this, null, containskeycmd);
+        return (Boolean)containskeycmd.getReturnValue();
+    }
+
+    public boolean containsKey_optimized(Object o)
     {
         TR.query_helper(this);
         lock();
@@ -96,6 +147,14 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     @Override
     public boolean containsValue(Object o)
     {
+        if (optimizereads)
+            return containsValue_optimized(o);
+        MapCommand containsvalmd = new MapCommand(MapCommand.CMD_CONTAINSVALUE, null, o);
+        TR.query_helper(this, null, containsvalmd);
+        return (Boolean)containsvalmd.getReturnValue();
+    }
+    public boolean containsValue_optimized(Object o)
+    {
         TR.query_helper(this);
         lock();
         boolean x = backingmap.containsValue(o);
@@ -106,6 +165,14 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     //accessor
     @Override
     public V get(Object o)
+    {
+        if (optimizereads)
+            return get_optimized(o);
+        MapCommand getcmd = new MapCommand(MapCommand.CMD_GET, o);
+        TR.query_helper(this, null, getcmd);
+        return (V)getcmd.getReturnValue();
+    }
+    public V get_optimized(Object o)
     {
         TR.query_helper(this);
         lock();
@@ -193,6 +260,12 @@ class MapCommand<K,V> extends CorfuDBObjectCommand
     static final int CMD_PREPUT = 1;
     static final int CMD_REMOVE = 2;
     static final int CMD_CLEAR = 3;
+    //accessors
+    static final int CMD_GET = 4;
+    static final int CMD_ISEMPTY = 5;
+    static final int CMD_CONTAINSKEY = 6;
+    static final int CMD_CONTAINSVALUE = 7;
+    static final int CMD_SIZE = 8;
     K key;
     V val;
     public K getKey()
