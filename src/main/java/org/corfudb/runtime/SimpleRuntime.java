@@ -14,7 +14,18 @@
  */
 package org.corfudb.runtime;
 
-import java.io.Serializable;
+import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.server.TServer;
+import org.apache.thrift.server.TSimpleServer;
+import org.apache.thrift.server.TThreadPoolServer;
+import org.apache.thrift.transport.*;
+import org.corfudb.sharedlog.sequencer.SequencerService;
+import org.corfudb.sharedlog.sequencer.SequencerTask;
+
+import java.io.*;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -26,7 +37,7 @@ import java.util.Set;
  * object multiplexing so that a single SMR instance can be shared by multiple objects.
  *
  */
-public class SimpleRuntime implements AbstractRuntime, SMRLearner
+public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHandler
 {
     StreamFactory streamfactory;
 
@@ -83,6 +94,12 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
         }
     }
 
+    /**
+     * Returns the SMR engine corresponding to the passed in stream/object ID.
+     *
+     * @param objectid object/stream id
+     * @return SMR Engine playing the stream with the passed in stream id
+     */
     SMREngine getEngine(long objectid)
     {
         synchronized(enginemap)
@@ -92,6 +109,8 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
         }
     }
 
+    RPCClient rpcc;
+    RPCServer rpcs;
 
     /**
      * Creates a SimpleRuntime
@@ -105,6 +124,13 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
         objectmap = new HashMap();
         enginemap = new HashMap();
         uniquenodeid = tuniquenodeid;
+
+        //rpc
+        rpcc = new ThriftRPCClient();
+        rpcs = new ThriftRPCServer();
+        rpcs.registerHandler(9090, this);
+        System.out.println(rpcc.send("Hello World", "localhost", 9090));
+        //System.exit(0);
     }
 
     public void BeginTX()
@@ -182,4 +208,142 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner
 
     }
 
+    //receives incoming RPCs
+    @Override
+    public Object deliver(Object cmd)
+    {
+        System.out.println(cmd);
+        return "Woohoo!";
+    }
+}
+
+interface RPCServer
+{
+    public void registerHandler(int portnum, RPCServerHandler h);
+}
+
+interface RPCServerHandler
+{
+    public Object deliver(Object cmd);
+}
+
+interface RPCClient
+{
+    public Object send(Serializable command, String hostname, int portnum);
+}
+
+class ThriftRPCClient implements RPCClient
+{
+    public void ThriftRPCClient()
+    {
+
+    }
+    public Object send(Serializable command, String hostname, int portnum)
+    {
+        try
+        {
+            //todo: make this less brain-dead
+            TTransport transport = new TSocket(hostname, portnum);
+            transport.open();
+            TProtocol protocol = new TBinaryProtocol(transport);
+            RemoteReadService.Client client = new RemoteReadService.Client(protocol);
+
+            Object ret = Utils.deserialize(client.remote_read(Utils.serialize(command)));
+            transport.close();
+            return ret;
+        }
+        catch (TTransportException e)
+        {
+            throw new RuntimeException(e);
+        }
+        catch (TException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+}
+
+class ThriftRPCServer implements RPCServer
+{
+
+    public ThriftRPCServer()
+    {
+
+    }
+
+    public void registerHandler(int portnum, RPCServerHandler h)
+    {
+        final RPCServerHandler handler = h;
+        final TServer server;
+        TServerSocket serverTransport;
+        RemoteReadService.Processor<RemoteReadService.Iface> processor;
+        try
+        {
+            serverTransport = new TServerSocket(portnum);
+            processor = new RemoteReadService.Processor(new RemoteReadService.Iface()
+            {
+                @Override
+                public ByteBuffer remote_read(ByteBuffer arg) throws TException
+                {
+                    return Utils.serialize(handler.deliver(Utils.deserialize(arg)));
+                }
+            });
+            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
+            new Thread(new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    server.serve(); //this seems to be a blocking call, putting it in its own thread
+                }
+            }).start();
+            System.out.println("listening on port " + portnum);
+        }
+        catch (TTransportException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+}
+
+
+class Utils
+{
+    public static ByteBuffer serialize(Object obj)
+    {
+        try
+        {
+            //todo: make serialization less clunky!
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(baos);
+            oos.writeObject(obj);
+            byte b[] = baos.toByteArray();
+            oos.close();
+            return ByteBuffer.wrap(b);
+        }
+        catch(IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+    public static Object deserialize(ByteBuffer b)
+    {
+        try
+        {
+            //todo: make serialization less clunky!
+            ByteArrayInputStream bais = new ByteArrayInputStream(b.array());
+            ObjectInputStream ois = new ObjectInputStream(bais);
+            Object obj = ois.readObject();
+            return obj;
+        }
+        catch(IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+        catch(ClassNotFoundException ce)
+        {
+            throw new RuntimeException(ce);
+        }
+    }
 }
