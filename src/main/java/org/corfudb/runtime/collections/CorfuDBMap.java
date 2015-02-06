@@ -26,7 +26,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         backingmap = new HashMap<K,V>();
     }
 
-    public void apply(Object bs)
+    public void applyToObject(Object bs)
     {
         dbglog.debug("CorfuDBMap received upcall");
         MapCommand<K,V> cc = (MapCommand<K,V>)bs;

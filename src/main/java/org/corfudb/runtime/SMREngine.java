@@ -142,9 +142,12 @@ public class SMREngine
     }
 
     /** returns once log has been played by playback thread
-     * until syncpos.
+     * until syncpos, inclusive.
+     * the command can be applied anytime after syncpos has been
+     * reached. syncpos is merely a hint to reduce the latency
+     * of the sync call.
      * todo: right now syncpos is ignored
-     * ideally, the command should be applied at syncpos
+     *
      * if syncpos == timestamp_invalid, the command should be applied
      * immediately before/without syncing;
      * if syncpos == timestamp_max, the command should be applied after
@@ -231,12 +234,12 @@ public class SMREngine
             {
                 if (localcmds.second != null)
                 {
-                    smrlearner.apply(localcmds.second, curstream.getStreamID(), cmdw.streams, TIMESTAMP_INVALID);
+                    smrlearner.deliver(localcmds.second, curstream.getStreamID(), cmdw.streams, TIMESTAMP_INVALID);
                 }
-                smrlearner.apply(localcmds.first, curstream.getStreamID(), cmdw.streams, (Long)update.getLogpos()); //todo: remove the cast
+                smrlearner.deliver(localcmds.first, curstream.getStreamID(), cmdw.streams, (Long) update.getLogpos()); //todo: remove the cast
             }
             else
-                smrlearner.apply(cmdw.cmd, curstream.getStreamID(), cmdw.streams, (Long)update.getLogpos()); //todo: remove the cast
+                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), cmdw.streams, (Long) update.getLogpos()); //todo: remove the cast
             update = curstream.readNext(curtail);
         }
 
@@ -252,7 +255,7 @@ public class SMREngine
             SyncObjectWrapper syncobj = it.next();
             if(syncobj.synccommand!=null)
             {
-                smrlearner.apply(syncobj.synccommand, curstream.getStreamID(), curstreamlist, TIMESTAMP_INVALID);
+                smrlearner.deliver(syncobj.synccommand, curstream.getStreamID(), curstreamlist, TIMESTAMP_INVALID);
             }
             synchronized(syncobj)
             {
@@ -280,7 +283,7 @@ interface SMRLearner
      * @param allstreams
      * @param timestamp
      */
-    void apply(Object command, long curstream, Set<Long> allstreams, long timestamp);
+    void deliver(Object command, long curstream, Set<Long> allstreams, long timestamp);
 }
 
 /**

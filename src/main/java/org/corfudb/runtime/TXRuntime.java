@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * This class is a transactional runtime implementing the AbstractRuntime interface.
@@ -100,7 +102,7 @@ public class TXRuntime extends SimpleRuntime
             dbglog.debug("synced stream ", streamid);
         }
 
-        dbglog.debug("EndTX checking for decision...");
+        dbglog.debug("EndTX checking for decision for intention at {}...", txpos);
         //at this point there should be a decision
         //if not, for now we throw an error (but with decision records we'll keep syncing
         //until we find the decision)
@@ -114,7 +116,13 @@ public class TXRuntime extends SimpleRuntime
                 return dec;
             }
             else
+            {
+                //catastrophic error for now, while we debug
+                System.out.println("dec not found for " + txpos);
+                System.out.println(this);
+                System.exit(0);
                 throw new RuntimeException("decision not found!");
+            }
         }
     }
 
@@ -168,7 +176,7 @@ public class TXRuntime extends SimpleRuntime
                 //mark the read set
                 query_helper(cob, key);
                 //apply the precommand to the object
-                apply(query, cob.getID(), streams, SMREngine.TIMESTAMP_INVALID);
+                deliver(query, cob.getID(), streams, SMREngine.TIMESTAMP_INVALID);
             }
             curtx.get().buffer_update(update, streams.iterator().next());
         }
@@ -180,9 +188,9 @@ public class TXRuntime extends SimpleRuntime
         query_then_update_helper(cob, null, update);
     }
 
-    public void apply(Object command, long curstream, Set<Long> streams, long timestamp)
+    public void deliver(Object command, long curstream, Set<Long> streams, long timestamp)
     {
-        dbglog.debug("apply {}", timestamp);
+        dbglog.debug("deliver {}", timestamp);
 
         if (command instanceof TxInt) //is the command a transaction or a linearizable singleton?
         {
@@ -220,14 +228,24 @@ public class TXRuntime extends SimpleRuntime
                 while(it.hasNext())
                 {
                     Pair<Serializable, Long> P = it.next();
-                    Set<Long> tstreams = new HashSet<Long>();
-                    tstreams.add(P.second);
+//                    Set<Long> tstreams = new HashSet<Long>();
+//                    tstreams.add(P.second);
+                    //todo: this apply upcall can be simultaneously called by different SMR threads!
+                    //todo: it has to be threadsafe! different threads can simultaneously
+                    //todo: try to enter the object's apply upcall...
+                    //todo: at the very least we need simple object locking.
                     //todo: do we have to do 2-phase locking?
                     //since all updates are funnelled through the apply thread
                     //the only bad thing that can happen is that reads see an inconsistent state
                     //but this can happen anyway, and in this case the transaction will abort
                     //todo: think about providing tx opacity across the board
-                    super.apply(P.first, curstream, tstreams, timestamp); //let SimpleRuntime do the object multiplexing
+                    CorfuDBObject cob = getObject(P.second);
+                    if(cob==null) throw new RuntimeException("not a registered object!");
+                    cob.lock(true);
+                    //super.apply(P.first, curstream, tstreams, timestamp); //let SimpleRuntime do the object multiplexing
+                    cob.applyToObject(P.first);
+                    cob.setTimestamp(timestamp);
+                    cob.unlock(true);
                 }
             }
         }
@@ -240,22 +258,26 @@ public class TXRuntime extends SimpleRuntime
                 else
                     ctr_numapplieslocal.incrementAndGet();
             }
-            super.apply(command, curstream, streams, timestamp);
+            super.deliver(command, curstream, streams, timestamp);
         }
 
-        dbglog.debug("done with apply {}", timestamp);
+        dbglog.debug("done with deliver {}", timestamp);
     }
 
     //the first bitset indicates whether the decision has been made or not
     //the second bitset indicates whether the decision is a commit or an abort
     Map<Long, Pair<BitSet, BitSet>> decisionbits = new HashMap();
+    Lock decbitslock = new ReentrantLock();
 
     final int VAL_ABORT = 0;
     final int VAL_COMMIT = 1;
     final int VAL_UNDECIDED = 2;
 
+    //this code needs to be threadsafe since multiple SMRs can call into it simultaneously
+    //even though each SMR is single-threaded.
     int validate(TxInt newtx, long curstream, long timestamp)
     {
+  //      System.out.println("validate " + timestamp + " in stream " + curstream);
         // to enforce strict serializability, we use a simple rule:
         // has anything the transaction read changed since it was read?
         // if not, the transaction commits since the state it viewed is
@@ -264,6 +286,7 @@ public class TXRuntime extends SimpleRuntime
 
         if(timestamp==SMREngine.TIMESTAMP_INVALID) throw new RuntimeException("validation timestamp cannot be invalid!");
 
+        decbitslock.lock();
         Pair<BitSet, BitSet> P = null;
         if(decisionbits.containsKey(timestamp))
             P = decisionbits.get(timestamp);
@@ -272,6 +295,8 @@ public class TXRuntime extends SimpleRuntime
             P = new Pair<BitSet, BitSet>(new BitSet(), new BitSet());
             decisionbits.put(timestamp, P);
         }
+        decbitslock.unlock();
+
         BitSet decided = P.first;
         BitSet committed = P.second;
 
@@ -284,6 +309,7 @@ public class TXRuntime extends SimpleRuntime
             {
                 Triple<Long, Long, Serializable> curread = readsit.next();
                 if (curread.first != curstream) continue; //validate only the current stream
+                //is the current version of the object at a later timestamp than the version read by the transaction?
                 if (getObject(curread.first).getTimestamp(curread.third) > curread.second)
                 {
                     partialabort = true;
@@ -291,25 +317,32 @@ public class TXRuntime extends SimpleRuntime
                 }
             }
             int streampos = newtx.get_readstreams().get(curstream);
-            decided.set(streampos);
-            if (!partialabort) committed.set(streampos);
+            synchronized(P) //using P to guard decided/committed bitsets
+            {
+                decided.set(streampos);
+                if (!partialabort) committed.set(streampos);
+            }
         }
 
         int ret;
-        if(decided.cardinality()!=committed.cardinality())
+        synchronized(P) //using P to guard decided/committed bitsets
         {
-            //transaction is an abort
-            ret = VAL_ABORT;
-        }
-        else if(decided.cardinality()==newtx.get_readstreams().size()) //all streams have been decided
-        {
-            //transaction is a commit
-            ret = VAL_COMMIT;
-        }
-        else
-        {
-            //not enough information yet
-            ret = VAL_UNDECIDED;
+            if (decided.cardinality() != committed.cardinality())
+            {
+                //transaction is an abort
+                ret = VAL_ABORT;
+            }
+            else if (decided.cardinality() == newtx.get_readstreams().size()) //all streams have been decided
+            {
+                //transaction is a commit
+                ret = VAL_COMMIT;
+            }
+            else
+            {
+                //not enough information yet
+                ret = VAL_UNDECIDED;
+                //dbglog.warn("undec " + timestamp + " " + decided.cardinality() + " " + committed.cardinality() + " " + newtx.get_readset().size() + " " + newtx.get_readstreams().size() + " " + curstream);
+            }
         }
         dbglog.debug("DECISION = {}", ret);
         return ret;

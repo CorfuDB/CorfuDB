@@ -75,7 +75,7 @@ public abstract class CorfuDBObject
         else statelock.readLock().unlock();
     }
 
-    abstract public void apply(Object update);
+    abstract public void applyToObject(Object update);
 
     public long getID()
     {

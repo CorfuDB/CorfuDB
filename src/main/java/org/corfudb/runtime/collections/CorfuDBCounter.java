@@ -19,7 +19,7 @@ public class CorfuDBCounter extends CorfuDBObject
         super(tTR, toid);
         value = 0;
     }
-    public void apply(Object bs)
+    public void applyToObject(Object bs)
     {
         //System.out.println("dummyupcall");
         System.out.println("CorfuDBCounter received upcall");

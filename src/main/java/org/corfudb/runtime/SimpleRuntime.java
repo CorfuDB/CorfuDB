@@ -22,8 +22,6 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.*;
 
 import java.io.*;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -80,7 +78,8 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     {
         synchronized(objectmap)
         {
-            if (!objectmap.containsKey(objectid)) throw new RuntimeException("object not registered!");
+//            if (!objectmap.containsKey(objectid)) throw new RuntimeException("object not registered!");
+            //returns null if the object does not exist
             return objectmap.get(objectid);
         }
     }
@@ -207,34 +206,25 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     }
 
 
-    public void apply(Object command, long curstream, Set<Long> streams, long timestamp)
+    public void deliver(Object command, long curstream, Set<Long> streams, long timestamp)
     {
         if(streams.size()!=1) throw new RuntimeException("unimplemented");
-        Long streamid = streams.iterator().next();
-        synchronized(objectmap)
-        {
-            if(objectmap.containsKey(streamid))
-            {
-                CorfuDBObject cob = objectmap.get(streamid);
-                cob.apply(command);
-                //todo: verify that it's okay for this to not be atomic with the apply
-                //in the worst case, the object thinks it has an older version than it really does
-                //but all that should cause is spurious aborts
-                //the alternative is to have the apply in the object always call a superclass version of apply
-                //that sets the timestamp
-                //only the apply thread sets the timestamp, so we only have to worry about concurrent reads
-                if(timestamp!=SMREngine.TIMESTAMP_INVALID)
-                    cob.setTimestamp(timestamp);
-            }
-            else
-                throw new RuntimeException("entry for stream " + streamid + " with no registered object");
-        }
-
+        CorfuDBObject cob = getObject(curstream);
+        if(cob==null) throw new RuntimeException("entry for stream " + curstream + " with no registered object");
+        cob.applyToObject(command);
+        //todo: verify that it's okay for this to not be atomic with the apply
+        //in the worst case, the object thinks it has an older version than it really does
+        //but all that should cause is spurious aborts
+        //the alternative is to have the apply in the object always call a superclass version of apply
+        //that sets the timestamp
+        //only the apply thread sets the timestamp, so we only have to worry about concurrent reads
+        if(timestamp!=SMREngine.TIMESTAMP_INVALID)
+            cob.setTimestamp(timestamp);
     }
 
     //receives incoming RPCs
     @Override
-    public Object deliver(Object cmd)
+    public Object deliverRPC(Object cmd)
     {
         Pair<Long, Object> P = (Pair<Long, Object>)cmd;
         //only queries are supported --- should we check this here, or just enforce it at the send point?
@@ -254,7 +244,7 @@ interface RPCServer
 
 interface RPCServerHandler
 {
-    public Object deliver(Object cmd);
+    public Object deliverRPC(Object cmd);
 }
 
 interface RPCClient
@@ -315,7 +305,7 @@ class ThriftRPCServer implements RPCServer
                 @Override
                 public ByteBuffer remote_read(ByteBuffer arg) throws TException
                 {
-                    return Utils.serialize(handler.deliver(Utils.deserialize(arg)));
+                    return Utils.serialize(handler.deliverRPC(Utils.deserialize(arg)));
                 }
             });
             server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
@@ -415,7 +405,7 @@ class RemoteReadMapImpl implements RemoteReadMap, SMRLearner
     }
 
     @Override
-    public void apply(Object command, long curstream, Set<Long> allstreams, long timestamp)
+    public void deliver(Object command, long curstream, Set<Long> allstreams, long timestamp)
     {
         Triple<Long, String, Integer> T = (Triple<Long, String, Integer>)command;
         objecttoruntimemap.put(T.first, new Pair(T.second, T.third));
