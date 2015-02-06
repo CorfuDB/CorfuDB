@@ -18,9 +18,6 @@ public class CorfuDBCounter extends CorfuDBObject
     {
         super(tTR, toid);
         value = 0;
-        TR = tTR;
-        oid = toid;
-        TR.registerObject(this);
     }
     public void apply(Object bs)
     {

@@ -86,6 +86,7 @@ public abstract class CorfuDBObject
     {
         TR = tTR;
         oid = tobjectid;
+        TR.registerObject(this);
         timestamp = new AtomicLong();
         statelock = new ReentrantReadWriteLock();
     }

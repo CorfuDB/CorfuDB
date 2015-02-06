@@ -142,18 +142,6 @@ public class CorfuDBTester
             throw new RuntimeException(e);
         }
 
-        if(testnum==MULTICLIENTTXTEST)
-        {
-            if(args.length<4)
-            {
-                print_usage();
-                return;
-            }
-            numclients = Integer.parseInt(args[2]);
-            expernum = Integer.parseInt(args[3]);
-        }
-
-
 
         ClientLib crf;
 

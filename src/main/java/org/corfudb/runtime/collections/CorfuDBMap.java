@@ -24,9 +24,6 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     {
         super(tTR, toid);
         backingmap = new HashMap<K,V>();
-        TR = tTR;
-        oid = toid;
-        TR.registerObject(this);
     }
 
     public void apply(Object bs)
