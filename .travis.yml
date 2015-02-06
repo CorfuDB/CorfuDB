@@ -11,7 +11,7 @@ before_install:
   ..
 install:
 - which thrift
-- mvn clean install
+- travis_retry mvn clean install
 after_success:
 - .travis_scripts/javadocs.sh
 script: mvn -e verify

@@ -38,15 +38,26 @@ public class SMREngine
 
     //used to coordinate between querying threads and the query_helper thread
     final Object queuelock;
+
     //pair of queues that get rotated between the playback thread and the sync threads
-    List<Object> curqueue;
-    List<Object> procqueue;
+    List<SyncObjectWrapper> curqueue;
+    List<SyncObjectWrapper> procqueue;
 
     Stream curstream;
 
     static final long TIMESTAMP_INVALID = -1;
-    Lock pendinglock = new ReentrantLock();
+    static final long TIMESTAMP_MAX = Long.MAX_VALUE;
+
+    //list of pending commands -- when we encounter entries in the log
+    //we check this list to see if the entry was appended by us.
+    //in that case we retrieve the original version of the object and pass
+    //it back to the application. this allows context to flow between
+    //the proposing thread and the apply upcall in the learner.
+    //Each command consists of the primary command, which is serialized into the
+    //total order, and a secondary command that is not inserted into the total order
+    //but executes locally just before the primary command
     HashMap<Long, Pair<Serializable, Object>> pendingcommands = new HashMap<Long, Pair<Serializable, Object>>();
+    Lock pendinglock = new ReentrantLock();
 
     public void registerLearner(SMRLearner tlearner)
     {
@@ -81,14 +92,26 @@ public class SMREngine
     }
 
 
+    /**
+     * Proposes a new command to the SMR total order.
+     *
+     * @param update The primary command to be appended to the total order
+     * @param streams The streams to which the command should be appended
+     * @param precommand A secondary command to be played immediately before the primary command;
+     *                   this command is not inserted into the total order,
+     *                   but is played at the same point as the primary order.
+     *                   It's typically used to insert a read operation that must execute atomically
+     *                   with a subsequent write operation.
+     * @return
+     */
     public long propose(Serializable update, Set<Long> streams, Object precommand)
     {
         SMRCommandWrapper cmd = new SMRCommandWrapper(update, streams);
         pendinglock.lock();
         pendingcommands.put(cmd.uniqueid.second, new Pair(update, precommand));
         pendinglock.unlock();
-        long pos = curstream.append(cmd, streams);
-        if(precommand!=null) //block until precommand is played
+        long pos = (Long)curstream.append(cmd, streams); //todo: remove the cast
+        if (precommand != null) //block until precommand is played
             sync(pos);
         return pos;
     }
@@ -99,13 +122,27 @@ public class SMREngine
     }
 
 
+    class SyncObjectWrapper
+    {
+        Object synccommand;
+        public SyncObjectWrapper(Object t)
+        {
+            synccommand = t;
+        }
+    }
+
     /** returns once log has been played by playback thread
      * until syncpos.
      * todo: right now syncpos is ignored
+     * ideally, the command should be applied at syncpos
+     * if syncpos == timestamp_invalid, the command should be applied
+     * immediately before/without syncing;
+     * if syncpos == timestamp_max, the command should be applied after
+     * syncing to the current tail.
      */
-    public void sync(long syncpos)
+    public void sync(long syncpos, Object command)
     {
-        final Object syncobj = new Object();
+        final SyncObjectWrapper syncobj = new SyncObjectWrapper(command);
         synchronized (syncobj)
         {
             synchronized(queuelock)
@@ -125,15 +162,20 @@ public class SMREngine
         }
     }
 
+    public void sync(long syncpos)
+    {
+        sync(syncpos, null);
+    }
+
     public void sync()
     {
-        sync(-1);
+        sync(TIMESTAMP_MAX, null);
     }
 
     //runs in a single thread
     void playback()
     {
-        List<Object> tqueue;
+        List<SyncObjectWrapper> tqueue;
         synchronized(queuelock)
         {
             while(curqueue.size()==0)
@@ -158,7 +200,7 @@ public class SMREngine
         if(procqueue.size()==0) throw new RuntimeException("queue cannot be empty at this point!");
 
         //check the current tail of the stream, and then read the stream until that position
-        long curtail = curstream.checkTail();
+        long curtail = (Long)curstream.checkTail(); //todo: remove the cast
 
         dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
 
@@ -181,10 +223,10 @@ public class SMREngine
                 {
                     smrlearner.apply(localcmds.second, curstream.getStreamID(), cmdw.streams, TIMESTAMP_INVALID);
                 }
-                smrlearner.apply(localcmds.first, curstream.getStreamID(), cmdw.streams, update.getLogpos());
+                smrlearner.apply(localcmds.first, curstream.getStreamID(), cmdw.streams, (Long)update.getLogpos()); //todo: remove the cast
             }
             else
-                smrlearner.apply(cmdw.cmd, curstream.getStreamID(), cmdw.streams, update.getLogpos());
+                smrlearner.apply(cmdw.cmd, curstream.getStreamID(), cmdw.streams, (Long)update.getLogpos()); //todo: remove the cast
             update = curstream.readNext(curtail);
         }
 
@@ -192,10 +234,16 @@ public class SMREngine
 
         //wake up all waiting query threads; they will now see a state that incorporates all updates
         //that finished before they started
-        Iterator it = procqueue.iterator();
+        //todo -- it's dumb to create a set every time for the trivial case
+        Set<Long> curstreamlist = new HashSet<Long>(); curstreamlist.add(curstream.getStreamID());
+        Iterator<SyncObjectWrapper> it = procqueue.iterator();
         while(it.hasNext())
         {
-            Object syncobj = it.next();
+            SyncObjectWrapper syncobj = it.next();
+            if(syncobj.synccommand!=null)
+            {
+                smrlearner.apply(syncobj.synccommand, curstream.getStreamID(), curstreamlist, TIMESTAMP_INVALID);
+            }
             synchronized(syncobj)
             {
                 syncobj.notifyAll();
@@ -212,6 +260,16 @@ public class SMREngine
  */
 interface SMRLearner
 {
+    /**
+     * An upcall that must be implemented by learners to obtain new commands
+     * from an SMREngine.
+     * todo: clean up timestamp semantics --- currently all local commands have invalid_timestamp; is this okay?
+     *
+     * @param command
+     * @param curstream
+     * @param allstreams
+     * @param timestamp
+     */
     void apply(Object command, long curstream, Set<Long> allstreams, long timestamp);
 }
 

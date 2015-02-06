@@ -74,7 +74,7 @@ start)
     ;;
 stop)
     echo -n "Stopping CorfuDB role ${1}..."
-    if [ ! -f "$CORFUDBPIDFILE" ]; 
+    if [ ! -f "$CORFUDBPIDFILE" ];
     then
         echo "Could not find a PID file to stop..."
         exit 0 #should this be exit 1, maybe?
@@ -91,7 +91,7 @@ restart)
     "$0" "$1" start
     ;;
 status)
-    if [ ! -f "$CORFUDBPIDFILE" ]; 
+    if [ ! -f "$CORFUDBPIDFILE" ];
     then
         echo "Could not find a PID file..."
         exit 0 #should this be exit 1, maybe?

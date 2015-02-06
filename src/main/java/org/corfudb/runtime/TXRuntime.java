@@ -135,13 +135,20 @@ public class TXRuntime extends SimpleRuntime
 
     public void query_helper(CorfuDBObject cob, Serializable key)
     {
+        query_helper(cob, key, null);
+    }
+
+    public void query_helper(CorfuDBObject cob, Serializable key, Object command)
+    {
         if(curtx.get()==null) //non-transactional, pass through
         {
-            super.query_helper(cob, key);
+            super.query_helper(cob, key, command);
         }
         else
         {
             curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
+            //do what here??? apply the command through the apply thread
+            getEngine(cob.getID()).sync(SMREngine.TIMESTAMP_INVALID, command);
         }
     }
 

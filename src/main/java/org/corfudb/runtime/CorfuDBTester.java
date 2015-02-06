@@ -24,6 +24,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import gnu.getopt.Getopt;
 import org.corfudb.runtime.collections.CorfuDBMap;
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
@@ -46,12 +47,15 @@ public class CorfuDBTester
 
     static void print_usage()
     {
-        System.out.println("usage: java CorfuDBTester testtype (0==TXTest|1==LinearizableTest|2==StreamTest) masternode");
-        System.out.println("usage: java CorfuDBTester testtype (3==MultiClientTXTest) masternode numclients");
-        System.out.println("e.g. java CorfuDBTester 0 http://localhost:8002/corfu");
-        if(dbglog instanceof SimpleLogger)
-            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
-                    "enable debug printouts");
+        System.out.println("usage: java CorfuDBTester");
+        System.out.println("\t-m masternode");
+        System.out.println("\t[-a testtype] (0==TXTest|1==LinMapTest|2==StreamTest|3==MultiClientTXTest|4==LinCounterTest)");
+        System.out.println("\t[-t number of threads]");
+        System.out.println("\t[-n number of ops]");
+        System.out.println("\t[-d enable debug printouts]");
+//        if(dbglog instanceof SimpleLogger)
+//            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
+//                    "enable debug printouts");
     }
 
     /**
@@ -59,22 +63,64 @@ public class CorfuDBTester
      */
     public static void main(String[] args) throws Exception
     {
-        if (args.length<2)
+        final int TXTEST=0;
+        final int LINTEST=1;
+        final int STREAMTEST=2;
+        final int MULTICLIENTTXTEST=3;
+        final int LINCTRTEST=4;
+
+        int numclients = 1;
+        int expernum = 1; //used by the barrier code
+
+        int c;
+        String strArg;
+        int numthreads = 1;
+        int numops = 1000;
+        int testnum = 0;
+        String masternode = null;
+        if(args.length==0)
         {
             print_usage();
             return;
         }
 
-        int testnum = Integer.parseInt(args[0]);
-        String masternode = args[1];
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:");
+        while ((c = g.getopt()) != -1)
+        {
+            switch(c)
+            {
+                case 'a':
+                    strArg = g.getOptarg();
+                    System.out.println("testtype = "+ strArg);
+                    testnum = Integer.parseInt(strArg);
+                    break;
+                case 'm':
+                    masternode = g.getOptarg();
+                    masternode = masternode.trim();
+                    System.out.println("master = " + masternode);
+                    break;
+                case 't':
+                    strArg = g.getOptarg();
+                    System.out.println("numthreads = "+ strArg);
+                    numthreads = Integer.parseInt(strArg);
+                    break;
+                case 'n':
+                    strArg = g.getOptarg();
+                    System.out.println("numops = "+ strArg);
+                    numops = Integer.parseInt(strArg);
+                    break;
+                default:
+                    System.out.print("getopt() returned " + c + "\n");
+            }
+        }
 
-        final int TXTEST=0;
-        final int LINTEST=1;
-        final int STREAMTEST=2;
-        final int MULTICLIENTTXTEST=3;
+        if(masternode == null)
+            throw new Exception("must provide master http address using -m flag");
+        if(numthreads < 1)
+            throw new Exception("need at least one thread!");
+        if(numops < 1)
+            throw new Exception("need at least one op!");
 
-        int numclients = 1;
-        int expernum = 1;
         if(testnum==MULTICLIENTTXTEST)
         {
             if(args.length<4)
@@ -100,12 +146,11 @@ public class CorfuDBTester
         }
 
 
-        int numthreads;
-        numthreads = 2;
         Thread[] threads = new Thread[numthreads];
 
         StreamFactory sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf));
 
+        long starttime = System.currentTimeMillis();
 
         if(testnum==MULTICLIENTTXTEST)
         {
@@ -113,7 +158,7 @@ public class CorfuDBTester
             DirectoryService DS = new DirectoryService(TR);
             CorfuDBCounter barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
             barrier.increment();
-            while(barrier.read()<numclients);
+            while(barrier.read() < numclients) ;
             dbglog.debug("Barrier reached; starting test...");
             testnum = TXTEST;
         }
@@ -132,6 +177,20 @@ public class CorfuDBTester
                 threads[i].join();
             System.out.println("Test succeeded!");
         }
+        if(testnum==LINCTRTEST)
+        {
+            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf));
+            CorfuDBCounter ctr1 = new CorfuDBCounter(TR, DirectoryService.getUniqueID(sf));
+            for (int i = 0; i < numthreads; i++)
+            {
+                //linearizable tester
+                threads[i] = new Thread(new TesterThread(ctr1));
+                threads[i].start();
+            }
+            for(int i=0;i<numthreads;i++)
+                threads[i].join();
+            System.out.println("Test succeeded!");
+        }
         else if(testnum==TXTEST)
         {
             TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf));
@@ -139,6 +198,7 @@ public class CorfuDBTester
             DirectoryService DS = new DirectoryService(TR);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
+
 
             for (int i = 0; i < numthreads; i++)
             {
@@ -169,8 +229,10 @@ public class CorfuDBTester
             }
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
-            System.out.println("Test done!");
         }
+
+        System.out.println("Test done in " + (System.currentTimeMillis()-starttime));
+
         System.exit(0);
 
     }
@@ -212,7 +274,7 @@ class DirectoryService
     {
         Stream S = sf.newStream(Long.MAX_VALUE-2);
         HashSet hs = new HashSet(); hs.add(Long.MAX_VALUE-2);
-        return S.append("DummyString", hs);
+        return (Long)S.append("DummyString", hs); //todo: remove the cast
     }
 
 
@@ -379,14 +441,14 @@ class TesterThread implements Runnable
                 int x = (int) (Math.random() * 1000.0);
                 System.out.println("changing key " + x + " from " + cmap.put(x, "ABCD") + " to " + cmap.get(x));
             }
-            try
+/*            try
             {
                 Thread.sleep((int)(Math.random()*1000.0));
             }
             catch(Exception e)
             {
                 throw new RuntimeException(e);
-            }
+            }*/
 
         }
     }
