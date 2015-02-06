@@ -18,13 +18,12 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.TServer;
-import org.apache.thrift.server.TSimpleServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.*;
-import org.corfudb.sharedlog.sequencer.SequencerService;
-import org.corfudb.sharedlog.sequencer.SequencerTask;
 
 import java.io.*;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -47,6 +46,8 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     //map from object IDs to object instances; used for multiplexing
     Map<Long, CorfuDBObject> objectmap;
 
+    Set<Long> remoteobjectset;
+
     //unique node id
     long uniquenodeid;
 
@@ -57,9 +58,9 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
      */
     public void registerObject(CorfuDBObject obj)
     {
-        synchronized(objectmap)
+        synchronized (objectmap)
         {
-            synchronized(enginemap)
+            synchronized (enginemap)
             {
                 if (objectmap.containsKey(obj.getID()))
                 {
@@ -111,6 +112,9 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
 
     RPCClient rpcc;
     RPCServer rpcs;
+    RemoteReadMap rrmap;
+    String rpchostname;
+    int rpcportnum;
 
     /**
      * Creates a SimpleRuntime
@@ -118,7 +122,7 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
      * @param  fact  a factory for creating new Stream objects
      * @param  tuniquenodeid    an identifier unique to this client process
      */
-    public SimpleRuntime(StreamFactory fact, long tuniquenodeid)
+    public SimpleRuntime(StreamFactory fact, long tuniquenodeid, String trpchostname, int trpcportnum)
     {
         streamfactory = fact;
         objectmap = new HashMap();
@@ -126,11 +130,12 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         uniquenodeid = tuniquenodeid;
 
         //rpc
+        rpchostname = trpchostname;
+        rpcportnum = trpcportnum;
         rpcc = new ThriftRPCClient();
         rpcs = new ThriftRPCServer();
-        rpcs.registerHandler(9090, this);
-        System.out.println(rpcc.send("Hello World", "localhost", 9090));
-        //System.exit(0);
+        rrmap = new RemoteReadMapImpl(fact, uniquenodeid);
+        rpcs.registerHandler(rpcportnum, this);
     }
 
     public void BeginTX()
@@ -144,24 +149,33 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     }
 
 
-    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update)
+    public void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update)
     {
         query_then_update_helper(cob, query, update, null);
     }
 
-    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Serializable key)
+    public void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update, Serializable key)
     {
         Set<Long> streams = new HashSet<Long>();
         streams.add(cob.getID());
+        SMREngine smre = getEngine(cob.getID());
+        if(smre==null) // we are not playing this stream
+        {
+            Pair<String, Integer> remotenode = rrmap.getRemoteRuntime(  cob.getID());
+            if(remotenode==null) // we can't locate a remote runtime to read from either
+                throw new RuntimeException("Cant find object in system");
+            throw new RuntimeException("remote objects do not support query_then_update_helper");
+        }
+
         getEngine(cob.getID()).propose(update, streams, query);
     }
 
-    public void update_helper(CorfuDBObject cob, Serializable update)
+    public void update_helper(CorfuDBObject cob, CorfuDBObjectCommand update)
     {
         update_helper(cob, update, null);
     }
 
-    public void update_helper(CorfuDBObject cob, Serializable update, Serializable key)
+    public void update_helper(CorfuDBObject cob, CorfuDBObjectCommand update, Serializable key)
     {
         query_then_update_helper(cob, null, update);
     }
@@ -177,9 +191,19 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     }
 
 
-    public void query_helper(CorfuDBObject cob, Serializable key, Object command)
+    public void query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command)
     {
-        getEngine(cob.getID()).sync(SMREngine.TIMESTAMP_INVALID, command); //check getEngine return value?
+        SMREngine smre = getEngine(cob.getID());
+        if(smre==null) //not playing stream
+        {
+            Pair<String, Integer> remoteruntime = rrmap.getRemoteRuntime(cob.getID());
+            if(remoteruntime==null)
+                throw new RuntimeException("unable to find object in system");
+            Object retobj = rpcc.send(new Pair<Long, Object>(cob.getID(), command), remoteruntime.first, remoteruntime.second);
+            command.setReturnValue(retobj);
+        }
+        else
+            smre.sync(SMREngine.TIMESTAMP_INVALID, command);
     }
 
 
@@ -212,9 +236,15 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     @Override
     public Object deliver(Object cmd)
     {
-        System.out.println(cmd);
-        return "Woohoo!";
+        Pair<Long, Object> P = (Pair<Long, Object>)cmd;
+        //only queries are supported --- should we check this here, or just enforce it at the send point?
+        SMREngine smre = getEngine(P.first);
+        if(smre==null) //we aren't playing this stream; the client was misinformed
+            return null; //todo: should we return a cleaner error code instead?
+        smre.sync(SMREngine.TIMESTAMP_INVALID, P.second);
+        return P.second;
     }
+
 }
 
 interface RPCServer
@@ -345,5 +375,49 @@ class Utils
         {
             throw new RuntimeException(ce);
         }
+    }
+}
+
+interface RemoteReadMap
+{
+    public Pair<String, Integer> getRemoteRuntime(long objectid);
+    public void putMyRuntime(long objectid, String hostname, int port);
+}
+
+class RemoteReadMapImpl implements RemoteReadMap, SMRLearner
+{
+    //this can't be implemented over CorfuDBObjects to avoid
+    //circularity issues.
+
+    //for now, we maintain just one node per object
+    Map<Long, Pair<String, Integer>> objecttoruntimemap;
+
+    SMREngine smre;
+
+    public RemoteReadMapImpl(StreamFactory sf, long uniquenodeid)
+    {
+        objecttoruntimemap = new HashMap<Long, Pair<String, Integer>>();
+        smre = new SMREngine(sf.newStream(DirectoryService.getUniqueID(sf)), uniquenodeid);
+        smre.registerLearner(this);
+    }
+
+    @Override
+    public Pair<String, Integer> getRemoteRuntime(long objectid)
+    {
+        smre.sync();
+        return objecttoruntimemap.get(objectid);
+    }
+
+    @Override
+    public void putMyRuntime(long objectid, String hostname, int port)
+    {
+        smre.propose(new Triple(objectid, hostname, port));
+    }
+
+    @Override
+    public void apply(Object command, long curstream, Set<Long> allstreams, long timestamp)
+    {
+        Triple<Long, String, Integer> T = (Triple<Long, String, Integer>)command;
+        objecttoruntimemap.put(T.first, new Pair(T.second, T.third));
     }
 }

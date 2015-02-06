@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
+import org.corfudb.runtime.CorfuDBObjectCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -238,19 +239,6 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         throw new RuntimeException("unimplemented");
     }
 
-}
-
-class CorfuDBObjectCommand implements Serializable
-{
-    Object retval;
-    public Object getReturnValue()
-    {
-        return retval;
-    }
-    public void setReturnValue(Object obj)
-    {
-        retval = obj;
-    }
 }
 
 class MapCommand<K,V> extends CorfuDBObjectCommand

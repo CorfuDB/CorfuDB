@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
@@ -52,7 +54,8 @@ public class CorfuDBTester
         System.out.println("\t[-a testtype] (0==TXTest|1==LinMapTest|2==StreamTest|3==MultiClientTXTest|4==LinCounterTest)");
         System.out.println("\t[-t number of threads]");
         System.out.println("\t[-n number of ops]");
-        System.out.println("\t[-d enable debug printouts]");
+        System.out.println("\t[-p rpcport]");
+
 //        if(dbglog instanceof SimpleLogger)
 //            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
 //                    "enable debug printouts");
@@ -77,6 +80,7 @@ public class CorfuDBTester
         int numthreads = 1;
         int numops = 1000;
         int testnum = 0;
+        int rpcport = 9090;
         String masternode = null;
         if(args.length==0)
         {
@@ -109,6 +113,11 @@ public class CorfuDBTester
                     System.out.println("numops = "+ strArg);
                     numops = Integer.parseInt(strArg);
                     break;
+                case 'p':
+                    strArg = g.getOptarg();
+                    System.out.println("rpcport = "+ strArg);
+                    rpcport = Integer.parseInt(strArg);
+                    break;
                 default:
                     System.out.print("getopt() returned " + c + "\n");
             }
@@ -120,6 +129,18 @@ public class CorfuDBTester
             throw new Exception("need at least one thread!");
         if(numops < 1)
             throw new Exception("need at least one op!");
+
+
+        String rpchostname;
+
+        try
+        {
+            rpchostname = InetAddress.getLocalHost().getHostName();
+        }
+        catch (UnknownHostException e)
+        {
+            throw new RuntimeException(e);
+        }
 
         if(testnum==MULTICLIENTTXTEST)
         {
@@ -154,7 +175,7 @@ public class CorfuDBTester
 
         if(testnum==MULTICLIENTTXTEST)
         {
-            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf));
+            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             DirectoryService DS = new DirectoryService(TR);
             CorfuDBCounter barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
             barrier.increment();
@@ -165,7 +186,7 @@ public class CorfuDBTester
 
         if(testnum==LINTEST)
         {
-            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf));
+            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
             for (int i = 0; i < numthreads; i++)
             {
@@ -179,7 +200,7 @@ public class CorfuDBTester
         }
         if(testnum==LINCTRTEST)
         {
-            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf));
+            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             CorfuDBCounter ctr1 = new CorfuDBCounter(TR, DirectoryService.getUniqueID(sf));
             for (int i = 0; i < numthreads; i++)
             {
@@ -193,7 +214,7 @@ public class CorfuDBTester
         }
         else if(testnum==TXTEST)
         {
-            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf));
+            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
 
             DirectoryService DS = new DirectoryService(TR);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
@@ -307,6 +328,8 @@ class DirectoryService
     }
 
 }
+
+
 
 
 /**

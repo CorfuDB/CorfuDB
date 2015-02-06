@@ -43,6 +43,7 @@ public class SMREngine
     List<SyncObjectWrapper> curqueue;
     List<SyncObjectWrapper> procqueue;
 
+    Set<Long> defaultstreamset;
     Stream curstream;
 
     static final long TIMESTAMP_INVALID = -1;
@@ -75,6 +76,10 @@ public class SMREngine
         queuelock = new Object();
         curqueue = new LinkedList();
         procqueue = new LinkedList();
+
+        defaultstreamset = new HashSet();
+        defaultstreamset.add(sb.getStreamID());
+
 
         //start the playback thread
         new Thread(new Runnable()
@@ -114,6 +119,11 @@ public class SMREngine
         if (precommand != null) //block until precommand is played
             sync(pos);
         return pos;
+    }
+
+    public long propose(Serializable update)
+    {
+        return propose(update, defaultstreamset);
     }
 
     public long propose(Serializable update, Set<Long> streams)
