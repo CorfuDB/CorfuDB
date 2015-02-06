@@ -16,7 +16,10 @@ public class CorfuStreamStress {
         String masteraddress = null;
         int numthreads = 1;
         int numappends = 10;
-        Getopt g = new Getopt("corfu-stream-stress", args, "m:t:n:");
+        boolean sharecl = false;
+        ClientLib cl = null;
+
+        Getopt g = new Getopt("corfu-stream-stress", args, "m:t:n:p");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
@@ -36,6 +39,9 @@ public class CorfuStreamStress {
                     System.out.println("numappends = "+ strArg);
                     numappends = Integer.parseInt(strArg);
                     break;
+                case 'p':
+                    sharecl = true;
+                    break;
                 default:
                     System.out.print("getopt() returned " + c + "\n");
             }
@@ -47,12 +53,14 @@ public class CorfuStreamStress {
             throw new Exception("need at least one thread!");
         if(numappends < 1)
             throw new Exception("need at least one append!");
+        if(sharecl)
+            cl = new ClientLib(masteraddress);
 
         Thread[] allthreads = new Thread[numthreads];
         CyclicBarrier startbarrier = new CyclicBarrier(numthreads);
         CyclicBarrier stopbarrier = new CyclicBarrier(numthreads);
         for(int i=0;i<numthreads;i++) {
-            Thread T = new Thread(new StreamTester(startbarrier, stopbarrier, masteraddress, i, numappends));
+            Thread T = new Thread(new StreamTester(cl, startbarrier, stopbarrier, masteraddress, i, numappends));
             allthreads[i] = T;
             T.start();
         }
@@ -74,6 +82,7 @@ class StreamTester implements Runnable
 
     public
     StreamTester(
+            ClientLib _cl,
             CyclicBarrier _startbarrier,
             CyclicBarrier _stopbarrier,
             String masteraddress,
@@ -86,13 +95,18 @@ class StreamTester implements Runnable
         stopbarrier = _stopbarrier;
         threadnum = tnum;
         numappends = nappends;
-        try {
-            cl = new ClientLib(masteraddress);
-        } catch (CorfuException e) {
-            e.printStackTrace();
-            throw new CorfuException("cannot initalize command parser with master " + masteraddress);
+        cl = _cl;
+
+        if(cl == null) {
+            try {
+                cl = new ClientLib(masteraddress);
+            } catch (CorfuException e) {
+                e.printStackTrace();
+                throw new CorfuException("cannot initalize command parser with master " + masteraddress);
+            }
         }
     }
+
 
     public void run() {
         try {

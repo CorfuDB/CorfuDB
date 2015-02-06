@@ -88,7 +88,15 @@ public class ClientLib implements
     }
 
 
-    SequencerService.Client sequencer;
+    // SequencerService.Client sequencer;
+    Endpoint sn;
+    SequencerService.Client getSequencer() {
+        try {
+            return Endpoint.getSequencer(sn);
+        } catch(CorfuException e) {
+            throw new RuntimeException(e);
+        }
+    }
     String master;
 
     public ClientLib(String master) throws CorfuException {
@@ -110,9 +118,11 @@ public class ClientLib implements
             }
         }
 
-		Endpoint sn = CM.getSequencer();
+		// Endpoint sn = CM.getSequencer();
+        sn = CM.getSequencer();
         try {
-            sequencer = Endpoint.getSequencer(sn);
+            // sequencer = Endpoint.getSequencer(sn);
+            Endpoint.getSequencer(sn);
         } catch (CorfuException e) {
             throw new CorfuException("buildConnections to sequencer failed");
         }
@@ -166,7 +176,8 @@ public class ClientLib implements
 		long offset = -1;
 
 		try {
-			offset = sequencer.nextpos(1);
+			// offset = sequencer.nextpos(1);
+            offset = getSequencer().nextpos(1);
 			writeExtnt(offset, ctnt);
 		} catch (TException e) {
 			e.printStackTrace();
@@ -329,7 +340,8 @@ public class ClientLib implements
 	public long querytail() throws CorfuException {
 		long r;
 		try {
-			r = sequencer.nextpos(0);
+			//r = sequencer.nextpos(0);
+            r = getSequencer().nextpos(0);
 		} catch (TException t) {
 			throw new InternalCorfuException("querytail() failed ");
 		}
@@ -402,7 +414,8 @@ public class ClientLib implements
 	public long grabtokens(int tcnt) throws CorfuException {
 		long ret;
         try {
-			ret = sequencer.nextpos(tcnt);
+			// ret = sequencer.nextpos(tcnt);
+            ret = getSequencer().nextpos(tcnt);
 		} catch (TException t) {
 			throw new InternalCorfuException("grabtoken failed");
 		}
@@ -502,7 +515,8 @@ public class ClientLib implements
     @Override
     public void tokenserverrecover(long lowbound) throws CorfuException {
         try {
-            sequencer.recover(lowbound);
+            // sequencer.recover(lowbound);
+            getSequencer().recover(lowbound);
         } catch (TException e) {
             e.printStackTrace();
             throw new CorfuException("tokenserver recovery failed");
