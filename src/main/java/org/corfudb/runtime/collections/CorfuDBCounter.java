@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
+import org.corfudb.runtime.CorfuDBObjectCommand;
 
 import java.io.Serializable;
 import java.util.HashSet;

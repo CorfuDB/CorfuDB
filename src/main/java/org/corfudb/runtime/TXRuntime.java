@@ -44,9 +44,9 @@ public class TXRuntime extends SimpleRuntime
     //used to communicate decisions from the query_helper thread to waiting endtx calls
     final Map<Long, Boolean> decisionmap;
 
-    public TXRuntime(StreamFactory fact, long uniquenodeid)
+    public TXRuntime(StreamFactory fact, long uniquenodeid, String rpchostname, int rpcport)
     {
-        super(fact, uniquenodeid);
+        super(fact, uniquenodeid, rpchostname, rpcport);
         decisionmap = new HashMap<Long, Boolean>();
     }
 
@@ -123,12 +123,12 @@ public class TXRuntime extends SimpleRuntime
         query_helper(cob, null);
     }
 
-    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update)
+    public void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update)
     {
         query_then_update_helper(cob, query, update, null);
     }
 
-    public void update_helper(CorfuDBObject cob, Serializable update)
+    public void update_helper(CorfuDBObject cob, CorfuDBObjectCommand update)
     {
         update_helper(cob, update, null);
     }
@@ -138,7 +138,7 @@ public class TXRuntime extends SimpleRuntime
         query_helper(cob, key, null);
     }
 
-    public void query_helper(CorfuDBObject cob, Serializable key, Object command)
+    public void query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command)
     {
         if(curtx.get()==null) //non-transactional, pass through
         {
@@ -152,15 +152,12 @@ public class TXRuntime extends SimpleRuntime
         }
     }
 
-    public void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Serializable key)
+    public void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update, Serializable key)
     {
         Set<Long> streams = new HashSet<Long>();
         streams.add(cob.getID());
         if(curtx.get()==null) //not in a transactional context, append immediately to the stream
         {
-            //what about the weird case where the application proposes a TxInt? Can we assume
-            //this won't happen since TxInt is not a public class?
-            if(update instanceof TxInt) throw new RuntimeException("app cant update_helper a txint");
             //return super.query_then_update_helper(cob, query, update, streams);
             getEngine(cob.getID()).propose(update, streams, query); //todo: check return value of getEngine?
         }
@@ -178,7 +175,7 @@ public class TXRuntime extends SimpleRuntime
 
     }
 
-    public void update_helper(CorfuDBObject cob, Serializable update, Serializable key)
+    public void update_helper(CorfuDBObject cob, CorfuDBObjectCommand update, Serializable key)
     {
         query_then_update_helper(cob, null, update);
     }

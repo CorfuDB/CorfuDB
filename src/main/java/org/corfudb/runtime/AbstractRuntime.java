@@ -37,7 +37,7 @@ public interface AbstractRuntime
      */
     void query_helper(CorfuDBObject cob);
     void query_helper(CorfuDBObject cob, Serializable key);
-    void query_helper(CorfuDBObject cob, Serializable key, Object command);
+    void query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command);
 
     /**
      * This function is to be called within any mutator method in the CorfuDB object.
@@ -46,14 +46,13 @@ public interface AbstractRuntime
      * SMR stream bundle.
      *
      * Within a transactional context it returns immediately after buffering the update.
-     *
-     * @param cob the calling CorfuDB object
+     *  @param cob the calling CorfuDB object
      * @param update a serializable description of the update
      */
-    void update_helper(CorfuDBObject cob, Serializable update);
+    void update_helper(CorfuDBObject cob, CorfuDBObjectCommand update);
 
 
-    void update_helper(CorfuDBObject cob, Serializable update, Serializable key);
+    void update_helper(CorfuDBObject cob, CorfuDBObjectCommand update, Serializable key);
 
 
     /**
@@ -69,14 +68,13 @@ public interface AbstractRuntime
      *
      * Within a transactional context it buffers the update, uses the query to mark the read set, applies
      * the query, and returns without issuing any I/O to the underlying stream bundle.
-     *
-     * @param cob the calling CorfuDB object
+     *  @param cob the calling CorfuDB object
      * @param query a description of the query
      * @param update a serializable description of the update
      */
-    void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update);
+    void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update);
 
-    void query_then_update_helper(CorfuDBObject cob, Object query, Serializable update, Serializable key);
+    void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update, Serializable key);
 
     /**
      * This function is used to register a CorfuDB object with the runtime. Future updates that
