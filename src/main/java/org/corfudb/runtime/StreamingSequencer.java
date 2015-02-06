@@ -44,10 +44,7 @@ class CorfuStreamingSequencer implements StreamingSequencer
         long ret;
         try
         {
-            synchronized(cl)
-            {
-                ret = cl.grabtokens(1);
-            }
+            ret = cl.grabtokens(1);
         }
         catch(CorfuException ce)
         {
@@ -59,10 +56,7 @@ class CorfuStreamingSequencer implements StreamingSequencer
     {
         try
         {
-            synchronized(cl)
-            {
-                return cl.querytail();
-            }
+            return cl.querytail();
         }
         catch(CorfuException ce)
         {

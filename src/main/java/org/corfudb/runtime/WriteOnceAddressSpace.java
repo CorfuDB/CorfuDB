@@ -81,10 +81,7 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
             byte[] payload = new byte[cl.grainsize()];
             bs.flatten(payload);
             buflist.add(ByteBuffer.wrap(payload));
-            synchronized(cl)
-            {
-                cl.writeExtnt(pos, buflist);
-            }
+            cl.writeExtnt(pos, buflist);
         }
         catch(CorfuException ce)
         {
@@ -104,13 +101,12 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
             {
                 ExtntWrap ew = null;
                 long difftime = -1;
-                synchronized(cl)
-                {
-                    long startts = System.currentTimeMillis();
-                    ew = cl.readExtnt(pos);
-                    long stopts = System.currentTimeMillis();
-                    difftime = stopts-startts;
-                }
+
+                long startts = System.currentTimeMillis();
+                ew = cl.readExtnt(pos);
+                long stopts = System.currentTimeMillis();
+                difftime = stopts-startts;
+
                 //for now, copy to a byte array and return
                 dbglog.debug("read back {} bytes, took {} ms", ew.getCtntSize(), difftime);
                 ret = new byte[4096 * 10]; //hack --- fix this
@@ -156,10 +152,7 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
     {
         try
         {
-            synchronized(cl)
-            {
-                cl.trim(pos);
-            }
+            cl.trim(pos);
         }
         catch (CorfuException e)
         {
