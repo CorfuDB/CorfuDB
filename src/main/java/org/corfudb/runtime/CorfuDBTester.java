@@ -224,7 +224,7 @@ public class CorfuDBTester
             //sb.prefixTrim(sb.checkTail()); //todo: turning off, trim not yet implemented at log level
             for(int i=0;i<numthreads;i++)
             {
-                threads[i] = new Thread(new StreamTester(sb));
+                threads[i] = new Thread(new StreamTester(sb, numops));
                 threads[i].start();
             }
             for(int i=0;i<numthreads;i++)
@@ -602,14 +602,16 @@ class BufferStack implements Serializable //todo: custom serialization
 class StreamTester implements Runnable
 {
     Stream sb;
-    public StreamTester(Stream tsb)
+    int numops = 10000;
+    public StreamTester(Stream tsb, int nops)
     {
         sb = tsb;
+        numops = nops;
     }
     public void run()
     {
         System.out.println("starting sb tester thread");
-        for(int i=0;i<10000;i++)
+        for(int i=0;i<numops;i++)
         {
             byte x[] = new byte[5];
             Set<Long> T = new HashSet<Long>();
