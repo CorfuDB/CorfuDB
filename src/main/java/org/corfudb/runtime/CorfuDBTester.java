@@ -73,7 +73,7 @@ public class CorfuDBTester
         final int LINCTRTEST=4;
         final int REMOBJTEST=5;
 
-        int numclients = 1;
+        int numclients = 2;
         int expernum = 1; //used by the barrier code
 
         int c;
@@ -119,6 +119,15 @@ public class CorfuDBTester
                     System.out.println("rpcport = "+ strArg);
                     rpcport = Integer.parseInt(strArg);
                     break;
+                case 'c':
+                    strArg = g.getOptarg();
+                    System.out.println("numbarrier = " + strArg);
+                    numclients = Integer.parseInt(strArg);
+                    break;
+                case 'e':
+                    strArg = g.getOptarg();
+                    System.out.println("expernum = " + strArg);
+                    expernum = Integer.parseInt(strArg);
                 default:
                     System.out.print("getopt() returned " + c + "\n");
             }
@@ -162,20 +171,21 @@ public class CorfuDBTester
 
         long starttime = System.currentTimeMillis();
 
+        AbstractRuntime TR = null;
+        DirectoryService DS = null;
         if(testnum==MULTICLIENTTXTEST)
         {
-            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
-            DirectoryService DS = new DirectoryService(TR);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            DS = new DirectoryService(TR);
             CorfuDBCounter barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
             barrier.increment();
             while(barrier.read() < numclients) ;
             dbglog.debug("Barrier reached; starting test...");
-            testnum = TXTEST;
         }
 
         if(testnum==LINTEST)
         {
-            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
             for (int i = 0; i < numthreads; i++)
             {
@@ -189,7 +199,7 @@ public class CorfuDBTester
         }
         if(testnum==LINCTRTEST)
         {
-            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             CorfuDBCounter ctr1 = new CorfuDBCounter(TR, DirectoryService.getUniqueID(sf));
             for (int i = 0; i < numthreads; i++)
             {
@@ -203,9 +213,9 @@ public class CorfuDBTester
         }
         else if(testnum==TXTEST)
         {
-            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
 
-            DirectoryService DS = new DirectoryService(TR);
+            DS = new DirectoryService(TR);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
 
@@ -243,9 +253,9 @@ public class CorfuDBTester
         else if(testnum==REMOBJTEST)
         {
             //create two maps, one local, one remote
-            SimpleRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
 
-            DirectoryService DS = new DirectoryService(TR);
+            DS = new DirectoryService(TR);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
             System.out.println("local map = " + (rpcport%2));
@@ -262,6 +272,34 @@ public class CorfuDBTester
             Thread.sleep(5000);
             System.out.println("Test succeeded!");
         }
+        else if(testnum==MULTICLIENTTXTEST)
+        {
+
+            //TR has already been created by the barrier code
+            //DS has already been created by the barrier code
+
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
+            System.out.println("local map = " + (rpcport%2));
+            System.out.println("remote map = " + ((rpcport+1)%2));
+
+            for (int i = 0; i < numthreads; i++)
+            {
+                //transactional tester
+                threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
+                threads[i].start();
+            }
+            for(int i=0;i<numthreads;i++)
+                threads[i].join();
+            System.out.println("Test done! Checking consistency...");
+            TXTesterThread tx = new TXTesterThread(cob1, cob2, TR);
+            if(tx.check_consistency())
+                System.out.println("Consistency check passed --- test successful!");
+            else
+                System.out.println("Consistency check failed!");
+            System.out.println(TR);
+        }
+
 
         System.out.println("Test done in " + (System.currentTimeMillis()-starttime));
 
@@ -358,18 +396,18 @@ class TXTesterThread implements Runnable
 {
     private static Logger dbglog = LoggerFactory.getLogger(TXTesterThread.class);
 
-    TXRuntime cr;
+    AbstractRuntime cr;
     CorfuDBMap<Integer, Integer> map1;
     CorfuDBMap<Integer, Integer> map2;
     int numkeys;
     int numops;
 
-    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, TXRuntime tcr)
+    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, AbstractRuntime tcr)
     {
         this(tmap1, tmap2, tcr, 10, 100);
     }
 
-    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, TXRuntime tcr, int tnumkeys, int tnumops)
+    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, AbstractRuntime tcr, int tnumkeys, int tnumops)
     {
         map1 = tmap1;
         map2 = tmap2;

@@ -213,14 +213,21 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         SMREngine smre = getEngine(cob.getID());
         if(smre==null) //not playing stream
         {
-            Pair<String, Integer> remoteruntime = rrmap.getRemoteRuntime(cob.getID());
-            if(remoteruntime==null)
-                throw new RuntimeException("unable to find object in system");
-            CorfuDBObjectCommand retobj = (CorfuDBObjectCommand)rpcc.send(new Pair<Long, Object>(cob.getID(), command), remoteruntime.first, remoteruntime.second);
-            command.setReturnValue(retobj.getReturnValue());
+            rpcRemoteRuntime(cob, command);
         }
         else
             smre.sync(SMREngine.TIMESTAMP_INVALID, command);
+    }
+
+    public void rpcRemoteRuntime(CorfuDBObject cob, CorfuDBObjectCommand command)
+    {
+        Pair<String, Integer> remoteruntime = rrmap.getRemoteRuntime(cob.getID());
+        if(remoteruntime==null)
+            throw new RuntimeException("unable to find object in system");
+        CorfuDBObjectCommand retobj = (CorfuDBObjectCommand)rpcc.send(new Pair<Long, Object>(cob.getID(), command), remoteruntime.first, remoteruntime.second);
+        if(retobj==null)
+            throw new RuntimeException("remote read returned null...");
+        command.setReturnValue(retobj.getReturnValue());
     }
 
 
@@ -248,7 +255,10 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         //only queries are supported --- should we check this here, or just enforce it at the send point?
         SMREngine smre = getEngine(P.first);
         if(smre==null) //we aren't playing this stream; the client was misinformed
+        {
+            System.out.println("received RPC for object that we aren't playing");
             return null; //todo: should we return a cleaner error code instead?
+        }
         smre.sync(SMREngine.TIMESTAMP_INVALID, P.second);
         return P.second;
     }

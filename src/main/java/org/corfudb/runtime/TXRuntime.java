@@ -97,9 +97,16 @@ public class TXRuntime extends SimpleRuntime
         {
             long streamid = it.next().first;
             smre = getEngine(streamid);
-            if(smre==null) throw new RuntimeException("no engine found for read stream!");
-            smre.sync(txpos); //this results in a number of calls to apply, as each intervening intention is processed
-            dbglog.debug("synced stream ", streamid);
+            if(smre!=null)
+            {
+                smre.sync(txpos); //this results in a number of calls to apply, as each intervening intention is processed
+                dbglog.debug("synced stream ", streamid);
+            }
+            else
+            {
+                //throw new RuntimeException("no engine found for read stream!");
+                //remote read
+            }
         }
 
         dbglog.debug("EndTX checking for decision for intention at {}...", txpos);
@@ -154,9 +161,20 @@ public class TXRuntime extends SimpleRuntime
         }
         else
         {
-            curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
-            //do what here??? apply the command through the apply thread
-            getEngine(cob.getID()).sync(SMREngine.TIMESTAMP_INVALID, command);
+            SMREngine smre = getEngine(cob.getID());
+            if(smre!=null) //we're playing the object
+            {
+                curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
+                //do what here??? apply the command through the apply thread
+                getEngine(cob.getID()).sync(SMREngine.TIMESTAMP_INVALID, command);
+            }
+            else //it's a remote object
+            {
+                rpcRemoteRuntime(cob, command);
+                //todo: we need to get the timestamp back from the remote node!!!
+                //todo: for now just using the local object timestamp as a dummy value...
+                curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
+            }
         }
     }
 
@@ -173,10 +191,9 @@ public class TXRuntime extends SimpleRuntime
         {
             if(query !=null)
             {
-                //mark the read set
-                query_helper(cob, key);
+                query_helper(cob, key, query);
                 //apply the precommand to the object
-                deliver(query, cob.getID(), streams, SMREngine.TIMESTAMP_INVALID);
+//                deliver(query, cob.getID(), streams, SMREngine.TIMESTAMP_INVALID);
             }
             curtx.get().buffer_update(update, streams.iterator().next());
         }
