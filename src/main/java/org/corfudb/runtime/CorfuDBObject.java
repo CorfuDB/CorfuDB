@@ -84,9 +84,15 @@ public abstract class CorfuDBObject
 
     public CorfuDBObject(AbstractRuntime tTR, long tobjectid)
     {
+        this(tTR, tobjectid, false);
+    }
+
+    public CorfuDBObject(AbstractRuntime tTR, long tobjectid, boolean remote)
+    {
         TR = tTR;
         oid = tobjectid;
-        TR.registerObject(this);
+        System.out.println("registering... " + remote);
+        TR.registerObject(this, remote);
         timestamp = new AtomicLong();
         statelock = new ReentrantReadWriteLock();
     }

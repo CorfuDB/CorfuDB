@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.impl.SimpleLogger;
 import org.corfudb.runtime.collections.CorfuDBCounter;
 
-/**
+    /**
  * Tester code for the CorfuDB runtime stack
  *
  *
@@ -71,6 +71,7 @@ public class CorfuDBTester
         final int STREAMTEST=2;
         final int MULTICLIENTTXTEST=3;
         final int LINCTRTEST=4;
+        final int REMOBJTEST=5;
 
         int numclients = 1;
         int expernum = 1; //used by the barrier code
@@ -88,7 +89,7 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
@@ -239,6 +240,28 @@ public class CorfuDBTester
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
         }
+        else if(testnum==REMOBJTEST)
+        {
+            //create two maps, one local, one remote
+            SimpleRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+
+            DirectoryService DS = new DirectoryService(TR);
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
+            System.out.println("local map = " + (rpcport%2));
+            System.out.println("remote map = " + ((rpcport+1)%2));
+
+
+            System.out.println("sleeping");
+            Thread.sleep(10000);
+            System.out.println("woke up");
+
+            cob1.put(100, 55);
+            System.out.println(cob1.size());
+            System.out.println(cob2.size());
+            Thread.sleep(5000);
+            System.out.println("Test succeeded!");
+        }
 
         System.out.println("Test done in " + (System.currentTimeMillis()-starttime));
 
@@ -258,11 +281,17 @@ class DirectoryService
     AbstractRuntime TR;
     CorfuDBMap<String, Long> names;
     CorfuDBCounter idctr;
+
+    static long DS_RESERVED_MAP_ID = 0;
+    static long DS_RESERVED_CTR_ID = 1;
+    static long DS_RESERVED_UNIQUE_ID = 2;
+    static long FIRST_VALID_STREAM_ID = 3;
+
     public DirectoryService(AbstractRuntime tTR)
     {
         TR = tTR;
-        names = new CorfuDBMap(TR, Long.MAX_VALUE);
-        idctr = new CorfuDBCounter(TR, Long.MAX_VALUE-1);
+        names = new CorfuDBMap(TR, DS_RESERVED_MAP_ID);
+        idctr = new CorfuDBCounter(TR, DS_RESERVED_CTR_ID);
 
     }
 
@@ -281,8 +310,8 @@ class DirectoryService
      */
     public static long getUniqueID(StreamFactory sf)
     {
-        Stream S = sf.newStream(Long.MAX_VALUE-2);
-        HashSet hs = new HashSet(); hs.add(Long.MAX_VALUE-2);
+        Stream S = sf.newStream(DS_RESERVED_UNIQUE_ID);
+        HashSet hs = new HashSet(); hs.add(DS_RESERVED_UNIQUE_ID);
         return (Long)S.append("DummyString", hs); //todo: remove the cast
     }
 
@@ -305,7 +334,7 @@ class DirectoryService
                 ret = names.get(X);
             else
             {
-                ret = idctr.read();
+                ret = idctr.read() + FIRST_VALID_STREAM_ID;
                 idctr.increment();
                 names.put(X, ret);
             }
@@ -507,6 +536,10 @@ class Triple<X,Y,Z> implements Serializable
             && (((second==null && otherT.second==null)) || (second!=null && second.equals(otherT.second)))) //third matches up
             return true;
         return false;
+    }
+    public String toString()
+    {
+        return "(" + first + ", " + second + ", " + third + ")";
     }
 }
 

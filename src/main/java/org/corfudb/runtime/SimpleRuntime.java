@@ -27,6 +27,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * This runtime implementation provides linearizable semantics for CorfuDB objects. It's unaware of transactions.
@@ -44,33 +46,49 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     //map from object IDs to object instances; used for multiplexing
     Map<Long, CorfuDBObject> objectmap;
 
-    Set<Long> remoteobjectset;
-
     //unique node id
     long uniquenodeid;
+
+    final long reservedStreamIDStart = Long.MAX_VALUE-100;
+    final long reservedStreamIDStop = Long.MAX_VALUE;
+    final long reservedRemoteReadMapID = Long.MAX_VALUE;
+
+
+    public void registerObject(CorfuDBObject obj)
+    {
+        registerObject(obj, false);
+    }
 
     /**
      * Registers an object with the runtime
      *
      * @param  obj  the object to register
      */
-    public void registerObject(CorfuDBObject obj)
+    public void registerObject(CorfuDBObject obj, boolean remote)
     {
-        synchronized (objectmap)
+        if(!remote)
         {
-            synchronized (enginemap)
+            synchronized (objectmap)
             {
-                if (objectmap.containsKey(obj.getID()))
+                synchronized (enginemap)
                 {
-                    System.out.println("object ID already registered!");
-                    throw new RuntimeException();
+                    if (objectmap.containsKey(obj.getID()))
+                    {
+                        System.out.println("object ID already registered!");
+                        throw new RuntimeException();
+                    }
+                    System.out.println("registering object ID " + obj.getID());
+                    objectmap.put(obj.getID(), obj);
+                    SMREngine smre = new SMREngine(streamfactory.newStream(obj.getID()), uniquenodeid);
+                    smre.registerLearner(this);
+                    enginemap.put(obj.getID(), smre);
+                    rrmap.putMyRuntime(obj.getID(), this.rpchostname, this.rpcportnum);
                 }
-                System.out.println("registering object ID " + obj.getID());
-                objectmap.put(obj.getID(), obj);
-                SMREngine smre = new SMREngine(streamfactory.newStream(obj.getID()), uniquenodeid);
-                smre.registerLearner(this);
-                enginemap.put(obj.getID(), smre);
             }
+        }
+        else
+        {
+            System.out.println("ignoring remote object registration for " + obj.getID());
         }
     }
 
@@ -133,7 +151,7 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         rpcportnum = trpcportnum;
         rpcc = new ThriftRPCClient();
         rpcs = new ThriftRPCServer();
-        rrmap = new RemoteReadMapImpl(fact, uniquenodeid);
+        rrmap = new RemoteReadMapImpl(fact.newStream(reservedRemoteReadMapID), uniquenodeid);
         rpcs.registerHandler(rpcportnum, this);
     }
 
@@ -198,8 +216,8 @@ public class SimpleRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
             Pair<String, Integer> remoteruntime = rrmap.getRemoteRuntime(cob.getID());
             if(remoteruntime==null)
                 throw new RuntimeException("unable to find object in system");
-            Object retobj = rpcc.send(new Pair<Long, Object>(cob.getID(), command), remoteruntime.first, remoteruntime.second);
-            command.setReturnValue(retobj);
+            CorfuDBObjectCommand retobj = (CorfuDBObjectCommand)rpcc.send(new Pair<Long, Object>(cob.getID(), command), remoteruntime.first, remoteruntime.second);
+            command.setReturnValue(retobj.getReturnValue());
         }
         else
             smre.sync(SMREngine.TIMESTAMP_INVALID, command);
@@ -381,33 +399,50 @@ class RemoteReadMapImpl implements RemoteReadMap, SMRLearner
 
     //for now, we maintain just one node per object
     Map<Long, Pair<String, Integer>> objecttoruntimemap;
+    Lock biglock;
 
     SMREngine smre;
 
-    public RemoteReadMapImpl(StreamFactory sf, long uniquenodeid)
+    public RemoteReadMapImpl(Stream s, long uniquenodeid)
     {
         objecttoruntimemap = new HashMap<Long, Pair<String, Integer>>();
-        smre = new SMREngine(sf.newStream(DirectoryService.getUniqueID(sf)), uniquenodeid);
+//        System.out.println("creating remotereadmap...");
+        smre = new SMREngine(s, uniquenodeid);
         smre.registerLearner(this);
+//        System.out.println(smre + " has learner " + smre.smrlearner + " of class " + smre.smrlearner.getClass());
+        biglock = new ReentrantLock();
     }
 
     @Override
     public Pair<String, Integer> getRemoteRuntime(long objectid)
     {
         smre.sync();
-        return objecttoruntimemap.get(objectid);
+        biglock.lock();
+        Pair<String, Integer> P = objecttoruntimemap.get(objectid);
+        if(P==null)
+        {
+            System.out.println("object " + objectid + " not found");
+            System.out.println(objecttoruntimemap);
+        }
+        biglock.unlock();
+        return P;
     }
 
     @Override
     public void putMyRuntime(long objectid, String hostname, int port)
     {
-        smre.propose(new Triple(objectid, hostname, port));
+        Triple T = new Triple(objectid, hostname, port);
+//        System.out.println("RRM proposing command " + T + " on " + smre.curstream.getStreamID());
+        smre.propose(T);
     }
 
     @Override
     public void deliver(Object command, long curstream, Set<Long> allstreams, long timestamp)
     {
+//        System.out.println("RRM got message on " + curstream);
         Triple<Long, String, Integer> T = (Triple<Long, String, Integer>)command;
+        biglock.lock();
         objecttoruntimemap.put(T.first, new Pair(T.second, T.third));
+        biglock.unlock();
     }
 }

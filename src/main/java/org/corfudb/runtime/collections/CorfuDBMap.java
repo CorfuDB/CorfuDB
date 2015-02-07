@@ -22,7 +22,12 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 
     public CorfuDBMap(AbstractRuntime tTR, long toid)
     {
-        super(tTR, toid);
+        this(tTR, toid, false);
+    }
+
+    public CorfuDBMap(AbstractRuntime tTR, long toid, boolean remote)
+    {
+        super(tTR, toid, remote);
         backingmap = new HashMap<K,V>();
     }
 
