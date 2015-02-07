@@ -28,7 +28,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * It extends SimpleRuntime and overloads apply, update_helper and query_helper.
  *
  */
-public class TXRuntime extends SimpleRuntime
+public class TXRuntime extends BaseRuntime
 {
 
     static Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
@@ -155,9 +155,15 @@ public class TXRuntime extends SimpleRuntime
 
     public void query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command)
     {
-        if(curtx.get()==null) //non-transactional, pass through
+        if(curtx.get()==null) //non-transactional
         {
-            super.query_helper(cob, key, command);
+            SMREngine smre = getEngine(cob.getID());
+            if(smre==null) //not playing stream
+            {
+                rpcRemoteRuntime(cob, command);
+            }
+            else
+                smre.sync(SMREngine.TIMESTAMP_INVALID, command);
         }
         else
         {
@@ -166,7 +172,7 @@ public class TXRuntime extends SimpleRuntime
             {
                 curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
                 //do what here??? apply the command through the apply thread
-                getEngine(cob.getID()).sync(SMREngine.TIMESTAMP_INVALID, command);
+                smre.sync(SMREngine.TIMESTAMP_INVALID, command);
             }
             else //it's a remote object
             {
@@ -247,10 +253,10 @@ public class TXRuntime extends SimpleRuntime
                     Pair<Serializable, Long> P = it.next();
 //                    Set<Long> tstreams = new HashSet<Long>();
 //                    tstreams.add(P.second);
-                    //todo: this apply upcall can be simultaneously called by different SMR threads!
-                    //todo: it has to be threadsafe! different threads can simultaneously
-                    //todo: try to enter the object's apply upcall...
-                    //todo: at the very least we need simple object locking.
+                    //this apply upcall can be simultaneously called by different SMR threads!
+                    //it has to be threadsafe! different threads can simultaneously
+                    //try to enter the object's apply upcall...
+                    //at the very least we need simple object locking.
                     //todo: do we have to do 2-phase locking?
                     //since all updates are funnelled through the apply thread
                     //the only bad thing that can happen is that reads see an inconsistent state
@@ -275,7 +281,7 @@ public class TXRuntime extends SimpleRuntime
                 else
                     ctr_numapplieslocal.incrementAndGet();
             }
-            super.deliver(command, curstream, streams, timestamp);
+            applyCommandToObject(curstream, command, timestamp);
         }
 
         dbglog.debug("done with deliver {}", timestamp);
