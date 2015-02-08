@@ -20,8 +20,6 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * This class is a transactional runtime implementing the AbstractRuntime interface.
@@ -33,18 +31,39 @@ public class TXRuntime extends BaseRuntime
 
     static Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
 
-    final boolean trackstats = true;
-    AtomicLong ctr_numcommits = new AtomicLong();
-    AtomicLong ctr_numaborts = new AtomicLong();
-    AtomicLong ctr_numundecided = new AtomicLong();
-    AtomicLong ctr_numappliestx = new AtomicLong();
-    AtomicLong ctr_numapplieslin = new AtomicLong();
-    AtomicLong ctr_numapplieslocal = new AtomicLong();
 
     final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 
     //used to communicate decisions from the query_helper thread to waiting endtx calls
     final Map<Long, Boolean> decisionmap;
+
+    Map<Long, TXEngine> txenginemap = new HashMap<Long, TXEngine>();
+
+    public TXEngine getTXEngine(long streamid)
+    {
+        synchronized(txenginemap)
+        {
+            return txenginemap.get(streamid);
+        }
+    }
+
+    public void registerObject(CorfuDBObject cob)
+    {
+        registerObject(cob, false);
+    }
+
+    public void registerObject(CorfuDBObject cob, boolean remote)
+    {
+        super.registerObject(cob, remote);
+        if(!remote)
+        {
+            synchronized(txenginemap)
+            {
+                txenginemap.put(cob.getID(), new TXEngine(cob, getEngine(cob.getID()), this));
+            }
+        }
+    }
+
 
     public TXRuntime(StreamFactory fact, long uniquenodeid, String rpchostname, int rpcport)
     {
@@ -66,6 +85,8 @@ public class TXRuntime extends BaseRuntime
         long txpos = -1;
         //append the transaction intention
         if(curtx.get()==null) throw new RuntimeException("no current transaction!");
+
+        //check if it's read-only or empty
         if(curtx.get().get_updatestreams().size()==0)
         {
             if(curtx.get().get_readset().size()==0) // empty transaction
@@ -85,13 +106,19 @@ public class TXRuntime extends BaseRuntime
             }
 //            throw new RuntimeException("empty transaction!"); //todo: do something more sensible here
         }
+
+
+        //append the intention
         SMREngine smre = getEngine();
         if(smre==null) throw new RuntimeException("no engine found for appending tx!");
         txpos = smre.propose(curtx.get(), curtx.get().get_updatestreams());
         dbglog.debug("appended endtx at position {}; now syncing...", txpos);
+
+
         //now that we appended the intention, we need to play the stream until the append point
         //todo: do this more efficiently so that each sync doesn't need to establish
         //a brand new linearization point by independently checking the tail of the underlying stream
+
         Iterator<Triple<Long, Long, Serializable>> it = curtx.get().get_readset().iterator();
         while(it.hasNext())
         {
@@ -109,7 +136,7 @@ public class TXRuntime extends BaseRuntime
                 //remote read
             }
         }
-        final int maxtries = 100;
+        final int maxtries = Integer.MAX_VALUE;
         int numtries = 0;
 
         while(true)
@@ -245,108 +272,238 @@ public class TXRuntime extends BaseRuntime
         query_then_update_helper(cob, null, update);
     }
 
-    //called by deliver
-    public void process_tx_intention(Object command, long curstream, Set<Long> streams, long timestamp)
+
+    public void deliver(Object command, long curstream, long timestamp)
     {
+        throw new RuntimeException("this should never get called! SMR commands" +
+                " are handled by individual TXEngines...");
+    }
+
+    Object partialinfolock = new Object();
+    Map<Long, BitSet> partialdecisions = new HashMap();
+    Map<Long, TxInt> pendingtxes = new HashMap();
 
 
-
-        if(trackstats)
+    public void addPending(long timestamp, TxInt txint)
+    {
+        synchronized(partialinfolock)
         {
-            ctr_numappliestx.incrementAndGet();
+            if(!pendingtxes.containsKey(timestamp))
+            {
+                pendingtxes.put(timestamp, txint);
+                partialdecisions.put(timestamp, new BitSet());
+            }
+
         }
+    }
 
-        TxInt T = (TxInt)command;
-
-        //should the transaction commit or abort?
-        int decision = validate(T, curstream, timestamp);
-
-        if(trackstats)
+    public TxInt getPending(long timestamp)
+    {
+        synchronized(partialinfolock)
         {
-            if(decision==VAL_COMMIT) ctr_numcommits.incrementAndGet();
-            else if(decision==VAL_ABORT) ctr_numaborts.incrementAndGet();
-            else if(decision==VAL_UNDECIDED) ctr_numundecided.incrementAndGet();
+            return pendingtxes.get(timestamp);
         }
+    }
 
-        //update the decision map
-        if(decision==VAL_COMMIT || decision==VAL_ABORT)
+    public Pair<Boolean, Boolean> updateDecision(long timestamp, long stream, boolean partialdecision)
+    {
+        boolean decided = false;
+        boolean commit = false;
+        if(partialdecision)
+        {
+            TxInt txint;
+            synchronized (partialinfolock)
+            {
+                txint = pendingtxes.get(timestamp);
+                if (txint == null)
+                    throw new RuntimeException("pending tx not found -- was addPending called?");
+                BitSet bs = partialdecisions.get(timestamp);
+                if (bs == null)
+                    throw new RuntimeException("bitset not found -- was addPending called?");
+                bs.set(txint.get_readstreams().get(stream));
+                if(bs.cardinality()==txint.get_readstreams().size())
+                {
+                    decided = true;
+                    commit = true;
+                }
+            }
+        }
+        else
+        {
+            decided = true;
+            commit = false;
+        }
+        if(decided)
         {
             synchronized (decisionmap)
             {
                 dbglog.debug("decided position {}", timestamp);
-                decisionmap.put(timestamp, decision==VAL_COMMIT);
+                decisionmap.put(timestamp, commit);
             }
         }
-
-        //if decision is a commit, apply the changes
-        if(decision==VAL_COMMIT)
-        {
-            Iterator<Pair<Serializable, Long>> it = T.get_bufferedupdates().iterator();
-            while(it.hasNext())
-            {
-                Pair<Serializable, Long> P = it.next();
-                //this apply upcall can be simultaneously called by different SMR threads!
-                //it has to be threadsafe! different threads can simultaneously
-                //try to enter the object's apply upcall...
-                //at the very least we need simple object locking.
-                //todo: do we have to do 2-phase locking?
-                //since all updates are funnelled through the apply thread
-                //the only bad thing that can happen is that reads see an inconsistent state
-                //but this can happen anyway, and in this case the transaction will abort
-                //todo: think about providing tx opacity across the board
-                CorfuDBObject cob = getObject(P.second);
-                if(cob==null) throw new RuntimeException("not a registered object!");
-                cob.lock(true);
-                //super.apply(P.first, curstream, tstreams, timestamp); //let SimpleRuntime do the object multiplexing
-                cob.applyToObject(P.first);
-                cob.setTimestamp(timestamp);
-                cob.unlock(true);
-            }
-        }
+        return new Pair(decided, commit);
     }
 
-    public void process_lin_singleton(Object command, long curstream, Set<Long> streams, long timestamp)
+    final boolean trackstats = true;
+    AtomicLong ctr_numcommits = new AtomicLong();
+    AtomicLong ctr_numaborts = new AtomicLong();
+    AtomicLong ctr_numtxint = new AtomicLong();
+    AtomicLong ctr_numtxdec = new AtomicLong();
+    AtomicLong ctr_numapplieslin = new AtomicLong();
+    AtomicLong ctr_numapplieslocal = new AtomicLong();
+
+
+    public String toString()
     {
-        if(trackstats)
-        {
-            if(timestamp!=SMREngine.TIMESTAMP_INVALID)
-                ctr_numapplieslin.incrementAndGet();
-            else
-                ctr_numapplieslocal.incrementAndGet();
-        }
-        applyCommandToObject(curstream, command, timestamp);
+        String x = "TXRuntime: " + ctr_numtxint.get() + " txints; "
+                + ctr_numtxdec.get() + " decrecs; "
+                + ctr_numcommits.get() + " commits; "
+                + ctr_numaborts.get() + " aborts; "
+                + ctr_numapplieslin.get() + " lin applies; "
+                + ctr_numapplieslocal.get() + " local applies;";
+        return x;
     }
 
-    public void deliver(Object command, long curstream, Set<Long> streams, long timestamp)
+}
+
+class TXEngine implements SMRLearner
+{
+    static Logger dbglog = LoggerFactory.getLogger(TXEngine.class);
+
+    SMREngine smre;
+    CorfuDBObject cob;
+    TXRuntime txr;
+
+
+
+    public TXEngine(CorfuDBObject tcob, SMREngine tsmre, TXRuntime ttxr)
+    {
+        smre = tsmre;
+        cob = tcob;
+        txr = ttxr;
+        smre.registerLearner(this); //overwrites any existing learner (i.e., TXRuntime)
+    }
+
+    @Override
+    public void deliver(Object command, long curstream, long timestamp)
     {
         dbglog.debug("deliver {}", timestamp);
 
         if (command instanceof TxInt) //is the command a transaction or a linearizable singleton?
         {
-            process_tx_intention(command, curstream, streams, timestamp);
+            process_tx_intention(command, curstream, timestamp);
+        }
+        else if(command instanceof TxDec)
+        {
+            process_tx_decision(command, curstream, timestamp);
         }
         else
         {
-            process_lin_singleton(command, curstream, streams, timestamp);
+            process_lin_singleton(command, curstream, timestamp);
         }
 
         dbglog.debug("done with deliver {}", timestamp);
+
     }
 
-    //the first bitset indicates whether the decision has been made or not
-    //the second bitset indicates whether the decision is a commit or an abort
-    Map<Long, Pair<BitSet, BitSet>> decisionbits = new HashMap();
-    Lock decbitslock = new ReentrantLock();
-
-    final int VAL_ABORT = 0;
-    final int VAL_COMMIT = 1;
-    final int VAL_UNDECIDED = 2;
-
-    //this code needs to be threadsafe since multiple SMRs can call into it simultaneously
-    //even though each SMR is single-threaded.
-    int validate(TxInt newtx, long curstream, long timestamp)
+    //called by deliver
+    public void process_tx_intention(Object command, long curstream, long timestamp)
     {
-  //      System.out.println("validate " + timestamp + " in stream " + curstream);
+
+
+        if (txr.trackstats)
+        {
+            txr.ctr_numtxint.incrementAndGet();
+        }
+
+        TxInt T = (TxInt) command;
+
+        txr.addPending(timestamp, T);
+
+        //generate partial decision
+        validate(T, curstream, timestamp);
+    }
+
+
+    public void process_tx_decision(Object command, long curstream, long timestamp)
+    {
+        if (txr.trackstats)
+        {
+            txr.ctr_numtxdec.incrementAndGet();
+        }
+
+
+//        if(trackstats)
+//        {
+//            if(decision==VAL_COMMIT) ctr_numcommits.incrementAndGet();
+//            else if(decision==VAL_ABORT) ctr_numaborts.incrementAndGet();
+//            else if(decision==VAL_UNDECIDED) ctr_numundecided.incrementAndGet();
+//        }
+
+//        //update the decision map
+//        if(decision==VAL_COMMIT || decision==VAL_ABORT)
+//        {
+//            txr.updateDecision(timestamp, decision==VAL_COMMIT);
+//        }
+
+
+        TxDec decrec = (TxDec)command;
+
+        Pair<Boolean, Boolean> P = txr.updateDecision(decrec.txint_timestamp, decrec.stream, decrec.decision);
+
+        if(txr.trackstats)
+        {
+            if(P.first)
+            {
+                if(P.second) txr.ctr_numcommits.incrementAndGet();
+                else txr.ctr_numaborts.incrementAndGet();
+            }
+        }
+
+
+
+        //if decision is a commit, apply the changes
+        if(P.first && P.second)
+        {
+            Iterator<Pair<Serializable, Long>> it = txr.getPending(decrec.txint_timestamp).get_bufferedupdates().iterator();
+            while(it.hasNext())
+            {
+                Pair<Serializable, Long> P2 = it.next();
+                //no need to lock since each object can only be modified by its underlying TXEngine, which
+                //in turn is only entered by the underlying SMREngine thread.
+                //todo: do we have to do 2-phase locking?
+                //the only bad thing that can happen is that reads see an inconsistent state
+                //but this can happen anyway, and in this case the transaction will abort
+                //todo: think about providing tx opacity across the board
+                if(P2.second!=curstream) continue;
+                CorfuDBObject cob = txr.getObject(P2.second);
+                if(cob==null) throw new RuntimeException("not a registered object!");
+                //cob.lock(true);
+                cob.applyToObject(P2.first);
+                cob.setTimestamp(timestamp);
+                //cob.unlock(true);
+            }
+        }
+    }
+
+    public void process_lin_singleton(Object command, long curstream, long timestamp)
+    {
+        if(txr.trackstats)
+        {
+            if(timestamp!=SMREngine.TIMESTAMP_INVALID)
+                txr.ctr_numapplieslin.incrementAndGet();
+            else
+                txr.ctr_numapplieslocal.incrementAndGet();
+        }
+        txr.applyCommandToObject(curstream, command, timestamp);
+    }
+
+    //this code does not need to be threadsafe; each TXEngine is
+    //coupled with exactly one SMREngine object, hence only
+    //the single SMREngine thread will upcall into this function
+    void validate(TxInt newtx, long curstream, long timestamp)
+    {
+        //      System.out.println("validate " + timestamp + " in stream " + curstream);
         // to enforce strict serializability, we use a simple rule:
         // has anything the transaction read changed since it was read?
         // if not, the transaction commits since the state it viewed is
@@ -355,81 +512,42 @@ public class TXRuntime extends BaseRuntime
 
         if(timestamp==SMREngine.TIMESTAMP_INVALID) throw new RuntimeException("validation timestamp cannot be invalid!");
 
-        decbitslock.lock();
-        Pair<BitSet, BitSet> P = null;
-        if(decisionbits.containsKey(timestamp))
-            P = decisionbits.get(timestamp);
-        else
+
+
+        boolean partialabort = false;
+        Iterator<Triple<Long, Long, Serializable>> readsit = newtx.get_readset().iterator();
+        while (readsit.hasNext())
         {
-            P = new Pair<BitSet, BitSet>(new BitSet(), new BitSet());
-            decisionbits.put(timestamp, P);
-        }
-        decbitslock.unlock();
-
-        BitSet decided = P.first;
-        BitSet committed = P.second;
-
-
-        if(decided.cardinality()==committed.cardinality())
-        {
-            boolean partialabort = false;
-            Iterator<Triple<Long, Long, Serializable>> readsit = newtx.get_readset().iterator();
-            while (readsit.hasNext())
+            Triple<Long, Long, Serializable> curread = readsit.next();
+            if (curread.first != curstream) continue; //validate only the current stream
+            //is the current version of the object at a later timestamp than the version read by the transaction?
+            if (txr.getObject(curread.first).getTimestamp(curread.third) > curread.second)
             {
-                Triple<Long, Long, Serializable> curread = readsit.next();
-                if (curread.first != curstream) continue; //validate only the current stream
-                //is the current version of the object at a later timestamp than the version read by the transaction?
-                if (getObject(curread.first).getTimestamp(curread.third) > curread.second)
-                {
-                    partialabort = true;
-                    break;
-                }
-            }
-            int streampos = newtx.get_readstreams().get(curstream);
-            synchronized(P) //using P to guard decided/committed bitsets
-            {
-                decided.set(streampos);
-                if (!partialabort) committed.set(streampos);
+                partialabort = true;
+                break;
             }
         }
+        TxDec decrec = new TxDec(timestamp, curstream, !partialabort);
+        smre.propose(decrec, newtx.get_allstreams());
 
-        int ret;
-        synchronized(P) //using P to guard decided/committed bitsets
-        {
-            if (decided.cardinality() != committed.cardinality())
-            {
-                //transaction is an abort
-                ret = VAL_ABORT;
-            }
-            else if (decided.cardinality() == newtx.get_readstreams().size()) //all streams have been decided
-            {
-                //transaction is a commit
-                ret = VAL_COMMIT;
-            }
-            else
-            {
-                //not enough information yet
-                ret = VAL_UNDECIDED;
-                //dbglog.warn("undec " + timestamp + " " + decided.cardinality() + " " + committed.cardinality() + " " + newtx.get_readset().size() + " " + newtx.get_readstreams().size() + " " + curstream);
-            }
-        }
-        dbglog.debug("DECISION = {}", ret);
-        return ret;
     }
 
-    public String toString()
-    {
-        String x = "TXRuntime: " + ctr_numappliestx.get() + " tx applies; "
-                + ctr_numcommits.get() + " commits; "
-                + ctr_numaborts.get() + " aborts; "
-                + ctr_numundecided.get() + " undecided; "
-                + ctr_numapplieslin.get() + " lin applies; "
-                + ctr_numapplieslocal.get() + " local applies;";
-        return x;
-    }
 
 }
 
+class TxDec implements Serializable
+{
+    long stream;
+    boolean decision; //true means commit, false means abort
+    long txint_timestamp;
+    public TxDec(long t_txint_timestamp, long t_stream, boolean t_dec)
+    {
+        txint_timestamp = t_txint_timestamp;
+        stream = t_stream;
+        decision = t_dec;
+    }
+
+}
 
 
 class TxInt implements Serializable //todo: custom serialization
@@ -438,23 +556,27 @@ class TxInt implements Serializable //todo: custom serialization
     private Set<Long> updatestreamset;
     private Set<Triple<Long, Long, Serializable>> readset;
     private Map<Long, Integer> readstreammap; //maps from a stream id to a number denoting the insertion order of that id
+    private Set<Long> allstreamset; //todo: custom serialization so this doesnt get written out
     TxInt()
     {
         bufferedupdates = new LinkedList<Pair<Serializable, Long>>();
         readset = new HashSet();
         updatestreamset = new HashSet<Long>();
         readstreammap = new HashMap();
+        allstreamset = new HashSet();
     }
     void buffer_update(Serializable bs, long stream)
     {
         bufferedupdates.add(new Pair<Serializable, Long>(bs, stream));
         updatestreamset.add(stream);
+        allstreamset.add(stream);
     }
     void mark_read(long object, long version, Serializable key)
     {
         readset.add(new Triple(object, version, key));
         if(!readstreammap.containsKey(object))
             readstreammap.put(object, readstreammap.size());
+        allstreamset.add(object);
     }
     Set<Long> get_updatestreams()
     {
@@ -471,5 +593,9 @@ class TxInt implements Serializable //todo: custom serialization
     List<Pair<Serializable, Long>> get_bufferedupdates()
     {
         return bufferedupdates;
+    }
+    Set<Long> get_allstreams()
+    {
+        return allstreamset;
     }
 }

@@ -89,7 +89,7 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
@@ -258,8 +258,8 @@ public class CorfuDBTester
             DS = new DirectoryService(TR);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
-            System.out.println("local map = " + (rpcport%2));
-            System.out.println("remote map = " + ((rpcport+1)%2));
+            System.out.println("local map = " + (rpcport%2) + " " + cob1.getID());
+            System.out.println("remote map = " + ((rpcport+1)%2) + " " + cob2.getID());
 
 
             System.out.println("sleeping");
@@ -280,8 +280,8 @@ public class CorfuDBTester
 
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
-            System.out.println("local map = " + (rpcport%2));
-            System.out.println("remote map = " + ((rpcport+1)%2));
+            System.out.println("local map = " + (rpcport%2) + " " + cob1.getID());
+            System.out.println("remote map = " + ((rpcport+1)%2)+ " " + cob2.getID());
 
             for (int i = 0; i < numthreads; i++)
             {

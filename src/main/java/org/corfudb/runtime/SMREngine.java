@@ -239,15 +239,15 @@ public class SMREngine
                 if (localcmds.second != null)
                 {
 //                    System.out.println("deliver local command precommand " + localcmds.second);
-                    smrlearner.deliver(localcmds.second, curstream.getStreamID(), cmdw.streams, TIMESTAMP_INVALID);
+                    smrlearner.deliver(localcmds.second, curstream.getStreamID(), TIMESTAMP_INVALID);
                 }
 //                System.out.println("deliver local command " + localcmds.first);
-                smrlearner.deliver(localcmds.first, curstream.getStreamID(), cmdw.streams, (Long) update.getLogpos()); //todo: remove the cast
+                smrlearner.deliver(localcmds.first, curstream.getStreamID(), (Long) update.getLogpos()); //todo: remove the cast
             }
             else
             {
 //                System.out.println("deliver local command " + cmdw.cmd);
-                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), cmdw.streams, (Long) update.getLogpos()); //todo: remove the cast
+                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), (Long) update.getLogpos()); //todo: remove the cast
             }
             update = curstream.readNext(curtail);
         }
@@ -264,7 +264,7 @@ public class SMREngine
             SyncObjectWrapper syncobj = it.next();
             if(syncobj.synccommand!=null)
             {
-                smrlearner.deliver(syncobj.synccommand, curstream.getStreamID(), curstreamlist, TIMESTAMP_INVALID);
+                smrlearner.deliver(syncobj.synccommand, curstream.getStreamID(), TIMESTAMP_INVALID);
             }
             synchronized(syncobj)
             {
@@ -286,13 +286,11 @@ interface SMRLearner
      * An upcall that must be implemented by learners to obtain new commands
      * from an SMREngine.
      * todo: clean up timestamp semantics --- currently all local commands have invalid_timestamp; is this okay?
-     *
      * @param command
      * @param curstream
-     * @param allstreams
      * @param timestamp
      */
-    void deliver(Object command, long curstream, Set<Long> allstreams, long timestamp);
+    void deliver(Object command, long curstream, long timestamp);
 }
 
 /**

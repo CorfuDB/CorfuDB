@@ -174,6 +174,8 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         return P.second;
     }
 
+    //we don't lock the object; the sub-classing runtime is responsible for locking, if required,
+    //before calling this method
     public void applyCommandToObject(long curstream, Object command, long timestamp)
     {
         CorfuDBObject cob = getObject(curstream);
@@ -276,9 +278,10 @@ public class SimpleRuntime extends BaseRuntime
             smre.sync(SMREngine.TIMESTAMP_INVALID, command);
     }
 
-    public void deliver(Object command, long curstream, Set<Long> streams, long timestamp)
+    public void deliver(Object command, long curstream, long timestamp)
     {
-        if(streams.size()!=1) throw new RuntimeException("unimplemented");
+        //we don't have to lock the object --- there's one thread per SMREngine,
+        //and exactly one SMREngine per stream/object
         applyCommandToObject(curstream, command, timestamp);
     }
 
@@ -466,7 +469,7 @@ class RemoteReadMapImpl implements RemoteReadMap, SMRLearner
     }
 
     @Override
-    public void deliver(Object command, long curstream, Set<Long> allstreams, long timestamp)
+    public void deliver(Object command, long curstream, long timestamp)
     {
 //        System.out.println("RRM got message on " + curstream);
         Triple<Long, String, Integer> T = (Triple<Long, String, Integer>)command;
