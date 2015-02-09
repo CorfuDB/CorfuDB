@@ -25,6 +25,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.CyclicBarrier;
 
 import gnu.getopt.Getopt;
 import org.corfudb.runtime.collections.CorfuDBMap;
@@ -34,6 +35,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.impl.SimpleLogger;
 import org.corfudb.runtime.collections.CorfuDBCounter;
+import org.corfudb.runtime.collections.CorfuDBCoarseList;
+import org.corfudb.runtime.collections.CorfuDBList;
 
 /**
  * Tester code for the CorfuDB runtime stack
@@ -46,7 +49,6 @@ public class CorfuDBTester
 
     static Logger dbglog = LoggerFactory.getLogger(CorfuDBTester.class);
 
-
     static void print_usage()
     {
         System.out.println("usage: java CorfuDBTester");
@@ -54,6 +56,8 @@ public class CorfuDBTester
         System.out.println("\t[-a testtype] (0==TXTest|1==LinMapTest|2==StreamTest|3==MultiClientTXTest|4==LinCounterTest)");
         System.out.println("\t[-t number of threads]");
         System.out.println("\t[-n number of ops]");
+        System.out.println("\t[-k number of keys used in list tests]");
+        System.out.println("\t[-l number of lists used in list tests]");
         System.out.println("\t[-p rpcport]");
 
 //        if(dbglog instanceof SimpleLogger)
@@ -71,6 +75,8 @@ public class CorfuDBTester
         final int STREAMTEST=2;
         final int MULTICLIENTTXTEST=3;
         final int LINCTRTEST=4;
+        final int TXLISTCOARSE=5;
+        final int TXLISTFINE=6;
 
         int numclients = 1;
         int expernum = 1; //used by the barrier code
@@ -79,6 +85,8 @@ public class CorfuDBTester
         String strArg;
         int numthreads = 1;
         int numops = 1000;
+        int numkeys = 100;
+        int numlists = 2;
         int testnum = 0;
         int rpcport = 9090;
         String masternode = null;
@@ -88,7 +96,7 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:k:l:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
@@ -112,6 +120,16 @@ public class CorfuDBTester
                     strArg = g.getOptarg();
                     System.out.println("numops = "+ strArg);
                     numops = Integer.parseInt(strArg);
+                    break;
+                case 'k':
+                    strArg = g.getOptarg();
+                    System.out.println("numkeys = "+ strArg);
+                    numkeys = Integer.parseInt(strArg);
+                    break;
+                case 'l':
+                    strArg = g.getOptarg();
+                    System.out.println("numlists = "+ strArg);
+                    numlists = Integer.parseInt(strArg);
                     break;
                 case 'p':
                     strArg = g.getOptarg();
@@ -251,14 +269,42 @@ public class CorfuDBTester
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
         }
+        else if(testnum==TXLISTCOARSE)
+        {
+            CyclicBarrier startbarrier = new CyclicBarrier(numthreads);
+            CyclicBarrier stopbarrier = new CyclicBarrier(numthreads);
+            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            ArrayList<CorfuDBList<Integer>> lists = new ArrayList<CorfuDBList<Integer>>();
+            NonRandomIntProvider generator = new NonRandomIntProvider();
+
+            for(int i=0; i<numlists; i++) {
+                lists.add(new CorfuDBCoarseList<Integer>(TR, DirectoryService.getUniqueID(sf)));
+            }
+
+            for (int i = 0; i < numthreads; i++)
+            {
+                TXListTester<Integer> txl = new TXListTester<Integer>(
+                        i, startbarrier, stopbarrier, TR, lists, numops, numkeys, generator);
+                threads[i] = new Thread(txl);
+                threads[i].start();
+            }
+            for(int i=0;i<numthreads;i++)
+                threads[i].join();
+
+            System.out.println("Test done! Checking consistency...");
+            TXListChecker txc = new TXListChecker(TR, lists, numops, numkeys);
+            if(txc.isConsistent())
+                System.out.println("List consistency check passed --- test successful!");
+            else
+                System.out.println("List consistency check failed!");
+            System.out.println(TR);
+        }
 
         System.out.println("Test done in " + (System.currentTimeMillis()-starttime));
 
         System.exit(0);
 
     }
-
-
 }
 
 /**

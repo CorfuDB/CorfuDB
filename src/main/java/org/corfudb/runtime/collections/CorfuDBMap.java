@@ -185,8 +185,6 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     //accessor+mutator
     public V put(K key, V val)
     {
-        HashSet<Long> H = new HashSet<Long>();
-        H.add(this.getID());
         MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, key);
         TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_PUT, key, val));
         return (V)precmd.getReturnValue();
