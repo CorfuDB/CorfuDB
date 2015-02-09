@@ -643,7 +643,7 @@ class TxInt implements Serializable //todo: custom serialization
                 if(Trip1.first==Trip2.second)
                 {
                     //keys match?
-                    if(Trip1.third==null || Trip2.third==null || Trip1.third==Trip2.third)
+                    if(Trip1.third==null || Trip2.third==null || Trip1.third.equals(Trip2.third))
                     {
                         return true;
                     }
