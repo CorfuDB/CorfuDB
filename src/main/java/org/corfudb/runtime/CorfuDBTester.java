@@ -173,11 +173,18 @@ public class CorfuDBTester
 
         AbstractRuntime TR = null;
         DirectoryService DS = null;
+        CorfuDBCounter barrier=null;
         if(testnum==MULTICLIENTTXTEST)
         {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             DS = new DirectoryService(TR);
-            CorfuDBCounter barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
+            barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
+            if(barrier.read()>numclients)
+            {
+                System.out.println("This experiment number has been used before! Use a new number for the -e flag, or check" +
+                        " that the -c flag correctly specifies the number of clients.");
+                System.exit(0);
+            }
             barrier.increment();
             while(barrier.read() < numclients) ;
             dbglog.debug("Barrier reached; starting test...");
@@ -291,13 +298,22 @@ public class CorfuDBTester
             }
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
-            System.out.println("Test done! Checking consistency...");
+            barrier.increment();
+            while(barrier.read() < 2*numclients)
+                cob1.size(); //this ensures that we're still processing txints and issuing partial decisions to help other nodes
+                             //need a cleaner way to ensure this
+            dbglog.debug("second barrier reached; checking consistency...");
+            System.out.println("Checking consistency...");
             TXTesterThread tx = new TXTesterThread(cob1, cob2, TR);
             if(tx.check_consistency())
                 System.out.println("Consistency check passed --- test successful!");
             else
                 System.out.println("Consistency check failed!");
             System.out.println(TR);
+            barrier.increment();
+            while(barrier.read() < 3*numclients);
+            dbglog.debug("third barrier reached; test done");
+            System.out.println("Test done!");
         }
 
 
