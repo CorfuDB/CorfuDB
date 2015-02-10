@@ -81,7 +81,7 @@ public class TXRuntime extends BaseRuntime
 
     public boolean EndTX()
     {
-        dbglog.debug("EndTX");
+        dbglog.debug("EndTX: " + curtx.get());
         long txpos = -1;
         //append the transaction intention
         if(curtx.get()==null) throw new RuntimeException("no current transaction!");
@@ -111,7 +111,8 @@ public class TXRuntime extends BaseRuntime
         //append the intention
         SMREngine smre = getEngine();
         if(smre==null) throw new RuntimeException("no engine found for appending tx!");
-        txpos = smre.propose(curtx.get(), curtx.get().get_updatestreams());
+        //todo: remove the egregious copy
+        txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_updatestreams().keySet()));
         dbglog.debug("appended endtx at position {}; now syncing...", txpos);
 
 
@@ -119,11 +120,11 @@ public class TXRuntime extends BaseRuntime
         //todo: do this more efficiently so that each sync doesn't need to establish
         //a brand new linearization point by independently checking the tail of the underlying stream
 
-        Iterator<Triple<Long, Long, Serializable>> it = curtx.get().get_readset().iterator();
+        Iterator<TxIntReadSetEntry> it = curtx.get().get_readset().iterator();
         while(it.hasNext())
         {
             //for each stream in the readset, if we're playing it, sync
-            long streamid = it.next().first;
+            long streamid = it.next().objectid;
             smre = getEngine(streamid);
             if(smre!=null)
             {
@@ -145,23 +146,22 @@ public class TXRuntime extends BaseRuntime
                 throw new RuntimeException("timeout on waiting for final decision for " + txpos);
             }
             dbglog.debug("EndTX checking for decision for intention at {}...", txpos);
+            boolean ret = false;
+            boolean dec = false;
             synchronized (decisionmap)
             {
                 if (decisionmap.containsKey(txpos))
                 {
-                    boolean dec = decisionmap.get(txpos);
-                    decisionmap.remove(txpos);
-                    curtx.set(null);
-                    return dec;
+                    //at this point we know the decision
+                    //but it's possible that not all TXEngines have
+                    //processed and applied the decision yet
+                    //which means the next TX can see an inconsistent
+                    //state and abort.
+                    //for now, we simply trigger another sync
+                    //to ensure that all TXEngines catch up
+                    ret = true;
+                    //return dec;
                 }
-//                else
-//                {
-//                    //catastrophic error for now, while we debug
-//                    System.out.println("dec not found for " + txpos);
-//                    System.out.println(this);
-//                    System.exit(0);
-//                    throw new RuntimeException("decision not found!");
-//                }
             }
             //decision not found --- sync all the streams again
             //ideally, two kinds of nodes need to know about the final tx decision:
@@ -171,7 +171,7 @@ public class TXRuntime extends BaseRuntime
             //but for the second category, the originating node may only be playing the read streams
             //hence, we put decisions on all streams
             //todo: put decisions on read streams only if required (how do we determine this?)
-            Iterator<Long> it2 = curtx.get().get_updatestreams().iterator();
+            Iterator<Long> it2 = curtx.get().get_allstreams().keySet().iterator();
             while(it2.hasNext())
             {
                 long streamid = it2.next();
@@ -179,16 +179,16 @@ public class TXRuntime extends BaseRuntime
                 if(smre2!=null)
                     smre2.sync();
             }
-            it2 = curtx.get().get_readstreams().keySet().iterator();
-            while(it2.hasNext())
+            if(ret)
             {
-                long streamid = it2.next();
-                SMREngine smre2 = getEngine(streamid);
-                if(smre2!=null)
-                    smre2.sync();
+                synchronized(decisionmap)
+                {
+                    dec = decisionmap.get(txpos);
+                    decisionmap.remove(txpos);
+                }
+                curtx.set(null);
+                return dec;
             }
-
-
         }
     }
 
@@ -229,6 +229,7 @@ public class TXRuntime extends BaseRuntime
             SMREngine smre = getEngine(cob.getID());
             if(smre!=null) //we're playing the object
             {
+//                System.out.println("read " + cob.getID() + " at " + cob.getTimestamp());
                 curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
                 //do what here??? apply the command through the apply thread
                 //todo: right now this causes an unnecessary sync
@@ -279,10 +280,15 @@ public class TXRuntime extends BaseRuntime
                 " are handled by individual TXEngines...");
     }
 
+
+    //State shared by TXEngines:
+
+    //todo: GC for partialdecisions
+
     Object partialinfolock = new Object();
     Map<Long, BitSet> partialdecisions = new HashMap();
 
-    public void initDecision(long timestamp)
+    public void initDecisionState(long timestamp)
     {
         synchronized(partialinfolock)
         {
@@ -290,11 +296,10 @@ public class TXRuntime extends BaseRuntime
             {
                 partialdecisions.put(timestamp, new BitSet());
             }
-
         }
     }
 
-    public Pair<Boolean, Boolean> updateDecision(long timestamp, int streambitpos, int totalstreams, boolean partialdecision)
+    public Pair<Boolean, Boolean> updateDecisionState(long timestamp, int streambitpos, int totalstreams, boolean partialdecision)
     {
         boolean decided = false;
         boolean commit = false;
@@ -304,7 +309,7 @@ public class TXRuntime extends BaseRuntime
             {
                 BitSet bs = partialdecisions.get(timestamp);
                 if (bs == null)
-                    throw new RuntimeException("bitset not found -- was addPending called?");
+                    throw new RuntimeException("bitset not found -- was initDecisionState called?");
                 bs.set(streambitpos);
                 if(bs.cardinality()==totalstreams)
                 {
@@ -318,16 +323,18 @@ public class TXRuntime extends BaseRuntime
             decided = true;
             commit = false;
         }
-        //System.out.println(timestamp + " " + streambitpos + " " + totalstreams + " " + partialdecision + " " + decided + " " + commit);
-        if(decided)
-        {
-            synchronized (decisionmap)
-            {
-                dbglog.debug("decided position {}", timestamp);
-                decisionmap.put(timestamp, commit);
-            }
-        }
         return new Pair(decided, commit);
+        //System.out.println(timestamp + " " + streambitpos + " " + totalstreams + " " + partialdecision + " " + decided + " " + commit);
+    }
+
+
+    public void updateFinalDecision(long timestamp, boolean commit)
+    {
+        synchronized (decisionmap)
+        {
+            dbglog.debug("decided position {}", timestamp);
+            decisionmap.put(timestamp, commit);
+        }
     }
 
     final boolean trackstats = true;
@@ -408,6 +415,10 @@ class TXEngine implements SMRLearner
         return pendingtxes.get(timestamp);
     }
 
+    public void removePending(long timestamp)
+    {
+        pendingtxes.remove(timestamp);
+    }
 
     //called by deliver
     public void process_tx_intention(Object command, long curstream, long timestamp)
@@ -421,7 +432,7 @@ class TXEngine implements SMRLearner
 
         TxInt T = (TxInt) command;
 
-        txr.initDecision(timestamp);
+        txr.initDecisionState(timestamp);
 
         //generate partial decision
         // to enforce strict serializability, we use a simple rule:
@@ -440,14 +451,15 @@ class TXEngine implements SMRLearner
         //if stream appends are reliable, we can get rid of generating the txdec if we are only in the write set
         if(T.get_readstreams().get(curstream)!=null)
         {
-            Iterator<Triple<Long, Long, Serializable>> readsit = T.get_readset().iterator();
+            Iterator<TxIntReadSetEntry> readsit = T.get_readset().iterator();
             while (readsit.hasNext())
             {
-                Triple<Long, Long, Serializable> curread = readsit.next();
-                if (curread.first != curstream) continue; //validate only the current stream
+                TxIntReadSetEntry curread = readsit.next();
+                if (curread.objectid != curstream) continue; //validate only the current stream
                 //is the current version of the object at a later timestamp than the version read by the transaction?
-                if (txr.getObject(curread.first).getTimestamp(curread.third) > curread.second)
+                if (txr.getObject(curread.objectid).getTimestamp(curread.key) > curread.readtimestamp)
                 {
+//                    System.out.println("partial decision is an abort: " + curread.objectid + ":" + curread.key + ":" + curread.readtimestamp + ":" + txr.getObject(curread.objectid).getTimestamp(curread.key));
                     partialabort = true;
                     break;
                 }
@@ -508,7 +520,7 @@ class TXEngine implements SMRLearner
 
 
         TxInt T = getPending(decrec.txint_timestamp);
-        if(T==null) //already been decided
+        if(T==null) //already been decided and applied by this TXEngine
         {
             return;
         }
@@ -516,7 +528,7 @@ class TXEngine implements SMRLearner
 
 
         //we index over all streams here; if stream appends are reliable, we can switch this to only readstreams
-        Pair<Boolean, Boolean> P = txr.updateDecision(decrec.txint_timestamp, T.get_allstreams().get(decrec.stream), T.get_allstreams().size(), decrec.decision);
+        Pair<Boolean, Boolean> P = txr.updateDecisionState(decrec.txint_timestamp, T.get_allstreams().get(decrec.stream), T.get_allstreams().size(), decrec.decision);
 
         if(txr.trackstats)
         {
@@ -532,26 +544,31 @@ class TXEngine implements SMRLearner
         {
             if(P.second) //... and is a commit
             {
-                Iterator<Triple<Serializable, Long, Serializable>> it = getPending(decrec.txint_timestamp).get_bufferedupdates().iterator();
+                Iterator<TxIntWriteSetEntry> it = getPending(decrec.txint_timestamp).get_bufferedupdates().iterator();
                 while (it.hasNext())
                 {
-                    Triple<Serializable, Long, Serializable> P2 = it.next();
+                    TxIntWriteSetEntry P2 = it.next();
                     //no need to lock since each object can only be modified by its underlying TXEngine, which
                     //in turn is only entered by the underlying SMREngine thread.
                     //todo: do we have to do 2-phase locking?
                     //the only bad thing that can happen is that reads see an inconsistent state
                     //but this can happen anyway, and in this case the transaction will abort
                     //todo: think about providing tx opacity across the board
-                    if (P2.second != curstream) continue;
-                    CorfuDBObject cob = txr.getObject(P2.second);
+                    if (P2.objectid != curstream) continue;
+                    CorfuDBObject cob = txr.getObject(P2.objectid);
                     if (cob == null) throw new RuntimeException("not a registered object!");
                     //cob.lock(true);
-                    cob.applyToObject(P2.first);
-                    cob.setTimestamp(timestamp);
+                    cob.applyToObject(P2.command);
+                    cob.setTimestamp(decrec.txint_timestamp); //use the intention's timestamp
                     //cob.unlock(true);
+//                    System.out.println("object " + cob.getID() + " timestamp set to " + cob.getTimestamp());
                 }
             }
-            pendingtxes.remove(decrec.txint_timestamp);
+            removePending(decrec.txint_timestamp);
+            //todo: if it's an abort, we can notify the app earlier
+//            if(txr.updateApplyStatus(decrec.txint_timestamp, T.get_updatestreams().get(decrec.stream), T.get_updatestreams().size()))
+                txr.updateFinalDecision(decrec.txint_timestamp, P.second); //notify the application
+
         }
     }
 
@@ -585,35 +602,60 @@ class TxDec implements Serializable
 
 }
 
+class TxIntReadSetEntry implements Serializable
+{
+    public long objectid;
+    public long readtimestamp;
+    public Serializable key;
+    public TxIntReadSetEntry(long tobjid, long ttimestamp, Serializable tkey)
+    {
+        objectid = tobjid;
+        readtimestamp = ttimestamp;
+        key = tkey;
+    }
+}
+
+class TxIntWriteSetEntry implements Serializable
+{
+    Serializable command;
+    long objectid;
+    Serializable key;
+    public TxIntWriteSetEntry(Serializable tcommand, long tobjid, Serializable tkey)
+    {
+        command = tcommand;
+        objectid = tobjid;
+        key = tkey;
+    }
+}
 
 class TxInt implements Serializable //todo: custom serialization
 {
     //command, object, key
-    private List<Triple<Serializable, Long, Serializable>> bufferedupdates;
-    private Set<Long> updatestreamset;
+    private List<TxIntWriteSetEntry> bufferedupdates;
+    private Map<Long, Integer> updatestreammap;
 
     //object, version, key
-    private Set<Triple<Long, Long, Serializable>> readset;
+    private Set<TxIntReadSetEntry> readset;
     private Map<Long, Integer> readstreammap; //maps from a stream id to a number denoting the insertion order of that id
     private Map<Long, Integer> allstreammap; //todo: custom serialization so this doesnt get written out
     TxInt()
     {
-        bufferedupdates = new LinkedList<Triple<Serializable, Long, Serializable>>();
+        bufferedupdates = new LinkedList();
         readset = new HashSet();
-        updatestreamset = new HashSet<Long>();
+        updatestreammap = new HashMap();
         readstreammap = new HashMap();
         allstreammap = new HashMap();
     }
     void buffer_update(Serializable bs, long stream, Serializable key)
     {
-        bufferedupdates.add(new Triple<Serializable, Long, Serializable>(bs, stream, key));
-        updatestreamset.add(stream);
+        bufferedupdates.add(new TxIntWriteSetEntry(bs, stream, key));
+        updatestreammap.put(stream, updatestreammap.size());
         if(!allstreammap.containsKey(stream))
             allstreammap.put(stream, allstreammap.size());
     }
     void mark_read(long object, long version, Serializable key)
     {
-        readset.add(new Triple(object, version, key));
+        readset.add(new TxIntReadSetEntry(object, version, key));
         if(!readstreammap.containsKey(object))
             readstreammap.put(object, readstreammap.size());
         if(!allstreammap.containsKey(object))
@@ -622,19 +664,19 @@ class TxInt implements Serializable //todo: custom serialization
         }
 
     }
-    Set<Long> get_updatestreams()
+    Map<Long, Integer> get_updatestreams()
     {
-        return updatestreamset;
+        return updatestreammap;
     }
     Map<Long, Integer> get_readstreams()
     {
         return readstreammap;
     }
-    Set<Triple<Long, Long, Serializable>> get_readset()
+    Set<TxIntReadSetEntry> get_readset()
     {
         return readset;
     }
-    List<Triple<Serializable, Long, Serializable>> get_bufferedupdates()
+    List<TxIntWriteSetEntry> get_bufferedupdates()
     {
         return bufferedupdates;
     }
@@ -645,19 +687,19 @@ class TxInt implements Serializable //todo: custom serialization
 
     public boolean readsSomethingWrittenBy(TxInt T2)
     {
-        Iterator<Triple<Long, Long, Serializable>> it = get_readset().iterator();
+        Iterator<TxIntReadSetEntry> it = get_readset().iterator();
         while(it.hasNext())
         {
-            Triple<Long, Long, Serializable> Trip1 = it.next();
-            Iterator<Triple<Serializable, Long, Serializable>> it2 = T2.get_bufferedupdates().iterator();
+            TxIntReadSetEntry Trip1 = it.next();
+            Iterator<TxIntWriteSetEntry> it2 = T2.get_bufferedupdates().iterator();
             while(it2.hasNext())
             {
-                Triple<Serializable, Long, Serializable> Trip2 = it2.next();
+                TxIntWriteSetEntry Trip2 = it2.next();
                 //objects match?
-                if(Trip1.first==Trip2.second)
+                if(Trip1.objectid==Trip2.objectid)
                 {
                     //keys match?
-                    if(Trip1.third==null || Trip2.third==null || Trip1.third.equals(Trip2.third))
+                    if(Trip1.key==null || Trip2.key==null || Trip1.key.equals(Trip2.key))
                     {
                         return true;
                     }
@@ -665,6 +707,12 @@ class TxInt implements Serializable //todo: custom serialization
             }
         }
         return false;
+    }
+
+    public String toString()
+    {
+        return "TXINT: [[[WriteSet: " + bufferedupdates.toString() + "]]]\n"
+                + "[[[ReadSet: " + readset.toString() + "]]]";
     }
 
 }
