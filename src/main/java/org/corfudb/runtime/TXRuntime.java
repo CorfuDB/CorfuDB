@@ -296,6 +296,7 @@ public class TXRuntime extends BaseRuntime
 
     public Pair<Boolean, Boolean> updateDecision(long timestamp, int streambitpos, int totalstreams, boolean partialdecision)
     {
+        System.out.println("updateDecision...");
         boolean decided = false;
         boolean commit = false;
         if(partialdecision)
@@ -506,8 +507,17 @@ class TXEngine implements SMRLearner
         }
 
 
+        Map<Long, Integer> readstreams = T.get_readstreams();
+        Long streamkey = decrec.stream;
+        Integer streamval = readstreams.get(streamkey);
+        int size = readstreams.size();
+        boolean decision = decrec.decision;
+        long ts = decrec.txint_timestamp;
 
-        Pair<Boolean, Boolean> P = txr.updateDecision(decrec.txint_timestamp, T.get_readstreams().get(decrec.stream), T.get_readstreams().size(), decrec.decision);
+        // Pair<Boolean, Boolean> P = txr.updateDecision(decrec.txint_timestamp, T.get_readstreams().get(decrec.stream), T.get_readstreams().size(), decrec.decision);
+        assert(txr != null);
+        System.out.println("ts = " + ts + ", streamval="+streamval+", size="+size+", decision="+decision);
+        Pair<Boolean, Boolean> P = txr.updateDecision(ts, streamval, size, decision);
 
         if(txr.trackstats)
         {
