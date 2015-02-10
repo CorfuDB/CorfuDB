@@ -432,14 +432,14 @@ class TXEngine implements SMRLearner
 
         if(timestamp==SMREngine.TIMESTAMP_INVALID) throw new RuntimeException("validation timestamp cannot be invalid!");
 
-
+        boolean partialabort = false;
         //we see the intention if we play a stream that's either in the read set or the write set
         //we only have to validate and generate a partial decision if the stream is in the read set
+        //but we also generate a 'true' decision if the stream is in the write set
+        //to handle the blind writes case
+        //if stream appends are reliable, we can get rid of generating the txdec if we are only in the write set
         if(T.get_readstreams().get(curstream)!=null)
         {
-
-
-            boolean partialabort = false;
             Iterator<Triple<Long, Long, Serializable>> readsit = T.get_readset().iterator();
             while (readsit.hasNext())
             {
@@ -470,11 +470,12 @@ class TXEngine implements SMRLearner
                     }
                 }
             }
-
-
-            TxDec decrec = new TxDec(timestamp, curstream, !partialabort);
-            smre.propose(decrec, T.get_allstreams());
         }
+        TxDec decrec = new TxDec(timestamp, curstream, !partialabort);
+        //todo: remove this egregious copy
+        smre.propose(decrec, new HashSet<Long>(T.get_allstreams().keySet()));
+
+        //if stream appends are reliable, we can commit blind writes at this point
 
         //at this point, the transaction hasn't committed; we need to wait until we encounter
         //partial decisions (including the one we just inserted) to appear in the stream
@@ -514,7 +515,8 @@ class TXEngine implements SMRLearner
 
 
 
-        Pair<Boolean, Boolean> P = txr.updateDecision(decrec.txint_timestamp, T.get_readstreams().get(decrec.stream), T.get_readstreams().size(), decrec.decision);
+        //we index over all streams here; if stream appends are reliable, we can switch this to only readstreams
+        Pair<Boolean, Boolean> P = txr.updateDecision(decrec.txint_timestamp, T.get_allstreams().get(decrec.stream), T.get_allstreams().size(), decrec.decision);
 
         if(txr.trackstats)
         {
@@ -593,27 +595,32 @@ class TxInt implements Serializable //todo: custom serialization
     //object, version, key
     private Set<Triple<Long, Long, Serializable>> readset;
     private Map<Long, Integer> readstreammap; //maps from a stream id to a number denoting the insertion order of that id
-    private Set<Long> allstreamset; //todo: custom serialization so this doesnt get written out
+    private Map<Long, Integer> allstreammap; //todo: custom serialization so this doesnt get written out
     TxInt()
     {
         bufferedupdates = new LinkedList<Triple<Serializable, Long, Serializable>>();
         readset = new HashSet();
         updatestreamset = new HashSet<Long>();
         readstreammap = new HashMap();
-        allstreamset = new HashSet();
+        allstreammap = new HashMap();
     }
     void buffer_update(Serializable bs, long stream, Serializable key)
     {
         bufferedupdates.add(new Triple<Serializable, Long, Serializable>(bs, stream, key));
         updatestreamset.add(stream);
-        allstreamset.add(stream);
+        if(!allstreammap.containsKey(stream))
+            allstreammap.put(stream, allstreammap.size());
     }
     void mark_read(long object, long version, Serializable key)
     {
         readset.add(new Triple(object, version, key));
         if(!readstreammap.containsKey(object))
             readstreammap.put(object, readstreammap.size());
-        allstreamset.add(object);
+        if(!allstreammap.containsKey(object))
+        {
+            allstreammap.put(object, allstreammap.size());
+        }
+
     }
     Set<Long> get_updatestreams()
     {
@@ -631,9 +638,9 @@ class TxInt implements Serializable //todo: custom serialization
     {
         return bufferedupdates;
     }
-    Set<Long> get_allstreams()
+    Map<Long, Integer> get_allstreams()
     {
-        return allstreamset;
+        return allstreammap;
     }
 
     public boolean readsSomethingWrittenBy(TxInt T2)
