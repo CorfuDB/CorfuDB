@@ -433,41 +433,48 @@ class TXEngine implements SMRLearner
         if(timestamp==SMREngine.TIMESTAMP_INVALID) throw new RuntimeException("validation timestamp cannot be invalid!");
 
 
-
-        boolean partialabort = false;
-        Iterator<Triple<Long, Long, Serializable>> readsit = T.get_readset().iterator();
-        while (readsit.hasNext())
+        //we see the intention if we play a stream that's either in the read set or the write set
+        //we only have to validate and generate a partial decision if the stream is in the read set
+        if(T.get_readstreams().get(curstream)!=null)
         {
-            Triple<Long, Long, Serializable> curread = readsit.next();
-            if (curread.first != curstream) continue; //validate only the current stream
-            //is the current version of the object at a later timestamp than the version read by the transaction?
-            if (txr.getObject(curread.first).getTimestamp(curread.third) > curread.second)
-            {
-                partialabort = true;
-                break;
-            }
-        }
 
-        if(!partialabort)
-        {
-            //we now need to check if the transaction conflicts with any of the pending transactions
-            //to this object; if so, for now we abort immediately. in the future, we need to maintain
-            //a dependency graph
-            Iterator<TxInt> it = pendingtxes.values().iterator();
-            while (it.hasNext())
+
+            boolean partialabort = false;
+            Iterator<Triple<Long, Long, Serializable>> readsit = T.get_readset().iterator();
+            while (readsit.hasNext())
             {
-                TxInt T2 = it.next();
-                //does T2 write something that T reads?
-                if (T.readsSomethingWrittenBy(T2))
+                Triple<Long, Long, Serializable> curread = readsit.next();
+                if (curread.first != curstream) continue; //validate only the current stream
+                //is the current version of the object at a later timestamp than the version read by the transaction?
+                if (txr.getObject(curread.first).getTimestamp(curread.third) > curread.second)
                 {
                     partialabort = true;
                     break;
                 }
             }
-        }
 
-        TxDec decrec = new TxDec(timestamp, curstream, !partialabort);
-        smre.propose(decrec, T.get_allstreams());
+            if (!partialabort)
+            {
+                //we now need to check if the transaction conflicts with any of the pending transactions
+                //to this object; if so, for now we abort immediately. in the future, we need to maintain
+                //a dependency graph
+                Iterator<TxInt> it = pendingtxes.values().iterator();
+                while (it.hasNext())
+                {
+                    TxInt T2 = it.next();
+                    //does T2 write something that T reads?
+                    if (T.readsSomethingWrittenBy(T2))
+                    {
+                        partialabort = true;
+                        break;
+                    }
+                }
+            }
+
+
+            TxDec decrec = new TxDec(timestamp, curstream, !partialabort);
+            smre.propose(decrec, T.get_allstreams());
+        }
 
         //at this point, the transaction hasn't committed; we need to wait until we encounter
         //partial decisions (including the one we just inserted) to appear in the stream
