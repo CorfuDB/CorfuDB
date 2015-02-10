@@ -75,7 +75,7 @@ public abstract class CorfuDBObject
         else statelock.readLock().unlock();
     }
 
-    abstract public void apply(Object update);
+    abstract public void applyToObject(Object update);
 
     public long getID()
     {
@@ -84,8 +84,15 @@ public abstract class CorfuDBObject
 
     public CorfuDBObject(AbstractRuntime tTR, long tobjectid)
     {
+        this(tTR, tobjectid, false);
+    }
+
+    public CorfuDBObject(AbstractRuntime tTR, long tobjectid, boolean remote)
+    {
         TR = tTR;
         oid = tobjectid;
+        System.out.println("registering... " + remote);
+        TR.registerObject(this, remote);
         timestamp = new AtomicLong();
         statelock = new ReentrantReadWriteLock();
     }

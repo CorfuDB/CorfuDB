@@ -18,14 +18,11 @@ public class CorfuDBCounter extends CorfuDBObject
     {
         super(tTR, toid);
         value = 0;
-        TR = tTR;
-        oid = toid;
-        TR.registerObject(this);
     }
-    public void apply(Object bs)
+    public void applyToObject(Object bs)
     {
         //System.out.println("dummyupcall");
-        System.out.println("CorfuDBCounter received upcall");
+        //System.out.println("CorfuDBCounter received upcall");
         CounterCommand cc = (CounterCommand)bs;
         if(optimizereads)
             lock(true);
@@ -41,7 +38,7 @@ public class CorfuDBCounter extends CorfuDBObject
         }
         if(optimizereads)
             unlock(true);
-        System.out.println("Counter value is " + value);
+        //System.out.println("Counter value is " + value);
     }
     public void increment()
     {

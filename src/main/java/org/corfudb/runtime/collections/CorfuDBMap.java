@@ -22,14 +22,16 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 
     public CorfuDBMap(AbstractRuntime tTR, long toid)
     {
-        super(tTR, toid);
-        backingmap = new HashMap<K,V>();
-        TR = tTR;
-        oid = toid;
-        TR.registerObject(this);
+        this(tTR, toid, false);
     }
 
-    public void apply(Object bs)
+    public CorfuDBMap(AbstractRuntime tTR, long toid, boolean remote)
+    {
+        super(tTR, toid, remote);
+        backingmap = new HashMap<K,V>();
+    }
+
+    public void applyToObject(Object bs)
     {
         dbglog.debug("CorfuDBMap received upcall");
         MapCommand<K,V> cc = (MapCommand<K,V>)bs;
@@ -131,13 +133,13 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         if (optimizereads)
             return containsKey_optimized(o);
         MapCommand containskeycmd = new MapCommand(MapCommand.CMD_CONTAINSKEY, o);
-        TR.query_helper(this, null, containskeycmd);
+        TR.query_helper(this, o.hashCode(), containskeycmd);
         return (Boolean)containskeycmd.getReturnValue();
     }
 
     public boolean containsKey_optimized(Object o)
     {
-        TR.query_helper(this);
+        TR.query_helper(this, o.hashCode());
         lock();
         boolean x = backingmap.containsKey(o);
         unlock();
@@ -170,12 +172,12 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         if (optimizereads)
             return get_optimized(o);
         MapCommand getcmd = new MapCommand(MapCommand.CMD_GET, o);
-        TR.query_helper(this, null, getcmd);
+        TR.query_helper(this, o.hashCode(), getcmd);
         return (V)getcmd.getReturnValue();
     }
     public V get_optimized(Object o)
     {
-        TR.query_helper(this);
+        TR.query_helper(this, o.hashCode());
         lock();
         V x = backingmap.get(o);
         unlock();
@@ -186,7 +188,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     public V put(K key, V val)
     {
         MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, key);
-        TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_PUT, key, val));
+        TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_PUT, key, val), key.hashCode());
         return (V)precmd.getReturnValue();
     }
 
@@ -198,7 +200,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         HashSet<Long> H = new HashSet<Long>();
         H.add(this.getID());
         MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, (K)o);
-        TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o));
+        TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o), o.hashCode());
         return (V)precmd.getReturnValue();
     }
 

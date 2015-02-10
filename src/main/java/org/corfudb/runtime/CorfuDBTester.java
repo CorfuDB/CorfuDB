@@ -38,7 +38,7 @@ import org.corfudb.runtime.collections.CorfuDBCounter;
 import org.corfudb.runtime.collections.CorfuDBCoarseList;
 import org.corfudb.runtime.collections.CorfuDBList;
 
-/**
+    /**
  * Tester code for the CorfuDB runtime stack
  *
  *
@@ -75,10 +75,11 @@ public class CorfuDBTester
         final int STREAMTEST=2;
         final int MULTICLIENTTXTEST=3;
         final int LINCTRTEST=4;
-        final int TXLISTCOARSE=5;
-        final int TXLISTFINE=6;
+        final int REMOBJTEST=5;
+        final int TXLISTCOARSE=6;
+        final int TXLISTFINE=7;
 
-        int numclients = 1;
+        int numclients = 2;
         int expernum = 1; //used by the barrier code
 
         int c;
@@ -96,7 +97,7 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:k:l:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:l:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
@@ -136,6 +137,15 @@ public class CorfuDBTester
                     System.out.println("rpcport = "+ strArg);
                     rpcport = Integer.parseInt(strArg);
                     break;
+                case 'c':
+                    strArg = g.getOptarg();
+                    System.out.println("numbarrier = " + strArg);
+                    numclients = Integer.parseInt(strArg);
+                    break;
+                case 'e':
+                    strArg = g.getOptarg();
+                    System.out.println("expernum = " + strArg);
+                    expernum = Integer.parseInt(strArg);
                 default:
                     System.out.print("getopt() returned " + c + "\n");
             }
@@ -160,18 +170,6 @@ public class CorfuDBTester
             throw new RuntimeException(e);
         }
 
-        if(testnum==MULTICLIENTTXTEST)
-        {
-            if(args.length<4)
-            {
-                print_usage();
-                return;
-            }
-            numclients = Integer.parseInt(args[2]);
-            expernum = Integer.parseInt(args[3]);
-        }
-
-
 
         ClientLib crf;
 
@@ -191,20 +189,28 @@ public class CorfuDBTester
 
         long starttime = System.currentTimeMillis();
 
+        AbstractRuntime TR = null;
+        DirectoryService DS = null;
+        CorfuDBCounter barrier=null;
         if(testnum==MULTICLIENTTXTEST)
         {
-            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
-            DirectoryService DS = new DirectoryService(TR);
-            CorfuDBCounter barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            DS = new DirectoryService(TR);
+            barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
+            if(barrier.read()>numclients)
+            {
+                System.out.println("This experiment number has been used before! Use a new number for the -e flag, or check" +
+                        " that the -c flag correctly specifies the number of clients.");
+                System.exit(0);
+            }
             barrier.increment();
             while(barrier.read() < numclients) ;
             dbglog.debug("Barrier reached; starting test...");
-            testnum = TXTEST;
         }
 
         if(testnum==LINTEST)
         {
-            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
             for (int i = 0; i < numthreads; i++)
             {
@@ -218,7 +224,7 @@ public class CorfuDBTester
         }
         if(testnum==LINCTRTEST)
         {
-            SimpleRuntime TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             CorfuDBCounter ctr1 = new CorfuDBCounter(TR, DirectoryService.getUniqueID(sf));
             for (int i = 0; i < numthreads; i++)
             {
@@ -232,9 +238,9 @@ public class CorfuDBTester
         }
         else if(testnum==TXTEST)
         {
-            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
 
-            DirectoryService DS = new DirectoryService(TR);
+            DS = new DirectoryService(TR);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
 
@@ -273,7 +279,7 @@ public class CorfuDBTester
         {
             CyclicBarrier startbarrier = new CyclicBarrier(numthreads);
             CyclicBarrier stopbarrier = new CyclicBarrier(numthreads);
-            TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             ArrayList<CorfuDBList<Integer>> lists = new ArrayList<CorfuDBList<Integer>>();
             NonRandomIntProvider generator = new NonRandomIntProvider();
 
@@ -299,6 +305,65 @@ public class CorfuDBTester
                 System.out.println("List consistency check failed!");
             System.out.println(TR);
         }
+        else if(testnum==REMOBJTEST)
+        {
+            //create two maps, one local, one remote
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+
+            DS = new DirectoryService(TR);
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
+            System.out.println("local map = " + (rpcport%2) + " " + cob1.getID());
+            System.out.println("remote map = " + ((rpcport+1)%2) + " " + cob2.getID());
+
+
+            System.out.println("sleeping");
+            Thread.sleep(10000);
+            System.out.println("woke up");
+
+            cob1.put(100, 55);
+            System.out.println(cob1.size());
+            System.out.println(cob2.size());
+            Thread.sleep(5000);
+            System.out.println("Test succeeded!");
+        }
+        else if(testnum==MULTICLIENTTXTEST)
+        {
+
+            //TR has already been created by the barrier code
+            //DS has already been created by the barrier code
+
+            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
+            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
+            System.out.println("local map = " + (rpcport%2) + " " + cob1.getID());
+            System.out.println("remote map = " + ((rpcport+1)%2)+ " " + cob2.getID());
+
+            for (int i = 0; i < numthreads; i++)
+            {
+                //transactional tester
+                threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
+                threads[i].start();
+            }
+            for(int i=0;i<numthreads;i++)
+                threads[i].join();
+            barrier.increment();
+            while(barrier.read() < 2*numclients)
+                cob1.size(); //this ensures that we're still processing txints and issuing partial decisions to help other nodes
+                             //need a cleaner way to ensure this
+            dbglog.debug("second barrier reached; checking consistency...");
+            System.out.println("Checking consistency...");
+            TXTesterThread tx = new TXTesterThread(cob1, cob2, TR);
+            if(tx.check_consistency())
+                System.out.println("Consistency check passed --- test successful!");
+            else
+                System.out.println("Consistency check failed!");
+            System.out.println(TR);
+            barrier.increment();
+            while(barrier.read() < 3*numclients);
+            dbglog.debug("third barrier reached; test done");
+            System.out.println("Test done!");
+        }
+
 
         System.out.println("Test done in " + (System.currentTimeMillis()-starttime));
 
@@ -316,11 +381,17 @@ class DirectoryService
     AbstractRuntime TR;
     CorfuDBMap<String, Long> names;
     CorfuDBCounter idctr;
+
+    static long DS_RESERVED_MAP_ID = 0;
+    static long DS_RESERVED_CTR_ID = 1;
+    static long DS_RESERVED_UNIQUE_ID = 2;
+    static long FIRST_VALID_STREAM_ID = 3;
+
     public DirectoryService(AbstractRuntime tTR)
     {
         TR = tTR;
-        names = new CorfuDBMap(TR, Long.MAX_VALUE);
-        idctr = new CorfuDBCounter(TR, Long.MAX_VALUE-1);
+        names = new CorfuDBMap(TR, DS_RESERVED_MAP_ID);
+        idctr = new CorfuDBCounter(TR, DS_RESERVED_CTR_ID);
 
     }
 
@@ -339,8 +410,8 @@ class DirectoryService
      */
     public static long getUniqueID(StreamFactory sf)
     {
-        Stream S = sf.newStream(Long.MAX_VALUE-2);
-        HashSet hs = new HashSet(); hs.add(Long.MAX_VALUE-2);
+        Stream S = sf.newStream(DS_RESERVED_UNIQUE_ID);
+        HashSet hs = new HashSet(); hs.add(DS_RESERVED_UNIQUE_ID);
         return (Long)S.append("DummyString", hs); //todo: remove the cast
     }
 
@@ -363,7 +434,7 @@ class DirectoryService
                 ret = names.get(X);
             else
             {
-                ret = idctr.read();
+                ret = idctr.read() + FIRST_VALID_STREAM_ID;
                 idctr.increment();
                 names.put(X, ret);
             }
@@ -387,18 +458,18 @@ class TXTesterThread implements Runnable
 {
     private static Logger dbglog = LoggerFactory.getLogger(TXTesterThread.class);
 
-    TXRuntime cr;
+    AbstractRuntime cr;
     CorfuDBMap<Integer, Integer> map1;
     CorfuDBMap<Integer, Integer> map2;
     int numkeys;
     int numops;
 
-    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, TXRuntime tcr)
+    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, AbstractRuntime tcr)
     {
         this(tmap1, tmap2, tcr, 10, 100);
     }
 
-    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, TXRuntime tcr, int tnumkeys, int tnumops)
+    public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, AbstractRuntime tcr, int tnumkeys, int tnumops)
     {
         map1 = tmap1;
         map2 = tmap2;
@@ -565,6 +636,10 @@ class Triple<X,Y,Z> implements Serializable
             && (((second==null && otherT.second==null)) || (second!=null && second.equals(otherT.second)))) //third matches up
             return true;
         return false;
+    }
+    public String toString()
+    {
+        return "(" + first + ", " + second + ", " + third + ")";
     }
 }
 

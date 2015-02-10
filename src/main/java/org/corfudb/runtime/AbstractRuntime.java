@@ -84,6 +84,8 @@ public interface AbstractRuntime
      */
     void registerObject(CorfuDBObject obj);
 
+    void registerObject(CorfuDBObject obj, boolean remote);
+
     /**
      * Starts a new transaction tied to the executing thread. Transactions cannot span threads.
      */
