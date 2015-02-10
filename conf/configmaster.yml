@@ -5,12 +5,12 @@
 # on port 8002.
 #
 # Required:
-# role (string) - org.corfudb.sharedlog.ConfigMasterService selects the configuration master
+# role (string) - org.corfudb.infrastructure.ConfigMasterService selects the configuration master
 # port (number) - the port number to run on
 #
 # Optional:
 
-role: org.corfudb.sharedlog.ConfigMasterService
+role: org.corfudb.infrastructure.ConfigMasterService
 port: 8002
 pagesize: 4096
 epoch: 0
