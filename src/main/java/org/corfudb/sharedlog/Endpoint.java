@@ -16,7 +16,7 @@ package org.corfudb.sharedlog;
 
 import org.corfudb.sharedlog.loggingunit.LogUnitConfigService;
 import org.corfudb.sharedlog.loggingunit.LogUnitService;
-import org.corfudb.sharedlog.sequencer.SequencerService;
+import org.corfudb.infrastructure.thrift.SimpleSequencerService;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TMultiplexedProtocol;
 import org.apache.thrift.transport.TSocket;
@@ -250,13 +250,13 @@ public class Endpoint {
 
     static class clientSequencerEndpoint extends ClientEndpoint {
 
-        static bpclientctor s_seqclientctor = (a) -> new SequencerService.Client(a);
+        static bpclientctor s_seqclientctor = (a) -> new SimpleSequencerService.Client(a);
         clientSequencerEndpoint(Endpoint cn) throws CorfuException {
             super(cn, "SEQ", s_seqclientctor);
         }
-        SequencerService.Client cl() throws CorfuException {
+        SimpleSequencerService.Client cl() throws CorfuException {
             ThreadTransport tstate = getTransport();
-            return (SequencerService.Client) tstate.client("SEQ");
+            return (SimpleSequencerService.Client) tstate.client("SEQ");
         }
     }
 
@@ -277,7 +277,7 @@ public class Endpoint {
         return ep.configcl();
     }
 
-    static public SequencerService.Client getSequencer(Endpoint cn) throws CorfuException {
+    static public SimpleSequencerService.Client getSequencer(Endpoint cn) throws CorfuException {
         clientSequencerEndpoint ep = (clientSequencerEndpoint) cn.getInfo();
         if (ep == null) {
             ep = new clientSequencerEndpoint(cn);

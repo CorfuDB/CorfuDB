@@ -17,7 +17,7 @@ package org.corfudb.sharedlog;
 import org.corfudb.sharedlog.loggingunit.LogUnitConfigService;
 import org.corfudb.sharedlog.loggingunit.LogUnitService;
 import org.corfudb.sharedlog.loggingunit.LogUnitWrap;
-import org.corfudb.sharedlog.sequencer.SequencerService;
+import org.corfudb.infrastructure.thrift.SimpleSequencerService;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.methods.HttpGet;
@@ -90,7 +90,7 @@ public class ClientLib implements
 
     // SequencerService.Client sequencer;
     Endpoint sn;
-    SequencerService.Client getSequencer() {
+    SimpleSequencerService.Client getSequencer() {
         try {
             return Endpoint.getSequencer(sn);
         } catch(CorfuException e) {

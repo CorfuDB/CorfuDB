@@ -37,23 +37,56 @@ import java.util.*;
 import javax.json.JsonWriter;
 import javax.json.Json;
 
-public class ConfigMasterService implements Runnable, ICorfuDBServer {
+public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
-    private Logger log = LoggerFactory.getLogger(ConfigMasterService.class);
+    private Logger log = LoggerFactory.getLogger(ConfigMasterServer.class);
     private Map<String,Object> config;
     private CorfuDBView currentView;
+    private Boolean viewActive;
 
     int masterid = new SecureRandom().nextInt();
 
-    public ConfigMasterService() {
+    public ConfigMasterServer() {
     }
 
     public Runnable getInstance(final Map<String,Object> config)
     {
         //use the config for the init view (well, we'll have to deal with reconfigurations...)
         this.config = config;
+        viewActive = false;
         currentView = new CorfuDBView(config);
         return this;
+    }
+
+    public void checkViewThread() {
+        log.info("Starting view check thread");
+        while(true)
+        {
+            try {
+                boolean success = currentView.isViewAccessible();
+                if (success && !viewActive)
+                {
+                    log.info("New view is now accessible and active");
+                    viewActive = true;
+                    synchronized(viewActive)
+                    {
+                        viewActive.notify();
+                    }
+                }
+                else if(!success)
+                {
+                    log.info("View is not accessible, checking again in 30s");
+                }
+                synchronized(viewActive)
+                {
+                    viewActive.wait(30000);
+                }
+            }
+            catch (InterruptedException ie)
+            {
+
+            }
+        }
     }
 
     public void run()
@@ -64,6 +97,7 @@ public class ConfigMasterService implements Runnable, ICorfuDBServer {
             server.createContext("/corfu", new RequestHandler());
             server.setExecutor(null);
             server.start();
+            checkViewThread();
         } catch(IOException ie) {
             log.error(MarkerFactory.getMarker("FATAL"), "Couldn't start HTTP Service!" , ie);
             System.exit(1);
@@ -77,7 +111,7 @@ public class ConfigMasterService implements Runnable, ICorfuDBServer {
             String response = null;
 
             if (t.getRequestMethod().startsWith("GET")) {
-                log.debug("GET request");
+                log.debug("GET request:" + t.getRequestURI());
                 StringWriter sw = new StringWriter();
                 try (JsonWriter jw = Json.createWriter(sw))
                 {

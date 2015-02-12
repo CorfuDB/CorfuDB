@@ -19,10 +19,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
+import java.util.List;
+import java.util.LinkedList;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.StringBuilder;
 
 import javax.json.Json;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
+import javax.json.JsonArrayBuilder;
+
+import org.reflections.Reflections;
+import org.reflections.scanners.SubTypesScanner;
 
 /**
  * This class provides a view of the CorfuDB infrastructure. Clients
@@ -32,9 +46,15 @@ import javax.json.JsonObjectBuilder;
  */
 
 public class CorfuDBView {
-    private Logger log = LoggerFactory.getLogger(CorfuDBView.class);
+    private static final Logger log = LoggerFactory.getLogger(CorfuDBView.class);
 
     private long epoch;
+    private long pagesize;
+    private static Map<String,Class<? extends IServerProtocol>> availableSequencerProtocols= getSequencerProtocolClasses();
+    private static Map<String,Class<? extends IServerProtocol>> availableLogUnitProtocols= getLogUnitProtocolClasses();
+
+    private List<IServerProtocol> sequencers;
+    private List<CorfuDBViewSegment> segments; //eventually this should be upgraded to rangemap or something..
 
     public CorfuDBView(JsonObject jsonView)
     {
@@ -48,19 +68,241 @@ public class CorfuDBView {
      *
      * @param config    A configuration object from the parsed yml file.
      */
+    @SuppressWarnings("unchecked")
     public CorfuDBView(Map<String,Object> config)
     {
         epoch = config.get("epoch").getClass() == Long.class ? (Long) config.get("epoch") : (Integer) config.get("epoch");
+        pagesize = config.get("pagesize").getClass() == Long.class ? (Long) config.get("pagesize") : (Integer) config.get("pagesize");
+        sequencers = populateSequencersFromList((List<String>)config.get("sequencers"));
+        segments = populateSegmentsFromList((List<Map<String,Object>>)((Map<String,Object>)config.get("layout")).get("segments"));
+    }
+
+    public long getEpoch()
+    {
+        return 0;
+    }
+
+    public List<IServerProtocol> getSequencers() {
+        return sequencers;
+    }
+
+    /**
+     * Checks if all servers in the view can be accessed. Does not check
+     * to see if all the servers are in a valid configuration epoch.
+     */
+    public boolean isViewAccessible()
+    {
+        for (IServerProtocol sequencer : sequencers)
+        {
+            if (!sequencer.ping()) {
+                log.debug("View acessibility check failed, couldn't connect to: " + sequencer.getFullString());
+                return false;
+            }
+        }
+
+        for (CorfuDBViewSegment vs : segments)
+        {
+            for (List<IServerProtocol> group : vs.getGroups())
+            {
+                for (IServerProtocol logunit: group)
+                {
+                    if (!logunit.ping()) {
+                    log.debug("View acessibility check failed, couldn't connect to: " + logunit.getFullString());
+                    return false;
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 
     public JsonObject getSerializedJSONView()
     {
+        JsonArrayBuilder sequencerObject = Json.createArrayBuilder();
+        for (IServerProtocol sp : sequencers)
+        {
+            sequencerObject.add(sp.getFullString());
+        }
+
+        JsonArrayBuilder segmentObject = Json.createArrayBuilder();
+        for (CorfuDBViewSegment vs: segments)
+        {
+            log.debug("found segment");
+            JsonObjectBuilder jsb = Json.createObjectBuilder();
+            jsb.add("start", vs.getStart());
+            jsb.add("sealed", vs.getSealed());
+
+            JsonArrayBuilder groups = Json.createArrayBuilder();
+            for (List<IServerProtocol> lsp : vs.getGroups())
+            {
+                JsonArrayBuilder group = Json.createArrayBuilder();
+                for (IServerProtocol sp : lsp)
+                {
+                    group.add(sp.getFullString());
+                }
+                groups.add(group);
+            }
+            jsb.add("groups", groups);
+            segmentObject.add(jsb);
+        }
+
         return Json.createObjectBuilder()
                                 .add("epoch", Long.toString(epoch))
+                                .add("sequencer", sequencerObject)
+                                .add("segments", segmentObject)
                                 .build();
     }
-    public long getEpoch()
+
+    private List<CorfuDBViewSegment> populateSegmentsFromList(List<Map<String,Object>> list)
     {
-        return 0;
+        LinkedList<CorfuDBViewSegment> segments = new LinkedList<CorfuDBViewSegment>();
+        for (Map<String,Object> m : list)
+        {
+            long start = m.get("start").getClass() == Long.class ? (Long) m.get("start") : (Integer) m.get("start");
+            long sealed = m.get("sealed").getClass() ==  Long.class ? (Long) m.get("sealed") : (Integer) m.get("sealed");
+            CorfuDBViewSegment vs = new CorfuDBViewSegment(start, sealed, populateGroupsFromList((List<Map<String,Object>>) m.get("groups")));
+            segments.add(vs);
+        }
+        return segments;
+    }
+
+    private Matcher getMatchesFromServerString(String serverString)
+    {
+        Pattern r = Pattern.compile("(?<protocol>[a-z]+)\\://(?<host>(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\\.?)\\:?(?<port>[0-9]+)?");
+        return r.matcher(serverString);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<List<IServerProtocol>> populateGroupsFromList(List<Map<String,Object>> list) {
+        LinkedList<List<IServerProtocol>> groups = new LinkedList<List<IServerProtocol>>();
+        for (Map<String,Object> map : list)
+        {
+            LinkedList<IServerProtocol> nodes = new LinkedList<IServerProtocol>();
+            for (String node : (List<String>)map.get("nodes"))
+            {
+                Matcher m = getMatchesFromServerString(node);
+                if (m.find())
+                {
+                    String protocol = m.group("protocol");
+                    String host = m.group("host");
+                    String port = m.group("port");
+                    if (!availableLogUnitProtocols.keySet().contains(protocol))
+                    {
+                        log.warn("Unsupported logunit protocol: " + protocol);
+                    }
+                    else
+                    {
+                        Class<? extends IServerProtocol> sprotocol = availableLogUnitProtocols.get(protocol);
+                        try
+                        {
+                            nodes.add((IServerProtocol)sprotocol.getMethod("protocolFactory", String.class, String.class, String.class).invoke(null,host, port, node));
+                        }
+                        catch (Exception ex){
+                            log.error("Error invoking protocol for protocol: ", ex);
+                        }
+                    }
+                }
+                else
+                {
+                    log.warn("Logunit string " + node + " appears to be an invalid logunit string");
+                }
+            }
+            groups.add(nodes);
+        }
+        return groups;
+    }
+
+
+    private List<IServerProtocol> populateSequencersFromList(List<String> list) {
+        LinkedList<IServerProtocol> sequencerList = new LinkedList<IServerProtocol>();
+        for (String s : list)
+        {
+            Matcher m = getMatchesFromServerString(s);
+            if (m.find())
+            {
+                String protocol = m.group("protocol");
+                String host = m.group("host");
+                String port = m.group("port");
+                if (!availableSequencerProtocols.keySet().contains(protocol))
+                {
+                    log.warn("Unsupported sequencer protocol: " + protocol);
+                }
+                else
+                {
+                    Class<? extends IServerProtocol> sprotocol = availableSequencerProtocols.get(protocol);
+                    try
+                    {
+                        sequencerList.add((IServerProtocol)sprotocol.getMethod("protocolFactory", String.class, String.class, String.class).invoke(null,host, port, s));
+                    }
+                    catch (Exception ex){
+                        log.error("Error invoking protocol for protocol: ", ex);
+                    }
+                }
+            }
+            else
+            {
+                log.warn("Sequencer string " + s + " appears to be an invalid sequencer string");
+            }
+        }
+        return sequencerList;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String,Class<? extends IServerProtocol>> getSequencerProtocolClasses()
+    {
+        Reflections reflections = new Reflections("org.corfudb.client.sequencers", new SubTypesScanner(false));
+        Set<Class<? extends Object>> allClasses = reflections.getSubTypesOf(Object.class);
+        Map<String, Class<? extends IServerProtocol>> sequencerMap = new HashMap<String,Class<? extends IServerProtocol>>();
+
+        for(Class<? extends Object> c : allClasses)
+        {
+            try {
+                Method getProtocolString = c.getMethod("getProtocolString");
+                String protocol = (String) getProtocolString.invoke(null);
+                sequencerMap.put(protocol, (Class<? extends IServerProtocol>)c);
+            }
+            catch (Exception e)
+            {
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Found ").append(sequencerMap.size()).append(" supported sequencer(s):\n");
+        for(String proto : sequencerMap.keySet())
+        {
+            sb.append(proto + "\t\t- " + sequencerMap.get(proto).toString() + "\n");
+        }
+        log.debug(sb.toString());
+        return sequencerMap;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String,Class<? extends IServerProtocol>> getLogUnitProtocolClasses()
+    {
+        Reflections reflections = new Reflections("org.corfudb.client.logunits", new SubTypesScanner(false));
+        Set<Class<? extends Object>> allClasses = reflections.getSubTypesOf(Object.class);
+        Map<String, Class<? extends IServerProtocol>> logunitMap = new HashMap<String,Class<? extends IServerProtocol>>();
+
+        for(Class<? extends Object> c : allClasses)
+        {
+            try {
+                Method getProtocolString = c.getMethod("getProtocolString");
+                String protocol = (String) getProtocolString.invoke(null);
+                logunitMap.put(protocol, (Class<? extends IServerProtocol>)c);
+            }
+            catch (Exception e)
+            {
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Found ").append(logunitMap.size()).append(" supported log unit(s):\n");
+        for(String proto : logunitMap.keySet())
+        {
+            sb.append(proto + "\t\t- " + logunitMap.get(proto).toString() + "\n");
+        }
+        log.debug(sb.toString());
+        return logunitMap;
     }
 }

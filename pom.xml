@@ -76,9 +76,9 @@
             <version>1.15-SNAPSHOT</version>
         </dependency>
         <dependency>
-            <groupId>javax.json</groupId>
-            <artifactId>javax.json-api</artifactId>
-            <version>1.0</version>
+            <groupId>org.glassfish</groupId>
+            <artifactId>javax.json</artifactId>
+            <version>1.0.4</version>
         </dependency>
         <dependency>
             <groupId>org.reflections</groupId>
@@ -89,6 +89,11 @@
             <groupId>gnu.getopt</groupId>
             <artifactId>java-getopt</artifactId>
             <version>1.0.13</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-pool</groupId>
+            <artifactId>commons-pool</artifactId>
+            <version>1.6</version>
         </dependency>
     </dependencies>
 
