@@ -1,6 +1,10 @@
+org.corfudb.client
+org.corfudb.client.logunits
+org.corfudb.client.sequencers
+org.corfudb.infrastructure
+org.corfudb.infrastructure.thrift
 org.corfudb.runtime
 org.corfudb.runtime.collections
 org.corfudb.sharedlog
 org.corfudb.sharedlog.examples
 org.corfudb.sharedlog.loggingunit
-org.corfudb.sharedlog.sequencer
