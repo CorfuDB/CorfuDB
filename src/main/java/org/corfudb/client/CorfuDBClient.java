@@ -49,8 +49,17 @@ public class CorfuDBClient {
     private StampedLock viewLock;
     private Thread viewManagerThread;
     private CorfuDBView currentView;
+    private BooleanLock viewUpdatePending;
 
     private Logger log = LoggerFactory.getLogger(CorfuDBClient.class);
+
+    private class BooleanLock
+    {
+        public boolean lock;
+        public BooleanLock() {
+            lock = false;
+        }
+    }
 
     /**
      * Suppressed default constructor.
@@ -70,6 +79,9 @@ public class CorfuDBClient {
         this.configurationString = configurationString;
 
         viewLock = new StampedLock();
+        viewUpdatePending = new BooleanLock();
+        viewUpdatePending.lock = true;
+        viewManagerThread = getViewManagerThread();
     }
 
     /**
@@ -79,9 +91,11 @@ public class CorfuDBClient {
      * to load the inital view during application load.
      */
     public void startViewManager() {
-        log.debug("Starting view manager thread.");
-        viewManagerThread = getViewManagerThread();
-        viewManagerThread.start();
+        if (!viewManagerThread.isAlive())
+        {
+            log.debug("Starting view manager thread.");
+            viewManagerThread.start();
+        }
     }
 
     /**
@@ -105,24 +119,75 @@ public class CorfuDBClient {
     }
 
     /**
-     * Set a new current view. This method acquires the writer lock to the current
-     * view and replaces it with the new view provided.
+     * Invalidate the current view and wait for a new view.
      */
-    private void setView(CorfuDBView view)
+    public void invalidateViewAndWait()
     {
-        //Acquire a W lock
-        long stamp = viewLock.writeLock();
-        currentView = view;
-        //Release the W lock
-        viewLock.unlock(stamp);
+        log.warn("Client requested invalidation of current view");
+        currentView.invalidate();
+            synchronized(viewUpdatePending)
+            {
+                viewUpdatePending.lock = true;
+                viewUpdatePending.notify();
+                while (viewUpdatePending.lock)
+                {
+                    try {
+                    viewUpdatePending.wait();
+                    } catch (InterruptedException ie)
+                    {}
+                }
+            }
     }
 
     /**
-     * Get the current view. This method acquires a reader lock and retrieves the
-     * current view. It must be closed to release the reader lock
+     * Synchronously block until a valid view is installed.
+     */
+    public void waitForViewReady()
+    {
+        synchronized(viewUpdatePending)
+        {
+            while (viewUpdatePending.lock)
+            {
+                try {
+                viewUpdatePending.wait();
+                } catch (InterruptedException ie)
+                {}
+            }
+        }
+    }
+
+    /**
+     * Get the current view. This method optimisically acquires the
+     * current view.
      */
     public CorfuDBView getView()
     {
+        if (viewManagerThread == null || !currentView.isValid())
+        {
+            if (viewManagerThread == null)
+            {
+                startViewManager();
+            }
+            synchronized(viewUpdatePending)
+            {
+                while (viewUpdatePending.lock)
+                {
+                    try {
+                    viewUpdatePending.wait();
+                    } catch (InterruptedException ie)
+                    {}
+                }
+            }
+        }
+        long stamp = viewLock.tryOptimisticRead();
+        CorfuDBView view = currentView;
+        if (!viewLock.validate(stamp))
+        {
+            //We should only get here if the view is being updated.
+            stamp = viewLock.readLock();
+            view = currentView;
+            viewLock.unlock(stamp);
+        }
         return currentView;
     }
 
@@ -137,19 +202,43 @@ public class CorfuDBClient {
                 log.debug("View manager thread started.");
                 while (true)
                 {
-                    log.debug("View manager retrieving view...");
-                    try {
-                        CorfuDBView newView = retrieveView();
-                        if (currentView == null || newView.getEpoch() > currentView.getEpoch())
-                        {
-                            String oldEpoch = (currentView == null) ? "null" : Long.toString(currentView.getEpoch());
-                            log.info("New view epoch " + newView.getEpoch() + " greater than old view epoch " + oldEpoch + ", changing views");
-                            setView(newView);
-                        }
-                    }
-                    catch (IOException ie)
+                    synchronized(viewUpdatePending)
                     {
-                        log.warn("Error retrieving view: " + ie.getMessage());
+                        if (viewUpdatePending.lock)
+                        {
+                            log.debug("View manager retrieving view...");
+                            //lock, preventing old view from being read.
+                            long stamp = viewLock.writeLock();
+                            try {
+                                CorfuDBView newView = retrieveView();
+                                if (currentView == null || newView.getEpoch() > currentView.getEpoch());
+                                {
+                                    String oldEpoch = (currentView == null) ? "null" : Long.toString(currentView.getEpoch());
+                                    log.info("New view epoch " + newView.getEpoch() + " greater than old view epoch " + oldEpoch + ", changing views");
+                                    currentView = newView;
+                                    viewUpdatePending.lock = false;
+                                    viewUpdatePending.notifyAll();
+                                }
+                            }
+                            catch (IOException ie)
+                            {
+                                log.warn("Error retrieving view: " + ie.getMessage());
+                                currentView.invalidate();
+                            }
+                            finally {
+                                viewLock.unlock(stamp);
+                            }
+                        }
+                        else
+                        {
+                            while (!viewUpdatePending.lock)
+                            {
+                                try {
+                                    viewUpdatePending.wait();
+                                }
+                                catch (InterruptedException ie){}
+                            }
+                        }
                     }
                 }
             }

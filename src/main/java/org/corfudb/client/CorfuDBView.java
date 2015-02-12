@@ -31,6 +31,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.StringBuilder;
 
 import javax.json.Json;
+import javax.json.JsonValue;
+import javax.json.JsonString;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
@@ -50,6 +52,7 @@ public class CorfuDBView {
 
     private long epoch;
     private long pagesize;
+    private boolean isInvalid = false;
     private static Map<String,Class<? extends IServerProtocol>> availableSequencerProtocols= getSequencerProtocolClasses();
     private static Map<String,Class<? extends IServerProtocol>> availableLogUnitProtocols= getLogUnitProtocolClasses();
 
@@ -58,7 +61,14 @@ public class CorfuDBView {
 
     public CorfuDBView(JsonObject jsonView)
     {
-        epoch = 0;
+        epoch = jsonView.getJsonNumber("epoch").longValue();
+        pagesize = jsonView.getJsonNumber("pagesize").longValue();
+        LinkedList<String> lsequencers = new LinkedList<String>();
+        for (JsonValue j : jsonView.getJsonArray("sequencer"))
+        {
+            lsequencers.add(((JsonString)j).getString());
+        }
+        sequencers = populateSequencersFromList(lsequencers);
     }
 
     /**
@@ -79,7 +89,7 @@ public class CorfuDBView {
 
     public long getEpoch()
     {
-        return 0;
+        return epoch;
     }
 
     public List<IServerProtocol> getSequencers() {
@@ -148,7 +158,8 @@ public class CorfuDBView {
         }
 
         return Json.createObjectBuilder()
-                                .add("epoch", Long.toString(epoch))
+                                .add("epoch", epoch)
+                                .add("pagesize", pagesize)
                                 .add("sequencer", sequencerObject)
                                 .add("segments", segmentObject)
                                 .build();
@@ -171,6 +182,25 @@ public class CorfuDBView {
     {
         Pattern r = Pattern.compile("(?<protocol>[a-z]+)\\://(?<host>(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\\.?)\\:?(?<port>[0-9]+)?");
         return r.matcher(serverString);
+    }
+
+    /**
+     * Invalidate this view. This prevents this view from being used by
+     * clients accessing the view through CorfuDBClient.
+     */
+    void invalidate()
+    {
+        isInvalid = true;
+    }
+
+    /**
+     * Check if the view is valid.
+     *
+     * @return True if the view is valid, false otherwise.
+     */
+    boolean isValid()
+    {
+        return !isInvalid;
     }
 
     @SuppressWarnings("unchecked")

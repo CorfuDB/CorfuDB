@@ -25,7 +25,7 @@ import org.apache.commons.pool.impl.GenericObjectPool.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class CorfuDBSimpleSequencerProtocol implements IServerProtocol
+public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleSequencer
 {
     private String host;
     private String port;
@@ -76,6 +76,23 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol
     public String getFullString()
     {
         return getProtocolString() + "://" + host + ":" + port;
+    }
+
+    public long sequenceGetNext()
+    throws Exception
+    {
+         SimpleSequencerService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            long ret = client.nextpos(1);
+            thriftPool.returnResourceObject(client);
+            return ret;
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+            throw new Exception("Couldn't connect to endpoint!");
+        }
     }
 
     public boolean ping()
