@@ -1,8 +1,8 @@
-namespace java  org.corfudb.sharedlog.loggingunit
+namespace java  org.corfudb.infrastructure.thrift
 
 include "Common.thrift"
 
-service LogUnitService {
+service SimpleLogUnitService {
 
 	Common.ErrorCode write(1:Common.UnitServerHdr hdr, 2:list<Common.LogPayload> ctnt, 3:Common.ExtntMarkType et),
 	

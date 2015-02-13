@@ -15,7 +15,7 @@
 // @author Dahlia Malkhi
 //
 // implement a cyclic log store: logically infinite log sequence mapped onto a UNICAPACITY array of fixed-entrys
-package org.corfudb.sharedlog.loggingunit;
+package org.corfudb.infrastructure;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -40,12 +40,14 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 
 import org.corfudb.sharedlog.ICorfuDBServer;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitConfigService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitWrap;
 
+public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDBServer {
+	private Logger log = LoggerFactory.getLogger(SimpleLogUnitServer.class);
 
-public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
-	private Logger log = LoggerFactory.getLogger(LogUnitTask.class);
-
-    private LogUnitTask(Builder b) { // this is private; use build() to generate objects of this class
+    private SimpleLogUnitServer(Builder b) { // this is private; use build() to generate objects of this class
         CM = b.getCM();
         masterIncarnation = CM.getIncarnation();
         UNITCAPACITY = b.getUNITCAPACITY();
@@ -103,13 +105,13 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
 		mapb = ByteBuffer.wrap(map);
 	}
 
-    public LogUnitTask() {
+    public SimpleLogUnitServer() {
         //default constructor
     }
 
     public Runnable getInstance (final Map<String,Object> config)
     {
-        final LogUnitTask lut = this;
+        final SimpleLogUnitServer lut = this;
 
         //These are required and will throw an exception if not defined.
         lut.RAMMODE = (Boolean) config.get("ramdisk");
@@ -133,8 +135,12 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
         CorfuConfiguration CM = null;
         while (CM == null) {
             try {
-                CM = ClientLib.pullConfigUtil((String) config.get("master"));
-            } catch (CorfuException e) {
+                CM = null;
+                while (CM == null)
+                {
+                    ClientLib.pullConfigUtil((String) config.get("master"));
+
+                }            } catch (CorfuException e) {
                 try {
                 log.warn("cannot pull configuration; sleep 1 sec");
                 Thread.sleep(1000);}
@@ -448,9 +454,9 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
         TProtocol prot = new TBinaryProtocol(buildsock);
         TMultiplexedProtocol mprot = new TMultiplexedProtocol(prot, "CONFIG");
 
-        LogUnitConfigService.Client cl = new LogUnitConfigService.Client(mprot);
+        SimpleLogUnitConfigService.Client cl = new SimpleLogUnitConfigService.Client(mprot);
         log.info("established connection with rebuild-node {}", rebuildnode);
-        LogUnitWrap wr = null;
+        SimpleLogUnitWrap wr = null;
         try {
             wr = cl.rebuild();
             log.info("obtained mirror lowwater={} highwater={} trimmark={} ctnt-length={}",
@@ -608,7 +614,7 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
     /**
      * class implementing the configServer service
      */
-    class LogUnitConfigServiceImpl implements LogUnitConfigService.Iface {
+    class LogUnitConfigServiceImpl implements SimpleLogUnitConfigService.Iface {
 
         @Override
         public void probe() throws TException {
@@ -653,9 +659,9 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
         }
 
         @Override
-        synchronized public LogUnitWrap rebuild() throws TException {
+        synchronized public SimpleLogUnitWrap rebuild() throws TException {
 
-            LogUnitWrap wr = new LogUnitWrap(ErrorCode.OK,
+            SimpleLogUnitWrap wr = new SimpleLogUnitWrap(ErrorCode.OK,
                     lowwater, highwater,
                     gcmark, ckmark,
                     null,
@@ -744,8 +750,8 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
             LogUnitConfigServiceImpl cnfg = new LogUnitConfigServiceImpl();
 
             TMultiplexedProcessor mprocessor = new TMultiplexedProcessor();
-            mprocessor.registerProcessor("SUNIT", new LogUnitService.Processor<LogUnitTask>(this));
-            mprocessor.registerProcessor("CONFIG", new LogUnitConfigService.Processor<LogUnitConfigServiceImpl>(cnfg));
+            mprocessor.registerProcessor("SUNIT", new SimpleLogUnitService.Processor<SimpleLogUnitServer>(this));
+            mprocessor.registerProcessor("CONFIG", new SimpleLogUnitConfigService.Processor<LogUnitConfigServiceImpl>(cnfg));
 
             server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(mprocessor));
             System.out.println("Starting Corfu storage unit server on multiplexed port " + PORT);
@@ -769,7 +775,7 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
         private long trim = 0;
         private CorfuConfiguration CM = null;
 
-        public LogUnitTask build() {
+        public SimpleLogUnitServer build() {
             if (getCM() == null)
                 throw new RuntimeException("initial configuration must be provided");
             if (getPORT() < 0)
@@ -777,7 +783,7 @@ public class LogUnitTask implements LogUnitService.Iface, ICorfuDBServer {
             if (!isRAMMODE() && getDRIVENAME() == null)
                 throw new RuntimeException("must have a drivename");
 
-            return new LogUnitTask(this);
+            return new SimpleLogUnitServer(this);
         }
 
         public CorfuConfiguration getCM() {

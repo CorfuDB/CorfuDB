@@ -1,8 +1,8 @@
-namespace java org.corfudb.sharedlog.loggingunit
+namespace java org.corfudb.infrastructure.thrift
 
 include "Common.thrift"
 
-struct LogUnitWrap {
+struct SimpleLogUnitWrap {
 	1: Common.ErrorCode err,
 	2: i32 lowwater,
 	3: i32 highwater,
@@ -12,10 +12,10 @@ struct LogUnitWrap {
 	7: Common.LogPayload bmap,
 	}
 
-service LogUnitConfigService {
+service SimpleLogUnitConfigService {
     void probe(),
     Common.ErrorCode phase2b(1:string config),
     string phase1b(1:i32 masterid),
-    LogUnitWrap rebuild(),
+    SimpleLogUnitWrap rebuild(),
 	void kill(),
 }

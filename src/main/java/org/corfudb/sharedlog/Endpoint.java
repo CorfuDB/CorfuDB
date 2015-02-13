@@ -14,8 +14,8 @@
  */
 package org.corfudb.sharedlog;
 
-import org.corfudb.sharedlog.loggingunit.LogUnitConfigService;
-import org.corfudb.sharedlog.loggingunit.LogUnitService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitConfigService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
 import org.corfudb.infrastructure.thrift.SimpleSequencerService;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TMultiplexedProtocol;
@@ -230,21 +230,21 @@ public class Endpoint {
 
     static class clientSunitEndpoint extends ClientEndpoint {
 
-        static mpclientctor s_luclientctor = (a) -> new LogUnitService.Client(a);
-        static mpclientctor s_luconfigctor = (a) -> new LogUnitConfigService.Client(a);
+        static mpclientctor s_luclientctor = (a) -> new SimpleLogUnitService.Client(a);
+        static mpclientctor s_luconfigctor = (a) -> new SimpleLogUnitConfigService.Client(a);
 
         clientSunitEndpoint(Endpoint cn) throws CorfuException {
             super(cn, "SUNIT", s_luclientctor, "CONFIG", s_luconfigctor);
         }
 
-        LogUnitService.Client cl() throws CorfuException {
+        SimpleLogUnitService.Client cl() throws CorfuException {
             ThreadTransport tstate = getTransport();
-            return (LogUnitService.Client) tstate.client("SUNIT");
+            return (SimpleLogUnitService.Client) tstate.client("SUNIT");
         }
 
-        LogUnitConfigService.Client configcl() throws CorfuException {
+        SimpleLogUnitConfigService.Client configcl() throws CorfuException {
             ThreadTransport tstate = getTransport();
-            return (LogUnitConfigService.Client) tstate.client("CONFIG");
+            return (SimpleLogUnitConfigService.Client) tstate.client("CONFIG");
         }
     }
 
@@ -260,7 +260,7 @@ public class Endpoint {
         }
     }
 
-    static public LogUnitService.Client getSUnitOf(Endpoint cn) throws CorfuException {
+    static public SimpleLogUnitService.Client getSUnitOf(Endpoint cn) throws CorfuException {
         clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
         if (ep == null) {
             ep = new clientSunitEndpoint(cn);
@@ -268,7 +268,7 @@ public class Endpoint {
         }
         return ep.cl();
     }
-    static public LogUnitConfigService.Client getCfgOf(Endpoint cn) throws CorfuException {
+    static public SimpleLogUnitConfigService.Client getCfgOf(Endpoint cn) throws CorfuException {
         clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
         if (ep == null) {
             ep = new clientSunitEndpoint(cn);
