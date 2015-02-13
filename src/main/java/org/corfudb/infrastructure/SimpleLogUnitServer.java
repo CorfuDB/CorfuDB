@@ -114,24 +114,6 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             lut.RECOVERY = (Boolean) config.get("recovery");
         }
 
-        // We also need a configuration
-        // TODO: eliminate this dependency.
-        CorfuConfiguration CM = null;
-        while (CM == null) {
-            try {
-                CM = null;
-                while (CM == null)
-                {
-                    ClientLib.pullConfigUtil((String) config.get("master"));
-
-                }            } catch (CorfuException e) {
-                try {
-                log.warn("cannot pull configuration; sleep 1 sec");
-                Thread.sleep(1000);}
-                catch (InterruptedException ie) {}
-            }
-        }
-
         return new Runnable() {
             @Override
             public void run() {
@@ -460,6 +442,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         } catch (TException e) {
             e.printStackTrace();
         }
+    }
+    @Override
+    public boolean ping() throws TException {
+        return true;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////
