@@ -47,23 +47,7 @@ import org.corfudb.infrastructure.thrift.SimpleLogUnitWrap;
 public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDBServer {
 	private Logger log = LoggerFactory.getLogger(SimpleLogUnitServer.class);
 
-    private SimpleLogUnitServer(Builder b) { // this is private; use build() to generate objects of this class
-        CM = b.getCM();
-        masterIncarnation = CM.getIncarnation();
-        UNITCAPACITY = b.getUNITCAPACITY();
-        PORT = b.getPORT();
-        DRIVENAME = b.getDRIVENAME();
-        RAMMODE = b.isRAMMODE();
-        RECOVERY = b.isRECOVERY();
-        REBUILD = b.isREBUILD();
-        rebuildnode = b.getRebuildnode();
-
-        PAGESIZE = CM.getPagesize();
-        gcmark = CM.getTrimmark();
-    }
-
     List<Integer> masterIncarnation = null;
-    CorfuConfiguration CM = null;
     protected int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
     protected int PORT=-1;	// REQUIRED: port number this unit listens on
     protected String DRIVENAME = null; // where to persist data (unless rammode is on)
@@ -147,8 +131,6 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
                 catch (InterruptedException ie) {}
             }
         }
-        lut.CM = CM;
-        lut.masterIncarnation = CM.getIncarnation();
 
         return new Runnable() {
             @Override
@@ -345,12 +327,13 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	}
 
 	public ErrorCode appendExtntLogStore(long logOffset, List<ByteBuffer> wbufs, ExtntMarkType et)
-            throws IOException {
-		if (logOffset < CM.getTrimmark())             return ErrorCode.ERR_OVERWRITE;
-        if ((logOffset-CM.getTrimmark()) >= UNITCAPACITY) {
-            setExtntInfo(logOffset, 0, 0, et);
-            return ErrorCode.ERR_FULL;
-        }
+        throws IOException {
+        //TODO: figure out trim story..
+		//if (logOffset < CM.getTrimmark())             return ErrorCode.ERR_OVERWRITE;
+        //if ((logOffset-CM.getTrimmark()) >= UNITCAPACITY) {
+        //    setExtntInfo(logOffset, 0, 0, et);
+        //    return ErrorCode.ERR_FULL;
+       // }
 
         ExtntMarkType oldet = getET(logOffset);
         if (oldet != ExtntMarkType.EX_EMPTY) {
@@ -369,7 +352,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 	public ExtntWrap getExtntLogStore(long logOffset) throws IOException {
 		ExtntWrap wr = new ExtntWrap();
-
+//TODO : figure out trim story
+/*
 		if (logOffset < CM.getTrimmark()) {
 			wr.setErr(ErrorCode.ERR_TRIMMED);
 			wr.setCtnt(new ArrayList<ByteBuffer>());
@@ -377,6 +361,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 			wr.setErr(ErrorCode.ERR_UNWRITTEN);
 			wr.setCtnt(new ArrayList<ByteBuffer>());
 		} else {
+        */
 			mapInfo minf = new mapInfo(logOffset);
 			wr.setInf(new ExtntInfo(logOffset, minf.length, minf.et));
 			log.debug("read phys {}->{}, {}", minf.physOffset, minf.length, minf.et);
@@ -391,18 +376,20 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 			} else if (minf.et == ExtntMarkType.EX_TRIMMED) {
 				wr.setErr(ErrorCode.ERR_TRIMMED);
 			}
-		}
+		//}
 		return wr;
 	}
 
 	public ErrorCode getExtntInfoLogStore(long logOffset, ExtntInfo inf) {
+        // TODO: figure out trim story
+        /*
 		if (logOffset < CM.getTrimmark()) {
 			inf.setFlag(ExtntMarkType.EX_TRIMMED);
             return ErrorCode.ERR_TRIMMED;
 		} else if ((logOffset-CM.getTrimmark()) >= UNITCAPACITY) {
 			inf.setFlag(ExtntMarkType.EX_EMPTY);
             return ErrorCode.ERR_UNWRITTEN;
-		} else {
+		} else {*/
 			mapInfo minf = new mapInfo(logOffset);
             inf.setFlag(minf.et);
             inf.setMetaFirstOff(logOffset);
@@ -414,7 +401,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
                 case EX_SKIP: return ErrorCode.ERR_UNWRITTEN;
                 default: log.error("internal error in getExtntInfoLogStore"); return ErrorCode.ERR_BADPARAM;
             }
-		}
+		//}
 	}
 
     private void writegcmark() throws IOException {
@@ -573,7 +560,11 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     }
 
 	@Override
-	synchronized public long querytrim() {	return CM.getTrimmark(); }
+	synchronized public long querytrim() {
+        //return CM.getTrimmark();
+        //TODO figure out trim story
+        return 0;
+        }
 
 	@Override
 	synchronized public long queryck() {	return ckmark; }
@@ -632,9 +623,9 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
                     return ErrorCode.OK;
 
                 log.info("set new configuration: {}", xmlconfig);
-                if (nc.getTrimmark() > CM.getTrimmark())
-                    trim(nc.getTrimmark());
-                CM = nc;
+            //    if (nc.getTrimmark() > CM.getTrimmark())
+            //        trim(nc.getTrimmark());
+          //      CM = nc;
                 // TODO persist?
                 return ErrorCode.OK;
             } catch (CorfuException e) {
@@ -646,6 +637,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         @Override
         synchronized public String phase1b(int masterid) {
             String s = null;
+            /*
             if (CM != null) {
                 try {
                     s = CM.ConfToXMLString();
@@ -655,6 +647,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             }
             if (!Util.getMasterId(masterIncarnation).equals(masterid))
                 Util.incMasterEpoch(masterIncarnation, masterid);
+                */
             return s;
         }
 
@@ -760,120 +753,6 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    public static class Builder {
-
-        private int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
-        private int PAGESIZE = 128;	// unit size in bytes
-        private int PORT=-1;	// REQUIRED: port number this unit listens on
-        private String DRIVENAME = null; // where to persist data (unless rammode is on)
-        private boolean RAMMODE = true; // command line switch: work in memory (no data persistence)
-        private boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
-        private boolean REBUILD = false;
-        private String rebuildnode = null;
-        private long trim = 0;
-        private CorfuConfiguration CM = null;
-
-        public SimpleLogUnitServer build() {
-            if (getCM() == null)
-                throw new RuntimeException("initial configuration must be provided");
-            if (getPORT() < 0)
-                throw new RuntimeException("port must be initialized");
-            if (!isRAMMODE() && getDRIVENAME() == null)
-                throw new RuntimeException("must have a drivename");
-
-            return new SimpleLogUnitServer(this);
-        }
-
-        public CorfuConfiguration getCM() {
-            return CM;
-        }
-
-        public void setCM(CorfuConfiguration CM) {
-            this.CM = CM;
-        }
-
-        public int getUNITCAPACITY() {
-            return UNITCAPACITY;
-        }
-
-        public Builder setUNITCAPACITY(int UNITCAPACITY) {
-            this.UNITCAPACITY = UNITCAPACITY;
-            return this;
-        }
-
-        public int getPAGESIZE() {
-            return PAGESIZE;
-        }
-
-        public Builder setPAGESIZE(int PAGESIZE) {
-            this.PAGESIZE = PAGESIZE;
-            return this;
-        }
-
-        public int getPORT() {
-            return PORT;
-        }
-
-        public Builder setPORT(int PORT) {
-            this.PORT = PORT;
-            return this;
-        }
-
-        public String getDRIVENAME() {
-            return DRIVENAME;
-        }
-
-        public Builder setDRIVENAME(String DRIVENAME) {
-            this.DRIVENAME = DRIVENAME;
-            return this;
-        }
-
-        public boolean isRAMMODE() {
-            return RAMMODE;
-        }
-
-        public Builder setRAMMODE(boolean RAMMODE) {
-            this.RAMMODE = RAMMODE;
-            return this;
-        }
-
-        public boolean isRECOVERY() {
-            return RECOVERY;
-        }
-
-        public Builder setRECOVERY(boolean RECOVERY) {
-            this.RECOVERY = RECOVERY;
-            return this;
-        }
-
-        public boolean isREBUILD() {
-            return REBUILD;
-        }
-
-        public Builder setREBUILD(boolean REBUILD) {
-            this.REBUILD = REBUILD;
-            return this;
-        }
-
-        public String getRebuildnode() {
-            return rebuildnode;
-        }
-
-        public Builder setRebuildnode(String rebuildnode) {
-            this.rebuildnode = rebuildnode;
-            return this;
-        }
-
-        public long getTrim() {
-            return trim;
-        }
-
-        public void setTrim(long trim) {
-            this.trim = trim;
-        }
-
     }
 
 }
