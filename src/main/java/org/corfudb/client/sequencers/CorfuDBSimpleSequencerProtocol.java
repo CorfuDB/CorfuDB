@@ -22,14 +22,16 @@ import org.corfudb.infrastructure.thrift.SimpleSequencerService;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.commons.pool.impl.GenericObjectPool.Config;
 
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleSequencer
 {
     private String host;
-    private String port;
-    private String fullString;
+    private Integer port;
+    private Map<String,String> options;
 
     private final PooledThriftClient<SimpleSequencerService.Client> thriftPool;
     private Logger log = LoggerFactory.getLogger(CorfuDBSimpleSequencerProtocol.class);
@@ -40,16 +42,31 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
         return "cdbss";
     }
 
-    public static IServerProtocol protocolFactory(String host, String port, String fullString)
+    public Integer getPort()
     {
-        return new CorfuDBSimpleSequencerProtocol(host, port, fullString);
+        return port;
     }
 
-    private CorfuDBSimpleSequencerProtocol(String host, String port, String fullString)
+    public String getHost()
+    {
+        return host;
+    }
+
+    public Map<String,String> getOptions()
+    {
+        return options;
+    }
+
+    public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
+    {
+        return new CorfuDBSimpleSequencerProtocol(host, port, options);
+    }
+
+    private CorfuDBSimpleSequencerProtocol(String host, Integer port, Map<String,String> options)
     {
         this.host = host;
         this.port = port;
-        this.fullString = fullString;
+        this.options = options;
 
         try
         {
@@ -63,19 +80,14 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
                     },
                     new Config(),
                     host,
-                    Integer.parseInt(port)
+                    port
             );
         }
         catch (Exception ex)
         {
-            log.warn("Failed to connect to endpoint " + fullString);
+            log.warn("Failed to connect to endpoint " + getFullString());
             throw new RuntimeException("Failed to connect to endpoint");
         }
-    }
-
-    public String getFullString()
-    {
-        return getProtocolString() + "://" + host + ":" + port;
     }
 
     public long sequenceGetNext()

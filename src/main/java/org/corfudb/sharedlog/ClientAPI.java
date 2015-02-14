@@ -14,6 +14,9 @@
  */
 package org.corfudb.sharedlog;
 
+import org.corfudb.infrastructure.thrift.ExtntWrap;
+
+import org.corfudb.sharedlog.CorfuException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -26,15 +29,15 @@ import java.util.List;
  *
  */
 public interface ClientAPI {
-	
+
 	/**
 	 * @return		a "grain" size, the equivalent of an individual Corfu log-page
 	 */
 	public int grainsize() throws CorfuException;
-	
+
 	/**
 	 * Reads the next extent; it remembers the last read extent (starting with zero).
-	 * 
+	 *
 	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
 	 * @throws CorfuException
 	 */
@@ -43,7 +46,7 @@ public interface ClientAPI {
 	/**
 	 * a variant of readExtnt that takes the log-offset to read an extent from.
      * The last-read position is remembered for future readExtnt() calls
-	 * 
+	 *
 	 * @param pos           starting position to read
 	 * @return an extent wrapper, containing ExtntInfo and a list of ByteBuffers, one for each individual log-entry page
 	 * @throws CorfuException
@@ -52,7 +55,7 @@ public interface ClientAPI {
 
 	/**
 	 * Appends an extent to the log. Extent will be written to consecutive log offsets.
-	 * 
+	 *
 	 * @param ctnt          list of ByteBuffers to be written
 	 * @return              the first log-offset of the written range
 	 * @throws CorfuException
@@ -74,50 +77,50 @@ public interface ClientAPI {
 	 * @throws CorfuException
 	 */
 	public long appendExtnt(byte[] buf, int reqsize) throws CorfuException;
-	
+
 	/**
 	 * force a delay until we are notified that previously invoked writes to the log have been safely forced to persistent store.
-	 * 
+	 *
 	 * @throws CorfuException if the call to storage-units failed; in this case, there is no gaurantee regarding data persistence.
 	 */
 	public void sync() throws CorfuException;
-	
+
 	/**
 	 * Query the log head (the last trimmed position).
-	 *  
-	 * @return the current head's index 
-	 * @throws CorfuException if the call fails or returns illegal (negative) value 
+	 *
+	 * @return the current head's index
+	 * @throws CorfuException if the call fails or returns illegal (negative) value
 	 */
 	public long queryhead() throws CorfuException;
-	
+
 	/**
-	 * Query the log tail. 
-	 *  
-	 * @return the current tail's index 
-	 * @throws CorfuException if the call fails or returns illegal (negative) value 
+	 * Query the log tail.
+	 *
+	 * @return the current tail's index
+	 * @throws CorfuException if the call fails or returns illegal (negative) value
 	 */
 	public long querytail() throws CorfuException;
-	
+
 	/**
-	 * Query the last known checkpoint position. 
-	 *  
+	 * Query the last known checkpoint position.
+	 *
 	 * @return the last known checkpoint position.
-	 * @throws CorfuException if the call fails or returns illegal (negative) value 
+	 * @throws CorfuException if the call fails or returns illegal (negative) value
 	 */
 	public long queryck() throws CorfuException;
-	
+
 	/**
-	 * inform about a new checkpoint mark. 
-	 *  
+	 * inform about a new checkpoint mark.
+	 *
 	 * @param off the offset of the new checkpoint
-	 * @throws CorfuException if the call fails 
+	 * @throws CorfuException if the call fails
 	 */
 	public void ckpoint(long off) throws CorfuException;
-	
+
 	/**
-	 * set the read mark to the requested position. 
+	 * set the read mark to the requested position.
 	 * after this, invoking readExtnt will perform at the specified position.
-	 * 
+	 *
 	 * @param pos move the read mark to this log position
 	 * @throws CorfuException
 	 */

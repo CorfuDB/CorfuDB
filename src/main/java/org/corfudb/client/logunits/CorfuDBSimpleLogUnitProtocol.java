@@ -22,14 +22,17 @@ import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.commons.pool.impl.GenericObjectPool.Config;
 
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol
+public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 {
     private String host;
-    private String port;
-    private String fullString;
+    private Integer port;
+    private Map<String,String> options;
+    private Long epoch;
 
     private final PooledThriftClient<SimpleLogUnitService.Client> thriftPool;
     private Logger log = LoggerFactory.getLogger(CorfuDBSimpleLogUnitProtocol.class);
@@ -39,16 +42,32 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol
         return "cdbslu";
     }
 
-    public static IServerProtocol protocolFactory(String host, String port, String fullString)
+    public Integer getPort()
     {
-        return new CorfuDBSimpleLogUnitProtocol(host, port, fullString);
+        return port;
     }
 
-    public CorfuDBSimpleLogUnitProtocol(String host, String port, String fullString)
+    public String getHost()
+    {
+        return host;
+    }
+
+    public Map<String,String> getOptions()
+    {
+        return options;
+    }
+
+    public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
+    {
+        return new CorfuDBSimpleLogUnitProtocol(host, port, options, epoch);
+    }
+
+    public CorfuDBSimpleLogUnitProtocol(String host, Integer port, Map<String,String> options, Long epoch)
     {
         this.host = host;
         this.port = port;
-        this.fullString = fullString;
+        this.options = options;
+        this.epoch = epoch;
 
         try
         {
@@ -62,19 +81,14 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol
                     },
                     new Config(),
                     host,
-                    Integer.parseInt(port)
+                    port
             );
         }
         catch (Exception ex)
         {
-            log.warn("Failed to connect to endpoint " + fullString);
+            log.warn("Failed to connect to endpoint " + getFullString());
             throw new RuntimeException("Failed to connect to endpoint");
         }
-    }
-
-    public String getFullString()
-    {
-        return getProtocolString() + "://" + host + ":" + port;
     }
 
     public boolean ping()
@@ -91,6 +105,36 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol
             if (client != null ) {thriftPool.returnBrokenResource(client);}
             return false;
         }
+    }
+
+    public void write(long address, byte[] data)
+    throws Exception
+    {
+      //  client.
+    }
+
+    public byte[] read(long address)
+    throws Exception
+    {
+        byte[] data = null;
+        SimpleLogUnitService.Client client = thriftPool.getResource();
+        Boolean success = false;
+        try {
+         //   data = client.read(new UnitServerHdr(epoch, address));
+            success = true;
+            thriftPool.returnResourceObject(client);
+        }
+        finally {
+            if (!success){
+                thriftPool.returnBrokenResource(client);
+            }
+        }
+        return data;
+    }
+
+    public void trim(long address)
+    throws Exception
+    {
 
     }
 }

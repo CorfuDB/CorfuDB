@@ -24,12 +24,12 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
+import java.util.Map;
 public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
 {
     private String host;
-    private String port;
-    private String fullString;
-    private String key;
+    private Integer port;
+    private Map<String,String> options;
 
     private JedisPool pool;
 
@@ -40,48 +40,41 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
         return "redisseq";
     }
 
-    public static IServerProtocol protocolFactory(String host, String port, String fullString)
+    public Integer getPort()
     {
-        String[] options = fullString.split(",");
-        String key = null;
-        for (String kvpair: options)
-        {
-            String[] pairsplit = kvpair.split("=");
-            if (pairsplit.length > 1)
-            {
-                String K = pairsplit[0];
-                String V = pairsplit[1];
-                if (K.equals("key"))
-                {
-                    key =V;
-                }
-            }
-        }
-        if (key == null) { throw new RuntimeException("Key not specified!"); }
-        return new RedisSequencerProtocol(host, port, fullString, key);
+        return port;
     }
 
-    private RedisSequencerProtocol(String host, String port, String fullString, String key)
+    public String getHost()
+    {
+        return host;
+    }
+
+    public Map<String,String> getOptions()
+    {
+        return options;
+    }
+
+    public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
+    {
+        return new RedisSequencerProtocol(host, port, options);
+    }
+
+    private RedisSequencerProtocol(String host, Integer port, Map<String,String> options)
     {
         this.host = host;
         this.port = port;
-        this.fullString = fullString;
-        this.key = key;
+        this.options = options;
 
         try
         {
-            this.pool = new JedisPool(host, Integer.parseInt(port));
+            this.pool = new JedisPool(host, port);
         }
         catch (Exception ex)
         {
-            log.warn("Failed to connect to endpoint " + fullString);
+            log.warn("Failed to connect to endpoint " + getFullString());
             throw new RuntimeException("Failed to connect to endpoint");
         }
-    }
-
-    public String getFullString()
-    {
-        return getProtocolString() + "://" + host + ":" + port + ",key=" + key;
     }
 
     public long sequenceGetNext()
@@ -89,7 +82,7 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
     {
         try (Jedis jedis = pool.getResource())
         {
-            return jedis.incr(key);
+            return jedis.incr(options.get("key"));
         }
     }
 

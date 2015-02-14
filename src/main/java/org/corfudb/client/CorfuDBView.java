@@ -178,12 +178,6 @@ public class CorfuDBView {
         return segments;
     }
 
-    private Matcher getMatchesFromServerString(String serverString)
-    {
-        Pattern r = Pattern.compile("(?<protocol>[a-z]+)\\://(?<host>(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\\.?)\\:?(?<port>[0-9]+)?");
-        return r.matcher(serverString);
-    }
-
     /**
      * Invalidate this view. This prevents this view from being used by
      * clients accessing the view through CorfuDBClient.
@@ -211,12 +205,10 @@ public class CorfuDBView {
             LinkedList<IServerProtocol> nodes = new LinkedList<IServerProtocol>();
             for (String node : (List<String>)map.get("nodes"))
             {
-                Matcher m = getMatchesFromServerString(node);
+                Matcher m = IServerProtocol.getMatchesFromServerString(node);
                 if (m.find())
                 {
                     String protocol = m.group("protocol");
-                    String host = m.group("host");
-                    String port = m.group("port");
                     if (!availableLogUnitProtocols.keySet().contains(protocol))
                     {
                         log.warn("Unsupported logunit protocol: " + protocol);
@@ -226,7 +218,7 @@ public class CorfuDBView {
                         Class<? extends IServerProtocol> sprotocol = availableLogUnitProtocols.get(protocol);
                         try
                         {
-                            nodes.add((IServerProtocol)sprotocol.getMethod("protocolFactory", String.class, String.class, String.class).invoke(null,host, port, node));
+                            nodes.add(IServerProtocol.protocolFactory(sprotocol, node, epoch));
                         }
                         catch (Exception ex){
                             log.error("Error invoking protocol for protocol: ", ex);
@@ -248,12 +240,10 @@ public class CorfuDBView {
         LinkedList<IServerProtocol> sequencerList = new LinkedList<IServerProtocol>();
         for (String s : list)
         {
-            Matcher m = getMatchesFromServerString(s);
+            Matcher m = IServerProtocol.getMatchesFromServerString(s);
             if (m.find())
             {
                 String protocol = m.group("protocol");
-                String host = m.group("host");
-                String port = m.group("port");
                 if (!availableSequencerProtocols.keySet().contains(protocol))
                 {
                     log.warn("Unsupported sequencer protocol: " + protocol);
@@ -263,7 +253,7 @@ public class CorfuDBView {
                     Class<? extends IServerProtocol> sprotocol = availableSequencerProtocols.get(protocol);
                     try
                     {
-                        sequencerList.add((IServerProtocol)sprotocol.getMethod("protocolFactory", String.class, String.class, String.class).invoke(null,host, port, s));
+                        sequencerList.add(IServerProtocol.protocolFactory(sprotocol, s, epoch));
                     }
                     catch (Exception ex){
                         log.error("Error invoking protocol for protocol: ", ex);

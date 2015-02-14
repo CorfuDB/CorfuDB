@@ -21,6 +21,12 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
+import org.corfudb.infrastructure.thrift.ExtntMarkType;
+import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
 
 public class Util {
 
@@ -33,7 +39,7 @@ public class Util {
 		to.setMetaFirstOff(from.getMetaFirstOff());
 		to.setMetaLength(from.getMetaLength());
 	}
-	
+
 	/** utility method to compute the log-offset succeeding an extent
 	 * @param inf the extent's meta-info
 	 * @return the offset succeeding this extent
@@ -42,7 +48,7 @@ public class Util {
 
 	/**
 	 * 	utility method to serialize ExtntInfo objects
-	 * 
+	 *
 	 * @param obj to serialize
 	 * @return a byte array containing the object serialization
 	 * @throws IOException shouldn't happen, since we are not doing actual IO, we are serializing into a memory buffer
@@ -59,7 +65,7 @@ public class Util {
 
     /**
      * utility method to de-serialize a byte-array into a ExtntInfo object
-     * 
+     *
      * @param bytes the byte array containing the object's serialization
      * @return the reconstructed object
      * @throws IOException shouldn't happen, since we are not doing actual IO, we are de-serializing from a memory buf
@@ -77,12 +83,12 @@ public class Util {
 
     /**
      * @return the size in bytes of an ExtntInfo object's serialization
-     * @throws IOException 
+     * @throws IOException
      */
-    public static int ExtntInfoSSize() throws IOException { 
+    public static int ExtntInfoSSize() throws IOException {
     	return ByteBuffer.wrap(ExtntInfoSerialize(new ExtntInfo(0, 0, ExtntMarkType.EX_FILLED))).capacity();
     }
-    
+
 	public static byte[] ObjectSerialize(Object obj) throws IOException {
 			ByteArrayOutputStream bb = new ByteArrayOutputStream();
 			ObjectOutputStream oo = new ObjectOutputStream(bb);
@@ -90,7 +96,7 @@ public class Util {
 			oo.flush();
 			return bb.toByteArray();
 	}
-	
+
 	public static Object ObjectDeserialize(byte[] buf) throws IOException, ClassNotFoundException {
 			ByteArrayInputStream bi = new ByteArrayInputStream(buf);
 			ObjectInputStream oi = new ObjectInputStream(bi);

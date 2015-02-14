@@ -18,6 +18,7 @@ import org.corfudb.infrastructure.thrift.SimpleLogUnitConfigService;
 import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
 import org.corfudb.infrastructure.thrift.SimpleLogUnitWrap;
 import org.corfudb.infrastructure.thrift.SimpleSequencerService;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.methods.HttpGet;
@@ -36,6 +37,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Vector;
+
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
+import org.corfudb.infrastructure.thrift.ExtntMarkType;
+import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+
 
 public class ClientLib implements
         ClientAPI,
