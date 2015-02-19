@@ -32,7 +32,6 @@ import org.apache.thrift.protocol.TMultiplexedProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
-import org.corfudb.sharedlog.*;
 import org.slf4j.*;
 import org.apache.thrift.TException;
 import org.apache.thrift.server.TServer;
@@ -422,7 +421,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         }
         initLogStore(bb.array(), UNITCAPACITY);
     }
-
+/*
     private void rebuildfromnode() throws Exception {
         Endpoint cn = Endpoint.genEndpoint(rebuildnode);
         TTransport buildsock = new TSocket(cn.getHostname(), cn.getPort());
@@ -449,7 +448,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         } catch (TException e) {
             e.printStackTrace();
         }
-    }
+    }*/
     @Override
     public boolean ping() throws TException {
         return true;
@@ -607,6 +606,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
         @Override
         synchronized public ErrorCode phase2b(String xmlconfig) {
+            /*
             try {
                 CorfuConfiguration nc = new CorfuConfiguration(xmlconfig);
                 int cmp = Util.compareIncarnations(masterIncarnation, nc.getIncarnation());
@@ -625,6 +625,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
                 e.printStackTrace();
                 return ErrorCode.ERR_IO;
             }
+            */
+            return ErrorCode.OK;
         }
 
         @Override
@@ -720,7 +722,9 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         if (RECOVERY) {
             recover();
         } else if (REBUILD) {
-            rebuildfromnode();
+            log.warn("REBUILD TEMPORARILY DISABLED");
+            //TODO reimplement rebuild
+            //rebuildfromnode();
         } else {
             initLogStore(UNITCAPACITY);
             writegcmark();
