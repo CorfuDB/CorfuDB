@@ -7,5 +7,4 @@ org.corfudb.infrastructure
 org.corfudb.infrastructure.thrift
 org.corfudb.runtime
 org.corfudb.runtime.collections
-org.corfudb.sharedlog
-org.corfudb.sharedlog.examples
+org.corfudb.tests
