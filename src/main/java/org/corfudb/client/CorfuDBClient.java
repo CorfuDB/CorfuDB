@@ -124,7 +124,10 @@ public class CorfuDBClient {
     public void invalidateViewAndWait()
     {
         log.warn("Client requested invalidation of current view");
-        currentView.invalidate();
+        if (currentView != null)
+        {
+            currentView.invalidate();
+        }
             synchronized(viewUpdatePending)
             {
                 viewUpdatePending.lock = true;
