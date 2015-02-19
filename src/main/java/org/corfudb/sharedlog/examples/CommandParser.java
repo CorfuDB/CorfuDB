@@ -27,9 +27,9 @@ import java.util.StringTokenizer;
 
 import org.corfudb.infrastructure.thrift.UnitServerHdr;
 import org.corfudb.infrastructure.thrift.ExtntInfo;
-import org.corfudb.infrastructure.thrift.ExtntWrap;
 import org.corfudb.infrastructure.thrift.ExtntMarkType;
 import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
 import org.corfudb.infrastructure.thrift.UnitServerHdr;
 
 

@@ -110,6 +110,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         lut.PAGESIZE = (Integer) config.get("pagesize");
         lut.gcmark = (Integer) config.get("trim");
 
+        masterIncarnation = new ArrayList<Integer>();
+        masterIncarnation.add(0);
         //These are not required and will be only populated if given
         if (config.containsKey("drive"))
         {

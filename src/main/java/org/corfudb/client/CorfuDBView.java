@@ -23,6 +23,8 @@ import java.util.HashMap;
 import java.util.Set;
 import java.util.List;
 import java.util.LinkedList;
+import java.util.ArrayList;
+
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
@@ -33,6 +35,7 @@ import java.lang.StringBuilder;
 import javax.json.Json;
 import javax.json.JsonValue;
 import javax.json.JsonString;
+import javax.json.JsonArray;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
@@ -69,6 +72,30 @@ public class CorfuDBView {
             lsequencers.add(((JsonString)j).getString());
         }
         sequencers = populateSequencersFromList(lsequencers);
+        ArrayList<Map<String,Object>> lSegments = new ArrayList<Map<String,Object>>();
+        for (JsonValue j : jsonView.getJsonArray("segments"))
+        {
+            JsonObject jo = (JsonObject) j;
+            HashMap<String,Object> tMap = new HashMap<String,Object>();
+            tMap.put("start", jo.getJsonNumber("start").longValue());
+            tMap.put("sealed", jo.getJsonNumber("sealed").longValue());
+            ArrayList<Map<String, Object>> groupList = new ArrayList<Map<String, Object>>();
+            for (JsonValue j2 : jo.getJsonArray("groups"))
+            {
+                HashMap<String,Object> groupItem = new HashMap<String,Object>();
+                JsonArray ja = (JsonArray) j2;
+                ArrayList<String> group = new ArrayList<String>();
+                for (JsonValue j3 : ja)
+                {
+                    group.add(((JsonString)j3).getString());
+                }
+                groupItem.put("nodes", group);
+                groupList.add(groupItem);
+            }
+            tMap.put("groups", groupList);
+            lSegments.add(tMap);
+        }
+        segments = populateSegmentsFromList(lSegments);
     }
 
     /**
@@ -94,6 +121,10 @@ public class CorfuDBView {
 
     public List<IServerProtocol> getSequencers() {
         return sequencers;
+    }
+
+    public List<CorfuDBViewSegment> getSegments() {
+        return segments;
     }
 
     /**
@@ -165,9 +196,10 @@ public class CorfuDBView {
                                 .build();
     }
 
+    @SuppressWarnings("unchecked")
     private List<CorfuDBViewSegment> populateSegmentsFromList(List<Map<String,Object>> list)
     {
-        LinkedList<CorfuDBViewSegment> segments = new LinkedList<CorfuDBViewSegment>();
+        ArrayList<CorfuDBViewSegment> segments = new ArrayList<CorfuDBViewSegment>();
         for (Map<String,Object> m : list)
         {
             long start = m.get("start").getClass() == Long.class ? (Long) m.get("start") : (Integer) m.get("start");
@@ -199,10 +231,10 @@ public class CorfuDBView {
 
     @SuppressWarnings("unchecked")
     private List<List<IServerProtocol>> populateGroupsFromList(List<Map<String,Object>> list) {
-        LinkedList<List<IServerProtocol>> groups = new LinkedList<List<IServerProtocol>>();
+        ArrayList<List<IServerProtocol>> groups = new ArrayList<List<IServerProtocol>>();
         for (Map<String,Object> map : list)
         {
-            LinkedList<IServerProtocol> nodes = new LinkedList<IServerProtocol>();
+            ArrayList<IServerProtocol> nodes = new ArrayList<IServerProtocol>();
             for (String node : (List<String>)map.get("nodes"))
             {
                 Matcher m = IServerProtocol.getMatchesFromServerString(node);

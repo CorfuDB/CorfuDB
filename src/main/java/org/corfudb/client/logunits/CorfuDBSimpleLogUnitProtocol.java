@@ -17,12 +17,22 @@ package org.corfudb.client.logunits;
 
 import org.corfudb.client.IServerProtocol;
 import org.corfudb.client.PooledThriftClient;
+
 import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+
+import org.corfudb.infrastructure.thrift.ExtntWrap;
+import org.corfudb.infrastructure.thrift.ExtntMarkType;
 
 import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.protocol.TMultiplexedProtocol;
+
 import org.apache.commons.pool.impl.GenericObjectPool.Config;
 
 import java.util.Map;
+import java.util.ArrayList;
+
+import java.nio.ByteBuffer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,7 +86,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
                         @Override
                         public SimpleLogUnitService.Client make(TProtocol protocol)
                         {
-                            return new SimpleLogUnitService.Client(protocol);
+                            return new SimpleLogUnitService.Client(new TMultiplexedProtocol(protocol, "SUNIT"));
                         }
                     },
                     new Config(),
@@ -110,7 +120,22 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     public void write(long address, byte[] data)
     throws Exception
     {
-      //  client.
+        SimpleLogUnitService.Client client = thriftPool.getResource();
+        boolean success = false;
+        try {
+            success = true;
+            ArrayList<Integer> epochlist = new ArrayList<Integer>();
+            epochlist.add(epoch.intValue());
+            ArrayList<ByteBuffer> byteList = new ArrayList<ByteBuffer>();
+            byteList.add(ByteBuffer.wrap(data));
+            client.write(new UnitServerHdr(epochlist, address), byteList, ExtntMarkType.EX_FILLED);
+            thriftPool.returnResourceObject(client);
+        } finally {
+            if (!success)
+            {
+                thriftPool.returnBrokenResource(client);
+            }
+        }
     }
 
     public byte[] read(long address)
@@ -118,9 +143,13 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     {
         byte[] data = null;
         SimpleLogUnitService.Client client = thriftPool.getResource();
-        Boolean success = false;
+        boolean success = false;
         try {
-         //   data = client.read(new UnitServerHdr(epoch, address));
+            ArrayList<Integer> epochlist = new ArrayList<Integer>();
+            epochlist.add(epoch.intValue());
+            ExtntWrap wrap = client.read(new UnitServerHdr(epochlist, address));
+            data = new byte[wrap.getCtnt().get(0).remaining()];
+            wrap.getCtnt().get(0).get(data);
             success = true;
             thriftPool.returnResourceObject(client);
         }
