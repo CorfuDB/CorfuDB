@@ -52,7 +52,7 @@ fi
 
 if [ "x${CORFUDB_LOG4J_PROP}" = "x" ]
 then
-    CORFUDB_LOG4J_PROP="INFO,CONSOLE"
+    CORFUDB_LOG4J_PROP="DEBUG"
 fi
 
 if [ "$JAVA_HOME" != "" ]; then

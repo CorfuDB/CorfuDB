@@ -12,21 +12,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.sharedlog;
 
-import java.io.FileNotFoundException;
+package org.corfudb.client.sequencers;
 
 /**
- * Created by dalia on 7/1/2014.
+ * This interface represents the simplest type of sequencer. Simple sequencers
+ * implement only sequenceGetNext(), which returns the next value in the
+ * sequence.
  */
-public class ConfigMasterDriver {
-    public static void main(String[] args) throws CorfuException, FileNotFoundException, InterruptedException {
-        Runnable t;
-        if (args.length > 0 && "-recover".equals(args[0]))
-            t = new ConfigMasterService("./corfu.xml", true);
-        else
-            t = new ConfigMasterService("./corfu.xml", false);
 
-        new Thread(t).start();
-    }
+public interface ISimpleSequencer {
+    long sequenceGetNext() throws Exception;
 }
+

@@ -14,13 +14,20 @@
  */
 package org.corfudb.sharedlog;
 
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
+import org.corfudb.infrastructure.thrift.ExtntMarkType;
+import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+
 import java.io.*;
 
 @SuppressWarnings("serial")
 public class CorfuException extends IOException
 {
 	public ErrorCode er;
-	
+
 	public CorfuException(String desc)
 	{
 		super(desc);

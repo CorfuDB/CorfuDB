@@ -5,23 +5,22 @@
 # on port 8002.
 #
 # Required:
-# role (string) - org.corfudb.sharedlog.ConfigMasterService selects the configuration master
+# role (string) - org.corfudb.infrastructure.ConfigMasterServer selects the configuration master
 # port (number) - the port number to run on
 #
 # Optional:
 
-role: org.corfudb.sharedlog.ConfigMasterService
+role: org.corfudb.infrastructure.ConfigMasterServer
 port: 8002
 pagesize: 4096
 epoch: 0
-sequencer:
-    address: localhost
-    port: 8000
+sequencers:
+    - "cdbss://localhost:8000"
 layout:
     segments:
         - start: 0
           sealed: -1
           groups:
               - nodes:
-                    - { address: localhost, port: 8001 }
+                  - "cdbslu://localhost:8001"
           replicas: 1

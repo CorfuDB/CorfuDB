@@ -2,10 +2,18 @@ package org.corfudb.sharedlog.examples;
 
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
-import org.corfudb.sharedlog.ExtntWrap;
 import java.util.List;
 import java.util.ArrayList;
 import java.lang.StringBuilder;
+
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
+import org.corfudb.infrastructure.thrift.ExtntMarkType;
+import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+
+
 
 /**
  * Created by mwei on 1/28/15.

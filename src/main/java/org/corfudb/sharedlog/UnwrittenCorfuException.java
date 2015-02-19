@@ -14,6 +14,8 @@
  */
 package org.corfudb.sharedlog;
 
+import org.corfudb.infrastructure.thrift.ErrorCode;
+
 import java.io.*;
 
 @SuppressWarnings("serial")

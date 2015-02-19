@@ -14,10 +14,11 @@
  */
 package org.corfudb.sharedlog;
 
-import org.corfudb.sharedlog.loggingunit.LogUnitConfigService;
-import org.corfudb.sharedlog.loggingunit.LogUnitService;
-import org.corfudb.sharedlog.loggingunit.LogUnitWrap;
-import org.corfudb.sharedlog.sequencer.SequencerService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitConfigService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitWrap;
+import org.corfudb.infrastructure.thrift.SimpleSequencerService;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.methods.HttpGet;
@@ -36,6 +37,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Vector;
+
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
+import org.corfudb.infrastructure.thrift.ExtntMarkType;
+import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+
 
 public class ClientLib implements
         ClientAPI,
@@ -90,7 +99,7 @@ public class ClientLib implements
 
     // SequencerService.Client sequencer;
     Endpoint sn;
-    SequencerService.Client getSequencer() {
+    SimpleSequencerService.Client getSequencer() {
         try {
             return Endpoint.getSequencer(sn);
         } catch(CorfuException e) {
@@ -192,7 +201,7 @@ public class ClientLib implements
 		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
         Vector<Endpoint> replicas = el.group;
 
-        LogUnitService.Client sunit;
+        SimpleLogUnitService.Client sunit;
 
         try {
             for (Endpoint ep : replicas) {
@@ -251,7 +260,7 @@ public class ClientLib implements
 		ExtntWrap ret = null;
 		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
         Endpoint ep = null;
-        LogUnitService.Client sunit;
+        SimpleLogUnitService.Client sunit;
 
         for (ListIterator<Endpoint> it = el.group.listIterator(el.group.size());
              it.hasPrevious() && ep == null;
@@ -313,7 +322,7 @@ public class ClientLib implements
         for (Vector<Endpoint> grp : CM.getActiveSegmentView().getGroups()) {
             for (Endpoint ep : grp) {
                 if (ep == null) continue; // fault unit, removed from configuration
-				LogUnitService.Client sunit = Endpoint.getSUnitOf(ep);
+				SimpleLogUnitService.Client sunit = Endpoint.getSUnitOf(ep);
 				try { sunit.sync(); } catch (TException e) {
 					throw new InternalCorfuException("sync() failed ");
 				}
@@ -396,7 +405,7 @@ public class ClientLib implements
 	@Override
 	public ExtntWrap dbg(long offset) throws CorfuException {
 		CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
-		LogUnitService.Client sunit = Endpoint.getSUnitOf(el.group.elementAt(0));
+		SimpleLogUnitService.Client sunit = Endpoint.getSUnitOf(el.group.elementAt(0));
 		try {
 			return sunit.readmeta(new UnitServerHdr(CM.getIncarnation(), offset));
 		} catch (TException t) {
@@ -451,10 +460,10 @@ public class ClientLib implements
         proposeReconfig(CM.ConfTrim(offset));
     }
 
-    public LogUnitWrap rebuild(long offset) throws CorfuException {
+    public SimpleLogUnitWrap rebuild(long offset) throws CorfuException {
         CorfuConfiguration.EntryLocation el = CM.getLocationForOffset(offset);
-        LogUnitConfigService.Client cnfg = Endpoint.getCfgOf(el.group.elementAt(0));
-        LogUnitWrap ret = null;
+        SimpleLogUnitConfigService.Client cnfg = Endpoint.getCfgOf(el.group.elementAt(0));
+        SimpleLogUnitWrap ret = null;
         try {
             ret = cnfg.rebuild();
         } catch (TException t) {

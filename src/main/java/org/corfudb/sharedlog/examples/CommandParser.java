@@ -16,8 +16,7 @@ package org.corfudb.sharedlog.examples;
 
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
-import org.corfudb.sharedlog.ExtntWrap;
-import org.corfudb.sharedlog.loggingunit.LogUnitWrap;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitWrap;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -25,6 +24,14 @@ import java.io.InputStreamReader;
 import java.lang.Exception;import java.lang.Long;import java.lang.Override;import java.lang.String;import java.lang.System;import java.util.HashMap;
 import java.util.Iterator;
 import java.util.StringTokenizer;
+
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.ExtntMarkType;
+import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.ExtntWrap;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
+
 
 /**
  * Created by dalia on 7/1/2014.
@@ -112,7 +119,7 @@ public class CommandParser {
                 new helper() {
                     @Override
                     public void helperf(long[] args) throws CorfuException {
-                        LogUnitWrap ret;
+                        SimpleLogUnitWrap ret;
                         ret = crf.rebuild(args[0]);
                         System.out.println("@C@ rebuild: lowwater=" + ret.getLowwater() + " highwater=" + ret.getHighwater());
                     }

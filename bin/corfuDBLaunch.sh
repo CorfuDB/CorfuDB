@@ -48,7 +48,7 @@ start)
             exit 0
         fi
     fi
-    nohup "$JAVA" "-DCorfuDB.root.logger=${CORFUDB_LOG4J_PROP}" \
+    nohup "$JAVA" "-Dorg.slf4j.simpleLogger.defaultLogLevel=${CORFUDB_LOG4J_PROP}" \
     -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" "$CORFUDBCFG" > "$CORFUDB_DAEMON_OUT" 2>&1 < /dev/null &
     if [ $? -eq 0 ]
     then

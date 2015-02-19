@@ -14,9 +14,9 @@
  */
 package org.corfudb.sharedlog;
 
-import org.corfudb.sharedlog.loggingunit.LogUnitConfigService;
-import org.corfudb.sharedlog.loggingunit.LogUnitService;
-import org.corfudb.sharedlog.sequencer.SequencerService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitConfigService;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
+import org.corfudb.infrastructure.thrift.SimpleSequencerService;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TMultiplexedProtocol;
 import org.apache.thrift.transport.TSocket;
@@ -230,37 +230,37 @@ public class Endpoint {
 
     static class clientSunitEndpoint extends ClientEndpoint {
 
-        static mpclientctor s_luclientctor = (a) -> new LogUnitService.Client(a);
-        static mpclientctor s_luconfigctor = (a) -> new LogUnitConfigService.Client(a);
+        static mpclientctor s_luclientctor = (a) -> new SimpleLogUnitService.Client(a);
+        static mpclientctor s_luconfigctor = (a) -> new SimpleLogUnitConfigService.Client(a);
 
         clientSunitEndpoint(Endpoint cn) throws CorfuException {
             super(cn, "SUNIT", s_luclientctor, "CONFIG", s_luconfigctor);
         }
 
-        LogUnitService.Client cl() throws CorfuException {
+        SimpleLogUnitService.Client cl() throws CorfuException {
             ThreadTransport tstate = getTransport();
-            return (LogUnitService.Client) tstate.client("SUNIT");
+            return (SimpleLogUnitService.Client) tstate.client("SUNIT");
         }
 
-        LogUnitConfigService.Client configcl() throws CorfuException {
+        SimpleLogUnitConfigService.Client configcl() throws CorfuException {
             ThreadTransport tstate = getTransport();
-            return (LogUnitConfigService.Client) tstate.client("CONFIG");
+            return (SimpleLogUnitConfigService.Client) tstate.client("CONFIG");
         }
     }
 
     static class clientSequencerEndpoint extends ClientEndpoint {
 
-        static bpclientctor s_seqclientctor = (a) -> new SequencerService.Client(a);
+        static bpclientctor s_seqclientctor = (a) -> new SimpleSequencerService.Client(a);
         clientSequencerEndpoint(Endpoint cn) throws CorfuException {
             super(cn, "SEQ", s_seqclientctor);
         }
-        SequencerService.Client cl() throws CorfuException {
+        SimpleSequencerService.Client cl() throws CorfuException {
             ThreadTransport tstate = getTransport();
-            return (SequencerService.Client) tstate.client("SEQ");
+            return (SimpleSequencerService.Client) tstate.client("SEQ");
         }
     }
 
-    static public LogUnitService.Client getSUnitOf(Endpoint cn) throws CorfuException {
+    static public SimpleLogUnitService.Client getSUnitOf(Endpoint cn) throws CorfuException {
         clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
         if (ep == null) {
             ep = new clientSunitEndpoint(cn);
@@ -268,7 +268,7 @@ public class Endpoint {
         }
         return ep.cl();
     }
-    static public LogUnitConfigService.Client getCfgOf(Endpoint cn) throws CorfuException {
+    static public SimpleLogUnitConfigService.Client getCfgOf(Endpoint cn) throws CorfuException {
         clientSunitEndpoint ep = (clientSunitEndpoint) cn.getInfo();
         if (ep == null) {
             ep = new clientSunitEndpoint(cn);
@@ -277,7 +277,7 @@ public class Endpoint {
         return ep.configcl();
     }
 
-    static public SequencerService.Client getSequencer(Endpoint cn) throws CorfuException {
+    static public SimpleSequencerService.Client getSequencer(Endpoint cn) throws CorfuException {
         clientSequencerEndpoint ep = (clientSequencerEndpoint) cn.getInfo();
         if (ep == null) {
             ep = new clientSequencerEndpoint(cn);
