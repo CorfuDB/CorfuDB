@@ -19,6 +19,9 @@ import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.CorfuDBViewSegment;
 import org.corfudb.client.IServerProtocol;
 import org.corfudb.client.logunits.IWriteOnceLogUnit;
+import org.corfudb.client.UnwrittenException;
+import org.corfudb.client.TrimmedException;
+import org.corfudb.client.OverwriteException;
 
 import java.util.List;
 
@@ -42,7 +45,7 @@ public class WriteOnceAddressSpace {
     }
 
     public void write(long address, byte[] data)
-        throws Exception
+        throws OverwriteException, TrimmedException
     {
         while (true)
         {
@@ -69,7 +72,7 @@ public class WriteOnceAddressSpace {
     }
 
     public byte[] read(long address)
-        throws Exception
+        throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
 
