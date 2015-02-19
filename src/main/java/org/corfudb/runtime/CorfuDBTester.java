@@ -27,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import gnu.getopt.Getopt;
+import org.corfudb.client.CorfuDBClient;
 import org.corfudb.runtime.collections.CorfuDBMap;
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
@@ -161,17 +162,11 @@ public class CorfuDBTester
         }
 
 
-        ClientLib crf;
+        CorfuDBClient crf;
 
-        try
-        {
-            crf = new ClientLib(masternode);
-        }
-        catch (CorfuException e)
-        {
-            throw e;
-        }
-
+        crf = new CorfuDBClient(masternode);
+        crf.startViewManager();
+        crf.waitForViewReady();
 
         Thread[] threads = new Thread[numthreads];
 

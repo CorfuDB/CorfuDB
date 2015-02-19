@@ -14,6 +14,7 @@
  */
 package org.corfudb.runtime;
 
+import org.corfudb.client.CorfuDBClient;
 import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
 import org.corfudb.sharedlog.UnwrittenCorfuException;
@@ -62,30 +63,24 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
     Logger dbglog = LoggerFactory.getLogger(CorfuLogAddressSpace.class);
 
 
-    ClientLib cl;
+    CorfuDBClient cl;
+    org.corfudb.client.view.WriteOnceAddressSpace cwoas;
 
-    public CorfuLogAddressSpace(ClientLib tcl)
+    public CorfuLogAddressSpace(CorfuDBClient tcl)
     {
         cl = tcl;
+        cwoas = new org.corfudb.client.view.WriteOnceAddressSpace(cl);
     }
 
-    //todo we are currently synchronizing on 'cl' because ClientLib crashes on concurrent access;
     public void write(long pos, BufferStack bs)
     {
         try
         {
-            //convert to a linked list of extent-sized bytebuffers, which is what the logging layer wants
-            if(bs.numBytes()>cl.grainsize())
-                throw new RuntimeException("entry too big at " + bs.numBytes() + " bytes; multi-entry writes not yet implemented");
-            LinkedList<ByteBuffer> buflist = new LinkedList<ByteBuffer>();
-            byte[] payload = new byte[cl.grainsize()];
-            bs.flatten(payload);
-            buflist.add(ByteBuffer.wrap(payload));
-            cl.writeExtnt(pos, buflist);
+            cwoas.write(pos, bs.flatten());
         }
-        catch(CorfuException ce)
+        catch(Exception e)
         {
-            throw new RuntimeException(ce);
+            throw new RuntimeException(e);
         }
     }
 
@@ -99,24 +94,16 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
         {
             try
             {
-                ExtntWrap ew = null;
                 long difftime = -1;
 
                 long startts = System.currentTimeMillis();
-                ew = cl.readExtnt(pos);
+
+                ret = cwoas.read(pos);
                 long stopts = System.currentTimeMillis();
                 difftime = stopts-startts;
 
                 //for now, copy to a byte array and return
-                dbglog.debug("read back {} bytes, took {} ms", ew.getCtntSize(), difftime);
-                ret = new byte[4096 * 10]; //hack --- fix this
-                ByteBuffer bb = ByteBuffer.wrap(ret);
-                java.util.Iterator<ByteBuffer> it = ew.getCtntIterator();
-                while (it.hasNext())
-                {
-                    ByteBuffer btemp = it.next();
-                    bb.put(btemp);
-                }
+                dbglog.debug("read back {} bytes, took {} ms", ret.length, difftime);
                 break;
             }
             catch (UnwrittenCorfuException uce)
@@ -141,6 +128,11 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
             {
                 throw new RuntimeException(e);
             }
+            catch(Exception e)
+            {
+                throw new RuntimeException(e);
+            }
+
         }
         dbglog.debug("Done Reading {}", pos);
         return new BufferStack(ret);
@@ -150,13 +142,6 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
     @Override
     public void prefixTrim(long pos)
     {
-        try
-        {
-            cl.trim(pos);
-        }
-        catch (CorfuException e)
-        {
-            throw new RuntimeException(e);
-        }
+        throw new RuntimeException("unimplemented");
     }
 }
