@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 
 import org.corfudb.infrastructure.thrift.SimpleSequencerService;
 
-import org.corfudb.sharedlog.ICorfuDBServer;
 import java.util.Map;
 
 public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICorfuDBServer {

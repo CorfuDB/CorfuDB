@@ -15,7 +15,6 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.client.CorfuDBView;
-import org.corfudb.sharedlog.ICorfuDBServer;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;

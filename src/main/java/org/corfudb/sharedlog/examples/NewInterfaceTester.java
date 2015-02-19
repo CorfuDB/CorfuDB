@@ -76,8 +76,8 @@ public class NewInterfaceTester {
                 executor.invokeAll(list);
             } catch ( Exception e ) {}
             long endTime = System.currentTimeMillis();
-            long actionsPerSec = (long)((float)numTokens /(((float)endTime-startTime)/1000));
             long testTime = endTime-startTime;
+            float actionsPerSec = (float)numTokens /((float)testTime/1000);
             log.info("Total acquisitions/sec=" + actionsPerSec + ", test time=" + testTime);
         }
     }

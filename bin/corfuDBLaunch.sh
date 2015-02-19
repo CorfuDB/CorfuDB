@@ -28,7 +28,7 @@ else
 fi
 
 CORFUDB_DAEMON_OUT="/var/log/corfudb.${1}.log"
-CORFUDBMAIN="org.corfudb.sharedlog.ConfigParser"
+CORFUDBMAIN="org.corfudb.infrastructure.ConfigParser"
 
 echo "Using config: $CORFUDBCFG" >&2
 echo "Logging to: $CORFUDB_DAEMON_OUT" >&2

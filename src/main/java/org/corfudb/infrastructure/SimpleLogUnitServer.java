@@ -39,7 +39,6 @@ import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 
-import org.corfudb.sharedlog.ICorfuDBServer;
 import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
 import org.corfudb.infrastructure.thrift.SimpleLogUnitConfigService;
 import org.corfudb.infrastructure.thrift.SimpleLogUnitWrap;
