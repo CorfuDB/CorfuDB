@@ -16,8 +16,6 @@ package org.corfudb.runtime;
 
 import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.view.Sequencer;
-import org.corfudb.sharedlog.ClientLib;
-import org.corfudb.sharedlog.CorfuException;
 
 import java.util.Set;
 

@@ -29,8 +29,6 @@ import java.util.*;
 import gnu.getopt.Getopt;
 import org.corfudb.client.CorfuDBClient;
 import org.corfudb.runtime.collections.CorfuDBMap;
-import org.corfudb.sharedlog.ClientLib;
-import org.corfudb.sharedlog.CorfuException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.impl.SimpleLogger;

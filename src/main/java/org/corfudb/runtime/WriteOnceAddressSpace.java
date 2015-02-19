@@ -15,15 +15,11 @@
 package org.corfudb.runtime;
 
 import org.corfudb.client.CorfuDBClient;
-import org.corfudb.sharedlog.ClientLib;
 import org.corfudb.sharedlog.CorfuException;
 import org.corfudb.sharedlog.UnwrittenCorfuException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.corfudb.infrastructure.thrift.ExtntWrap;
 
-import java.nio.ByteBuffer;
-import java.util.LinkedList;
 
 /**
  * This is the write-once address space providing storage for the shared log.
