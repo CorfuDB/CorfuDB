@@ -107,6 +107,23 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
         }
     }
 
+    public long sequenceGetCurrent()
+    throws Exception
+    {
+         SimpleSequencerService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            long ret = client.nextpos(0);
+            thriftPool.returnResourceObject(client);
+            return ret;
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+            throw new Exception("Couldn't connect to endpoint!");
+        }
+    }
+
     public boolean ping()
     {
         SimpleSequencerService.Client client = null;

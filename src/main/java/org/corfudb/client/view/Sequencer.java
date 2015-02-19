@@ -53,6 +53,23 @@ public class Sequencer {
             }
         }
     }
+
+    public long getCurrent()
+    {
+        while (true)
+        {
+            try {
+                ISimpleSequencer sequencer = (ISimpleSequencer) client.getView().getSequencers().get(0);
+                return sequencer.sequenceGetCurrent();
+            }
+            catch (Exception e)
+            {
+                log.warn("Unable to get next sequence, requesting new view.", e);
+                client.invalidateViewAndWait();
+            }
+        }
+    }
+
 }
 
 

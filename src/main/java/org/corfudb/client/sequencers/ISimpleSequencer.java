@@ -23,5 +23,6 @@ package org.corfudb.client.sequencers;
 
 public interface ISimpleSequencer {
     long sequenceGetNext() throws Exception;
+    long sequenceGetCurrent() throws Exception;
 }
 
