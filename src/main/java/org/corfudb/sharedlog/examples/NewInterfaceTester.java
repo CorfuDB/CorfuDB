@@ -1,8 +1,11 @@
 package org.corfudb.sharedlog.examples;
 
 import org.corfudb.client.CorfuDBClient;
+
 import org.corfudb.client.view.Sequencer;
 import org.corfudb.client.view.WriteOnceAddressSpace;
+
+import org.corfudb.client.abstractions.SharedLog;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +38,7 @@ public class NewInterfaceTester {
         CorfuDBClient client = new CorfuDBClient(masteraddress);
         Sequencer s = new Sequencer(client);
         WriteOnceAddressSpace woas = new WriteOnceAddressSpace(client);
+        SharedLog sl = new SharedLog(s, woas);
         client.startViewManager();
 
         for (int numThreads = 1; numThreads <= 8; numThreads++)
@@ -51,18 +55,13 @@ public class NewInterfaceTester {
             byte[] testData = new byte[4096];
             for (int i = 0; i < 4096; i++)
             {
-                testData[i] = (byte) 0xEF;
+                testData[i] = (byte) i;
             }
 
             Callable<Void> r = () -> {
                 for (long i = 0; i < numTokensPerThread; i++)
                 {
-                    woas.write(i, testData);
-                    byte[] result = woas.read(i);
-                    for (int j = 0; j < 4096; j++)
-                    {
-                       log.warn("Test data = " + result[j] + " index=" + j + " len=" + result.length);
-                    }
+                    sl.append(i);
                 }
                 return null;
             };
