@@ -64,7 +64,7 @@ public class Sequencer {
             }
             catch (Exception e)
             {
-                log.warn("Unable to get next sequence, requesting new view.", e);
+                log.warn("Unable to get current sequence, requesting new view.", e);
                 client.invalidateViewAndWait();
             }
         }
