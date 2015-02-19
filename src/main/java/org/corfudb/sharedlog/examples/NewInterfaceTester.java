@@ -61,7 +61,7 @@ public class NewInterfaceTester {
             Callable<Void> r = () -> {
                 for (long i = 0; i < numTokensPerThread; i++)
                 {
-                    sl.append(i);
+                    sl.append(testData);
                 }
                 return null;
             };
@@ -76,7 +76,7 @@ public class NewInterfaceTester {
                 executor.invokeAll(list);
             } catch ( Exception e ) {}
             long endTime = System.currentTimeMillis();
-            long actionsPerSec = Math.round((float)numTokens / ((endTime-startTime)/1000));
+            long actionsPerSec = (long)((float)numTokens /(((float)endTime-startTime)/1000));
             long testTime = endTime-startTime;
             log.info("Total acquisitions/sec=" + actionsPerSec + ", test time=" + testTime);
         }
