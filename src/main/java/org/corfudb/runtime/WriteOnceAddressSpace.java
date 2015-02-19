@@ -15,8 +15,6 @@
 package org.corfudb.runtime;
 
 import org.corfudb.client.CorfuDBClient;
-import org.corfudb.sharedlog.CorfuException;
-import org.corfudb.sharedlog.UnwrittenCorfuException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,7 +100,8 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
                 dbglog.debug("read back {} bytes, took {} ms", ret.length, difftime);
                 break;
             }
-            catch (UnwrittenCorfuException uce)
+            //reactivate this code block once michael throws exceptions on unwritten
+/*            catch (UnwrittenCorfuException uce)
             {
                 //encountered a hole -- try again
 //                System.out.println("Hole..." + pos);
@@ -119,11 +118,7 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
                 {
                     //ignore
                 }
-            }
-            catch (CorfuException e)
-            {
-                throw new RuntimeException(e);
-            }
+            }*/
             catch(Exception e)
             {
                 throw new RuntimeException(e);
