@@ -22,6 +22,7 @@ import org.corfudb.client.logunits.IWriteOnceLogUnit;
 import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
 import org.corfudb.client.OverwriteException;
+import org.corfudb.client.NetworkException;
 
 import java.util.List;
 
@@ -63,7 +64,7 @@ public class WriteOnceAddressSpace {
                     return;
                 }
             }
-            catch (Exception e)
+            catch (NetworkException e)
             {
                 log.warn("Unable to write, requesting new view.", e);
                 client.invalidateViewAndWait();
@@ -89,12 +90,11 @@ public class WriteOnceAddressSpace {
                 long mappedAddress = address/mod;
                 return wolu.read(mappedAddress);
             }
-            catch (Exception e)
+            catch (NetworkException e)
             {
                 log.warn("Unable to read, requesting new view.", e);
                 client.invalidateViewAndWait();
             }
-            log.info("oops");
         }
     }
 }
