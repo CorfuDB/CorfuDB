@@ -14,6 +14,7 @@
  */
 
 package org.corfudb.client.sequencers;
+import org.corfudb.client.NetworkException;
 
 /**
  * This interface represents the simplest type of sequencer. Simple sequencers
@@ -22,7 +23,7 @@ package org.corfudb.client.sequencers;
  */
 
 public interface ISimpleSequencer {
-    long sequenceGetNext() throws Exception;
-    long sequenceGetCurrent() throws Exception;
+    long sequenceGetNext() throws NetworkException;
+    long sequenceGetCurrent() throws NetworkException;
 }
 

@@ -17,6 +17,7 @@ package org.corfudb.client.sequencers;
 
 import org.corfudb.client.IServerProtocol;
 import org.corfudb.client.PooledThriftClient;
+import org.corfudb.client.NetworkException;
 import org.corfudb.infrastructure.thrift.SimpleSequencerService;
 
 import org.apache.thrift.protocol.TProtocol;
@@ -91,7 +92,7 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
     }
 
     public long sequenceGetNext()
-    throws Exception
+    throws NetworkException
     {
          SimpleSequencerService.Client client = null;
         try {
@@ -103,12 +104,12 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
         catch (Exception e)
         {
             if (client != null ) {thriftPool.returnBrokenResource(client);}
-            throw new Exception("Couldn't connect to endpoint!");
+            throw new NetworkException("Couldn't connect to endpoint!", this);
         }
     }
 
     public long sequenceGetCurrent()
-    throws Exception
+    throws NetworkException
     {
          SimpleSequencerService.Client client = null;
         try {
@@ -120,7 +121,7 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
         catch (Exception e)
         {
             if (client != null ) {thriftPool.returnBrokenResource(client);}
-            throw new Exception("Couldn't connect to endpoint!");
+            throw new NetworkException("Couldn't connect to endpoint!", this);
         }
     }
 

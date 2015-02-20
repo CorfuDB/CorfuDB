@@ -16,6 +16,7 @@
 package org.corfudb.client.sequencers;
 
 import org.corfudb.client.IServerProtocol;
+import org.corfudb.client.NetworkException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,7 +79,7 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
     }
 
     public long sequenceGetNext()
-    throws Exception
+    throws NetworkException
     {
         try (Jedis jedis = pool.getResource())
         {
@@ -87,7 +88,7 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
     }
 
     public long sequenceGetCurrent()
-    throws Exception
+    throws NetworkException
     {
         try (Jedis jedis = pool.getResource())
         {

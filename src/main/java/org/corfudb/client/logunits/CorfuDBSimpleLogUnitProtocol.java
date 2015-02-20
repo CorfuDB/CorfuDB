@@ -23,9 +23,11 @@ import org.corfudb.infrastructure.thrift.UnitServerHdr;
 
 import org.corfudb.infrastructure.thrift.ExtntWrap;
 import org.corfudb.infrastructure.thrift.ExtntMarkType;
+import org.corfudb.infrastructure.thrift.ErrorCode;
 
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.protocol.TMultiplexedProtocol;
+import org.apache.thrift.TException;
 
 import org.apache.commons.pool.impl.GenericObjectPool.Config;
 
@@ -36,6 +38,11 @@ import java.nio.ByteBuffer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.corfudb.client.NetworkException;
+import org.corfudb.client.UnwrittenException;
+import org.corfudb.client.TrimmedException;
+import org.corfudb.client.OverwriteException;
 
 public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 {
@@ -118,19 +125,32 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     }
 
     public void write(long address, byte[] data)
-    throws Exception
+    throws OverwriteException, TrimmedException, NetworkException
     {
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
         try {
-            success = true;
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
             ArrayList<ByteBuffer> byteList = new ArrayList<ByteBuffer>();
             byteList.add(ByteBuffer.wrap(data));
-            client.write(new UnitServerHdr(epochlist, address), byteList, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = client.write(new UnitServerHdr(epochlist, address), byteList, ExtntMarkType.EX_FILLED);
             thriftPool.returnResourceObject(client);
-        } finally {
+            success = true;
+            if (ec.equals(ErrorCode.ERR_OVERWRITE))
+            {
+                throw new OverwriteException("Overwrite error", address);
+            }
+            else if (ec.equals(ErrorCode.ERR_TRIMMED))
+            {
+                throw new TrimmedException("Trim error", address);
+            }
+        }
+        catch (TException e)
+        {
+            throw new NetworkException("Error connecting to endpoint: " + e.getMessage(), this);
+        }
+        finally {
             if (!success)
             {
                 thriftPool.returnBrokenResource(client);
@@ -139,7 +159,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     }
 
     public byte[] read(long address)
-    throws Exception
+    throws UnwrittenException, TrimmedException, NetworkException
     {
         byte[] data = null;
         SimpleLogUnitService.Client client = thriftPool.getResource();
@@ -152,6 +172,18 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             wrap.getCtnt().get(0).get(data);
             success = true;
             thriftPool.returnResourceObject(client);
+            if (wrap.err.equals(ErrorCode.ERR_UNWRITTEN))
+            {
+                throw new UnwrittenException("Unwritten error", address);
+            }
+            else if (wrap.err.equals(ErrorCode.ERR_TRIMMED))
+            {
+                throw new TrimmedException("Trim error", address);
+            }
+        }
+        catch (TException e)
+        {
+            throw new NetworkException("Error connecting to endpoint: " + e.getMessage(), this);
         }
         finally {
             if (!success){
@@ -162,7 +194,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     }
 
     public void trim(long address)
-    throws Exception
+    throws NetworkException
     {
 
     }

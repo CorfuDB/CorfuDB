@@ -15,6 +15,11 @@
 
 package org.corfudb.client.logunits;
 
+import org.corfudb.client.NetworkException;
+import org.corfudb.client.UnwrittenException;
+import org.corfudb.client.TrimmedException;
+import org.corfudb.client.OverwriteException;
+
 /**
  * This interface represents the simplest type of log unit.
  * Write once log units provide these simple features:
@@ -31,8 +36,8 @@ package org.corfudb.client.logunits;
  */
 
 public interface IWriteOnceLogUnit {
-    void write(long address, byte[] payload) throws Exception;
-    byte[] read(long address) throws Exception;
-    void trim(long address) throws Exception;
+    void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException;
+    byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException;
+    void trim(long address) throws NetworkException;
 }
 
