@@ -140,6 +140,12 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
             return false;
         }
     }
+
+    public void setEpoch(long epoch)
+    {
+
+    }
+
 }
 
 

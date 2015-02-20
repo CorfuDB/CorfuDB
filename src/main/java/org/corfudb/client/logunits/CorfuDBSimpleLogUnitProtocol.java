@@ -198,6 +198,12 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     {
 
     }
+
+    public void setEpoch(long epoch)
+    {
+
+    }
+
 }
 
 

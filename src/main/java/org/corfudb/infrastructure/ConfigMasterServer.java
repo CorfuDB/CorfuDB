@@ -66,6 +66,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                 if (success && !viewActive)
                 {
                     log.info("New view is now accessible and active");
+                    currentView.setEpoch(0);
                     viewActive = true;
                     synchronized(viewActive)
                     {

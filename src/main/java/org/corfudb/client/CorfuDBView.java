@@ -119,6 +119,30 @@ public class CorfuDBView {
         return epoch;
     }
 
+    /**
+     * Attempts to move all servers in this view to the given epoch. This should be called by
+     * the configuration master only!
+     */
+    public void setEpoch(long epoch)
+    {
+        for (IServerProtocol sequencer : sequencers)
+        {
+            sequencer.setEpoch(epoch);
+        }
+
+        for (CorfuDBViewSegment vs : segments)
+        {
+            for (List<IServerProtocol> group : vs.getGroups())
+            {
+                for (IServerProtocol logunit: group)
+                {
+                    logunit.setEpoch(epoch);
+                }
+            }
+        }
+
+    }
+
     public List<IServerProtocol> getSequencers() {
         return sequencers;
     }

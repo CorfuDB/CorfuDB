@@ -167,4 +167,8 @@ public interface IServerProtocol {
      */
     boolean ping();
 
+    /**
+     * Sets the epoch of the server. Used by the configuration master to switch epochs.
+     */
+    void setEpoch(long epoch);
 }

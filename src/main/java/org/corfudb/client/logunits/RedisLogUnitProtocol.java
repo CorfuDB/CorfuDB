@@ -154,4 +154,20 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         return;
     }
 
+    public void setEpoch(long epoch)
+    {
+        Long epochn = epoch;
+        try (BinaryJedis jedis = pool.getResource())
+        {
+           String script = "local key=redis.call('GET', KEYS[1]) if key==false then redis.call('SET', KEYS[1], ARGV[1]) return 0 elseif key == ARGV[1] then return 1 elseif key < ARGV[1] then redis.call('SET', KEYS[1], ARGV[1]) return 2 else return 3 end";
+            List<byte[]> keys = new ArrayList<byte[]>();
+           keys.add(options.get("meta").getBytes());
+           List<byte[]> args = new ArrayList<byte[]>();
+           args.add(epochn.toString().getBytes());
+
+           Long responses = (Long) jedis.eval(script.getBytes(), keys, args);
+        }
+
+    }
+
 }

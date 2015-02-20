@@ -165,7 +165,7 @@ public class CorfuDBClient {
      */
     public CorfuDBView getView()
     {
-        if (viewManagerThread == null || !currentView.isValid())
+        if (viewManagerThread == null || currentView == null || !currentView.isValid())
         {
             if (viewManagerThread == null)
             {

@@ -111,6 +111,11 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
             return false;
         }
     }
+
+    public void setEpoch(long epoch)
+    {
+
+    }
 }
 
 
