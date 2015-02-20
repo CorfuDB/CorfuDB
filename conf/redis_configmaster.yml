@@ -1,0 +1,26 @@
+---
+# CorfuDB configmaster sample configuration
+#
+# This simple configuration file spawns a simple configuration master
+# on port 8002.
+#
+# Required:
+# role (string) - org.corfudb.infrastructure.ConfigMasterServer selects the configuration master
+# port (number) - the port number to run on
+#
+# Optional:
+
+role: org.corfudb.infrastructure.ConfigMasterServer
+port: 8002
+pagesize: 4096
+epoch: 0
+sequencers:
+    - "redisseq://localhost:6379,key=corfudb_seq"
+layout:
+    segments:
+        - start: 0
+          sealed: -1
+          groups:
+              - nodes:
+                  - "redislu://localhost:6379,prefix=corfudb_data,meta=corfudb_meta"
+          replicas: 1

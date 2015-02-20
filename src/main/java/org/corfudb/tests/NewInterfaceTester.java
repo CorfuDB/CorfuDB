@@ -1,4 +1,4 @@
-package org.corfudb.sharedlog.examples;
+package org.corfudb.tests;
 
 import org.corfudb.client.CorfuDBClient;
 
