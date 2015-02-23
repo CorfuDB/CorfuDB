@@ -18,6 +18,8 @@ package org.corfudb.client.abstractions;
 import org.corfudb.client.view.Sequencer;
 import org.corfudb.client.view.WriteOnceAddressSpace;
 
+import org.corfudb.client.OutOfSpaceException;
+
 import java.util.Map;
 import java.util.ArrayList;
 
@@ -37,6 +39,7 @@ public class SharedLog {
     }
 
     public long append(byte[] data)
+        throws OutOfSpaceException
     {
         while (true)
         {

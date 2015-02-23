@@ -170,4 +170,9 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 
     }
 
+    public void reset()
+    throws NetworkException
+    {
+    }
+
 }

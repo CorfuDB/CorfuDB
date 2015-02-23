@@ -146,6 +146,11 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
 
     }
 
+    public void reset()
+    throws NetworkException
+    {
+    }
+
 }
 
 

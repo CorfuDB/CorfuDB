@@ -6,6 +6,7 @@ import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.view.Sequencer;
 import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.abstractions.SharedLog;
+import org.corfudb.client.OutOfSpaceException;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
@@ -125,6 +126,9 @@ class StreamTester implements Runnable
             throw new RuntimeException(be);
         } catch (java.lang.InterruptedException ie) {
             throw new RuntimeException(ie);
+        } catch (OutOfSpaceException oose)
+        {
+            throw new RuntimeException(oose);
         }
         System.out.println("stream tester thread " + threadnum + ": exiting test");
       }

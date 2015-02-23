@@ -57,11 +57,13 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
+    throws NetworkException
     {
         return new RedisSequencerProtocol(host, port, options);
     }
 
     private RedisSequencerProtocol(String host, Integer port, Map<String,String> options)
+    throws NetworkException
     {
         this.host = host;
         this.port = port;
@@ -74,7 +76,7 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
         catch (Exception ex)
         {
             log.warn("Failed to connect to endpoint " + getFullString());
-            throw new RuntimeException("Failed to connect to endpoint");
+            throw new NetworkException("Failed to connect to endpoint", this);
         }
     }
 
@@ -115,6 +117,15 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
     public void setEpoch(long epoch)
     {
 
+    }
+
+    public void reset()
+    throws NetworkException
+    {
+        try (Jedis jedis = pool.getResource())
+        {
+            jedis.set(options.get("key"), "0");
+        }
     }
 }
 

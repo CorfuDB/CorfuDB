@@ -5,6 +5,7 @@ import org.corfudb.client.view.Sequencer;
 import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.abstractions.SharedLog;
 
+import org.corfudb.client.OutOfSpaceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +42,15 @@ public class CorfuHello {
         client.startViewManager();
 
         log.info("Appending hello world into log...");
-        long address = sl.append("hello world".getBytes());
+        long address = 0;
+        try {
+            address = sl.append("hello world".getBytes());
+        }
+        catch (OutOfSpaceException oose)
+        {
+            log.error("Out of space during append!", oose);
+            System.exit(1);
+        }
         log.info("Successfully appended hello world into log position " + address);
         log.info("Reading back entry at address " + address);
         byte[] result = sl.read(address);
