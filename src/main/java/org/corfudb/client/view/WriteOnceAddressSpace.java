@@ -60,7 +60,7 @@ public class WriteOnceAddressSpace {
                 long mappedAddress = address/mod;
                 for (IServerProtocol unit : chain)
                 {
-                    ((IWriteOnceLogUnit)unit).write(address,data);
+                    ((IWriteOnceLogUnit)unit).write(mappedAddress,data);
                     return;
                 }
             }

@@ -27,6 +27,8 @@ import org.slf4j.Logger;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
 import java.io.OutputStream;
 import java.io.StringWriter;
 import java.net.InetSocketAddress;
@@ -35,6 +37,10 @@ import java.util.*;
 
 import javax.json.JsonWriter;
 import javax.json.Json;
+import javax.json.JsonValue;
+import javax.json.JsonObject;
+import javax.json.JsonObjectBuilder;
+import javax.json.JsonReader;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
@@ -95,6 +101,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             log.info("Starting HTTP Service on port " + config.get("port"));
             HttpServer server = HttpServer.create(new InetSocketAddress((Integer)config.get("port")), 0);
             server.createContext("/corfu", new RequestHandler());
+            server.createContext("/control", new ControlRequestHandler());
             server.setExecutor(null);
             server.start();
             checkViewThread();
@@ -104,6 +111,58 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         }
     }
 
+    private void reset() {
+        log.info("RESET requested, resetting all nodes and incrementing epoch");
+    }
+
+    private class ControlRequestHandler implements HttpHandler {
+        public void handle(HttpExchange t) throws IOException {
+
+            String response = null;
+
+            if (t.getRequestMethod().startsWith("POST")) {
+                log.debug("POST request:" + t.getRequestURI());
+                String apiCall = null;
+                try (InputStreamReader isr  = new InputStreamReader(t.getRequestBody(), "utf-8"))
+                {
+                    try (BufferedReader br = new BufferedReader(isr))
+                    {
+                        try (JsonReader jr = Json.createReader(br))
+                        {
+                            JsonObject jo  = jr.readObject();
+                            apiCall = jo.getString("method");
+                        }
+                        catch (Exception e)
+                        {
+                            log.error("error", e);
+                        }
+                    }
+                }
+                JsonValue result = JsonValue.FALSE;
+                switch(apiCall)
+                {
+                    case "reset":
+                        reset();
+                        result = JsonValue.TRUE;
+                        break;
+
+                }
+                JsonObject res = Json.createObjectBuilder()
+                                    .add("calledmethod", apiCall)
+                                    .add("result", result)
+                                    .build();
+                response = res.toString();
+            } else {
+                log.debug("PUT request");
+                response = "deny";
+            }
+                t.sendResponseHeaders(200, response.length());
+                OutputStream os = t.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+
+        }
+    }
 
     private class RequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
