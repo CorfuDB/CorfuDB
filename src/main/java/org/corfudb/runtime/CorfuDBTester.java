@@ -28,9 +28,8 @@ import java.util.*;
 import java.util.concurrent.CyclicBarrier;
 
 import gnu.getopt.Getopt;
+import org.corfudb.client.CorfuDBClient;
 import org.corfudb.runtime.collections.CorfuDBMap;
-import org.corfudb.sharedlog.ClientLib;
-import org.corfudb.sharedlog.CorfuException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.impl.SimpleLogger;
@@ -60,6 +59,9 @@ public class CorfuDBTester
         System.out.println("\t[-k number of keys used in list tests]");
         System.out.println("\t[-l number of lists used in list tests]");
         System.out.println("\t[-p rpcport]");
+        System.out.println("\t[-e expernum (for MultiClientTXTest)]");
+        System.out.println("\t[-c numclients (for MultiClientTXTest)]");
+        System.out.println("\t[-k numkeys (for TXTest)]");
 
 //        if(dbglog instanceof SimpleLogger)
 //            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
@@ -98,7 +100,7 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:l:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
@@ -172,17 +174,11 @@ public class CorfuDBTester
         }
 
 
-        ClientLib crf;
+        CorfuDBClient crf;
 
-        try
-        {
-            crf = new ClientLib(masternode);
-        }
-        catch (CorfuException e)
-        {
-            throw e;
-        }
-
+        crf = new CorfuDBClient(masternode);
+        crf.startViewManager();
+        crf.waitForViewReady();
 
         Thread[] threads = new Thread[numthreads];
 
@@ -249,13 +245,13 @@ public class CorfuDBTester
             for (int i = 0; i < numthreads; i++)
             {
                 //transactional tester
-                threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
+                threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR, numkeys, numops));
                 threads[i].start();
             }
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
             System.out.println("Test done! Checking consistency...");
-            TXTesterThread tx = new TXTesterThread(cob1, cob2, TR);
+            TXTesterThread tx = new TXTesterThread(cob1, cob2, TR, numkeys, numops);
             if(tx.check_consistency())
                 System.out.println("Consistency check passed --- test successful!");
             else
@@ -324,7 +320,7 @@ public class CorfuDBTester
             for (int i = 0; i < numthreads; i++)
             {
                 //transactional tester
-                threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR));
+                threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR, numkeys, numops));
                 threads[i].start();
             }
             for(int i=0;i<numthreads;i++)
@@ -335,7 +331,7 @@ public class CorfuDBTester
                              //need a cleaner way to ensure this
             dbglog.debug("second barrier reached; checking consistency...");
             System.out.println("Checking consistency...");
-            TXTesterThread tx = new TXTesterThread(cob1, cob2, TR);
+            TXTesterThread tx = new TXTesterThread(cob1, cob2, TR, numkeys, numops);
             if(tx.check_consistency())
                 System.out.println("Consistency check passed --- test successful!");
             else

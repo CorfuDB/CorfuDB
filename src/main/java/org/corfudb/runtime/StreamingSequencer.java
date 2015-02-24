@@ -14,8 +14,8 @@
  */
 package org.corfudb.runtime;
 
-import org.corfudb.sharedlog.ClientLib;
-import org.corfudb.sharedlog.CorfuException;
+import org.corfudb.client.CorfuDBClient;
+import org.corfudb.client.view.Sequencer;
 
 import java.util.Set;
 
@@ -34,33 +34,18 @@ public interface StreamingSequencer
  */
 class CorfuStreamingSequencer implements StreamingSequencer
 {
-    ClientLib cl;
-    public CorfuStreamingSequencer(ClientLib tcl)
+    Sequencer s;
+    public CorfuStreamingSequencer(CorfuDBClient tcl)
     {
-        cl = tcl;
+        s = new Sequencer(tcl);
     }
     public long get_slot(Set<Long> streams)
     {
-        long ret;
-        try
-        {
-            ret = cl.grabtokens(1);
-        }
-        catch(CorfuException ce)
-        {
-            throw new RuntimeException(ce);
-        }
+        long ret = s.getNext();
         return ret;
     }
     public long check_tail()
     {
-        try
-        {
-            return cl.querytail();
-        }
-        catch(CorfuException ce)
-        {
-            throw new RuntimeException(ce);
-        }
+        return s.getCurrent();
     }
 }

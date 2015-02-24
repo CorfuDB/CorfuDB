@@ -15,12 +15,12 @@ port: 8002
 pagesize: 4096
 epoch: 0
 sequencers:
-    - "cdbss://localhost:8000"
+    - "redisseq://localhost:6379,key=corfudb_seq"
 layout:
     segments:
         - start: 0
           sealed: -1
           groups:
               - nodes:
-                  - "cdbslu://localhost:8001"
+                  - "redislu://localhost:6379,prefix=corfudb_data,meta=corfudb_meta"
           replicas: 1
