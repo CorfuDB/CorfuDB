@@ -38,6 +38,10 @@ class ListCommand<E> extends CorfuDBObjectCommand {
     int m_index = 0;
     List<E> m_parm;
     int m_cmd;
+    long m_oid = -1;
+
+    public void setID(long oid) { m_oid = oid;}
+    public long oid() { return m_oid; }
 
     public int getcmd() {
         return m_cmd;
@@ -57,6 +61,10 @@ class ListCommand<E> extends CorfuDBObjectCommand {
 
     public ListCommand(int cmd) {
         this(cmd, null, -1, null);
+    }
+
+    public ListCommand(int cmd, int idx) {
+        this(cmd, null, idx, null);
     }
 
     public ListCommand(int cmd, E e) {

@@ -22,33 +22,29 @@ import org.slf4j.LoggerFactory;
 import org.corfudb.runtime.collections.CorfuDBList;
 
 
-class TXListTester<E> implements Runnable {
-
-    public static interface RandomElementProvider<E> {
-        E randElem(Object i);
-    };
+class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
 
     private static Logger dbglog = LoggerFactory.getLogger(TXListTester.class);
 
-    TXRuntime m_rt;
-    List<CorfuDBList<E>> m_v;
+    AbstractRuntime m_rt;
+    List<L> m_v;
     CyclicBarrier m_startbarrier;
     CyclicBarrier m_stopbarrier;
     int m_nOps;
     int m_nKeys;
     int m_nId;
-    RandomElementProvider<E> m_generator;
+    ElemGenerator<E> m_generator;
 
     public
     TXListTester(
             int nId,
             CyclicBarrier startbarrier,
             CyclicBarrier stopbarrier,
-            TXRuntime tcr,
-            List<CorfuDBList<E>> v,
+            AbstractRuntime tcr,
+            List<L> v,
             int nops,
             int nkeys,
-            RandomElementProvider<E> generator
+            ElemGenerator<E> generator
             )
     {
         m_nId = nId;
@@ -61,63 +57,15 @@ class TXListTester<E> implements Runnable {
         m_generator = generator;
     }
 
-    // this version checks the list invariant by enumerating the key space,
-    // which has the advantage that it no has requirements around support for iterators
-    // in a tx context, but has the disadvantage that it is horribly inefficient.
-    public boolean
-    isConsistentBF() {
-
-        boolean consistent = true;
-        m_rt.BeginTX();
-        for(int i=0;i<m_nKeys && consistent;i++) {
-            for(CorfuDBList<E> l : m_v) {
-                if(l.contains(i)) {
-                    for(CorfuDBList<E> lB : m_v) {
-                        if (lB != l && lB.contains(i)) {
-                            consistent = false;
-                            break;
-                        }
-                    }
-                }
-                if(!consistent)
-                    break;
-            }
-        }
-        if(!m_rt.EndTX()) throw new RuntimeException("Consistency check aborted...");
-        return consistent;
-    }
-
-
-    public boolean
-    isConsistent() {
-
-        boolean consistent = true;
-        m_rt.BeginTX();
-        for(CorfuDBList<E> l : m_v) {
-            for (E e : l) {
-                for (CorfuDBList<E> lB : m_v) {
-                    if (lB != l && lB.contains(e)) {
-                        consistent = false;
-                        break;
-                    }
-                }
-            }
-            if (!consistent)
-                break;
-        }
-
-        if(!m_rt.EndTX()) throw new RuntimeException("Consistency check aborted...");
-        return consistent;
-    }
-
-    private Pair<CorfuDBList<E>, CorfuDBList<E>> selectLists() {
-        CorfuDBList<E> src = null;
-        CorfuDBList<E> dst = null;
-        ArrayList<CorfuDBList<E>> lists = new ArrayList<CorfuDBList<E>>();
+    private Pair<L, L> selectLists() {
+        L src = null;
+        L dst = null;
+        ArrayList<L> lists = new ArrayList<L>();
         lists.addAll(m_v);
         while(lists.size() > 0 && (src == null || dst == null)) {
-            int lidx = (int) (Math.random() * lists.size());
-            CorfuDBList<E> randlist = lists.remove(lidx);
+            int lidx = (int) (Math.random() * lists.size()-1);
+            assert(lidx >= 0);
+            L randlist = lists.remove(lidx);
             if(src == null && randlist.size() != 0)
                 src = randlist;
             else if (src != null)
@@ -130,25 +78,65 @@ class TXListTester<E> implements Runnable {
 
     private void
     moveRandomItem(
-            CorfuDBList<E> src,
-            CorfuDBList<E> dst
+            L src,
+            L dst
             ) {
-        int lidx = (int) (Math.random() * src.size());
-        // E item = src.remove(lidx);
+        int startsize = src.sizeview();
+        int viewsize = src.size();
+        assert(viewsize > 0);
+        int lidx = (int) (Math.random() * viewsize-1);
         E item = src.get(lidx);
+        int aftergetsize = src.sizeview();
+        src.remove(lidx);
+        int afterremovesize = src.sizeview();
         dst.add(item);
+        //if(startsize != aftergetsize || startsize != afterremovesize) {
+            System.out.println("moveRandomItem sync-size:" + viewsize + ", viewsize[before,mid,after]=[" + startsize + "," + aftergetsize + "," + afterremovesize + "]");
+        //}
+    }
+
+    private void
+    moveRandomItemOrig(
+            L src,
+            L dst
+        ) {
+        int lidx = (int) (Math.random() * src.size()-1);
+        E item = src.get(lidx);
+        src.remove(lidx);
+        dst.add(item);
+    }
+
+    public void
+    populateListsCG() {
+
+        // putting all this list creation in one coarse grain
+        // transaction stresses the lower layers, which dont yet
+        // support multi-entry writes. Technically, this is init code,
+        // and is only using the tx layer because that's how to get the
+        // data into the log. Keep this variation around in case we
+        // ever need synchronization on this step. For now, prefer the
+        // version below, which uses finer grain transactions.
+        m_rt.BeginTX();
+        for(int i=0; i<m_nKeys; i++) {
+            int lidx = (int) (Math.random() * m_v.size());
+            L randlist = m_v.get(lidx);
+            randlist.add(m_generator.randElem(i));
+            int size = randlist.size();
+        }
+        m_rt.EndTX();
     }
 
     public void
     populateLists() {
 
-        m_rt.BeginTX();
         for(int i=0; i<m_nKeys; i++) {
             int lidx = (int) (Math.random() * m_v.size());
-            CorfuDBList<E> randlist = m_v.get(lidx);
+            L randlist = m_v.get(lidx);
+            m_rt.BeginTX();
             randlist.add(m_generator.randElem(i));
+            int size = randlist.size();
+            m_rt.EndTX();
         }
-        m_rt.EndTX();
     }
 
     public void run()
@@ -168,7 +156,7 @@ class TXListTester<E> implements Runnable {
             long curtime = System.currentTimeMillis();
             dbglog.debug("Tx starting...");
             m_rt.BeginTX();
-            Pair<CorfuDBList<E>, CorfuDBList<E>> pair = selectLists();
+            Pair<L, L> pair = selectLists();
             moveRandomItem(pair.first, pair.second);
             if(m_rt.EndTX()) numcommits++;
             else naborts++;

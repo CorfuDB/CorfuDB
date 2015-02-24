@@ -126,12 +126,12 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
             {
                 synchronized (enginemap)
                 {
+                    System.out.println("registering object ID " + obj.getID());
                     if (objectmap.containsKey(obj.getID()))
                     {
-                        System.out.println("object ID already registered!");
+                        System.out.println("object ID " + obj.getID() + " already registered!");
                         throw new RuntimeException();
                     }
-                    System.out.println("registering object ID " + obj.getID());
                     objectmap.put(obj.getID(), obj);
                     SMREngine smre = new SMREngine(streamfactory.newStream(obj.getID()), uniquenodeid);
                     smre.registerLearner(this);

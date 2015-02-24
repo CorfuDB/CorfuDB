@@ -229,10 +229,12 @@ public class TXRuntime extends BaseRuntime
             SMREngine smre = getEngine(cob.getID());
             if(smre!=null) //we're playing the object
             {
-                curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
-                //do what here??? apply the command through the apply thread
-                //todo: right now this causes an unnecessary sync
-                smre.sync(SMREngine.TIMESTAMP_INVALID, command);
+                if(!curtx.get().has_read(cob.getID(), cob.getTimestamp(), key)) {
+                    curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
+                    //do what here??? apply the command through the apply thread
+                    //todo: right now this causes an unnecessary sync
+                    smre.sync(SMREngine.TIMESTAMP_INVALID, command);
+                }
             }
             else //it's a remote object
             {
@@ -296,7 +298,6 @@ public class TXRuntime extends BaseRuntime
 
     public Pair<Boolean, Boolean> updateDecision(long timestamp, int streambitpos, int totalstreams, boolean partialdecision)
     {
-        System.out.println("updateDecision...");
         boolean decided = false;
         boolean commit = false;
         if(partialdecision)
@@ -514,16 +515,14 @@ class TXEngine implements SMRLearner
         }
 
 
+        // Pair<Boolean, Boolean> P = txr.updateDecision(decrec.txint_timestamp, T.get_readstreams().get(decrec.stream), T.get_readstreams().size(), decrec.decision);
         Map<Long, Integer> readstreams = T.get_readstreams();
         Long streamkey = decrec.stream;
         Integer streamval = readstreams.get(streamkey);
         int size = readstreams.size();
         boolean decision = decrec.decision;
         long ts = decrec.txint_timestamp;
-
-        // Pair<Boolean, Boolean> P = txr.updateDecision(decrec.txint_timestamp, T.get_readstreams().get(decrec.stream), T.get_readstreams().size(), decrec.decision);
         assert(txr != null);
-        System.out.println("ts = " + ts + ", streamval="+streamval+", size="+size+", decision="+decision);
         Pair<Boolean, Boolean> P = txr.updateDecision(ts, streamval, size, decision);
 
         if(txr.trackstats)
@@ -644,6 +643,19 @@ class TxInt implements Serializable //todo: custom serialization
     Set<Long> get_allstreams()
     {
         return allstreamset;
+    }
+
+    boolean has_read(long object, long version, Serializable key)
+    {
+        Iterator<Triple<Long, Long, Serializable>> it = get_readset().iterator();
+        while(it.hasNext()) {
+            Triple<Long, Long, Serializable> trip = it.next();
+            if(trip.first == object) {
+                if(key == null || trip.third == null || key.equals(trip.third))
+                    return true;
+            }
+        }
+        return false;
     }
 
     public boolean readsSomethingWrittenBy(TxInt T2)

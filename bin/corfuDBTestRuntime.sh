@@ -29,4 +29,5 @@ CORFUDBMAIN="org.corfudb.runtime.$1"
 #"$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" "${*:2}" 2>&1 < /dev/null
 #
 
+echo " -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" ${*:2}"
 "$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" ${*:2} 2>&1 < /dev/null

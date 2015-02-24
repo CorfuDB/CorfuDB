@@ -6,20 +6,20 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
-public class TXListChecker<E> {
+public class TXListChecker<E, L extends CorfuDBList<E>> {
 
     private static Logger dbglog = LoggerFactory.getLogger(TXListChecker.class);
 
-    TXRuntime m_rt;
-    List<CorfuDBList<E>> m_v;
+    AbstractRuntime m_rt;
+    List<L> m_v;
     int m_nOps;
     int m_nKeys;
     int m_nId;
 
     public
     TXListChecker(
-            TXRuntime tcr,
-            List<CorfuDBList<E>> v,
+            AbstractRuntime tcr,
+            List<L> v,
             int nops,
             int nkeys) {
         m_nOps = nops;
@@ -37,9 +37,9 @@ public class TXListChecker<E> {
         boolean consistent = true;
         m_rt.BeginTX();
         for(int i=0;i<m_nKeys && consistent;i++) {
-            for(CorfuDBList<E> l : m_v) {
+            for(L l : m_v) {
                 if(l.contains(i)) {
-                    for(CorfuDBList<E> lB : m_v) {
+                    for(L lB : m_v) {
                         if (lB != l && lB.contains(i)) {
                             consistent = false;
                             break;
@@ -60,9 +60,11 @@ public class TXListChecker<E> {
 
         boolean consistent = true;
         m_rt.BeginTX();
-        for(CorfuDBList<E> l : m_v) {
-            for (E e : l) {
-                for (CorfuDBList<E> lB : m_v) {
+        for(L l : m_v) {
+            int siz = l.size();
+            for (int i=0; i<siz; i++) {
+                E e = l.get(i);
+                for (L lB : m_v) {
                     if (lB != l && lB.contains(e)) {
                         consistent = false;
                         break;

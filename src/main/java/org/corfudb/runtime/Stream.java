@@ -107,9 +107,5 @@ interface StreamEntry extends Serializable
     public Set<Long> getStreams();
 }
 
-interface StreamFactory
-{
-    public Stream newStream(long streamid);
-}
 
 

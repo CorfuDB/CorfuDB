@@ -37,6 +37,7 @@ import org.slf4j.impl.SimpleLogger;
 import org.corfudb.runtime.collections.CorfuDBCounter;
 import org.corfudb.runtime.collections.CorfuDBCoarseList;
 import org.corfudb.runtime.collections.CorfuDBList;
+import org.corfudb.runtime.collections.CDBList;
 
     /**
  * Tester code for the CorfuDB runtime stack
@@ -275,35 +276,17 @@ public class CorfuDBTester
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
         }
-        else if(testnum==TXLISTCOARSE)
-        {
-            CyclicBarrier startbarrier = new CyclicBarrier(numthreads);
-            CyclicBarrier stopbarrier = new CyclicBarrier(numthreads);
+        else if(testnum==TXLISTCOARSE) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
-            ArrayList<CorfuDBList<Integer>> lists = new ArrayList<CorfuDBList<Integer>>();
-            NonRandomIntProvider generator = new NonRandomIntProvider();
-
-            for(int i=0; i<numlists; i++) {
-                lists.add(new CorfuDBCoarseList<Integer>(TR, DirectoryService.getUniqueID(sf)));
-            }
-
-            for (int i = 0; i < numthreads; i++)
-            {
-                TXListTester<Integer> txl = new TXListTester<Integer>(
-                        i, startbarrier, stopbarrier, TR, lists, numops, numkeys, generator);
-                threads[i] = new Thread(txl);
-                threads[i].start();
-            }
-            for(int i=0;i<numthreads;i++)
-                threads[i].join();
-
-            System.out.println("Test done! Checking consistency...");
-            TXListChecker txc = new TXListChecker(TR, lists, numops, numkeys);
-            if(txc.isConsistent())
-                System.out.println("List consistency check passed --- test successful!");
-            else
-                System.out.println("List consistency check failed!");
-            System.out.println(TR);
+            CorfuDBTester.<Integer, CorfuDBCoarseList<Integer>>runListTest(
+                    TR, rpchostname, rpcport, sf, numthreads,
+                    numlists, numops, numkeys, new SeqIntGenerator(), "CorfuDBCoarseList");
+        }
+        else if(testnum==TXLISTFINE) {
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            CorfuDBTester.<Integer, CDBList<Integer>>runListTest(
+                    TR, rpchostname, rpcport, sf, numthreads,
+                    numlists, numops, numkeys, new SeqIntGenerator(), "CDBList");
         }
         else if(testnum==REMOBJTEST)
         {
@@ -370,83 +353,72 @@ public class CorfuDBTester
         System.exit(0);
 
     }
-}
 
-/**
- * This is a directory service that maps from human-readable names to CorfuDB object IDs.
- * It's built using CorfuDB objects that run over hardcoded IDs (MAX_LONG and MAX_LONG-1).
- */
-class DirectoryService
-{
-    AbstractRuntime TR;
-    CorfuDBMap<String, Long> names;
-    CorfuDBCounter idctr;
-
-    static long DS_RESERVED_MAP_ID = 0;
-    static long DS_RESERVED_CTR_ID = 1;
-    static long DS_RESERVED_UNIQUE_ID = 2;
-    static long FIRST_VALID_STREAM_ID = 3;
-
-    public DirectoryService(AbstractRuntime tTR)
-    {
-        TR = tTR;
-        names = new CorfuDBMap(TR, DS_RESERVED_MAP_ID);
-        idctr = new CorfuDBCounter(TR, DS_RESERVED_CTR_ID);
-
-    }
-
-    /**
-     * Returns a unique ID. This ID is guaranteed to be unique
-     * system-wide with respect to other IDs generated across the system
-     * by the getUniqueID call parameterized with a streamfactory running over
-     * the same log address space. It's implemented by appending an entry
-     * to the underlying log and returning the timestamp/position.
-     *
-     * Note: it is not guaranteed to be unique with respect to IDs returned
-     * by nameToStreamID.
-     *
-     * @param sf StreamFactory to use
-     * @return system-wide unique ID
-     */
-    public static long getUniqueID(StreamFactory sf)
-    {
-        Stream S = sf.newStream(DS_RESERVED_UNIQUE_ID);
-        HashSet hs = new HashSet(); hs.add(DS_RESERVED_UNIQUE_ID);
-        return (Long)S.append("DummyString", hs); //todo: remove the cast
-    }
-
-
-    /**
-     * Maps human-readable name to object ID. If no such human-readable name exists already,
-     * a new mapping is created.
-     *
-     * @param X
-     * @return
-     */
-    public long nameToStreamID(String X)
-    {
-        System.out.println("Mapping " + X);
-        long ret;
-        while(true)
-        {
-            TR.BeginTX();
-            if (names.containsKey(X))
-                ret = names.get(X);
-            else
-            {
-                ret = idctr.read() + FIRST_VALID_STREAM_ID;
-                idctr.increment();
-                names.put(X, ret);
-            }
-            if(TR.EndTX()) break;
+    static class SeqIntGenerator implements ElemGenerator<Integer> {
+        public Integer randElem(Object i) {
+            return new Integer((Integer) i);
         }
-        System.out.println("Mapped " + X + " to " + ret);
-        return ret;
     }
 
+    static <E, L extends CorfuDBList<E>> L
+    createList(
+        String strClass,
+        AbstractRuntime TR,
+        StreamFactory sf,
+        long oid
+        )
+    {
+        if(strClass.contains("CDBList"))
+            return (L) new CDBList<E>(TR, sf, oid);
+        else if(strClass.contains("CorfuDBCoarseList"))
+            return (L) new CorfuDBCoarseList<E>(TR, sf, oid);
+        return null;
+    }
+
+
+    static <E, L extends CorfuDBList<E>> void
+    runListTest(
+        AbstractRuntime TR,
+        String rpchostname,
+        int rpcport,
+        StreamFactory sf,
+        int numthreads,
+        int numlists,
+        int numops,
+        int numkeys,
+        ElemGenerator<E> generator,
+        String strClass
+        ) throws InterruptedException
+    {
+        ArrayList<L> lists = new ArrayList<L>();
+        CyclicBarrier startbarrier = new CyclicBarrier(numthreads);
+        CyclicBarrier stopbarrier = new CyclicBarrier(numthreads);
+
+        for(int i=0; i<numlists; i++) {
+            long oidlist = DirectoryService.getUniqueID(sf);
+            L list = CorfuDBTester.<E,L>createList(strClass, TR, sf, oidlist);
+            lists.add(list);
+        }
+
+        Thread[] threads = new Thread[numthreads];
+        for (int i = 0; i < numthreads; i++) {
+            TXListTester<E, L> txl = new TXListTester<E, L>(
+                    i, startbarrier, stopbarrier, TR, lists, numops, numkeys, generator);
+            threads[i] = new Thread(txl);
+            threads[i].start();
+        }
+        for(int i=0;i<numthreads;i++)
+            threads[i].join();
+
+        System.out.println("Test done! Checking consistency...");
+        TXListChecker txc = new TXListChecker(TR, lists, numops, numkeys);
+        if(txc.isConsistent())
+            System.out.println("List consistency check passed --- test successful!");
+        else
+            System.out.println("List consistency check failed!");
+        System.out.println(TR);
+    }
 }
-
-
 
 
 /**
