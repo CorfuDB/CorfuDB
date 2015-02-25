@@ -8,6 +8,8 @@ import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.abstractions.SharedLog;
 
 import org.corfudb.client.OutOfSpaceException;
+import org.corfudb.client.OverwriteException;
+import org.corfudb.client.TrimmedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,7 +83,8 @@ public class corfudb_bench {
     public static void main(String[] args) throws Exception {
         Map<String,Object> opts = new Docopt(doc).withVersion("git").parse(args);
         BenchTest[] tests = new BenchTest[] {
-            new PingTest()
+            new PingTest(),
+            new AppendTest()
         };
 
         for (BenchTest test : tests)
@@ -178,4 +181,59 @@ public class corfudb_bench {
             return m;
         }
     }
+
+
+    @SuppressWarnings({"rawtypes","unchecked"})
+    static class AppendTest implements BenchTest {
+        AppendTest() {}
+        public MetricRegistry runTest(Map<String,Object> args)
+        {
+            final MetricRegistry m = new MetricRegistry();
+            final AtomicInteger totalCompleted = new AtomicInteger();
+            int totalDispatched = 0;
+            try (CorfuDBClient c = getClient(args))
+            {
+                WriteOnceAddressSpace woas = new WriteOnceAddressSpace(c);
+                Sequencer s = new Sequencer(c);
+                c.startViewManager();
+                c.waitForViewReady();
+                ExecutorService executor = Executors.newFixedThreadPool(getNumThreads(args));
+                Timer t_action = m.timer("action");
+                Timer t_total = m.timer("total");
+                final byte[] data = new byte[4096];
+                final Timer.Context c_total = t_total.time();
+                do {
+                    CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                            final Timer.Context c_action = t_action.time();
+                            Timer t_sequencer = m.timer("Acquire token");
+                            Timer.Context c_sequencer = t_sequencer.time();
+                            long token = s.getNext();
+                            c_sequencer.stop();
+                            Timer t_logunit = m.timer("Append data");
+                            Timer.Context c_logunit = t_logunit.time();
+                            try {
+                            woas.write(token, data);}
+                            catch (OverwriteException oe) {}
+                            catch (TrimmedException te) {}
+                            c_logunit.stop();
+                            totalCompleted.incrementAndGet();
+                            c_action.stop();
+                    }, executor);
+
+                    totalDispatched++;
+                    while (totalDispatched - totalCompleted.get() > getWindowSize(args) ||
+                            (totalDispatched >= getNumOperations(args) && totalDispatched != totalCompleted.get()))
+                    {
+                        try {
+                        Thread.sleep(1);} catch (InterruptedException ie) {}
+                    }
+                } while (totalCompleted.get() < getNumOperations(args));
+
+                c_total.stop();
+                executor.shutdownNow();
+            }
+            return m;
+        }
+    }
+
 }
