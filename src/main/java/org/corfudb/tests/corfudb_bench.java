@@ -44,13 +44,14 @@ public class corfudb_bench {
     private static final String doc =
          "corfudb_bench, the corfudb benchmark tool.\n\n"
         +"Usage:\n"
-        +"  corfudb_bench benchmark <master-address> [--threads <numthreads>] [--ops <operations>] [--window-size <size>]\n"
+        +"  corfudb_bench benchmark <master-address> [--threads <numthreads>] [--ops <operations>] [--window-size <size>] [--payload-size <size>]\n"
         +"  corfudb_bench (-h | --help)\n"
         +"  corfudb_bench --version\n\n"
         +"Options:\n"
         +"  -t <numthreads>, --threads <numthreads>  number of threads to spawn for each test [default: 1]\n"
         +"  -o <operations>, --ops <operations>      number of operations to perform for each test [default: 10000]\n"
         +"  -ws <size>, --window-size <size>         number of outstanding operations to allow, 1=synchronous [default: 1]\n"
+        +"  -ps <size>, --payload-size <size>        size of payload for read/write operations in bytes [default: 4096]\n"
         +"  --h --help                              show this screen\n"
         +"  --version                               show version.\n";
 
@@ -129,6 +130,9 @@ public class corfudb_bench {
         default int getWindowSize(Map<String,Object> args) {
             return Integer.parseInt((String)args.get("--window-size"));
         }
+        default int getPayloadSize(Map<String,Object> args) {
+            return Integer.parseInt((String)args.get("--payload-size"));
+        }
         default int getNumActionsPerThread(Map<String,Object> args) {
             return getNumOperations(args) / getNumThreads(args);
         }
@@ -179,7 +183,9 @@ public class corfudb_bench {
                 Callable<Void> r = () -> {
                     for (int i =0; i < getNumActionsPerThread(args); i++)
                     {
+                        final Timer.Context c_action = t_action.time();
                         doRun(args, m);
+                        c_action.stop();
                     }
                     return null;
                 };
@@ -257,7 +263,7 @@ public class corfudb_bench {
         {
             c = getClient(args);
             c.startViewManager();
-            data = new byte[4096];
+            data = new byte[getPayloadSize(args)];
             s = new Sequencer(c);
             woas = new WriteOnceAddressSpace(c);
             c.waitForViewReady();
