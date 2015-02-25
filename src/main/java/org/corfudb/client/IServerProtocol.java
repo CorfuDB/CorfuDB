@@ -176,6 +176,6 @@ public interface IServerProtocol {
      * Resets the server. Used by the configuration master to reset the state of the server.
      * Should eliminate ALL hard state!
      */
-    void reset()
+    void reset(long epoch)
         throws NetworkException;
 }

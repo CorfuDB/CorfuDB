@@ -43,13 +43,14 @@ import java.util.concurrent.locks.StampedLock;
  *
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
-public class CorfuDBClient {
+public class CorfuDBClient implements AutoCloseable {
 
     private String configurationString;
     private StampedLock viewLock;
     private Thread viewManagerThread;
     private CorfuDBView currentView;
     private BooleanLock viewUpdatePending;
+    private Boolean closed = false;
 
     private Logger log = LoggerFactory.getLogger(CorfuDBClient.class);
 
@@ -194,6 +195,11 @@ public class CorfuDBClient {
         return currentView;
     }
 
+    public void close()
+    {
+        closed = true;
+        viewManagerThread.interrupt();
+    }
     /**
      * Retrieves a runnable that provides a view manager thread. The view
      * manager retrieves the view and manages view changes.
@@ -203,7 +209,7 @@ public class CorfuDBClient {
             @Override
             public void run() {
                 log.debug("View manager thread started.");
-                while (true)
+                while (!closed)
                 {
                     synchronized(viewUpdatePending)
                     {
@@ -214,7 +220,7 @@ public class CorfuDBClient {
                             long stamp = viewLock.writeLock();
                             try {
                                 CorfuDBView newView = retrieveView();
-                                if (currentView == null || newView.getEpoch() > currentView.getEpoch());
+                                if (currentView == null || newView.getEpoch() > currentView.getEpoch())
                                 {
                                     String oldEpoch = (currentView == null) ? "null" : Long.toString(currentView.getEpoch());
                                     log.info("New view epoch " + newView.getEpoch() + " greater than old view epoch " + oldEpoch + ", changing views");
@@ -239,7 +245,9 @@ public class CorfuDBClient {
                                 try {
                                     viewUpdatePending.wait();
                                 }
-                                catch (InterruptedException ie){}
+                                catch (InterruptedException ie){
+                                    if (closed) { return; }
+                                }
                             }
                         }
                     }

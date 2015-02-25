@@ -170,9 +170,15 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 
     }
 
-    public void reset()
+    public void reset(long epoch)
     throws NetworkException
     {
+        // drop all keys, I suppose.
+        try (BinaryJedis jedis = pool.getResource())
+        {
+            jedis.flushDB();
+        }
+        setEpoch(epoch);
     }
 
 }

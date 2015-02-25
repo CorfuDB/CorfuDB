@@ -204,7 +204,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
 
     }
 
-    public void reset()
+    public void reset(long epoch)
     throws NetworkException
     {
     }
