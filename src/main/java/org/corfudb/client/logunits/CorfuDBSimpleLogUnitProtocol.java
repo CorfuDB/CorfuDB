@@ -168,10 +168,6 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
             ExtntWrap wrap = client.read(new UnitServerHdr(epochlist, address));
-            data = new byte[wrap.getCtnt().get(0).remaining()];
-            wrap.getCtnt().get(0).get(data);
-            success = true;
-            thriftPool.returnResourceObject(client);
             if (wrap.err.equals(ErrorCode.ERR_UNWRITTEN))
             {
                 throw new UnwrittenException("Unwritten error", address);
@@ -180,6 +176,10 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             {
                 throw new TrimmedException("Trim error", address);
             }
+            data = new byte[wrap.getCtnt().get(0).remaining()];
+            wrap.getCtnt().get(0).get(data);
+            success = true;
+            thriftPool.returnResourceObject(client);
         }
         catch (TException e)
         {
