@@ -119,7 +119,7 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
 
     }
 
-    public void reset()
+    public void reset(long epoch)
     throws NetworkException
     {
         try (Jedis jedis = pool.getResource())
