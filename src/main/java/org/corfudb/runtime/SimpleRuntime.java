@@ -256,18 +256,18 @@ public class SimpleRuntime extends BaseRuntime
         query_then_update_helper(cob, null, update);
     }
 
-    public void query_helper(CorfuDBObject cob)
+    public boolean query_helper(CorfuDBObject cob)
     {
-        query_helper(cob, null);
+        return query_helper(cob, null);
     }
 
-    public void query_helper(CorfuDBObject cob, Serializable key)
+    public boolean query_helper(CorfuDBObject cob, Serializable key)
     {
-        query_helper(cob, key, null);
+        return query_helper(cob, key, null);
     }
 
 
-    public void query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command)
+    public boolean query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command)
     {
         SMREngine smre = getEngine(cob.getID());
         if(smre==null) //not playing stream
@@ -276,6 +276,7 @@ public class SimpleRuntime extends BaseRuntime
         }
         else
             smre.sync(SMREngine.TIMESTAMP_INVALID, command);
+        return true;
     }
 
     public void deliver(Object command, long curstream, long timestamp)

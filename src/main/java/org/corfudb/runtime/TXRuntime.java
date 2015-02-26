@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -31,6 +32,17 @@ public class TXRuntime extends BaseRuntime
 
     static Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
 
+    // playing the log forward to multiple versions of the same
+    // object within a single transaction context is just one of
+    // a number of problems with the combination of programming model
+    // and concurrency management. It is possible to avoid playing
+    // the log forward for reads already in the read set, (a setting
+    // that is controlled by the boolean flag below) but the problem
+    // is not fixed without additional mechanisms for locking writesets
+    // during commit and detecting inconsistent views on reads, which
+    // is necessary for opacity. Default setting is off, since only the list
+    // objects actually take advantage of this setting.
+    static final Boolean prohibitMultiVersionReads = true;
 
     final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 
@@ -78,6 +90,9 @@ public class TXRuntime extends BaseRuntime
         curtx.set(new TxInt());
     }
 
+    public long getTxid() {
+        return (curtx.get() != null) ? curtx.get().getTxid() : -1;
+    }
 
     public boolean EndTX()
     {
@@ -192,9 +207,9 @@ public class TXRuntime extends BaseRuntime
         }
     }
 
-    public void query_helper(CorfuDBObject cob)
+    public boolean query_helper(CorfuDBObject cob)
     {
-        query_helper(cob, null);
+        return query_helper(cob, null);
     }
 
     public void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update)
@@ -207,13 +222,14 @@ public class TXRuntime extends BaseRuntime
         update_helper(cob, update, null);
     }
 
-    public void query_helper(CorfuDBObject cob, Serializable key)
+    public boolean query_helper(CorfuDBObject cob, Serializable key)
     {
-        query_helper(cob, key, null);
+        return query_helper(cob, key, null);
     }
 
-    public void query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command)
+    public boolean query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command)
     {
+        boolean retval = true;
         if(curtx.get()==null) //non-transactional
         {
             SMREngine smre = getEngine(cob.getID());
@@ -226,14 +242,22 @@ public class TXRuntime extends BaseRuntime
         }
         else
         {
+            command.setTxid(curtx.get().getTxid());
             SMREngine smre = getEngine(cob.getID());
             if(smre!=null) //we're playing the object
             {
-                if(!curtx.get().has_read(cob.getID(), cob.getTimestamp(), key)) {
+                if(!prohibitMultiVersionReads || !curtx.get().has_read(cob.getID(), cob.getTimestamp(), key)) {
                     curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
                     //do what here??? apply the command through the apply thread
                     //todo: right now this causes an unnecessary sync
                     smre.sync(SMREngine.TIMESTAMP_INVALID, command);
+                } else {
+                    // give the programmer some hint that we couldn't satisfy the
+                    // read operation by playing the log further forward because this
+                    // object has already been played forward within the current transaction.
+                    // this allows the programmer to satisfy the read by making the upcall
+                    // themselves, or simply performing the operation on the local in memory view.
+                    retval = false;
                 }
             }
             else //it's a remote object
@@ -244,6 +268,7 @@ public class TXRuntime extends BaseRuntime
                 curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
             }
         }
+        return retval;
     }
 
     public void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update, Serializable key)
@@ -260,10 +285,12 @@ public class TXRuntime extends BaseRuntime
         {
             if(query !=null)
             {
+                query.setTxid(curtx.get().getTxid());
                 query_helper(cob, key, query);
                 //apply the precommand to the object
 //                deliver(query, cob.getID(), streams, SMREngine.TIMESTAMP_INVALID);
             }
+            update.setTxid(curtx.get().getTxid());
             curtx.get().buffer_update(update, streams.iterator().next(), key);
         }
 
@@ -628,6 +655,8 @@ class TxIntWriteSetEntry implements Serializable
 class TxInt implements Serializable //todo: custom serialization
 {
     //command, object, key
+    private static AtomicLong s_txidctr = new AtomicLong(0);
+    private final long txid;
     private List<TxIntWriteSetEntry> bufferedupdates;
     private Map<Long, Integer> updatestreammap;
 
@@ -637,6 +666,7 @@ class TxInt implements Serializable //todo: custom serialization
     private Map<Long, Integer> allstreammap; //todo: custom serialization so this doesnt get written out
     TxInt()
     {
+        txid = s_txidctr.incrementAndGet();
         bufferedupdates = new LinkedList();
         readset = new HashSet();
         updatestreammap = new HashMap();
@@ -723,6 +753,10 @@ class TxInt implements Serializable //todo: custom serialization
     {
         return "TXINT: [[[WriteSet: " + bufferedupdates.toString() + "]]]\n"
                 + "[[[ReadSet: " + readset.toString() + "]]]";
+    }
+
+    public long getTxid() {
+        return txid;
     }
 
 }

@@ -72,7 +72,7 @@ public class CDBNode<E> extends CorfuDBObject {
     public void applyToObject(Object bs) {
 
         dbglog.debug("CDBNode received upcall");
-        CDBNode<E> node = null;
+        CDBNode<E> node = this;
         CDBNode<E> oprev = null;
         CDBNode<E> onext = null;
         long ooidnext = oidnull;

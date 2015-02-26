@@ -35,9 +35,9 @@ public interface AbstractRuntime
      *
      * @param cob the calling CorfuDB object
      */
-    void query_helper(CorfuDBObject cob);
-    void query_helper(CorfuDBObject cob, Serializable key);
-    void query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command);
+    boolean query_helper(CorfuDBObject cob);
+    boolean query_helper(CorfuDBObject cob, Serializable key);
+    boolean query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command);
 
     /**
      * This function is to be called within any mutator method in the CorfuDB object.

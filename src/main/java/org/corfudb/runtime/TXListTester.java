@@ -63,13 +63,29 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
         ArrayList<L> lists = new ArrayList<L>();
         lists.addAll(m_v);
         while(lists.size() > 0 && (src == null || dst == null)) {
-            int lidx = (int) (Math.random() * lists.size()-1);
-            assert(lidx >= 0);
+            int lidx = lists.size() == 1 ? 0 : (int) (Math.random() * lists.size());
+            assert(lidx >= 0 && lidx < lists.size());
             L randlist = lists.remove(lidx);
-            if(src == null && randlist.size() != 0)
-                src = randlist;
-            else if (src != null)
+            if(randlist.size() == 0) {
+                // if the size is zero, this can only be the destination
+                // list...if we have a dst list already, prefer this one,
+                // so that we can start filling it back up again! If we've already
+                // got a dst, with a non-zero size, assign it to the source.
+                if(dst != null && dst.size() != 0) {
+                    src = dst;
+                }
                 dst = randlist;
+            } else {
+                // a non-zero sized list can be conditionally assigned to either
+                // dst or src--we prefer to assign it to src first, since we need
+                // it for src, and cannot predict whether we will see non-zero
+                // candidates in the future
+                if(src == null) {
+                    src = randlist;
+                } else if(dst == null) {
+                    dst = randlist;
+                }
+            }
         }
         if(src == null || dst == null)
             throw new RuntimeException("failed to select non-empty src and (potentially empty) dst lists!");
@@ -77,26 +93,25 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
     }
 
     private void
-    moveRandomItem(
+    moveRandomItemDbg(
             L src,
             L dst
             ) {
         int startsize = src.sizeview();
         int viewsize = src.size();
         assert(viewsize > 0);
-        int lidx = (int) (Math.random() * viewsize-1);
+        int lidx = (int) (Math.random() * viewsize);
+        assert(lidx >= 0 && lidx < viewsize);
         E item = src.get(lidx);
         int aftergetsize = src.sizeview();
         src.remove(lidx);
         int afterremovesize = src.sizeview();
         dst.add(item);
-        //if(startsize != aftergetsize || startsize != afterremovesize) {
-            System.out.println("moveRandomItem sync-size:" + viewsize + ", viewsize[before,mid,after]=[" + startsize + "," + aftergetsize + "," + afterremovesize + "]");
-        //}
+        System.out.println("moveRandomItem sync-size:" + viewsize + ", viewsize[before,mid,after]=[" + startsize + "," + aftergetsize + "," + afterremovesize + "]");
     }
 
     private void
-    moveRandomItemOrig(
+    moveRandomItem(
             L src,
             L dst
         ) {
@@ -154,12 +169,21 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
         for(int i=0;i<m_nOps;i++)
         {
             long curtime = System.currentTimeMillis();
-            dbglog.debug("Tx starting...");
-            m_rt.BeginTX();
-            Pair<L, L> pair = selectLists();
-            moveRandomItem(pair.first, pair.second);
-            if(m_rt.EndTX()) numcommits++;
-            else naborts++;
+            long retries = 0;
+            boolean done = false;
+            dbglog.debug("Tx starting..."+(retries > 0 ? " retry #"+retries:""));
+            while(!done) {
+                try {
+                    m_rt.BeginTX();
+                    Pair<L, L> pair = selectLists();
+                    moveRandomItem(pair.first, pair.second);
+                    if (m_rt.EndTX()) numcommits++;
+                    else naborts++;
+                    done = true;
+                } catch (Exception e) {
+                    retries++;
+                }
+            }
             dbglog.debug("Tx took {}", (System.currentTimeMillis()-curtime));
         }
         try {

@@ -13,14 +13,11 @@ import java.util.function.UnaryOperator;
 public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
 
     static Logger dbglog = LoggerFactory.getLogger(CorfuDBCoarseList.class);
-    //backing state of the map
     LinkedList<E> m_memlist;
-    LinkedList<E> m_clone;
 
     public CorfuDBCoarseList(AbstractRuntime tTR, StreamFactory sf, long toid) {
         super(tTR, sf, toid);
         m_memlist = new LinkedList<E>();
-        m_clone = null;
     }
 
     public void applyToObject(Object bs) {
@@ -131,63 +128,120 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
         dbglog.debug("list size is {}", m_memlist.size());
     }
 
+    void rlock() { lock(false); }
+    void runlock() { unlock(false); }
+    void wlock() { lock(true); }
+    void wunlock() { unlock(true); }
+
     @Override
     public int sizeview() {
-        synchronized (m_memlist) {
-            return m_memlist.size();
-        }
+        rlock();
+        int result = m_memlist.size();
+        runlock();
+        return result;
     }
 
     @Override
     public int size() {
         ListCommand sizecmd = new ListCommand(ListCommand.CMD_SIZE);
-        TR.query_helper(this, oid, sizecmd);
-        return (Integer) sizecmd.getReturnValue();
+        if(!TR.query_helper(this, null, sizecmd)) {
+            return sizeview();
+        }
+        return (int) sizecmd.getReturnValue();
+    }
+
+    public int indexOfview(Object o) {
+        rlock();
+        int result = m_memlist.indexOf(o);
+        runlock();
+        return result;
     }
 
     @Override
     public int indexOf(Object o) {
         if(!isTypeE(o)) return -1;
         ListCommand cmd = new ListCommand(ListCommand.CMD_INDEX_OF, (E) o);
-        TR.query_helper(this, oid, cmd);
+        if(!TR.query_helper(this, oid, cmd))
+            return indexOfview(o);
         return (Integer) cmd.getReturnValue();
+    }
+
+    public int lastIndexOfview(Object o) {
+        rlock();
+        int result = m_memlist.lastIndexOf(o);
+        runlock();
+        return result;
     }
 
     @Override
     public int lastIndexOf(Object o) {
         if(!isTypeE(o)) return -1;
         ListCommand cmd = new ListCommand(ListCommand.CMD_LAST_INDEX_OF, (E) o);
-        TR.query_helper(this, oid, cmd);
+        if(!TR.query_helper(this, oid, cmd))
+            return lastIndexOfview(o);
         return (Integer) cmd.getReturnValue();
+    }
+
+    public boolean isEmptyView() {
+        rlock();
+        boolean result = m_memlist.isEmpty();
+        runlock();
+        return result;
     }
 
     @Override
     public boolean isEmpty() {
         ListCommand isemptycmd = new ListCommand(ListCommand.CMD_IS_EMPTY);
-        TR.query_helper(this, oid, isemptycmd);
+        if(!TR.query_helper(this, oid, isemptycmd))
+            return isEmptyView();
         return (Boolean) isemptycmd.getReturnValue();
     }
+
+    public boolean containsView(Object o) {
+        rlock();
+        boolean result = m_memlist.contains(o);
+        runlock();
+        return result;
+    }
+
 
     @Override
     public boolean contains(Object o) {
         if (!isTypeE(o)) return false;
         ListCommand containscmd = new ListCommand(ListCommand.CMD_CONTAINS, (E) o);
-        TR.query_helper(this, oid, containscmd);
+        if(!TR.query_helper(this, oid, containscmd))
+            return containsView(o);
         return (Boolean) containscmd.getReturnValue();
+    }
+
+    public boolean containsAllView(Collection<?> c) {
+        rlock();
+        boolean result = m_memlist.containsAll(c);
+        runlock();
+        return result;
     }
 
     @Override
     public boolean containsAll(Collection<?> c) {
         for (Object o : c) if (!isTypeE(c)) return false;
         ListCommand cmd = new ListCommand(ListCommand.CMD_CONTAINS_ALL, c);
-        TR.query_helper(this, oid, cmd);
+        if(!TR.query_helper(this, oid, cmd))
+            return containsAllView(c);
         return (Boolean) cmd.getReturnValue();
+    }
+
+    public E getView(int index) {
+        rlock();
+        E result = m_memlist.get(index);
+        runlock();
+        return result;
     }
 
     @Override
     public E get(int index) {
         ListCommand getcmd = new ListCommand(ListCommand.CMD_GET, index);
-        TR.query_helper(this, oid, getcmd);
+        if(!TR.query_helper(this, oid, getcmd))
+            return getView(index);
         return (E) getcmd.getReturnValue();
     }
 

@@ -15,30 +15,9 @@
 
 package org.corfudb.runtime;
 
-import java.io.ByteArrayOutputStream;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.ObjectInputStream;
-import java.io.Serializable;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.CyclicBarrier;
-
-import gnu.getopt.Getopt;
 import org.corfudb.runtime.collections.CorfuDBMap;
-import org.corfudb.sharedlog.ClientLib;
-import org.corfudb.sharedlog.CorfuException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.slf4j.impl.SimpleLogger;
 import org.corfudb.runtime.collections.CorfuDBCounter;
-import org.corfudb.runtime.collections.CorfuDBCoarseList;
-import org.corfudb.runtime.collections.CorfuDBList;
-
-
 
 /**
  * This is a directory service that maps from human-readable names to CorfuDB object IDs.

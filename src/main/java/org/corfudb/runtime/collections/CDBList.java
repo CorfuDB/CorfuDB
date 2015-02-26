@@ -28,7 +28,6 @@ public class CDBList<E> extends CorfuDBList<E>  {
     public CDBNode<E> m_tail;
     public HashMap<Long, CDBNode<E>> m_nodes;
     public StreamFactory sf;
-    public AbstractRuntime TR;
     public long oid;
 
     public void applyToObject(Object bs) {
@@ -120,7 +119,7 @@ public class CDBList<E> extends CorfuDBList<E>  {
         // returning the current size of the list
 
         NodeOp<E> cmd = new NodeOp(NodeOp.CMD_READ_PARENT, oid);
-        TR.query_helper(null, oid, cmd);
+        TR.query_helper(this, oid, cmd);
 
         int size = 0;
         CDBNode<E> node = m_head;
@@ -140,7 +139,7 @@ public class CDBList<E> extends CorfuDBList<E>  {
         if(!isTypeE(o)) return -1;
 
         NodeOp<E> cmd = new NodeOp(NodeOp.CMD_READ_PARENT, oid);
-        TR.query_helper(null, oid, cmd);
+        TR.query_helper(this, oid, cmd);
 
         CDBNode<E> node = m_head;
         while(node != null) {
@@ -175,7 +174,7 @@ public class CDBList<E> extends CorfuDBList<E>  {
         int index = size-1;
 
         NodeOp<E> cmd = new NodeOp(NodeOp.CMD_READ_PARENT, oid);
-        TR.query_helper(null, oid, cmd);
+        TR.query_helper(this, oid, cmd);
 
         CDBNode<E> node = m_tail;
         while(node != null) {
@@ -216,7 +215,7 @@ public class CDBList<E> extends CorfuDBList<E>  {
 
         int cindex=0;
         NodeOp<E> cmd = new NodeOp(NodeOp.CMD_READ_PARENT, oid);
-        TR.query_helper(null, oid, cmd);
+        TR.query_helper(this, oid, cmd);
 
         CDBNode<E> node = m_head;
         while(node != null) {
@@ -238,7 +237,7 @@ public class CDBList<E> extends CorfuDBList<E>  {
 
         int cindex=0;
         NodeOp<E> cmd = new NodeOp(NodeOp.CMD_READ_PARENT, oid);
-        TR.query_helper(null, oid, cmd);
+        TR.query_helper(this, oid, cmd);
 
         boolean found = false;
         CDBNode<E> node = m_head;
@@ -397,8 +396,10 @@ public class CDBList<E> extends CorfuDBList<E>  {
 
     @Override
     public boolean add(E e) {
+
         NodeOp<E> cmd = new NodeOp(NodeOp.CMD_READ_PARENT, oid);
-        TR.query_helper(null, oid, cmd);
+        System.out.println("TR="+TR+", this="+this+", oid="+oid+", cmd="+cmd);
+        TR.query_helper(this, oid, cmd);
 
         CDBNode<E> newnode = new CDBNode<E>(TR, sf, e, DirectoryService.getUniqueID(sf), this);
         synchronized (m_nodes) {
@@ -411,12 +412,12 @@ public class CDBList<E> extends CorfuDBList<E>  {
             assert(m_head == null);
             TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_PREV, CDBNode.oidnull));
             TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_NEXT, CDBNode.oidnull));
-            TR.update_helper(null, new NodeOp(NodeOp.CMD_WRITE_HEAD, oid, newnode.oid));
-            TR.update_helper(null, new NodeOp(NodeOp.CMD_WRITE_TAIL, oid, newnode.oid));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, oid, newnode.oid));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, oid, newnode.oid));
         } else {
             TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_PREV, m_tail.oid));
             TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_NEXT, CDBNode.oidnull));
-            TR.update_helper(null, new NodeOp(NodeOp.CMD_WRITE_HEAD, oid, newnode.oid));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, oid, newnode.oid));
         }
         return true;
     }

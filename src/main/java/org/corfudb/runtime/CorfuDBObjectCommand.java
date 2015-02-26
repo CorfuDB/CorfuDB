@@ -19,6 +19,7 @@ import java.io.Serializable;
 public class CorfuDBObjectCommand implements Serializable
 {
     Object retval;
+    long txid = -1;
     public Object getReturnValue()
     {
         return retval;
@@ -27,4 +28,6 @@ public class CorfuDBObjectCommand implements Serializable
     {
         retval = obj;
     }
+    public long getTxid() { return txid; }
+    public void setTxid(long l) { txid = l; }
 }
