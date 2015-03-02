@@ -24,7 +24,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * helper code for locking and timestamp bookkeeping. It also defines the abstract
  * apply upcall that every CorfuDB object must implement.
  */
-public abstract class CorfuDBObject
+public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
 {
     //object ID -- corresponds to stream ID used underneath
     public long oid;
@@ -95,6 +95,17 @@ public abstract class CorfuDBObject
         TR.registerObject(this, remote);
         timestamp = new AtomicLong();
         statelock = new ReentrantReadWriteLock();
+    }
+
+    public int compareTo(CorfuDBObject compareCob) {
+        // using identity hash code is robust, but is more mechanism
+        // than is really needed here. OIDs have to be unique for
+        // basic services to work, so it suffices to use the oid instead:
+        // int thisHashCode = System.identityHashCode(this);
+        // int thatHashCode = System.identityHashCode(compareCob);
+        // return thisHashCode - thatHashCode;
+        long result = (this.oid - compareCob.oid);
+        return result == 0 ? 0 : result > 0 ? 1 : -1;
     }
 
 }

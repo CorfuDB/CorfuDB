@@ -25,95 +25,25 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
         dbglog.debug("CorfuDBList received upcall");
         ListCommand<E> cc = (ListCommand<E>) bs;
         switch (cc.getcmd()) {
-            case ListCommand.CMD_POST_ADD:
-                lock(false);
-                cc.setReturnValue(new Boolean(m_memlist.contains(cc.e())));
-                unlock(false);
-                break;
-            case ListCommand.CMD_ADD:
-                lock(true);
-                cc.setReturnValue(new Boolean(m_memlist.add(cc.e())));
-                unlock(true);
-                break;
-            case ListCommand.CMD_ADD_AT:
-                lock(true);
-                m_memlist.add(cc.index(), cc.e());
-                unlock(true);
-                break;
-            case ListCommand.CMD_ADD_ALL:
-                lock(true);
-                cc.setReturnValue(m_memlist.addAll(cc.lparm()));
-                unlock(true);
-                break;
-            case ListCommand.CMD_CLEAR:
-                lock(true);
-                m_memlist.clear();
-                unlock(true);
-                break;
-            case ListCommand.CMD_CONTAINS:
-                lock(false);
-                cc.setReturnValue(new Boolean(m_memlist.contains(cc.e())));
-                unlock(false);
-                break;
-            case ListCommand.CMD_CONTAINS_ALL:
-                lock(false);
-                cc.setReturnValue(m_memlist.containsAll(cc.lparm()));
-                unlock(false);
-                break;
-            case ListCommand.CMD_EQUALS:
-                lock(false);
-                cc.setReturnValue(m_memlist.equals(cc.lparm()));
-                unlock(false);
-                break;
-            case ListCommand.CMD_GET:
-                lock(false);
-                cc.setReturnValue(m_memlist.get(cc.index()));
-                unlock(false);
-                break;
-            case ListCommand.CMD_HASH_CODE:
-                lock(false);
-                cc.setReturnValue(m_memlist.hashCode());
-                unlock(false);
-                break;
-            case ListCommand.CMD_INDEX_OF:
-                lock(false);
-                cc.setReturnValue(m_memlist.indexOf(cc.e()));
-                unlock(false);
-                break;
-            case ListCommand.CMD_LAST_INDEX_OF:
-                lock(false);
-                cc.setReturnValue(m_memlist.lastIndexOf(cc.e()));
-                unlock(false);
-                break;
-            case ListCommand.CMD_REMOVE_OBJ:
-                lock(true);
-                cc.setReturnValue(m_memlist.remove(cc.e()));
-                unlock(true);
-                break;
-            case ListCommand.CMD_REMOVE_AT:
-                lock(true);
-                cc.setReturnValue(m_memlist.remove(cc.index()));
-                unlock(true);
-                break;
-            case ListCommand.CMD_REMOVE_ALL:
-                lock(true);
-                cc.setReturnValue(m_memlist.removeAll(cc.lparm()));
-                unlock(true);
-                break;
-            case ListCommand.CMD_REPLACE_ALL:
-                throw new RuntimeException("Unsupported");
-            case ListCommand.CMD_RETAIN_ALL:
-                throw new RuntimeException("Unsupported");
-            case ListCommand.CMD_SET:
-                lock(true);
-                cc.setReturnValue(m_memlist.set(cc.index(), cc.e()));
-                unlock(true);
-                break;
-            case ListCommand.CMD_SIZE:
-                lock(false);
-                cc.setReturnValue(m_memlist.size());
-                unlock(false);
-                break;
+            case ListCommand.CMD_POST_ADD: cc.setReturnValue(applyContains(cc.e())); break;
+            case ListCommand.CMD_ADD: cc.setReturnValue(new Boolean(applyAddObject(cc.e()))); break;
+            case ListCommand.CMD_ADD_AT: applyAddAt(cc.index(), cc.e()); break;
+            case ListCommand.CMD_ADD_ALL: applyAddAll(cc.lparm()); break;
+            case ListCommand.CMD_CLEAR: applyClear(); break;
+            case ListCommand.CMD_CONTAINS: cc.setReturnValue(applyContains(cc.e())); break;
+            case ListCommand.CMD_CONTAINS_ALL: cc.setReturnValue(applyContainsAll(cc.lparm())); break;
+            case ListCommand.CMD_EQUALS: cc.setReturnValue(applyEquals(cc.lparm())); break;
+            case ListCommand.CMD_GET: cc.setReturnValue(applyGet(cc.index())); break;
+            case ListCommand.CMD_HASH_CODE: cc.setReturnValue(applyHashCode()); break;
+            case ListCommand.CMD_INDEX_OF: cc.setReturnValue(applyIndexOf(cc.e())); break;
+            case ListCommand.CMD_LAST_INDEX_OF: cc.setReturnValue(applyLastIndexOf(cc.e())); break;
+            case ListCommand.CMD_REMOVE_OBJ: cc.setReturnValue(applyRemove(cc.e())); break;
+            case ListCommand.CMD_REMOVE_AT: cc.setReturnValue(applyRemove(cc.index())); break;
+            case ListCommand.CMD_REMOVE_ALL: cc.setReturnValue(applyRemoveAll(cc.lparm())); break;
+            case ListCommand.CMD_REPLACE_ALL: throw new RuntimeException("Unsupported");
+            case ListCommand.CMD_RETAIN_ALL: throw new RuntimeException("Unsupported");
+            case ListCommand.CMD_SET: cc.setReturnValue(applySet(cc.index(), cc.e())); break;
+            case ListCommand.CMD_SIZE: cc.setReturnValue(applySize()); break;
             case ListCommand.CMD_SORT:
                 throw new RuntimeException("Unsupported");
             case ListCommand.CMD_SPLITERATOR:
@@ -133,12 +63,190 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
     void wlock() { lock(true); }
     void wunlock() { unlock(true); }
 
+    protected int applySize() {
+        return sizeview();
+    }
+
+    protected boolean applyEquals(Collection<?> c) {
+        boolean result = false;
+        rlock();
+        try {
+            result = this.equals(c);
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    protected int applyHashCode() {
+        int result = -1;
+        rlock();
+        try {
+            result = hashCode();
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
     @Override
     public int sizeview() {
+        int result = 0;
         rlock();
-        int result = m_memlist.size();
-        runlock();
+        try {
+            result = m_memlist.size();
+        } finally {
+            runlock();
+        }
         return result;
+    }
+
+    protected int applyIndexOf(Object o) {
+        int result = -1;
+        rlock();
+        try {
+            result = m_memlist.indexOf(o);
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    protected int applyLastIndexOf(Object o) {
+        int result = 0;
+        rlock();
+        try {
+            result = m_memlist.lastIndexOf(o);
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    protected boolean applyIsEmpty() {
+        boolean result =false;
+        rlock();
+        try {
+            result = m_memlist.isEmpty();
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    protected boolean applyContains(Object o) {
+        boolean result = false;
+        rlock();
+        try {
+            result = m_memlist.contains(o);
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    protected boolean applyContainsAll(Collection<?> c) {
+        boolean result = false;
+        rlock();
+        try {
+            result = m_memlist.containsAll(c);
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    protected E applyGet(int index) {
+        E result;
+        rlock();
+        try {
+            result = m_memlist.get(index);
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    protected E applyRemove(int i) {
+        E result;
+        wlock();
+        try {
+            result = m_memlist.remove(i);
+        } finally {
+            wunlock();
+        }
+        return result;
+    }
+
+    protected boolean applyRemove(Object o) {
+        boolean result = false;
+        wlock();
+        try {
+            result = m_memlist.remove(o);
+        } finally {
+            wunlock();
+        }
+        return result;
+    }
+
+    protected boolean applyRemoveAll(Collection<?> c) {
+        boolean result = false;
+        wlock();
+        try {
+            result = m_memlist.removeAll(c);
+        } finally {
+            wunlock();
+        }
+        return result;
+    }
+
+    protected void applyClear() {
+        wlock();
+        try {
+            m_memlist.clear();
+        } finally {
+            wunlock();
+        }
+    }
+
+    protected E applySet(int index, E element) {
+        E result;
+        wlock();
+        try {
+            result = m_memlist.set(index, element);
+        } finally {
+            wunlock();
+        }
+        return result;
+    }
+
+    protected boolean applyAddObject(E e) {
+        boolean result = false;
+        wlock();
+        try {
+            result = m_memlist.add(e);
+        } finally {
+            wunlock();
+        }
+        return result;
+    }
+
+    protected void applyAddAt(int index, E e) {
+        wlock();
+        try {
+            m_memlist.add(index, e);
+        } finally {
+            wunlock();
+        }
+    }
+
+    protected void applyAddAll(Collection<? extends E> c) {
+        wlock();
+        try {
+            m_memlist.addAll(c);
+        } finally {
+            wunlock();
+        }
     }
 
     @Override
@@ -150,27 +258,14 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
         return (int) sizecmd.getReturnValue();
     }
 
-    public int indexOfview(Object o) {
-        rlock();
-        int result = m_memlist.indexOf(o);
-        runlock();
-        return result;
-    }
 
     @Override
     public int indexOf(Object o) {
         if(!isTypeE(o)) return -1;
         ListCommand cmd = new ListCommand(ListCommand.CMD_INDEX_OF, (E) o);
         if(!TR.query_helper(this, oid, cmd))
-            return indexOfview(o);
+            return applyIndexOf(o);
         return (Integer) cmd.getReturnValue();
-    }
-
-    public int lastIndexOfview(Object o) {
-        rlock();
-        int result = m_memlist.lastIndexOf(o);
-        runlock();
-        return result;
     }
 
     @Override
@@ -178,47 +273,25 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
         if(!isTypeE(o)) return -1;
         ListCommand cmd = new ListCommand(ListCommand.CMD_LAST_INDEX_OF, (E) o);
         if(!TR.query_helper(this, oid, cmd))
-            return lastIndexOfview(o);
+            return applyLastIndexOf(o);
         return (Integer) cmd.getReturnValue();
-    }
-
-    public boolean isEmptyView() {
-        rlock();
-        boolean result = m_memlist.isEmpty();
-        runlock();
-        return result;
     }
 
     @Override
     public boolean isEmpty() {
         ListCommand isemptycmd = new ListCommand(ListCommand.CMD_IS_EMPTY);
         if(!TR.query_helper(this, oid, isemptycmd))
-            return isEmptyView();
+            return applyIsEmpty();
         return (Boolean) isemptycmd.getReturnValue();
     }
-
-    public boolean containsView(Object o) {
-        rlock();
-        boolean result = m_memlist.contains(o);
-        runlock();
-        return result;
-    }
-
 
     @Override
     public boolean contains(Object o) {
         if (!isTypeE(o)) return false;
         ListCommand containscmd = new ListCommand(ListCommand.CMD_CONTAINS, (E) o);
         if(!TR.query_helper(this, oid, containscmd))
-            return containsView(o);
+            return applyContains(o);
         return (Boolean) containscmd.getReturnValue();
-    }
-
-    public boolean containsAllView(Collection<?> c) {
-        rlock();
-        boolean result = m_memlist.containsAll(c);
-        runlock();
-        return result;
     }
 
     @Override
@@ -226,22 +299,16 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
         for (Object o : c) if (!isTypeE(c)) return false;
         ListCommand cmd = new ListCommand(ListCommand.CMD_CONTAINS_ALL, c);
         if(!TR.query_helper(this, oid, cmd))
-            return containsAllView(c);
+            return applyContainsAll(c);
         return (Boolean) cmd.getReturnValue();
     }
 
-    public E getView(int index) {
-        rlock();
-        E result = m_memlist.get(index);
-        runlock();
-        return result;
-    }
 
     @Override
     public E get(int index) {
         ListCommand getcmd = new ListCommand(ListCommand.CMD_GET, index);
         if(!TR.query_helper(this, oid, getcmd))
-            return getView(index);
+            return applyGet(index);
         return (E) getcmd.getReturnValue();
     }
 

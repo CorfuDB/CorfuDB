@@ -207,6 +207,10 @@ public class TXRuntime extends BaseRuntime
         }
     }
 
+    public void AbortTX() {
+        curtx.set(null);
+    }
+
     public boolean query_helper(CorfuDBObject cob)
     {
         return query_helper(cob, null);
@@ -391,11 +395,17 @@ class TXEngine implements SMRLearner
 {
     static Logger dbglog = LoggerFactory.getLogger(TXEngine.class);
 
+    // original implementation of applying buffered updates did not lock
+    // the writeset during commit--this exposes opportunities for opacity
+    // violations, even on the upcall thread. If the member below is set
+    // to false, the code reverts to the original behavior. Otherwise,
+    // it locks corfu db objects in order before entering the upcall sequence
+    // to apply updates for a transaction
+    static final Boolean lockWritesetForCommit = true;
+
     SMREngine smre;
     CorfuDBObject cob;
     TXRuntime txr;
-
-
 
     public TXEngine(CorfuDBObject tcob, SMREngine tsmre, TXRuntime ttxr)
     {
@@ -570,24 +580,30 @@ class TXEngine implements SMRLearner
         {
             if(P.second) //... and is a commit
             {
-                Iterator<TxIntWriteSetEntry> it = getPending(decrec.txint_timestamp).get_bufferedupdates().iterator();
-                while (it.hasNext())
-                {
-                    TxIntWriteSetEntry P2 = it.next();
-                    //no need to lock since each object can only be modified by its underlying TXEngine, which
-                    //in turn is only entered by the underlying SMREngine thread.
-                    //todo: do we have to do 2-phase locking?
-                    //the only bad thing that can happen is that reads see an inconsistent state
-                    //but this can happen anyway, and in this case the transaction will abort
-                    //todo: think about providing tx opacity across the board
-                    if (P2.objectid != curstream) continue;
-                    CorfuDBObject cob = txr.getObject(P2.objectid);
-                    if (cob == null) throw new RuntimeException("not a registered object!");
-                    //cob.lock(true);
-                    cob.applyToObject(P2.command);
-                    cob.setTimestamp(decrec.txint_timestamp); //use the intention's timestamp
-                    //cob.unlock(true);
+                ArrayList<CorfuDBObject> lockset = lockWriteSet(decrec, curstream);
+                try {
+                    Iterator<TxIntWriteSetEntry> it = getPending(decrec.txint_timestamp).get_bufferedupdates().iterator();
+                    while (it.hasNext()) {
+                        TxIntWriteSetEntry P2 = it.next();
+                        //no need to lock since each object can only be modified by its underlying TXEngine, which
+                        //in turn is only entered by the underlying SMREngine thread.
+                        //todo: do we have to do 2-phase locking?
+                        //the only bad thing that can happen is that reads see an inconsistent state
+                        //but this can happen anyway, and in this case the transaction will abort
+                        //todo: think about providing tx opacity across the board
+                        if (P2.objectid != curstream) continue;
+                        CorfuDBObject cob = txr.getObject(P2.objectid);
+                        if (cob == null) throw new RuntimeException("not a registered object!");
+                        //cob.lock(true);
+                        cob.applyToObject(P2.command);
+                        cob.setTimestamp(decrec.txint_timestamp); //use the intention's timestamp
+                        //cob.unlock(true);
 //                    System.out.println("object " + cob.getID() + " timestamp set to " + cob.getTimestamp());
+                    }
+                } catch(Exception e) {
+                  throw e;
+                } finally {
+                    unlockWriteSet(lockset);
                 }
             }
             removePending(decrec.txint_timestamp);
@@ -595,6 +611,42 @@ class TXEngine implements SMRLearner
 //            if(txr.updateApplyStatus(decrec.txint_timestamp, T.get_updatestreams().get(decrec.stream), T.get_updatestreams().size()))
                 txr.updateFinalDecision(decrec.txint_timestamp, P.second); //notify the application
 
+        }
+    }
+
+    protected ArrayList<CorfuDBObject> lockWriteSet(TxDec decrec, long curstream) {
+
+        ArrayList<CorfuDBObject> lockset = null;
+        if (lockWritesetForCommit) {
+            lockset = new ArrayList<CorfuDBObject>();
+            Iterator<TxIntWriteSetEntry> it = getPending(decrec.txint_timestamp).get_bufferedupdates().iterator();
+            while (it.hasNext()) {
+                TxIntWriteSetEntry P2 = it.next();
+                if (P2.objectid != curstream) continue;
+                CorfuDBObject cob = txr.getObject(P2.objectid);
+                if (cob == null) throw new RuntimeException("not a registered object!");
+                lockset.add(cob);
+            }
+            Collections.sort(lockset);
+            Iterator<CorfuDBObject> lit = lockset.iterator();
+            while (lit.hasNext()) {
+                CorfuDBObject cob = lit.next();
+                // System.out.format("  write-locking %d for commit updates\n", cob.getID());
+                cob.lock(true);
+            }
+        }
+        return lockset;
+    }
+
+    protected void unlockWriteSet(ArrayList<CorfuDBObject> lockset) {
+
+        if (lockWritesetForCommit && lockset != null) {
+            Iterator<CorfuDBObject> lit = lockset.iterator();
+            while (lit.hasNext()) {
+                CorfuDBObject cob = lit.next();
+                // System.out.format("  unlocking %d for commit updates\n", cob.getID());
+                cob.unlock(true);
+            }
         }
     }
 

@@ -158,6 +158,7 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
     {
         int numcommits = 0;
         int naborts = 0;
+        int ntotalretries = 0;
         if(m_nId == 0)
             populateLists();
         System.out.println("starting tx list tester thread " + m_nId);
@@ -166,24 +167,32 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
         } catch(Exception bbe) {
             throw new RuntimeException(bbe);
         }
+        System.out.println("Entering run loop for tx list tester thread " + m_nId);
         for(int i=0;i<m_nOps;i++)
         {
             long curtime = System.currentTimeMillis();
             long retries = 0;
             boolean done = false;
-            dbglog.debug("Tx starting..."+(retries > 0 ? " retry #"+retries:""));
             while(!done) {
+                dbglog.debug("Tx starting..."+(retries > 0 ? " retry #"+retries:""));
+                // System.out.format("[T%d] tx #%d starting..."+(retries > 0 ? "retry #"+retries:"")+"\n", m_nId, i);
+                boolean inTX = false;
                 try {
                     m_rt.BeginTX();
+                    inTX = true;
                     Pair<L, L> pair = selectLists();
                     moveRandomItem(pair.first, pair.second);
                     if (m_rt.EndTX()) numcommits++;
                     else naborts++;
+                    inTX = false;
                     done = true;
                 } catch (Exception e) {
+                    dbglog.debug("forcing retry in thread " + m_nId + " because of exception "+e);
                     retries++;
+                    if(inTX) m_rt.AbortTX();
                 }
             }
+            ntotalretries += retries;
             dbglog.debug("Tx took {}", (System.currentTimeMillis()-curtime));
         }
         try {
@@ -191,7 +200,7 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
         } catch(Exception bbe) {
             throw new RuntimeException(bbe);
         }
-        System.out.println("Tester thread is done: " + numcommits + " commits out of " + m_nOps);
+        System.out.println("Tester thread is done: " + numcommits + " commits out of " + m_nOps + " with " + ntotalretries + " retries for inconsistent views...");
     }
 
 }

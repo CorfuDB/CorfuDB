@@ -224,6 +224,10 @@ public class SimpleRuntime extends BaseRuntime
         throw new RuntimeException("SimpleRuntime does not support transactions.");
     }
 
+    public void AbortTX()
+    {
+        throw new RuntimeException("SimpleRuntime does not support transactions.");
+    }
 
     public void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update)
     {

@@ -98,5 +98,10 @@ public interface AbstractRuntime
      */
     boolean EndTX();
 
+    /**
+     * Abort the current transaction if one exists.
+     */
+    void AbortTX();
+
 
 }
