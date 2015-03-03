@@ -117,7 +117,7 @@ public class SMREngine
         pendingcommands.put(cmd.uniqueid.second, new Pair(update, precommand));
 //        System.out.println("putting " + update + " as a pending local command");
         pendinglock.unlock();
-        long pos = (Long)curstream.append(cmd, streams); //todo: remove the cast
+        long pos = curstream.append(cmd, streams).pos; //todo: make SMREngine Timestamp-aware
         if (precommand != null) //block until precommand is played
             sync(pos);
         return pos;
@@ -242,7 +242,7 @@ public class SMREngine
         if(procqueue.size()==0) return;
 
         //check the current tail of the stream, and then read the stream until that position
-        long curtail = (Long)curstream.checkTail(); //todo: remove the cast
+        Timestamp curtail = curstream.checkTail();
 
         dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
 
@@ -269,12 +269,12 @@ public class SMREngine
                     smrlearner.deliver(localcmds.second, curstream.getStreamID(), TIMESTAMP_INVALID);
                 }
 //                System.out.println("deliver local command " + localcmds.first);
-                smrlearner.deliver(localcmds.first, curstream.getStreamID(), (Long) update.getLogpos()); //todo: remove the cast
+                smrlearner.deliver(localcmds.first, curstream.getStreamID(), update.getLogpos().pos); //todo: make timestamp-aware
             }
             else
             {
 //                System.out.println("deliver local command " + cmdw.cmd);
-                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), (Long) update.getLogpos()); //todo: remove the cast
+                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), update.getLogpos().pos); //todo: make timestamp-aware
             }
             update = curstream.readNext(curtail);
         }

@@ -59,7 +59,7 @@ public class DirectoryService
     {
         Stream S = sf.newStream(DS_RESERVED_UNIQUE_ID);
         HashSet hs = new HashSet(); hs.add(DS_RESERVED_UNIQUE_ID);
-        return (Long)S.append("DummyString", hs); //todo: remove the cast
+        return S.append("DummyString", hs).pos;
     }
 
 

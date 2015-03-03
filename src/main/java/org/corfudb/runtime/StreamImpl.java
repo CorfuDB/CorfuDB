@@ -24,11 +24,11 @@ import java.util.concurrent.locks.ReentrantLock;
 
 class StreamEntryImpl implements StreamEntry
 {
-    private Comparable logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
+    private Timestamp logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
     private Object payload;
     private Set<Long> streams;
 
-    public Comparable getLogpos()
+    public Timestamp getLogpos()
     {
         return logpos;
     }
@@ -43,7 +43,7 @@ class StreamEntryImpl implements StreamEntry
         return streams;
     }
 
-    public StreamEntryImpl(Object tbs, long position, Set<Long> tstreams)
+    public StreamEntryImpl(Object tbs, Timestamp position, Set<Long> tstreams)
     {
         logpos = position;
         payload = tbs;
@@ -98,31 +98,33 @@ class StreamImpl implements Stream
     }
 
     @Override
-    public Comparable append(Serializable payload, Set<Long> streams)
+    public Timestamp append(Serializable payload, Set<Long> streams)
     {
         long ret = seq.get_slot(streams);
+        Timestamp T = new Timestamp(addrspace.getID(), ret, 0); //todo: fill in the right epoch
         dbglog.debug("reserved slot {}", ret);
-        StreamEntry S = new StreamEntryImpl(payload, ret, streams);
+        StreamEntry S = new StreamEntryImpl(payload, T, streams);
         addrspace.write(ret, BufferStack.serialize(S));
         dbglog.debug("wrote slot {}", ret);
-        return ret;
+        return T;
     }
 
     @Override
     public StreamEntry readNext()
     {
-        return readNext(0L);
+        return readNext(null);
     }
 
     @Override
-    public StreamEntry readNext(Comparable tstoppos)
+    public StreamEntry readNext(Timestamp stoppos)
     {
-        long stoppos = (Long)tstoppos;
+        //this is a hacky implementation that doesn't take multi-log hopping (epochs, logids) into account
+        if(stoppos!=null && stoppos.logid!=addrspace.getID()) throw new RuntimeException("readnext using timestamp of different log!");
         StreamEntry ret = null;
         while(true)
         {
             biglock.lock();
-            if (!(curpos < curtail && (stoppos == 0 || curpos < stoppos)))
+            if (!(curpos < curtail && (stoppos == null || curpos < stoppos.pos)))
             {
                 biglock.unlock();
                 return null;
@@ -139,17 +141,17 @@ class StreamImpl implements Stream
     }
 
     @Override
-    public Comparable checkTail()
+    public Timestamp checkTail()
     {
         long tcurtail = seq.check_tail();
         biglock.lock();
         if(tcurtail>curtail) curtail = tcurtail;
         biglock.unlock();
-        return tcurtail;
+        return new Timestamp(addrspace.getID(), tcurtail, 0); //todo: populate epoch
     }
 
     @Override
-    public void prefixTrim(Comparable trimpos)
+    public void prefixTrim(Timestamp trimpos)
     {
         throw new RuntimeException("unimplemented");
     }
