@@ -58,11 +58,6 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
         dbglog.debug("list size is {}", m_memlist.size());
     }
 
-    void rlock() { lock(false); }
-    void runlock() { unlock(false); }
-    void wlock() { lock(true); }
-    void wunlock() { unlock(true); }
-
     protected int applySize() {
         return sizeview();
     }

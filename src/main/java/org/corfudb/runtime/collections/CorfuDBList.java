@@ -22,7 +22,7 @@ public abstract class CorfuDBList<E> extends CorfuDBObject implements List<E> {
         oid = toid;
     }
 
-    boolean isTypeE(Object o) {
+    protected boolean isTypeE(Object o) {
         try {
             E e = (E) o;
         } catch (Exception e) {

@@ -37,6 +37,7 @@ import org.corfudb.runtime.collections.CorfuDBCounter;
 import org.corfudb.runtime.collections.CorfuDBCoarseList;
 import org.corfudb.runtime.collections.CorfuDBList;
 import org.corfudb.runtime.collections.CDBList;
+import org.corfudb.runtime.collections.CDBMList;
 
     /**
  * Tester code for the CorfuDB runtime stack
@@ -81,6 +82,7 @@ public class CorfuDBTester
         final int REMOBJTEST=5;
         final int TXLISTCOARSE=6;
         final int TXLISTFINE=7;
+        final int TXLISTFINEMAP=8;
 
         int numclients = 2;
         int expernum = 1; //used by the barrier code
@@ -279,6 +281,14 @@ public class CorfuDBTester
                     TR, rpchostname, rpcport, sf, numthreads,
                     numlists, numops, numkeys, new SeqIntGenerator(), "CDBList");
         }
+        else if(testnum==TXLISTFINEMAP) {
+            System.out.println("selected CDBMList test...");
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            System.out.println("running CDBMList test...");
+            CorfuDBTester.<Integer, CDBList<Integer>>runListTest(
+                    TR, rpchostname, rpcport, sf, numthreads,
+                    numlists, numops, numkeys, new SeqIntGenerator(), "CDBMList");
+        }
         else if(testnum==REMOBJTEST)
         {
             //create two maps, one local, one remote
@@ -381,6 +391,8 @@ public class CorfuDBTester
     {
         if(strClass.contains("CDBList"))
             return (L) new CDBList<E>(TR, sf, oid);
+        if(strClass.contains("CDBMList"))
+            return (L) new CDBMList<E>(TR, sf, oid);
         else if(strClass.contains("CorfuDBCoarseList"))
             return (L) new CorfuDBCoarseList<E>(TR, sf, oid);
         return null;
@@ -416,6 +428,7 @@ public class CorfuDBTester
             TXListTester<E, L> txl = new TXListTester<E, L>(
                     i, startbarrier, stopbarrier, TR, lists, numops, numkeys, generator);
             threads[i] = new Thread(txl);
+            System.out.println("...starting thread "+i);
             threads[i].start();
         }
         for(int i=0;i<numthreads;i++)

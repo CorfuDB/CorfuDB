@@ -30,12 +30,6 @@ public class CDBList<E> extends CorfuDBList<E>  {
     public StreamFactory sf;
     public long oid;
 
-    void rlock() { lock(false); }
-    void runlock() { unlock(false); }
-    void wlock() { lock(true); }
-    void wunlock() { unlock(true); }
-
-
     public void applyToObject(Object bs) {
 
         dbglog.debug("CDBNode received upcall");
@@ -145,15 +139,6 @@ public class CDBList<E> extends CorfuDBList<E>  {
             node = node.prev();
         }
         m_head = node;
-    }
-
-    boolean isTypeE(Object o) {
-        try {
-            E e = (E) o;
-        } catch (Exception e) {
-            return false;
-        }
-        return true;
     }
 
     @Override

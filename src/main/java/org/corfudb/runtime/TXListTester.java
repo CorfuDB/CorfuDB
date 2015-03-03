@@ -175,7 +175,7 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
             boolean done = false;
             while(!done) {
                 dbglog.debug("Tx starting..."+(retries > 0 ? " retry #"+retries:""));
-                // System.out.format("[T%d] tx #%d starting..."+(retries > 0 ? "retry #"+retries:"")+"\n", m_nId, i);
+                System.out.format("[T%d] tx #%d starting..."+(retries > 0 ? "retry #"+retries:"")+"\n", m_nId, i);
                 boolean inTX = false;
                 try {
                     m_rt.BeginTX();
