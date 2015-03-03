@@ -242,7 +242,7 @@ public class TXRuntime extends BaseRuntime
                 rpcRemoteRuntime(cob, command);
             }
             else
-                smre.sync(SMREngine.TIMESTAMP_INVALID, command);
+                smre.sync(SMREngine.TIMESTAMP_MAX, command);
         }
         else
         {

@@ -189,21 +189,6 @@ public class CorfuDBTester
         AbstractRuntime TR = null;
         DirectoryService DS = null;
         CorfuDBCounter barrier=null;
-        if(testnum==MULTICLIENTTXTEST)
-        {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
-            DS = new DirectoryService(TR);
-            barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
-            if(barrier.read()>numclients)
-            {
-                System.out.println("This experiment number has been used before! Use a new number for the -e flag, or check" +
-                        " that the -c flag correctly specifies the number of clients.");
-                System.exit(0);
-            }
-            barrier.increment();
-            while(barrier.read() < numclients) ;
-            dbglog.debug("Barrier reached; starting test...");
-        }
 
         if(testnum==LINTEST)
         {
@@ -219,7 +204,7 @@ public class CorfuDBTester
                 threads[i].join();
             System.out.println("Test succeeded!");
         }
-        if(testnum==LINCTRTEST)
+        else if(testnum==LINCTRTEST)
         {
             TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             CorfuDBCounter ctr1 = new CorfuDBCounter(TR, DirectoryService.getUniqueID(sf));
@@ -302,8 +287,8 @@ public class CorfuDBTester
             DS = new DirectoryService(TR);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
-            System.out.println("local map = " + (rpcport%2) + " " + cob1.getID());
-            System.out.println("remote map = " + ((rpcport+1)%2) + " " + cob2.getID());
+            System.out.println("local map = testmap" + (rpcport%2) + " " + cob1.getID());
+            System.out.println("remote map = testmap" + ((rpcport+1)%2) + " " + cob2.getID());
 
 
             System.out.println("sleeping");
@@ -318,14 +303,34 @@ public class CorfuDBTester
         }
         else if(testnum==MULTICLIENTTXTEST)
         {
-
-            //TR has already been created by the barrier code
-            //DS has already been created by the barrier code
-
+            //barrier code
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            DS = new DirectoryService(TR);
             CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + (rpcport%2)));
             CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap" + ((rpcport+1)%2)), true);
-            System.out.println("local map = " + (rpcport%2) + " " + cob1.getID());
-            System.out.println("remote map = " + ((rpcport+1)%2)+ " " + cob2.getID());
+
+            barrier = new CorfuDBCounter(TR, DS.nameToStreamID("barrier" + expernum));
+            if(barrier.read()>numclients)
+            {
+                System.out.println("This experiment number has been used before! Use a new number for the -e flag, or check" +
+                        " that the -c flag correctly specifies the number of clients.");
+                System.exit(0);
+            }
+            barrier.increment();
+            long lastprinttime = System.currentTimeMillis();
+            int curnumclients = 0;
+            while((curnumclients = barrier.read()) < numclients)
+            {
+                if(System.currentTimeMillis()-lastprinttime>3000)
+                {
+                    System.out.println("current number of clients in barrier " + expernum + " = " + curnumclients);
+                    lastprinttime = System.currentTimeMillis();
+                }
+            }
+            dbglog.debug("Barrier reached; starting test...");
+
+            System.out.println("local map = testmap" + (rpcport%2) + " " + cob1.getID());
+            System.out.println("remote map = testmap" + ((rpcport+1)%2)+ " " + cob2.getID());
 
             for (int i = 0; i < numthreads; i++)
             {

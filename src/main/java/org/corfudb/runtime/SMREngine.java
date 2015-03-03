@@ -154,7 +154,7 @@ public class SMREngine
      * the command can be applied anytime after syncpos has been
      * reached. syncpos is merely a hint to reduce the latency
      * of the sync call.
-     * todo: right now syncpos is ignored
+     * todo: right now syncpos is ignored unless it's TIMESTAMP_INVALID
      *
      * if syncpos == timestamp_invalid, the command should be applied
      * immediately before/without syncing;
