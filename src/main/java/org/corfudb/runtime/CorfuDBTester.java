@@ -184,7 +184,7 @@ public class CorfuDBTester
 
         Thread[] threads = new Thread[numthreads];
 
-        StreamFactory sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf), new CorfuStreamingSequencer(crf));
+        StreamFactory sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf, 0), new CorfuStreamingSequencer(crf)); //todo: fill in the right logid
 
         long starttime = System.currentTimeMillis();
 

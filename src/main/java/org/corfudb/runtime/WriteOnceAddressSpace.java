@@ -48,6 +48,8 @@ public interface WriteOnceAddressSpace
      * @param pos position before which all entries are trimmed
      */
     void prefixTrim(long pos);
+
+    int getID();
 }
 
 /**
@@ -57,12 +59,14 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
 {
     Logger dbglog = LoggerFactory.getLogger(CorfuLogAddressSpace.class);
 
+    int ID;
 
     CorfuDBClient cl;
     org.corfudb.client.view.WriteOnceAddressSpace cwoas;
 
-    public CorfuLogAddressSpace(CorfuDBClient tcl)
+    public CorfuLogAddressSpace(CorfuDBClient tcl, int ID)
     {
+        this.ID = ID;
         cl = tcl;
         cwoas = new org.corfudb.client.view.WriteOnceAddressSpace(cl);
     }
@@ -135,5 +139,11 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
     public void prefixTrim(long pos)
     {
         throw new RuntimeException("unimplemented");
+    }
+
+    @Override
+    public int getID()
+    {
+        return ID;
     }
 }

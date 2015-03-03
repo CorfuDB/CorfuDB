@@ -45,7 +45,7 @@ public interface Stream
      * @param streams set of streams to append the entry to
      * @return Timestamp of the appended entry
      */
-    Comparable append(Serializable s, Set<Long> streams);
+    Timestamp append(Serializable s, Set<Long> streams);
 
     /**
      * reads the next entry in the stream
@@ -63,7 +63,7 @@ public interface Stream
      * @param  stoppos  the stopping position for the read
      * @return          the next entry in the stream
      */
-    StreamEntry readNext(Comparable stoppos);
+    StreamEntry readNext(Timestamp stoppos);
 
     /**
      * returns the current tail position of the stream (this is exclusive, so a checkTail
@@ -73,7 +73,7 @@ public interface Stream
      *
      * @return          the current tail of the stream
      */
-    Comparable checkTail();
+    Timestamp checkTail();
 
     /**
      * trims all entries in the stream until the passed in position (exclusive); so
@@ -83,7 +83,7 @@ public interface Stream
      * @param   trimpos the position strictly before which all entries belonging to the
      *                  stream are trimmed
      */
-    void prefixTrim(Comparable trimpos);
+    void prefixTrim(Timestamp trimpos);
 
     /**
      * returns this stream's ID
@@ -102,10 +102,36 @@ public interface Stream
 
 interface StreamEntry extends Serializable
 {
-    public Comparable getLogpos();
+    public Timestamp getLogpos();
     public Object getPayload();
     public Set<Long> getStreams();
 }
 
+class Timestamp implements Comparable, Serializable
+{
+    long logid; //todo: currently we seem to identify logs with strings... which makes for terribly inefficient timestamps
+    long pos;
+    long epoch;
+    public Timestamp(long tlogid, long tpos, long tepoch)
+    {
+        logid = tlogid;
+        pos = tpos;
+        epoch = tepoch;
+    }
+
+    @Override
+    public int compareTo(Object o)
+    {
+        Timestamp T2 = (Timestamp)o;
+        //todo: is it okay to (ab)use ClassCastException?
+        if(this.logid!=T2.logid) throw new ClassCastException("timestamps are not comparable since they are on different logs");
+        int x;
+        if(this.epoch<T2.epoch || (this.epoch==T2.epoch && this.pos<T2.pos))
+            x = -1;
+        else
+            x = 1;
+        return x;
+    }
+}
 
 
