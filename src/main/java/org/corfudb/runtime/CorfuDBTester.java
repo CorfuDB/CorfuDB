@@ -235,24 +235,34 @@ public class CorfuDBTester
         }
         else if(testnum==TXTEST)
         {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            boolean perthreadstack = true;
+            CorfuDBMap<Integer, Integer> cob1 = null;
+            CorfuDBMap<Integer, Integer> cob2 = null;
+            if(!perthreadstack)
+            {
+                TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
 
-            DS = new DirectoryService(TR);
-            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
-            CorfuDBMap<Integer, Integer> cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
-
-
+                DS = new DirectoryService(TR);
+                cob1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
+                cob2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
+            }
+            TXTesterThread firsttester = null;
             for (int i = 0; i < numthreads; i++)
             {
+                TXTesterThread ttt = null;
                 //transactional tester
-                threads[i] = new Thread(new TXTesterThread(cob1, cob2, TR, numkeys, numops));
+                if(perthreadstack)
+                    ttt = new TXTesterThread(numkeys, numops, sf, rpchostname, rpcport+i);
+                else
+                    ttt = new TXTesterThread(cob1, cob2, TR, numkeys, numops);
+                if(i==0) firsttester = ttt;
+                threads[i] = new Thread(ttt);
                 threads[i].start();
             }
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
             System.out.println("Test done! Checking consistency...");
-            TXTesterThread tx = new TXTesterThread(cob1, cob2, TR, numkeys, numops);
-            if(tx.check_consistency())
+            if(firsttester.check_consistency())
                 System.out.println("Consistency check passed --- test successful!");
             else
                 System.out.println("Consistency check failed!");
@@ -431,6 +441,20 @@ class TXTesterThread implements Runnable
     CorfuDBMap<Integer, Integer> map2;
     int numkeys;
     int numops;
+
+    //creates thread-specific stack
+    public TXTesterThread(int tnumkeys, int tnumops, StreamFactory sf, String rpchostname, int rpcport)
+    {
+        TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+
+        DirectoryService DS = new DirectoryService(TR);
+        map1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
+        map2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
+
+        cr = TR;
+        numkeys = tnumkeys;
+        numops = tnumops;
+    }
 
     public TXTesterThread(CorfuDBMap<Integer, Integer> tmap1, CorfuDBMap<Integer, Integer> tmap2, AbstractRuntime tcr)
     {

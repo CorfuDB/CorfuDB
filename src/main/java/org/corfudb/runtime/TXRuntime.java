@@ -42,7 +42,7 @@ public class TXRuntime extends BaseRuntime
     // during commit and detecting inconsistent views on reads, which
     // is necessary for opacity. Default setting is off, since only the list
     // objects actually take advantage of this setting.
-    static final Boolean prohibitMultiVersionReads = true;
+    static final Boolean prohibitMultiVersionReads = false;
 
     final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 
@@ -253,7 +253,8 @@ public class TXRuntime extends BaseRuntime
                 if(!prohibitMultiVersionReads || !curtx.get().has_read(cob.getID(), cob.getTimestamp(), key)) {
                     curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
                     //do what here??? apply the command through the apply thread
-                    //todo: right now this causes an unnecessary sync
+                    //passing TIMESTAMP_INVALID ensures that this applies the command
+                    //through the upcall thread without triggering an actual sync
                     smre.sync(SMREngine.TIMESTAMP_INVALID, command);
                 } else {
                     // give the programmer some hint that we couldn't satisfy the
@@ -615,7 +616,7 @@ class TXEngine implements SMRLearner
     }
 
     protected ArrayList<CorfuDBObject> lockWriteSet(TxDec decrec, long curstream) {
-
+        if(true) return null;
         ArrayList<CorfuDBObject> lockset = null;
         if (lockWritesetForCommit) {
             lockset = new ArrayList<CorfuDBObject>();
@@ -639,7 +640,7 @@ class TXEngine implements SMRLearner
     }
 
     protected void unlockWriteSet(ArrayList<CorfuDBObject> lockset) {
-
+        if(true) return;
         if (lockWritesetForCommit && lockset != null) {
             Iterator<CorfuDBObject> lit = lockset.iterator();
             while (lit.hasNext()) {
