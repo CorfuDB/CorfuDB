@@ -30,6 +30,12 @@ public class CDBList<E> extends CorfuDBList<E>  {
     public StreamFactory sf;
     public long oid;
 
+    void rlock() { lock(false); }
+    void runlock() { unlock(false); }
+    void wlock() { lock(true); }
+    void wunlock() { unlock(true); }
+
+
     public void applyToObject(Object bs) {
 
         dbglog.debug("CDBNode received upcall");
@@ -41,21 +47,50 @@ public class CDBList<E> extends CorfuDBList<E>  {
         NodeOp<E> cc = (NodeOp<E>) bs;
 
         switch (cc.cmd()) {
-            case NodeOp.CMD_READ_HEAD:
-                cc.setReturnValue(m_head == null ? CDBNode.oidnull : m_head.oid);
-                break;
-            case NodeOp.CMD_READ_TAIL:
-                cc.setReturnValue(m_tail == null ? CDBNode.oidnull : m_tail.oid);
-                break;
-            case NodeOp.CMD_WRITE_HEAD:
-                long hoid = cc.oidparam();
-                m_head = hoid == CDBNode.oidnull ? null : findNode(hoid, null, false);
-                break;
-            case NodeOp.CMD_WRITE_TAIL:
-                long toid = cc.oidparam();
-                m_tail = toid == CDBNode.oidnull ? null : findNode(toid, null, false);
-                break;
+            case NodeOp.CMD_READ_HEAD: applyReadHead(cc); break;
+            case NodeOp.CMD_READ_TAIL: applyReadTail(cc); break;
+            case NodeOp.CMD_WRITE_HEAD: applyWriteHead(cc); break;
+            case NodeOp.CMD_WRITE_TAIL: applyWriteTail(cc); break;
+        }
+    }
 
+    protected long applyReadHead(NodeOp<E> cc) {
+        rlock();
+        try {
+            cc.setReturnValue(m_head == null ? CDBNode.oidnull : m_head.oid);
+        } finally {
+            runlock();
+        }
+        return (long) cc.getReturnValue();
+    }
+
+    protected long applyReadTail(NodeOp<E> cc) {
+        rlock();
+        try {
+            cc.setReturnValue(m_tail == null ? CDBNode.oidnull : m_tail.oid);
+        } finally {
+            runlock();
+        }
+        return (long) cc.getReturnValue();
+    }
+
+    protected void applyWriteHead(NodeOp<E> cc) {
+        wlock();
+        try {
+            long hoid = cc.oidparam();
+            m_head = hoid == CDBNode.oidnull ? null : findNode(hoid, null, false);
+        } finally {
+            wunlock();
+        }
+    }
+
+    protected void applyWriteTail(NodeOp<E> cc) {
+        wlock();
+        try {
+            long toid = cc.oidparam();
+            m_tail = toid == CDBNode.oidnull ? null : findNode(toid, null, false);
+        } finally {
+            wunlock();
         }
     }
 
@@ -72,19 +107,28 @@ public class CDBList<E> extends CorfuDBList<E>  {
     }
 
     public CDBNode<E> findNode(long toid, E e, boolean createifabsent) {
-        synchronized (m_nodes) {
+        rlock();
+        try {
             if(m_nodes.containsKey(toid))
                 return m_nodes.get(toid);
             if(createifabsent) {
-                CDBNode<E> node = new CDBNode<E>(TR, sf, e, toid, this);
-                m_nodes.put(toid, node);
-                return node;
+                wlock();
+                try {
+                    CDBNode<E> node = new CDBNode<E>(TR, sf, e, toid, this);
+                    m_nodes.put(toid, node);
+                    return node;
+                } finally {
+                    wunlock();
+                }
             }
             return null;
+        } finally {
+            runlock();
         }
     }
 
     public void updateTail(long startoid) {
+        assert(false); // obsolete!
         CDBNode<E> node = findNode(startoid, null, false);
         if(node == null) throw new RuntimeException("cannot find node "+startoid);
         while(node.next() != null) {
@@ -94,6 +138,7 @@ public class CDBList<E> extends CorfuDBList<E>  {
     }
 
     public void updateHead(long startoid) {
+        assert(false); // obsolete!
         CDBNode<E> node = findNode(startoid, null, false);
         if(node == null) throw new RuntimeException("cannot find node "+startoid);
         while(node.prev() != null) {
@@ -145,25 +190,30 @@ public class CDBList<E> extends CorfuDBList<E>  {
         while(node != null) {
             cmd = new NodeOp(NodeOp.CMD_READ_VALUE, node.oid);
             TR.query_helper(node, node.oid, cmd);
-            cmd = new NodeOp(NodeOp.CMD_READ_NEXT, node.oid);
-            TR.query_helper(node, node.oid, cmd);
             if(node.value.equals(o))
                 return index;
-            index++;
+            cmd = new NodeOp(NodeOp.CMD_READ_NEXT, node.oid);
+            TR.query_helper(node, node.oid, cmd);
             node = node.next();
+            index++;
         }
         return -1;
     }
 
     @Override
     public int sizeview() {
-        int size = 0;
-        CDBNode<E> node = m_head;
-        while(node != null) {
-            size++;
-            node = node.next();
+        rlock();
+        try {
+            int size = 0;
+            CDBNode<E> node = m_head;
+            while (node != null) {
+                size++;
+                node = node.next();
+            }
+            return size;
+        } finally {
+            runlock();
         }
-        return size;
     }
 
     @Override
@@ -402,9 +452,13 @@ public class CDBList<E> extends CorfuDBList<E>  {
         TR.query_helper(this, oid, cmd);
 
         CDBNode<E> newnode = new CDBNode<E>(TR, sf, e, DirectoryService.getUniqueID(sf), this);
-        synchronized (m_nodes) {
+        wlock();
+        try {
             m_nodes.put(newnode.oid, newnode);
+        } finally {
+            wunlock();
         }
+
         cmd = new NodeOp(NodeOp.CMD_WRITE_VALUE, newnode.oid, e);
         TR.update_helper(newnode, cmd, newnode.oid);
 

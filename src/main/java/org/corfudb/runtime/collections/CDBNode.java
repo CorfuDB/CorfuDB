@@ -25,6 +25,11 @@ public class CDBNode<E> extends CorfuDBObject {
     protected transient CDBNode<E> _prev;
     public transient StreamFactory _sf;
 
+    void rlock() { lock(false); }
+    void runlock() { unlock(false); }
+    void wlock() { lock(true); }
+    void wunlock() { unlock(true); }
+
     public CDBNode(
             AbstractRuntime tr,
             StreamFactory tsf,
@@ -44,28 +49,110 @@ public class CDBNode<E> extends CorfuDBObject {
     }
 
     protected CDBList<E> parent() {
-        if(_parentlist == null) {
-            assert (isDistributed);
-            _parentlist = CDBList.findList(oidparent);
-            _parentlist = (_parentlist != null) ? _parentlist : new CDBList<E>(TR, _sf, oidparent);
+        rlock();
+        try {
+            if (_parentlist == null) {
+                assert (isDistributed);
+                _parentlist = CDBList.findList(oidparent);
+                _parentlist = (_parentlist != null) ? _parentlist : new CDBList<E>(TR, _sf, oidparent);
+            }
+            return _parentlist;
+        } finally {
+            runlock();
         }
-        return _parentlist;
     }
 
     protected CDBNode<E> next() {
-        if(oidnext == oidnull) return null;
-        assert(oidnext != this.oid);
-        if(_next == null)
-            _next = parent().findNode(oidnext, null, isDistributed);
-        return _next;
+        rlock();
+        try {
+            if (oidnext == oidnull) return null;
+            assert (oidnext != this.oid);
+            if (_next == null)
+                _next = parent().findNode(oidnext, null, isDistributed);
+            assert(this._next != this);
+            return _next;
+        } finally {
+            runlock();
+        }
     }
 
     protected CDBNode<E> prev() {
-        if(oidprev == oidnull) return null;
-        assert(oidprev != this.oid);
-        if(_prev == null)
-            _prev = parent().findNode(oidprev, null, isDistributed);
-        return _prev;
+        rlock();
+        try {
+            if (oidprev == oidnull) return null;
+            assert (oidprev != this.oid);
+            if (_prev == null)
+                _prev = parent().findNode(oidprev, null, isDistributed);
+            return _prev;
+        } finally {
+            runlock();
+        }
+    }
+
+    protected void applyReadValue(NodeOp<E> cc) {
+        rlock();
+        try {
+            assert (oid == cc.nodeid());
+            cc.setReturnValue(value);
+        } finally {
+            runlock();
+        }
+    }
+
+    protected void applyReadNext(NodeOp<E> cc) {
+        rlock();
+        try {
+            assert (oid == cc.nodeid());
+            oidnext = cc.oidparam();
+            cc.setReturnValue(next());
+        } finally {
+            runlock();
+        }
+    }
+
+    protected void applyReadPrev(NodeOp<E> cc) {
+        rlock();
+        try {
+            assert (oid == cc.nodeid());
+            oidprev = cc.oidparam();
+            cc.setReturnValue(prev());
+        } finally {
+            runlock();
+        }
+    }
+
+    protected void applyWriteValue(NodeOp<E> cc) {
+        wlock();
+        try {
+            assert (oid == cc.nodeid());
+            value = cc.e();
+        } finally {
+            wunlock();
+        }
+    }
+
+    protected void applyWriteNext(NodeOp<E> cc) {
+        wlock();
+        try {
+            assert (oid == cc.nodeid());
+            CDBNode<E> onext = _next;
+            oidnext = cc.oidparam();
+            _next = next();
+        } finally {
+            wunlock();
+        }
+    }
+
+    protected void applyWritePrev(NodeOp<E> cc) {
+        wlock();
+        try {
+            assert (oid == cc.nodeid());
+            CDBNode<E> oprev = _prev;
+            oidprev = cc.oidparam();
+            _prev = prev();
+        } finally {
+            wunlock();
+        }
     }
 
 
@@ -80,56 +167,12 @@ public class CDBNode<E> extends CorfuDBObject {
         NodeOp<E> cc = (NodeOp<E>) bs;
 
         switch (cc.cmd()) {
-            case NodeOp.CMD_READ_VALUE:
-                assert (oid == cc.nodeid());
-                value = cc.e();
-                cc.setReturnValue(value);
-                break;
-            case NodeOp.CMD_READ_NEXT:
-                assert (oid == cc.nodeid());
-                oidnext = cc.oidparam();
-                cc.setReturnValue(next());
-                break;
-            case NodeOp.CMD_READ_PREV:
-                assert (oid == cc.nodeid());
-                oidprev = cc.oidparam();
-                cc.setReturnValue(prev());
-                break;
-            case NodeOp.CMD_WRITE_VALUE:
-                assert (oid == cc.nodeid());
-                value = cc.e();
-                node.value = value;
-                break;
-            case NodeOp.CMD_WRITE_NEXT:
-                assert (oid == cc.nodeid());
-                onext = _next;
-                ooidnext = oidnext;
-                oidnext = cc.oidparam();
-                _next = next();
-//                if(ooidnext == oidnull || _next == null || oidnext == oidnull) {
-//                    // tail update required. Either we are:
-//                    // a) changing the next pointer from null to
-//                    //    something else--this implies (at least) that this node
-//                    //    was the tail of the list. A change of the next pointer
-//                    //    can result from append to the list (either single of sublist)
-//                    //    or an idempotent write of the null value.
-//                    // b) appending something with a null pointer
-//                    // c) truncating the list
-//                    long startnode = ooidnext == oidnull ? oidnext : ooidnext;
-//                    parent().updateTail(startnode);
-//                }
-                break;
-            case NodeOp.CMD_WRITE_PREV:
-                assert (oid == cc.nodeid());
-                ooidprev = oidprev;
-                oprev = _prev;
-                oidprev = cc.oidparam();
-                _prev = prev();
-//                if(ooidprev == oidnull || _prev == null || oidprev == oidnull) {
-//                    long startnode = ooidprev == oidnull ? oidprev : ooidprev;
-//                    parent().updateHead(startnode);
-//                }
-                break;
+            case NodeOp.CMD_READ_VALUE: applyReadValue(cc); break;
+            case NodeOp.CMD_READ_NEXT: applyReadNext(cc); break;
+            case NodeOp.CMD_READ_PREV: applyReadPrev(cc); break;
+            case NodeOp.CMD_WRITE_VALUE: applyWriteValue(cc); break;
+            case NodeOp.CMD_WRITE_NEXT: applyWriteNext(cc); break;
+            case NodeOp.CMD_WRITE_PREV: applyWritePrev(cc); break;
         }
     }
 }
