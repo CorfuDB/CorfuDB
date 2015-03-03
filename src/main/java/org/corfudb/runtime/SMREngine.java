@@ -136,10 +136,16 @@ public class SMREngine
 
     class SyncObjectWrapper
     {
+        boolean preapply = false;
         Object synccommand;
         public SyncObjectWrapper(Object t)
         {
+            this(t, false);
+        }
+        public SyncObjectWrapper(Object t, boolean tpreapply)
+        {
             synccommand = t;
+            preapply = tpreapply;
         }
     }
 
@@ -157,7 +163,7 @@ public class SMREngine
      */
     public void sync(long syncpos, Object command)
     {
-        final SyncObjectWrapper syncobj = new SyncObjectWrapper(command);
+        final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, syncpos==TIMESTAMP_INVALID);
         synchronized (syncobj)
         {
             synchronized(queuelock)
@@ -213,6 +219,27 @@ public class SMREngine
         }
 
         if(procqueue.size()==0) throw new RuntimeException("queue cannot be empty at this point!");
+
+        //check for pre-applies
+        //todo: make this more efficient
+        Iterator<SyncObjectWrapper> it2 = procqueue.iterator();
+        while(it2.hasNext())
+        {
+            SyncObjectWrapper sw = it2.next();
+            if(sw.preapply)
+            {
+                if(sw.synccommand!=null)
+                {
+                    smrlearner.deliver(sw.synccommand, curstream.getStreamID(), TIMESTAMP_INVALID);
+                }
+                synchronized(sw)
+                {
+                    sw.notifyAll();
+                }
+                it2.remove();
+            }
+        }
+        if(procqueue.size()==0) return;
 
         //check the current tail of the stream, and then read the stream until that position
         long curtail = (Long)curstream.checkTail(); //todo: remove the cast
