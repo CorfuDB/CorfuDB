@@ -132,6 +132,11 @@ class Timestamp implements Comparable, Serializable
             x = 1;
         return x;
     }
+
+    public String toString()
+    {
+        return "[" + logid + "." + epoch + "." + pos + "]";
+    }
 }
 
 

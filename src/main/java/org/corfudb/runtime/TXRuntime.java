@@ -127,7 +127,8 @@ public class TXRuntime extends BaseRuntime
         SMREngine smre = getEngine();
         if(smre==null) throw new RuntimeException("no engine found for appending tx!");
         //todo: remove the egregious copy
-        txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_updatestreams().keySet()));
+//        txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_updatestreams().keySet()));
+        txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_allstreams().keySet()));
         dbglog.debug("appended endtx at position {}; now syncing...", txpos);
 
 
@@ -160,7 +161,7 @@ public class TXRuntime extends BaseRuntime
             {
                 throw new RuntimeException("timeout on waiting for final decision for " + txpos);
             }
-            dbglog.debug("EndTX checking for decision for intention at {}...", txpos);
+//            dbglog.debug("EndTX checking for decision for intention at {}...", txpos);
             boolean ret = false;
             boolean dec = false;
             synchronized (decisionmap)
@@ -420,7 +421,7 @@ class TXEngine implements SMRLearner
     @Override
     public void deliver(Object command, long curstream, long timestamp)
     {
-        dbglog.debug("deliver {}", timestamp);
+        dbglog.debug("[{}] deliver {}", cob.getID(), timestamp);
 
         if (command instanceof TxInt) //is the command a transaction or a linearizable singleton?
         {
@@ -435,7 +436,7 @@ class TXEngine implements SMRLearner
             process_lin_singleton(command, curstream, timestamp);
         }
 
-        dbglog.debug("done with deliver {}", timestamp);
+        dbglog.debug("[{}] done with deliver {}", cob.getID(), timestamp);
 
     }
 
@@ -463,7 +464,7 @@ class TXEngine implements SMRLearner
     //called by deliver
     public void process_tx_intention(Object command, long curstream, long timestamp)
     {
-        dbglog.debug("process_tx_int " + curstream + "." + timestamp);
+        dbglog.debug("[" + cob.getID() + "] process_tx_int " + curstream + "." + timestamp);
 
         if (txr.trackstats)
         {
@@ -556,7 +557,7 @@ class TXEngine implements SMRLearner
 
         TxDec decrec = (TxDec)command;
 
-        dbglog.debug("process_tx_dec " + curstream + "." + timestamp + " for txint at " + curstream + "." + decrec.txint_timestamp);
+        dbglog.debug("[" + cob.getID() + "] process_tx_dec " + curstream + "." + timestamp + " for txint at " + curstream + "." + decrec.txint_timestamp);
 
 
         TxInt T = getPending(decrec.txint_timestamp);
@@ -691,6 +692,10 @@ class TxIntReadSetEntry implements Serializable
         readtimestamp = ttimestamp;
         key = tkey;
     }
+    public String toString()
+    {
+        return "(R(" + objectid + "," + key + "))";
+    }
 }
 
 class TxIntWriteSetEntry implements Serializable
@@ -703,6 +708,10 @@ class TxIntWriteSetEntry implements Serializable
         command = tcommand;
         objectid = tobjid;
         key = tkey;
+    }
+    public String toString()
+    {
+        return "(W(" + objectid + "," + key + "))";
     }
 }
 

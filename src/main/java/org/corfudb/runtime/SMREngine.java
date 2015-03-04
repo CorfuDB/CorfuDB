@@ -244,7 +244,7 @@ public class SMREngine
         //check the current tail of the stream, and then read the stream until that position
         Timestamp curtail = curstream.checkTail();
 
-        dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
+//        dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
 
         StreamEntry update = curstream.readNext();
         while(update!=null)
@@ -279,7 +279,7 @@ public class SMREngine
             update = curstream.readNext(curtail);
         }
 
-        dbglog.debug("done with applying sync batch... wake up syncing threads...");
+//        dbglog.debug("done with applying sync batch... wake up syncing threads...");
 
         //wake up all waiting query threads; they will now see a state that incorporates all updates
         //that finished before they started
