@@ -1,4 +1,4 @@
-# CorfuDB ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/corfudb-logo-1.5x1.5.png "corfudb logo")
+# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/corfudb-logo-3x3.png "CorfuDB")
 
 [![Build Status](https://travis-ci.org/CorfuDB/CorfuDB.svg?branch=master)](https://travis-ci.org/CorfuDB/CorfuDB)
 
