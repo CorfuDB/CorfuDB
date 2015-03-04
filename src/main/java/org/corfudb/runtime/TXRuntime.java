@@ -246,7 +246,8 @@ public class TXRuntime extends BaseRuntime
         }
         else
         {
-            command.setTxid(curtx.get().getTxid());
+            if(command != null)
+                command.setTxid(getTxid());
             SMREngine smre = getEngine(cob.getID());
             if(smre!=null) //we're playing the object
             {

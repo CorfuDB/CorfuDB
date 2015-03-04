@@ -148,8 +148,10 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
             int lidx = (int) (Math.random() * m_v.size());
             L randlist = m_v.get(lidx);
             m_rt.BeginTX();
-            randlist.add(m_generator.randElem(i));
             int size = randlist.size();
+            E elem = m_generator.randElem(i);
+            randlist.add(elem);
+            System.out.format("...added item %d to list:%d (initial size=%d)\n", i, randlist.oid, size);
             m_rt.EndTX();
         }
     }
@@ -175,7 +177,7 @@ class TXListTester<E, L extends CorfuDBList<E>> implements Runnable {
             boolean done = false;
             while(!done) {
                 dbglog.debug("Tx starting..."+(retries > 0 ? " retry #"+retries:""));
-                // System.out.format("[T%d] tx #%d starting..."+(retries > 0 ? "retry #"+retries:"")+"\n", m_nId, i);
+                System.out.format("[T%d] tx #%d starting..."+(retries > 0 ? "retry #"+retries:"")+"\n", m_nId, i);
                 boolean inTX = false;
                 try {
                     m_rt.BeginTX();

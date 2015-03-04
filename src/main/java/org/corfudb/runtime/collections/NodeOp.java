@@ -38,9 +38,10 @@ class NodeOp<E> extends CorfuDBObjectCommand {
     }
 
     public NodeOp(int _cmd,
-                  long _oid) {
+                  long _oidparam) {
         m_cmd = _cmd;
-        m_oidparam = _oid;
+        m_nodeid = CorfuDBObject.oidnull;
+        m_oidparam = _oidparam;
     }
 
     public NodeOp(int _cmd,
@@ -48,6 +49,7 @@ class NodeOp<E> extends CorfuDBObjectCommand {
                   E _eparam) {
         m_cmd = _cmd;
         m_nodeid = _oid;
+        m_oidparam = CorfuDBObject.oidnull;
         m_elemparam = _eparam;
     }
 
