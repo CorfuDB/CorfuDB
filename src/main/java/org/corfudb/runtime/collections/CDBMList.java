@@ -107,7 +107,7 @@ public class CDBMList<E> extends CorfuDBList<E>  {
     }
 
     protected long readhead() {
-        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_HEAD, oid);
+        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_HEAD, oid, oid);
         if (TR.query_helper(this, null, cmd))
             return (long) cmd.getReturnValue();
         rlock();
@@ -119,7 +119,7 @@ public class CDBMList<E> extends CorfuDBList<E>  {
     }
 
     protected long readtail() {
-        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_TAIL, oid);
+        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_TAIL, oid, oid);
         if(TR.query_helper(this, null, cmd))
             return (long) cmd.getReturnValue();
         rlock();
@@ -132,7 +132,7 @@ public class CDBMList<E> extends CorfuDBList<E>  {
 
     protected long readnext(CDBMNode<E> node) {
 
-        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_NEXT, node.oid);
+        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_NEXT, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
             return (long) cmd.getReturnValue();
         node.rlock();
@@ -145,7 +145,7 @@ public class CDBMList<E> extends CorfuDBList<E>  {
 
     protected long readprev(CDBMNode<E> node) {
 
-        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_PREV, node.oid);
+        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_PREV, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
             return (long) cmd.getReturnValue();
         node.rlock();
@@ -158,7 +158,7 @@ public class CDBMList<E> extends CorfuDBList<E>  {
 
     protected E readvalue(CDBMNode<E> node) {
 
-        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_VALUE, node.oid);
+        NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_VALUE, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
             return (E) cmd.getReturnValue();
         node.rlock();
@@ -307,8 +307,8 @@ public class CDBMList<E> extends CorfuDBList<E>  {
             // remove singleton from list. equivalent:
             // head = null;
             // tail = null;
-            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, oid, CDBNode.oidnull));
-            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, oid, CDBNode.oidnull));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, CDBNode.oidnull));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, CDBNode.oidnull));
         }
 
         else if(oidnext != oidnull && oidprev != oidnull) {
@@ -432,13 +432,15 @@ public class CDBMList<E> extends CorfuDBList<E>  {
         throw new RuntimeException("unimplemented");
     }
 
-    private CDBMNode<E> allocNode(E e) {
+    private CDBMNode<E> allocNode(E e, long oidtail) {
         CDBMNode<E> newnode = new CDBMNode<>(TR, sf, e, DirectoryService.getUniqueID(sf), this);
         wlock();
         try {
             m_nodes.put(newnode.oid, newnode);
-            NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_WRITE_VALUE, newnode.oid, e);
-            TR.update_helper(newnode, cmd);
+            TR.update_helper(newnode, new NodeOp<>(NodeOp.CMD_WRITE_VALUE, newnode.oid, e));
+            TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_PREV, newnode.oid, oidtail));
+            TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_NEXT, newnode.oid, CDBNode.oidnull));
+
             return newnode;
         } finally {
             wunlock();
@@ -448,18 +450,24 @@ public class CDBMList<E> extends CorfuDBList<E>  {
     @Override
     public boolean add(E e) {
 
-        CDBMNode<E> newnode = allocNode(e);
         long oidtail = readtail();
+        CDBMNode<E> newnode = allocNode(e, oidtail);
+
         if(oidtail == oidnull) {
+
+            // add to an empty list. It suffices to update the
+            // head and tail pointers to point to the new node.
             assert(m_head == oidnull);
-            TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_PREV, CDBNode.oidnull));
-            TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_NEXT, CDBNode.oidnull));
-            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, newnode.oid));
-            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, newnode.oid));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, newnode.oid, newnode.oid));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, newnode.oid, newnode.oid));
+
         } else {
-            TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_PREV, oidtail));
-            TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_NEXT, oidnull));
-            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, newnode.oid));
+
+            // add to a non-empty list. must point old tail.next to
+            // to the new node, and update the tail pointer of the list.
+            CDBMNode<E> tail = nodeById(oidtail);
+            TR.update_helper(tail, new NodeOp(NodeOp.CMD_WRITE_NEXT, tail.oid, newnode.oid));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, newnode.oid, newnode.oid));
         }
         return true;
     }
