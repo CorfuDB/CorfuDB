@@ -1,6 +1,6 @@
 # CorfuDB
 [![Build Status](https://travis-ci.org/CorfuDB/CorfuDB.svg?branch=master)](https://travis-ci.org/CorfuDB/CorfuDB)
-![My image](https://github.com/CorfuDB/CorfuDB/blob/master/corfudb-logo.jpg)
+![logo](https://github.com/CorfuDB/CorfuDB/blob/master/corfudb-logo.png "corfudb logo")
 
 CorfuDB is a consistency platform designed around the abstraction
 of a shared log. CorfuDB objects are in-memory, highly available
