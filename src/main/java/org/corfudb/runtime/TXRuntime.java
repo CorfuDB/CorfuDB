@@ -286,7 +286,7 @@ public class TXRuntime extends BaseRuntime
         {
             SMREngine smre = getEngine(cob.getID());
             if(smre==null) throw new RuntimeException("updates not allowed on remote objects!");
-            smre.propose(update, streams, query);
+            smre.propose(update, streams, query, true);
         }
         else //in a transactional context, buffer for now
         {

@@ -28,22 +28,18 @@ import java.util.*;
 import java.util.concurrent.CyclicBarrier;
 
 import gnu.getopt.Getopt;
+import org.apache.zookeeper.CreateMode;
 import org.corfudb.client.CorfuDBClient;
-import org.corfudb.runtime.collections.CorfuDBMap;
+import org.corfudb.runtime.collections.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.impl.SimpleLogger;
-import org.corfudb.runtime.collections.CorfuDBCounter;
-import org.corfudb.runtime.collections.CorfuDBCoarseList;
-import org.corfudb.runtime.collections.CorfuDBList;
-import org.corfudb.runtime.collections.CDBList;
-import org.corfudb.runtime.collections.CDBMList;
 
-    /**
- * Tester code for the CorfuDB runtime stack
- *
- *
- */
+/**
+* Tester code for the CorfuDB runtime stack
+*
+*
+*/
 
 public class CorfuDBTester
 {
@@ -83,6 +79,7 @@ public class CorfuDBTester
         final int TXLISTCOARSE=6;
         final int TXLISTFINE=7;
         final int TXLISTFINEMAP=8;
+        final int LINZK=9;
 
         int numclients = 2;
         int expernum = 1; //used by the barrier code
@@ -367,6 +364,42 @@ public class CorfuDBTester
             dbglog.debug("third barrier reached; test done");
             System.out.println("Test done!");
         }
+        else if(testnum==LINZK)
+        {
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            DS = new DirectoryService(TR);
+            IZooKeeper zk = new CorfuDBZK(TR, DS.nameToStreamID("zookeeper"), false, null);
+            if(zk.exists("/xyz",  true)==null)
+                System.out.println(zk.create("/xyz", "ABCD".getBytes(), null, CreateMode.PERSISTENT));
+            else
+                System.out.println("already exists");
+            System.out.println(zk.exists("/xyz",  true));
+            zk.setData("/xyz", "AAA".getBytes(), -1);
+            System.out.println(new String(zk.getData("/xyz", false, null)));
+            Thread.sleep(1000);
+            /*
+            //synchronous testing
+            for(int i=0;i<100;i++)
+                zk.create("/abcd/" + i, "AAA".getBytes(), null, CreateMode.PERSISTENT);
+            for(int i=0;i<100;i++)
+                zk.setData("/abcd/" + i, "BBB".getBytes(), -1);
+            for(int i=0;i<100;i++)
+                zk.exists("/abcd/" + i, false);
+            for(int i=0;i<100;i++)
+                zk.getData("/abcd/" + i, false, null);
+            for(int i=0;i<100;i++)
+                zk.getChildren("/abcd/" + i, false);
+            for(int i=0;i<100;i++)
+                zk.delete("/abcd/" + i, -1);
+            for(int i=0;i<100;i++)
+                System.out.println("Sequential --- " + zk.create("/xyzaaa", "qwerty".getBytes(), null, CreateMode.PERSISTENT_SEQUENTIAL));
+            List<String> childnodes = zk.getChildren("/", false);
+            Iterator<String> it = childnodes.iterator();
+            while(it.hasNext())
+                zk.delete(it.next(), -1);
+            zk.create("/abcd", "QWE".getBytes(), null, CreateMode.PERSISTENT);*/
+            System.out.println("Synchronous testing done!");
+        }
 
 
         System.out.println("Test done in " + (System.currentTimeMillis()-starttime));
@@ -601,27 +634,6 @@ class TesterThread implements Runnable
             }*/
 
         }
-    }
-}
-
-//todo: custom serialization + unit tests
-class Pair<X, Y> implements Serializable
-{
-    final X first;
-    final Y second;
-    Pair(X f, Y s)
-    {
-        first = f;
-        second = s;
-    }
-
-    public boolean equals(Pair<X,Y> otherP)
-    {
-        if(otherP==null) return false;
-        if(((first==null && otherP.first==null) || (first!=null && first.equals(otherP.first))) //first matches up
-                && ((second==null && otherP.second==null) || (second!=null && (second.equals(otherP.second))))) //second matches up
-            return true;
-        return false;
     }
 }
 

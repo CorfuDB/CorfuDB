@@ -97,6 +97,10 @@ public class SMREngine
 
     }
 
+    public long propose(Serializable update, Set<Long> streams, Object precommand)
+    {
+        return propose(update, streams, precommand, false);
+    }
 
     /**
      * Proposes a new command to the SMR total order.
@@ -110,15 +114,17 @@ public class SMREngine
      *                   with a subsequent write operation.
      * @return
      */
-    public long propose(Serializable update, Set<Long> streams, Object precommand)
+    public long propose(Serializable update, Set<Long> streams, Object precommand, boolean sync)
     {
         SMRCommandWrapper cmd = new SMRCommandWrapper(update, streams);
         pendinglock.lock();
         pendingcommands.put(cmd.uniqueid.second, new Pair(update, precommand));
-//        System.out.println("putting " + update + " as a pending local command");
+//        System.out.println("putting " + cmd + " as a pending local command");
         pendinglock.unlock();
         long pos = curstream.append(cmd, streams).pos; //todo: make SMREngine Timestamp-aware
-        if (precommand != null) //block until precommand is played
+        if (precommand != null || sync)
+        //we play until the append point --- this may be sub-optimal in some cases where we want to append
+        //but not play immediately (or ever)
             sync(pos);
         return pos;
     }
@@ -257,8 +263,11 @@ public class SMREngine
             pendinglock.lock();
             Pair<Serializable, Object> localcmds = null;
             //did we generate this command, and is it pending?
+//            System.out.println(uniquenodeid + " is checking for local command on " + cmdw.uniqueid);
+//            System.out.println(cmdw.uniqueid.first==uniquenodeid);
+///            System.out.println(pendingcommands);
             if(cmdw.uniqueid.first==uniquenodeid && pendingcommands.containsKey(cmdw.uniqueid.second))
-                localcmds = pendingcommands.remove(cmdw.uniqueid);
+                localcmds = pendingcommands.remove(cmdw.uniqueid.second);
             pendinglock.unlock();
             if(smrlearner==null) throw new RuntimeException("smr learner not set!");
             if(localcmds!=null)
@@ -273,7 +282,7 @@ public class SMREngine
             }
             else
             {
-//                System.out.println("deliver local command " + cmdw.cmd);
+//                System.out.println("deliver non-local command " + cmdw.cmd);
                 smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), update.getLogpos().pos); //todo: make timestamp-aware
             }
             update = curstream.readNext(curtail);
@@ -346,6 +355,10 @@ class SMRCommandWrapper implements Serializable
         uniquenodeid = tuniquenodeid;
         ctr = new AtomicLong();
         init = true;
+    }
+    public String toString()
+    {
+        return super.toString() + "::" + uniqueid + "::" + cmd;
     }
 }
 
