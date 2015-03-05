@@ -176,11 +176,19 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
 
     //we don't lock the object; the sub-classing runtime is responsible for locking, if required,
     //before calling this method
-    public void applyCommandToObject(long curstream, Object command, long timestamp)
+    public void applyCommandToObject(long curstream, CorfuDBObjectCommand command, long timestamp)
     {
         CorfuDBObject cob = getObject(curstream);
         if(cob==null) throw new RuntimeException("entry for stream " + curstream + " with no registered object");
-        cob.applyToObject(command);
+        try
+        {
+            cob.applyToObject(command);
+        }
+        catch(Exception e)
+        {
+            System.out.println("caught exception " + e + " and setting exception on command");
+            command.setException(e);
+        }
         //todo: verify that it's okay for this to not be atomic with the apply
         //in the worst case, the object thinks it has an older version than it really does
         //but all that should cause is spurious aborts
@@ -287,7 +295,7 @@ public class SimpleRuntime extends BaseRuntime
     {
         //we don't have to lock the object --- there's one thread per SMREngine,
         //and exactly one SMREngine per stream/object
-        applyCommandToObject(curstream, command, timestamp);
+        applyCommandToObject(curstream, (CorfuDBObjectCommand)command, timestamp);
     }
 
 }

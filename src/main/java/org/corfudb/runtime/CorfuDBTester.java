@@ -376,29 +376,31 @@ public class CorfuDBTester
             System.out.println(zk.exists("/xyz",  true));
             zk.setData("/xyz", "AAA".getBytes(), -1);
             System.out.println(new String(zk.getData("/xyz", false, null)));
+            zk.delete("/xyz", -1);
+            System.out.println(zk.exists("/xyz",  true));
+            System.out.println(zk.create("/xyz", "ABCD".getBytes(), null, CreateMode.PERSISTENT));
             Thread.sleep(1000);
-            /*
+            int numzops = 100;
             //synchronous testing
-            for(int i=0;i<100;i++)
-                zk.create("/abcd/" + i, "AAA".getBytes(), null, CreateMode.PERSISTENT);
-            for(int i=0;i<100;i++)
-                zk.setData("/abcd/" + i, "BBB".getBytes(), -1);
-            for(int i=0;i<100;i++)
-                zk.exists("/abcd/" + i, false);
-            for(int i=0;i<100;i++)
-                zk.getData("/abcd/" + i, false, null);
-            for(int i=0;i<100;i++)
-                zk.getChildren("/abcd/" + i, false);
-            for(int i=0;i<100;i++)
-                zk.delete("/abcd/" + i, -1);
-            for(int i=0;i<100;i++)
+            for(int i=0;i<numzops;i++)
+                zk.create("/xyz/" + i, "AAA".getBytes(), null, CreateMode.PERSISTENT);
+            for(int i=0;i<numzops;i++)
+                zk.setData("/xyz/" + i, "BBB".getBytes(), -1);
+            for(int i=0;i<numzops;i++)
+                zk.exists("/xyz/" + i, false);
+            for(int i=0;i<numzops;i++)
+                zk.getData("/xyz/" + i, false, null);
+            for(int i=0;i<numzops;i++)
+                zk.getChildren("/xyz/" + i, false);
+            for(int i=0;i<numzops;i++)
+                zk.delete("/xyz/" + i, -1);
+            for(int i=0;i<numzops;i++)
                 System.out.println("Sequential --- " + zk.create("/xyzaaa", "qwerty".getBytes(), null, CreateMode.PERSISTENT_SEQUENTIAL));
             List<String> childnodes = zk.getChildren("/", false);
             Iterator<String> it = childnodes.iterator();
             while(it.hasNext())
                 zk.delete(it.next(), -1);
-            zk.create("/abcd", "QWE".getBytes(), null, CreateMode.PERSISTENT);*/
-            System.out.println("Synchronous testing done!");
+            zk.create("/abcd", "QWE".getBytes(), null, CreateMode.PERSISTENT);
         }
 
 

@@ -56,7 +56,7 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
         timestamp.set(newts);
     }
 
-    abstract public void applyToObject(Object update);
+    abstract public void applyToObject(Object update) throws Exception;
 
     public long getID()
     {

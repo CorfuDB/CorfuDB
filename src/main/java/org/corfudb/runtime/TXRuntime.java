@@ -598,14 +598,25 @@ class TXEngine implements SMRLearner
                         CorfuDBObject cob = txr.getObject(P2.objectid);
                         if (cob == null) throw new RuntimeException("not a registered object!");
                         //cob.lock(true);
-                        cob.applyToObject(P2.command);
+                        try
+                        {
+                            cob.applyToObject(P2.command);
+                        }
+                        catch(Exception e)
+                        {
+                            ((CorfuDBObjectCommand)P2.command).setException(e);
+                        }
                         cob.setTimestamp(decrec.txint_timestamp); //use the intention's timestamp
                         //cob.unlock(true);
 //                    System.out.println("object " + cob.getID() + " timestamp set to " + cob.getTimestamp());
                     }
-                } catch(Exception e) {
+                }
+                catch(Exception e)
+                {
                   throw e;
-                } finally {
+                }
+                finally
+                {
                     unlockWriteSet(lockset);
                 }
             }
@@ -662,7 +673,7 @@ class TXEngine implements SMRLearner
             else
                 txr.ctr_numapplieslocal.incrementAndGet();
         }
-        txr.applyCommandToObject(curstream, command, timestamp);
+        txr.applyCommandToObject(curstream, (CorfuDBObjectCommand)command, timestamp);
     }
 
 }

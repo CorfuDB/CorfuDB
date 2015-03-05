@@ -18,7 +18,8 @@ import java.io.Serializable;
 
 public class CorfuDBObjectCommand implements Serializable
 {
-    Object retval;
+    Exception E=null;
+    Object retval=null;
     long txid = -1;
     public Object getReturnValue()
     {
@@ -30,4 +31,12 @@ public class CorfuDBObjectCommand implements Serializable
     }
     public long getTxid() { return txid; }
     public void setTxid(long l) { txid = l; }
+    public void setException(Exception tE)
+    {
+        E = tE;
+    }
+    public Exception getException()
+    {
+        return E;
+    }
 }

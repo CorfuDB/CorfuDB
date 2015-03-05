@@ -27,30 +27,27 @@ public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
     AbstractRuntime CR;
 
     @Override
-    public void applyToObject(Object update)
+    public void applyToObject(Object update) throws Exception
     {
-        try
-        {
-            if (update instanceof CreateOp)
-                ((CreateOp)update).setReturnValue(apply((CreateOp)update));
-            else if(update instanceof ExistsOp)
-                ((ExistsOp)update).setReturnValue(apply((ExistsOp)update));
-            else if(update instanceof SetOp)
-                ((SetOp)update).setReturnValue(apply((SetOp)update));
-            else if(update instanceof GetOp)
-                ((GetOp)update).setReturnValue(apply((GetOp)update));
-            else
-                throw new RuntimeException("unrecognized command");
-        }
-        catch(Exception e)
-        {
-            throw new RuntimeException(e);
-        }
+        if (update instanceof CreateOp)
+            ((CreateOp)update).setReturnValue(apply((CreateOp)update));
+        else if(update instanceof ExistsOp)
+            ((ExistsOp)update).setReturnValue(apply((ExistsOp)update));
+        else if(update instanceof SetOp)
+            ((SetOp)update).setReturnValue(apply((SetOp)update));
+        else if(update instanceof GetOp)
+            ((GetOp)update).setReturnValue(apply((GetOp)update));
+        else if(update instanceof DeleteOp)
+            ((DeleteOp)update).setReturnValue(apply((DeleteOp)update));
+        else if(update instanceof GetChildrenOp)
+            ((GetChildrenOp)update).setReturnValue(apply((GetChildrenOp)update));
+        else
+            throw new RuntimeException("unrecognized command");
     }
 
     public Object apply(CreateOp cop) throws KeeperException
     {
-        dbglog.warn("applying create command");
+        dbglog.debug("applying create command");
         String path = cop.path;
         File f = new File(path);
         if(map.containsKey(f))
@@ -94,7 +91,7 @@ public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
     Map<String, Set<Watcher>> existswatches = new HashMap(); //protected by map
     public Object apply(ExistsOp eop) throws KeeperException
     {
-        dbglog.warn("applying exists command");
+        dbglog.debug("applying exists command");
         File F = new File(eop.path);
         if(!map.containsKey(F))
         {
@@ -143,6 +140,44 @@ public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
         if(gop.watch && defaultwatcher!=null) N.datawatches.add(defaultwatcher);
         return new Pair<byte[], Stat>(y, x); //todo -- copy data and stat
     }
+
+    public Object apply(DeleteOp dop) throws KeeperException
+    {
+        File F = new File(dop.path);
+        if(!map.containsKey(F))
+            throw new KeeperException.NoNodeException();
+        ZNode N = map.get(F);
+        //		N.lock();
+        if(dop.version!=-1 && N.stat.getVersion()!=dop.version)
+            throw new KeeperException.BadVersionException();
+        if(N.children.size()>0)
+            throw new KeeperException.NotEmptyException();
+        ZNode parent = map.get(F.getParentFile());
+        parent.children.remove(N);
+//        triggerwatches(parent.childrenwatches, new WatchedEvent(Watcher.Event.EventType.NodeChildrenChanged, KeeperState.SyncConnected, parent.path));
+//        triggerwatches(N.datawatches, new WatchedEvent(Watcher.Event.EventType.NodeDeleted, KeeperState.SyncConnected, N.path));
+        map.remove(F);
+        return null;
+    }
+
+    public Object apply(GetChildrenOp gcop) throws KeeperException
+    {
+        File F = new File(gcop.path);
+        if(!map.containsKey(F))
+            throw new KeeperException.NoNodeException();
+        ZNode N = map.get(F);
+        //		N.lock();
+        LinkedList<String> children = new LinkedList<String>();
+        Iterator<ZNode> it = N.children.iterator();
+        while(it.hasNext())
+        {
+            children.add(it.next().path);
+        }
+        if(gcop.watch && defaultwatcher!=null) N.childrenwatches.add(defaultwatcher);
+        //		N.unlock();
+        return children;
+    }
+
 
     class ZNode
     {
@@ -201,25 +236,41 @@ public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
     @Override
     public String create(String path, byte[] data, List<ACL> acl, CreateMode createMode) throws KeeperException, InterruptedException
     {
-        System.out.println("createsync");
         CreateOp cop = new CreateOp(path, data, acl, createMode, null, null);
         CR.update_helper(this, cop);
+        if(cop.getException()!=null)
+        {
+            if (cop.getException() instanceof KeeperException) throw (KeeperException) cop.getException();
+            else if (cop.getException() instanceof InterruptedException) throw (InterruptedException) cop.getException();
+            else throw new RuntimeException(cop.getException());
+        }
         return (String)cop.getReturnValue();
     }
 
     @Override
     public Stat exists(String path, boolean watcher) throws KeeperException, InterruptedException
     {
-        System.out.println("existssync");
         ExistsOp eop = new ExistsOp(path, watcher, null, null);
         CR.query_helper(this, null, eop);
+        if(eop.getException()!=null)
+        {
+            if (eop.getException() instanceof KeeperException) throw (KeeperException) eop.getException();
+            else if (eop.getException() instanceof InterruptedException) throw (InterruptedException) eop.getException();
+            else throw new RuntimeException(eop.getException());
+        }
         return (Stat)eop.getReturnValue();
     }
 
     @Override
     public void delete(String path, int version) throws KeeperException
     {
-
+        DeleteOp dop = new DeleteOp(path, version, null, null);
+        if(dop.getException()!=null)
+        {
+            if (dop.getException() instanceof KeeperException) throw (KeeperException) dop.getException();
+            else throw new RuntimeException(dop.getException());
+        }
+        CR.update_helper(this, dop);
     }
 
     @Override
@@ -227,6 +278,12 @@ public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
     {
         SetOp sop = new SetOp(path, data, version, null, null);
         CR.update_helper(this, sop);
+        if(sop.getException()!=null)
+        {
+            if (sop.getException() instanceof KeeperException) throw (KeeperException) sop.getException();
+            else if (sop.getException() instanceof InterruptedException) throw (InterruptedException) sop.getException();
+            else throw new RuntimeException(sop.getException());
+        }
         return (Stat)sop.getReturnValue();
     }
 
@@ -236,13 +293,27 @@ public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
         //todo: what about stat?
         GetOp gop = new GetOp(path, watcher, null, null);
         CR.query_helper(this, null, gop);
+        if(gop.getException()!=null)
+        {
+            if (gop.getException() instanceof KeeperException) throw (KeeperException) gop.getException();
+            else if (gop.getException() instanceof InterruptedException) throw (InterruptedException) gop.getException();
+            else throw new RuntimeException(gop.getException());
+        }
         return ((Pair<byte[], Stat>)gop.getReturnValue()).first;
     }
 
     @Override
     public List<String> getChildren(String path, boolean watch) throws KeeperException, InterruptedException
     {
-        return null;
+        GetChildrenOp gcop = new GetChildrenOp(path, watch, null, null);
+        CR.query_helper(this, null, gcop);
+        if(gcop.getException()!=null)
+        {
+            if (gcop.getException() instanceof KeeperException) throw (KeeperException) gcop.getException();
+            else if (gcop.getException() instanceof InterruptedException) throw (InterruptedException) gcop.getException();
+            else throw new RuntimeException(gcop.getException());
+        }
+        return (List<String>)gcop.getReturnValue();
     }
 
     @Override
@@ -355,6 +426,36 @@ class GetOp extends ZKOp
     Object ctx;
 
     public GetOp(String path, boolean watch, AsyncCallback.DataCallback cb, Object ctx)
+    {
+        this.path = path;
+        this.watch = watch;
+        this.cb = cb;
+        this.ctx = ctx;
+    }
+}
+
+class DeleteOp extends ZKOp implements Serializable
+{
+    String path;
+    int version;
+    AsyncCallback.VoidCallback cb;
+    Object ctxt;
+    public DeleteOp(String path, int version, AsyncCallback.VoidCallback tcb, Object tctxt)
+    {
+        this.path = path;
+        this.version = version;
+        this.cb = tcb;
+        this.ctxt = tctxt;
+    }
+}
+
+class GetChildrenOp extends ZKOp
+{
+    String path;
+    boolean watch;
+    AsyncCallback.ChildrenCallback cb;
+    Object ctx;
+    public GetChildrenOp(String path, boolean watch, AsyncCallback.ChildrenCallback cb, Object ctx)
     {
         this.path = path;
         this.watch = watch;
