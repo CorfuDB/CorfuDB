@@ -101,7 +101,7 @@ class StreamImpl implements Stream
     public Timestamp append(Serializable payload, Set<Long> streams)
     {
         long ret = seq.get_slot(streams);
-        Timestamp T = new Timestamp(addrspace.getID(), ret, 0); //todo: fill in the right epoch
+        Timestamp T = new Timestamp(addrspace.getID(), ret, 0, this.getStreamID()); //todo: fill in the right epoch
         dbglog.debug("reserved slot {}", ret);
         StreamEntry S = new StreamEntryImpl(payload, T, streams);
         addrspace.write(ret, BufferStack.serialize(S));
@@ -147,7 +147,7 @@ class StreamImpl implements Stream
         biglock.lock();
         if(tcurtail>curtail) curtail = tcurtail;
         biglock.unlock();
-        return new Timestamp(addrspace.getID(), tcurtail, 0); //todo: populate epoch
+        return new Timestamp(addrspace.getID(), tcurtail, 0, this.getStreamID()); //todo: populate epoch
     }
 
     @Override
