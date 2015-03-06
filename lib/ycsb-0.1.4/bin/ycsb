@@ -1,0 +1,111 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import subprocess
+
+BASE_URL = "https://github.com/brianfrankcooper/YCSB/tree/master/"
+COMMANDS = {
+    "shell" : {
+        "command"     : "",
+        "description" : "Interactive mode",
+        "main"        : "com.yahoo.ycsb.CommandLine",
+    },
+    "load" : {
+        "command"     : "-load",
+        "description" : "Execute the load phase",
+        "main"        : "com.yahoo.ycsb.Client",
+    },
+    "run" : {
+        "command"     : "-t",
+        "description" : "Execute the transaction phase",
+        "main"        : "com.yahoo.ycsb.Client",
+    },
+}
+
+DATABASES = {
+    "basic"        : "com.yahoo.ycsb.BasicDB",
+    "cassandra-7"  : "com.yahoo.ycsb.db.CassandraClient7",
+    "cassandra-8"  : "com.yahoo.ycsb.db.CassandraClient8",
+    "cassandra-10" : "com.yahoo.ycsb.db.CassandraClient10",
+    "gemfire"      : "com.yahoo.ycsb.db.GemFireClient",
+    "hbase"        : "com.yahoo.ycsb.db.HBaseClient",
+    "infinispan"   : "com.yahoo.ycsb.db.InfinispanClient",
+    "jdbc"         : "com.yahoo.ycsb.db.JdbcDBClient",
+    "mapkeeper"    : "com.yahoo.ycsb.db.MapKeeperClient",
+    "mongodb"      : "com.yahoo.ycsb.db.MongoDbClient",
+    "nosqldb"      : "com.yahoo.ycsb.db.NoSqlDbClient",
+    "redis"        : "com.yahoo.ycsb.db.RedisClient", 
+    "voldemort"    : "com.yahoo.ycsb.db.VoldemortClient", 
+}
+
+OPTIONS = {
+    "-P file"      : "Specify workload file",
+    "-p key=value" : "Override workload property",
+    "-s"           : "Print status to stderr",
+    "-target n"    : "Target ops/sec (default: unthrottled)",
+    "-threads n"   : "Number of client threads (default: 1)",
+}
+
+def usage():
+    print "Usage: %s command database [options]" % sys.argv[0]
+
+    print "\nCommands:"
+    for command in sorted(COMMANDS.keys()):
+        print "    %s %s" % (command.ljust(13), COMMANDS[command]["description"])
+
+    print "\nDatabases:"
+    for db in sorted(DATABASES.keys()):
+        print "    %s %s" % (db.ljust(13), BASE_URL + db.split("-")[0])
+
+    print "\nOptions:"
+    for option in sorted(OPTIONS.keys()):
+        print "    %s %s" % (option.ljust(13), OPTIONS[option])
+
+    print """\nWorkload Files:
+    There are various predefined workloads under workloads/ directory.
+    See https://github.com/brianfrankcooper/YCSB/wiki/Core-Properties
+    for the list of workload properties."""
+
+    sys.exit(1)
+
+def find_jars(dir, database):
+    jars = []
+    for (dirpath, dirnames, filenames) in os.walk(dir):
+        if dirpath.endswith("conf"):
+            jars.append(dirpath)
+        for filename in filenames:
+            if filename.endswith(".jar") and \
+               (filename.startswith("core") or \
+                filename.startswith(database.split("-")[0]) or \
+                not "binding" in filename):
+                jars.append(os.path.join(dirpath, filename))
+    return jars
+
+def get_ycsb_home():
+    dir = os.path.abspath(os.path.dirname(sys.argv[0]))
+    while "CHANGELOG" not in os.listdir(dir):
+        dir = os.path.join(dir, os.path.pardir)
+    return os.path.abspath(dir)
+
+if len(sys.argv) < 3:
+    usage()
+if sys.argv[1] not in COMMANDS:
+    print "ERROR: Command '%s' not found" % sys.argv[1]
+    usage()
+if sys.argv[2] not in DATABASES:
+    print "ERROR: Database '%s' not found" % sys.argv[2]
+    usage()
+
+ycsb_home = get_ycsb_home()
+command = COMMANDS[sys.argv[1]]["command"]
+database = sys.argv[2]
+db_classname = DATABASES[database]
+options = sys.argv[3:]
+
+ycsb_command = ["java", "-cp", ":".join(find_jars(ycsb_home, database)), \
+                COMMANDS[sys.argv[1]]["main"], "-db", db_classname] + options
+if command:
+    ycsb_command.append(command)
+print " ".join(ycsb_command)
+subprocess.call(ycsb_command)
