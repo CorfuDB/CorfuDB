@@ -41,6 +41,9 @@ import javax.json.JsonValue;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonReader;
+import javax.json.JsonArray;
+
+import java.util.UUID;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
@@ -115,6 +118,20 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         log.info("RESET requested, resetting all nodes and incrementing epoch");
     }
 
+    private JsonValue addStream(JsonArray params)
+    {
+        try {
+            JsonObject jo = params.getJsonObject(0);
+            currentView.updateStream(UUID.fromString(jo.getJsonString("uuid").getString()), jo.getJsonNumber("start").longValue());
+        }
+        catch (Exception ex)
+        {
+            log.error("Error adding stream", ex);
+            return JsonValue.FALSE;
+        }
+        return JsonValue.TRUE;
+    }
+
     private class ControlRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
 
@@ -123,6 +140,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             if (t.getRequestMethod().startsWith("POST")) {
                 log.debug("POST request:" + t.getRequestURI());
                 String apiCall = null;
+                JsonArray params = null;
                 try (InputStreamReader isr  = new InputStreamReader(t.getRequestBody(), "utf-8"))
                 {
                     try (BufferedReader br = new BufferedReader(isr))
@@ -131,6 +149,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         {
                             JsonObject jo  = jr.readObject();
                             apiCall = jo.getString("method");
+                            params = jo.getJsonArray("params");
                         }
                         catch (Exception e)
                         {
@@ -144,6 +163,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                     case "reset":
                         reset();
                         result = JsonValue.TRUE;
+                        break;
+                    case "addstream":
+                        result = addStream(params);
                         break;
 
                 }

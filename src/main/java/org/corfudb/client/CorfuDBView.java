@@ -40,6 +40,8 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
 
+import java.util.UUID;
+
 import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
 
@@ -58,6 +60,17 @@ public class CorfuDBView {
     private boolean isInvalid = false;
     private static Map<String,Class<? extends IServerProtocol>> availableSequencerProtocols= getSequencerProtocolClasses();
     private static Map<String,Class<? extends IServerProtocol>> availableLogUnitProtocols= getLogUnitProtocolClasses();
+
+    public class StreamData {
+       public Long logPos;
+       public String moved;
+       public StreamData(Long logPos, String moved)
+       {
+           this.logPos = logPos;
+           this.moved = moved;
+       }
+    }
+    private Map<UUID,StreamData> streamData = new HashMap<UUID, StreamData>();
 
     private List<IServerProtocol> sequencers;
     private List<CorfuDBViewSegment> segments; //eventually this should be upgraded to rangemap or something..
@@ -151,6 +164,15 @@ public class CorfuDBView {
         return segments;
     }
 
+    public void updateStream(UUID stream, long logPos)
+    {
+        streamData.put(stream, new StreamData(logPos, null));
+    }
+
+    public void moveStream(UUID stream, String newLocation)
+    {
+        streamData.put(stream, new StreamData(null, newLocation));
+    }
     /**
      * Checks if all servers in the view can be accessed. Does not check
      * to see if all the servers are in a valid configuration epoch.
@@ -193,7 +215,6 @@ public class CorfuDBView {
         JsonArrayBuilder segmentObject = Json.createArrayBuilder();
         for (CorfuDBViewSegment vs: segments)
         {
-            log.debug("found segment");
             JsonObjectBuilder jsb = Json.createObjectBuilder();
             jsb.add("start", vs.getStart());
             jsb.add("sealed", vs.getSealed());
@@ -212,11 +233,25 @@ public class CorfuDBView {
             segmentObject.add(jsb);
         }
 
+        JsonObjectBuilder streamObject = Json.createObjectBuilder();
+        for (UUID streamID : streamData.keySet())
+        {
+           if (streamData.get(streamID).logPos == null)
+           {
+               streamObject.add(streamID.toString(), streamData.get(streamID).moved);
+           }
+           else
+           {
+               streamObject.add(streamID.toString(), streamData.get(streamID).logPos);
+           }
+        }
+
         return Json.createObjectBuilder()
                                 .add("epoch", epoch)
                                 .add("pagesize", pagesize)
                                 .add("sequencer", sequencerObject)
                                 .add("segments", segmentObject)
+                                .add("streams",  streamObject)
                                 .build();
     }
 

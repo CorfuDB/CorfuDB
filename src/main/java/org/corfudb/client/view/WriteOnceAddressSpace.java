@@ -29,6 +29,12 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectOutput;
+import java.io.IOException;
+
 /**
  * This view implements a simple write once address space
  *
@@ -45,6 +51,19 @@ public class WriteOnceAddressSpace {
         this.client = client;
     }
 
+    public void write(long address, Serializable s)
+        throws IOException, OverwriteException, TrimmedException
+    {
+        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
+        {
+            try (ObjectOutput out = new ObjectOutputStream(bs))
+            {
+                out.writeObject(s);
+                write(address, bs.toByteArray());
+            }
+        }
+
+    }
     public void write(long address, byte[] data)
         throws OverwriteException, TrimmedException
     {
