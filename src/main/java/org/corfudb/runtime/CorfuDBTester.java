@@ -392,6 +392,32 @@ public class CorfuDBTester
                 zk.getData("/xyz/" + i, false, null);
             for(int i=0;i<numzops;i++)
                 zk.getChildren("/xyz/" + i, false);
+            //atomic rename
+            int txretries = 0;
+            int moves = 0;
+            for(int i=0;i<numzops;i++)
+            {
+                while(true)
+                {
+                    TR.BeginTX();
+                    String src = "/xyz/" + (int)((Math.random()*(double)numzops));
+                    String dest = "/xyz/" + (int)((Math.random()*(double)numzops*2));
+                    if(zk.exists(src, false)!=null && zk.exists(dest, false)==null)
+                    {
+                        moves++;
+                        byte[] data = zk.getData(src, false, null);
+                        zk.delete(src, -1);
+                        zk.create(dest, data, null, CreateMode.PERSISTENT); //take mode from old item?
+                    }
+                    if (TR.EndTX())
+                    {
+                        break;
+                    }
+                    else
+                        txretries++;
+                }
+            }
+            System.out.println("atomic renames: " + moves + " moves, " + txretries + " TX retries.");
             for(int i=0;i<numzops;i++)
                 zk.delete("/xyz/" + i, -1);
             for(int i=0;i<numzops;i++)

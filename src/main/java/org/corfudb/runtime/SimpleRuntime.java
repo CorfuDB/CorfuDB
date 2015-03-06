@@ -186,7 +186,7 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         }
         catch(Exception e)
         {
-            System.out.println("caught exception " + e + " and setting exception on command");
+//            System.out.println("caught exception " + e + " and setting exception on command");
             command.setException(e);
         }
         //todo: verify that it's okay for this to not be atomic with the apply

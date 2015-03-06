@@ -112,14 +112,9 @@ public class TXRuntime extends BaseRuntime
             //read-only transaction
             else
             {
-                //todo: this doesn't work anymore!
-//                boolean ret = validate(curtx.get());
-//                curtx.set(null);
-//                if (ret) return true;
-                curtx.set(null);
-                return true;
+                //todo: smarter read-only txes
+                //for now, we treat read-only as a normal tx that appends to the log
             }
-//            throw new RuntimeException("empty transaction!"); //todo: do something more sensible here
         }
 
 
