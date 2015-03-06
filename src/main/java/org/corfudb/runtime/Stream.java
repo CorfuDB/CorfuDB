@@ -23,7 +23,6 @@ import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-
 /**
  * A Stream is a subsequence of entries residing in a single
  * underlying log.
@@ -109,34 +108,45 @@ interface StreamEntry extends Serializable
 
 class Timestamp implements Comparable, Serializable
 {
+    long streamid;
     long logid; //todo: currently we seem to identify logs with strings... which makes for terribly inefficient timestamps
     long pos;
     long epoch;
-    public Timestamp(long tlogid, long tpos, long tepoch)
+    public Timestamp(long tlogid, long tpos, long tepoch, long tstreamid)
     {
         logid = tlogid;
         pos = tpos;
         epoch = tepoch;
+        streamid = tstreamid;
     }
 
     @Override
     public int compareTo(Object o)
     {
         Timestamp T2 = (Timestamp)o;
+        int x = 0;
         //todo: is it okay to (ab)use ClassCastException?
-        if(this.logid!=T2.logid) throw new ClassCastException("timestamps are not comparable since they are on different logs");
-        int x;
-        if(this.epoch<T2.epoch || (this.epoch==T2.epoch && this.pos<T2.pos))
-            x = -1;
-        else
-            x = 1;
+        if(this.logid!=T2.logid && this.streamid!=T2.streamid) throw new ClassCastException("timestamps are not comparable since they are on different logs");
+            //different logs, same stream
+        else if(this.logid!=T2.logid && this.streamid==T2.streamid)
+        {
+            if(this.epoch==T2.epoch && this.pos==T2.pos)
+                x = 0;
+            else if(this.epoch<T2.epoch || (this.epoch==T2.epoch && this.pos<T2.pos)) //on the same epoch, logpos must be comparable since they're on the same log
+                x = -1;
+            else
+                x = 1;
+        }
+        //same log, different streams
+        else if(this.logid==T2.logid && this.streamid!=T2.streamid)
+        {
+            if(this.pos==T2.pos)
+                x = 0;
+            else if(this.pos<T2.pos)
+                x = -1;
+            else
+                x = 1;
+        }
         return x;
     }
-
-    public String toString()
-    {
-        return "[" + logid + "." + epoch + "." + pos + "]";
-    }
 }
-
-
