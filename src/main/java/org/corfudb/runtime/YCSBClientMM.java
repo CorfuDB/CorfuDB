@@ -18,7 +18,7 @@ import org.corfudb.client.CorfuDBClient;
 import org.corfudb.runtime.collections.CorfuDBMap;
 import org.corfudb.runtime.collections.CDBZMap;
 
-public class YCSBClient extends DB {
+public class YCSBClientMM extends DB {
 
     private CorfuDBClient crf;
     private String masternode;
@@ -29,12 +29,15 @@ public class YCSBClient extends DB {
     private CorfuLogAddressSpace addressSpace = null;
     private CorfuStreamingSequencer sequencer = null;
     private int rpcport = 9090;
-    private CDBZMap<String, Map<String, String>> map = null;
+    private CorfuDBMap<String, Map<String, String>> map = null;
+    private CDBZMap<Double, String> index = null;
 
     public static final String DEFAULT_RPCPORT = "9090";
     public static final String DEFAULT_MASTERNODE = "http://localhost:8002/corfu";
     public static final String MASTERNODE_PROPERTY = "corfudb.masternode";
     public static final String RPCPORT_PROPERTY = "corfudb.rpcport";
+
+    public static final String INDEX_KEY = "_indices";
 
     public void init() throws DBException {
 
@@ -56,11 +59,17 @@ public class YCSBClient extends DB {
         sf = new StreamFactoryImpl(addressSpace, sequencer);
         TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
         DS = new DirectoryService(TR);
-        map = new CDBZMap(TR, DS.nameToStreamID("ycsbmap"));
+        map = new CorfuDBMap(TR, DS.nameToStreamID("ycsbmap"));
+        index = new CDBZMap(TR, DS.nameToStreamID("ycsbindex"));
+
     }
 
     public void cleanup() throws DBException {
         // TBD--anything to do here?
+    }
+
+    private double hash(String key) {
+        return key.hashCode();
     }
 
     @Override
@@ -94,6 +103,7 @@ public class YCSBClient extends DB {
         )
     {
         map.put(key, StringByteIterator.getStringMap(values));
+        index.put(hash(key), key);
         return 0;
     }
 
@@ -104,6 +114,7 @@ public class YCSBClient extends DB {
         )
     {
         map.remove(key);
+        index.remove(hash(key));
         return 0;
     }
 
@@ -127,8 +138,8 @@ public class YCSBClient extends DB {
          Vector<HashMap<String, ByteIterator>> result
         )
     {
-        SortedMap<String, Map<String, String>> range = map.getRange(startkey, recordcount);
-        Collection<String> keys = range.keySet();
+        SortedMap<Double, String> range = index.getRange(hash(startkey), recordcount);
+        Collection<String> keys = range.values();
         HashMap<String, ByteIterator> values;
         for (String key : keys) {
             values = new HashMap();

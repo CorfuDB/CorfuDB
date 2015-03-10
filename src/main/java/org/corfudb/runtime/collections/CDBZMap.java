@@ -8,27 +8,28 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.ConcurrentNavigableMap;
 
 /**
  *
  */
-public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
+public class CDBZMap<K extends Comparable,V> extends CorfuDBObject implements Map<K,V>
 {
     static Logger dbglog = LoggerFactory.getLogger(CorfuDBMap.class);
     //backing state of the map
-    Map<K, V> backingmap;
+    TreeMap<K, V> backingmap;
 
     boolean optimizereads = false;
 
-    public CorfuDBMap(AbstractRuntime tTR, long toid)
+    public CDBZMap(AbstractRuntime tTR, long toid)
     {
         this(tTR, toid, false);
     }
 
-    public CorfuDBMap(AbstractRuntime tTR, long toid, boolean remote)
+    public CDBZMap(AbstractRuntime tTR, long toid, boolean remote)
     {
         super(tTR, toid, remote);
-        backingmap = new HashMap<K,V>();
+        backingmap = new TreeMap<K,V>();
     }
 
     public void applyToObject(Object bs)
@@ -73,6 +74,14 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         {
             cc.setReturnValue(backingmap.isEmpty());
         }
+        else if(cc.getCmdType()==MapCommand.CMD_GET_KEY_RANGE)
+        {
+            cc.setReturnValue(applyGetKeyRange(cc.getKey(), cc.getCount()));
+        }
+        else if(cc.getCmdType()==MapCommand.CMD_GET_RANGE)
+        {
+            cc.setReturnValue(applyGetRange(cc.getKey(), cc.getCount()));
+        }
         else
         {
             //need to unlock?
@@ -82,6 +91,77 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         if(optimizereads)
             unlock(true);
     }
+
+    protected Set<K> applyGetKeyRange(K start, int records) {
+        Set<K> result = new HashSet<K>();
+        if(records == 0)
+            return result;
+        rlock();
+        try {
+            int count = 0;
+            K actualstart = start;
+            if(!backingmap.containsKey(start)) {
+                actualstart = backingmap.higherKey(start);
+                if(actualstart == null)
+                    throw new RuntimeException("invalid range parameter!");
+            }
+            K current = actualstart;
+            do {
+                result.add(current);
+                current = backingmap.higherKey(current);
+                count++;
+            } while(count < records && current != null);
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    protected SortedMap<K,V> applyGetRange(K start, int records) {
+        SortedMap<K,V> result = new TreeMap<K, V>();
+        if(records == 0)
+            return result;
+        rlock();
+        try {
+            int count = 0;
+            K actualstart = start;
+            if(!backingmap.containsKey(start)) {
+                actualstart = backingmap.higherKey(start);
+                if(actualstart == null)
+                    throw new RuntimeException("invalid range parameter!");
+            }
+            K current = actualstart;
+            if(current == null)
+                return result;
+            do {
+                result.put(current, backingmap.get(current));
+                current = backingmap.higherKey(current);
+                count++;
+            } while(count < records && current != null);
+        } finally {
+            runlock();
+        }
+        return result;
+    }
+
+    public Set<K> getKeyRange(K start, int records) {
+        if(optimizereads)
+            return applyGetKeyRange(start, records);
+        MapCommand cmd = new MapCommand(MapCommand.CMD_GET_KEY_RANGE, start, null, records);
+        TR.query_helper(this, null, cmd);
+        return (Set<K>) cmd.getReturnValue();
+    }
+
+    public SortedMap<K, V> getRange(K start, int records) {
+        if(optimizereads)
+            return applyGetRange(start, records);
+        MapCommand cmd = new MapCommand(MapCommand.CMD_GET_RANGE, start, null, records);
+        TR.query_helper(this, null, cmd);
+        return (SortedMap<K,V>) cmd.getReturnValue();
+
+    }
+
+
 
     //accessor
     @Override
@@ -240,3 +320,4 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     }
 
 }
+
