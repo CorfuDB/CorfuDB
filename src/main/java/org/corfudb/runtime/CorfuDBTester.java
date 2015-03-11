@@ -241,15 +241,20 @@ public class CorfuDBTester
                     ttt = new TXTesterThread(cob1, cob2, TR, numkeys, numops);
                 if(i==0) firsttester = ttt;
                 threads[i] = new Thread(ttt);
-                threads[i].start();
             }
+            for(int i=0;i<numthreads;i++)
+                threads[i].start();
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
             System.out.println("Test done! Checking consistency...");
             if(firsttester.check_consistency())
                 System.out.println("Consistency check passed --- test successful!");
             else
+            {
                 System.out.println("Consistency check failed!");
+                System.out.println(firsttester.map1);
+                System.out.println(firsttester.map2);
+            }
             System.out.println(TR);
         }
         else if(testnum==STREAMTEST)
@@ -552,28 +557,33 @@ class TXTesterThread implements Runnable
     public boolean check_consistency()
     {
         boolean consistent = true;
-        cr.BeginTX();
-        for(int i=0;i<numkeys;i++)
+        int numretries = 10;
+        int j = 0;
+        for(j=0;j<numretries;j++)
         {
-            if(map1.containsKey(i))
+            cr.BeginTX();
+            for (int i = 0; i < numkeys; i++)
             {
-                if(!map2.containsKey(map1.get(i)) || map2.get(map1.get(i))!=i)
+                if (map1.containsKey(i))
                 {
-                    consistent = false;
-                    break;
+                    if (!map2.containsKey(map1.get(i)) || map2.get(map1.get(i)) != i)
+                    {
+                        consistent = false;
+                        break;
+                    }
+                }
+                if (map2.containsKey(i))
+                {
+                    if (!map1.containsKey(map2.get(i)) || map1.get(map2.get(i)) != i)
+                    {
+                        consistent = false;
+                        break;
+                    }
                 }
             }
-            if(map2.containsKey(i))
-            {
-                if(!map1.containsKey(map2.get(i)) || map1.get(map2.get(i))!=i)
-                {
-                    consistent = false;
-                    break;
-                }
-            }
+            if (cr.EndTX()) break;
         }
-        //todo: fix this -- it'll fail with multiple clients
-        if(!cr.EndTX()) throw new RuntimeException("Consistency check aborted...");
+        if(j==numretries) throw new RuntimeException("too many aborts on consistency check");
         return consistent;
     }
 

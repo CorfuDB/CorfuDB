@@ -20,6 +20,14 @@ public class Pair<X, Y> implements Serializable
             return true;
         return false;
     }
+
+    public int hashCode()
+    {
+        int ret = 0;
+        if(first!=null) ret+=first.hashCode();
+        if(second!=null) ret+=second.hashCode();
+        return ret;
+    }
     public String toString()
     {
         return "(" + first + "," + second + ")";

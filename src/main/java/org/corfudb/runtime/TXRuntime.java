@@ -248,7 +248,7 @@ public class TXRuntime extends BaseRuntime
             if(smre!=null) //we're playing the object
             {
                 if(!prohibitMultiVersionReads || !curtx.get().has_read(cob.getID(), cob.getTimestamp(), key)) {
-                    curtx.get().mark_read(cob.getID(), cob.getTimestamp(), key);
+                    curtx.get().mark_read(cob.getID(), cob.getTimestamp(key), key);
                     //do what here??? apply the command through the apply thread
                     //passing TIMESTAMP_INVALID ensures that this applies the command
                     //through the upcall thread without triggering an actual sync
@@ -601,7 +601,7 @@ class TXEngine implements SMRLearner
                         {
                             ((CorfuDBObjectCommand)P2.command).setException(e);
                         }
-                        cob.setTimestamp(decrec.txint_timestamp); //use the intention's timestamp
+                        cob.setTimestamp(decrec.txint_timestamp, P2.key); //use the intention's timestamp
                         //cob.unlock(true);
 //                    System.out.println("object " + cob.getID() + " timestamp set to " + cob.getTimestamp());
                     }
