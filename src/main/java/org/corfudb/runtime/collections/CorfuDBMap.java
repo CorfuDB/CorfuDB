@@ -1,9 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.AbstractRuntime;
-import org.corfudb.runtime.CorfuDBObject;
-import org.corfudb.runtime.CorfuDBObjectCommand;
-import org.corfudb.runtime.Pair;
+import org.corfudb.runtime.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,48 +30,41 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         backingmap = new HashMap<K,V>();
     }
 
-    public void applyToObject(Object bs)
+    public void applyToObject(Object bs, long timestamp)
     {
-        dbglog.debug("CorfuDBMap received upcall");
         MapCommand<K,V> cc = (MapCommand<K,V>)bs;
+        dbglog.debug("CorfuDBMap received upcall: " + cc);
         if(optimizereads)
             lock(true);
+        //custom conflict detection: accessors provide a read summary; mutators set the last update timestamp
+        if(cc.getCmdType()==MapCommand.CMD_PREPUT || cc.getCmdType()==MapCommand.CMD_GET || cc.getCmdType()==MapCommand.CMD_SIZE
+                || cc.getCmdType()==MapCommand.CMD_CONTAINSKEY || cc.getCmdType()==MapCommand.CMD_CONTAINSVALUE || cc.getCmdType()==MapCommand.CMD_ISEMPTY)
+            cc.summarizeRead(new Triple(cc.getCmdType(), cc.getKey(), getLastUpdateTS(cc.getCmdType(), cc.getKey())));
+        else if(cc.getCmdType()==MapCommand.CMD_PUT || cc.getCmdType()==MapCommand.CMD_REMOVE || cc.getCmdType()==MapCommand.CMD_CLEAR)
+            setLastUpdateTS(timestamp, cc.getCmdType(), cc.getKey());
+        else
+        {
+            //need to unlock?
+            throw new RuntimeException("Unrecognized command in stream!");
+        }
         if(cc.getCmdType()==MapCommand.CMD_PUT)
-        {
             backingmap.put(cc.getKey(), cc.getVal());
-        }
         else if(cc.getCmdType()==MapCommand.CMD_PREPUT)
-        {
             cc.setReturnValue(backingmap.get(cc.getKey()));
-        }
         else if(cc.getCmdType()==MapCommand.CMD_REMOVE)
-        {
             backingmap.remove(cc.getKey());
-        }
         else if(cc.getCmdType()==MapCommand.CMD_CLEAR)
-        {
             backingmap.clear();
-        }
         else if(cc.getCmdType()==MapCommand.CMD_GET)
-        {
             cc.setReturnValue(backingmap.get(cc.getKey()));
-        }
         else if(cc.getCmdType()==MapCommand.CMD_SIZE)
-        {
             cc.setReturnValue(backingmap.size());
-        }
         else if(cc.getCmdType()==MapCommand.CMD_CONTAINSKEY)
-        {
             cc.setReturnValue(backingmap.containsKey(cc.getKey()));
-        }
         else if(cc.getCmdType()==MapCommand.CMD_CONTAINSVALUE)
-        {
             cc.setReturnValue(backingmap.containsValue(cc.getVal()));
-        }
         else if(cc.getCmdType()==MapCommand.CMD_ISEMPTY)
-        {
             cc.setReturnValue(backingmap.isEmpty());
-        }
         else
         {
             //need to unlock?
@@ -262,64 +252,58 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     //However, some mutator/accessor pairs only conflict if the map key being modified is the same
     //Accordingly, we have two timestamps: a non-keyed one and a keyed one.
     AtomicLong globaltimestamp = new AtomicLong(); //used by size, isEmpty, containsValue
-    Map<Serializable, AtomicLong> localtimestamps = new HashMap(); //used by get, containsKey, put(accessor), remove(accessor)
+    Map<K, AtomicLong> localtimestamps = new HashMap(); //used by get, containsKey, put(accessor), remove(accessor)
 
 
-    public long getTimestamp()
-    {
-        throw new RuntimeException("CorfuDBMap doesn't support non-parameterized getTS");
-    }
-
-    //returns the timestamp of the last command in the stream that affected the outcome
+    //returns the timestamp of the last mutator command in the stream that affected the outcome
     //of the passed in accessor
-    public long getTimestamp(Serializable key)
+    public long getLastUpdateTS(int cmdtype, K key)
     {
-//        System.out.println("GT: " + key);
-        Pair<Integer, Serializable> P = (Pair<Integer, Serializable>)key;
-        if(P.first==MapCommand.CMD_SIZE || P.first==MapCommand.CMD_ISEMPTY || P.first==MapCommand.CMD_CONTAINSVALUE)
+        if(cmdtype==MapCommand.CMD_SIZE || cmdtype==MapCommand.CMD_ISEMPTY || cmdtype==MapCommand.CMD_CONTAINSVALUE)
         {
 //            System.out.println("returns global " + globaltimestamp.get());
             return globaltimestamp.get();
         }
-        else if(P.first==MapCommand.CMD_GET || P.first==MapCommand.CMD_CONTAINSKEY || P.first==MapCommand.CMD_PUT || P.first==MapCommand.CMD_REMOVE)
+        else if(cmdtype==MapCommand.CMD_GET || cmdtype==MapCommand.CMD_CONTAINSKEY || cmdtype==MapCommand.CMD_PUT || cmdtype==MapCommand.CMD_REMOVE || cmdtype==MapCommand.CMD_PREPUT)
         {
-            if(!(localtimestamps.containsKey(P.second)))
-                localtimestamps.put(P.second, new AtomicLong());
+            if(!(localtimestamps.containsKey(key)))
+                localtimestamps.put(key, new AtomicLong());
 //            System.out.println("returns local " + localtimestamps.get(P.second).get());
-            return localtimestamps.get(P.second).get(); //todo: what if it's a read on a map with no updates?
+            return localtimestamps.get(key).get(); //todo: what if it's a read on a map with no updates?
         }
         else
         {
-            throw new RuntimeException("unknown key type: " + key);
+            throw new RuntimeException("unknown cmd type: " + cmdtype);
         }
     }
 
-    public void setTimestamp(long newts)
+    public boolean isStillValid(Serializable readsummary)
     {
-        throw new RuntimeException("CorfuDBMap doesn't support non-parameterized setTS");
+        Triple<Integer, K, Long> T = (Triple<Integer, K, Long>)readsummary;
+        if(getLastUpdateTS(T.first, T.second)>T.third)
+            return false;
+        return true;
     }
 
-    //key specifies an operation op and a map key
     //for every accessor operation, we have to update its timestamp if its return value is impacted
     //e.g. if op is put, we need to update the get key-specific timestamp; the size timestamp; ...
-    public void setTimestamp(long newts, Serializable key)
+    public void setLastUpdateTS(long newts, int cmdtype, K key)
     {
 //        System.out.println("ST: " + key + " " + newts);
-        Pair<Integer, Serializable> P = (Pair<Integer, Serializable>)key;
-        if(P.first==MapCommand.CMD_PUT || P.first==MapCommand.CMD_REMOVE)
+        if(cmdtype==MapCommand.CMD_PUT || cmdtype==MapCommand.CMD_REMOVE)
         {
 //            System.out.println("setting local");
-            if(!(localtimestamps.containsKey(P.second)))
-                localtimestamps.put(P.second, new AtomicLong());
-            localtimestamps.get(P.second).set(newts);
+            if(!(localtimestamps.containsKey(key)))
+                localtimestamps.put(key, new AtomicLong());
+            localtimestamps.get(key).set(newts);
         }
-        else if(P.first==MapCommand.CMD_CLEAR)
+        else if(cmdtype==MapCommand.CMD_CLEAR)
         {
 //            System.out.println("setting global");
             globaltimestamp.set(newts);
         }
         else
-            throw new RuntimeException("unknown key type: " + key);
+            throw new RuntimeException("unknown cmd type: " + cmdtype);
     }
 
 

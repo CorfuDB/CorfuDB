@@ -29,7 +29,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
     public StreamFactory sf;
     public long oid;
 
-    public void applyToObject(Object bs) {
+    public void applyToObject(Object bs, long timestamp) {
 
         dbglog.debug("CDBLinkedList received upcall");
         NodeOp<E> cc = (NodeOp<E>) bs;

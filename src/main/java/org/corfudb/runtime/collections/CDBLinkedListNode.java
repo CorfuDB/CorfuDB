@@ -88,7 +88,7 @@ public class CDBLinkedListNode<E> extends CorfuDBObject {
         }
     }
 
-    public void applyToObject(Object bs) {
+    public void applyToObject(Object bs, long timestamp) {
 
         dbglog.debug("CDBMNode received upcall");
         NodeOp<E> cc = (NodeOp<E>) bs;

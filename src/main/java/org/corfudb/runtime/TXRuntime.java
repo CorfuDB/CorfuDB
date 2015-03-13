@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -42,7 +41,7 @@ public class TXRuntime extends BaseRuntime
     // during commit and detecting inconsistent views on reads, which
     // is necessary for opacity. Default setting is off, since only the list
     // objects actually take advantage of this setting.
-    static final Boolean prohibitMultiVersionReads = true;
+    static final Boolean prohibitMultiVersionReads = false;
 
     final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 
@@ -248,11 +247,12 @@ public class TXRuntime extends BaseRuntime
             if(smre!=null) //we're playing the object
             {
                 if(!prohibitMultiVersionReads || !curtx.get().has_read(cob.getID(), cob.getTimestamp(), key)) {
-                    curtx.get().mark_read(cob.getID(), cob.getTimestamp(key), key);
                     //do what here??? apply the command through the apply thread
                     //passing TIMESTAMP_INVALID ensures that this applies the command
                     //through the upcall thread without triggering an actual sync
                     smre.sync(SMREngine.TIMESTAMP_INVALID, command);
+                    dbglog.debug("applied cmd, marking read set: " + command);
+                    curtx.get().mark_read(cob.getID(), command.getTimestamp(), command.getReadSummary());
                 } else {
                     // give the programmer some hint that we couldn't satisfy the
                     // read operation by playing the log further forward because this
@@ -493,9 +493,12 @@ class TXEngine implements SMRLearner
                 TxIntReadSetEntry curread = readsit.next();
                 if (curread.objectid != curstream) continue; //validate only the current stream
                 //is the current version of the object at a later timestamp than the version read by the transaction?
-                if (txr.getObject(curread.objectid).getTimestamp(curread.key) > curread.readtimestamp)
+                //if (txr.getObject(curread.objectid).getTimestamp(curread.key) > curread.readtimestamp)
+                //if no read summary is provided, use the read timestamp instead
+                if((curread.readsummary!=null && !txr.getObject(curread.objectid).isStillValid(curread.readsummary))
+                    || (curread.readsummary==null && txr.getObject(curread.objectid).getTimestamp()>curread.readtimestamp))
                 {
-//                    System.out.println("partial decision is an abort: " + curread.objectid + ":" + curread.key + ":" + curread.readtimestamp + ":" + txr.getObject(curread.objectid).getTimestamp(curread.key));
+                    System.out.println("partial decision is an abort: " + curread.objectid + ":" + curread.readsummary + ":" + curread.readtimestamp);
                     partialabort = true;
                     break;
                 }
@@ -595,7 +598,7 @@ class TXEngine implements SMRLearner
                         //cob.lock(true);
                         try
                         {
-                            cob.applyToObject(P2.command);
+                            cob.applyToObject(P2.command, decrec.txint_timestamp);
                         }
                         catch(Exception e)
                         {
@@ -691,16 +694,16 @@ class TxIntReadSetEntry implements Serializable
 {
     public long objectid;
     public long readtimestamp;
-    public Serializable key;
-    public TxIntReadSetEntry(long tobjid, long ttimestamp, Serializable tkey)
+    public Serializable readsummary;
+    public TxIntReadSetEntry(long tobjid, long ttimestamp, Serializable treadsummary)
     {
         objectid = tobjid;
         readtimestamp = ttimestamp;
-        key = tkey;
+        readsummary = treadsummary;
     }
     public String toString()
     {
-        return "(R(" + objectid + "," + key + "))";
+        return "(R(" + objectid + "," + readtimestamp + "," + readsummary + "))";
     }
 }
 
@@ -749,9 +752,9 @@ class TxInt implements Serializable //todo: custom serialization
         if(!allstreammap.containsKey(stream))
             allstreammap.put(stream, allstreammap.size());
     }
-    void mark_read(long object, long version, Serializable key)
+    void mark_read(long object, long timestamp, Serializable readsummary)
     {
-        readset.add(new TxIntReadSetEntry(object, version, key));
+        readset.add(new TxIntReadSetEntry(object, timestamp, readsummary));
         if(!readstreammap.containsKey(object))
             readstreammap.put(object, readstreammap.size());
         if(!allstreammap.containsKey(object))
@@ -787,7 +790,7 @@ class TxInt implements Serializable //todo: custom serialization
         while(it.hasNext()) {
             TxIntReadSetEntry trip = it.next();
             if(trip.objectid == object) {
-                if(key == null || trip.key == null || key.equals(trip.key))
+//                if(key == null || trip.key == null || key.equals(trip.key))
                     return true;
             }
         }
@@ -808,7 +811,7 @@ class TxInt implements Serializable //todo: custom serialization
                 if(Trip1.objectid==Trip2.objectid)
                 {
                     //keys match?
-                    if(Trip1.key==null || Trip2.key==null || Trip1.key.equals(Trip2.key))
+//                    if(Trip1.key==null || Trip2.key==null || Trip1.key.equals(Trip2.key))
                     {
                         return true;
                     }

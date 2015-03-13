@@ -27,7 +27,7 @@ public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
     AbstractRuntime CR;
 
     @Override
-    public void applyToObject(Object update) throws Exception
+    public void applyToObject(Object update, long timestamp) throws Exception
     {
         if (update instanceof CreateOp)
             ((CreateOp)update).setReturnValue(apply((CreateOp)update));

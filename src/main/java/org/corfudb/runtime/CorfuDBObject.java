@@ -56,7 +56,13 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
         timestamp.set(newts);
     }
 
-    abstract public void applyToObject(Object update) throws Exception;
+    abstract public void applyToObject(Object update, long timestamp) throws Exception;
+
+    //override this in subclass to perform custom conflict detection
+    public boolean isStillValid(Serializable readsummary)
+    {
+        throw new RuntimeException("unimplemented! override this in subclass...");
+    }
 
     public long getID()
     {
