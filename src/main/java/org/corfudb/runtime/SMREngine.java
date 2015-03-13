@@ -69,7 +69,7 @@ public class SMREngine
 
     public SMREngine(Stream sb, long tuniquenodeid)
     {
-        System.out.println("Creating new SMR engine on stream " + sb.getStreamID() + " with node id " + tuniquenodeid);
+        // System.out.println("Creating new SMR engine on stream " + sb.getStreamID() + " with node id " + tuniquenodeid);
         curstream = sb;
         uniquenodeid = tuniquenodeid;
         SMRCommandWrapper.initialize(uniquenodeid);
