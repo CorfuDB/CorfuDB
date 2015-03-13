@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.CorfuDBObjectCommand;
-
 import java.util.Collection;
 import java.util.List;
 

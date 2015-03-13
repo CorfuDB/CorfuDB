@@ -18,7 +18,6 @@ class NodeOp<E> extends CorfuDBObjectCommand {
     static final int CMD_WRITE_HEAD = 7;
     static final int CMD_READ_TAIL = 8;
     static final int CMD_WRITE_TAIL = 9;
-    static final int CMD_READ_PARENT = 10;
 
     public int m_cmd;
     public long m_nodeid;

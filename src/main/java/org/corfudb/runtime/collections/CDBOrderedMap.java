@@ -2,18 +2,15 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
-import org.corfudb.runtime.CorfuDBObjectCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.ConcurrentNavigableMap;
 
 /**
  *
  */
-public class CDBZMap<K extends Comparable,V> extends CorfuDBObject implements Map<K,V>
+public class CDBOrderedMap<K extends Comparable,V> extends CorfuDBObject implements Map<K,V>
 {
     static Logger dbglog = LoggerFactory.getLogger(CorfuDBMap.class);
     //backing state of the map
@@ -21,12 +18,12 @@ public class CDBZMap<K extends Comparable,V> extends CorfuDBObject implements Ma
 
     boolean optimizereads = false;
 
-    public CDBZMap(AbstractRuntime tTR, long toid)
+    public CDBOrderedMap(AbstractRuntime tTR, long toid)
     {
         this(tTR, toid, false);
     }
 
-    public CDBZMap(AbstractRuntime tTR, long toid, boolean remote)
+    public CDBOrderedMap(AbstractRuntime tTR, long toid, boolean remote)
     {
         super(tTR, toid, remote);
         backingmap = new TreeMap<K,V>();

@@ -11,12 +11,9 @@ import java.util.function.UnaryOperator;
 /**
  *
  */
-public abstract class CorfuDBList<E> extends CorfuDBObject implements List<E> {
+public abstract class CDBAbstractList<E> extends CorfuDBObject implements List<E> {
 
-    static Logger dbglog = LoggerFactory.getLogger(CorfuDBCoarseList.class);
-    //backing state of the map
-
-    public CorfuDBList(AbstractRuntime tTR, StreamFactory sf, long toid) {
+    public CDBAbstractList(AbstractRuntime tTR, StreamFactory sf, long toid) {
         super(tTR, toid);
         TR = tTR;
         oid = toid;

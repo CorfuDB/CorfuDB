@@ -15,8 +15,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.*;
 import org.corfudb.client.CorfuDBClient;
-import org.corfudb.runtime.collections.CorfuDBMap;
-import org.corfudb.runtime.collections.CDBZMap;
+import org.corfudb.runtime.collections.CDBOrderedMap;
 
 public class YCSBClient extends DB {
 
@@ -29,7 +28,7 @@ public class YCSBClient extends DB {
     private CorfuLogAddressSpace addressSpace = null;
     private CorfuStreamingSequencer sequencer = null;
     private int rpcport = 9090;
-    private CDBZMap<String, Map<String, String>> map = null;
+    private CDBOrderedMap<String, Map<String, String>> map = null;
 
     public static final String DEFAULT_RPCPORT = "9090";
     public static final String DEFAULT_MASTERNODE = "http://localhost:8002/corfu";
@@ -56,7 +55,7 @@ public class YCSBClient extends DB {
         sf = new StreamFactoryImpl(addressSpace, sequencer);
         TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
         DS = new DirectoryService(TR);
-        map = new CDBZMap(TR, DS.nameToStreamID("ycsbmap"));
+        map = new CDBOrderedMap(TR, DS.nameToStreamID("ycsbmap"));
     }
 
     public void cleanup() throws DBException {

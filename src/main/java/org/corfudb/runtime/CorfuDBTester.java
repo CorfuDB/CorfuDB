@@ -33,7 +33,6 @@ import org.corfudb.client.CorfuDBClient;
 import org.corfudb.runtime.collections.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.impl.SimpleLogger;
 
 /**
 * Tester code for the CorfuDB runtime stack
@@ -59,6 +58,8 @@ public class CorfuDBTester
         System.out.println("\t[-e expernum (for MultiClientTXTest)]");
         System.out.println("\t[-c numclients (for MultiClientTXTest)]");
         System.out.println("\t[-k numkeys (for TXTest)]");
+        System.out.println("\t[-v verbose mode...]");
+        System.out.println("\t[-r read write pct (double)]");
 
 //        if(dbglog instanceof SimpleLogger)
 //            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
@@ -76,9 +77,9 @@ public class CorfuDBTester
         final int MULTICLIENTTXTEST=3;
         final int LINCTRTEST=4;
         final int REMOBJTEST=5;
-        final int TXLISTCOARSE=6;
-        final int TXLISTFINE=7;
-        final int TXLISTFINEMAP=8;
+        final int TXLOGICALLIST=6;
+        final int TXLINKEDLIST=7;
+        final int TXDOUBLYLINKEDLIST=8;
         final int LINZK=9;
 
         int numclients = 2;
@@ -93,21 +94,32 @@ public class CorfuDBTester
         int testnum = 0;
         int rpcport = 9090;
         String masternode = null;
+        boolean verbose = false;
+        double rwpct = 0.25;
+
         if(args.length==0)
         {
             print_usage();
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:v");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
             {
+                case 'v':
+                    verbose = true;
+                    break;
                 case 'a':
                     strArg = g.getOptarg();
                     System.out.println("testtype = "+ strArg);
                     testnum = Integer.parseInt(strArg);
+                    break;
+                case 'r':
+                    strArg = g.getOptarg();
+                    System.out.println("rwpct = "+ strArg);
+                    rwpct = Double.parseDouble(strArg);
                     break;
                 case 'm':
                     masternode = g.getOptarg();
@@ -271,25 +283,20 @@ public class CorfuDBTester
             for(int i=0;i<numthreads;i++)
                 threads[i].join();
         }
-        else if(testnum==TXLISTCOARSE) {
+        else if(testnum==TXLOGICALLIST) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
-            CorfuDBTester.<Integer, CorfuDBCoarseList<Integer>>runListTest(
-                    TR, rpchostname, rpcport, sf, numthreads,
-                    numlists, numops, numkeys, new SeqIntGenerator(), "CorfuDBCoarseList");
+            TXListTester.<Integer, CDBLogicalList<Integer>>runListTest(
+                    TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBLogicalList", verbose);
         }
-        else if(testnum==TXLISTFINE) {
+        else if(testnum==TXLINKEDLIST) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
-            CorfuDBTester.<Integer, CDBList<Integer>>runListTest(
-                    TR, rpchostname, rpcport, sf, numthreads,
-                    numlists, numops, numkeys, new SeqIntGenerator(), "CDBList");
+            TXListTester.<Integer, CDBLinkedList<Integer>>runListTest(
+                    TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBLinkedList", verbose);
         }
-        else if(testnum==TXLISTFINEMAP) {
-            System.out.println("selected CDBMList test...");
+        else if(testnum==TXDOUBLYLINKEDLIST) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
-            System.out.println("running CDBMList test...");
-            CorfuDBTester.<Integer, CDBList<Integer>>runListTest(
-                    TR, rpchostname, rpcport, sf, numthreads,
-                    numlists, numops, numkeys, new SeqIntGenerator(), "CDBMList");
+            TXListTester.<Integer, CDBDoublyLinkedList<Integer>>runListTest(
+                    TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBDoublyLinkedList", verbose);
         }
         else if(testnum==REMOBJTEST)
         {
@@ -434,79 +441,10 @@ public class CorfuDBTester
             zk.create("/abcd", "QWE".getBytes(), null, CreateMode.PERSISTENT);
         }
 
-
         System.out.println("Test done in " + (System.currentTimeMillis()-starttime));
 
         System.exit(0);
 
-    }
-
-    static class SeqIntGenerator implements ElemGenerator<Integer> {
-        public Integer randElem(Object i) {
-            return new Integer((Integer) i);
-        }
-    }
-
-    static <E, L extends CorfuDBList<E>> L
-    createList(
-        String strClass,
-        AbstractRuntime TR,
-        StreamFactory sf,
-        long oid
-        )
-    {
-        if(strClass.contains("CDBList"))
-            return (L) new CDBList<E>(TR, sf, oid);
-        if(strClass.contains("CDBMList"))
-            return (L) new CDBMList<E>(TR, sf, oid);
-        else if(strClass.contains("CorfuDBCoarseList"))
-            return (L) new CorfuDBCoarseList<E>(TR, sf, oid);
-        return null;
-    }
-
-
-    static <E, L extends CorfuDBList<E>> void
-    runListTest(
-        AbstractRuntime TR,
-        String rpchostname,
-        int rpcport,
-        StreamFactory sf,
-        int numthreads,
-        int numlists,
-        int numops,
-        int numkeys,
-        ElemGenerator<E> generator,
-        String strClass
-        ) throws InterruptedException
-    {
-        ArrayList<L> lists = new ArrayList<L>();
-        CyclicBarrier startbarrier = new CyclicBarrier(numthreads);
-        CyclicBarrier stopbarrier = new CyclicBarrier(numthreads);
-
-        for(int i=0; i<numlists; i++) {
-            long oidlist = DirectoryService.getUniqueID(sf);
-            L list = CorfuDBTester.<E,L>createList(strClass, TR, sf, oidlist);
-            lists.add(list);
-        }
-
-        Thread[] threads = new Thread[numthreads];
-        for (int i = 0; i < numthreads; i++) {
-            TXListTester<E, L> txl = new TXListTester<E, L>(
-                    i, startbarrier, stopbarrier, TR, lists, numops, numkeys, generator);
-            threads[i] = new Thread(txl);
-            System.out.println("...starting thread "+i);
-            threads[i].start();
-        }
-        for(int i=0;i<numthreads;i++)
-            threads[i].join();
-
-        System.out.println("Test done! Checking consistency...");
-        TXListChecker txc = new TXListChecker(TR, lists, numops, numkeys);
-        if(txc.isConsistent())
-            System.out.println("List consistency check passed --- test successful!");
-        else
-            System.out.println("List consistency check failed!");
-        System.out.println(TR);
     }
 }
 

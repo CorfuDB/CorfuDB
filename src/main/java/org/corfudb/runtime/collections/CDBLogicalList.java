@@ -10,12 +10,12 @@ import java.util.function.UnaryOperator;
 /**
  *
  */
-public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
+public class CDBLogicalList<E> extends CDBAbstractList<E> {
 
-    static Logger dbglog = LoggerFactory.getLogger(CorfuDBCoarseList.class);
+    static Logger dbglog = LoggerFactory.getLogger(CDBLogicalList.class);
     LinkedList<E> m_memlist;
 
-    public CorfuDBCoarseList(AbstractRuntime tTR, StreamFactory sf, long toid) {
+    public CDBLogicalList(AbstractRuntime tTR, StreamFactory sf, long toid) {
         super(tTR, sf, toid);
         m_memlist = new LinkedList<E>();
     }
@@ -152,10 +152,11 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
     }
 
     protected E applyGet(int index) {
-        E result;
+        E result = null;
         rlock();
         try {
-            result = m_memlist.get(index);
+            if(index > 0 && index < m_memlist.size())
+                result = m_memlist.get(index);
         } finally {
             runlock();
         }
@@ -399,16 +400,7 @@ public class CorfuDBCoarseList<E> extends CorfuDBList<E> {
     public boolean add(E e) {
         ListCommand<E> cmd =  new ListCommand<E>(ListCommand.CMD_ADD, e);
         TR.update_helper(this, cmd, oid);
-        // ACHTUNG: sadly, we cannot know whether this succeeds until we see the upcall.
-        // Which will not happen until the transaction commits. Hence returning true/false
-        // is technically impossible here. We can return true/false based on our current
-        // view of the list, which is slightly better, but it would require us to modify the
-        // data structure and the result is still speculative, so if we take this route we have
-        // to clone the data structure to ensure that we can recover local state on an abort.
-        // for now, explore limiting the programming model: basically, we can't do synchronous,
-        // conditional updates.
-        // return (Boolean)cmd.getReturnValue();
-        return true; // TODO: FIXME: this will lie to the programmer sometimes!
+        return true;
     }
 
     @Override

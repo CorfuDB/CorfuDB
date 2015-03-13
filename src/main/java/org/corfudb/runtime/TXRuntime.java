@@ -42,7 +42,7 @@ public class TXRuntime extends BaseRuntime
     // during commit and detecting inconsistent views on reads, which
     // is necessary for opacity. Default setting is off, since only the list
     // objects actually take advantage of this setting.
-    static final Boolean prohibitMultiVersionReads = false;
+    static final Boolean prohibitMultiVersionReads = true;
 
     final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 

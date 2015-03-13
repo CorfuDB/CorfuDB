@@ -1,12 +1,11 @@
 package org.corfudb.runtime;
-import org.corfudb.runtime.TXRuntime;
-import org.corfudb.runtime.collections.CorfuDBList;
+import org.corfudb.runtime.collections.CDBAbstractList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
-public class TXListChecker<E, L extends CorfuDBList<E>> {
+public class TXListChecker<E, L extends CDBAbstractList<E>> {
 
     private static Logger dbglog = LoggerFactory.getLogger(TXListChecker.class);
 
