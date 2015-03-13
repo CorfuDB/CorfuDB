@@ -20,6 +20,8 @@ public class CorfuDBObjectCommand implements Serializable
 {
     Exception E=null;
     Object retval=null;
+    Serializable readsummary=null;
+    long appliedtimestamp=SMREngine.TIMESTAMP_INVALID;
     long txid = -1;
     public Object getReturnValue()
     {
@@ -38,5 +40,26 @@ public class CorfuDBObjectCommand implements Serializable
     public Exception getException()
     {
         return E;
+    }
+    public void summarizeRead(Serializable R)
+    {
+        readsummary = R;
+    }
+    public Serializable getReadSummary()
+    {
+        return readsummary;
+    }
+    public void setTimestamp(long ts)
+    {
+        appliedtimestamp = ts;
+    }
+    public long getTimestamp()
+    {
+        return appliedtimestamp;
+    }
+
+    public String toString()
+    {
+        return appliedtimestamp + ":" + readsummary;
     }
 }

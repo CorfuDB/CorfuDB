@@ -30,7 +30,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     public StreamFactory sf;
     public long oid;
 
-    public void applyToObject(Object bs) {
+    public void applyToObject(Object bs, long timestamp) {
 
         dbglog.debug("CDBNode received upcall");
         NodeOp<E> cc = (NodeOp<E>) bs;

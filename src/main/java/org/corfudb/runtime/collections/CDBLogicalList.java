@@ -20,7 +20,7 @@ public class CDBLogicalList<E> extends CDBAbstractList<E> {
         m_memlist = new LinkedList<E>();
     }
 
-    public void applyToObject(Object bs) {
+    public void applyToObject(Object bs, long timestamp) {
 
         dbglog.debug("CorfuDBList received upcall");
         ListCommand<E> cc = (ListCommand<E>) bs;

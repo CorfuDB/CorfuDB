@@ -29,7 +29,7 @@ public class CDBOrderedMap<K extends Comparable,V> extends CorfuDBObject impleme
         backingmap = new TreeMap<K,V>();
     }
 
-    public void applyToObject(Object bs)
+    public void applyToObject(Object bs, long timestamp)
     {
         dbglog.debug("CorfuDBMap received upcall");
         MapCommand<K,V> cc = (MapCommand<K,V>)bs;

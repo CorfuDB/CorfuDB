@@ -178,7 +178,7 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         if(cob==null) throw new RuntimeException("entry for stream " + curstream + " with no registered object");
         try
         {
-            cob.applyToObject(command);
+            cob.applyToObject(command, timestamp);
         }
         catch(Exception e)
         {
@@ -193,6 +193,7 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         //only the apply thread sets the timestamp, so we only have to worry about concurrent reads
         if(timestamp!=SMREngine.TIMESTAMP_INVALID)
             cob.setTimestamp(timestamp);
+        command.setTimestamp(cob.getTimestamp());
     }
 
 

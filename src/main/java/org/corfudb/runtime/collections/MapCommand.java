@@ -17,6 +17,9 @@ class MapCommand<K,V> extends CorfuDBObjectCommand
     static final int CMD_SIZE = 8;
     static final int CMD_GET_KEY_RANGE = 9;
     static final int CMD_GET_RANGE = 10;
+    String desc[] = {"CMD_PUT", "CMD_PREPUT", "CMD_REMOVE", "CMD_CLEAR", "CMD_GET", "CMD_ISEMPTY",
+            "CMD_CONTAINSKEY", "CMD_CONTAINSVALUE", "CMD_SIZE", "CMD_GET_KEY_RANGE", "CMD_GET_RANGE"};
+
     K key;
     V val;
     int count;
@@ -46,5 +49,9 @@ class MapCommand<K,V> extends CorfuDBObjectCommand
         key = tkey;
         val = tval;
         count = _count;
+    }
+    public String toString()
+    {
+        return desc[cmdtype] + ":" + super.toString();
     }
 }

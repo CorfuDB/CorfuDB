@@ -613,34 +613,6 @@ class TesterThread implements Runnable
     }
 }
 
-//todo: custom serialization + unit tests
-class Triple<X,Y,Z> implements Serializable
-{
-    final X first;
-    final Y second;
-    final Z third;
-    Triple(X f, Y s, Z t)
-    {
-        first = f;
-        second = s;
-        third = t;
-    }
-
-    public boolean equals(Triple<X,Y,Z> otherT)
-    {
-        if(otherT==null) return false;
-        if((((first==null && otherT.first==null)) || (first!=null && first.equals(otherT.first))) //first matches up
-            && (((second==null && otherT.second==null)) || (second!=null && second.equals(otherT.second))) //second matches up
-            && (((second==null && otherT.second==null)) || (second!=null && second.equals(otherT.second)))) //third matches up
-            return true;
-        return false;
-    }
-    public String toString()
-    {
-        return "(" + first + ", " + second + ", " + third + ")";
-    }
-}
-
 class BufferStack implements Serializable //todo: custom serialization
 {
     private Stack<byte[]> buffers;
