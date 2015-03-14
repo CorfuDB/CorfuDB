@@ -49,6 +49,7 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
     double m_readWriteRatio;        // ratio of reads to writes
     ElemGenerator<E> m_generator;   // element generator to populate random lists.
     boolean m_verbose;              // emit copious dbg text to console?
+    int m_nattempts;                // number of attempts (a tx may need to be retried many times)
     int m_numcommits;               // number of committed transactions
     int m_naborts;                  // number of aborts
     int m_ntotalretries;            // retries due to inconsistent views (opacity violations)
@@ -70,6 +71,20 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
             endmax = Math.max(endmax, tester.m_endwork);
         }
         return endmax - startmin;
+    }
+
+    /**
+     * return the total number of committed
+     * operations for the worker thread group.
+     * @param testers
+     * @return
+     */
+    static int
+    getCommittedOps(TXListTester[] testers) {
+        int committed = 0;
+        for(TXListTester tester : testers)
+            committed += tester.m_numcommits;
+        return committed;
     }
 
     /**
@@ -125,6 +140,7 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
         m_numcommits =  0;
         m_naborts = 0;
         m_ntotalretries = 0;
+        m_nattempts = 0;
         m_readWriteRatio = rwpct;
     }
 
@@ -143,17 +159,17 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
             int lidx = lists.size() == 1 ? 0 : (int) (Math.random() * lists.size());
             assert(lidx >= 0 && lidx < lists.size());
             L randlist = lists.remove(lidx);
-            if(randlist.size() == 0) {
+            if(randlist.isEmpty()) {
                 // if the size is zero, this can only be the destination
                 // list...if we have a dst list already, prefer this one,
                 // so that we can start filling it back up again! If we've already
                 // got a dst, with a non-zero size, assign it to the source.
-                if(dst != null && dst.size() != 0) {
+                if(dst != null && !dst.isEmpty()) {
                     src = dst;
                 }
                 dst = randlist;
             } else {
-                // a non-zero sized list can be conditionally assigned to either
+                // a non-empty list can be conditionally assigned to either
                 // dst or src--we prefer to assign it to src first, since we need
                 // it for src, and cannot predict whether we will see non-zero
                 // candidates in the future
@@ -205,8 +221,11 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
                 // guess of the list size. If it's zero bail. Otherwise, try again--
                 // we're guaranteed to get something on the second try.
                 range = src.size();
-                if(range == 0)
+                inform("[T%d]   getRandomElem: idx:%d OOR for L%d, set range=%d\n", m_nId, lidx, src.oid, range);
+                if(range == 0) {
+                    inform("[T%d]   getRandomElem: L%d is empty!\n", m_nId, src.oid);
                     return null;
+                }
             }
         }
     }
@@ -218,9 +237,8 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
     private void readRandomItem() {
         L src = selectRandomList();
         Pair<Integer,E> pair = getRandomElement(src);
-        inform("performed read");
+        inform("T[%d]   read L%d(%d)\n", m_nId, src.oid, pair.first);
     }
-
 
     /**
      * moveRandomItem
@@ -235,10 +253,13 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
         L dst = lists.second;
         Pair<Integer, E> item = getRandomElement(src);
         if(item != null) {
-            src.remove(item.first);
+            src.remove((int)item.first);
             dst.add(item.second);
-            inform("performed move...\n");
+            inform("[T%d]   move %d L%d[idx:%d]->L%d\n",
+                    m_nId, item.second, src.oid, item.first, dst.oid);
+            return;
         }
+        inform("[T%d]   move failed to select random element from L%d\n", src.oid);
     }
 
     /**
@@ -337,30 +358,34 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
         awaitInit();
         for(int i=0;i<m_nOps;i++)
         {
-            long retries = 0;
+            long attempts = 0;
+            long icretries = 0;
             boolean done = false;
             while(!done) {
-                dbglog.debug("Tx starting..."+(retries > 0 ? " retry #"+retries:""));
-                inform("[T%d] tx #%d starting..." + (retries > 0 ? "retry #" + retries : "") + "\n", m_nId, i);
+                inform("[T%d] begintx[#%d, try:%d]\n", m_nId, i, attempts);
                 boolean inTX = false;
                 try {
+                    attempts++;
+                    m_nattempts++;
                     m_rt.BeginTX();
                     inTX = true;
                     performRandomOp();
-                    if (m_rt.EndTX()) m_numcommits++;
-                    else m_naborts++;
+                    done = m_rt.EndTX();
                     inTX = false;
-                    done = true;
+                    inform("[T%d] endtx[#%d, try:%d]->%s\n", m_nId, i, attempts, (done?"COMMIT":"ABORT"));
+                    m_numcommits += done ? 1 : 0;
+                    m_naborts += done ? 0 : 1;
                 } catch (Exception e) {
-                    dbglog.debug("forcing retry in thread " + m_nId + " because of exception "+e);
-                    retries++;
+                    inform("[T%d] force retry tx[%d, try%d] because of exception "+e+"\n", m_nId, i, attempts);
+                    icretries++;
                     if(inTX) m_rt.AbortTX();
                 }
             }
-            m_ntotalretries += retries;
+            m_ntotalretries += icretries;
         }
         awaitComplete();
-        System.out.format("Tester thread is done: %d commits of %d with %d retries for inconsistent views...\n", m_numcommits, m_nOps, m_ntotalretries);
+        System.out.format("[T%d] done(%d ops): %d commits of %d attempts with %d retries for inconsistent views...\n",
+                m_nId, m_nOps, m_numcommits, m_nattempts, m_ntotalretries);
     }
 
     /**
@@ -370,6 +395,88 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
         public Integer randElem(Object i) {
             return new Integer((Integer) i);
         }
+    }
+
+
+    /**
+     * check whether the end state of the field
+     * of lists is consistent with a serial order
+     * of all the operations. Because the key space
+     * is unique, (see the entirely not random random
+     * generator above), each element must be present
+     * in exactly one of the lists.
+     * @param rt    runtime
+     * @param v     list of lists
+     * @param <E>   element type
+     * @param <L>   list type
+     * @return true if the state of the
+     *      list is consistent
+     */
+    static <E, L extends CDBAbstractList<E>> boolean
+    isConsistent(
+            AbstractRuntime rt,
+            List<L> v,
+            int expectedKeys,
+            StringBuilder strDetails
+            )
+    {
+        int violations = 0;
+        int totalElems = 0;
+        boolean consistent = true;
+        boolean failfast = strDetails == null;
+        List<String> failures = failfast ? null : new LinkedList<String>();
+        for(L l : v) {
+            rt.BeginTX();
+            totalElems += l.size();
+            rt.EndTX();
+        }
+        for(L l : v) {
+            rt.BeginTX();
+            int siz = l.size();
+            for (int i=0; i<siz; i++) {
+                E e = l.get(i);
+                for (L lB : v) {
+                    if (lB != l && lB.contains(e)) {
+                        consistent = false;
+                        violations++;
+                        if(failfast) break;
+                        String failure = "" + e + " contained in L" + l.oid +
+                                " and L" + lB.oid + "\n";
+                        failures.add(failure);
+                    }
+                }
+            }
+            if(!rt.EndTX())
+                throw new RuntimeException("Consistency check aborted...");
+            if (!consistent && failfast)
+                break;
+        }
+
+        if(totalElems != expectedKeys) {
+            consistent = false;
+            violations++;
+            if(failures != null)
+                failures.add(new String("expected "+expectedKeys+", found "+totalElems+"\n"));
+            List<String> missingKeys = new LinkedList<String>();
+            for(int i=0; i<expectedKeys; i++) {
+                boolean foundi = false;
+                for(L l: v) {
+                    foundi = l.contains(i);
+                    if(foundi)
+                        break;
+                }
+                if(!foundi)
+                    missingKeys.add("" + i);
+            }
+            failures.add("missing keys: [" + String.join(", ", missingKeys) + "]\n");
+        }
+
+        if(!consistent && strDetails != null) {
+            strDetails.append("found " + violations + " violations:\n");
+            for(String s : failures)
+                strDetails.append(s);
+        }
+        return consistent;
     }
 
     /**
@@ -399,14 +506,13 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
         return null;
     }
 
-
     /**
      * run a tx list test.
      * @param TR
      * @param sf
      * @param numthreads
      * @param numlists
-     * @param numops
+     * @param nOperations
      * @param numkeys
      * @param rwpct
      * @param strClass
@@ -421,7 +527,7 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
             StreamFactory sf,
             int numthreads,
             int numlists,
-            int numops,
+            int nOperations,
             int numkeys,
             double rwpct,
             String strClass,
@@ -441,27 +547,25 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
 
         Thread[] threads = new Thread[numthreads];
         TXListTester<E,L>[] testers = new TXListTester[numthreads];
+        int perWorkerOps = nOperations / numthreads;
         for (int i = 0; i < numthreads; i++) {
             TXListTester<E, L> txl = new TXListTester<E, L>(
-                    i, startbarrier, stopbarrier, TR, lists, numops, numkeys, rwpct, generator, verbose);
+                    i, startbarrier, stopbarrier, TR, lists, perWorkerOps, numkeys, rwpct, generator, verbose);
             testers[i] = txl;
             threads[i] = new Thread(txl);
-            System.out.println("...starting thread "+i);
             threads[i].start();
         }
         for(int i=0;i<numthreads;i++)
             threads[i].join();
 
-        System.out.println("Test done! Checking consistency...");
-        TXListChecker txc = new TXListChecker(TR, lists, numops, numkeys);
-        if(txc.isConsistent()) {
-            System.out.println("List consistency check passed --- test successful!");
-            long e2e = getEndToEndLatency(testers);
-            double throughput = 1000 * numops / e2e;
-            System.out.format("%d tx in %d msec -> %f tx/sec", numops, e2e, throughput);
-        }
-        else
-            System.out.println("List consistency check failed!");
+        StringBuilder strDetails = new StringBuilder();
+        boolean success = isConsistent(TR, lists, numkeys, strDetails);
+        long e2e = getEndToEndLatency(testers);
+        int committedops = getCommittedOps(testers);
+        double throughput = (1000 * committedops) / e2e;
+        System.out.format("List consistency check %s!\n", success ? "PASSED" : "FAILED");
+        System.out.format("Throughput: %d tx in %d msec -> %f tx/sec\n", committedops, e2e, throughput);
+        System.out.print(strDetails.toString());
         System.out.println(TR);
     }
 

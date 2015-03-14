@@ -78,7 +78,6 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
     {
         TR = tTR;
         oid = tobjectid;
-        System.out.println("registering... " + remote);
         TR.registerObject(this, remote);
         timestamp = new AtomicLong();
         statelock = new ReentrantReadWriteLock();
