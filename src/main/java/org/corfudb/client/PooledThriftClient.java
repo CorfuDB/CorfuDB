@@ -137,7 +137,8 @@ public class PooledThriftClient<T extends TServiceClient> implements AutoCloseab
     public void returnBrokenResource(T resource)
     {
         try {
-        pool.invalidateObject(resource);
+            log.warn("Warning, broken resource returned!");
+            pool.invalidateObject(resource);
         }
         catch (Exception e)
         {

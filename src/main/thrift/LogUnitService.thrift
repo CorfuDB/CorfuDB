@@ -21,4 +21,6 @@ service SimpleLogUnitService {
 	void ckpoint(1:Common.UnitServerHdr hdr),
 		
     bool ping();
+
+    void reset();
 }

@@ -41,7 +41,7 @@ import java.io.IOException;
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
 
-public class WriteOnceAddressSpace {
+public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
     private CorfuDBClient client;
 	private final Logger log = LoggerFactory.getLogger(WriteOnceAddressSpace.class);

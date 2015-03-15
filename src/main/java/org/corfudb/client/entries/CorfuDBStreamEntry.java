@@ -41,11 +41,12 @@ import java.io.IOException;
 public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStreamEntry>
 {
     private static final long serialVersionUID = 0L;
-    private UUID streamID;
+    UUID streamID;
     private long lastEntry;
-    private transient Timestamp ts;
+    Timestamp ts;
     private byte[] payload;
 
+    public CorfuDBStreamEntry() {}
     public CorfuDBStreamEntry(UUID streamID, Serializable payloadObject)
         throws IOException
     {

@@ -15,9 +15,12 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.client.CorfuDBView;
+import org.corfudb.client.CorfuDBViewSegment;
+import org.corfudb.client.IServerProtocol;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.Headers;
 import org.apache.thrift.TException;
 
 import org.slf4j.MarkerFactory;
@@ -39,6 +42,8 @@ import javax.json.JsonWriter;
 import javax.json.Json;
 import javax.json.JsonValue;
 import javax.json.JsonObject;
+import javax.json.JsonString;
+import javax.json.JsonNumber;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonReader;
 import javax.json.JsonArray;
@@ -63,6 +68,10 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         this.config = config;
         viewActive = false;
         currentView = new CorfuDBView(config);
+        //UUID is going to be random for now, since this configuration is not persistent
+        UUID logID =  UUID.randomUUID();
+        log.info("New log instance id= " + logID.toString());
+        currentView.setUUID(logID);
         return this;
     }
 
@@ -105,6 +114,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             HttpServer server = HttpServer.create(new InetSocketAddress((Integer)config.get("port")), 0);
             server.createContext("/corfu", new RequestHandler());
             server.createContext("/control", new ControlRequestHandler());
+            server.createContext("/", new StaticRequestHandler());
             server.setExecutor(null);
             server.start();
             checkViewThread();
@@ -116,13 +126,43 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
     private void reset() {
         log.info("RESET requested, resetting all nodes and incrementing epoch");
+        long newEpoch = currentView.getEpoch() + 1;
+
+        for (IServerProtocol sequencer : currentView.getSequencers())
+        {
+            try {
+            sequencer.reset(newEpoch);
+            } catch (Exception e)
+            {
+                log.error("Error resetting sequencer", e);
+            }
+        }
+
+        for (CorfuDBViewSegment vs : currentView.getSegments())
+        {
+            for (List<IServerProtocol> group : vs.getGroups())
+            {
+                for (IServerProtocol logunit: group)
+                {
+                    try {
+                    logunit.reset(newEpoch);
+                    }
+                    catch (Exception e)
+                    {
+                        log.error("Error resetting logunit", e);
+                    }
+                }
+            }
+        }
+
+        currentView.resetEpoch(newEpoch);
     }
 
-    private JsonValue addStream(JsonArray params)
+    private JsonValue addStream(JsonObject params)
     {
         try {
-            JsonObject jo = params.getJsonObject(0);
-            currentView.updateStream(UUID.fromString(jo.getJsonString("uuid").getString()), jo.getJsonNumber("start").longValue());
+            JsonObject jo = params;
+            currentView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), jo.getJsonNumber("startpos").longValue());
         }
         catch (Exception ex)
         {
@@ -132,6 +172,39 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         return JsonValue.TRUE;
     }
 
+    private JsonObject getStream(JsonObject params)
+    {
+        JsonObjectBuilder ob = Json.createObjectBuilder();
+
+        try {
+            JsonObject jo = params;
+            log.debug(jo.toString());
+            CorfuDBView.StreamData sd = currentView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
+            if (sd == null)
+            {
+                ob.add("present", false);
+            }
+            else
+            {
+                ob.add("present", true);
+                ob.add("startpos", sd.logPos);
+                ob.add("logid", UUID.randomUUID().toString());
+            }
+
+        }
+        catch (Exception ex)
+        {
+            log.error("Error getting stream", ex);
+            ob.add("present", false);
+        }
+        return ob.build();
+    }
+
+    private class StaticRequestHandler implements HttpHandler {
+        public void handle(HttpExchange t) throws IOException {
+
+        }
+    }
     private class ControlRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
 
@@ -140,7 +213,8 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             if (t.getRequestMethod().startsWith("POST")) {
                 log.debug("POST request:" + t.getRequestURI());
                 String apiCall = null;
-                JsonArray params = null;
+                JsonObject params = null;
+                JsonNumber id = null;
                 try (InputStreamReader isr  = new InputStreamReader(t.getRequestBody(), "utf-8"))
                 {
                     try (BufferedReader br = new BufferedReader(isr))
@@ -148,8 +222,10 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         try (JsonReader jr = Json.createReader(br))
                         {
                             JsonObject jo  = jr.readObject();
+                            log.debug("request is " + jo.toString());
                             apiCall = jo.getString("method");
-                            params = jo.getJsonArray("params");
+                            params = jo.getJsonObject("params");
+                            id = jo.getJsonNumber("id");
                         }
                         catch (Exception e)
                         {
@@ -157,27 +233,35 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         }
                     }
                 }
-                JsonValue result = JsonValue.FALSE;
+                Object result = JsonValue.FALSE;
+                JsonObjectBuilder job = Json.createObjectBuilder();
                 switch(apiCall)
                 {
+                    case "ping":
+                        job.add("result", "pong");
+                        break;
                     case "reset":
                         reset();
-                        result = JsonValue.TRUE;
+                        job.add("result", JsonValue.TRUE);
                         break;
                     case "addstream":
-                        result = addStream(params);
+                        job.add("result", addStream(params));
                         break;
-
+                    case "getstream":
+                        job.add("result", getStream(params));
+                        break;
                 }
-                JsonObject res = Json.createObjectBuilder()
-                                    .add("calledmethod", apiCall)
-                                    .add("result", result)
+                JsonObject res =    job.add("calledmethod", apiCall)
+                                    .add("jsonrpc", "2.0")
+                                    .add("id", id)
                                     .build();
                 response = res.toString();
             } else {
                 log.debug("PUT request");
                 response = "deny";
             }
+                Headers h = t.getResponseHeaders();
+                h.set("Content-Type", "application/json");
                 t.sendResponseHeaders(200, response.length());
                 OutputStream os = t.getResponseBody();
                 os.write(response.getBytes());
