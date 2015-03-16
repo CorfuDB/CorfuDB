@@ -37,6 +37,10 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
     // TODO: eventually this should become obsolete and should be removed!
     private static boolean writeOnlyTxSupport = true;
 
+    // lock and dump the state of lists after every
+    // completed transaction (aborted or otherwise)
+    public static boolean extremeDebug = false;
+
     AbstractRuntime m_rt;           // corfu runtime
     List<L> m_v;                    // list of lists we are reading/updating
     CyclicBarrier m_startbarrier;   // start barrier to ensure all threads finish init before tx loop
@@ -234,10 +238,12 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
      * given an input list, read
      * a random item from that list
      */
-    private void readRandomItem() {
+    private Pair<L,L>
+    readRandomItem() {
         L src = selectRandomList();
         Pair<Integer,E> pair = getRandomElement(src);
         inform("T[%d]   read L%d(%d)\n", m_nId, src.oid, pair.first);
+        return new Pair<L, L>(src, null);
     }
 
     /**
@@ -245,7 +251,7 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
      * given a pair of lists, randomly choose an element from the
      * source and move it to the destination list.
      */
-    private void
+    private Pair<L, L>
     moveRandomItem() {
 
         Pair<L, L> lists = selectRandomLists();
@@ -257,9 +263,10 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
             dst.add(item.second);
             inform("[T%d]   move %d L%d[idx:%d]->L%d\n",
                     m_nId, item.second, src.oid, item.first, dst.oid);
-            return;
+            return new Pair<L,L>(src, dst);
         }
         inform("[T%d]   move failed to select random element from L%d\n", src.oid);
+        return new Pair<L, L>(null, null);
     }
 
     /**
@@ -280,13 +287,16 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
      * perform a read-only operation (get an item from a list)
      * or a read-write tx (move a random item between lists)
      */
-    private void performRandomOp() {
+    private Pair<L,L>
+    performRandomOp() {
+        Pair<L, L> result;
         double diceRoll = Math.random();
         if(diceRoll < m_readWriteRatio) {
-            readRandomItem();
+            result = readRandomItem();
         } else {
-            moveRandomItem();
+            result = moveRandomItem();
         }
+        return result;
     }
 
     /**
@@ -346,6 +356,60 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
         inform("Leaving run loop for tx list tester thread %d\n", m_nId);
     }
 
+    private static Object slock = new Object();
+
+    /**
+     * dump the state of the lists used in the last transaction attempt
+     * as close to atomically as possible.
+     * Which isn't really all that close. Option to use a transaction
+     * or not--this is a debug utility, and we may want to see uncommitted
+     * state as often as not.
+     * @param pair
+     * @param txid
+     * @param attemptid
+     * @param committed
+     * @param usetx
+     */
+    private void
+    dumpLists(
+            Pair<L, L> pair,
+            int txid,
+            long attemptid,
+            boolean committed,
+            boolean usetx
+        )
+    {
+        if(!extremeDebug) return;
+        String strSrc = null;
+        String strDst = null;
+        String strOp = committed ? "post-cmt" : "post-abt";
+        boolean done = false;
+
+        while(!done) {
+            boolean inTX = false;
+            try {
+                if(usetx) m_rt.BeginTX();
+                inTX = usetx;
+                strSrc = pair.first.print();
+                if(pair.second != null)
+                    strDst = pair.second.print();
+                done = usetx ? m_rt.EndTX() : true;
+                inTX = false;
+            } catch (Exception e) {
+                if(inTX) m_rt.AbortTX();
+                inTX = false;
+            }
+        }
+
+        synchronized (slock) {
+            inform("[T%d]   %s[#%d, try:%d]->src:L%d=%s\n",
+                    m_nId, strOp, txid, attemptid, pair.first.oid, strSrc);
+            if(pair.second != null) {
+                inform("       %s[#%d, try:%d]->dst:L%d=%s\n", strOp, txid, attemptid, pair.second.oid, strDst);
+            }
+        }
+    }
+
     /**
      * run method (runnable)
      * wait for all worker threads to initialize
@@ -369,12 +433,13 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
                     m_nattempts++;
                     m_rt.BeginTX();
                     inTX = true;
-                    performRandomOp();
+                    Pair<L, L> res = performRandomOp();
                     done = m_rt.EndTX();
                     inTX = false;
                     inform("[T%d] endtx[#%d, try:%d]->%s\n", m_nId, i, attempts, (done?"COMMIT":"ABORT"));
                     m_numcommits += done ? 1 : 0;
                     m_naborts += done ? 0 : 1;
+                    dumpLists(res, i, attempts, done, true);
                 } catch (Exception e) {
                     inform("[T%d] force retry tx[%d, try%d] because of exception "+e+"\n", m_nId, i, attempts);
                     icretries++;
@@ -562,7 +627,7 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
         boolean success = isConsistent(TR, lists, numkeys, strDetails);
         long e2e = getEndToEndLatency(testers);
         int committedops = getCommittedOps(testers);
-        double throughput = (1000 * committedops) / e2e;
+        double throughput = (1000.0 * (double)committedops) / (double)e2e;
         System.out.format("List consistency check %s!\n", success ? "PASSED" : "FAILED");
         System.out.format("Throughput: %d tx in %d msec -> %f tx/sec\n", committedops, e2e, throughput);
         System.out.print(strDetails.toString());
