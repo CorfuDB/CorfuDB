@@ -141,6 +141,7 @@ public class CorfuDBView {
         sequencers = populateSequencersFromList((List<String>)config.get("sequencers"));
         configmasters = populateConfigMastersFromList((List<String>)config.get("configmasters"));
         segments = populateSegmentsFromList((List<Map<String,Object>>)((Map<String,Object>)config.get("layout")).get("segments"));
+        logs = new ConcurrentHashMap<UUID, String>();
     }
 
     public void setUUID(UUID uuid)

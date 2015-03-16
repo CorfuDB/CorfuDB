@@ -34,6 +34,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.OutputStream;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URLConnection;
 import java.io.StringWriter;
 import java.net.InetSocketAddress;
 import java.security.SecureRandom;
@@ -75,25 +78,29 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         log.info("New log instance id= " + logID.toString());
         currentView.setUUID(logID);
         currentView.addRemoteLog(logID, currentView.getConfigMasters().get(0).getFullString());
-        for (Object configmaster  : (List<Object>) config.get("remotelogs"))
+        log.info("Remote log set");
+        if (config.get("remotelogs") != null)
         {
-            try {
-                IConfigMaster cm = CorfuDBView.getConfigurationMasterFromString((String) configmaster);
-                //Get the list of logs that the remote knows
-                Map<UUID, String> remoteLogList = cm.getAllLogs();
-                for (UUID rlog : remoteLogList.keySet())
-                {
-                   if (currentView.addRemoteLog(rlog, remoteLogList.get(rlog)))
-                   {
-                       log.info("Discovered new remote log " + rlog);
-                   }
-                }
-                //Tell the remote log that we exist
-                cm.addLog(logID, currentView.getConfigMasters().get(0).getFullString());
-            }
-            catch (Exception e)
+            for (Object configmaster  : (List<Object>) config.get("remotelogs"))
             {
-                log.warn("Error talking to remote log" ,e);
+                try {
+                    IConfigMaster cm = CorfuDBView.getConfigurationMasterFromString((String) configmaster);
+                    //Get the list of logs that the remote knows
+                    Map<UUID, String> remoteLogList = cm.getAllLogs();
+                    for (UUID rlog : remoteLogList.keySet())
+                    {
+                       if (currentView.addRemoteLog(rlog, remoteLogList.get(rlog)))
+                       {
+                           log.info("Discovered new remote log " + rlog);
+                       }
+                    }
+                    //Tell the remote log that we exist
+                    cm.addLog(logID, currentView.getConfigMasters().get(0).getFullString());
+                }
+                catch (Exception e)
+                {
+                    log.warn("Error talking to remote log" ,e);
+                }
             }
         }
         return this;
@@ -248,7 +255,38 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
     private class StaticRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
-
+            URI request = t.getRequestURI();
+            InputStream resourceStream = getClass().getResourceAsStream(request.toString());
+            if(resourceStream != null)
+            {
+                Headers h = t.getResponseHeaders();
+                OutputStream os = t.getResponseBody();
+                try {
+                byte[] data = new byte[16384];
+                int nread;
+                long total = 0;
+                h.set("Content-Type", URLConnection.guessContentTypeFromName(request.toString()));
+                t.sendResponseHeaders(200, resourceStream.available());
+                while ((nread = resourceStream.read(data, 0, data.length))!= -1)
+                {
+                    os.write(data, 0, nread);
+                }
+                log.debug("wrote " + total + " bytes!");
+                }
+                catch (Exception e)
+                {
+                    log.debug("error", e);
+                }
+                os.close();
+            }
+            else
+            {
+                String response = "File not found!";
+                OutputStream os = t.getResponseBody();
+                t.sendResponseHeaders(404, response.length());
+                os.write(response.getBytes());
+                os.close();
+            }
         }
     }
     private class ControlRequestHandler implements HttpHandler {
