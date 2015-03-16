@@ -107,6 +107,7 @@ public interface IBenchTest extends AutoCloseable {
             } while (totalCompleted.get() < getNumOperations(args));
             c_total.stop();
             executor.shutdownNow();
+            close();
         }
         catch (Exception e)
         {
@@ -117,6 +118,7 @@ public interface IBenchTest extends AutoCloseable {
     default MetricRegistry runTest(Map<String, Object> args)
     {
         final MetricRegistry m = new MetricRegistry();
+        AtomicLong al = new AtomicLong(0);
         try (IBenchTest t = this)
         {
             t.doSetup(args);
@@ -127,7 +129,7 @@ public interface IBenchTest extends AutoCloseable {
                 for (long i =0; i < getNumActionsPerThread(args); i++)
                 {
                     final Timer.Context c_action = t_action.time();
-                    doRun(args, i, m);
+                    doRun(args, al.getAndIncrement(),m);
                     c_action.stop();
                 }
                 return null;
@@ -142,6 +144,7 @@ public interface IBenchTest extends AutoCloseable {
             executor.invokeAll(list);} catch(InterruptedException ie) {}
             c_total.stop();
             executor.shutdownNow();
+            close();
         }
         catch (Exception e)
         {

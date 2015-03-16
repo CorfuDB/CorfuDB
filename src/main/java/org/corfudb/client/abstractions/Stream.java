@@ -46,6 +46,7 @@ import java.util.concurrent.CompletableFuture;
 
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.TimeUnit;
 import org.corfudb.client.Timestamp;
 import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
@@ -155,6 +156,7 @@ public class Stream implements AutoCloseable {
     private CompletableFuture<ReadResult> dispatchDetailRead(long logPos)
     {
         return CompletableFuture.supplyAsync(() -> {
+           // log.debug("dispatch " + streamID.toString() + " " + logPos);
             ReadResult r = new ReadResult(logPos);
             try {
                 byte[] data = woas.read(logPos);
@@ -215,7 +217,7 @@ public class Stream implements AutoCloseable {
                                     //flush what we've read (unless the stream starts at the next allocation,)
                                     //it's all bound to be invalid...
                                     dispatchedReads.set(cdbsme.destinationPos);
-                                    getStreamTailAndDispatch(1);
+                                    currentDispatch = getStreamTailAndDispatch(1);
                                     return;
                                 }
                                 else if (payload instanceof CorfuDBStreamStartEntry)
@@ -262,7 +264,7 @@ public class Stream implements AutoCloseable {
                     if (numReadable == results.size()) {
                         numReadable = numReadable * 2; }
                     if (closed) {return;}
-                    getStreamTailAndDispatch(Math.max(numReadable, 1));
+                    currentDispatch = getStreamTailAndDispatch(Math.max(numReadable, 1));
                 }, executor);
             }, executor);
         return future;
@@ -304,14 +306,32 @@ public class Stream implements AutoCloseable {
     throws IOException, InterruptedException
     {
         if (closed) { throw new IOException("Reading from closed stream!"); }
-        if (!prefetch && (currentDispatch == null || currentDispatch.isDone()))
+        if (!prefetch)
         {
-            currentDispatch = getStreamTailAndDispatch(queueMax);
+            CorfuDBStreamEntry entry = streamQ.poll();
+            while (entry == null)
+            {
+                synchronized (streamQ)
+                {
+                    if (currentDispatch == null || currentDispatch.isDone())
+                    {
+                        currentDispatch = getStreamTailAndDispatch(queueMax);
+                    }
+                    else
+                    {
+                    }
+                }
+                entry = streamQ.poll(100, TimeUnit.MILLISECONDS);
+            }
+            return entry;
         }
-        synchronized(streamQ){
-            streamQ.notify();
+        else
+        {
+            synchronized(streamQ){
+                streamQ.notify();
+            }
+            return streamQ.take();
         }
-        return streamQ.take();
     }
 
     public byte[] readNext()

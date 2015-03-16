@@ -16,6 +16,8 @@ pagesize: 4096
 epoch: 0
 sequencers:
     - "cdbss://localhost:8000"
+configmasters:
+    - "cdbcm://localhost:8002"
 layout:
     segments:
         - start: 0

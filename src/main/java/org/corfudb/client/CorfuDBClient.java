@@ -31,6 +31,10 @@ import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+import java.util.UUID;
+
+import org.corfudb.client.configmasters.IConfigMaster;
+
 /**
  * Note, the following imports require Java 8
  */
@@ -89,7 +93,7 @@ public class CorfuDBClient implements AutoCloseable {
      * Starts the view manager thread. The view manager retrieves the view
      * and manages view changes. This thread will be automatically started
      * when any requests are made, but this method allows the view manager
-     * to load the inital view during application load.
+     * to load the initial view during application load.
      */
     public void startViewManager() {
         if (!viewManagerThread.isAlive())
@@ -103,11 +107,11 @@ public class CorfuDBClient implements AutoCloseable {
      * Retrieves the CorfuDBView from a configuration string. The view manager
      * uses this method to fetch the most recent view.
      */
-    private CorfuDBView retrieveView()
+    private CorfuDBView retrieveView(String configString)
         throws IOException
     {
         HttpClient httpClient = HttpClients.createDefault();
-        HttpResponse response = httpClient.execute(new HttpGet(configurationString));
+        HttpResponse response = httpClient.execute(new HttpGet(configString));
         if (response.getStatusLine().getStatusCode() != 200)
         {
             log.warn("Failed to get view from configuration string", response.getStatusLine());
@@ -158,6 +162,28 @@ public class CorfuDBClient implements AutoCloseable {
                 {}
             }
         }
+    }
+
+    /**
+     * Get the view for a remote log.
+     *
+     * @param logID     The UUID of the remote log to retrieve the view for.
+     *
+     * @return          A CorfuDBView, if the remote log can be retrieved, or
+     *                  null, if the UUID cannot be resolved.
+     */
+    public CorfuDBView getView(UUID logID)
+    throws IOException
+    {
+        /** Go to the current view, and communicate with the local configuration
+         *  master to resolve the log.
+         */
+        IConfigMaster cm = (IConfigMaster) getView().getConfigMasters().get(0);
+        String remoteLog = cm.getLog(logID);
+        /** Go to the remote log, communicate with the remote configuration master
+         * and resolve the remote configuration.
+         */
+        return retrieveView(remoteLog);
     }
 
     /**
@@ -219,7 +245,7 @@ public class CorfuDBClient implements AutoCloseable {
                             //lock, preventing old view from being read.
                             long stamp = viewLock.writeLock();
                             try {
-                                CorfuDBView newView = retrieveView();
+                                CorfuDBView newView = retrieveView(configurationString);
                                 if (currentView == null || newView.getEpoch() > currentView.getEpoch())
                                 {
                                     String oldEpoch = (currentView == null) ? "null" : Long.toString(currentView.getEpoch());

@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @SuppressWarnings({"rawtypes","unchecked"})
 public class MultipleStreamReadTest implements IBenchTest {
     CorfuDBClient c;
-    ArrayList<Stream> sl = new ArrayList<Stream>();
+    ArrayList<Stream> sl;
     AtomicLong l;
     byte[] data;
     public MultipleStreamReadTest() {}
@@ -52,17 +52,19 @@ public class MultipleStreamReadTest implements IBenchTest {
     {
         c = getClient(args);
         c.startViewManager();
-        exec = Executors.newFixedThreadPool(getNumStreams(args) * 2);
+        exec = Executors.newFixedThreadPool(getNumThreads(args));
+        sl = new ArrayList<Stream>();
         data = new byte[getPayloadSize(args)];
         for (int i = 0; i < getNumStreams(args); i++)
         {
-            sl.add(new Stream(c, UUID.randomUUID(), 10, getStreamAllocationSize(args), exec, false));
-            for (long j = 0; j < Math.max(1, (int)((float)getNumOperations(args)/(float)getNumStreams(args))) * 2; j++)
-            {
-                try {
-                sl.get(i).append(data);
-                } catch (Exception e) {}
-            }
+            sl.add(new Stream(c, UUID.randomUUID(), getNumThreads(args), getStreamAllocationSize(args), exec, false));
+        }
+
+        for (long i = 0; i < getNumOperations(args) * 2; i++)
+        {
+            try {
+            sl.get((int)i % getNumStreams(args)).append(data);
+            } catch (Exception e) {}
         }
         l = new AtomicLong();
         c.waitForViewReady();
@@ -74,6 +76,7 @@ public class MultipleStreamReadTest implements IBenchTest {
         {
             s.close();
         }
+        exec.shutdownNow();
         c.close();
     }
 
@@ -84,7 +87,7 @@ public class MultipleStreamReadTest implements IBenchTest {
         Timer t_logunit = m.timer("read data from stream " + streamNum);
         Timer.Context c_logunit = t_logunit.time();
         try {
-            sl.get(streamNum).readNext();
+            sl.get(streamNum).readNext();;
         }
         catch (Exception e) {}
         c_logunit.stop();

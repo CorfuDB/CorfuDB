@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @SuppressWarnings({"rawtypes","unchecked"})
 public class MultipleStreamWriteTest implements IBenchTest {
     CorfuDBClient c;
-    ArrayList<Stream> sl = new ArrayList<Stream>();
+    ArrayList<Stream> sl;
     AtomicLong l;
     byte[] data;
     ExecutorService exec;
@@ -54,6 +54,7 @@ public class MultipleStreamWriteTest implements IBenchTest {
         c = getClient(args);
         c.startViewManager();
         exec = Executors.newFixedThreadPool(getNumThreads(args));
+        sl = new ArrayList<Stream>();
         for (int i = 0; i < getNumStreams(args); i++)
         {
             sl.add(new Stream(c, UUID.randomUUID(), 1, getStreamAllocationSize(args), exec, false));
@@ -69,6 +70,7 @@ public class MultipleStreamWriteTest implements IBenchTest {
         {
             s.close();
         }
+        exec.shutdownNow();
         c.close();
     }
 

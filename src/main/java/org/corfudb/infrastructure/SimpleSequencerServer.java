@@ -45,6 +45,12 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
 	}
 
     @Override
+    public void reset() throws TException {
+        log.info("Reset requested, setting sequence to 0");
+        pos = new AtomicLong(0);
+    }
+
+    @Override
     public void recover(long lowbound) throws TException {
         pos.set(lowbound);
     }

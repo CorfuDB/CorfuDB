@@ -99,6 +99,10 @@ public class StreamingSequencer {
                     ((IStreamSequencer)sequencer).setAllocationSize(streamID, size);
                     return;
                 }
+                else
+                {
+                    return;
+                }
             }
             catch (Exception e)
             {

@@ -41,6 +41,9 @@ import java.lang.Math;
 import java.util.concurrent.locks.StampedLock;
 import java.util.concurrent.CompletableFuture;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class StreamingSequencerServer implements StreamingSequencerService.Iface, ICorfuDBServer {
 
     private int port = 0;
@@ -48,6 +51,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
     private Logger log = LoggerFactory.getLogger(StreamingSequencerServer.class);
     private CorfuDBClient c;
     private WriteOnceAddressSpace woas;
+    private ExecutorService tp = Executors.newCachedThreadPool();
     class StreamData {
 
         public StreamData(UUID streamID) {
@@ -93,7 +97,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
                 {
                     log.warn("Error placing move entry: ", ie);
                 }
-                });
+                }, tp);
                 max = newPos + allocation - 1;
                 s.position = internalPos.getAndAdd(range);
                 s.totalTokens = Math.min(range, (int)(max-s.position));
