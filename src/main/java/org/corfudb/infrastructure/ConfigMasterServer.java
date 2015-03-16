@@ -237,6 +237,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         Map<UUID, String> logs = currentView.getAllLogs();
         for (UUID key : logs.keySet())
         {
+            log.debug("Building result...");
             jb.add(key.toString(), logs.get(key));
         }
         return jb.build();
@@ -256,7 +257,16 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     private class StaticRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
             URI request = t.getRequestURI();
-            InputStream resourceStream = getClass().getResourceAsStream(request.toString());
+            String ignoreQuery = request.toString().split("\\?")[0];
+            log.debug("Serving {}.", ignoreQuery);
+            if (ignoreQuery.toString().equals("/"))
+            {
+                Headers h = t.getResponseHeaders();
+                h.set("Location", "index.html");
+                t.sendResponseHeaders(301, 0);
+                return;
+            }
+            InputStream resourceStream = getClass().getResourceAsStream(ignoreQuery);
             if(resourceStream != null)
             {
                 Headers h = t.getResponseHeaders();
@@ -265,13 +275,44 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                 byte[] data = new byte[16384];
                 int nread;
                 long total = 0;
-                h.set("Content-Type", URLConnection.guessContentTypeFromName(request.toString()));
+                String contentType = URLConnection.guessContentTypeFromStream(resourceStream);
+                if (contentType == null) {
+                    String extension = "";
+
+                    int i = ignoreQuery.lastIndexOf('.');
+                    if (i > 0) {
+                        extension = request.toString().substring(i+1);
+                    }
+                    switch (extension)
+                    {
+                        case "js":
+                            contentType = "application/javascript";
+                            break;
+                        case "woff":
+                            contentType = "application/font-woff";
+                            break;
+                        case "eot":
+                            contentType = "application/vnd.ms-fontobject";
+                            break;
+                        case "html":
+                        case "htm":
+                            contentType = "text/html";
+                            break;
+                        case "css":
+                            contentType = "text/css";
+                            break;
+                        default:
+                            contentType = "application/octet-stream";
+                            break;
+                    }
+                }
+                log.debug("Set content type to {}",  contentType);
+                h.set("Content-Type", contentType);
                 t.sendResponseHeaders(200, resourceStream.available());
                 while ((nread = resourceStream.read(data, 0, data.length))!= -1)
                 {
                     os.write(data, 0, nread);
                 }
-                log.debug("wrote " + total + " bytes!");
                 }
                 catch (Exception e)
                 {
