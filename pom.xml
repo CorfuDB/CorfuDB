@@ -389,13 +389,12 @@
                     </execution>
                 </executions>
             </plugin>
-            <!--
             <plugin>
                 <groupId>com.github.eirslett</groupId>
                 <artifactId>frontend-maven-plugin</artifactId>
                 <version>0.0.20</version>
                 <configuration>
-                    <workingDirectory>src/main/nodejs/directoryService</workingDirectory>
+                    <workingDirectory>src/main/frontend</workingDirectory>
                 </configuration>
                 <executions>
                     <execution>
@@ -418,6 +417,12 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>bower install</id>
+                        <goals>
+                            <goal>bower</goal>
+                        </goals>
+                    </execution>
+                    <execution>
                         <id>gulp build</id>
                         <goals>
                             <goal>gulp</goal>
@@ -428,7 +433,13 @@
                     </execution>
                 </executions>
             </plugin>
-            -->
-    </plugins>
+        </plugins>
+
+    <resources>
+        <resource>
+            <directory>src/main/frontend/build/</directory>
+        </resource>
+    </resources>
+
     </build>
 </project>
