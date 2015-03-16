@@ -15,8 +15,18 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
 
     static Logger dbglog = LoggerFactory.getLogger(CDBDoublyLinkedList.class);
     static protected final HashMap<Long, CDBDoublyLinkedList> s_lists = new HashMap<>();
+    public long m_head;
+    public long m_tail;
+    public HashMap<Long, CDBDoublyLinkedListNode<E>> m_nodes;
+    public StreamFactory sf;
 
-    static public CDBDoublyLinkedList findList(long loid) {
+    /**
+     * track all instances
+     * @param loid
+     * @return
+     */
+    static public
+    CDBDoublyLinkedList findList(long loid) {
         synchronized (s_lists) {
             if (s_lists.containsKey(loid))
                 return s_lists.get(loid);
@@ -24,63 +34,19 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
-    public long m_head;
-    public long m_tail;
-    public HashMap<Long, CDBDoublyLinkedListNode<E>> m_nodes;
-    public StreamFactory sf;
-    public long oid;
-
-    public void applyToObject(Object bs, long timestamp) {
-
-        dbglog.debug("CDBNode received upcall");
-        NodeOp<E> cc = (NodeOp<E>) bs;
-        switch (cc.cmd()) {
-            case NodeOp.CMD_READ_HEAD: applyReadHead(cc); break;
-            case NodeOp.CMD_READ_TAIL: applyReadTail(cc); break;
-            case NodeOp.CMD_WRITE_HEAD: applyWriteHead(cc); break;
-            case NodeOp.CMD_WRITE_TAIL: applyWriteTail(cc); break;
-        }
-    }
-
-    protected long applyReadHead(NodeOp<E> cc) {
-        rlock();
-        try {
-            cc.setReturnValue(m_head);
-        } finally {
-            runlock();
-        }
-        return (long) cc.getReturnValue();
-    }
-
-    protected long applyReadTail(NodeOp<E> cc) {
-        rlock();
-        try {
-            cc.setReturnValue(m_tail);
-        } finally {
-            runlock();
-        }
-        return (long) cc.getReturnValue();
-    }
-
-    protected void applyWriteHead(NodeOp<E> cc) {
-        wlock();
-        try {
-            m_head = cc.oidparam();
-        } finally {
-            wunlock();
-        }
-    }
-
-    protected void applyWriteTail(NodeOp<E> cc) {
-        wlock();
-        try {
-            m_tail = cc.oidparam();
-        } finally {
-            wunlock();
-        }
-    }
-
-    public CDBDoublyLinkedList(AbstractRuntime tTR, StreamFactory tsf, long toid) {
+    /**
+     * ctor
+     * @param tTR
+     * @param tsf
+     * @param toid
+     */
+    public
+    CDBDoublyLinkedList(
+        AbstractRuntime tTR,
+        StreamFactory tsf,
+        long toid
+        )
+    {
         super(tTR, tsf, toid);
         m_head = oidnull;
         m_tail = oidnull;
@@ -92,12 +58,109 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
-    protected CDBDoublyLinkedListNode<E> nodeById_nolock(long noid) {
+    /**
+     * required by runtime
+     * @param bs
+     * @param timestamp
+     */
+    public void
+    applyToObject(Object bs, long timestamp) {
+
+        dbglog.debug("CDBNode received upcall");
+        NodeOp<E> cc = (NodeOp<E>) bs;
+        switch (cc.cmd()) {
+            case NodeOp.CMD_READ_HEAD: applyReadHead(cc); break;
+            case NodeOp.CMD_READ_TAIL: applyReadTail(cc); break;
+            case NodeOp.CMD_WRITE_HEAD: applyWriteHead(cc); break;
+            case NodeOp.CMD_WRITE_TAIL: applyWriteTail(cc); break;
+        }
+    }
+
+    /**
+     * read the head of the list
+     * @param cc
+     * @return
+     */
+    protected long
+    applyReadHead(NodeOp<E> cc) {
+        rlock();
+        try {
+            cc.setReturnValue(m_head);
+        } finally {
+            runlock();
+        }
+        return (long) cc.getReturnValue();
+    }
+
+    /**
+     * read the tail
+     * @param cc
+     * @return
+     */
+    protected long
+    applyReadTail(NodeOp<E> cc) {
+        rlock();
+        try {
+            cc.setReturnValue(m_tail);
+        } finally {
+            runlock();
+        }
+        return (long) cc.getReturnValue();
+    }
+
+    /**
+     * apply a write head command
+     * @param cc
+     */
+    protected void
+    applyWriteHead(NodeOp<E> cc) {
+        wlock();
+        try {
+            m_head = cc.oidparam();
+        } finally {
+            wunlock();
+        }
+    }
+
+    /**
+     * apply a write tail command
+     * @param cc
+     */
+    protected void
+    applyWriteTail(NodeOp<E> cc) {
+        wlock();
+        try {
+            m_tail = cc.oidparam();
+        } finally {
+            wunlock();
+        }
+    }
+
+    /**
+     * get the node with the given id. lock assumed held
+     * @param noid
+     * @return
+     */
+    protected
+    CDBDoublyLinkedListNode<E>
+    nodeById_nolock(
+        long noid
+        )
+    {
         assert(lockheld());
         return m_nodes.getOrDefault(noid, null);
     }
 
-    protected CDBDoublyLinkedListNode<E> nodeById(long noid) {
+    /**
+     * get the node with the given oid
+     * @param noid
+     * @return
+     */
+    protected CDBDoublyLinkedListNode<E>
+    nodeById(
+        long noid
+        )
+    {
         rlock();
         try {
             return m_nodes.getOrDefault(noid, null);
@@ -106,7 +169,12 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
-    protected long readhead() {
+    /**
+     * read the head field
+     * @return
+     */
+    protected long
+    readhead() {
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_HEAD, oid, oid);
         if (TR.query_helper(this, null, cmd))
             return (long) cmd.getReturnValue();
@@ -118,7 +186,12 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
-    protected long readtail() {
+    /**
+     * read the tail field
+     * @return
+     */
+    protected long
+    readtail() {
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_TAIL, oid, oid);
         if(TR.query_helper(this, null, cmd))
             return (long) cmd.getReturnValue();
@@ -130,7 +203,13 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
-    protected long readnext(CDBDoublyLinkedListNode<E> node) {
+    /**
+     * read the next pointer of a given node
+     * @param node
+     * @return
+     */
+    protected long
+    readnext(CDBDoublyLinkedListNode<E> node) {
 
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_NEXT, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
@@ -143,7 +222,13 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
-    protected long readprev(CDBDoublyLinkedListNode<E> node) {
+    /**
+     * read the prev pointer for a given node
+     * @param node
+     * @return
+     */
+    protected long
+    readprev(CDBDoublyLinkedListNode<E> node) {
 
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_PREV, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
@@ -156,7 +241,13 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
-    protected E readvalue(CDBDoublyLinkedListNode<E> node) {
+    /**
+     * read the value of a given node
+     * @param node
+     * @return
+     */
+    protected E
+    readvalue(CDBDoublyLinkedListNode<E> node) {
 
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_VALUE, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
@@ -169,6 +260,10 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
+    /**
+     * return the size of the list
+     * @return
+     */
     @Override
     public int size() {
 
@@ -181,6 +276,11 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return size;
     }
 
+    /**
+     * return the index of the given object
+     * @param o
+     * @return
+     */
     @Override
     public int indexOf(Object o) {
 
@@ -200,6 +300,10 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return -1;
     }
 
+    /**
+     * return the size based on the most recent view
+     * @return
+     */
     @Override
     public int sizeview() {
 
@@ -224,6 +328,11 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         }
     }
 
+    /**
+     * return the last index of the given object
+     * @param o
+     * @return
+     */
     @Override
     public int lastIndexOf(Object o) {
 
@@ -244,17 +353,31 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return -1;
     }
 
+    /**
+     * return true if the list is empty
+     * @return
+     */
     @Override
     public boolean isEmpty() {
         long head = readhead();
         return head == oidnull;
     }
 
+    /**
+     * return true if the list contains the given object
+     * @param o
+     * @return
+     */
     @Override
     public boolean contains(Object o) {
         return indexOf(o) != -1;
     }
 
+    /**
+     * return true if the list contains all the given objects
+     * @param c
+     * @return
+     */
     @Override
     public boolean containsAll(Collection<?> c) {
         for (Object o : c) {
@@ -263,6 +386,11 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return true;
     }
 
+    /**
+     * get the value at the given index
+     * @param index
+     * @return
+     */
     @Override
     public E get(int index) {
 
@@ -278,6 +406,11 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return null;
     }
 
+    /**
+     * return the value at the given index
+     * @param index
+     * @return
+     */
     @Override
     public E remove(int index) {
 
@@ -315,37 +448,50 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
             // remove in middle of list. equivalent:
             // prev.next = next;
             // next.prev = prev;
-            TR.update_helper(nodeById(oidnext), new NodeOp(NodeOp.CMD_WRITE_PREV, oidprev));
-            TR.update_helper(nodeById(oidprev), new NodeOp(NodeOp.CMD_WRITE_NEXT, oidnext));
+            TR.update_helper(nodeById(oidnext), new NodeOp(NodeOp.CMD_WRITE_PREV, oidnext, oidprev));
+            TR.update_helper(nodeById(oidprev), new NodeOp(NodeOp.CMD_WRITE_NEXT, oidprev, oidnext));
         }
 
         else if(oidprev == oidnull) {
             // remove at head of list. equivalent:
             // next.prev = null;
             // head = next;
-            TR.update_helper(nodeById(oidnext), new NodeOp(NodeOp.CMD_WRITE_PREV, oidnull));
-            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, oidnext));
+            TR.update_helper(nodeById(oidnext), new NodeOp(NodeOp.CMD_WRITE_PREV, oidnext, oidnull));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, oidnext, oidnext));
         }
 
         else {
             // remove at tail of list. equivalent:
             // prev.next = null;
             // tail = prev;
-            TR.update_helper(nodeById(oidprev), new NodeOp(NodeOp.CMD_WRITE_NEXT, oidnull));
-            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, oidprev));
+            TR.update_helper(nodeById(oidprev), new NodeOp(NodeOp.CMD_WRITE_NEXT, oidprev, oidnull));
+            TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, oidprev, oidprev));
         }
 
         return result;
     }
 
+    /**
+     * remove the given object
+     * @param o
+     * @return
+     */
     @Override
     public boolean remove(Object o) {
-        int idx = indexOf(o);
-        if (idx==-1) return false;
-        remove(idx);
-        return true;
+        boolean removed = false;
+        while(contains(o)) {
+            int idx = indexOf(o);
+            remove(idx);
+            removed = true;
+        }
+        return removed;
     }
 
+    /**
+     * remove all the objects
+     * @param c
+     * @return
+     */
     @Override
     public boolean removeAll(Collection<?> c) {
         boolean res = true;
@@ -355,22 +501,41 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return res;
     }
 
+    /**
+     * replace all
+     * @param op
+     */
     @Override
     public void replaceAll(UnaryOperator<E> op) {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * filter the list
+     * @param c
+     * @return
+     */
     @Override
     public boolean retainAll(Collection<?> c) {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * clear the list
+     */
     @Override
     public void clear() {
+        readhead();
         TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_HEAD, oidnull));
         TR.update_helper(this, new NodeOp(NodeOp.CMD_WRITE_TAIL, oidnull));
     }
 
+    /**
+     * set the value at the given index
+     * @param index
+     * @param element
+     * @return
+     */
     @Override
     public E set(int index, E element) {
 
@@ -392,60 +557,111 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return null;
     }
 
+    /**
+     * sort
+     * @param c
+     */
     @Override
     public void sort(Comparator<? super E> c) {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * unimplemented
+     * @return
+     */
     @Override
     public Spliterator<E> spliterator() {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * unimplemented
+     * @return
+     */
     @Override
     public Object[] toArray() {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * unimplemented
+     * @return
+     */
     @Override
     public <E> E[] toArray(E[] a) {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * unimplemented
+     * @return
+     */
     @Override
     public List<E> subList(int fromIndex, int toIndex) {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * unimplemented
+     * @return
+     */
     @Override
     public ListIterator<E> listIterator(int index) {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * unimplemented
+     * @return
+     */
     @Override
     public ListIterator<E> listIterator() {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * unimplemented
+     * @return
+     */
     @Override
     public Iterator<E> iterator() {
         throw new RuntimeException("unimplemented");
     }
 
-    private CDBDoublyLinkedListNode<E> allocNode(E e, long oidtail) {
-        CDBDoublyLinkedListNode<E> newnode = new CDBDoublyLinkedListNode<>(TR, sf, e, DirectoryService.getUniqueID(sf), this);
+    /**
+     * allocate a new node
+     * @param e
+     * @param oidtail
+     * @return
+     */
+    private CDBDoublyLinkedListNode<E>
+    allocNode(
+        E e,
+        long oidtail
+        )
+    {
+        CDBDoublyLinkedListNode<E> newnode =
+                new CDBDoublyLinkedListNode<>(TR, sf, e, DirectoryService.getUniqueID(sf), this);
+
         wlock();
         try {
             m_nodes.put(newnode.oid, newnode);
-            TR.update_helper(newnode, new NodeOp<>(NodeOp.CMD_WRITE_VALUE, newnode.oid, e));
-            TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_PREV, newnode.oid, oidtail));
-            TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_NEXT, newnode.oid, oidnull));
-            return newnode;
         } finally {
             wunlock();
         }
+
+        TR.update_helper(newnode, new NodeOp<>(NodeOp.CMD_WRITE_VALUE, newnode.oid, e));
+        TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_PREV, newnode.oid, oidtail));
+        TR.update_helper(newnode, new NodeOp(NodeOp.CMD_WRITE_NEXT, newnode.oid, oidnull));
+        return newnode;
     }
 
+    /**
+     * add the given element
+     * @param e
+     * @return
+     */
     @Override
     public boolean add(E e) {
 
@@ -471,11 +687,21 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return true;
     }
 
+    /**
+     * unimplemented
+     * @param index
+     * @param e
+     */
     @Override
     public void add(int index, E e) {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * unimplemented
+     * @param c
+     * @return
+     */
     @Override
     public boolean addAll(Collection<? extends E> c) {
         boolean res = true;
@@ -485,11 +711,38 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         return res;
     }
 
+    /**
+     * add 'em all!
+     * @param index
+     * @param c
+     * @return
+     */
     @Override
     public boolean addAll(int index, Collection<? extends E> c) {
         throw new RuntimeException("unimplemented");
     }
 
+    /**
+     * print the current state of the list
+     * @return
+     */
+    @Override
+    public String print() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        boolean first = true;
+        long nodeoid = readhead();
+        while(nodeoid != oidnull) {
+            CDBDoublyLinkedListNode<E> node = nodeById(nodeoid);
+            E value = readvalue(node);
+            nodeoid = readnext(node);
+            if(!first) sb.append(", ");
+            first = false;
+            sb.append(value);
+        }
+        sb.append("]");
+        return sb.toString();
+    }
 }
 
 

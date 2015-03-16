@@ -30,6 +30,8 @@ public abstract class CDBAbstractList<E> extends CorfuDBObject implements List<E
 
     abstract public int sizeview();
 
+    abstract public String print();
+
 }
 
 

@@ -15,12 +15,30 @@ public class CDBLogicalList<E> extends CDBAbstractList<E> {
     static Logger dbglog = LoggerFactory.getLogger(CDBLogicalList.class);
     LinkedList<E> m_memlist;
 
-    public CDBLogicalList(AbstractRuntime tTR, StreamFactory sf, long toid) {
+    /**
+     * ctor
+     * @param tTR
+     * @param sf
+     * @param toid
+     */
+    public
+    CDBLogicalList(
+        AbstractRuntime tTR,
+        StreamFactory sf,
+        long toid
+        )
+    {
         super(tTR, sf, toid);
         m_memlist = new LinkedList<E>();
     }
 
-    public void applyToObject(Object bs, long timestamp) {
+    /**
+     * corfu runtime upcall
+     * @param bs
+     * @param timestamp
+     */
+    public void
+    applyToObject(Object bs, long timestamp) {
 
         dbglog.debug("CorfuDBList received upcall");
         ListCommand<E> cc = (ListCommand<E>) bs;
@@ -422,6 +440,24 @@ public class CDBLogicalList<E> extends CDBAbstractList<E> {
         throw new RuntimeException("unimplemented");
     }
 
+    @Override
+    public String print() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        boolean first = true;
+        rlock();
+        try {
+            for(E e : m_memlist) {
+                if(!first) sb.append(", ");
+                first = false;
+                sb.append(e);
+            }
+        } finally {
+            runlock();
+        }
+        sb.append("]");
+        return sb.toString();
+    }
 }
 
 

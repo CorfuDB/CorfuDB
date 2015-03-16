@@ -59,6 +59,7 @@ public class CorfuDBTester
         System.out.println("\t[-c numclients (for MultiClientTXTest)]");
         System.out.println("\t[-k numkeys (for TXTest)]");
         System.out.println("\t[-v verbose mode...]");
+        System.out.println("\t[-x extreme debug mode (requires -v)]");
         System.out.println("\t[-r read write pct (double)]");
 
 //        if(dbglog instanceof SimpleLogger)
@@ -103,11 +104,14 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:v");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vx");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
             {
+                case 'x':
+                    TXListTester.extremeDebug = true;
+                    break;
                 case 'v':
                     verbose = true;
                     break;
