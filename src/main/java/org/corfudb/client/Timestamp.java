@@ -49,6 +49,12 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     {
         this.epoch = newEpoch;
     }
+
+    public long getEpoch()
+    {
+        return epoch;
+    }
+
     public int compareTo(Timestamp t)
     {
         if (t.epoch != this.epoch) { return (int) (this.epoch - t.epoch); }

@@ -17,6 +17,7 @@ package org.corfudb.infrastructure;
 import org.corfudb.client.CorfuDBView;
 import org.corfudb.client.CorfuDBViewSegment;
 import org.corfudb.client.IServerProtocol;
+import org.corfudb.client.configmasters.IConfigMaster;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -62,6 +63,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     public ConfigMasterServer() {
     }
 
+    @SuppressWarnings("unchecked")
     public Runnable getInstance(final Map<String,Object> config)
     {
         //use the config for the init view (well, we'll have to deal with reconfigurations...)
@@ -72,6 +74,28 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         UUID logID =  UUID.randomUUID();
         log.info("New log instance id= " + logID.toString());
         currentView.setUUID(logID);
+        currentView.addRemoteLog(logID, currentView.getConfigMasters().get(0).getFullString());
+        for (Object configmaster  : (List<Object>) config.get("remotelogs"))
+        {
+            try {
+                IConfigMaster cm = CorfuDBView.getConfigurationMasterFromString((String) configmaster);
+                //Get the list of logs that the remote knows
+                Map<UUID, String> remoteLogList = cm.getAllLogs();
+                for (UUID rlog : remoteLogList.keySet())
+                {
+                   if (currentView.addRemoteLog(rlog, remoteLogList.get(rlog)))
+                   {
+                       log.info("Discovered new remote log " + rlog);
+                   }
+                }
+                //Tell the remote log that we exist
+                cm.addLog(logID, currentView.getConfigMasters().get(0).getFullString());
+            }
+            catch (Exception e)
+            {
+                log.warn("Error talking to remote log" ,e);
+            }
+        }
         return this;
     }
 
@@ -200,6 +224,28 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         return ob.build();
     }
 
+    private JsonObject getAllLogs(JsonObject params)
+    {
+        JsonObjectBuilder jb = Json.createObjectBuilder();
+        Map<UUID, String> logs = currentView.getAllLogs();
+        for (UUID key : logs.keySet())
+        {
+            jb.add(key.toString(), logs.get(key));
+        }
+        return jb.build();
+    }
+
+    private JsonValue addLog(JsonObject params)
+    {
+       if (currentView.addRemoteLog(UUID.fromString(params.getString("logid")), params.getString("path")))
+       {
+           log.info("Learned new remote log " + params.getString("logid"));
+       }
+
+        return JsonValue.FALSE;
+    }
+
+
     private class StaticRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
 
@@ -249,6 +295,12 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         break;
                     case "getstream":
                         job.add("result", getStream(params));
+                        break;
+                    case "getalllogs":
+                        job.add("result", getAllLogs(params));
+                        break;
+                    case "addlog":
+                        job.add("result", addLog(params));
                         break;
                 }
                 JsonObject res =    job.add("calledmethod", apiCall)

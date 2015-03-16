@@ -65,6 +65,7 @@ public class Stream implements AutoCloseable {
 
     CorfuDBClient cdbc;
     UUID streamID;
+    UUID logID;
 
     StreamingSequencer sequencer;
     WriteOnceAddressSpace woas;
@@ -101,6 +102,7 @@ public class Stream implements AutoCloseable {
     {
         this.cdbc  = cdbc;
         this.streamID = uuid;
+        this.logID = cdbc.getView().getUUID();
         sequencer = new StreamingSequencer(cdbc);
         woas = new WriteOnceAddressSpace(cdbc);
         logQ = new PriorityBlockingQueue<CorfuDBEntry>();
@@ -214,11 +216,14 @@ public class Stream implements AutoCloseable {
                                 if (payload instanceof CorfuDBStreamMoveEntry)
                                 {
                                     CorfuDBStreamMoveEntry cdbsme = (CorfuDBStreamMoveEntry) payload;
-                                    //flush what we've read (unless the stream starts at the next allocation,)
-                                    //it's all bound to be invalid...
-                                    dispatchedReads.set(cdbsme.destinationPos);
-                                    currentDispatch = getStreamTailAndDispatch(1);
-                                    return;
+                                    if (cdbsme.destinationLog.equals(logID) || cdbsme.getTimestamp().getEpoch() == -1)
+                                    {
+                                        //flush what we've read (unless the stream starts at the next allocation,)
+                                        //it's all bound to be invalid...
+                                        dispatchedReads.set(cdbsme.destinationPos);
+                                        currentDispatch = getStreamTailAndDispatch(1);
+                                        return;
+                                    }
                                 }
                                 else if (payload instanceof CorfuDBStreamStartEntry)
                                 {

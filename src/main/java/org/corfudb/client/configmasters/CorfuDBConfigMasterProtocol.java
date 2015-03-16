@@ -185,12 +185,43 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
 
     public boolean addLog(UUID logID, String path)
     {
-        return true;
+        try {
+            JSONRPC2Request jr = new JSONRPC2Request("addlog", id.getAndIncrement());
+            Map<String, Object> params = new HashMap<String,Object>();
+            params.put("logid", logID.toString());
+            params.put("path", path);
+            jr.setNamedParams(params);
+            JSONRPC2Response jres = jsonSession.send(jr);
+            if (jres.indicatesSuccess() && (Boolean) jres.getResult())
+            {
+                return true;
+            }
+            return false;
+        } catch(Exception e) {
+            return false;
+        }
     }
 
     public String getLog(UUID logID)
     {
         return "";
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<UUID, String> getAllLogs()
+    {
+        try {
+            JSONRPC2Request jr = new JSONRPC2Request("getalllogs", id.getAndIncrement());
+            JSONRPC2Response jres = jsonSession.send(jr);
+            if (jres.indicatesSuccess())
+            {
+                return (Map<UUID, String>)jres.getResult();
+            }
+            return null;
+        } catch(Exception e) {
+            return null;
+        }
+
     }
 
     public void resetAll()

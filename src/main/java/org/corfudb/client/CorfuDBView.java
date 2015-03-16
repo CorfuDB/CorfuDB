@@ -41,6 +41,8 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
 
+import org.corfudb.client.configmasters.IConfigMaster;
+
 import java.util.UUID;
 
 import org.reflections.Reflections;
@@ -78,6 +80,7 @@ public class CorfuDBView {
     private List<IServerProtocol> sequencers;
     private List<CorfuDBViewSegment> segments; //eventually this should be upgraded to rangemap or something..
     private List<IServerProtocol> configmasters;
+    private Map<UUID, String> logs;
 
     public CorfuDBView(JsonObject jsonView)
     {
@@ -214,6 +217,16 @@ public class CorfuDBView {
     public StreamData getStream(UUID stream)
     {
         return streamData.get(stream);
+    }
+
+    public boolean addRemoteLog(UUID remoteLog, String path)
+    {
+        return logs.putIfAbsent(remoteLog, path) != null;
+    }
+
+    public Map<UUID, String> getAllLogs()
+    {
+        return logs;
     }
 
     public void moveStream(UUID stream, String newLocation)
@@ -440,10 +453,39 @@ public class CorfuDBView {
             }
             else
             {
-                log.warn("Configmaster string " + s + " appears to be an invalid sequencer string");
+                log.warn("Configmaster string " + s + " appears to be an invalid configmaster string");
             }
         }
         return sequencerList;
+    }
+
+    public static IConfigMaster getConfigurationMasterFromString(String masterString)
+    {
+        Matcher m = IServerProtocol.getMatchesFromServerString(masterString);
+            if (m.find())
+            {
+                String protocol = m.group("protocol");
+                if (!availableConfigMasterProtocols.keySet().contains(protocol))
+                {
+                    log.warn("Unsupported config master protocol: " + protocol);
+                }
+                else
+                {
+                    Class<? extends IServerProtocol> sprotocol = availableConfigMasterProtocols.get(protocol);
+                    try
+                    {
+                        return (IConfigMaster) IServerProtocol.protocolFactory(sprotocol, masterString, 0);
+                    }
+                    catch (Exception ex){
+                        log.error("Error invoking protocol for protocol: ", ex);
+                    }
+                }
+            }
+            else
+            {
+                log.warn("Configmaster string " + masterString + " appears to be an invalid configmaster string");
+            }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

@@ -20,6 +20,7 @@ import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
 import org.corfudb.client.OverwriteException;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -35,6 +36,7 @@ public interface IConfigMaster {
     boolean addStream(UUID logID, UUID streamID, long startPos);
     streamInfo getStream(UUID streamID);
     boolean addLog(UUID logID, String path);
+    Map<UUID, String> getAllLogs();
     String getLog(UUID logID);
     void resetAll();
 }
