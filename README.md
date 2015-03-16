@@ -74,9 +74,16 @@ $ bin/corfuDBTest.sh CorfuHello <master-address>
 Where `<master-address>` is the full address of the master, for example,
 http://localhost:8002/corfu.
 
+## Where is my output?
+
+At some point, you may run into problems or error, and you might want to look at output from CorfuDB. You will find various logs under /var/log/corfudb.<rolename>.log , where <rolename>
+one of sequencer, logunit, configmaster.
+
 ## Bringing up a custom CorfuDB deployment
 
-A CorfuDB deployment requires a Sequencer, one or more logging units,
+The single-node deployment configuration uses the `configmaster.yml` file in the conf directory.
+It describes the configuration which a CorfuDB deployment requires: a Sequencer, 
+one or more groups of replicated logging units,
 and a configuration master.
 
 *Sequencer* - provides unique sequence numbers to clients. Only one
