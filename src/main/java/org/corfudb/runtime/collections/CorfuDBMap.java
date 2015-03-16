@@ -18,6 +18,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     Map<K, V> backingmap;
 
     boolean optimizereads = false;
+    boolean finegrainconflictdetection = false;
 
     public CorfuDBMap(AbstractRuntime tTR, long toid)
     {
@@ -36,16 +37,19 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         dbglog.debug("CorfuDBMap received upcall: " + cc);
         if(optimizereads)
             lock(true);
-        //custom conflict detection: accessors provide a read summary; mutators set the last update timestamp
-        if(cc.getCmdType()==MapCommand.CMD_PREPUT || cc.getCmdType()==MapCommand.CMD_GET || cc.getCmdType()==MapCommand.CMD_SIZE
-                || cc.getCmdType()==MapCommand.CMD_CONTAINSKEY || cc.getCmdType()==MapCommand.CMD_CONTAINSVALUE || cc.getCmdType()==MapCommand.CMD_ISEMPTY)
-            cc.summarizeRead(new Triple(cc.getCmdType(), cc.getKey(), getLastUpdateTS(cc.getCmdType(), cc.getKey())));
-        else if(cc.getCmdType()==MapCommand.CMD_PUT || cc.getCmdType()==MapCommand.CMD_REMOVE || cc.getCmdType()==MapCommand.CMD_CLEAR)
-            setLastUpdateTS(timestamp, cc.getCmdType(), cc.getKey());
-        else
+        if(finegrainconflictdetection)
         {
-            //need to unlock?
-            throw new RuntimeException("Unrecognized command in stream!");
+            //custom conflict detection: accessors provide a read summary; mutators set the last update timestamp
+            if (cc.getCmdType() == MapCommand.CMD_PREPUT || cc.getCmdType() == MapCommand.CMD_GET || cc.getCmdType() == MapCommand.CMD_SIZE
+                    || cc.getCmdType() == MapCommand.CMD_CONTAINSKEY || cc.getCmdType() == MapCommand.CMD_CONTAINSVALUE || cc.getCmdType() == MapCommand.CMD_ISEMPTY)
+                cc.summarizeRead(new Triple(cc.getCmdType(), cc.getKey(), getLastUpdateTS(cc.getCmdType(), cc.getKey())));
+            else if (cc.getCmdType() == MapCommand.CMD_PUT || cc.getCmdType() == MapCommand.CMD_REMOVE || cc.getCmdType() == MapCommand.CMD_CLEAR)
+                setLastUpdateTS(timestamp, cc.getCmdType(), cc.getKey());
+            else
+            {
+                //need to unlock?
+                throw new RuntimeException("Unrecognized command in stream!");
+            }
         }
         if(cc.getCmdType()==MapCommand.CMD_PUT)
             backingmap.put(cc.getKey(), cc.getVal());
@@ -259,6 +263,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     //of the passed in accessor
     public long getLastUpdateTS(int cmdtype, K key)
     {
+        if(!finegrainconflictdetection) throw new RuntimeException("this should never get called if fine-grained conflict detection is disabled");
         if(cmdtype==MapCommand.CMD_SIZE || cmdtype==MapCommand.CMD_ISEMPTY || cmdtype==MapCommand.CMD_CONTAINSVALUE)
         {
 //            System.out.println("returns global " + globaltimestamp.get());
@@ -279,6 +284,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
 
     public boolean isStillValid(Serializable readsummary)
     {
+        if(!finegrainconflictdetection) throw new RuntimeException("this should never get called if fine-grained conflict detection is disabled");
         Triple<Integer, K, Long> T = (Triple<Integer, K, Long>)readsummary;
         if(getLastUpdateTS(T.first, T.second)>T.third)
             return false;
@@ -289,6 +295,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     //e.g. if op is put, we need to update the get key-specific timestamp; the size timestamp; ...
     public void setLastUpdateTS(long newts, int cmdtype, K key)
     {
+        if(!finegrainconflictdetection) throw new RuntimeException("this should never get called if fine-grained conflict detection is disabled");
 //        System.out.println("ST: " + key + " " + newts);
         if(cmdtype==MapCommand.CMD_PUT || cmdtype==MapCommand.CMD_REMOVE)
         {

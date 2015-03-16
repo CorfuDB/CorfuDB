@@ -204,11 +204,23 @@ public class CorfuDBTester
         if(testnum==LINTEST)
         {
             TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
-            CorfuDBMap<Integer, Integer> cob1 = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
+            Map<Integer, Integer> cob1 = null;
+            boolean partitionedmap = true;
+            if(!partitionedmap)
+            {
+                cob1 = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
+            }
+            else
+            {
+                Map<Integer, Integer> partmaparray[] = new Map[10];
+                for (int i = 0; i < partmaparray.length; i++)
+                    partmaparray[i] = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
+                cob1 = new PartitionedMap<Integer, Integer>(partmaparray);
+            }
             for (int i = 0; i < numthreads; i++)
             {
                 //linearizable tester
-                threads[i] = new Thread(new TesterThread(cob1));
+                threads[i] = new Thread(new MapTesterThread(cob1));
                 threads[i].start();
             }
             for(int i=0;i<numthreads;i++)
@@ -222,7 +234,7 @@ public class CorfuDBTester
             for (int i = 0; i < numthreads; i++)
             {
                 //linearizable tester
-                threads[i] = new Thread(new TesterThread(ctr1));
+                threads[i] = new Thread(new CtrTesterThread(ctr1));
                 threads[i].start();
             }
             for(int i=0;i<numthreads;i++)
@@ -231,6 +243,7 @@ public class CorfuDBTester
         }
         else if(testnum==TXTEST)
         {
+            int numpartitions = 10;
             boolean perthreadstack = true;
             CorfuDBMap<Integer, Integer> cob1 = null;
             CorfuDBMap<Integer, Integer> cob2 = null;
@@ -248,7 +261,7 @@ public class CorfuDBTester
                 TXTesterThread ttt = null;
                 //transactional tester
                 if(perthreadstack)
-                    ttt = new TXTesterThread(numkeys, numops, sf, rpchostname, rpcport+i);
+                    ttt = new TXTesterThread(numkeys, numops, sf, rpchostname, rpcport+i, numpartitions);
                 else
                     ttt = new TXTesterThread(cob1, cob2, TR, numkeys, numops);
                 if(i==0) firsttester = ttt;
@@ -459,19 +472,34 @@ class TXTesterThread implements Runnable
     private static Logger dbglog = LoggerFactory.getLogger(TXTesterThread.class);
 
     AbstractRuntime cr;
-    CorfuDBMap<Integer, Integer> map1;
-    CorfuDBMap<Integer, Integer> map2;
+    Map<Integer, Integer> map1;
+    Map<Integer, Integer> map2;
     int numkeys;
     int numops;
 
     //creates thread-specific stack
-    public TXTesterThread(int tnumkeys, int tnumops, StreamFactory sf, String rpchostname, int rpcport)
+    public TXTesterThread(int tnumkeys, int tnumops, StreamFactory sf, String rpchostname, int rpcport, int numpartitions)
     {
         TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
 
         DirectoryService DS = new DirectoryService(TR);
-        map1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
-        map2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
+        if(numpartitions==0)
+        {
+            map1 = new CorfuDBMap(TR, DS.nameToStreamID("testmap1"));
+            map2 = new CorfuDBMap(TR, DS.nameToStreamID("testmap2"));
+        }
+        else
+        {
+            Map<Integer, Integer> partmaparray1[] = new Map[numpartitions];
+            for (int i = 0; i < partmaparray1.length; i++)
+                partmaparray1[i] = new CorfuDBMap<Integer, Integer>(TR, DS.nameToStreamID("testmap1-part" + i));
+            map1 = new PartitionedMap<>(partmaparray1);
+
+            Map<Integer, Integer> partmaparray2[] = new Map[numpartitions];
+            for (int i = 0; i < partmaparray2.length; i++)
+                partmaparray2[i] = new CorfuDBMap<Integer, Integer>(TR, DS.nameToStreamID("testmap2-part" + i));
+            map2 = new PartitionedMap<>(partmaparray2);
+        }
 
         cr = TR;
         numkeys = tnumkeys;
@@ -507,6 +535,7 @@ class TXTesterThread implements Runnable
                     if (!map2.containsKey(map1.get(i)) || map2.get(map1.get(i)) != i)
                     {
                         consistent = false;
+                        System.out.println("inconsistency on " + i);
                         break;
                     }
                 }
@@ -515,11 +544,20 @@ class TXTesterThread implements Runnable
                     if (!map1.containsKey(map2.get(i)) || map1.get(map2.get(i)) != i)
                     {
                         consistent = false;
+                        System.out.println("inconsistency on " + i);
                         break;
                     }
                 }
             }
-            if (cr.EndTX()) break;
+            if (cr.EndTX())
+            {
+                break;
+            }
+            else
+            {
+                consistent = true;
+                System.out.println("abort! retrying consistency check...");
+            }
         }
         if(j==numretries) throw new RuntimeException("too many aborts on consistency check");
         return consistent;
@@ -572,15 +610,12 @@ class TXTesterThread implements Runnable
 }
 
 
-
-
-class TesterThread implements Runnable
+class CtrTesterThread implements Runnable
 {
-
-    CorfuDBObject cob;
-    public TesterThread(CorfuDBObject tcob)
+    CorfuDBCounter ctr;
+    public CtrTesterThread(CorfuDBCounter tcob)
     {
-        cob = tcob;
+        ctr = tcob;
     }
 
     public void run()
@@ -588,27 +623,29 @@ class TesterThread implements Runnable
         System.out.println("starting thread");
         for(int i=0;i<100;i++)
         {
-            if(cob instanceof CorfuDBCounter)
-            {
-                CorfuDBCounter ctr = (CorfuDBCounter)cob;
-                ctr.increment();
-                System.out.println("counter value = " + ctr.read());
-            }
-            else if(cob instanceof CorfuDBMap)
-            {
-                CorfuDBMap<Integer, String> cmap = (CorfuDBMap<Integer, String>)cob; //can't do instanceof on generics, have to guess
-                int x = (int) (Math.random() * 1000.0);
-                System.out.println("changing key " + x + " from " + cmap.put(x, "ABCD") + " to " + cmap.get(x));
-            }
-/*            try
-            {
-                Thread.sleep((int)(Math.random()*1000.0));
-            }
-            catch(Exception e)
-            {
-                throw new RuntimeException(e);
-            }*/
+            ctr.increment();
+            System.out.println("counter value = " + ctr.read());
+        }
+    }
+}
 
+
+class MapTesterThread implements Runnable
+{
+
+    Map cmap;
+    public MapTesterThread(Map tcob)
+    {
+        cmap = tcob;
+    }
+
+    public void run()
+    {
+        System.out.println("starting thread");
+        for(int i=0;i<100;i++)
+        {
+            int x = (int) (Math.random() * 1000.0);
+            System.out.println("changing key " + x + " from " + cmap.put(x, "ABCD") + " to " + cmap.get(x));
         }
     }
 }
