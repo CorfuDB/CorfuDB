@@ -465,8 +465,14 @@ public class Stream implements AutoCloseable {
         else { return check(); }
     }
 
-    public void trim(long address)
+    /**
+     * Requests a trim on this stream. This function informs the configuration master that the
+     * position on this stream is trimmable, and moves the start position of this stream to the
+     * new position.
+     */
+    public void trim(Timestamp address)
     {
+
     }
 
     /**
@@ -477,18 +483,40 @@ public class Stream implements AutoCloseable {
     public void sync(Timestamp pos)
     throws LinearizationException, InterruptedException
     {
+        sync(pos, -1);
+    }
+
+    /**
+     * Synchronously block until we have seen the requested position, or a certain amount of real time has elapsed.
+     *
+     * @param pos       The position to block until.
+     * @param timeout   The amount of time to wait. A negative number is interpreted as infinite.
+     *
+     * @return          True, if the sync was successful, or false if the timeout was reached.
+     */
+    public boolean sync(Timestamp pos, long timeout)
+    throws LinearizationException, InterruptedException
+    {
         while (true)
         {
             synchronized (latest)
             {
                 if (latest.equals(pos)){
-                    return;
+                    return true;
                 }
                 else if (latest.epoch != pos.epoch)
                 {
                     throw new LinearizationException("Linearization error due to epoch change", pos, pos);
                 }
-                latest.wait();
+                if (timeout < 0)
+                {
+                    latest.wait();
+                }
+                else
+                {
+                    latest.wait(timeout);
+                    return false;
+                }
             }
         }
     }
@@ -500,11 +528,35 @@ public class Stream implements AutoCloseable {
     public void waitForEpochChange()
         throws InterruptedException
     {
+        waitForEpochChange(-1);
+    }
+
+    /**
+     *  Synchronously block until an epoch change is seen, or a certain amount of real time has elapsed.
+     *  Useful for quickly detecting when a permanent move is successful.
+     *
+     * @param timeout   The amount of time to wait. A negative number is interpreted as infinite.
+     * @return          True, if an epoch change occurs, or false if the timeout was reached.
+     */
+    public boolean waitForEpochChange(long timeout)
+        throws InterruptedException
+    {
+        long last = currentEpoch.get();
         synchronized(currentEpoch)
         {
-            currentEpoch.wait();
+            if (timeout < 0)
+            {
+                currentEpoch.wait();
+            }
+            else
+            {
+                currentEpoch.wait(timeout);
+            }
+            if (currentEpoch.get() == last) { return false; }
         }
+        return true;
     }
+
 
     /**
      * Permanently hop to another log. This function tries to hop this stream to
