@@ -102,7 +102,7 @@ testCase() {
   fi
   
   for iter in `seq 1 $iters`; do
-    outfile=$outdir/c$type-t$thrds--run$iter.txt
+    outfile=$outdir/c$type-t$thrds-k$keys-rw$rwpct-o$ops-run$iter.txt
     startcmd="$BINDIR/corfuDBsingle.sh start"
     cmd="$BINDIR/corfuDBTestRuntime.sh CorfuDBTester -m $masternode -a $type -t $thrds -n $ops -k $keys -r $rwpct"
     stopcmd="$BINDIR/corfuDBsingle.sh stop"
@@ -152,11 +152,13 @@ else
   rm -f $outdir/*
 fi
 
-for Xconcurrency in 1 2 4; do
 for Xtype in 6 7 8; do
+for Xconcurrency in 1 2 4; do
 for Xrwpct in 0.25 0.75 1.0; do
-for Xkeys in 20 80; do
-for Xops in 20 80 160; do
+#for Xkeys in 20 80; do
+for Xkeys in 40; do
+#for Xops in 20 80 160; do
+for Xops in 40; do
 
 testCase $outdir $ITERATIONS $Xtype $Xconcurrency $masternode $Xkeys $Xrwpct $Xops
 

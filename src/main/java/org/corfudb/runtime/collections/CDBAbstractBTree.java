@@ -28,7 +28,13 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends Corfu
     public abstract int size();
     public abstract int height();
     public abstract V get(K key);
+    public abstract V remove(K key);
     public abstract void put(K key, V value);
+    public abstract void clear();
+
+    protected boolean eq(Comparable a, Comparable b) { return a.compareTo(b) == 0; }
+    protected boolean lt(Comparable a, Comparable b) { return a.compareTo(b) < 0; }
+
 }
 
 

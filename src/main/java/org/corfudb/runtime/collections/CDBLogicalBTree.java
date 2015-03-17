@@ -3,7 +3,7 @@ package org.corfudb.runtime.collections;
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.StreamFactory;
 
-public abstract class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
+public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
 
     public static final int M = 4;
 
@@ -24,10 +24,12 @@ public abstract class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbs
         private Comparable key;
         private V value;
         private Node next;
+        private boolean deleted;
         public Entry(K _key, V _value, Node _next) {
             key = _key;
             value = _value;
             next = _next;
+            deleted = false;
         }
     }
 
@@ -64,8 +66,46 @@ public abstract class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbs
             case TreeOp.CMD_PUT: applyPut(cc.key(), cc.value()); break;
             case TreeOp.CMD_SIZE: cc.setReturnValue(applySize()); break;
             case TreeOp.CMD_HEIGHT:  cc.setReturnValue(applyHeight()); break;
+            case TreeOp.CMD_CLEAR: applyClear(); break;
+            case TreeOp.CMD_REMOVE: cc.setReturnValue(applyRemove(cc.key())); break;
         }
     }
+
+    /**
+     * apply a clear operation
+     */
+    public void applyClear() {
+        wlock();
+        try {
+            m_root = new Node(0);
+            m_size = 0;
+            m_height = 0;
+        } finally {
+            wunlock();
+        }
+    }
+
+    /**
+     * apply a remove command by marking the
+     * entry deleted (if found)
+     * @param key
+     * @return
+     */
+    public V applyRemove(K key) {
+        wlock();
+        try {
+            Entry entry = searchEntry(m_root, key, m_height);
+            if(entry != null) {
+                V result = entry.deleted ? (V) entry.value : null;
+                entry.deleted = true;
+                return result;
+            }
+            return null;
+        } finally {
+            wunlock();
+        }
+    }
+
 
     /**
      * apply a get command
@@ -174,9 +214,18 @@ public abstract class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbs
      * @param value
      */
     public void put(K key, V value) {
-        TreeOp cmd = new TreeOp(TreeOp.CMD_GET, oid, key, value);
+        TreeOp cmd = new TreeOp(TreeOp.CMD_PUT, oid, key, value);
         TR.update_helper(this, cmd, oid);
     }
+
+    /**
+     * clear the tree
+     */
+    public void clear() {
+        TreeOp cmd = new TreeOp(TreeOp.CMD_CLEAR, oid, null, null);
+        TR.update_helper(this, cmd);
+    }
+
 
     /**
      * print the current state of the tree
@@ -187,8 +236,16 @@ public abstract class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbs
         return toString();
     }
 
-    private boolean eq(Comparable a, Comparable b) { return a.compareTo(b) == 0; }
-    private boolean lt(Comparable a, Comparable b) { return a.compareTo(b) < 0; }
+    /**
+     *
+     * @param key
+     * @return
+     */
+    public V remove(K key) {
+        TreeOp cmd = new TreeOp(TreeOp.CMD_REMOVE, oid, key, null);
+        TR.update_helper(this, cmd);
+        return null; // arg!
+    }
 
     /**
      * search for a key starting at the given
@@ -205,6 +262,27 @@ public abstract class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbs
         int height
         )
     {
+        Entry entry = searchEntry(node, key, height);
+        if (entry == null) return null;
+        if (entry.deleted) return null;
+        return (V) entry.value;
+    }
+
+    /**
+     * search for the entry with given key
+     * starting at the given node and tree depth
+     * @param node
+     * @param key
+     * @param height
+     * @return
+     */
+    private Entry
+    searchEntry(
+        Node node,
+        K key,
+        int height
+        )
+    {
         Entry[] children = node.m_vChildren;
 
         if(height == 0) {
@@ -213,13 +291,13 @@ public abstract class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbs
                 Entry child = node.m_vChildren[i];
                 Comparable ckey = child.key;
                 if(eq(key, ckey))
-                    return (V) child.value;
+                    return child;
             }
         } else {
             // internal node
             for(int i=0; i<node.m_nChildren; i++) {
                 if(i+1==node.m_nChildren || lt(key, children[i+1].key)) {
-                    return search(children[i].next, key, height-1);
+                    return searchEntry(children[i].next, key, height - 1);
                 }
             }
         }
