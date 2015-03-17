@@ -630,6 +630,7 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
         double throughput = (1000.0 * (double)committedops) / (double)e2e;
         System.out.format("List consistency check %s!\n", success ? "PASSED" : "FAILED");
         System.out.format("Throughput: %d tx in %d msec -> %f tx/sec\n", committedops, e2e, throughput);
+        System.out.format("tput: %s, %d, %d, %d, %.1f, %.3f\n", strClass, numthreads, numkeys, nOperations, rwpct, throughput);
         System.out.print(strDetails.toString());
         System.out.println(TR);
     }

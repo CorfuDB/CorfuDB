@@ -89,9 +89,11 @@ testCase() {
   type=${3}
   thrds=${4}
   masternode=${5}
-  # args=${6}
+  keys=${6}
+  rwpct=${7}
+  ops=${8}
 
-  echo "testCase: iters=$iters, type=$type"
+  echo "testCase: iters=$iters, type=$type, thrds=$thrds, keys=$keys, rwpct=$rwpct, ops=$ops"
 
   if [ "$specificclass" != "" ]; then
 	if [ "$specificclass " != "$type" ]; then
@@ -102,7 +104,7 @@ testCase() {
   for iter in `seq 1 $iters`; do
     outfile=$outdir/c$type-t$thrds--run$iter.txt
     startcmd="$BINDIR/corfuDBsingle.sh start"
-    cmd="$BINDIR/corfuDBTestRuntime.sh CorfuDBTester -m $masternode -a $type -t $thrds -n 100 -r 0.75"
+    cmd="$BINDIR/corfuDBTestRuntime.sh CorfuDBTester -m $masternode -a $type -t $thrds -n $ops -k $keys -r $rwpct"
     stopcmd="$BINDIR/corfuDBsingle.sh stop"
     if [ "$verbose" = "TRUE" ]; then
       echo "testCase $outdir, run$iter, $type, thrds=$thrds"
@@ -123,6 +125,8 @@ testCase() {
 	else
 	  resstr="OK..."
 	fi
+
+    egrep "tput" $outfile
 
     if [ "$verbose" = "TRUE" ]; then
 	  echo "current failure count: $FAILURES"
@@ -148,11 +152,17 @@ else
   rm -f $outdir/*
 fi
 
-for Xconcurrency in 1 4; do
+for Xconcurrency in 1 2 4; do
 for Xtype in 6 7 8; do
+for Xrwpct in 0.25 0.75 1.0; do
+for Xkeys in 20 80; do
+for Xops in 20 80 160; do
 
-testCase $outdir $ITERATIONS $Xtype $Xconcurrency $masternode
+testCase $outdir $ITERATIONS $Xtype $Xconcurrency $masternode $Xkeys $Xrwpct $Xops
 
+done
+done
+done
 done
 done
 
