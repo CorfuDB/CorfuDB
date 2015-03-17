@@ -116,7 +116,12 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                 {
                     if (object instanceof StreamEpochGossipEntry)
                     {
-                        log.debug("yay");
+                        StreamEpochGossipEntry sege = (StreamEpochGossipEntry) object;
+                        if (!currentStreamView.checkStream(sege.streamID, sege.logPos))
+                        {
+                            log.debug("Got a new epoch gossip message at position " + sege.logPos);
+                            currentStreamView.learnStream(sege.streamID, sege.logID, null, -1, sege.epoch, sege.logPos);
+                        }
                     }
                 }
             });
@@ -336,6 +341,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     {
         JsonArrayBuilder jb = Json.createArrayBuilder();
         Set<UUID> streams = currentStreamView.getAllStreams();
+        try {
         for (UUID key : streams)
         {
             StreamView.StreamData sd = currentStreamView.getStream(key);
@@ -346,6 +352,11 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             job.add("startpos", sd.startPos);
             job.add("epoch", sd.epoch);
             jb.add(job);
+        }
+        }
+        catch (Exception ex)
+        {
+            log.debug("Exception getting streaminfo", ex);
         }
         return jb.build();
     }
