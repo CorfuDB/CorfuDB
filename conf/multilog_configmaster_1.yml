@@ -19,7 +19,7 @@ sequencers:
 configmasters:
     - "cdbcm://localhost:8002"
 remotelogs:
-    - "cdbcm://localhost:8005"
+    - "cdbcm://localhost:8006"
 layout:
     segments:
         - start: 0

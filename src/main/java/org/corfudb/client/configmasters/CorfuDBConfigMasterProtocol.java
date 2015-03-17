@@ -49,6 +49,10 @@ import javax.json.JsonReader;
 
 import java.io.StringReader;
 
+import org.corfudb.client.gossip.IGossip;
+
+import com.esotericsoftware.kryonet.Client;
+
 public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMaster
 {
     private String host;
@@ -58,6 +62,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
     private Logger log = LoggerFactory.getLogger(CorfuDBConfigMasterProtocol.class);
     private JSONRPC2Session jsonSession;
     private AtomicInteger id;
+    private Client client;
 
      public static String getProtocolString()
     {
@@ -95,10 +100,14 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
         try
         {
             jsonSession = new JSONRPC2Session(new URL("http://"+ host + ":" + port + "/control"));
+            client = new Client();
+            IGossip.registerSerializer(client.getKryo());
+            client.start();
+            client.connect(5000, host, port+1, port+1);
         }
         catch (Exception ex)
         {
-            log.warn("Failed to connect to endpoint " + getFullString());
+            log.warn("Failed to connect to endpoint " + getFullString(), ex);
             throw new RuntimeException("Failed to connect to endpoint");
         }
 
@@ -131,6 +140,11 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
     public void setEpoch(long epoch)
     {
 
+    }
+
+    public void sendGossip(IGossip gossip)
+    {
+            client.sendUDP(gossip);
     }
 
     public streamInfo getStream(UUID streamID)

@@ -17,9 +17,9 @@
 # drive (string) - the path to serve from, if not a ramdisk (required if not a ramdisk)
 
 role: org.corfudb.infrastructure.SimpleLogUnitServer
-port: 8004
+port: 8005
 capacity: 100000000
 ramdisk: true
 pagesize: 4096
 trim: 0
-master: http://localhost:8005/corfu
+master: http://localhost:8006/corfu

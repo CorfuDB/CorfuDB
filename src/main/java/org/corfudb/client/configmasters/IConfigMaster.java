@@ -20,6 +20,8 @@ import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
 import org.corfudb.client.OverwriteException;
 
+import org.corfudb.client.gossip.IGossip;
+
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,6 +40,7 @@ public interface IConfigMaster extends IServerProtocol {
     boolean addLog(UUID logID, String path);
     Map<UUID, String> getAllLogs();
     String getLog(UUID logID);
+    void sendGossip(IGossip gossip);
     void resetAll();
 }
 

@@ -58,6 +58,7 @@ import java.lang.ClassNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.stream.Collectors;
+import org.corfudb.client.gossip.StreamEpochGossipEntry;
 
 /**
  *  A hop-aware stream implementation. The stream must be closed after the application is done using it
@@ -144,6 +145,7 @@ public class Stream implements AutoCloseable {
                 cm.addStream(cdbc.getView().getUUID(), streamID, sequenceNo);
                 sequencer.setAllocationSize(streamID, allocationSize);
                 si = cm.getStream(streamID);
+                cm.sendGossip(new StreamEpochGossipEntry(streamID, 0));
             } catch (IOException ie)
             {
                 log.debug("Warning, couldn't get streaminfo, retrying...", ie);

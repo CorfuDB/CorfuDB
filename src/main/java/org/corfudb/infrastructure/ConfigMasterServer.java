@@ -64,6 +64,13 @@ import java.lang.reflect.Modifier;
 import java.lang.IllegalAccessException;
 import java.lang.IllegalArgumentException;
 
+import com.esotericsoftware.kryonet.Server;
+import com.esotericsoftware.kryonet.Listener;
+import com.esotericsoftware.kryonet.Connection;
+
+import org.corfudb.client.gossip.StreamEpochGossipEntry;
+import org.corfudb.client.gossip.IGossip;
+
 import org.corfudb.client.Timestamp;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
@@ -72,16 +79,55 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     private Map<String,Object> config;
     private CorfuDBView currentView;
     private Boolean viewActive;
-
+    private GossipServer gossipServer;
     int masterid = new SecureRandom().nextInt();
 
     public ConfigMasterServer() {
+    }
+
+    private class GossipServer {
+        private Server server;
+        private int port;
+
+        public GossipServer(final Map<String,Object> config)
+        {
+            server = new Server();
+            port = (Integer) config.get("port");
+            port += 1;
+            IGossip.registerSerializer(server.getKryo());
+        }
+
+        public void start()
+        {
+            server.start();
+            log.info("Gossip server bound to TCP/UDP port " + port);
+            try {
+                server.bind(port, port);
+            }
+            catch (IOException ie)
+            {
+                log.debug("Error binding gossip server", ie);
+            }
+            server.addListener(new Listener(){
+                public void received (Connection connection, Object object)
+                {
+                    if (object instanceof StreamEpochGossipEntry)
+                    {
+                        log.debug("yay");
+                    }
+                }
+            });
+        }
+
     }
 
     @SuppressWarnings("unchecked")
     public Runnable getInstance(final Map<String,Object> config)
     {
         //use the config for the init view (well, we'll have to deal with reconfigurations...)
+        gossipServer = new GossipServer(config);
+        gossipServer.start();
+
         this.config = config;
         viewActive = false;
         currentView = new CorfuDBView(config);
@@ -91,30 +137,6 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         currentView.setUUID(logID);
         currentView.addRemoteLog(logID, currentView.getConfigMasters().get(0).getFullString());
         log.info("Remote log set");
-        if (config.get("remotelogs") != null)
-        {
-            for (Object configmaster  : (List<Object>) config.get("remotelogs"))
-            {
-                try {
-                    IConfigMaster cm = CorfuDBView.getConfigurationMasterFromString((String) configmaster);
-                    //Get the list of logs that the remote knows
-                    Map<UUID, String> remoteLogList = cm.getAllLogs();
-                    for (UUID rlog : remoteLogList.keySet())
-                    {
-                       if (currentView.addRemoteLog(rlog, remoteLogList.get(rlog)))
-                       {
-                           log.info("Discovered new remote log " + rlog);
-                       }
-                    }
-                    //Tell the remote log that we exist
-                    cm.addLog(logID, currentView.getConfigMasters().get(0).getFullString());
-                }
-                catch (Exception e)
-                {
-                    log.warn("Error talking to remote log" ,e);
-                }
-            }
-        }
         return this;
     }
 
@@ -158,6 +180,38 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         }
                     }
                 }
+
+                if (config.get("remotelogs") != null)
+                {
+                    for (Object configmaster  : (List<Object>) config.get("remotelogs"))
+                    {
+                        try {
+                            IConfigMaster cm = CorfuDBView.getConfigurationMasterFromString((String) configmaster);
+                            //Get the list of logs that the remote knows
+                            Map<UUID, String> remoteLogList = null;
+                            for (int i = 0; i < 5; i++)
+                            {
+                                remoteLogList = cm.getAllLogs();
+                                if (remoteLogList != null) { break; }
+                                else {log.debug("Remote log " + configmaster + " inaccessible, waiting 5 s and retrying"); Thread.sleep(5000);}
+                            }
+                            for (UUID rlog : remoteLogList.keySet())
+                            {
+                               if (currentView.addRemoteLog(rlog, remoteLogList.get(rlog)))
+                               {
+                                   log.info("Discovered new remote log " + rlog);
+                               }
+                            }
+                            //Tell the remote log that we exist
+                            cm.addLog(currentView.getUUID(), currentView.getConfigMasters().get(0).getFullString());
+                        }
+                        catch (Exception e)
+                        {
+                            log.warn("Error talking to remote log" ,e);
+                        }
+                    }
+                }
+
                 synchronized(viewActive)
                 {
                     viewActive.wait(30000);
@@ -350,11 +404,6 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             }
 
         }
-        catch (Exception e)
-        {
-            log.debug("Exception ", e);
-        }
-        /*
         catch (TrimmedException te)
         {
             output.add("state", "trimmed");
@@ -362,8 +411,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         catch (UnwrittenException ue)
         {
             output.add("state", "unwritten");
-        }*/
-        log.debug("returning");
+        }
         return output.build();
     }
 
