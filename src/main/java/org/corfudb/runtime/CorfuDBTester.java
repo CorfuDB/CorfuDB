@@ -207,19 +207,28 @@ public class CorfuDBTester
 
         if(testnum==LINTEST)
         {
-            TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             Map<Integer, Integer> cob1 = null;
-            boolean partitionedmap = true;
-            if(!partitionedmap)
+            int numpartitions = 10;
+            if(numpartitions==0)
             {
+                TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
                 cob1 = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
             }
             else
             {
-                Map<Integer, Integer> partmaparray[] = new Map[10];
-                for (int i = 0; i < partmaparray.length; i++)
-                    partmaparray[i] = new CorfuDBMap<Integer, Integer>(TR, DirectoryService.getUniqueID(sf));
-                cob1 = new PartitionedMap<Integer, Integer>(partmaparray);
+                TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+                CDBLinkedList<Long> partitionlist = new CDBLinkedList<>(TR, sf, DirectoryService.getUniqueID(sf));
+                while(true)
+                {
+                    TR.BeginTX();
+                    if(partitionlist.size()!=numpartitions)
+                    {
+                        for (int i = 0; i < numpartitions; i++)
+                            partitionlist.add(DirectoryService.getUniqueID(sf));
+                    }
+                    if(TR.EndTX()) break;
+                }
+                cob1 = new PartitionedMap<Integer, Integer>(partitionlist, TR);
             }
             for (int i = 0; i < numthreads; i++)
             {
@@ -247,7 +256,7 @@ public class CorfuDBTester
         }
         else if(testnum==TXTEST)
         {
-            int numpartitions = 10;
+            int numpartitions = 0;
             boolean perthreadstack = true;
             CorfuDBMap<Integer, Integer> cob1 = null;
             CorfuDBMap<Integer, Integer> cob2 = null;
@@ -494,6 +503,8 @@ class TXTesterThread implements Runnable
         }
         else
         {
+            throw new RuntimeException("unimplemented");
+            /*
             Map<Integer, Integer> partmaparray1[] = new Map[numpartitions];
             for (int i = 0; i < partmaparray1.length; i++)
                 partmaparray1[i] = new CorfuDBMap<Integer, Integer>(TR, DS.nameToStreamID("testmap1-part" + i));
@@ -502,7 +513,7 @@ class TXTesterThread implements Runnable
             Map<Integer, Integer> partmaparray2[] = new Map[numpartitions];
             for (int i = 0; i < partmaparray2.length; i++)
                 partmaparray2[i] = new CorfuDBMap<Integer, Integer>(TR, DS.nameToStreamID("testmap2-part" + i));
-            map2 = new PartitionedMap<>(partmaparray2);
+            map2 = new PartitionedMap<>(partmaparray2);*/
         }
 
         cr = TR;
