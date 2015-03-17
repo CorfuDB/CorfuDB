@@ -498,7 +498,7 @@ class TXEngine implements SMRLearner
                 if((curread.readsummary!=null && !txr.getObject(curread.objectid).isStillValid(curread.readsummary))
                     || (curread.readsummary==null && txr.getObject(curread.objectid).getTimestamp()>curread.readtimestamp))
                 {
-                    System.out.println("partial decision is an abort: " + curread.objectid + ":" + curread.readsummary + ":" + curread.readtimestamp);
+                    dbglog.debug("partial decision is an abort: " + curread.objectid + ":" + curread.readsummary + ":" + curread.readtimestamp);
                     partialabort = true;
                     break;
                 }
