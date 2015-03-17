@@ -1,5 +1,6 @@
 org.corfudb.client
 org.corfudb.client.abstractions
+org.corfudb.client.configmasters
 org.corfudb.client.entries
 org.corfudb.client.logunits
 org.corfudb.client.sequencers
@@ -9,3 +10,4 @@ org.corfudb.infrastructure.thrift
 org.corfudb.runtime
 org.corfudb.runtime.collections
 org.corfudb.tests
+org.corfudb.tests.benchtests
