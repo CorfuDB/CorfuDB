@@ -83,6 +83,7 @@ public class Stream implements AutoCloseable {
     AtomicLong logPointer;
     AtomicLong currentEpoch;
 
+    Timestamp latest = null;
     boolean closed = false;
     boolean killExecutor = false;
     PriorityBlockingQueue<CorfuDBStreamEntry> streamQ;
@@ -276,6 +277,7 @@ public class Stream implements AutoCloseable {
                                     if (cdbse.getStreamID().equals(streamID) && cdbse.getTimestamp().epoch == (currentEpoch.get()))
                                     {
                                         cdbse.setTimestamp(new Timestamp(0, streamPointer.getAndIncrement(), r.pos));
+                                        latest = cdbse.getTimestamp();
                                         numReadable++;
                                         streamQ.offer(cdbse);
                                     }
@@ -445,6 +447,21 @@ public class Stream implements AutoCloseable {
         return new Timestamp(currentEpoch.get(), streamPointer.get(), sequencer.getCurrent(streamID));
     }
 
+    /**
+     * Returns a fresh or cached timestamp, which can serve as a linearization point. This function
+     * may return a non-linearizable (invalid) timestamp which may never occur in the ordering
+     * due to a move/epoch change.
+     *
+     * @param       cached      Whether or not the timestamp returned is cached.
+     * @return                  A timestamp, which reflects the most recently allocated timestamp in the stream,
+     *                          or currently read, depending on whether cached is set or not.
+     */
+    public Timestamp check(boolean cached)
+    {
+        if (cached) { return latest; }
+        else { return check(); }
+    }
+
     public void trim(long address)
     {
     }
@@ -508,9 +525,8 @@ public class Stream implements AutoCloseable {
     public void attachStream(UUID destinationStream)
     throws RemoteException, OutOfSpaceException, IOException
     {
-        // Find the current head of the destination stream...
-        // TODO: we need some way to check if we properly joined
-        // into the destination stream's ordering.
+        // Insert a start stream entry.
+
     }
 
     /**
