@@ -503,7 +503,8 @@ public class Stream implements AutoCloseable {
         {
             synchronized (latest)
             {
-                if (latest.equals(pos)){
+                if (latest.compareTo(pos) >= 0)
+                {
                     return true;
                 }
                 else if (latest.epoch != pos.epoch)
