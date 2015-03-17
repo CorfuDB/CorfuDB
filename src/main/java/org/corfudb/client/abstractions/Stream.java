@@ -277,7 +277,10 @@ public class Stream implements AutoCloseable {
                                     if (cdbse.getStreamID().equals(streamID) && cdbse.getTimestamp().epoch == (currentEpoch.get()))
                                     {
                                         cdbse.setTimestamp(new Timestamp(0, streamPointer.getAndIncrement(), r.pos));
-                                        latest = cdbse.getTimestamp();
+                                        synchronized (latest) {
+                                            latest = cdbse.getTimestamp();
+                                            latest.notifyAll();
+                                        }
                                         numReadable++;
                                         streamQ.offer(cdbse);
                                     }
@@ -472,9 +475,22 @@ public class Stream implements AutoCloseable {
      * @param pos   The position to block until.
      */
     public void sync(Timestamp pos)
-    throws LinearizationException
+    throws LinearizationException, InterruptedException
     {
-        throw new LinearizationException("Linearization error due to epoch change", pos, pos);
+        while (true)
+        {
+            synchronized (latest)
+            {
+                if (latest.equals(pos)){
+                    return;
+                }
+                else if (latest.epoch != pos.epoch)
+                {
+                    throw new LinearizationException("Linearization error due to epoch change", pos, pos);
+                }
+                latest.wait();
+            }
+        }
     }
 
     /**
