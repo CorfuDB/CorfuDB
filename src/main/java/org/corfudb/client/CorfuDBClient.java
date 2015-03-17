@@ -107,7 +107,7 @@ public class CorfuDBClient implements AutoCloseable {
      * Retrieves the CorfuDBView from a configuration string. The view manager
      * uses this method to fetch the most recent view.
      */
-    private CorfuDBView retrieveView(String configString)
+    public CorfuDBView retrieveView(String configString)
         throws IOException
     {
         HttpClient httpClient = HttpClients.createDefault();

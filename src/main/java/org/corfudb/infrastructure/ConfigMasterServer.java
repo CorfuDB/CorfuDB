@@ -138,6 +138,26 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                 {
                     log.info("View is not accessible, checking again in 30s");
                 }
+                //also check if all remote logs are still accessible.
+                //and remove any which are not.
+                for (UUID remoteLog : currentView.getAllLogs().keySet())
+                {
+                    IConfigMaster cm = CorfuDBView.getConfigurationMasterFromString(currentView.getAllLogs().get(remoteLog));
+                    if (!cm.ping())
+                    {
+                        log.debug("Remote log " + remoteLog + " not accessible, removing after 2 retries.");
+                        Thread.sleep(5000);
+                        if (!cm.ping())
+                        {
+                            Thread.sleep(5000);
+                            if (!cm.ping())
+                            {
+                                log.debug("Removing inaccessible remote log {}", remoteLog);
+                                currentView.getAllLogs().remove(remoteLog);
+                            }
+                        }
+                    }
+                }
                 synchronized(viewActive)
                 {
                     viewActive.wait(30000);

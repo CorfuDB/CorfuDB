@@ -14,7 +14,7 @@
  */
 
 package org.corfudb.client.configmasters;
-
+import org.corfudb.client.IServerProtocol;
 import org.corfudb.client.NetworkException;
 import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
@@ -27,7 +27,7 @@ import java.util.UUID;
  * This interface represents a CorfuDB configuration master.
  */
 
-public interface IConfigMaster {
+public interface IConfigMaster extends IServerProtocol {
     public class streamInfo {
         public UUID currentLog;
         public long startPos;

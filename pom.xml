@@ -122,6 +122,11 @@
             <artifactId>jsonrpc2-client</artifactId>
             <version>1.14.4</version>
         </dependency>
+        <dependency>
+            <groupId>org.zeromq</groupId>
+            <artifactId>jeromq</artifactId>
+            <version>0.3.4</version>
+        </dependency>
     </dependencies>
 
     <build>
