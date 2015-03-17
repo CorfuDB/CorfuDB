@@ -55,6 +55,7 @@ public class CorfuDBClient implements AutoCloseable {
     private CorfuDBView currentView;
     private BooleanLock viewUpdatePending;
     private Boolean closed = false;
+    private UUID localID = null;
 
     private Logger log = LoggerFactory.getLogger(CorfuDBClient.class);
 
@@ -176,6 +177,7 @@ public class CorfuDBClient implements AutoCloseable {
     throws RemoteException
     {
         if (logID == null) {return getView();}
+        if (logID.equals(localID)) { return getView(); }
         /** Go to the current view, and communicate with the local configuration
          *  master to resolve the log.
          */
@@ -260,6 +262,7 @@ public class CorfuDBClient implements AutoCloseable {
                                     String oldEpoch = (currentView == null) ? "null" : Long.toString(currentView.getEpoch());
                                     log.info("New view epoch " + newView.getEpoch() + " greater than old view epoch " + oldEpoch + ", changing views");
                                     currentView = newView;
+                                    localID = currentView.getUUID();
                                     viewUpdatePending.lock = false;
                                     viewUpdatePending.notifyAll();
                                 }

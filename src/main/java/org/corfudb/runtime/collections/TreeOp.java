@@ -8,6 +8,8 @@ class TreeOp<K extends Comparable<K>, V> extends CorfuDBObjectCommand {
     static final int CMD_HEIGHT = 2;
     static final int CMD_GET = 3;
     static final int CMD_PUT = 4;
+    static final int CMD_REMOVE = 5;
+    static final int CMD_CLEAR = 6;
 
     public int m_cmd;
     public long m_oid;
