@@ -85,6 +85,7 @@ public class Stream implements AutoCloseable {
     AtomicLong currentEpoch;
 
     Timestamp latest = null;
+
     boolean closed = false;
     boolean killExecutor = false;
     PriorityBlockingQueue<CorfuDBStreamEntry> streamQ;
@@ -177,7 +178,7 @@ public class Stream implements AutoCloseable {
     private CompletableFuture<ReadResult> dispatchDetailRead(long logPos)
     {
         return CompletableFuture.supplyAsync(() -> {
-           // log.debug("dispatch " + streamID.toString() + " " + logPos);
+            //log.debug("dispatch " + streamID.toString() + " " + logPos);
             ReadResult r = new ReadResult(logPos);
             try {
                 byte[] data = woas.read(logPos);
@@ -185,10 +186,12 @@ public class Stream implements AutoCloseable {
                 //success
                 r.resultType = ReadResultType.SUCCESS;
                 r.payload = cde;
+
             } catch (UnwrittenException ue)
             {
                 //retry
                 r.resultType = ReadResultType.UNWRITTEN;
+
             } catch (TrimmedException te)
             {
                 //tell the main code this entry was trimmed
@@ -279,9 +282,9 @@ public class Stream implements AutoCloseable {
                                     if (cdbse.getStreamID().equals(streamID) && cdbse.getTimestamp().epoch == (currentEpoch.get()))
                                     {
                                         cdbse.setTimestamp(new Timestamp(0, streamPointer.getAndIncrement(), r.pos));
-                                        synchronized (latest) {
+                                        synchronized (streamPointer) {
                                             latest = cdbse.getTimestamp();
-                                            latest.notifyAll();
+                                            streamPointer.notifyAll();
                                         }
                                         numReadable++;
                                         streamQ.offer(cdbse);
@@ -501,23 +504,26 @@ public class Stream implements AutoCloseable {
     {
         while (true)
         {
-            synchronized (latest)
+            synchronized (streamPointer)
             {
-                if (latest.compareTo(pos) >= 0)
+                if (latest != null)
                 {
-                    return true;
-                }
-                else if (latest.epoch != pos.epoch)
-                {
-                    throw new LinearizationException("Linearization error due to epoch change", pos, pos);
+                    if (latest.compareTo(pos) >= 0)
+                    {
+                        return true;
+                    }
+                    else if (latest.epoch != pos.epoch)
+                    {
+                        throw new LinearizationException("Linearization error due to epoch change", pos, pos);
+                    }
                 }
                 if (timeout < 0)
                 {
-                    latest.wait();
+                    streamPointer.wait();
                 }
                 else
                 {
-                    latest.wait(timeout);
+                    streamPointer.wait(timeout);
                     return false;
                 }
             }

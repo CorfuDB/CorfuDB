@@ -66,17 +66,6 @@ public class CorfuDBView {
     private static Map<String,Class<? extends IServerProtocol>> availableLogUnitProtocols= getLogUnitProtocolClasses();
     private static Map<String,Class<? extends IServerProtocol>> availableConfigMasterProtocols = getConfigMasterProtocolClasses();
 
-    public class StreamData {
-       public Long logPos;
-       public String moved;
-       public StreamData(Long logPos, String moved)
-       {
-           this.logPos = logPos;
-           this.moved = moved;
-       }
-    }
-    private ConcurrentHashMap<UUID,StreamData> streamData = new ConcurrentHashMap<UUID, StreamData>();
-
     private List<IServerProtocol> sequencers;
     private List<CorfuDBViewSegment> segments; //eventually this should be upgraded to rangemap or something..
     private List<IServerProtocol> configmasters;
@@ -205,21 +194,6 @@ public class CorfuDBView {
         return configmasters;
     }
 
-    public void updateStream(UUID stream, long logPos)
-    {
-        streamData.put(stream, new StreamData(logPos, null));
-    }
-
-    public boolean addStream(UUID stream, long logPos)
-    {
-        return streamData.putIfAbsent(stream, new StreamData(logPos, null)) != null;
-    }
-
-    public StreamData getStream(UUID stream)
-    {
-        return streamData.get(stream);
-    }
-
     public boolean addRemoteLog(UUID remoteLog, String path)
     {
         return logs.putIfAbsent(remoteLog, path) != null;
@@ -235,10 +209,6 @@ public class CorfuDBView {
         return logs;
     }
 
-    public void moveStream(UUID stream, String newLocation)
-    {
-        streamData.put(stream, new StreamData(null, newLocation));
-    }
     /**
      * Checks if all servers in the view can be accessed. Does not check
      * to see if all the servers are in a valid configuration epoch.
@@ -305,19 +275,6 @@ public class CorfuDBView {
             segmentObject.add(jsb);
         }
 
-        JsonObjectBuilder streamObject = Json.createObjectBuilder();
-        for (UUID streamID : streamData.keySet())
-        {
-           if (streamData.get(streamID).logPos == null)
-           {
-               streamObject.add(streamID.toString(), streamData.get(streamID).moved);
-           }
-           else
-           {
-               streamObject.add(streamID.toString(), streamData.get(streamID).logPos);
-           }
-        }
-
         return Json.createObjectBuilder()
                                 .add("epoch", epoch)
                                 .add("logid", logID.toString())
@@ -325,7 +282,6 @@ public class CorfuDBView {
                                 .add("sequencer", sequencerObject)
                                 .add("configmaster", configmasterObject)
                                 .add("segments", segmentObject)
-                                .add("streams",  streamObject)
                                 .build();
     }
 

@@ -52,6 +52,7 @@ import javax.json.JsonNumber;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonReader;
 import javax.json.JsonArray;
+import javax.json.JsonArrayBuilder;
 
 import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
@@ -72,12 +73,14 @@ import org.corfudb.client.gossip.StreamEpochGossipEntry;
 import org.corfudb.client.gossip.IGossip;
 
 import org.corfudb.client.Timestamp;
+import org.corfudb.client.StreamView;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
     private Logger log = LoggerFactory.getLogger(ConfigMasterServer.class);
     private Map<String,Object> config;
     private CorfuDBView currentView;
+    private StreamView currentStreamView;
     private Boolean viewActive;
     private GossipServer gossipServer;
     int masterid = new SecureRandom().nextInt();
@@ -131,6 +134,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         this.config = config;
         viewActive = false;
         currentView = new CorfuDBView(config);
+        currentStreamView = new StreamView();
         //UUID is going to be random for now, since this configuration is not persistent
         UUID logID =  UUID.randomUUID();
         log.info("New log instance id= " + logID.toString());
@@ -279,7 +283,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     {
         try {
             JsonObject jo = params;
-            currentView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), jo.getJsonNumber("startpos").longValue());
+            currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
         }
         catch (Exception ex)
         {
@@ -296,7 +300,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         try {
             JsonObject jo = params;
             log.debug(jo.toString());
-            CorfuDBView.StreamData sd = currentView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
+            StreamView.StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
             if (sd == null)
             {
                 ob.add("present", false);
@@ -304,7 +308,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             else
             {
                 ob.add("present", true);
-                ob.add("startpos", sd.logPos);
+                ob.add("startpos", sd.startPos);
                 ob.add("logid", UUID.randomUUID().toString());
             }
 
@@ -324,6 +328,24 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         for (UUID key : logs.keySet())
         {
             jb.add(key.toString(), logs.get(key));
+        }
+        return jb.build();
+    }
+
+    private JsonArray streamInfo(JsonObject params)
+    {
+        JsonArrayBuilder jb = Json.createArrayBuilder();
+        Set<UUID> streams = currentStreamView.getAllStreams();
+        for (UUID key : streams)
+        {
+            StreamView.StreamData sd = currentStreamView.getStream(key);
+            JsonObjectBuilder job = Json.createObjectBuilder();
+            job.add("streamid", sd.streamID.toString());
+            job.add("currentlog", sd.currentLog.toString());
+            job.add("startlog", sd.startLog.toString());
+            job.add("startpos", sd.startPos);
+            job.add("epoch", sd.epoch);
+            jb.add(job);
         }
         return jb.build();
     }
@@ -547,6 +569,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         break;
                     case "loginfo":
                         job.add("result", logInfo(params));
+                        break;
+                    case "streaminfo":
+                        job.add("result", streamInfo(params));
                         break;
                 }
                 JsonObject res =    job.add("calledmethod", apiCall)

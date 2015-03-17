@@ -89,13 +89,29 @@ function updateView(v : CorfuDBView) {
 enum Panels {
     MAIN,
     LOGINFO,
-    REMOTELOG
+    REMOTELOG,
+    STREAMINFO
 };
 
 function switchPanel(newPanel: Panels)
 {
     $(".content").addClass('hidden');
     $("#" + Panels[newPanel]).removeClass('hidden');
+}
+
+function updateStreams() : Promise<any>
+{
+    return rpc("streaminfo", {}).then(function (data) {
+        $("#streamtable").empty();
+        data.result.forEach(function(itm,idx,array) {
+        $("#streamtable").append(
+        `<tr><td>${itm.streamid}</td>
+            <td>${itm.currentlog}</td>
+            <td>${itm.startlog}</td>
+            <td>${itm.startpos}</td>
+            <td>${itm.epoch}</tr>`);
+        });
+    })
 }
 
 function registerButtonHandlers() {
@@ -148,6 +164,11 @@ $("#overview").on('click', function() {
 $("#log").on('click', function() {
     updateLogDetail(0).then(function() {
         switchPanel(Panels.LOGINFO);
+    });
+});
+$("#streams").on('click', function() {
+    updateStreams().then(function() {
+        switchPanel(Panels.STREAMINFO);
     });
 });
 $("#loginfopage").on('click', function(e) {
