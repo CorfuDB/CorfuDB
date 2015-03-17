@@ -129,6 +129,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     {
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
+        boolean broken = false;
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
@@ -148,12 +149,14 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
         }
         catch (TException e)
         {
+            broken = true;
+            thriftPool.returnBrokenResource(client);
             throw new NetworkException("Error connecting to endpoint: " + e.getMessage(), this);
         }
         finally {
-            if (!success)
+            if (!success && !broken)
             {
-                thriftPool.returnBrokenResource(client);
+                thriftPool.returnResourceObject(client);
             }
         }
     }
@@ -164,6 +167,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
         byte[] data = null;
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
+        boolean broken = false;
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
@@ -183,11 +187,13 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
         }
         catch (TException e)
         {
+            broken = true;
+            thriftPool.returnBrokenResource(client);
             throw new NetworkException("Error connecting to endpoint: " + e.getMessage(), this);
         }
         finally {
-            if (!success){
-                thriftPool.returnBrokenResource(client);
+            if (!success && !broken){
+                thriftPool.returnResourceObject(client);
             }
         }
         return data;
@@ -207,6 +213,17 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     public void reset(long epoch)
     throws NetworkException
     {
+        SimpleLogUnitService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            client.reset();
+            thriftPool.returnResourceObject(client);
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+            throw new NetworkException("Couldn't connect to endpoint!", this);
+        }
 
     }
 

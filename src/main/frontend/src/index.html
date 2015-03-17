@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <title>CorfuDB UI</title>
+        <link href="css/styles.css" rel="stylesheet" type="text/css">
+        <script src="scripts/client.js"></script>
+        <meta charset="utf-8"/>
+    </head>
+    <body class="body-padded">
+        <div class="navbar navbar-default navbar-fixed-top" role="navigation">
+            <div class="navbar-header">
+                <a class="pull-left" href="#">
+                    <img src="images/logo.png" alt="CorfuDB"/>
+                </a>
+            </div>
+            <div style="margin-left:120px;">
+                <div>
+                    <h1 style="display:inline;">CorfuDB Configuration Master</h1>
+                    <br/>
+                    <h4 style="display:inline;">Log ID: <span id="logid"></span></h4>
+                </div>
+            </div>
+            <ul class="nav navbar-nav" style="height:48px;">
+                <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="overview">Overview</a></li>
+                <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="remotes">Remotes</a></li>
+                <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="log">Log</a></li>
+                <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="streams">Streams</a></li>
+                <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="reset">Reset</a></li>
+            </ul>
+        </div>
+        <div class="container content" id="MAIN">
+            <div class="panel panel-default">
+              <div class="panel-heading">Status</div>
+
+              <table class="table">
+                <thead>
+                    <tr><td>Item</td><td>Value</td></tr>
+                </thead>
+                <tbody>
+                <tr><td>Epoch</td><td id="epoch"></td></tr>
+              </tbody></table>
+            </div>
+            <div class="panel panel-default">
+              <div class="panel-heading">Sequencers</div>
+              <ul class="list-group" id="sequencers">
+              </ul>
+            </div>
+        </div>
+        <div class="container content hidden" id="LOGINFO">
+            <form class="form-inline">
+                <div class="form-group">
+                    <div class="input-group">
+                        <div class="input-group-addon">Pos</div>
+                        <input type="text" class="form-control" id="loginfopos" placeholder="logpos">
+                    </div>
+                 </div>
+                <button id="loginfopage" class="btn btn-primary">Go</button>
+            </form>
+            <div class="panel panel-default">
+              <div class="panel-heading">Detail</div>
+
+              <table class="table-striped table">
+                <tbody id="loginfotable">
+              </tbody></table>
+            </div>
+        </div>
+        <div class="container content hidden" id="REMOTELOG">
+            <div class="panel panel-default">
+              <div class="panel-heading">Remote Logs</div>
+
+              <table class="table">
+                <thead>
+                    <tr><th>UUID</th><th>URL</th></tr>
+                </thead>
+                <tbody id="remotelogtable">
+              </tbody></table>
+            </div>
+        </div>
+        <div class="container content hidden" id="STREAMINFO">
+            <div class="panel panel-default">
+              <div class="panel-heading">Stream view</div>
+
+              <table class="table">
+                <thead>
+                    <tr><th>UUID</th><th>CurrentLog</th><th>StartLog</th><th>StartPos</th><th>Epoch</th></tr>
+                </thead>
+                <tbody id="streamtable">
+              </tbody></table>
+            </div>
+        </div>
+
+    </body>
+</html>

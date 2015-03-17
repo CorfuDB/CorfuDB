@@ -558,6 +558,23 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         return 0;
         }
 
+    @Override
+    synchronized public void reset() {
+        log.debug("Reset requested, resetting state");
+        try {
+        if (RAMMODE)
+        {
+            inmemoryStore = new ByteBuffer[UNITCAPACITY];
+            initLogStore(UNITCAPACITY);
+            writegcmark();
+        }
+        }
+        catch (Exception e)
+        {
+            log.error("Error during reset", e);
+        }
+    }
+
 	@Override
 	synchronized public long queryck() {	return ckmark; }
 

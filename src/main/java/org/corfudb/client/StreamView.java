@@ -1,0 +1,114 @@
+package org.corfudb.client;
+
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * This class represents a view of the streams in the system.
+ */
+public class StreamView {
+
+    private static final Logger log = LoggerFactory.getLogger(StreamView.class);
+    private Map<UUID, StreamData> streamMap;
+
+    /**
+     * This class contains information about streams in the system.
+     */
+    public class StreamData {
+        /** The ID of the stream */
+        public UUID streamID;
+        /** The log the stream is currently on (a guess) */
+        public UUID currentLog;
+        /** The log the stream starts on. */
+        public UUID startLog;
+        /** The epoch the stream is in (a guess) */
+        public long epoch;
+        /** The start position of the stream */
+        public long startPos;
+
+        /** Creates a new StreamData instance */
+        public StreamData(UUID streamID, UUID currentLog, UUID startLog, long epoch, long startPos)
+        {
+            this.streamID = streamID;
+            this.currentLog = currentLog;
+            this.startLog = startLog;
+            this.epoch = epoch;
+            this.startPos = startPos;
+        }
+    }
+
+    /**
+     * Default constructor
+     */
+    public StreamView() {
+        this.streamMap = new ConcurrentHashMap<UUID, StreamData>();
+    }
+
+    /**
+     * Returns the data in view for a given stream.
+     *
+     * @param stream    The UUID of the stream to query.
+     *
+     * @return          The data for the stream in the view.
+     */
+    public StreamData getStream(UUID stream)
+    {
+        return streamMap.get(stream);
+    }
+
+    /**
+     * Get all streams that we know about.
+     *
+     * @return          A list of streams in the view.
+     */
+    public Set<UUID> getAllStreams()
+    {
+        return streamMap.keySet();
+    }
+
+    /**
+     * Adds a stream to the view, if it does not exist, and returns whether or not
+     * a new stream was added.
+     *
+     * @param stream        The UUID of the stream to add.
+     * @param startLog      The UUID of the log the stream starts on.
+     * @param startPos      The position that the stream starts at.
+     *
+     * @return              True, if the stream was added to the view, or false, if
+     *                      the stream already existed in the view.
+     */
+    public boolean addStream(UUID stream, UUID startLog, long startPos)
+    {
+        return streamMap.putIfAbsent(stream, new StreamData(stream, startLog, startLog, 0, startPos)) == null;
+    }
+
+    /**
+     * Adds or updates a learned stream to the view, and returns whether or not
+     * a stream was added or updated.
+     *
+     * @param stream        The UUID of the stream.
+     * @param currentLog    The UUID of the log the stream is currently in.
+     * @param startLog      The UUID of the log the stream resides on.
+     * @param epoch         The epoch the stream is currently in.
+     * @param startPos      The position the log currently starts on.
+     */
+    public boolean learnStream(UUID stream, UUID currentLog, UUID startLog, long epoch, long startPos)
+    {
+        StreamData old = streamMap.putIfAbsent(stream, new StreamData(stream, currentLog, startLog, epoch, startPos));
+        if (old == null) {return true;}
+        boolean changed = false;
+        if (old.currentLog != currentLog) { old.currentLog = currentLog; changed = true; }
+        if (old.startLog != startLog) { old.startLog = startLog; changed = true; }
+        if (old.epoch != epoch) {old.epoch = epoch; changed = true; }
+        if (old.startPos != startPos) {old.startPos = startPos; changed = true; }
+        return changed;
+    }
+}

@@ -41,8 +41,8 @@ import java.io.IOException;
 public class CorfuDBEntry implements Serializable, Comparable<CorfuDBEntry>
 {
     private static final long serialVersionUID = 0L;
-    private transient final long physPos;
-    byte[] payload;
+    public transient final long physPos;
+    public byte[] payload;
 
     public CorfuDBEntry()
     {

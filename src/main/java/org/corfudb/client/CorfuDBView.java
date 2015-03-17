@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.List;
 import java.util.LinkedList;
 import java.util.ArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
@@ -39,6 +40,8 @@ import javax.json.JsonArray;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
+
+import org.corfudb.client.configmasters.IConfigMaster;
 
 import java.util.UUID;
 
@@ -57,34 +60,35 @@ public class CorfuDBView {
 
     private long epoch;
     private long pagesize;
+    private UUID logID;
     private boolean isInvalid = false;
     private static Map<String,Class<? extends IServerProtocol>> availableSequencerProtocols= getSequencerProtocolClasses();
     private static Map<String,Class<? extends IServerProtocol>> availableLogUnitProtocols= getLogUnitProtocolClasses();
-
-    public class StreamData {
-       public Long logPos;
-       public String moved;
-       public StreamData(Long logPos, String moved)
-       {
-           this.logPos = logPos;
-           this.moved = moved;
-       }
-    }
-    private Map<UUID,StreamData> streamData = new HashMap<UUID, StreamData>();
+    private static Map<String,Class<? extends IServerProtocol>> availableConfigMasterProtocols = getConfigMasterProtocolClasses();
 
     private List<IServerProtocol> sequencers;
     private List<CorfuDBViewSegment> segments; //eventually this should be upgraded to rangemap or something..
+    private List<IServerProtocol> configmasters;
+    private Map<UUID, String> logs;
 
     public CorfuDBView(JsonObject jsonView)
     {
         epoch = jsonView.getJsonNumber("epoch").longValue();
         pagesize = jsonView.getJsonNumber("pagesize").longValue();
+        logID = UUID.fromString(jsonView.getJsonString("logid").getString());
         LinkedList<String> lsequencers = new LinkedList<String>();
         for (JsonValue j : jsonView.getJsonArray("sequencer"))
         {
             lsequencers.add(((JsonString)j).getString());
         }
         sequencers = populateSequencersFromList(lsequencers);
+        LinkedList<String> lconfigmasters = new LinkedList<String>();
+        for (JsonValue j : jsonView.getJsonArray("configmaster"))
+        {
+            lconfigmasters.add(((JsonString)j).getString());
+        }
+        configmasters = populateConfigMastersFromList(lconfigmasters);
+
         ArrayList<Map<String,Object>> lSegments = new ArrayList<Map<String,Object>>();
         for (JsonValue j : jsonView.getJsonArray("segments"))
         {
@@ -124,7 +128,19 @@ public class CorfuDBView {
         epoch = config.get("epoch").getClass() == Long.class ? (Long) config.get("epoch") : (Integer) config.get("epoch");
         pagesize = config.get("pagesize").getClass() == Long.class ? (Long) config.get("pagesize") : (Integer) config.get("pagesize");
         sequencers = populateSequencersFromList((List<String>)config.get("sequencers"));
+        configmasters = populateConfigMastersFromList((List<String>)config.get("configmasters"));
         segments = populateSegmentsFromList((List<Map<String,Object>>)((Map<String,Object>)config.get("layout")).get("segments"));
+        logs = new ConcurrentHashMap<UUID, String>();
+    }
+
+    public void setUUID(UUID uuid)
+    {
+        this.logID = uuid;
+    }
+
+    public UUID getUUID()
+    {
+        return this.logID;
     }
 
     public long getEpoch()
@@ -153,7 +169,17 @@ public class CorfuDBView {
                 }
             }
         }
+    }
 
+    /**
+     * Manually force the view into the given epoch. This should be called by the configuration
+     * master only!
+     *
+     * @param epoch The epoch to move to
+     */
+    public void resetEpoch(long epoch)
+    {
+        this.epoch = epoch;
     }
 
     public List<IServerProtocol> getSequencers() {
@@ -164,15 +190,25 @@ public class CorfuDBView {
         return segments;
     }
 
-    public void updateStream(UUID stream, long logPos)
-    {
-        streamData.put(stream, new StreamData(logPos, null));
+    public List<IServerProtocol> getConfigMasters() {
+        return configmasters;
     }
 
-    public void moveStream(UUID stream, String newLocation)
+    public boolean addRemoteLog(UUID remoteLog, String path)
     {
-        streamData.put(stream, new StreamData(null, newLocation));
+        return logs.putIfAbsent(remoteLog, path) != null;
     }
+
+    public String getRemoteLog(UUID remoteLog)
+    {
+        return logs.get(remoteLog);
+    }
+
+    public Map<UUID, String> getAllLogs()
+    {
+        return logs;
+    }
+
     /**
      * Checks if all servers in the view can be accessed. Does not check
      * to see if all the servers are in a valid configuration epoch.
@@ -212,6 +248,12 @@ public class CorfuDBView {
             sequencerObject.add(sp.getFullString());
         }
 
+        JsonArrayBuilder configmasterObject = Json.createArrayBuilder();
+        for (IServerProtocol sp : configmasters)
+        {
+            configmasterObject.add(sp.getFullString());
+        }
+
         JsonArrayBuilder segmentObject = Json.createArrayBuilder();
         for (CorfuDBViewSegment vs: segments)
         {
@@ -233,25 +275,13 @@ public class CorfuDBView {
             segmentObject.add(jsb);
         }
 
-        JsonObjectBuilder streamObject = Json.createObjectBuilder();
-        for (UUID streamID : streamData.keySet())
-        {
-           if (streamData.get(streamID).logPos == null)
-           {
-               streamObject.add(streamID.toString(), streamData.get(streamID).moved);
-           }
-           else
-           {
-               streamObject.add(streamID.toString(), streamData.get(streamID).logPos);
-           }
-        }
-
         return Json.createObjectBuilder()
                                 .add("epoch", epoch)
+                                .add("logid", logID.toString())
                                 .add("pagesize", pagesize)
                                 .add("sequencer", sequencerObject)
+                                .add("configmaster", configmasterObject)
                                 .add("segments", segmentObject)
-                                .add("streams",  streamObject)
                                 .build();
     }
 
@@ -359,6 +389,67 @@ public class CorfuDBView {
         return sequencerList;
     }
 
+    private List<IServerProtocol> populateConfigMastersFromList(List<String> list) {
+        LinkedList<IServerProtocol> sequencerList = new LinkedList<IServerProtocol>();
+        for (String s : list)
+        {
+            Matcher m = IServerProtocol.getMatchesFromServerString(s);
+            if (m.find())
+            {
+                String protocol = m.group("protocol");
+                if (!availableConfigMasterProtocols.keySet().contains(protocol))
+                {
+                    log.warn("Unsupported config master protocol: " + protocol);
+                }
+                else
+                {
+                    Class<? extends IServerProtocol> sprotocol = availableConfigMasterProtocols.get(protocol);
+                    try
+                    {
+                        sequencerList.add(IServerProtocol.protocolFactory(sprotocol, s, epoch));
+                    }
+                    catch (Exception ex){
+                        log.error("Error invoking protocol for protocol: ", ex);
+                    }
+                }
+            }
+            else
+            {
+                log.warn("Configmaster string " + s + " appears to be an invalid configmaster string");
+            }
+        }
+        return sequencerList;
+    }
+
+    public static IConfigMaster getConfigurationMasterFromString(String masterString)
+    {
+        Matcher m = IServerProtocol.getMatchesFromServerString(masterString);
+            if (m.find())
+            {
+                String protocol = m.group("protocol");
+                if (!availableConfigMasterProtocols.keySet().contains(protocol))
+                {
+                    log.warn("Unsupported config master protocol: " + protocol);
+                }
+                else
+                {
+                    Class<? extends IServerProtocol> sprotocol = availableConfigMasterProtocols.get(protocol);
+                    try
+                    {
+                        return (IConfigMaster) IServerProtocol.protocolFactory(sprotocol, masterString, 0);
+                    }
+                    catch (Exception ex){
+                        log.error("Error invoking protocol for protocol: ", ex);
+                    }
+                }
+            }
+            else
+            {
+                log.warn("Configmaster string " + masterString + " appears to be an invalid configmaster string");
+            }
+        return null;
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String,Class<? extends IServerProtocol>> getSequencerProtocolClasses()
     {
@@ -416,4 +507,34 @@ public class CorfuDBView {
         log.debug(sb.toString());
         return logunitMap;
     }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String,Class<? extends IServerProtocol>> getConfigMasterProtocolClasses()
+    {
+        Reflections reflections = new Reflections("org.corfudb.client.configmasters", new SubTypesScanner(false));
+        Set<Class<? extends Object>> allClasses = reflections.getSubTypesOf(Object.class);
+        Map<String, Class<? extends IServerProtocol>> logunitMap = new HashMap<String,Class<? extends IServerProtocol>>();
+
+        for(Class<? extends Object> c : allClasses)
+        {
+            try {
+                Method getProtocolString = c.getMethod("getProtocolString");
+                String protocol = (String) getProtocolString.invoke(null);
+                logunitMap.put(protocol, (Class<? extends IServerProtocol>)c);
+            }
+            catch (Exception e)
+            {
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Found ").append(logunitMap.size()).append(" supported configuration master(s):\n");
+        for(String proto : logunitMap.keySet())
+        {
+            sb.append(proto + "\t\t- " + logunitMap.get(proto).toString() + "\n");
+        }
+        log.debug(sb.toString());
+        return logunitMap;
+    }
+
 }
