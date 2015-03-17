@@ -9,6 +9,7 @@ import org.corfudb.client.abstractions.SharedLog;
 import org.corfudb.client.OutOfSpaceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.corfudb.client.Timestamp;
 
 import java.util.UUID;
 /**
@@ -42,7 +43,7 @@ public class CorfuStreamHello {
         UUID streamID = UUID.randomUUID();
         try (Stream s = new Stream(client, streamID)) {
         log.info("Appending hello world into log...");
-        long address = 0;
+        Timestamp address = null;
         try {
             address = s.append("hello world from stream " + streamID.toString());
         }

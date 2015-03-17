@@ -26,10 +26,11 @@ public class CorfuDBStreamStartEntry extends CorfuDBStreamEntry
 {
     private static final long serialVersionUID = 0L;
 
-    public CorfuDBStreamStartEntry(UUID streamID)
+    public CorfuDBStreamStartEntry(UUID streamID, long epoch)
     {
         super();
         this.streamID = streamID;
+        this.ts = new Timestamp(epoch);
     }
 
 }

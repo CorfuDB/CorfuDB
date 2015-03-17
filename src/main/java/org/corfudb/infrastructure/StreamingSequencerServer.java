@@ -41,6 +41,7 @@ import java.lang.Math;
 import java.util.concurrent.locks.StampedLock;
 import java.util.concurrent.CompletableFuture;
 
+import org.corfudb.client.Timestamp;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -89,8 +90,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
                 final long oldPos = s.position;
                 CompletableFuture<Void> cf = CompletableFuture.runAsync(() -> {
                 try {
-                    CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos);
-                    cdsme.getTimestamp().setEpoch(-1);
+                    CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos, -1, -1);
                     log.debug("Writing move entry from " + oldPos + " to " + newPos + " for stream " + streamID);
                     woas.write(oldPos, cdsme);
                 } catch (Exception ie)

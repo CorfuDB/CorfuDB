@@ -204,7 +204,20 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
 
     public String getLog(UUID logID)
     {
-        return "";
+        try {
+            JSONRPC2Request jr = new JSONRPC2Request("getlog", id.getAndIncrement());
+            Map<String, Object> params = new HashMap<String,Object>();
+            params.put("logid", logID.toString());
+            jr.setNamedParams(params);
+            JSONRPC2Response jres = jsonSession.send(jr);
+            if (jres.indicatesSuccess())
+            {
+                return (String)jres.getResult();
+            }
+            return null;
+        } catch(Exception e) {
+            return null;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -215,7 +228,13 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
             JSONRPC2Response jres = jsonSession.send(jr);
             if (jres.indicatesSuccess())
             {
-                return (Map<UUID, String>)jres.getResult();
+                Map<UUID, String> resultMap = new HashMap<UUID, String>();
+                Map<String, String> iresultMap = (Map<String,String>) jres.getResult();
+                for (String s : iresultMap.keySet())
+                {
+                    resultMap.put(UUID.fromString(s), iresultMap.get(s));
+                }
+                return resultMap;
             }
             return null;
         } catch(Exception e) {

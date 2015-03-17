@@ -173,17 +173,26 @@ public class CorfuDBClient implements AutoCloseable {
      *                  null, if the UUID cannot be resolved.
      */
     public CorfuDBView getView(UUID logID)
-    throws IOException
+    throws RemoteException
     {
+        if (logID == null) {return getView();}
         /** Go to the current view, and communicate with the local configuration
          *  master to resolve the log.
          */
-        IConfigMaster cm = (IConfigMaster) getView().getConfigMasters().get(0);
-        String remoteLog = cm.getLog(logID);
-        /** Go to the remote log, communicate with the remote configuration master
-         * and resolve the remote configuration.
-         */
-        return retrieveView(remoteLog);
+        try{
+            IConfigMaster cm = (IConfigMaster) getView().getConfigMasters().get(0);
+            String remoteLog = cm.getLog(logID);
+            /** Go to the remote log, communicate with the remote configuration master
+             * and resolve the remote configuration.
+             */
+            remoteLog = remoteLog.replace("cdbcm", "http");
+            return retrieveView(remoteLog + "/corfu");
+        }
+        catch (IOException ie)
+        {
+            log.debug("IOException", ie);
+            throw new RemoteException("Couldn't connect to remote log", logID);
+        }
     }
 
     /**

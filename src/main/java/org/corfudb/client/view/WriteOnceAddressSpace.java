@@ -16,6 +16,7 @@
 package org.corfudb.client.view;
 
 import org.corfudb.client.CorfuDBClient;
+import org.corfudb.client.CorfuDBView;
 import org.corfudb.client.CorfuDBViewSegment;
 import org.corfudb.client.IServerProtocol;
 import org.corfudb.client.logunits.IWriteOnceLogUnit;
@@ -23,6 +24,7 @@ import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
 import org.corfudb.client.OverwriteException;
 import org.corfudb.client.NetworkException;
+import org.corfudb.client.RemoteException;
 
 import java.util.List;
 
@@ -35,6 +37,9 @@ import java.io.ObjectOutputStream;
 import java.io.ObjectOutput;
 import java.io.IOException;
 
+import java.util.function.Supplier;
+
+import java.util.UUID;
 /**
  * This view implements a simple write once address space
  *
@@ -44,11 +49,42 @@ import java.io.IOException;
 public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
     private CorfuDBClient client;
+    private UUID logID;
+    private CorfuDBView view;
+    private Supplier<CorfuDBView> getView;
+
 	private final Logger log = LoggerFactory.getLogger(WriteOnceAddressSpace.class);
 
     public WriteOnceAddressSpace(CorfuDBClient client)
     {
         this.client = client;
+        this.getView = () ->  {
+            return this.client.getView();
+        };
+    }
+
+    public WriteOnceAddressSpace(CorfuDBClient client, UUID logID)
+    {
+        this.client = client;
+        this.logID = logID;
+        this.getView = () -> {
+            try {
+            return this.client.getView(this.logID);
+            }
+            catch (RemoteException re)
+            {
+                log.warn("Error getting remote view", re);
+                return null;
+            }
+        };
+    }
+
+    public WriteOnceAddressSpace(CorfuDBView view)
+    {
+        this.view = view;
+        this.getView = () -> {
+            return this.view;
+        };
     }
 
     public void write(long address, Serializable s)
@@ -71,7 +107,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         {
             try {
                 //TODO: handle multiple segments
-                CorfuDBViewSegment segments =  client.getView().getSegments().get(0);
+                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
                 int mod = segments.getGroups().size();
                 int groupnum =(int) (address % mod);
                 List<IServerProtocol> chain = segments.getGroups().get(groupnum);
@@ -100,7 +136,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         {
             try {
                 //TODO: handle multiple segments
-                CorfuDBViewSegment segments =  client.getView().getSegments().get(0);
+                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
                 int mod = segments.getGroups().size();
                 int groupnum =(int) (address % mod);
                 List<IServerProtocol> chain = segments.getGroups().get(groupnum);

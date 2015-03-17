@@ -19,6 +19,7 @@ import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.IServerProtocol;
 import org.corfudb.client.sequencers.ISimpleSequencer;
 import org.corfudb.client.sequencers.IStreamSequencer;
+import org.corfudb.client.RemoteException;
 
 import java.util.UUID;
 
@@ -35,11 +36,20 @@ import org.slf4j.LoggerFactory;
 public class StreamingSequencer {
 
     private CorfuDBClient client;
-	private final Logger log = LoggerFactory.getLogger(StreamingSequencer.class);
+    private UUID logID;
+
+    private final Logger log = LoggerFactory.getLogger(StreamingSequencer.class);
 
     public StreamingSequencer(CorfuDBClient client)
     {
         this.client = client;
+        this.logID = null;
+    }
+
+    public StreamingSequencer(CorfuDBClient client, UUID logID)
+    {
+        this.client = client;
+        this.logID = logID;
     }
 
     public long getNext(UUID streamID)
@@ -47,7 +57,7 @@ public class StreamingSequencer {
         while (true)
         {
             try {
-                IServerProtocol sequencer= client.getView().getSequencers().get(0);
+                IServerProtocol sequencer= client.getView(logID).getSequencers().get(0);
                 if (sequencer instanceof IStreamSequencer)
                 {
                     return ((IStreamSequencer)sequencer).sequenceGetNext(streamID, 1);
@@ -56,6 +66,11 @@ public class StreamingSequencer {
                 {
                     return ((ISimpleSequencer)sequencer).sequenceGetNext();
                 }
+            }
+            catch (RemoteException re)
+            {
+                log.warn("Unable to get next sequence from remote view, aborting", re);
+                return 0;
             }
             catch (Exception e)
             {
@@ -70,7 +85,7 @@ public class StreamingSequencer {
         while (true)
         {
             try {
-                IServerProtocol sequencer = client.getView().getSequencers().get(0);
+                IServerProtocol sequencer = client.getView(logID).getSequencers().get(0);
                 if (sequencer instanceof IStreamSequencer)
                 {
                     return ((IStreamSequencer)sequencer).sequenceGetCurrent(streamID);
@@ -93,7 +108,7 @@ public class StreamingSequencer {
         while (true)
         {
             try {
-                IServerProtocol sequencer = client.getView().getSequencers().get(0);
+                IServerProtocol sequencer = client.getView(logID).getSequencers().get(0);
                 if (sequencer instanceof IStreamSequencer)
                 {
                     ((IStreamSequencer)sequencer).setAllocationSize(streamID, size);

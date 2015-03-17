@@ -16,6 +16,7 @@ package org.corfudb.infrastructure;
 
 import org.corfudb.client.CorfuDBView;
 import org.corfudb.client.CorfuDBViewSegment;
+import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.IServerProtocol;
 import org.corfudb.client.configmasters.IConfigMaster;
 import com.sun.net.httpserver.HttpExchange;
@@ -52,7 +53,18 @@ import javax.json.JsonObjectBuilder;
 import javax.json.JsonReader;
 import javax.json.JsonArray;
 
+import org.corfudb.client.UnwrittenException;
+import org.corfudb.client.TrimmedException;
+import java.io.ByteArrayInputStream;
+import java.io.ObjectInputStream;
+
 import java.util.UUID;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.lang.IllegalAccessException;
+import java.lang.IllegalArgumentException;
+
+import org.corfudb.client.Timestamp;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
@@ -237,10 +249,14 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         Map<UUID, String> logs = currentView.getAllLogs();
         for (UUID key : logs.keySet())
         {
-            log.debug("Building result...");
             jb.add(key.toString(), logs.get(key));
         }
         return jb.build();
+    }
+
+    private String getLog(JsonObject params)
+    {
+        return currentView.getRemoteLog(UUID.fromString(params.getString("logid")));
     }
 
     private JsonValue addLog(JsonObject params)
@@ -253,6 +269,83 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         return JsonValue.FALSE;
     }
 
+    private JsonObject logInfo(JsonObject params)
+    {
+        long pos = params.getJsonNumber("pos").longValue();
+        JsonObjectBuilder output = Json.createObjectBuilder();
+        WriteOnceAddressSpace woas = new WriteOnceAddressSpace(currentView);
+        try {
+            byte[] data = woas.read(pos);
+            output.add("state", "data");
+            Object obj = null;
+            try (ByteArrayInputStream bis = new ByteArrayInputStream(data))
+            {
+                try (ObjectInputStream ois = new ObjectInputStream(bis))
+                {
+                    obj = ois.readObject();
+                    output.add("classname", obj.getClass().getName());
+                    JsonObjectBuilder datan = Json.createObjectBuilder();
+                    Class<?> current = obj.getClass();
+                    do
+                    {
+                        Field[] fields = current.getDeclaredFields();
+                        for (Field field: fields)
+                        {
+                            try{
+                                if (!Modifier.isTransient(field.getModifiers()))
+                                {
+                                    if (field.getName().toString().equals("ts"))
+                                    {
+                                        Timestamp ts = (Timestamp) field.get(obj);
+                                        if (ts!=null)
+                                        {
+                                            ts.physicalPos = pos;
+                                        }
+                                    }
+                                    log.debug("Getting field " + field.getName().toString());
+                                    Object odata = field.get(obj);
+                                    datan.add(field.getName().toString(), odata == null ? "null" :
+                                                                          odata.toString() == null ? "null" :
+                                                                          odata.toString());
+                                    log.debug("Successfully added");
+                                }
+                            } catch (IllegalArgumentException iae) {}
+                            catch (IllegalAccessException iae) {}
+                        }
+                    } while ((current = current.getSuperclass()) != null && current != Object.class);
+                    log.debug("output!");
+                    output.add("data", datan);
+                }
+            }
+            catch (IOException ie)
+            {
+                output.add("classname", "unknown");
+                output.add("error", ie.getMessage());
+
+            }
+            catch (ClassNotFoundException cnfe)
+            {
+                output.add("classname", "unknown");
+                output.add("error", cnfe.getMessage());
+            }
+
+        }
+        catch (Exception e)
+        {
+            log.debug("Exception ", e);
+        }
+        /*
+        catch (TrimmedException te)
+        {
+            output.add("state", "trimmed");
+        }
+        catch (UnwrittenException ue)
+        {
+            output.add("state", "unwritten");
+        }*/
+        log.debug("returning");
+        return output.build();
+    }
 
     private class StaticRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
@@ -381,12 +474,19 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                     case "addlog":
                         job.add("result", addLog(params));
                         break;
+                    case "getlog":
+                        job.add("result", getLog(params));
+                        break;
+                    case "loginfo":
+                        job.add("result", logInfo(params));
+                        break;
                 }
                 JsonObject res =    job.add("calledmethod", apiCall)
                                     .add("jsonrpc", "2.0")
                                     .add("id", id)
                                     .build();
                 response = res.toString();
+                log.debug("Response is " + response);
             } else {
                 log.debug("PUT request");
                 response = "deny";

@@ -88,6 +88,7 @@ function updateView(v : CorfuDBView) {
 
 enum Panels {
     MAIN,
+    LOGINFO,
     REMOTELOG
 };
 
@@ -103,6 +104,33 @@ $("#reset").on('click', function() {
     location.reload();
     });
 });
+
+function updateLogDetail(pos: number) : Promise<any>
+{
+    return new Promise(function (fulfill,reject) {
+    rpc("loginfo", { pos : pos }).then(function(data) {
+        $("#loginfotable").empty();
+        $("#loginfotable").append("<tr><td>state</td><td>" + data.result.state + "</a></td></tr>");
+        if (data.result.classname != null)
+        {
+            $("#loginfotable").append("<tr><td>class</td><td>" + data.result.classname + "</a></td></tr>");
+        }
+        if( data.result.data !== undefined)
+        {
+            var datakeys = Object.keys(data.result.data);
+            datakeys.forEach(function (itm, idx, array) {
+                $("#loginfotable").append("<tr><td>" + itm+ "</td><td>" + data.result.data[itm] + "</a></td></tr>");
+            });
+        }
+        if (data.result.error !== undefined)
+        {
+              $("#loginfotable").append("<tr><td>Error</td><td>" + data.result.error + "</a></td></tr>");
+        }
+        fulfill(null);
+        });
+    });
+}
+
 $("#remotes").on('click', function() {
     $("#remotelogtable").empty();
     rpc("getalllogs", {}).then(function(data) {
@@ -117,6 +145,15 @@ $("#remotes").on('click', function() {
 $("#overview").on('click', function() {
     switchPanel(Panels.MAIN);
 })
+$("#log").on('click', function() {
+    updateLogDetail(0).then(function() {
+        switchPanel(Panels.LOGINFO);
+    });
+});
+$("#loginfopage").on('click', function(e) {
+    e.preventDefault();
+    updateLogDetail(parseInt($("#loginfopos").val()));
+});
 }
 
 function initialize() : Promise<any> {

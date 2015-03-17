@@ -225,6 +225,11 @@ public class CorfuDBView {
         return logs.putIfAbsent(remoteLog, path) != null;
     }
 
+    public String getRemoteLog(UUID remoteLog)
+    {
+        return logs.get(remoteLog);
+    }
+
     public Map<UUID, String> getAllLogs()
     {
         return logs;

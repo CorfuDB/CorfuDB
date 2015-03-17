@@ -1,0 +1,14 @@
+---
+# CorfuDB streaming sequencer sample configuration
+#
+# This simple configuration file spawns a streaming sequencer
+# on port 8000.
+#
+# Required:
+# role - org.corfudb.sharedlog.sequencer.StreamingSequencerServer selects the sequencer
+# port - the port number to run on
+
+role: org.corfudb.infrastructure.StreamingSequencerServer
+port: 8003
+configmaster: http://localhost:8005/corfu
+

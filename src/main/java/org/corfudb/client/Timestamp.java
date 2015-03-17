@@ -33,16 +33,24 @@ import java.util.UUID;
 public class Timestamp implements Comparable<Timestamp>, Serializable {
 
     public long epoch;
-    public transient long pos;
-    public transient long physicalPos;
+    public transient Long pos;
+    public transient Long physicalPos;
     public transient UUID logID;
     public transient UUID streamID;
 
     public static final long serialVersionUID = 0l;
-    public Timestamp(long epoch, long pos)
+    public Timestamp(long epoch, long pos, long physicalPos)
     {
         this.epoch = epoch;
         this.pos = pos;
+        this.physicalPos = physicalPos;
+    }
+
+    public Timestamp(long epoch)
+    {
+        this.epoch = epoch;
+        this.pos = null;
+        this.physicalPos = null;
     }
 
     public void setEpoch(long newEpoch)
@@ -53,6 +61,16 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     public long getEpoch()
     {
         return epoch;
+    }
+
+    @Override
+    public String toString()
+    {
+        if (physicalPos == null)
+        {
+            return epoch + ".?";
+        }
+        return epoch + "." + physicalPos;
     }
 
     public int compareTo(Timestamp t)
