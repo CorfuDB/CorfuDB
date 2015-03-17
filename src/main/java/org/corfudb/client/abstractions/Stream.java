@@ -358,10 +358,11 @@ public class Stream implements AutoCloseable {
         }
     }
     /**
-     * Read the next entry in the stream as a CorfuDBStreamEntry. This function
-     * retireves the next entry in the stream, blocking if necessary.
+     * Peek at the next entry in the stream as a CorfuDBStreamEntry. This function
+     * peeks to see if there is an available entry in the stream to be read.
      *
-     * @return      A CorfuDBStreamEntry containing the payload of the next entry in the stream.
+     * @return      A CorfuDBStreamEntry containing the payload of the next entry in the stream, or null,
+     *              if there is no entry available.
      */
     public CorfuDBStreamEntry peek()
     {
