@@ -261,6 +261,8 @@ public class Stream implements AutoCloseable {
                                         }
                                         else
                                         {
+                                            //This is a temporary move, so expose it to the client without changing current
+                                            //reads.
 
                                         }
                                     }

@@ -8,12 +8,12 @@ var transform = require('vinyl-transform');
 var tsd = require('gulp-tsd');
 var rename = require('gulp-rename');
 
-gulp.task('ts-typings', function()
+gulp.task('ts-typings', function(cb)
 {
     tsd({
         command: 'reinstall',
         config: './tsd.json'
-    })
+    }, cb);
 });
 gulp.task('ts-compile', ['ts-typings'], function(cb) {
     var browserified = transform(function(filename) {
