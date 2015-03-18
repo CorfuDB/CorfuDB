@@ -60,12 +60,12 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
 
     public Timestamp(Map<UUID, Long> epochMap)
     {
-        this.epochMap = epochMap;
+        this.epochMap = new HashMap<UUID, Long>(epochMap);
     }
 
     public Timestamp(Map<UUID, Long> epochMap, long pos, long physicalPos)
     {
-        this.epochMap = epochMap;
+        this.epochMap = new HashMap<UUID, Long>(epochMap);
         this.pos = pos;
         this.physicalPos = physicalPos;
     }
@@ -131,6 +131,7 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
         return sb.toString();
     }
 
+    @Override
     public int compareTo(Timestamp t)
     {
         if (primaryStream != null && primaryStream.equals(t.primaryStream))
@@ -143,6 +144,19 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
             return (int) (physicalPos - t.physicalPos);
         }
         throw new ClassCastException("Uncomparable timestamp objects! [t1=" + this.toString() + "] [t2=" + t.toString() + "]");
+    }
+
+    @Override
+    public boolean equals(Object t)
+    {
+        if (!(t instanceof Timestamp)) { return false; }
+        return compareTo((Timestamp)t) == 0;
+    }
+
+    @Override
+    public int hashCode()
+    {
+        return physicalPos.intValue();
     }
 }
 

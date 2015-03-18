@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.ArrayList;
+import org.corfudb.client.LinearizationException;
 
 import java.util.UUID;
 /**
@@ -116,7 +117,6 @@ public class CorfuHopStreamTemporaryMultiHello {
                 }
                 log.info("Pull complete on all streams");
 */
-        Thread.sleep(2000);
 
         Timestamp s1_firstAddress = null;
         Timestamp s1_secondAddress = null;
@@ -134,6 +134,19 @@ public class CorfuHopStreamTemporaryMultiHello {
             log.info("Appending to outer stream " + streamID.toString());
             s1_firstAddress = s.append("hello world remote from outer stream " + streamID.toString());
             log.info("Successfully appended hello world into log position " + address + ", stream "+ streamID.toString());
+
+            log.info("Syncing inner streams to outer stream entry.");
+            while (true)
+            {
+                try {
+                s2.sync(s1_firstAddress);
+                s3.sync(s1_firstAddress);
+                break;
+                } catch (InterruptedException ie) {}
+                catch (LinearizationException le) {}
+            }
+            log.info("Finished syncing inner streams.");
+
             log.info("Appending to inner stream " + streamID2.toString());
             s1_secondAddress = s2.append("hello world remote from inner stream " + streamID2.toString());
             log.info("Successfully appended hello world into log position " + address + ", stream "+ streamID2.toString());
@@ -252,6 +265,14 @@ public class CorfuHopStreamTemporaryMultiHello {
        checkAddresses(s1_firstAddress, s3_secondAddress, s2_thirdAddress);
        checkAddresses(s1_firstAddress, s3_secondAddress, s3_thirdAddress);
 
+       log.debug("Checking address equality");
+       checkAddressEquality(s1_firstAddress, s2_firstAddress);
+       checkAddressEquality(s1_firstAddress, s3_firstAddress);
+       checkAddressEquality(s1_secondAddress, s2_secondAddress);
+       checkAddressEquality(s1_secondAddress, s3_secondAddress);
+       checkAddressEquality(s1_thirdAddress, s2_thirdAddress);
+       checkAddressEquality(s1_thirdAddress, s3_thirdAddress);
+
         try {
             log.info("Appending to detached stream " + streamID.toString());
             address = s.append("hello world from detached stream " + streamID.toString());
@@ -297,6 +318,23 @@ public class CorfuHopStreamTemporaryMultiHello {
         }
         }
 }
+    }
+
+    static void checkAddressEquality(Timestamp a1, Timestamp a2)
+    {
+        log.info("Checking that addresses are equal");
+        log.info("Address 1 == Address 2");
+        if (!(a1.equals(a2)))
+        {
+            log.error("ASSERT failed: Address 1 should EQUAL Address 2");
+            System.exit(1);
+        }
+        log.info("Address 2 == Address 1");
+        if (!(a2.equals(a1)))
+        {
+            log.error("ASSERT failed: Address 2 should EQUAL Address 1");
+            System.exit(1);
+        }
     }
 
     static void checkAddresses(Timestamp firstAddress, Timestamp secondAddress, Timestamp thirdAddress)

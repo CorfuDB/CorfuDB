@@ -608,11 +608,16 @@ public class Stream implements AutoCloseable, IStream {
             {
                 if (latest != null)
                 {
+                    try {
                     if (latest.compareTo(pos) >= 0)
                     {
                         return true;
                     }
                     else if (latest.getEpoch(streamID) != pos.getEpoch(streamID))
+                    {
+                        throw new LinearizationException("Linearization error due to epoch change", latest, pos);
+                    }
+                    } catch( ClassCastException cce)
                     {
                         throw new LinearizationException("Linearization error due to epoch change", latest, pos);
                     }
@@ -767,6 +772,53 @@ public class Stream implements AutoCloseable, IStream {
      *                         if -1, then the pull is permanent.
      */
     public void pullStream(List<UUID> targetStreams, int duration)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
+        HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
+        for (UUID id : targetStreams)
+        {
+            // Get information about remote stream
+            StreamData sd = getConfigMaster.get().getStream(id);
+            if (sd == null) { throw new RemoteException("Unable to find target stream " + id.toString(), logID); }
+            datamap.put(id, sd);
+        }
+
+        // Write a stream start in the local log.
+        // This entry needs to contain the epoch+1 of the target stream as well as our own epoch
+        Map<UUID, Long> epochMap = new HashMap<UUID, Long>();
+        epochMap.put(streamID, getCurrentEpoch());
+        for (UUID id : targetStreams)
+        {
+            StreamData sd = datamap.get(id);
+            epochMap.put(id, duration == -1 ? sd.epoch + 1 : sd.epoch);
+        }
+        CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams);
+        long token = sequencer.getNext(streamIDstack.peekLast());
+        woas.write(token, (Serializable) cdbsme);
+
+        for (UUID id : targetStreams)
+        {
+            // Get a sequence in the remote stream
+            StreamData sd = datamap.get(id);
+            StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
+            long remoteToken = sremote.getNext(id);
+            // Write a move in the remote log
+            WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
+            woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch()));
+        }
+    }
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a payload in the
+     * remote move operation. This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The payload to insert
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     */
+    public void pullStream(List<UUID> targetStreams, byte[] payload, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
         HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
