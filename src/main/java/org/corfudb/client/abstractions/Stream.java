@@ -72,7 +72,7 @@ import org.corfudb.client.StreamData;
  *  A hop-aware stream implementation. The stream must be closed after the application is done using it
  *  to free resources, or enclosed in a try-resource block.
  */
-public class Stream implements AutoCloseable {
+public class Stream implements AutoCloseable, IStream {
 
     private final Logger log = LoggerFactory.getLogger(Stream.class);
 
