@@ -72,7 +72,7 @@ import org.corfudb.client.StreamData;
  *  A hop-aware stream implementation. The stream must be closed after the application is done using it
  *  to free resources, or enclosed in a try-resource block.
  */
-public class Stream implements AutoCloseable {
+public class Stream implements AutoCloseable, IStream {
 
     private final Logger log = LoggerFactory.getLogger(Stream.class);
 
@@ -360,9 +360,7 @@ public class Stream implements AutoCloseable {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
                                     if (cdbse.checkEpoch(epochMap))
                                     {
-                                        cdbse.getTimestamp().setLogicalPos(streamPointer.getAndIncrement());
-                                        cdbse.getTimestamp().setPhysicalPos(r.pos);
-                                        cdbse.getTimestamp().setLogId(logID);
+                                        cdbse.getTimestamp().setTransientInfo(logID, streamID, streamPointer.getAndIncrement(), r.pos);
                                         synchronized (streamPointer) {
                                             latest = cdbse.getTimestamp();
                                             streamPointer.notifyAll();
@@ -464,7 +462,7 @@ public class Stream implements AutoCloseable {
                 long token = sequencer.getNext(streamIDstack.peekLast());
                 CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(epochMap, data);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(streamID, getCurrentEpoch(), -1, token);
+                return new Timestamp(epochMap, -1, token);
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }

@@ -36,6 +36,8 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     private static final Logger log = LoggerFactory.getLogger(Timestamp.class);
 
     public transient Long pos;
+    public transient UUID primaryStream;
+
     public transient Long physicalPos;
     public transient UUID logID;
     public Map<UUID, Long> epochMap;
@@ -54,8 +56,6 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     {
         epochMap = new HashMap<UUID, Long>();
         epochMap.put(streamID, epoch);
-        this.pos = null;
-        this.physicalPos = null;
     }
 
     public Timestamp(Map<UUID, Long> epochMap)
@@ -76,12 +76,21 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
         return epochMap.get(stream);
     }
 
-    public void setLogicalPos(long pos)
+    public void setTransientInfo(UUID log, UUID primaryStream, long pos, long physicalPos)
     {
+        this.primaryStream = primaryStream;
+        this.pos = pos;
+        this.physicalPos = physicalPos;
+        this.logID = log;
+    }
+
+    public void setLogicalPos(long pos, UUID primaryStream)
+    {
+        this.primaryStream = primaryStream;
         this.pos = pos;
     }
 
-public void setPhysicalPos(long pos)
+    public void setPhysicalPos(long pos)
     {
         this.physicalPos = physicalPos;
     }
@@ -124,13 +133,16 @@ public void setPhysicalPos(long pos)
 
     public int compareTo(Timestamp t)
     {
-    /*
-        if (logID.equals(t.logID)) {
-            return (int)(t.physicalPos - physicalPos);
+        if (primaryStream != null && primaryStream.equals(t.primaryStream))
+        {
+            return (int) (pos - t.pos);
         }
-        /*
-        if (t.epoch != this.epoch) { return (int) (this.epoch - t.epoch); }*/
-        return (int) (pos - t.pos);
+
+        if (physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap))
+        {
+            return (int) (physicalPos - t.physicalPos);
+        }
+        throw new ClassCastException("Uncomparable timestamp objects! [t1=" + this.toString() + "] [t2=" + t.toString() + "]");
     }
 }
 

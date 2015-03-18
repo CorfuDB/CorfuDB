@@ -125,6 +125,7 @@ function updateLogDetail(pos: number) : Promise<any>
 {
     return new Promise(function (fulfill,reject) {
     rpc("loginfo", { pos : pos }).then(function(data) {
+        $("#payload").addClass("hidden");
         $("#loginfotable").empty();
         $("#loginfotable").append("<tr><td>state</td><td>" + data.result.state + "</a></td></tr>");
         if (data.result.classname != null)
@@ -141,6 +142,15 @@ function updateLogDetail(pos: number) : Promise<any>
         if (data.result.error !== undefined)
         {
               $("#loginfotable").append("<tr><td>Error</td><td>" + data.result.error + "</a></td></tr>");
+        }
+        if (data.result.payload !== undefined)
+        {
+            $("#payload").removeClass("hidden");
+            $("#payloadinfotable").empty();
+            var payloadkeys = Object.keys(data.result.payload);
+            payloadkeys.forEach(function (itm, idx, array) {
+            $("#payloadinfotable").append(`<tr><td>${itm}</td><td>${data.result.payload[itm]}</td></tr>`);
+            })
         }
         fulfill(null);
         });
