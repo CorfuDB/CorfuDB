@@ -38,13 +38,27 @@ import java.io.ObjectOutput;
 import java.io.ObjectInput;
 import java.io.IOException;
 
+/**
+ * This class represents an entry inside a stream.
+ */
 public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStreamEntry>
 {
     private static final long serialVersionUID = 0L;
+    /** The timestamp of the entry */
     public Timestamp ts;
+    /** The payload of the entry, which may be null. */
     public byte[] payload;
 
-    public CorfuDBStreamEntry() {}
+    /** Hidden default constructor */
+    private CorfuDBStreamEntry() {}
+
+    /**
+     * Create a new CorfuDBStreamEntry with a serializable object, residing in a single stream.
+     *
+     * @param streamID      The ID of the stream the entry is in.
+     * @param payloadObject A serializable object containing the payload to insert.
+     * @param epoch         The epoch of the entry.
+     */
     public CorfuDBStreamEntry(UUID streamID, Serializable payloadObject, long epoch)
         throws IOException
     {
@@ -60,6 +74,11 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
         this.ts = new Timestamp(streamID, epoch);
     }
 
+    /**
+     * Return the deserialized version of the payload.
+     *
+     * @return      A deserialized object representing the payload.
+     */
     public Object deserializePayload()
         throws IOException, ClassNotFoundException
     {
@@ -72,7 +91,13 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
         }
     }
 
-
+    /**
+     * Create a new CorfuDBStreamEntry with a byte array payload, residing in a single stream.
+     *
+     * @param streamID      The ID of the stream the entry is in.
+     * @param payload       A byte array representing the payload to inert.
+     * @param epoch         The epoch of the entry.
+     */
     public CorfuDBStreamEntry(UUID streamID, byte[] payload, long epoch)
         throws IOException
     {
@@ -80,11 +105,23 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
         this.ts = new Timestamp(streamID, epoch);
     }
 
+    /**
+     * Create a new CorfuDBStreamEntry with no payload, residing in a single stream.
+     *
+     * @param streamID      The ID of the stream the entry is in.
+     * @param epoch         The epoch of the entry.
+     */
     public CorfuDBStreamEntry(UUID streamID, long epoch)
     {
         this.ts = new Timestamp(streamID, epoch);
     }
 
+    /**
+     * Create a new CorfuDBStreamEntry with a serializable payload, residing in multiple streams.
+     *
+     * @param epochMap      A map containing all the streams and epochs this entry is to be inserted in.
+     * @param payloadObject The serializable object to insert.
+     */
     public CorfuDBStreamEntry(Map<UUID, Long> epochMap, Serializable payloadObject)
     throws IOException
     {
@@ -100,56 +137,92 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
         this.ts = new Timestamp(epochMap);
     }
 
+    /**
+     * Create a new CorfuDBStreamEntry with a byte array payload, residing in multiple streams.
+     *
+     * @param epochMap      A map containing all the streams and epochs this entry is to be inserted in.
+     * @param payload       A byte array representing the payload to insert.
+     */
     public CorfuDBStreamEntry(Map<UUID, Long> epochMap, byte[] payload)
     {
         this.payload = payload;
         this.ts = new Timestamp(epochMap);
     }
 
+    /**
+     * Create a new CorfuDBStreamEntry with no payload, residing in multiple streams.
+     *
+     * @param epochMap      A map containing all the streams and epochs this entry is to be inserted in.
+     */
     public CorfuDBStreamEntry(Map<UUID, Long> epochMap)
     {
         this.ts = new Timestamp(epochMap);
     }
 
+    /**
+     * Get the payload attached to this entry as a byte array.
+     */
     public byte[] getPayload() {
         return payload;
     }
 
+    /**
+     * Compare this entry to another object, and return based on order.
+     *
+     * @param cse           The entry to compare against.
+     *
+     * @return              0 if the entries are at the same position (and therefore the same entry),
+     *                      >0 if this entry is ahead of the provided entry,
+     *                      <0 if this entry is behind the provided entry.
+     */
+    @Override
     public int compareTo(CorfuDBStreamEntry cse)
     {
         return cse.ts.compareTo(cse.getTimestamp());
     }
 
+    /**
+     * Set the timestamp for this entry.
+     *
+     * @param ts            The timestamp to set.
+     */
     public void setTimestamp(Timestamp ts)
     {
         this.ts = ts;
     }
 
+    /**
+     * Retrieve the timestamp for this entry.
+     *
+     * @return              The timestamp for this entry.
+     */
     public Timestamp getTimestamp()
     {
         return ts;
     }
 
+    /**
+     * Returns whether or not the entry is in a given stream.
+     *
+     * @param id            The UUID of the stream to check.
+     *
+     * @return              True, if the entry is in the stream, false otherwise.
+     */
     public boolean containsStream(UUID stream)
     {
         return ts.epochMap.containsKey(stream);
     }
 
+    /**
+     * Returns whether or not the entry is in a given epochmap.
+     *
+     * @param epochMap      A map describing the epoch to check against.
+     *
+     * @return              True, if the entry is in the epoch, false otherwise.
+     */
     public boolean checkEpoch(Map<UUID, Long> epochMap)
     {
-        boolean isContained = false;
-        for (UUID id : ts.epochMap.keySet())
-        {
-            if (epochMap.containsKey(id))
-            {
-                isContained = true;
-                if (!ts.epochMap.get(id).equals(epochMap.get(id)))
-                {
-                    return false;
-                }
-            }
-        }
-        return isContained;
+        return ts.checkEpoch(epochMap);
     }
 
 }
