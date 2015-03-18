@@ -57,7 +57,7 @@ public class CorfuDBClient implements AutoCloseable {
     private Boolean closed = false;
     private UUID localID = null;
 
-    private Logger log = LoggerFactory.getLogger(CorfuDBClient.class);
+    private static final Logger log = LoggerFactory.getLogger(CorfuDBClient.class);
 
     private class BooleanLock
     {
@@ -108,7 +108,7 @@ public class CorfuDBClient implements AutoCloseable {
      * Retrieves the CorfuDBView from a configuration string. The view manager
      * uses this method to fetch the most recent view.
      */
-    public CorfuDBView retrieveView(String configString)
+    public static CorfuDBView retrieveView(String configString)
         throws IOException
     {
         HttpClient httpClient = HttpClients.createDefault();

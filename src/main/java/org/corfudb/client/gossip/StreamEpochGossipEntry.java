@@ -15,6 +15,8 @@ public class StreamEpochGossipEntry implements IGossip {
     public long epoch;
     /** The logical position the epoch change occurs at */
     public long logPos;
+    /** Whether or not this message was from a configuration master */
+    public boolean fromMaster;
 
     public StreamEpochGossipEntry(UUID uuid, UUID logID, long epoch, long logPos)
     {
@@ -22,5 +24,6 @@ public class StreamEpochGossipEntry implements IGossip {
         this.epoch = epoch;
         this.logID = logID;
         this.logPos = logPos;
+        this.fromMaster = false;
     }
 }

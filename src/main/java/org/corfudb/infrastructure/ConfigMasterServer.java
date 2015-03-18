@@ -74,6 +74,8 @@ import org.corfudb.client.gossip.IGossip;
 
 import org.corfudb.client.Timestamp;
 import org.corfudb.client.StreamView;
+import org.corfudb.client.RemoteLogView;
+import org.corfudb.client.RemoteException;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
@@ -83,6 +85,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     private StreamView currentStreamView;
     private Boolean viewActive;
     private GossipServer gossipServer;
+    private RemoteLogView currentRemoteView;
     int masterid = new SecureRandom().nextInt();
 
     public ConfigMasterServer() {
@@ -119,8 +122,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         StreamEpochGossipEntry sege = (StreamEpochGossipEntry) object;
                         if (!currentStreamView.checkStream(sege.streamID, sege.logPos))
                         {
-                            log.debug("Got a new epoch gossip message at position " + sege.logPos);
                             currentStreamView.learnStream(sege.streamID, sege.logID, null, -1, sege.epoch, sege.logPos);
+                            /* now we need to advertise this change to all other configuration masters */
+                            sege.fromMaster = true;
                         }
                     }
                 }
@@ -140,13 +144,48 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         viewActive = false;
         currentView = new CorfuDBView(config);
         currentStreamView = new StreamView();
+        currentRemoteView = new RemoteLogView();
         //UUID is going to be random for now, since this configuration is not persistent
         UUID logID =  UUID.randomUUID();
         log.info("New log instance id= " + logID.toString());
         currentView.setUUID(logID);
-        currentView.addRemoteLog(logID, currentView.getConfigMasters().get(0).getFullString());
-        log.info("Remote log set");
+        loadRemoteLogs();
         return this;
+    }
+
+    public void loadRemoteLogs()
+    {
+        if (config.get("remotelogs") != null)
+        {
+            for (String configMaster  : (List<String>) config.get("remotelogs"))
+            {
+                try {
+                    UUID remoteID = currentRemoteView.addLog(configMaster, currentView.getUUID());
+                    CorfuDBView view = currentRemoteView.getLog(remoteID);
+                    if (view != null)
+                    {
+                        IConfigMaster cm = (IConfigMaster) view.getConfigMasters().get(0);
+                        Map<UUID, String> remoteLogList = cm.getAllLogs();
+                        for (UUID rlog : remoteLogList.keySet())
+                        {
+                           if (!rlog.equals(currentView.getUUID()))
+                           {
+                               if (currentRemoteView.addLog(rlog, remoteLogList.get(rlog)))
+                               {
+                                   log.info("Discovered new remote log " + rlog);
+                               }
+                           }
+                        }
+                        //Tell the remote log that we exist
+                        cm.addLog(currentView.getUUID(), currentView.getConfigMasters().get(0).getFullString());
+                    }
+                }
+                catch (Exception e)
+                {
+                    log.warn("Error talking to remote log" ,e);
+                }
+            }
+        }
     }
 
     public void checkViewThread() {
@@ -171,55 +210,8 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                 }
                 //also check if all remote logs are still accessible.
                 //and remove any which are not.
-                for (UUID remoteLog : currentView.getAllLogs().keySet())
-                {
-                    IConfigMaster cm = CorfuDBView.getConfigurationMasterFromString(currentView.getAllLogs().get(remoteLog));
-                    if (!cm.ping())
-                    {
-                        log.debug("Remote log " + remoteLog + " not accessible, removing after 2 retries.");
-                        Thread.sleep(5000);
-                        if (!cm.ping())
-                        {
-                            Thread.sleep(5000);
-                            if (!cm.ping())
-                            {
-                                log.debug("Removing inaccessible remote log {}", remoteLog);
-                                currentView.getAllLogs().remove(remoteLog);
-                            }
-                        }
-                    }
-                }
-
-                if (config.get("remotelogs") != null)
-                {
-                    for (Object configmaster  : (List<Object>) config.get("remotelogs"))
-                    {
-                        try {
-                            IConfigMaster cm = CorfuDBView.getConfigurationMasterFromString((String) configmaster);
-                            //Get the list of logs that the remote knows
-                            Map<UUID, String> remoteLogList = null;
-                            for (int i = 0; i < 5; i++)
-                            {
-                                remoteLogList = cm.getAllLogs();
-                                if (remoteLogList != null) { break; }
-                                else {log.debug("Remote log " + configmaster + " inaccessible, waiting 5 s and retrying"); Thread.sleep(5000);}
-                            }
-                            for (UUID rlog : remoteLogList.keySet())
-                            {
-                               if (currentView.addRemoteLog(rlog, remoteLogList.get(rlog)))
-                               {
-                                   log.info("Discovered new remote log " + rlog);
-                               }
-                            }
-                            //Tell the remote log that we exist
-                            cm.addLog(currentView.getUUID(), currentView.getConfigMasters().get(0).getFullString());
-                        }
-                        catch (Exception e)
-                        {
-                            log.warn("Error talking to remote log" ,e);
-                        }
-                    }
-                }
+                currentRemoteView.checkAllLogs();
+                loadRemoteLogs();
 
                 synchronized(viewActive)
                 {
@@ -281,6 +273,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             }
         }
 
+        currentStreamView = new StreamView();
         currentView.resetEpoch(newEpoch);
     }
 
@@ -329,7 +322,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     private JsonObject getAllLogs(JsonObject params)
     {
         JsonObjectBuilder jb = Json.createObjectBuilder();
-        Map<UUID, String> logs = currentView.getAllLogs();
+        Map<UUID, String> logs = currentRemoteView.getAllLogsMappings();
         for (UUID key : logs.keySet())
         {
             jb.add(key.toString(), logs.get(key));
@@ -363,12 +356,18 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
     private String getLog(JsonObject params)
     {
-        return currentView.getRemoteLog(UUID.fromString(params.getString("logid")));
+        try {
+            return currentRemoteView.getLogString(UUID.fromString(params.getString("logid")));
+        }
+        catch (RemoteException e)
+        {
+            throw new RuntimeException(e.getMessage());
+        }
     }
 
     private JsonValue addLog(JsonObject params)
     {
-       if (currentView.addRemoteLog(UUID.fromString(params.getString("logid")), params.getString("path")))
+       if (currentRemoteView.addLog(UUID.fromString(params.getString("logid")), params.getString("path")))
        {
            log.info("Learned new remote log " + params.getString("logid"));
        }

@@ -69,7 +69,6 @@ public class CorfuDBView {
     private List<IServerProtocol> sequencers;
     private List<CorfuDBViewSegment> segments; //eventually this should be upgraded to rangemap or something..
     private List<IServerProtocol> configmasters;
-    private Map<UUID, String> logs;
 
     public CorfuDBView(JsonObject jsonView)
     {
@@ -130,7 +129,6 @@ public class CorfuDBView {
         sequencers = populateSequencersFromList((List<String>)config.get("sequencers"));
         configmasters = populateConfigMastersFromList((List<String>)config.get("configmasters"));
         segments = populateSegmentsFromList((List<Map<String,Object>>)((Map<String,Object>)config.get("layout")).get("segments"));
-        logs = new ConcurrentHashMap<UUID, String>();
     }
 
     public void setUUID(UUID uuid)
@@ -192,21 +190,6 @@ public class CorfuDBView {
 
     public List<IServerProtocol> getConfigMasters() {
         return configmasters;
-    }
-
-    public boolean addRemoteLog(UUID remoteLog, String path)
-    {
-        return logs.putIfAbsent(remoteLog, path) != null;
-    }
-
-    public String getRemoteLog(UUID remoteLog)
-    {
-        return logs.get(remoteLog);
-    }
-
-    public Map<UUID, String> getAllLogs()
-    {
-        return logs;
     }
 
     /**
