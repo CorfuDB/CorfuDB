@@ -63,6 +63,7 @@ import org.corfudb.client.gossip.StreamEpochGossipEntry;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import java.util.function.Supplier;
 import org.corfudb.client.StreamData;
@@ -86,7 +87,6 @@ public class Stream implements AutoCloseable {
     boolean prefetch = true;
 
 
-    PriorityBlockingQueue<CorfuDBEntry> logQ;
     AtomicLong dispatchedReads;
     AtomicLong logPointer;
 
@@ -96,7 +96,7 @@ public class Stream implements AutoCloseable {
 
     boolean closed = false;
     boolean killExecutor = false;
-    PriorityBlockingQueue<CorfuDBStreamEntry> streamQ;
+    LinkedBlockingQueue<CorfuDBStreamEntry> streamQ;
     CompletableFuture<Void> currentDispatch;
     AtomicLong streamPointer;
     int queueMax;
@@ -150,8 +150,7 @@ public class Stream implements AutoCloseable {
         this.logID = cdbc.getView().getUUID();
         sequencer = new StreamingSequencer(cdbc);
         woas = new WriteOnceAddressSpace(cdbc);
-        logQ = new PriorityBlockingQueue<CorfuDBEntry>();
-        streamQ = new PriorityBlockingQueue<CorfuDBStreamEntry>();
+        streamQ = new LinkedBlockingQueue<CorfuDBStreamEntry>();
         streamIDstack = new LinkedBlockingDeque<UUID>();
         returnStack = new LinkedBlockingDeque<ReturnInfo>();
         epochMap = new ConcurrentHashMap<UUID, Long>();
@@ -342,12 +341,12 @@ public class Stream implements AutoCloseable {
                                                 sequencer = new StreamingSequencer(cdbc, cdbsme.destinationLog);
                                             }
                                             dispatchedReads.set(cdbsme.destinationPos);
-                                            currentDispatch = getStreamTailAndDispatch(1);
                                             logID = cdbsme.destinationLog;
                                             synchronized(epochMap)
                                             {
                                                 epochMap.notifyAll();
                                             }
+                                            currentDispatch = getStreamTailAndDispatch(1);
                                             return;
                                         }
                                     }
@@ -361,7 +360,9 @@ public class Stream implements AutoCloseable {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
                                     if (cdbse.checkEpoch(epochMap))
                                     {
-                                        cdbse.getTimestamp().setLogicalPos(r.pos);
+                                        cdbse.getTimestamp().setLogicalPos(streamPointer.getAndIncrement());
+                                        cdbse.getTimestamp().setPhysicalPos(r.pos);
+                                        cdbse.getTimestamp().setLogId(logID);
                                         synchronized (streamPointer) {
                                             latest = cdbse.getTimestamp();
                                             streamPointer.notifyAll();
@@ -512,10 +513,11 @@ public class Stream implements AutoCloseable {
         }
         else
         {
+            CorfuDBStreamEntry entry = streamQ.take();
             synchronized(streamQ){
                 streamQ.notify();
             }
-            return streamQ.take();
+            return entry;
         }
     }
 
@@ -666,6 +668,46 @@ public class Stream implements AutoCloseable {
         return true;
     }
 
+    /**
+     *  Synchronously block until an epoch change is seen compared to a given timestamp. Useful for quickly detecting
+     *  when a permanent move is successful.
+     *
+     *  @param t    The timestamp to compare against.
+     */
+    public void waitForEpochChange(Timestamp t)
+        throws InterruptedException
+    {
+        waitForEpochChange(t, -1);
+    }
+
+    /**
+     *  Synchronously block until an epoch change is seen compared to a given timestmap, or a certain amount of real time has elapsed.
+     *  Useful for quickly detecting when a permanent move is successful.
+     *
+     * @param t         The timestamp to compare against.
+     * @param timeout   The amount of time to wait. A negative number is interpreted as infinite.
+     * @return          True, if an epoch change occurs, or false if the timeout was reached.
+     */
+    public boolean waitForEpochChange(Timestamp t, long timeout)
+        throws InterruptedException
+    {
+        if (!t.checkEpoch(epochMap)) { return true; }
+        synchronized(epochMap)
+        {
+            if (timeout < 0)
+            {
+                epochMap.wait();
+            }
+            else
+            {
+                epochMap.wait(timeout);
+            }
+            if (t.checkEpoch(epochMap)) { return false; }
+        }
+        return true;
+    }
+
+
 
     /**
      * Permanently hop to another log. This function tries to hop this stream to
@@ -707,32 +749,60 @@ public class Stream implements AutoCloseable {
      * attach a remote stream to this stream. It may or may not succeed.
      *
      * @param targetStream     The destination stream to attach.
-     * @param duration         The length of time, in log entries that this pull should last
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
      */
     public void pullStream(UUID targetStream, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
-        // Get information about remote stream
-        StreamData sd = getConfigMaster.get().getStream(targetStream);
-        if (sd == null) { throw new RemoteException("Unable to find target stream " + targetStream.toString(), logID); }
+        List<UUID> streams = new ArrayList<UUID>();
+        streams.add(targetStream);
+        pullStream(streams, duration);
+    }
+
+    /**
+     * Temporarily pull multiple remote streams into this stream. This function tries to
+     * attach multiple remote stream to this stream. It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     */
+    public void pullStream(List<UUID> targetStreams, int duration)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
+        HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
+        for (UUID id : targetStreams)
+        {
+            // Get information about remote stream
+            StreamData sd = getConfigMaster.get().getStream(id);
+            if (sd == null) { throw new RemoteException("Unable to find target stream " + id.toString(), logID); }
+            datamap.put(id, sd);
+        }
 
         // Write a stream start in the local log.
         // This entry needs to contain the epoch+1 of the target stream as well as our own epoch
         Map<UUID, Long> epochMap = new HashMap<UUID, Long>();
         epochMap.put(streamID, getCurrentEpoch());
-        epochMap.put(targetStream, duration == -1 ? sd.epoch + 1 : sd.epoch);
-        List<UUID> startEntries = new ArrayList<UUID>();
-        startEntries.add(targetStream);
-        CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, startEntries);
+        for (UUID id : targetStreams)
+        {
+            StreamData sd = datamap.get(id);
+            epochMap.put(id, duration == -1 ? sd.epoch + 1 : sd.epoch);
+        }
+        CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams);
         long token = sequencer.getNext(streamIDstack.peekLast());
         woas.write(token, (Serializable) cdbsme);
 
-        // Get a sequence in the remote stream
-        StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
-        long remoteToken = sremote.getNext(targetStream);
-        // Write a move in the remote log
-        WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
-        woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(targetStream, logID, streamID, token, duration, sd.epoch, getCurrentEpoch()));
+        for (UUID id : targetStreams)
+        {
+            // Get a sequence in the remote stream
+            StreamData sd = datamap.get(id);
+            StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
+            long remoteToken = sremote.getNext(id);
+            // Write a move in the remote log
+            WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
+            woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch()));
+        }
     }
 
     /**

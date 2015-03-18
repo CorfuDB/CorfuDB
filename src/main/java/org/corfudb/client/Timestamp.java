@@ -33,6 +33,7 @@ import java.util.UUID;
 import java.lang.StringBuilder;
 
 public class Timestamp implements Comparable<Timestamp>, Serializable {
+    private static final Logger log = LoggerFactory.getLogger(Timestamp.class);
 
     public transient Long pos;
     public transient Long physicalPos;
@@ -80,6 +81,33 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
         this.pos = pos;
     }
 
+public void setPhysicalPos(long pos)
+    {
+        this.physicalPos = physicalPos;
+    }
+
+    public void setLogId(UUID log)
+    {
+        this.logID = log;
+    }
+
+    public boolean checkEpoch(Map<UUID, Long> epochMap)
+    {
+        boolean isContained = false;
+        for (UUID id : this.epochMap.keySet())
+        {
+            if (epochMap.containsKey(id))
+            {
+                isContained = true;
+                if (!this.epochMap.get(id).equals(epochMap.get(id)))
+                {
+                    return false;
+                }
+            }
+        }
+        return isContained;
+    }
+
     @Override
     public String toString()
     {
@@ -96,12 +124,13 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
 
     public int compareTo(Timestamp t)
     {
-        /*
-        if (logID.equals(t.physicalPos)) {
-            return (int)(physicalPos - t.physicalPos);
+    /*
+        if (logID.equals(t.logID)) {
+            return (int)(t.physicalPos - physicalPos);
         }
+        /*
         if (t.epoch != this.epoch) { return (int) (this.epoch - t.epoch); }*/
-        return (int) (this.pos - t.pos);
+        return (int) (pos - t.pos);
     }
 }
 
