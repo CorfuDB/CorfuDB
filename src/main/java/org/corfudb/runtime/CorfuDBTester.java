@@ -82,6 +82,8 @@ public class CorfuDBTester
         final int TXLINKEDLIST=7;
         final int TXDOUBLYLINKEDLIST=8;
         final int LINZK=9;
+        final int TXLOGICALBTREE = 10;
+        final int TXPHYSICALBTREE = 11;
 
         int numclients = 2;
         int expernum = 1; //used by the barrier code
@@ -314,6 +316,18 @@ public class CorfuDBTester
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             TXListTester.<Integer, CDBDoublyLinkedList<Integer>>runListTest(
                     TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBDoublyLinkedList", verbose);
+        }
+        else if(testnum==TXLOGICALBTREE) {
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            BTreeTester.<String, String, CDBLogicalBTree<String, String>>runTest(
+                    TR, sf, BTreeTester.testcase.functional,
+                    numthreads, numlists, numops, numkeys, rwpct, "CDBLogicalBTree", verbose);
+        }
+        else if(testnum==TXPHYSICALBTREE) {
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            BTreeTester.<String, String, CDBPhysicalBTree<String, String>>runTest(
+                    TR, sf, BTreeTester.testcase.functional,
+                    numthreads, numlists, numops, numkeys, rwpct, "CDBPhysicalBTree", verbose);
         }
         else if(testnum==REMOBJTEST)
         {
