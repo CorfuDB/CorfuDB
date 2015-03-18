@@ -444,6 +444,18 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         return JsonValue.FALSE;
     }
 
+    public static byte[] toPrimitive(Byte[] array) {
+        if (array == null) {
+        return null;
+        } else if (array.length == 0) {
+        return null;
+        }
+        final byte[] result = new byte[array.length];
+        for (int i = 0; i < array.length; i++) {
+        result[i] = array[i];
+        }
+        return result;
+    }
     private JsonObject logInfo(JsonObject params)
     {
         long pos = params.getJsonNumber("pos").longValue();
@@ -475,6 +487,45 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                                         if (ts!=null)
                                         {
                                             ts.physicalPos = pos;
+                                        }
+                                    }
+                                    else if (field.getName().toString().equals("payload") && field.get(obj) != null)
+                                    {
+                                        try {
+                                        //deserialize the entire payload
+                                        JsonObjectBuilder pdatan = Json.createObjectBuilder();
+                                        byte[] pdata = (byte[]) field.get(obj);
+                                        try (ByteArrayInputStream pbis = new ByteArrayInputStream(pdata))
+                                        {
+                                            try (ObjectInputStream pois = new ObjectInputStream(pbis))
+                                            {
+                                                Object pobj = pois.readObject();
+                                                pdatan.add("classname", pobj.getClass().getName());
+                                                Class<?> pcurrent = pobj.getClass();
+                                                try {
+                                                pdatan.add("string", pobj.toString());
+                                                } catch (Exception ex) {}
+                                                do
+                                                {
+                                                    Field[] pfields = pcurrent.getDeclaredFields();
+                                                    for (Field pfield : pfields)
+                                                    {
+                                                        try
+                                                        {
+                                                            Object podata = pfield.get(obj);
+                                                            pdatan.add(pfield.getName().toString(), podata == null ? "null" :
+                                                                                                    podata.toString() == null ? "null" :
+                                                                                                    podata.toString());
+                                                        } catch (IllegalArgumentException iae) {}
+                                                        catch (IllegalAccessException iae) {}
+                                                    }
+                                                } while ((pcurrent = pcurrent.getSuperclass()) != null && pcurrent != Object.class);
+                                            }
+                                        }
+                                        output.add("payload", pdatan);
+                                        } catch (Exception e)
+                                        {
+                                            log.debug("Exception reading payload",e);
                                         }
                                     }
                                     Object odata = field.get(obj);
