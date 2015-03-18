@@ -124,13 +124,14 @@ public void setPhysicalPos(long pos)
 
     public int compareTo(Timestamp t)
     {
-    /*
-        if (logID.equals(t.logID)) {
-            return (int)(t.physicalPos - physicalPos);
+        for (UUID id : this.epochMap.keySet())
+        {
+            if (t.epochMap.containsKey(id))
+            {
+                return (int) (this.epochMap.get(id) - t.epochMap.get(id));
+            }
         }
-        /*
-        if (t.epoch != this.epoch) { return (int) (this.epoch - t.epoch); }*/
-        return (int) (pos - t.pos);
+        throw new ClassCastException("Uncomparable timestamp objects!");
     }
 }
 
