@@ -28,7 +28,6 @@ import java.util.UUID;
 /**
  * This interface represents a CorfuDB configuration master.
  */
-
 public interface IConfigMaster extends IServerProtocol {
 
     /**
