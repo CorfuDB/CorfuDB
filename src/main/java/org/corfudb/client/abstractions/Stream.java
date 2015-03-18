@@ -360,9 +360,7 @@ public class Stream implements AutoCloseable, IStream {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
                                     if (cdbse.checkEpoch(epochMap))
                                     {
-                                        cdbse.getTimestamp().setLogicalPos(streamPointer.getAndIncrement(), streamID);
-                                        cdbse.getTimestamp().setPhysicalPos(r.pos);
-                                        cdbse.getTimestamp().setLogId(logID);
+                                        cdbse.getTimestamp().setTransientInfo(logID, streamID, streamPointer.getAndIncrement(), r.pos);
                                         synchronized (streamPointer) {
                                             latest = cdbse.getTimestamp();
                                             streamPointer.notifyAll();
@@ -464,7 +462,7 @@ public class Stream implements AutoCloseable, IStream {
                 long token = sequencer.getNext(streamIDstack.peekLast());
                 CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(epochMap, data);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(streamID, getCurrentEpoch(), -1, token);
+                return new Timestamp(epochMap, -1, token);
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }
