@@ -248,7 +248,7 @@ public class Stream implements AutoCloseable {
                                     CorfuDBStreamMoveEntry cdbsme = (CorfuDBStreamMoveEntry) payload;
                                     // This move is just an allocation boundary change. The epoch doesn't change,
                                     // just the read pointer.
-                                    if (cdbsme.destinationLog.equals(logID) || cdbsme.getTimestamp().getEpoch() == -1)
+                                    if (cdbsme.destinationLog.equals(logID) || cdbsme.getTimestamp().getEpoch(streamID) == -1)
                                     {
                                         //flush what we've read (unless the stream starts at the next allocation,)
                                         //it's all bound to be invalid...
@@ -293,9 +293,9 @@ public class Stream implements AutoCloseable {
                                 else if (payload instanceof CorfuDBStreamEntry)
                                 {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
-                                    if (cdbse.getStreamID().equals(streamID) && cdbse.getTimestamp().epoch == (currentEpoch.get()))
+                                    if (cdbse.containsStream(streamID) && cdbse.getTimestamp().getEpoch(streamID) == (currentEpoch.get()))
                                     {
-                                        cdbse.setTimestamp(new Timestamp(0, streamPointer.getAndIncrement(), r.pos));
+                                        cdbse.getTimestamp().setLogicalPos(r.pos);
                                         synchronized (streamPointer) {
                                             latest = cdbse.getTimestamp();
                                             streamPointer.notifyAll();
@@ -305,7 +305,7 @@ public class Stream implements AutoCloseable {
                                     }
                                     else
                                     {
-                                        log.warn("Ignored log entry from wrong epoch (expected {}, got {})", currentEpoch.get(), cdbse.getTimestamp().epoch);
+                                        log.warn("Ignored log entry from wrong epoch (expected {}, got {})", currentEpoch.get(), cdbse.getTimestamp().getEpoch(streamID));
                                     }
                                 }
                             }
@@ -377,7 +377,7 @@ public class Stream implements AutoCloseable {
                 long currentepoch = currentEpoch.get();
                 CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(streamID, data, currentepoch);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(currentepoch, -1, token);
+                return new Timestamp(streamID, currentepoch, -1, token);
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }
@@ -466,7 +466,7 @@ public class Stream implements AutoCloseable {
      */
     public Timestamp check()
     {
-        return new Timestamp(currentEpoch.get(), streamPointer.get(), sequencer.getCurrent(streamID));
+        return new Timestamp(streamID, currentEpoch.get(), streamPointer.get(), sequencer.getCurrent(streamID));
     }
 
     /**
@@ -526,9 +526,9 @@ public class Stream implements AutoCloseable {
                     {
                         return true;
                     }
-                    else if (latest.epoch != pos.epoch)
+                    else if (latest.getEpoch(streamID) != pos.getEpoch(streamID))
                     {
-                        throw new LinearizationException("Linearization error due to epoch change", pos, pos);
+                        throw new LinearizationException("Linearization error due to epoch change", latest, pos);
                     }
                 }
                 if (timeout < 0)
@@ -599,7 +599,7 @@ public class Stream implements AutoCloseable {
         WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, destinationLog);
         woasremote.write(remoteToken, new CorfuDBStreamStartEntry(streamID, currentEpoch.get() + 1));
         // Write the move request into the local log
-        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, destinationLog, null, remoteToken, -1, currentEpoch.get());
+        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, destinationLog, null, remoteToken, -1, currentEpoch.get(), -1);
         long token = sequencer.getNext(streamID);
         woas.write(token, (Serializable) cdbsme);
     }
@@ -626,7 +626,7 @@ public class Stream implements AutoCloseable {
         WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
         woasremote.write(remoteToken, new CorfuDBStreamStartEntry(streamID, sd.epoch));
         // Write the move request into the local log
-        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, sd.currentLog, null, remoteToken, -1, currentEpoch.get());
+        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, sd.currentLog, null, remoteToken, -1, currentEpoch.get(), -1);
         long token = sequencer.getNext(streamID);
         woas.write(token, (Serializable) cdbsme);
     }

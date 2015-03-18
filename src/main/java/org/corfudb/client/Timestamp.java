@@ -21,6 +21,7 @@ import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.OutOfSpaceException;
 
 import java.util.Map;
+import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Queue;
 
@@ -32,53 +33,62 @@ import java.util.UUID;
 
 public class Timestamp implements Comparable<Timestamp>, Serializable {
 
-    public long epoch;
     public transient Long pos;
     public transient Long physicalPos;
     public transient UUID logID;
-    public transient UUID streamID;
+    public HashMap<UUID, Long> epochMap;
 
     public static final long serialVersionUID = 0l;
-    public Timestamp(long epoch, long pos, long physicalPos)
+
+    public Timestamp(UUID streamID, long epoch, long pos, long physicalPos)
     {
-        this.epoch = epoch;
+        epochMap = new HashMap<UUID, Long>();
+        epochMap.put(streamID, epoch);
         this.pos = pos;
         this.physicalPos = physicalPos;
     }
 
-    public Timestamp(long epoch)
+    public Timestamp(UUID streamID, long epoch)
     {
-        this.epoch = epoch;
+        epochMap = new HashMap<UUID, Long>();
+        epochMap.put(streamID, epoch);
         this.pos = null;
         this.physicalPos = null;
     }
 
-    public void setEpoch(long newEpoch)
+    public long getEpoch(UUID stream)
     {
-        this.epoch = newEpoch;
+        return epochMap.get(stream);
     }
 
-    public long getEpoch()
+    public void setLogicalPos(long pos)
     {
-        return epoch;
+        this.pos = pos;
     }
 
     @Override
     public String toString()
     {
-        if (physicalPos == null)
+        if (epochMap.size() == 1)
         {
-            return epoch + ".?";
+            Long epoch = epochMap.entrySet().iterator().next().getValue();
+            if (physicalPos == null)
+            {
+                return epoch + ".?";
+            }
+            return epoch + "." + physicalPos;
         }
-        return epoch + "." + physicalPos;
+
+        return "???";
     }
 
     public int compareTo(Timestamp t)
     {
+        /*
         if (logID.equals(t.physicalPos)) {
             return (int)(physicalPos - t.physicalPos);
         }
-        if (t.epoch != this.epoch) { return (int) (this.epoch - t.epoch); }
+        if (t.epoch != this.epoch) { return (int) (this.epoch - t.epoch); }*/
         return (int) (this.pos - t.pos);
     }
 }

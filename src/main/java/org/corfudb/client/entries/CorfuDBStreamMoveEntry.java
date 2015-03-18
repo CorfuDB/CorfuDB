@@ -30,14 +30,16 @@ public class CorfuDBStreamMoveEntry extends CorfuDBStreamEntry
     public final long destinationPos;
     public final int duration;
 
-    public CorfuDBStreamMoveEntry(UUID streamID, UUID destinationLog, UUID destinationStream, long destinationPos, int duration, long epoch)
+    public CorfuDBStreamMoveEntry(UUID streamID, UUID destinationLog, UUID destinationStream, long destinationPos, int duration, long epoch, long destinationEpoch)
     {
-        super();
-        this.streamID = streamID;
+        super(streamID, epoch);
         this.destinationStream = destinationStream;
+        if (destinationStream != null)
+        {
+            ts.epochMap.put(destinationStream, destinationEpoch);
+        }
         this.destinationLog = destinationLog;
         this.destinationPos = destinationPos;
-        this.ts = new Timestamp(epoch);
         this.duration = duration;
     }
 

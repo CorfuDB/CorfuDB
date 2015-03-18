@@ -41,7 +41,6 @@ import java.io.IOException;
 public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStreamEntry>
 {
     private static final long serialVersionUID = 0L;
-    public UUID streamID;
     public Timestamp ts;
     public byte[] payload;
 
@@ -58,8 +57,7 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
             }
         }
 
-        this.streamID = streamID;
-        this.ts = new Timestamp(epoch);
+        this.ts = new Timestamp(streamID, epoch);
     }
 
     public Object deserializePayload()
@@ -79,8 +77,12 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
         throws IOException
     {
         this.payload = payload;
-        this.streamID = streamID;
-        this.ts = new Timestamp(epoch);
+        this.ts = new Timestamp(streamID, epoch);
+    }
+
+    public CorfuDBStreamEntry(UUID streamID, long epoch)
+    {
+        this.ts = new Timestamp(streamID, epoch);
     }
 
     public byte[] getPayload() {
@@ -102,8 +104,8 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
         return ts;
     }
 
-    public UUID getStreamID() {
-        return this.streamID;
+    public boolean containsStream(UUID stream)
+    {
+        return ts.epochMap.containsKey(stream);
     }
-
 }

@@ -162,7 +162,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
                         if ((Boolean) jo.get("present"))
                         {
                             StreamData sd = new StreamData();
-                            sd.currentLog = UUID.fromString((String) jo.get("currentLog"));
+                            sd.currentLog = UUID.fromString((String) jo.get("currentlog"));
                             sd.startPos = (Long) jo.get("startpos");
                             sd.epoch = (Long) jo.get("epoch");
                             sd.startLog = UUID.fromString((String) jo.get("startlog"));

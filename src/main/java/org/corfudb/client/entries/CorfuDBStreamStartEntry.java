@@ -25,12 +25,12 @@ import java.io.IOException;
 public class CorfuDBStreamStartEntry extends CorfuDBStreamEntry
 {
     private static final long serialVersionUID = 0L;
+    public UUID streamID;
 
     public CorfuDBStreamStartEntry(UUID streamID, long epoch)
     {
-        super();
+        super(streamID, epoch);
         this.streamID = streamID;
-        this.ts = new Timestamp(epoch);
     }
 
 }

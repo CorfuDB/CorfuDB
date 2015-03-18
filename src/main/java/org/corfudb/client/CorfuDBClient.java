@@ -56,6 +56,8 @@ public class CorfuDBClient implements AutoCloseable {
     private BooleanLock viewUpdatePending;
     private Boolean closed = false;
     private UUID localID = null;
+    private RemoteLogView remoteView;
+
 
     private static final Logger log = LoggerFactory.getLogger(CorfuDBClient.class);
 
@@ -85,6 +87,7 @@ public class CorfuDBClient implements AutoCloseable {
         this.configurationString = configurationString;
 
         viewLock = new StampedLock();
+        remoteView = new RemoteLogView();
         viewUpdatePending = new BooleanLock();
         viewUpdatePending.lock = true;
         viewManagerThread = getViewManagerThread();
@@ -182,18 +185,18 @@ public class CorfuDBClient implements AutoCloseable {
          *  master to resolve the log.
          */
         try{
+            return remoteView.getLog(logID);
+        }
+        catch (RemoteException re)
+        {
             IConfigMaster cm = (IConfigMaster) getView().getConfigMasters().get(0);
             String remoteLog = cm.getLog(logID);
             /** Go to the remote log, communicate with the remote configuration master
              * and resolve the remote configuration.
              */
             remoteLog = remoteLog.replace("cdbcm", "http");
-            return retrieveView(remoteLog + "/corfu");
-        }
-        catch (IOException ie)
-        {
-            log.debug("IOException", ie);
-            throw new RemoteException("Couldn't connect to remote log", logID);
+            remoteView.addLog(logID, remoteLog);
+            return remoteView.getLog(logID);
         }
     }
 
