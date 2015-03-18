@@ -75,6 +75,9 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
 
     public int compareTo(Timestamp t)
     {
+        if (logID.equals(t.physicalPos)) {
+            return (int)(physicalPos - t.physicalPos);
+        }
         if (t.epoch != this.epoch) { return (int) (this.epoch - t.epoch); }
         return (int) (this.pos - t.pos);
     }

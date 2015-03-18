@@ -50,6 +50,7 @@ import javax.json.JsonReader;
 import java.io.StringReader;
 
 import org.corfudb.client.gossip.IGossip;
+import org.corfudb.client.StreamData;
 
 import com.esotericsoftware.kryonet.Client;
 
@@ -147,7 +148,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
             client.sendUDP(gossip);
     }
 
-    public streamInfo getStream(UUID streamID)
+    public StreamData getStream(UUID streamID)
     {
         try {
             JSONRPC2Request jr = new JSONRPC2Request("getstream", id.getAndIncrement());
@@ -160,10 +161,12 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
                 Map<String, Object> jo = (Map<String,Object>) jres.getResult();
                         if ((Boolean) jo.get("present"))
                         {
-                            streamInfo si = new streamInfo();
-                            si.currentLog = UUID.fromString((String) jo.get("logid"));
-                            si.startPos = (Long) jo.get("startpos");
-                            return si;
+                            StreamData sd = new StreamData();
+                            sd.currentLog = UUID.fromString((String) jo.get("currentLog"));
+                            sd.startPos = (Long) jo.get("startpos");
+                            sd.epoch = (Long) jo.get("epoch");
+                            sd.startLog = UUID.fromString((String) jo.get("startlog"));
+                            return sd;
                         }
                         else
                         {

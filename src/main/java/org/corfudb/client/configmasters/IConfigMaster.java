@@ -21,7 +21,7 @@ import org.corfudb.client.TrimmedException;
 import org.corfudb.client.OverwriteException;
 
 import org.corfudb.client.gossip.IGossip;
-
+import org.corfudb.client.StreamData;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,13 +30,9 @@ import java.util.UUID;
  */
 
 public interface IConfigMaster extends IServerProtocol {
-    public class streamInfo {
-        public UUID currentLog;
-        public long startPos;
-    }
 
     boolean addStream(UUID logID, UUID streamID, long startPos);
-    streamInfo getStream(UUID streamID);
+    StreamData getStream(UUID streamID);
     boolean addLog(UUID logID, String path);
     Map<UUID, String> getAllLogs();
     String getLog(UUID logID);

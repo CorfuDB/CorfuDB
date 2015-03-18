@@ -19,7 +19,6 @@ import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.view.Sequencer;
 import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.configmasters.IConfigMaster;
-import org.corfudb.client.configmasters.IConfigMaster.streamInfo;
 import org.corfudb.client.IServerProtocol;
 
 import org.corfudb.client.CorfuDBClient;
@@ -61,6 +60,7 @@ import java.util.stream.Collectors;
 import org.corfudb.client.gossip.StreamEpochGossipEntry;
 
 import java.util.function.Supplier;
+import org.corfudb.client.StreamData;
 
 /**
  *  A hop-aware stream implementation. The stream must be closed after the application is done using it
@@ -144,9 +144,9 @@ public class Stream implements AutoCloseable {
         this.prefetch = prefetch;
         this.executor = executor;
         //now, the stream starts reading from the beginning...
-        streamInfo si = getConfigMaster.get().getStream(streamID);
+        StreamData sd = getConfigMaster.get().getStream(streamID);
         //it doesn't, so try to create
-        while (si == null)
+        while (sd == null)
         {
             try {
                 long sequenceNo = sequencer.getNext(uuid);
@@ -154,13 +154,13 @@ public class Stream implements AutoCloseable {
                 woas.write(sequenceNo, cdsse);
                 getConfigMaster.get().addStream(cdbc.getView().getUUID(), streamID, sequenceNo);
                 sequencer.setAllocationSize(streamID, allocationSize);
-                si = getConfigMaster.get().getStream(streamID);
+                sd = getConfigMaster.get().getStream(streamID);
             } catch (IOException ie)
             {
                 log.debug("Warning, couldn't get streaminfo, retrying...", ie);
             }
         }
-        dispatchedReads.set(si.startPos);
+        dispatchedReads.set(sd.startPos);
         if (prefetch)
         {
             currentDispatch = getStreamTailAndDispatch(queueSize);
@@ -603,6 +603,34 @@ public class Stream implements AutoCloseable {
         long token = sequencer.getNext(streamID);
         woas.write(token, (Serializable) cdbsme);
     }
+
+    /**
+     * Permanently hop to another stream. This function tries to hop this stream to
+     * another stream by obtaining a position in the destination stream and inserting
+     * a move entry from the source log to the destination log. It may or may not
+     * be successful.
+     *
+     * @param destinationstream    The destination stream to hop to.
+     */
+    public void hopStream(UUID destinationStream)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
+        // Get the current location and epoch of the destination stream (through gossip)
+        StreamData sd = getConfigMaster.get().getStream(destinationStream);
+        if (sd == null) { throw new RemoteException("Unable to find destination stream " + destinationStream.toString(), logID); }
+
+        // Get a sequence in the remote stream
+        StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
+        long remoteToken = sremote.getNext(streamID);
+        // Write a start in the remote log
+        WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
+        woasremote.write(remoteToken, new CorfuDBStreamStartEntry(streamID, sd.epoch));
+        // Write the move request into the local log
+        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, sd.currentLog, null, remoteToken, -1, currentEpoch.get());
+        long token = sequencer.getNext(streamID);
+        woas.write(token, (Serializable) cdbsme);
+    }
+
 
     /**
      * Permanently attach a remote stream into this stream. This function tries to

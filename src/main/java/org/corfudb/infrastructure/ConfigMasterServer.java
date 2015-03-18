@@ -78,6 +78,7 @@ import org.corfudb.client.Timestamp;
 import org.corfudb.client.StreamView;
 import org.corfudb.client.RemoteLogView;
 import org.corfudb.client.RemoteException;
+import org.corfudb.client.StreamData;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
@@ -142,7 +143,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                     else if (object instanceof StreamDiscoveryRequestGossip)
                     {
                         StreamDiscoveryRequestGossip sdrg = (StreamDiscoveryRequestGossip) object;
-                        StreamView.StreamData sd = currentStreamView.getStream(sdrg.streamID);
+                        StreamData sd = currentStreamView.getStream(sdrg.streamID);
                         if (sd != null)
                         {
                             StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
@@ -334,7 +335,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         try {
             JsonObject jo = params;
             currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
-            StreamView.StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
+            StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
 
             if (sd != null)
             {
@@ -364,7 +365,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         try {
             JsonObject jo = params;
             log.debug(jo.toString());
-            StreamView.StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
+            StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
             if (sd == null)
             {
                 ob.add("present", false);
@@ -372,8 +373,10 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             else
             {
                 ob.add("present", true);
+                ob.add("currentlog", sd.currentLog.toString());
+                ob.add("startlog", sd.startLog.toString());
                 ob.add("startpos", sd.startPos);
-                ob.add("logid", UUID.randomUUID().toString());
+                ob.add("epoch", sd.epoch);
             }
 
         }
@@ -403,7 +406,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         try {
         for (UUID key : streams)
         {
-            StreamView.StreamData sd = currentStreamView.getStream(key);
+            StreamData sd = currentStreamView.getStream(key);
             JsonObjectBuilder job = Json.createObjectBuilder();
             job.add("streamid", sd.streamID.toString());
             job.add("currentlog", sd.currentLog.toString());
