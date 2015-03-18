@@ -85,6 +85,32 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
         this.ts = new Timestamp(streamID, epoch);
     }
 
+    public CorfuDBStreamEntry(Map<UUID, Long> epochMap, Serializable payloadObject)
+    throws IOException
+    {
+        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
+        {
+            try (ObjectOutput out = new ObjectOutputStream(bs))
+            {
+                out.writeObject(payloadObject);
+                payload = bs.toByteArray();
+            }
+        }
+
+        this.ts = new Timestamp(epochMap);
+    }
+
+    public CorfuDBStreamEntry(Map<UUID, Long> epochMap, byte[] payload)
+    {
+        this.payload = payload;
+        this.ts = new Timestamp(epochMap);
+    }
+
+    public CorfuDBStreamEntry(Map<UUID, Long> epochMap)
+    {
+        this.ts = new Timestamp(epochMap);
+    }
+
     public byte[] getPayload() {
         return payload;
     }
@@ -108,4 +134,22 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
     {
         return ts.epochMap.containsKey(stream);
     }
+
+    public boolean checkEpoch(Map<UUID, Long> epochMap)
+    {
+        boolean isContained = false;
+        for (UUID id : ts.epochMap.keySet())
+        {
+            if (epochMap.containsKey(id))
+            {
+                isContained = true;
+                if (!ts.epochMap.get(id).equals(epochMap.get(id)))
+                {
+                    return false;
+                }
+            }
+        }
+        return isContained;
+    }
+
 }

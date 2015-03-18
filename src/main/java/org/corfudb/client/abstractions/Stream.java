@@ -39,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
+import java.util.HashMap;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -58,6 +59,10 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.stream.Collectors;
 import org.corfudb.client.gossip.StreamEpochGossipEntry;
+
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingDeque;
 
 import java.util.function.Supplier;
 import org.corfudb.client.StreamData;
@@ -84,7 +89,8 @@ public class Stream implements AutoCloseable {
     PriorityBlockingQueue<CorfuDBEntry> logQ;
     AtomicLong dispatchedReads;
     AtomicLong logPointer;
-    AtomicLong currentEpoch;
+
+    ConcurrentHashMap<UUID, Long> epochMap;
 
     Timestamp latest = null;
 
@@ -95,6 +101,7 @@ public class Stream implements AutoCloseable {
     AtomicLong streamPointer;
     int queueMax;
 
+    BlockingDeque<UUID> streamIDstack;
     Supplier<CorfuDBView> getView;
     Supplier<IConfigMaster> getConfigMaster;
 
@@ -130,10 +137,14 @@ public class Stream implements AutoCloseable {
         woas = new WriteOnceAddressSpace(cdbc);
         logQ = new PriorityBlockingQueue<CorfuDBEntry>();
         streamQ = new PriorityBlockingQueue<CorfuDBStreamEntry>();
+        streamIDstack = new LinkedBlockingDeque<UUID>();
+        epochMap = new ConcurrentHashMap<UUID, Long>();
+        epochMap.put(uuid, 0L);
+        //stack our ID onto the stack
+        while (!streamIDstack.offerLast(uuid)) {}
         dispatchedReads = new AtomicLong();
         streamPointer = new AtomicLong();
         logPointer = new AtomicLong();
-        currentEpoch = new AtomicLong();
         queueMax = queueSize;
         getView = () -> {
             return this.cdbc.getView();
@@ -150,7 +161,7 @@ public class Stream implements AutoCloseable {
         {
             try {
                 long sequenceNo = sequencer.getNext(uuid);
-                CorfuDBStreamStartEntry cdsse = new CorfuDBStreamStartEntry(streamID, currentEpoch.get());
+                CorfuDBStreamStartEntry cdsse = new CorfuDBStreamStartEntry(streamID, getCurrentEpoch());
                 woas.write(sequenceNo, cdsse);
                 getConfigMaster.get().addStream(cdbc.getView().getUUID(), streamID, sequenceNo);
                 sequencer.setAllocationSize(streamID, allocationSize);
@@ -164,6 +175,19 @@ public class Stream implements AutoCloseable {
         if (prefetch)
         {
             currentDispatch = getStreamTailAndDispatch(queueSize);
+        }
+    }
+
+    private Long getCurrentEpoch()
+    {
+        return epochMap.get(streamID);
+    }
+
+    private void incrementAllEpochs()
+    {
+        for (UUID stream : epochMap.keySet())
+        {
+            epochMap.put(stream, epochMap.get(stream)+1);
         }
     }
 
@@ -246,44 +270,62 @@ public class Stream implements AutoCloseable {
                                 if (payload instanceof CorfuDBStreamMoveEntry)
                                 {
                                     CorfuDBStreamMoveEntry cdbsme = (CorfuDBStreamMoveEntry) payload;
-                                    // This move is just an allocation boundary change. The epoch doesn't change,
-                                    // just the read pointer.
-                                    if (cdbsme.destinationLog.equals(logID) || cdbsme.getTimestamp().getEpoch(streamID) == -1)
+                                    if (cdbsme.containsStream(streamID))
                                     {
-                                        //flush what we've read (unless the stream starts at the next allocation,)
-                                        //it's all bound to be invalid...
-                                        dispatchedReads.set(cdbsme.destinationPos);
-                                        currentDispatch = getStreamTailAndDispatch(1);
-                                        return;
-                                    }
-                                    // This is an intentional move, either permanent, or temporary.
-                                    else
-                                    {
-                                        if (cdbsme.duration == -1)
+                                        // This move is just an allocation boundary change. The epoch doesn't change,
+                                        // just the read pointer.
+                                        if (cdbsme.destinationLog.equals(logID) && cdbsme.getTimestamp().getEpoch(streamID) == -1 && cdbsme.destinationStream == null)
                                         {
-                                            log.debug("Detected permanent move operation to different log " + cdbsme.destinationLog);
-                                            //since this is a perma-move, we increment the epoch
-                                            long newEpoch = currentEpoch.incrementAndGet();
-                                            long logpos = streamPointer.getAndIncrement();
-                                            getConfigMaster.get().sendGossip(new StreamEpochGossipEntry(streamID, cdbsme.destinationLog, newEpoch, logpos));
-                                            //since this is on a different log, we change the address space and sequencer
-                                            woas = new WriteOnceAddressSpace(cdbc, cdbsme.destinationLog);
-                                            sequencer = new StreamingSequencer(cdbc, cdbsme.destinationLog);
+                                            //flush what we've read (unless the stream starts at the next allocation,)
+                                            //it's all bound to be invalid...
                                             dispatchedReads.set(cdbsme.destinationPos);
                                             currentDispatch = getStreamTailAndDispatch(1);
-                                            logID = cdbsme.destinationLog;
-                                            synchronized(currentEpoch)
-                                            {
-                                                currentEpoch.notifyAll();
-                                            }
                                             return;
                                         }
+                                        // This is an intentional move, either permanent, or temporary.
                                         else
                                         {
-                                            //This is a temporary move, so expose it to the client without changing current
-                                            //reads.
+                                            if (cdbsme.duration == -1)
+                                            {
+                                                if (!cdbsme.destinationLog.equals(logID)){
+                                                    log.debug("Detected permanent move operation to different log " + cdbsme.destinationLog);
+                                                }
+                                                else
+                                                {
+                                                    log.debug("Detected permanent move operation to same log " + cdbsme.destinationLog);
+                                                }
 
+                                                incrementAllEpochs();
+                                                if (cdbsme.destinationStream != null)
+                                                {
+                                                    log.debug("Detected permanent move operation into stream " + cdbsme.destinationStream);
+                                                    streamIDstack.putLast(cdbsme.destinationStream);
+                                                    epochMap.put(cdbsme.destinationStream, cdbsme.destinationEpoch);
+                                                }
+                                                //since this is a perma-move, we increment the epoch
+                                                long newEpoch = getCurrentEpoch();
+                                                long logpos = streamPointer.getAndIncrement();
+                                                getConfigMaster.get().sendGossip(new StreamEpochGossipEntry(streamID, cdbsme.destinationLog, newEpoch, logpos));
+                                                //since this is on a different log, we change the address space and sequencer
+                                                woas = new WriteOnceAddressSpace(cdbc, cdbsme.destinationLog);
+                                                sequencer = new StreamingSequencer(cdbc, cdbsme.destinationLog);
+                                                dispatchedReads.set(cdbsme.destinationPos);
+                                                currentDispatch = getStreamTailAndDispatch(1);
+                                                logID = cdbsme.destinationLog;
+                                                synchronized(epochMap)
+                                                {
+                                                    epochMap.notifyAll();
+                                                }
+                                                return;
+                                            }
+                                            else
+                                            {
+                                                //This is a temporary move, so expose it to the client without changing current
+                                                //reads.
+
+                                            }
                                         }
+
                                     }
                                 }
                                 else if (payload instanceof CorfuDBStreamStartEntry)
@@ -293,7 +335,7 @@ public class Stream implements AutoCloseable {
                                 else if (payload instanceof CorfuDBStreamEntry)
                                 {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
-                                    if (cdbse.containsStream(streamID) && cdbse.getTimestamp().getEpoch(streamID) == (currentEpoch.get()))
+                                    if (cdbse.checkEpoch(epochMap))
                                     {
                                         cdbse.getTimestamp().setLogicalPos(r.pos);
                                         synchronized (streamPointer) {
@@ -301,11 +343,11 @@ public class Stream implements AutoCloseable {
                                             streamPointer.notifyAll();
                                         }
                                         numReadable++;
-                                        streamQ.offer(cdbse);
+                                        streamQ.put(cdbse);
                                     }
                                     else
                                     {
-                                        log.warn("Ignored log entry from wrong epoch (expected {}, got {})", currentEpoch.get(), cdbse.getTimestamp().getEpoch(streamID));
+                                        log.warn("Ignored log entry from wrong epoch (expected {}, got {})", getCurrentEpoch(), cdbse.getTimestamp().getEpoch(streamID));
                                     }
                                 }
                             }
@@ -373,11 +415,10 @@ public class Stream implements AutoCloseable {
         while (true)
         {
             try {
-                long token = sequencer.getNext(streamID);
-                long currentepoch = currentEpoch.get();
-                CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(streamID, data, currentepoch);
+                long token = sequencer.getNext(streamIDstack.peekLast());
+                CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(epochMap, data);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(streamID, currentepoch, -1, token);
+                return new Timestamp(streamID, getCurrentEpoch(), -1, token);
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }
@@ -466,7 +507,7 @@ public class Stream implements AutoCloseable {
      */
     public Timestamp check()
     {
-        return new Timestamp(streamID, currentEpoch.get(), streamPointer.get(), sequencer.getCurrent(streamID));
+        return new Timestamp(epochMap, streamPointer.get(), sequencer.getCurrent(streamID));
     }
 
     /**
@@ -564,18 +605,18 @@ public class Stream implements AutoCloseable {
     public boolean waitForEpochChange(long timeout)
         throws InterruptedException
     {
-        long last = currentEpoch.get();
-        synchronized(currentEpoch)
+        long last = getCurrentEpoch();
+        synchronized(epochMap)
         {
             if (timeout < 0)
             {
-                currentEpoch.wait();
+                epochMap.wait();
             }
             else
             {
-                currentEpoch.wait(timeout);
+                epochMap.wait(timeout);
             }
-            if (currentEpoch.get() == last) { return false; }
+            if (getCurrentEpoch() == last) { return false; }
         }
         return true;
     }
@@ -594,12 +635,12 @@ public class Stream implements AutoCloseable {
     {
         // Get a sequence in the remote log
         StreamingSequencer sremote = new StreamingSequencer(cdbc, destinationLog);
-        long remoteToken = sremote.getNext(streamID);
+        long remoteToken = sremote.getNext(streamIDstack.peekLast());
         // Write a start in the remote log
         WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, destinationLog);
-        woasremote.write(remoteToken, new CorfuDBStreamStartEntry(streamID, currentEpoch.get() + 1));
+        woasremote.write(remoteToken, new CorfuDBStreamStartEntry(streamID, getCurrentEpoch() + 1));
         // Write the move request into the local log
-        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, destinationLog, null, remoteToken, -1, currentEpoch.get(), -1);
+        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, destinationLog, null, remoteToken, -1, getCurrentEpoch());
         long token = sequencer.getNext(streamID);
         woas.write(token, (Serializable) cdbsme);
     }
@@ -626,26 +667,42 @@ public class Stream implements AutoCloseable {
         WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
         woasremote.write(remoteToken, new CorfuDBStreamStartEntry(streamID, sd.epoch));
         // Write the move request into the local log
-        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, sd.currentLog, null, remoteToken, -1, currentEpoch.get(), -1);
+        CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, sd.currentLog, null, remoteToken, -1, getCurrentEpoch());
         long token = sequencer.getNext(streamID);
         woas.write(token, (Serializable) cdbsme);
     }
 
 
     /**
-     * Permanently attach a remote stream into this stream. This function tries to
-     * attach a remote stream to this stream. In order to complete the attachment,
-     * you need to call moveStream on the remote stream with this timestamp, but
-     * only once you know that this attachment is successful. Otherwise,
-     * the remote stream could be lost.
+     * Permanently pull a remote stream into this stream. This function tries to
+     * attach a remote stream to this stream. It may or may not succeed.
      *
-     * @param attachStream     The destination stream to attach.
+     * @param targetStream     The destination stream to attach.
      */
-    public void attachStream(UUID destinationStream)
+    public void pullStream(UUID targetStream)
     throws RemoteException, OutOfSpaceException, IOException
     {
-        // Insert a start stream entry.
+        // Get information about remote stream
+        StreamData sd = getConfigMaster.get().getStream(targetStream);
+        if (sd == null) { throw new RemoteException("Unable to find target stream " + targetStream.toString(), logID); }
 
+        // Write a stream start in the local log.
+        // This entry needs to contain the epoch+1 of the target stream as well as our own epoch
+        Map<UUID, Long> epochMap = new HashMap<UUID, Long>();
+        epochMap.put(streamID, getCurrentEpoch());
+        epochMap.put(targetStream, sd.epoch + 1);
+        List<UUID> startEntries = new ArrayList<UUID>();
+        startEntries.add(targetStream);
+        CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, startEntries);
+        long token = sequencer.getNext(streamIDstack.peekLast());
+        woas.write(token, (Serializable) cdbsme);
+
+        // Get a sequence in the remote stream
+        StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
+        long remoteToken = sremote.getNext(targetStream);
+        // Write a move in the remote log
+        WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
+        woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(targetStream, logID, streamID, token, -1, sd.epoch, getCurrentEpoch()));
     }
 
     /**

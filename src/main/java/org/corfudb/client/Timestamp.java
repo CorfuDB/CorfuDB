@@ -30,13 +30,14 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.UUID;
+import java.lang.StringBuilder;
 
 public class Timestamp implements Comparable<Timestamp>, Serializable {
 
     public transient Long pos;
     public transient Long physicalPos;
     public transient UUID logID;
-    public HashMap<UUID, Long> epochMap;
+    public Map<UUID, Long> epochMap;
 
     public static final long serialVersionUID = 0l;
 
@@ -56,6 +57,19 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
         this.physicalPos = null;
     }
 
+    public Timestamp(Map<UUID, Long> epochMap)
+    {
+        this.epochMap = epochMap;
+    }
+
+    public Timestamp(Map<UUID, Long> epochMap, long pos, long physicalPos)
+    {
+        this.epochMap = epochMap;
+        this.pos = pos;
+        this.physicalPos = physicalPos;
+    }
+
+
     public long getEpoch(UUID stream)
     {
         return epochMap.get(stream);
@@ -69,17 +83,15 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     @Override
     public String toString()
     {
-        if (epochMap.size() == 1)
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (UUID id : epochMap.keySet())
         {
-            Long epoch = epochMap.entrySet().iterator().next().getValue();
-            if (physicalPos == null)
-            {
-                return epoch + ".?";
-            }
-            return epoch + "." + physicalPos;
+            if (first) { first = false; }
+            else { sb.append(", "); }
+            sb.append(id).append(": ").append(epochMap.get(id)).append(".").append(physicalPos == null ? "?" : physicalPos);
         }
-
-        return "???";
+        return sb.toString();
     }
 
     public int compareTo(Timestamp t)

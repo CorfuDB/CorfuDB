@@ -7,6 +7,7 @@ import org.corfudb.client.Timestamp;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.Queue;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,12 +26,19 @@ import java.io.IOException;
 public class CorfuDBStreamStartEntry extends CorfuDBStreamEntry
 {
     private static final long serialVersionUID = 0L;
-    public UUID streamID;
+    public List<UUID> streamID;
 
     public CorfuDBStreamStartEntry(UUID streamID, long epoch)
     {
         super(streamID, epoch);
-        this.streamID = streamID;
+        this.streamID = new ArrayList<UUID>();
+        this.streamID.add(streamID);
+    }
+
+    public CorfuDBStreamStartEntry(Map<UUID, Long> streamMap, List<UUID> startStreams)
+    {
+        super(streamMap);
+        streamID = startStreams;
     }
 
 }

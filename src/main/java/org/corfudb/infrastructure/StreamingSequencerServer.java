@@ -90,7 +90,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
                 final long oldPos = s.position;
                 CompletableFuture<Void> cf = CompletableFuture.runAsync(() -> {
                 try {
-                    CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos, -1, -1, -1);
+                    CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos, -1, -1);
                     log.debug("Writing move entry from " + oldPos + " to " + newPos + " for stream " + streamID);
                     woas.write(oldPos, cdsme);
                 } catch (Exception ie)
