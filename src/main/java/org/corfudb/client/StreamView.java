@@ -25,14 +25,16 @@ public class StreamView {
     public class StreamData {
         /** The ID of the stream */
         public UUID streamID;
-        /** The log the stream is currently on (a guess) */
+        /** The log the stream is currently on (at lastupdate) */
         public UUID currentLog;
         /** The log the stream starts on. */
         public UUID startLog;
-        /** The epoch the stream is in (a guess) */
+        /** The epoch the stream is in (at lastupdate) */
         public long epoch;
         /** The start position of the stream */
         public long startPos;
+        /** The last update we saw on this stream */
+        public long lastUpdate;
 
         /** Creates a new StreamData instance */
         public StreamData(UUID streamID, UUID currentLog, UUID startLog, long epoch, long startPos)
@@ -42,7 +44,20 @@ public class StreamView {
             this.startLog = startLog;
             this.epoch = epoch;
             this.startPos = startPos;
+            this.lastUpdate = 0;
         }
+
+        /** Creates a new StreamData instance */
+        public StreamData(UUID streamID, UUID currentLog, UUID startLog, long epoch, long startPos, long lastupdate)
+        {
+            this.streamID = streamID;
+            this.currentLog = currentLog;
+            this.startLog = startLog;
+            this.epoch = epoch;
+            this.startPos = startPos;
+            this.lastUpdate = lastupdate;
+        }
+
     }
 
     /**
@@ -91,6 +106,23 @@ public class StreamView {
     }
 
     /**
+     * Returns whether the stream has been updated to the given logical position.
+     *
+     * @param stream        The UUID of the stream.
+     * @param logPos        The logical position to check.
+     *
+     * @return              True, if the stream has been updated to that position.
+     *                      False otherwise.
+     */
+    public boolean checkStream(UUID stream, long logPos)
+    {
+        StreamData sd = streamMap.get(stream);
+        if (sd == null) { return false; }
+        if (logPos > sd.lastUpdate) { return false; }
+        return true;
+    }
+
+    /**
      * Adds or updates a learned stream to the view, and returns whether or not
      * a stream was added or updated.
      *
@@ -99,16 +131,29 @@ public class StreamView {
      * @param startLog      The UUID of the log the stream resides on.
      * @param epoch         The epoch the stream is currently in.
      * @param startPos      The position the log currently starts on.
+     * @param lastUpdate    The logical position this log was last updated at
      */
-    public boolean learnStream(UUID stream, UUID currentLog, UUID startLog, long epoch, long startPos)
+    public boolean learnStream(UUID stream, UUID currentLog, UUID startLog, long startPos, long epoch, long lastUpdate)
     {
-        StreamData old = streamMap.putIfAbsent(stream, new StreamData(stream, currentLog, startLog, epoch, startPos));
-        if (old == null) {return true;}
-        boolean changed = false;
-        if (old.currentLog != currentLog) { old.currentLog = currentLog; changed = true; }
-        if (old.startLog != startLog) { old.startLog = startLog; changed = true; }
-        if (old.epoch != epoch) {old.epoch = epoch; changed = true; }
-        if (old.startPos != startPos) {old.startPos = startPos; changed = true; }
-        return changed;
+        StreamData old = streamMap.get(stream);
+        if (old == null) {
+            if (currentLog == null || startLog == null || epoch == -1 || startPos == -1)
+            {
+                return false;
+            }
+            else{
+                return streamMap.putIfAbsent(stream, new StreamData(stream, currentLog, startLog, epoch, startPos, lastUpdate)) == null;
+            }
+        }
+
+        synchronized(old)
+        {
+            if (currentLog != null) { old.currentLog = currentLog; }
+            if (startLog != null) { old.startLog = startLog; }
+            if (epoch != -1) {old.epoch = epoch; }
+            if (startPos != -1) {old.startPos = startPos; }
+            old.lastUpdate = lastUpdate;
+            return true;
+        }
     }
 }

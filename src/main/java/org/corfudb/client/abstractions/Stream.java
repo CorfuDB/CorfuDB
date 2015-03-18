@@ -60,6 +60,8 @@ import java.io.Serializable;
 import java.util.stream.Collectors;
 import org.corfudb.client.gossip.StreamEpochGossipEntry;
 
+import java.util.function.Supplier;
+
 /**
  *  A hop-aware stream implementation. The stream must be closed after the application is done using it
  *  to free resources, or enclosed in a try-resource block.
@@ -92,6 +94,9 @@ public class Stream implements AutoCloseable {
     CompletableFuture<Void> currentDispatch;
     AtomicLong streamPointer;
     int queueMax;
+
+    Supplier<CorfuDBView> getView;
+    Supplier<IConfigMaster> getConfigMaster;
 
     public Stream(CorfuDBClient cdbc, UUID uuid) {
         this(cdbc, uuid, 4, 10, Runtime.getRuntime().availableProcessors(), true);
@@ -130,12 +135,16 @@ public class Stream implements AutoCloseable {
         logPointer = new AtomicLong();
         currentEpoch = new AtomicLong();
         queueMax = queueSize;
+        getView = () -> {
+            return this.cdbc.getView();
+        };
+        getConfigMaster = () -> {
+            return (IConfigMaster) this.getView.get().getConfigMasters().get(0);
+        };
         this.prefetch = prefetch;
         this.executor = executor;
         //now, the stream starts reading from the beginning...
-        IConfigMaster cm = (IConfigMaster) cdbc.getView().getConfigMasters().get(0);
-        //does the stream exist? create if it does not
-        streamInfo si = cm.getStream(streamID);
+        streamInfo si = getConfigMaster.get().getStream(streamID);
         //it doesn't, so try to create
         while (si == null)
         {
@@ -143,10 +152,9 @@ public class Stream implements AutoCloseable {
                 long sequenceNo = sequencer.getNext(uuid);
                 CorfuDBStreamStartEntry cdsse = new CorfuDBStreamStartEntry(streamID, currentEpoch.get());
                 woas.write(sequenceNo, cdsse);
-                cm.addStream(cdbc.getView().getUUID(), streamID, sequenceNo);
+                getConfigMaster.get().addStream(cdbc.getView().getUUID(), streamID, sequenceNo);
                 sequencer.setAllocationSize(streamID, allocationSize);
-                si = cm.getStream(streamID);
-                cm.sendGossip(new StreamEpochGossipEntry(streamID, 0));
+                si = getConfigMaster.get().getStream(streamID);
             } catch (IOException ie)
             {
                 log.debug("Warning, couldn't get streaminfo, retrying...", ie);
@@ -238,6 +246,8 @@ public class Stream implements AutoCloseable {
                                 if (payload instanceof CorfuDBStreamMoveEntry)
                                 {
                                     CorfuDBStreamMoveEntry cdbsme = (CorfuDBStreamMoveEntry) payload;
+                                    // This move is just an allocation boundary change. The epoch doesn't change,
+                                    // just the read pointer.
                                     if (cdbsme.destinationLog.equals(logID) || cdbsme.getTimestamp().getEpoch() == -1)
                                     {
                                         //flush what we've read (unless the stream starts at the next allocation,)
@@ -246,13 +256,16 @@ public class Stream implements AutoCloseable {
                                         currentDispatch = getStreamTailAndDispatch(1);
                                         return;
                                     }
+                                    // This is an intentional move, either permanent, or temporary.
                                     else
                                     {
                                         if (cdbsme.duration == -1)
                                         {
                                             log.debug("Detected permanent move operation to different log " + cdbsme.destinationLog);
                                             //since this is a perma-move, we increment the epoch
-                                            currentEpoch.getAndIncrement();
+                                            long newEpoch = currentEpoch.incrementAndGet();
+                                            long logpos = streamPointer.getAndIncrement();
+                                            getConfigMaster.get().sendGossip(new StreamEpochGossipEntry(streamID, cdbsme.destinationLog, newEpoch, logpos));
                                             //since this is on a different log, we change the address space and sequencer
                                             woas = new WriteOnceAddressSpace(cdbc, cdbsme.destinationLog);
                                             sequencer = new StreamingSequencer(cdbc, cdbsme.destinationLog);
@@ -275,6 +288,7 @@ public class Stream implements AutoCloseable {
                                 }
                                 else if (payload instanceof CorfuDBStreamStartEntry)
                                 {
+
                                 }
                                 else if (payload instanceof CorfuDBStreamEntry)
                                 {

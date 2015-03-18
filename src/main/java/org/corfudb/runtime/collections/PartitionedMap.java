@@ -1,77 +1,150 @@
 package org.corfudb.runtime.collections;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+
+import org.corfudb.runtime.AbstractRuntime;
+import org.corfudb.runtime.CorfuDBObject;
 
 public class PartitionedMap<K,V> implements Map<K,V>
 {
-    Map<K,V> maps[];
+    List<Long> partitionlist;
+    AbstractRuntime TR;
 
-    public PartitionedMap(Map<K,V> tmaps[])
+    public PartitionedMap(List<Long> tpartitionlist, AbstractRuntime tTR)
     {
-        maps = tmaps;
+        partitionlist = tpartitionlist;
+        TR = tTR;
     }
 
-    int keytomap(Object O)
+    //objectid to object instance map
+    Map<Long, CorfuDBMap<K,V>> soft_mapobjs = new HashMap();
+
+    CorfuDBMap<K,V> objidtomap(long objid)
     {
-        return O.hashCode()%maps.length;
+        CorfuDBMap<K,V> curmap = null;
+        if(soft_mapobjs.containsKey(objid))
+            curmap = soft_mapobjs.get(objid);
+        else
+        {
+            curmap = new CorfuDBMap<K,V>(TR, objid);
+            soft_mapobjs.put(objid, curmap);
+        }
+        return curmap;
+    }
+
+    CorfuDBMap<K,V> keytomap(Object O)
+    {
+        int index = 0;
+        if(O!=null)
+            index = O.hashCode()%partitionlist.size();
+//        System.out.println("XYZ " + partitionlist.size() + ", " + index + ": " + partitionlist.get(index));
+        long objid = partitionlist.get(index);
+        return objidtomap(objid);
     }
 
     @Override
     public int size()
     {
-        int ret = 0;
-        for(int i=0;i<maps.length;i++)
-            ret += maps[i].size();
+        int ret;
+        while(true)
+        {
+            TR.BeginTX();
+            ret = 0;
+            for (int i = 0; i < partitionlist.size(); i++)
+                ret += objidtomap(partitionlist.get(i)).size();
+            if(TR.EndTX()) break;
+        }
         return ret;
     }
 
     @Override
     public boolean isEmpty()
     {
-        for(int i=0;i<maps.length;i++)
-            if(!maps[i].isEmpty())
-                return false;
-        return true;
+        boolean ret = true;
+        while(true)
+        {
+            TR.BeginTX();
+            for (int i = 0; i < partitionlist.size(); i++)
+                if (!objidtomap(partitionlist.get(i)).isEmpty())
+                {
+                    ret = false;
+                    break;
+                }
+            if(TR.EndTX()) break;
+
+        }
+        return ret;
     }
 
     @Override
     public boolean containsKey(Object o)
     {
-        return maps[keytomap(o)].containsKey(o);
+        boolean ret = false;
+        while(true)
+        {
+            TR.BeginTX();
+            ret = keytomap(o).containsKey(o);
+            if(TR.EndTX()) break;
+        }
+        return ret;
     }
 
     @Override
     public boolean containsValue(Object o)
     {
-        for(int i=0;i<maps.length;i++)
+        boolean ret = false;
+        while(true)
         {
-            if(maps[i].containsValue(o)) return true;
+            TR.BeginTX();
+            for (int i = 0; i < partitionlist.size(); i++)
+            {
+                if (objidtomap(partitionlist.get(i)).containsValue(o)) ret = true;
+            }
+            if(TR.EndTX()) break;
         }
-        return false;
+        return ret;
     }
 
     @Override
     public V get(Object o)
     {
 //4        System.out.println("getting " + o + " in map " + keytomap(o));
-        return maps[keytomap(o)].get(o);
+        V ret = null;
+        while(true)
+        {
+            TR.BeginTX();
+            ret = keytomap(o).get(o);
+            if(TR.EndTX()) break;
+        }
+        return ret;
     }
 
     @Override
     public V put(K k, V v)
     {
 //        System.out.println("putting " + k + " in map " + keytomap(k));
-        return maps[keytomap(k)].put(k, v);
+        V ret = null;
+        while(true)
+        {
+            TR.BeginTX();
+            ret = keytomap(k).put(k,v);
+            if(TR.EndTX()) break;
+        }
+        return ret;
     }
 
     @Override
     public V remove(Object o)
     {
 //        System.out.println("removing " + o + " from map " + keytomap(o));
-        return maps[keytomap(o)].remove(o);
+        V ret = null;
+        while(true)
+        {
+            TR.BeginTX();
+            ret = keytomap(o).remove(o);
+            if(TR.EndTX()) break;
+        }
+        return ret;
     }
 
     @Override
@@ -83,8 +156,13 @@ public class PartitionedMap<K,V> implements Map<K,V>
     @Override
     public void clear()
     {
-        for(int i=0;i<maps.length;i++)
-            maps[i].clear();
+        while(true)
+        {
+            TR.BeginTX();
+            for (int i = 0; i < partitionlist.size(); i++)
+                objidtomap(partitionlist.get(i)).clear();
+            if(TR.EndTX()) break;
+        }
     }
 
     @Override
