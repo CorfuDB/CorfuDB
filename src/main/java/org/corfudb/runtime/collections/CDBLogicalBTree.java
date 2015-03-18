@@ -96,7 +96,8 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
         try {
             Entry entry = searchEntry(m_root, key, m_height);
             if(entry != null) {
-                V result = entry.deleted ? (V) entry.value : null;
+                V result = entry.deleted ? null : (V) entry.value;
+                m_size -= entry.deleted ? 0 : 1;
                 entry.deleted = true;
                 return result;
             }
@@ -115,7 +116,7 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
     public V applyGet(K key) {
         rlock();
         try {
-            return search(m_root, key, m_size);
+            return search(m_root, key, m_height);
         } finally {
             runlock();
         }
@@ -228,12 +229,53 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
 
 
     /**
-     * print the current state of the tree
-     * TODO: implement this...
+     * print the b-tree
      * @return
      */
     public String print() {
-        return toString();
+        return print(m_root, m_height, "") + "\n";
+    }
+
+    /**
+     * print helper function
+     * @param node
+     * @param height
+     * @param indent
+     * @return
+     */
+    private String
+    print(Node<K, V> node, int height, String indent) {
+
+        if(node == null)
+            return new String("");
+
+        StringBuilder sb = new StringBuilder();
+        Entry[] children = node.m_vChildren;
+        int nChildren = node.m_nChildren;
+        if(height == 0) {
+            for(int i=0; i<nChildren; i++) {
+                Entry child = children[i];
+                sb.append(indent);
+                if(child.deleted)
+                    sb.append("DEL: ");
+                sb.append(child.key);
+                sb.append(" ");
+                sb.append(child.value);
+                sb.append("\n");
+            }
+        } else {
+            for(int i=0; i<nChildren; i++) {
+                if(i>0) {
+                    sb.append(indent);
+                    sb.append("(");
+                    sb.append(children[i].key);
+                    sb.append(")\n");
+                }
+                Node next = children[i].next;
+                sb.append(print(next, height-1, indent + "    "));
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -244,7 +286,12 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
     public V remove(K key) {
         TreeOp cmd = new TreeOp(TreeOp.CMD_REMOVE, oid, key, null);
         TR.update_helper(this, cmd);
-        return null; // arg!
+        rlock();
+        try {
+            return get(key);
+        } finally {
+            runlock();
+        }
     }
 
     /**
@@ -333,7 +380,7 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
                 if(idx+1==node.m_nChildren || lt(key, node.m_vChildren[idx+1].key)) {
                     Node unode = insert(node.m_vChildren[idx++].next, key, value, height-1);
                     if(unode == null)
-                        break;
+                        return null;
                     entry.key = unode.m_vChildren[0].key;
                     entry.next = unode;
                     break;

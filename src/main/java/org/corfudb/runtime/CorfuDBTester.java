@@ -61,6 +61,7 @@ public class CorfuDBTester
         System.out.println("\t[-v verbose mode...]");
         System.out.println("\t[-x extreme debug mode (requires -v)]");
         System.out.println("\t[-r read write pct (double)]");
+        System.out.println("\t[-T test case [functional|multifunctional|concurrent|tx]]\n");
 
 //        if(dbglog instanceof SimpleLogger)
 //            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
@@ -85,10 +86,9 @@ public class CorfuDBTester
         final int TXLOGICALBTREE = 10;
         final int TXPHYSICALBTREE = 11;
 
+        int c;
         int numclients = 2;
         int expernum = 1; //used by the barrier code
-
-        int c;
         String strArg;
         int numthreads = 1;
         int numops = 1000;
@@ -99,6 +99,7 @@ public class CorfuDBTester
         String masternode = null;
         boolean verbose = false;
         double rwpct = 0.25;
+        String testCase = "functional";
 
         if(args.length==0)
         {
@@ -106,13 +107,18 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vx");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
             {
+                case 'T':
+                    testCase = g.getOptarg();
+                    break;
                 case 'x':
                     TXListTester.extremeDebug = true;
+                    BTreeTester.extremeDebug = true;
+                    BTreeTester.trackOps = true;
                     break;
                 case 'v':
                     verbose = true;
@@ -329,14 +335,12 @@ public class CorfuDBTester
         else if(testnum==TXLOGICALBTREE) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             BTreeTester.<String, String, CDBLogicalBTree<String, String>>runTest(
-                    TR, sf, BTreeTester.testcase.functional,
-                    numthreads, numlists, numops, numkeys, rwpct, "CDBLogicalBTree", verbose);
+                    TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBLogicalBTree", testCase, verbose);
         }
         else if(testnum==TXPHYSICALBTREE) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
             BTreeTester.<String, String, CDBPhysicalBTree<String, String>>runTest(
-                    TR, sf, BTreeTester.testcase.functional,
-                    numthreads, numlists, numops, numkeys, rwpct, "CDBPhysicalBTree", verbose);
+                    TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBPhysicalBTree", testCase, verbose);
         }
         else if(testnum==REMOBJTEST)
         {
