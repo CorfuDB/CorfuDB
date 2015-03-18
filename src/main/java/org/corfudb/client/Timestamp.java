@@ -36,6 +36,8 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     private static final Logger log = LoggerFactory.getLogger(Timestamp.class);
 
     public transient Long pos;
+    public transient UUID primaryStream;
+
     public transient Long physicalPos;
     public transient UUID logID;
     public Map<UUID, Long> epochMap;
@@ -76,12 +78,13 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
         return epochMap.get(stream);
     }
 
-    public void setLogicalPos(long pos)
+    public void setLogicalPos(long pos, UUID primaryStream)
     {
+        this.primaryStream = primaryStream;
         this.pos = pos;
     }
 
-public void setPhysicalPos(long pos)
+    public void setPhysicalPos(long pos)
     {
         this.physicalPos = physicalPos;
     }
@@ -124,6 +127,11 @@ public void setPhysicalPos(long pos)
 
     public int compareTo(Timestamp t)
     {
+        if (primaryStream != null && primaryStream.equals(t.primaryStream))
+        {
+            return (int) (pos - t.pos);
+        }
+
         for (UUID id : this.epochMap.keySet())
         {
             if (t.epochMap.containsKey(id))

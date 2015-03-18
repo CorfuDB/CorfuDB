@@ -360,7 +360,7 @@ public class Stream implements AutoCloseable, IStream {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
                                     if (cdbse.checkEpoch(epochMap))
                                     {
-                                        cdbse.getTimestamp().setLogicalPos(streamPointer.getAndIncrement());
+                                        cdbse.getTimestamp().setLogicalPos(streamPointer.getAndIncrement(), streamID);
                                         cdbse.getTimestamp().setPhysicalPos(r.pos);
                                         cdbse.getTimestamp().setLogId(logID);
                                         synchronized (streamPointer) {
