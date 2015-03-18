@@ -70,6 +70,8 @@ import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Connection;
 
 import org.corfudb.client.gossip.StreamEpochGossipEntry;
+import org.corfudb.client.gossip.StreamDiscoveryRequestGossip;
+import org.corfudb.client.gossip.StreamDiscoveryResponseGossip;
 import org.corfudb.client.gossip.IGossip;
 
 import org.corfudb.client.Timestamp;
@@ -122,15 +124,65 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         StreamEpochGossipEntry sege = (StreamEpochGossipEntry) object;
                         if (!currentStreamView.checkStream(sege.streamID, sege.logPos))
                         {
-                            currentStreamView.learnStream(sege.streamID, sege.logID, null, -1, sege.epoch, sege.logPos);
-                            /* now we need to advertise this change to all other configuration masters */
-                            sege.fromMaster = true;
+                            if (!currentStreamView.learnStream(sege.streamID, sege.logID, null, -1, sege.epoch, sege.logPos))
+                            {
+                                log.debug("Learned about an epoch change for stream " + sege.streamID + ", but we don't know about that stream, discovering...");
+                                StreamDiscoveryRequestGossip sdrg = new StreamDiscoveryRequestGossip(sege.streamID);
+                                sendGossipToAllRemotes(sdrg);
+                                return;
+                            }
+                            if (!sege.fromMaster)
+                            {
+                                /* now we need to advertise this change to all other configuration masters */
+                                sege.fromMaster = true;
+                                sendGossipToAllRemotes(sege);
+                            }
+                        }
+                    }
+                    else if (object instanceof StreamDiscoveryRequestGossip)
+                    {
+                        StreamDiscoveryRequestGossip sdrg = (StreamDiscoveryRequestGossip) object;
+                        StreamView.StreamData sd = currentStreamView.getStream(sdrg.streamID);
+                        if (sd != null)
+                        {
+                            StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
+                                    sd.streamID,
+                                    sd.currentLog,
+                                    sd.startLog,
+                                    sd.startPos,
+                                    sd.epoch,
+                                    sd.lastUpdate
+                                    );
+                            sendGossipToAllRemotes(sdresp);
+                        }
+                    }
+                    else if (object instanceof StreamDiscoveryResponseGossip)
+                    {
+                        StreamDiscoveryResponseGossip sdrg = (StreamDiscoveryResponseGossip) object;
+                        if (!currentStreamView.checkStream(sdrg.streamID, sdrg.logPos))
+                        {
+                            currentStreamView.learnStream(sdrg.streamID, sdrg.currentLog, sdrg.startLog, sdrg.startPos, sdrg.epoch, sdrg.logPos);
                         }
                     }
                 }
             });
         }
 
+    }
+
+    private void sendGossipToAllRemotes(IGossip gossip)
+    {
+        for (UUID remote : currentRemoteView.getAllLogs())
+        {
+            try {
+                CorfuDBView cv = (CorfuDBView)currentRemoteView.getLog(remote);
+                IConfigMaster cm = (IConfigMaster) cv.getConfigMasters().get(0);
+                cm.sendGossip(gossip);
+            } catch (Exception e)
+            {
+                log.debug("Error Broadcasting Gossip", e);
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -149,7 +201,6 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         UUID logID =  UUID.randomUUID();
         log.info("New log instance id= " + logID.toString());
         currentView.setUUID(logID);
-        loadRemoteLogs();
         return this;
     }
 
@@ -235,6 +286,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             server.createContext("/", new StaticRequestHandler());
             server.setExecutor(null);
             server.start();
+            loadRemoteLogs();
             checkViewThread();
         } catch(IOException ie) {
             log.error(MarkerFactory.getMarker("FATAL"), "Couldn't start HTTP Service!" , ie);
@@ -282,6 +334,20 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         try {
             JsonObject jo = params;
             currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
+            StreamView.StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
+
+            if (sd != null)
+            {
+                StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
+                        sd.streamID,
+                        sd.currentLog,
+                        sd.startLog,
+                        sd.startPos,
+                        sd.epoch,
+                        sd.lastUpdate
+                        );
+                sendGossipToAllRemotes(sdresp);
+            }
         }
         catch (Exception ex)
         {
@@ -408,18 +474,15 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                                             ts.physicalPos = pos;
                                         }
                                     }
-                                    log.debug("Getting field " + field.getName().toString());
                                     Object odata = field.get(obj);
                                     datan.add(field.getName().toString(), odata == null ? "null" :
                                                                           odata.toString() == null ? "null" :
                                                                           odata.toString());
-                                    log.debug("Successfully added");
                                 }
                             } catch (IllegalArgumentException iae) {}
                             catch (IllegalAccessException iae) {}
                         }
                     } while ((current = current.getSuperclass()) != null && current != Object.class);
-                    log.debug("output!");
                     output.add("data", datan);
                 }
             }

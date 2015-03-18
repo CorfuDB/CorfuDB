@@ -22,10 +22,27 @@ public class RemoteLogView {
         /** The string to the remote */
         public String remoteString;
         /** A CorfuDBView, if available */
-        public CorfuDBView view;
+        private CorfuDBView view;
         public RemoteData (String remoteString)
         {
             this.remoteString = remoteString;
+            this.view = null;
+        }
+        public CorfuDBView getView()
+        {
+            try {
+                if (view == null)
+                {
+                    String remoteLog = remoteString.replace("cdbcm", "http");
+                    view = CorfuDBClient.retrieveView(remoteLog + "/corfu");
+                    return view;
+                }
+            }
+            catch (IOException e)
+            {
+                return null;
+            }
+            return view;
         }
     }
 
@@ -45,20 +62,7 @@ public class RemoteLogView {
      */
     public boolean addLog(UUID logID, String logRemote)
     {
-        RemoteData rd = remoteMap.putIfAbsent(logID, new RemoteData(logRemote));
-        if (rd == null)
-        {
-            try {
-                String remoteLog = logRemote.replace("cdbcm", "http");
-                rd.view = CorfuDBClient.retrieveView(remoteLog + "/corfu");
-            }
-            catch (IOException ie)
-            {
-                remoteMap.remove(logID);
-                return false;
-            }
-        }
-        return true;
+        return remoteMap.putIfAbsent(logID, new RemoteData(logRemote)) == null;
     }
 
     /**
@@ -89,19 +93,17 @@ public class RemoteLogView {
             }
         }
         try {
-            String remoteLog = logRemote.replace("cdbcm", "http");
             RemoteData rd = new RemoteData(logRemote);
-            rd.view = CorfuDBClient.retrieveView(remoteLog + "/corfu");
-            if (logSelf != null && logSelf.equals(rd.view.getUUID()))
+            if (logSelf != null && logSelf.equals(rd.getView().getUUID()))
             {
                 return logSelf;
             }
-            remoteMap.putIfAbsent(rd.view.getUUID(), new RemoteData(logRemote));
-            return rd.view.getUUID();
+            remoteMap.putIfAbsent(rd.getView().getUUID(), new RemoteData(logRemote));
+            return rd.getView().getUUID();
         }
-        catch (IOException ie)
+        catch (NullPointerException ie)
         {
-           // log.debug("IOException dynamically discovering remote log", ie);
+           log.debug("Exception dynamically discovering remote log", ie);
             return null;
         }
     }
@@ -158,7 +160,7 @@ public class RemoteLogView {
         }
         else
         {
-            return rd.view;
+            return rd.getView();
         }
     }
 

@@ -20,7 +20,6 @@ configmasters:
     - "cdbcm://localhost:8006"
 remotelogs:
     - "cdbcm://localhost:8002"
-    - "cdbcm://localhost:8006"
 layout:
     segments:
         - start: 0

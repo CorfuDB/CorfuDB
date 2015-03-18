@@ -46,6 +46,18 @@ public class StreamView {
             this.startPos = startPos;
             this.lastUpdate = 0;
         }
+
+        /** Creates a new StreamData instance */
+        public StreamData(UUID streamID, UUID currentLog, UUID startLog, long epoch, long startPos, long lastupdate)
+        {
+            this.streamID = streamID;
+            this.currentLog = currentLog;
+            this.startLog = startLog;
+            this.epoch = epoch;
+            this.startPos = startPos;
+            this.lastUpdate = lastupdate;
+        }
+
     }
 
     /**
@@ -124,7 +136,15 @@ public class StreamView {
     public boolean learnStream(UUID stream, UUID currentLog, UUID startLog, long startPos, long epoch, long lastUpdate)
     {
         StreamData old = streamMap.get(stream);
-        if (old == null) {return false;}
+        if (old == null) {
+            if (currentLog == null || startLog == null || epoch == -1 || startPos == -1)
+            {
+                return false;
+            }
+            else{
+                return streamMap.putIfAbsent(stream, new StreamData(stream, currentLog, startLog, epoch, startPos, lastUpdate)) == null;
+            }
+        }
 
         synchronized(old)
         {
