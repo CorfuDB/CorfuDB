@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
+import org.corfudb.runtime.ITimestamp;
 import org.corfudb.runtime.StreamFactory;
 
 public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
@@ -58,7 +59,7 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
      * @param timestamp
      */
     public void
-    applyToObject(Object bs, long timestamp) {
+    applyToObject(Object bs, ITimestamp timestamp) {
 
         TreeOp<K,V> cc = (TreeOp<K,V>) bs;
         switch (cc.cmd()) {

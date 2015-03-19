@@ -24,11 +24,11 @@ import java.util.concurrent.locks.ReentrantLock;
 
 class StreamEntryImpl implements StreamEntry
 {
-    private Timestamp logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
+    private ITimestamp logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
     private Object payload;
     private Set<Long> streams;
 
-    public Timestamp getLogpos()
+    public ITimestamp getLogpos()
     {
         return logpos;
     }
@@ -98,7 +98,7 @@ class StreamImpl implements Stream
     }
 
     @Override
-    public Timestamp append(Serializable payload, Set<Long> streams)
+    public ITimestamp append(Serializable payload, Set<Long> streams)
     {
         long ret = seq.get_slot(streams);
         Timestamp T = new Timestamp(addrspace.getID(), ret, 0, this.getStreamID()); //todo: fill in the right epoch
@@ -116,9 +116,10 @@ class StreamImpl implements Stream
     }
 
     @Override
-    public StreamEntry readNext(Timestamp stoppos)
+    public StreamEntry readNext(ITimestamp istoppos)
     {
         //this is a hacky implementation that doesn't take multi-log hopping (epochs, logids) into account
+        Timestamp stoppos = (Timestamp)istoppos;
         if(stoppos!=null && stoppos.logid!=addrspace.getID()) throw new RuntimeException("readnext using timestamp of different log!");
         StreamEntry ret = null;
         while(true)
@@ -141,7 +142,7 @@ class StreamImpl implements Stream
     }
 
     @Override
-    public Timestamp checkTail()
+    public ITimestamp checkTail()
     {
         long tcurtail = seq.check_tail();
         biglock.lock();
@@ -151,7 +152,7 @@ class StreamImpl implements Stream
     }
 
     @Override
-    public void prefixTrim(Timestamp trimpos)
+    public void prefixTrim(ITimestamp trimpos)
     {
         throw new RuntimeException("unimplemented");
     }

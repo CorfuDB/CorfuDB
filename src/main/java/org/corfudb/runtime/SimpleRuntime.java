@@ -166,13 +166,13 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
             System.out.println("received RPC for object that we aren't playing");
             return null; //todo: should we return a cleaner error code instead?
         }
-        smre.sync(SMREngine.TIMESTAMP_INVALID, P.second);
+        smre.sync(null, P.second);
         return P.second;
     }
 
     //we don't lock the object; the sub-classing runtime is responsible for locking, if required,
     //before calling this method
-    public void applyCommandToObject(long curstream, CorfuDBObjectCommand command, long timestamp)
+    public void applyCommandToObject(long curstream, CorfuDBObjectCommand command, ITimestamp timestamp)
     {
         CorfuDBObject cob = getObject(curstream);
         if(cob==null) throw new RuntimeException("entry for stream " + curstream + " with no registered object");
@@ -191,7 +191,7 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         //the alternative is to have the apply in the object always call a superclass version of apply
         //that sets the timestamp
         //only the apply thread sets the timestamp, so we only have to worry about concurrent reads
-        if(timestamp!=SMREngine.TIMESTAMP_INVALID)
+        if(timestamp!=null)
             cob.setTimestamp(timestamp);
         command.setTimestamp(cob.getTimestamp());
     }
@@ -284,11 +284,11 @@ public class SimpleRuntime extends BaseRuntime
             rpcRemoteRuntime(cob, command);
         }
         else
-            smre.sync(SMREngine.TIMESTAMP_INVALID, command);
+            smre.sync(TimestampConstants.singleton().getInvalidTimestamp(), command);
         return true;
     }
 
-    public void deliver(Object command, long curstream, long timestamp)
+    public void deliver(Object command, long curstream, ITimestamp timestamp)
     {
         //we don't have to lock the object --- there's one thread per SMREngine,
         //and exactly one SMREngine per stream/object
@@ -479,7 +479,7 @@ class RemoteReadMapImpl implements RemoteReadMap, SMRLearner
     }
 
     @Override
-    public void deliver(Object command, long curstream, long timestamp)
+    public void deliver(Object command, long curstream, ITimestamp timestamp)
     {
 //        System.out.println("RRM got message on " + curstream);
         Triple<Long, String, Integer> T = (Triple<Long, String, Integer>)command;

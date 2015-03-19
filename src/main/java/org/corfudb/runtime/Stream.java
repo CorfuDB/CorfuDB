@@ -44,7 +44,7 @@ public interface Stream
      * @param streams set of streams to append the entry to
      * @return Timestamp of the appended entry
      */
-    Timestamp append(Serializable s, Set<Long> streams);
+    ITimestamp append(Serializable s, Set<Long> streams);
 
     /**
      * reads the next entry in the stream
@@ -62,7 +62,7 @@ public interface Stream
      * @param  stoppos  the stopping position for the read
      * @return          the next entry in the stream
      */
-    StreamEntry readNext(Timestamp stoppos);
+    StreamEntry readNext(ITimestamp stoppos);
 
     /**
      * returns the current tail position of the stream (this is exclusive, so a checkTail
@@ -72,7 +72,7 @@ public interface Stream
      *
      * @return          the current tail of the stream
      */
-    Timestamp checkTail();
+    ITimestamp checkTail();
 
     /**
      * trims all entries in the stream until the passed in position (exclusive); so
@@ -82,7 +82,7 @@ public interface Stream
      * @param   trimpos the position strictly before which all entries belonging to the
      *                  stream are trimmed
      */
-    void prefixTrim(Timestamp trimpos);
+    void prefixTrim(ITimestamp trimpos);
 
     /**
      * returns this stream's ID
@@ -101,13 +101,57 @@ public interface Stream
 
 interface StreamEntry extends Serializable
 {
-    public Timestamp getLogpos();
+    public ITimestamp getLogpos();
     public Object getPayload();
     public Set<Long> getStreams();
 }
 
-class Timestamp implements Comparable, Serializable
+interface ITimestampConstants
 {
+    ITimestamp getInvalidTimestamp();
+    ITimestamp getMaxTimestamp();
+    ITimestamp getMinTimestamp();
+}
+
+class TimestampConstants implements ITimestampConstants
+{
+    static ITimestampConstants instance = new TimestampConstants();
+
+    public static ITimestampConstants singleton()
+    {
+        return instance;
+    }
+
+    Timestamp invalidts = new Timestamp(Timestamp.special_isinvalid);
+    Timestamp maxts = new Timestamp(Timestamp.special_ismax);
+    Timestamp mints = new Timestamp(Timestamp.special_ismin);
+
+    @Override
+    public ITimestamp getInvalidTimestamp()
+    {
+        return invalidts;
+    }
+
+    @Override
+    public ITimestamp getMaxTimestamp()
+    {
+        return maxts;
+    }
+
+    @Override
+    public ITimestamp getMinTimestamp()
+    {
+        return mints;
+    }
+}
+
+class Timestamp implements ITimestamp, Serializable
+{
+    public static final int special_ismax = 0;
+    public static final int special_ismin = 1;
+    public static final int special_isinvalid = 2;
+    boolean specialbits[] = new boolean[3];
+
     long streamid;
     long logid; //todo: currently we seem to identify logs with strings... which makes for terribly inefficient timestamps
     long pos;
@@ -119,26 +163,50 @@ class Timestamp implements Comparable, Serializable
         epoch = tepoch;
         streamid = tstreamid;
     }
+    public Timestamp(int specialbit)
+    {
+        specialbits[specialbit] = true;
+    }
+
+    public boolean equals(Object o)
+    {
+        ITimestamp tT = (ITimestamp)o;
+        if(compareTo(tT)==0) return true;
+        return false;
+    }
+
 
     @Override
-    public int compareTo(Object o)
+    public int compareTo(ITimestamp iTimestamp)
     {
-        Timestamp T2 = (Timestamp)o;
+        Timestamp T2 = (Timestamp)iTimestamp;
+        //check the special bits
+        for(int i=0;i<specialbits.length;i++)
+            if(specialbits[i] && T2.specialbits[i]) return 0;
+            else if(!specialbits[i] && T2.specialbits[i]) return -1;
+            else if(specialbits[i] && !T2.specialbits[i]) return 1;
+
+
         int x = 0;
         //todo: is it okay to (ab)use ClassCastException?
-        if(this.logid!=T2.logid && this.streamid!=T2.streamid) throw new ClassCastException("timestamps are not comparable since they are on different logs");
-            //different logs, same stream
-        else if(this.logid!=T2.logid && this.streamid==T2.streamid)
+        if(this.logid!=T2.logid && this.streamid!=T2.streamid)
+            throw new ClassCastException("timestamps are not comparable since they are on different logs");
+        //same stream
+        else if (this.streamid == T2.streamid)
         {
-            if(this.epoch==T2.epoch && this.pos==T2.pos)
+            if (this.epoch == T2.epoch && this.pos == T2.pos)
                 x = 0;
-            else if(this.epoch<T2.epoch || (this.epoch==T2.epoch && this.pos<T2.pos)) //on the same epoch, logpos must be comparable since they're on the same log
+            else if (this.epoch < T2.epoch || (this.epoch == T2.epoch && this.pos < T2.pos)) //on the same epoch, logpos must be comparable since they're on the same log
                 x = -1;
             else
                 x = 1;
         }
+        else
+        {
+            throw new ClassCastException("different streams!");
+        }
         //same log, different streams
-        else if(this.logid==T2.logid && this.streamid!=T2.streamid)
+/*        else if(this.logid==T2.logid && this.streamid!=T2.streamid)
         {
             if(this.pos==T2.pos)
                 x = 0;
@@ -146,7 +214,21 @@ class Timestamp implements Comparable, Serializable
                 x = -1;
             else
                 x = 1;
-        }
+        }*/
         return x;
+
+    }
+
+    public String toString()
+    {
+        if(specialbits[special_isinvalid]) return "T[INV]";
+        if(specialbits[special_ismax]) return "T[MAX]";
+        if(specialbits[special_ismin]) return "T[MIN]";
+        return "T[" + streamid + "," + logid + "," + epoch + "," + pos + "]";
+    }
+
+    public int hashCode()
+    {
+        return (int)(streamid+logid+pos+epoch);
     }
 }

@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
 import org.corfudb.runtime.CorfuDBObjectCommand;
+import org.corfudb.runtime.ITimestamp;
 
 import java.util.HashSet;
 
@@ -18,7 +19,7 @@ public class CorfuDBCounter extends CorfuDBObject
         super(tTR, toid);
         value = 0;
     }
-    public void applyToObject(Object bs, long timestamp)
+    public void applyToObject(Object bs, ITimestamp timestamp)
     {
         //System.out.println("dummyupcall");
         //System.out.println("CorfuDBCounter received upcall");

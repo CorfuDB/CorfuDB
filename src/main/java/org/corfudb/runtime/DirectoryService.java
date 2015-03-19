@@ -59,7 +59,7 @@ public class DirectoryService
     {
         Stream S = sf.newStream(DS_RESERVED_UNIQUE_ID);
         HashSet hs = new HashSet(); hs.add(DS_RESERVED_UNIQUE_ID);
-        return S.append("DummyString", hs).pos;
+        return ((Timestamp)S.append("DummyString", hs)).pos; //todo: this is a hack
     }
 
 

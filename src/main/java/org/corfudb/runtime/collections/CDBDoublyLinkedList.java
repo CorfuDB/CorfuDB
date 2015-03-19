@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.DirectoryService;
+import org.corfudb.runtime.ITimestamp;
 import org.corfudb.runtime.StreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +65,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      * @param timestamp
      */
     public void
-    applyToObject(Object bs, long timestamp) {
+    applyToObject(Object bs, ITimestamp timestamp) {
 
         dbglog.debug("CDBNode received upcall");
         NodeOp<E> cc = (NodeOp<E>) bs;

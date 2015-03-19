@@ -46,9 +46,6 @@ public class SMREngine
     Set<Long> defaultstreamset;
     Stream curstream;
 
-    static final long TIMESTAMP_INVALID = -1;
-    static final long TIMESTAMP_MAX = Long.MAX_VALUE;
-
     //list of pending commands -- when we encounter entries in the log
     //we check this list to see if the entry was appended by us.
     //in that case we retrieve the original version of the object and pass
@@ -97,7 +94,7 @@ public class SMREngine
 
     }
 
-    public long propose(Serializable update, Set<Long> streams, Object precommand)
+    public ITimestamp propose(Serializable update, Set<Long> streams, Object precommand)
     {
         return propose(update, streams, precommand, false);
     }
@@ -114,14 +111,14 @@ public class SMREngine
      *                   with a subsequent write operation.
      * @return
      */
-    public long propose(Serializable update, Set<Long> streams, Object precommand, boolean sync)
+    public ITimestamp propose(Serializable update, Set<Long> streams, Object precommand, boolean sync)
     {
         SMRCommandWrapper cmd = new SMRCommandWrapper(update, streams);
         pendinglock.lock();
         pendingcommands.put(cmd.uniqueid.second, new Pair(update, precommand));
 //        System.out.println("putting " + cmd + " as a pending local command");
         pendinglock.unlock();
-        long pos = curstream.append(cmd, streams).pos; //todo: make SMREngine Timestamp-aware
+        ITimestamp pos = curstream.append(cmd, streams);
         if (precommand != null || sync)
         //we play until the append point --- this may be sub-optimal in some cases where we want to append
         //but not play immediately (or ever)
@@ -129,12 +126,12 @@ public class SMREngine
         return pos;
     }
 
-    public long propose(Serializable update)
+    public ITimestamp propose(Serializable update)
     {
         return propose(update, defaultstreamset);
     }
 
-    public long propose(Serializable update, Set<Long> streams)
+    public ITimestamp propose(Serializable update, Set<Long> streams)
     {
         return propose(update, streams, null);
     }
@@ -167,9 +164,9 @@ public class SMREngine
      * if syncpos == timestamp_max, the command should be applied after
      * syncing to the current tail.
      */
-    public void sync(long syncpos, Object command)
+    public void sync(ITimestamp syncpos, Object command)
     {
-        final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, syncpos==TIMESTAMP_INVALID);
+        final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, (syncpos.equals(TimestampConstants.singleton().getInvalidTimestamp())));
         synchronized (syncobj)
         {
             synchronized(queuelock)
@@ -189,14 +186,14 @@ public class SMREngine
         }
     }
 
-    public void sync(long syncpos)
+    public void sync(ITimestamp syncpos)
     {
         sync(syncpos, null);
     }
 
     public void sync()
     {
-        sync(TIMESTAMP_MAX, null);
+        sync(TimestampConstants.singleton().getMaxTimestamp(), null);
     }
 
     //runs in a single thread
@@ -223,8 +220,11 @@ public class SMREngine
             procqueue = curqueue;
             curqueue = tqueue;
         }
+//        System.out.println("playback woken up...");
 
         if(procqueue.size()==0) throw new RuntimeException("queue cannot be empty at this point!");
+
+//        System.out.println("playback continuing...");
 
         //check for pre-applies
         //todo: make this more efficient
@@ -236,7 +236,7 @@ public class SMREngine
             {
                 if(sw.synccommand!=null)
                 {
-                    smrlearner.deliver(sw.synccommand, curstream.getStreamID(), TIMESTAMP_INVALID);
+                    smrlearner.deliver(sw.synccommand, curstream.getStreamID(), TimestampConstants.singleton().getInvalidTimestamp());
                 }
                 synchronized(sw)
                 {
@@ -248,9 +248,10 @@ public class SMREngine
         if(procqueue.size()==0) return;
 
         //check the current tail of the stream, and then read the stream until that position
-        Timestamp curtail = curstream.checkTail();
+        ITimestamp curtail = curstream.checkTail();
 
-//        dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
+
+        dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
 
         StreamEntry update = curstream.readNext();
         while(update!=null)
@@ -275,15 +276,15 @@ public class SMREngine
                 if (localcmds.second != null)
                 {
 //                    System.out.println("deliver local command precommand " + localcmds.second);
-                    smrlearner.deliver(localcmds.second, curstream.getStreamID(), TIMESTAMP_INVALID);
+                    smrlearner.deliver(localcmds.second, curstream.getStreamID(), TimestampConstants.singleton().getInvalidTimestamp());
                 }
 //                System.out.println("deliver local command " + localcmds.first);
-                smrlearner.deliver(localcmds.first, curstream.getStreamID(), update.getLogpos().pos); //todo: make timestamp-aware
+                smrlearner.deliver(localcmds.first, curstream.getStreamID(), update.getLogpos());
             }
             else
             {
 //                System.out.println("deliver non-local command " + cmdw.cmd);
-                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), update.getLogpos().pos); //todo: make timestamp-aware
+                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), update.getLogpos());
             }
             update = curstream.readNext(curtail);
         }
@@ -300,7 +301,7 @@ public class SMREngine
             SyncObjectWrapper syncobj = it.next();
             if(syncobj.synccommand!=null)
             {
-                smrlearner.deliver(syncobj.synccommand, curstream.getStreamID(), TIMESTAMP_INVALID);
+                smrlearner.deliver(syncobj.synccommand, curstream.getStreamID(), TimestampConstants.singleton().getInvalidTimestamp());
             }
             synchronized(syncobj)
             {
@@ -326,7 +327,7 @@ interface SMRLearner
      * @param curstream
      * @param timestamp
      */
-    void deliver(Object command, long curstream, long timestamp);
+    void deliver(Object command, long curstream, ITimestamp timestamp);
 }
 
 /**

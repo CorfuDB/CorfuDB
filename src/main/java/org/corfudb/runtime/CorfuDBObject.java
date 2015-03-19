@@ -34,29 +34,29 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
     public long oid;
     public AbstractRuntime TR;
 
-    AtomicLong timestamp;
+    ITimestamp timestamp = TimestampConstants.singleton().getMinTimestamp();
 
-    public long getTimestamp()
+    public ITimestamp getTimestamp()
     {
         return getTimestamp(null);
     }
 
-    public long getTimestamp(Serializable key)
+    public ITimestamp getTimestamp(Serializable key)
     {
-        return timestamp.get();
+        return timestamp;
     }
 
-    public void setTimestamp(long newts)
+    public void setTimestamp(ITimestamp newts)
     {
         setTimestamp(newts, null);
     }
 
-    public void setTimestamp(long newts, Serializable key)
+    public void setTimestamp(ITimestamp newts, Serializable key)
     {
-        timestamp.set(newts);
+        timestamp = newts;
     }
 
-    abstract public void applyToObject(Object update, long timestamp) throws Exception;
+    abstract public void applyToObject(Object update, ITimestamp timestamp) throws Exception;
 
     //override this in subclass to perform custom conflict detection
     public boolean isStillValid(Serializable readsummary)
@@ -80,7 +80,7 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
         TR = tTR;
         oid = tobjectid;
         TR.registerObject(this, remote);
-        timestamp = new AtomicLong();
+        timestamp = TimestampConstants.singleton().getInvalidTimestamp();
         statelock = new ReentrantReadWriteLock();
     }
 

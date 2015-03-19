@@ -78,7 +78,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
          * @param timestamp
          */
         public void
-        applyToObject(Object bs, long timestamp) {
+        applyToObject(Object bs, ITimestamp timestamp) {
 
             NodeOp cc = (NodeOp) bs;
             switch (cc.cmd()) {
@@ -252,7 +252,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
          * @param timestamp
          */
         public void
-        applyToObject(Object bs, long timestamp) {
+        applyToObject(Object bs, ITimestamp timestamp) {
 
             EntryOp<K,V> cc = (EntryOp<K,V>) bs;
             switch (cc.cmd()) {
@@ -451,7 +451,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @param timestamp
      */
     public void
-    applyToObject(Object bs, long timestamp) {
+    applyToObject(Object bs, ITimestamp timestamp) {
 
         BTreeOp cc = (BTreeOp) bs;
         switch (cc.cmd()) {

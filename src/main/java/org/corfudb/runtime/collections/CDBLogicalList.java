@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
+import org.corfudb.runtime.ITimestamp;
 import org.corfudb.runtime.StreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +39,7 @@ public class CDBLogicalList<E> extends CDBAbstractList<E> {
      * @param timestamp
      */
     public void
-    applyToObject(Object bs, long timestamp) {
+    applyToObject(Object bs, ITimestamp timestamp) {
 
         dbglog.debug("CorfuDBList received upcall");
         ListCommand<E> cc = (ListCommand<E>) bs;

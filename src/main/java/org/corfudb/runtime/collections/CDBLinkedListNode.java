@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
+import org.corfudb.runtime.ITimestamp;
 import org.corfudb.runtime.StreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,7 +89,7 @@ public class CDBLinkedListNode<E> extends CorfuDBObject {
         }
     }
 
-    public void applyToObject(Object bs, long timestamp) {
+    public void applyToObject(Object bs, ITimestamp timestamp) {
 
         dbglog.debug("CDBMNode received upcall");
         NodeOp<E> cc = (NodeOp<E>) bs;

@@ -31,7 +31,7 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
         backingmap = new HashMap<K,V>();
     }
 
-    public void applyToObject(Object bs, long timestamp)
+    public void applyToObject(Object bs, ITimestamp timestamp)
     {
         MapCommand<K,V> cc = (MapCommand<K,V>)bs;
         dbglog.debug("CorfuDBMap received upcall: " + cc);
@@ -255,26 +255,26 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     //In practice, for the map example, all mutators affect all accessors, so a single timestamp can suffice.
     //However, some mutator/accessor pairs only conflict if the map key being modified is the same
     //Accordingly, we have two timestamps: a non-keyed one and a keyed one.
-    AtomicLong globaltimestamp = new AtomicLong(); //used by size, isEmpty, containsValue
-    Map<K, AtomicLong> localtimestamps = new HashMap(); //used by get, containsKey, put(accessor), remove(accessor)
+    ITimestamp globaltimestamp = null; //used by size, isEmpty, containsValue
+    Map<K, ITimestamp> localtimestamps = new HashMap(); //used by get, containsKey, put(accessor), remove(accessor)
 
 
     //returns the timestamp of the last mutator command in the stream that affected the outcome
     //of the passed in accessor
-    public long getLastUpdateTS(int cmdtype, K key)
+    public ITimestamp getLastUpdateTS(int cmdtype, K key)
     {
         if(!finegrainconflictdetection) throw new RuntimeException("this should never get called if fine-grained conflict detection is disabled");
         if(cmdtype==MapCommand.CMD_SIZE || cmdtype==MapCommand.CMD_ISEMPTY || cmdtype==MapCommand.CMD_CONTAINSVALUE)
         {
 //            System.out.println("returns global " + globaltimestamp.get());
-            return globaltimestamp.get();
+            return globaltimestamp;
         }
         else if(cmdtype==MapCommand.CMD_GET || cmdtype==MapCommand.CMD_CONTAINSKEY || cmdtype==MapCommand.CMD_PUT || cmdtype==MapCommand.CMD_REMOVE || cmdtype==MapCommand.CMD_PREPUT)
         {
             if(!(localtimestamps.containsKey(key)))
-                localtimestamps.put(key, new AtomicLong());
+                localtimestamps.put(key, null);
 //            System.out.println("returns local " + localtimestamps.get(P.second).get());
-            return localtimestamps.get(key).get(); //todo: what if it's a read on a map with no updates?
+            return localtimestamps.get(key); //todo: what if it's a read on a map with no updates?
         }
         else
         {
@@ -285,29 +285,27 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     public boolean isStillValid(Serializable readsummary)
     {
         if(!finegrainconflictdetection) throw new RuntimeException("this should never get called if fine-grained conflict detection is disabled");
-        Triple<Integer, K, Long> T = (Triple<Integer, K, Long>)readsummary;
-        if(getLastUpdateTS(T.first, T.second)>T.third)
+        Triple<Integer, K, ITimestamp> T = (Triple<Integer, K, ITimestamp>)readsummary;
+        if(getLastUpdateTS(T.first, T.second).compareTo(T.third)>0)
             return false;
         return true;
     }
 
     //for every accessor operation, we have to update its timestamp if its return value is impacted
     //e.g. if op is put, we need to update the get key-specific timestamp; the size timestamp; ...
-    public void setLastUpdateTS(long newts, int cmdtype, K key)
+    public void setLastUpdateTS(ITimestamp newts, int cmdtype, K key)
     {
         if(!finegrainconflictdetection) throw new RuntimeException("this should never get called if fine-grained conflict detection is disabled");
 //        System.out.println("ST: " + key + " " + newts);
         if(cmdtype==MapCommand.CMD_PUT || cmdtype==MapCommand.CMD_REMOVE)
         {
 //            System.out.println("setting local");
-            if(!(localtimestamps.containsKey(key)))
-                localtimestamps.put(key, new AtomicLong());
-            localtimestamps.get(key).set(newts);
+            localtimestamps.put(key, newts);
         }
         else if(cmdtype==MapCommand.CMD_CLEAR)
         {
 //            System.out.println("setting global");
-            globaltimestamp.set(newts);
+            globaltimestamp = newts;
         }
         else
             throw new RuntimeException("unknown cmd type: " + cmdtype);

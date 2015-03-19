@@ -15,14 +15,15 @@
 package org.corfudb.runtime;
 
 import java.io.Serializable;
+import java.util.UUID;
 
 public class CorfuDBObjectCommand implements Serializable
 {
     Exception E=null;
     Object retval=null;
     Serializable readsummary=null;
-    long appliedtimestamp=SMREngine.TIMESTAMP_INVALID;
-    long txid = -1;
+    ITimestamp appliedtimestamp=TimestampConstants.singleton().getInvalidTimestamp();
+    UUID txid=null;
     public Object getReturnValue()
     {
         return retval;
@@ -31,8 +32,8 @@ public class CorfuDBObjectCommand implements Serializable
     {
         retval = obj;
     }
-    public long getTxid() { return txid; }
-    public void setTxid(long l) { txid = l; }
+    public UUID getTxid() { return txid; }
+    public void setTxid(UUID l) { txid = l; }
     public void setException(Exception tE)
     {
         E = tE;
@@ -49,11 +50,11 @@ public class CorfuDBObjectCommand implements Serializable
     {
         return readsummary;
     }
-    public void setTimestamp(long ts)
+    public void setTimestamp(ITimestamp ts)
     {
         appliedtimestamp = ts;
     }
-    public long getTimestamp()
+    public ITimestamp getTimestamp()
     {
         return appliedtimestamp;
     }
