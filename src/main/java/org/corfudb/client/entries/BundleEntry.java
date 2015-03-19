@@ -50,11 +50,11 @@ import org.corfudb.client.CorfuDBClient;
  * This class implements a bundle entry, which is encountered inside the move entries of remotely bundled
  * logs. It enables remote logs to easily write results to remotes.
  */
-public class BundleEntry implements Serializable {
+public class BundleEntry extends CorfuDBStreamMoveEntry {
 
     byte[] payload;
     long physicalPos;
-    UUID remoteLog;
+    long numSlots;
     Map<UUID, Long> epochMap;
 
     transient Stream s;
@@ -62,24 +62,22 @@ public class BundleEntry implements Serializable {
     transient WriteOnceAddressSpace woas;
     transient StreamingSequencer ss;
 
-    /** Hidden default constructor */
-    private BundleEntry() {
-
-    }
-
     /**
     * This constructor should only be called by the bundle code.
     *
     * @param payload        The payload to insert into the bundle.
     * @param epochMap       A mapping of the current epochs which will be at the remote stream start entry.
     * @param remoteLog      The remote log the bundle is attached to.
+    * @param numSlots       t
     * @param physicalPos    The physical position of the remote slot, if allocated, or -1, if there is no remote slot.
     */
-    public BundleEntry(byte[] payload, Map<UUID, Long> epochMap, UUID remoteLog, long physicalPos) {
-        this.payload = payload;
+    public BundleEntry(Map<UUID, Long> epochMap, UUID destinationLog, UUID destinationStream, long destinationPos, long destinationEpoch,
+                        byte[] payload, int numSlots, long physicalPos)
+    {
+        super(epochMap, destinationLog, destinationStream, destinationPos, (int) numSlots+1, destinationEpoch, payload);
         this.physicalPos = physicalPos;
         this.epochMap = new HashMap<UUID, Long>(epochMap);
-        this.remoteLog = remoteLog;
+        this.numSlots = numSlots;
     }
 
     /**
@@ -115,10 +113,11 @@ public class BundleEntry implements Serializable {
         }
 
         //  Write the payload to the remote (TODO: talk to the configuration master instead)
-        WriteOnceAddressSpace remote_woas = new WriteOnceAddressSpace(cdbc, remoteLog);
+        WriteOnceAddressSpace remote_woas = new WriteOnceAddressSpace(cdbc, destinationLog);
         CorfuDBStreamEntry cdbse = new CorfuDBStreamEntry(epochMap, payload);
         remote_woas.write(physicalPos, cdbse);
 
+        // Read all payloads from
         // Read the remote payload and write it to the local slots
 
         return new Timestamp(epochMap, -1, physicalPos);

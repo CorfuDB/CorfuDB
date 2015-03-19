@@ -52,4 +52,17 @@ public class CorfuDBStreamMoveEntry extends CorfuDBStreamEntry
         this.payload = payload;
     }
 
+    public CorfuDBStreamMoveEntry(Map<UUID, Long> epochMap, UUID destinationLog, UUID destinationStream, long destinationPos, int duration, long destinationEpoch, byte[] payload)
+    {
+        super(epochMap);
+        this.destinationStream = destinationStream;
+        this.destinationEpoch = destinationEpoch;
+        this.destinationLog = destinationLog;
+        this.destinationPos = destinationPos;
+        this.duration = duration;
+        this.payload = payload;
+    }
+
+
+
 }

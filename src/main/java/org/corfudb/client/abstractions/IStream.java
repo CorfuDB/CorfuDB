@@ -312,6 +312,21 @@ public interface IStream extends AutoCloseable {
     throws RemoteException, OutOfSpaceException, IOException;
 
     /**
+     * Temporarily pull multiple remote streams into this stream, including a payload in the
+     * remote move operation, and optionally reserve extra entries, using a BundleEntry.
+     * This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The payload to insert
+     * @param slots            The length of time, in slots that this pull should last.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
+     */
+    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, byte[] payload, int slots)
+    throws RemoteException, OutOfSpaceException, IOException;
+
+    /**
      * Close the stream. This method must be called to free resources.
      */
     public void close();

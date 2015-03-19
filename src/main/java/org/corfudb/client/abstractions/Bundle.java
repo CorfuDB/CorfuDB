@@ -112,7 +112,7 @@ class Bundle {
     public Timestamp apply()
     throws RemoteException, OutOfSpaceException, IOException
     {
-        return stream.pullStream(remoteStreams, payload, allocateSlots ? remoteStreams.size() : 0, remoteStreams.size() + 1);
+        return stream.pullStreamAsBundle(remoteStreams, payload, allocateSlots ? remoteStreams.size() : 0);
     }
 
 }

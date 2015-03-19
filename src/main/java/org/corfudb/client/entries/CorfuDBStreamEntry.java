@@ -41,7 +41,7 @@ import java.io.IOException;
 /**
  * This class represents an entry inside a stream.
  */
-public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStreamEntry>
+public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<CorfuDBStreamEntry>
 {
     private static final long serialVersionUID = 0L;
     /** The timestamp of the entry */
@@ -72,23 +72,6 @@ public class CorfuDBStreamEntry implements Serializable, Comparable<CorfuDBStrea
         }
 
         this.ts = new Timestamp(streamID, epoch);
-    }
-
-    /**
-     * Return the deserialized version of the payload.
-     *
-     * @return      A deserialized object representing the payload.
-     */
-    public Object deserializePayload()
-        throws IOException, ClassNotFoundException
-    {
-        try (ByteArrayInputStream bis = new ByteArrayInputStream(payload))
-        {
-            try (ObjectInputStream ois = new ObjectInputStream(bis))
-            {
-                return ois.readObject();
-            }
-        }
     }
 
     /**
