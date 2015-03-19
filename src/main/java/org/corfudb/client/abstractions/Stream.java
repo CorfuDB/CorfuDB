@@ -789,11 +789,13 @@ public class Stream implements AutoCloseable, IStream {
      * attach a remote stream to this stream. It may or may not succeed.
      *
      * @param targetStream     The destination stream to attach.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
      */
-    public void pullStream(UUID targetStream)
+    public Timestamp pullStream(UUID targetStream)
     throws RemoteException, OutOfSpaceException, IOException
     {
-        pullStream(targetStream, -1);
+        return pullStream(targetStream, -1);
     }
 
     /**
@@ -803,13 +805,15 @@ public class Stream implements AutoCloseable, IStream {
      * @param targetStream     The destination stream to attach.
      * @param duration         The length of time, in log entries that this pull should last,
      *                         if -1, then the pull is permanent.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
      */
-    public void pullStream(UUID targetStream, int duration)
+    public Timestamp pullStream(UUID targetStream, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
         List<UUID> streams = new ArrayList<UUID>();
         streams.add(targetStream);
-        pullStream(streams, duration);
+        return pullStream(streams, duration);
     }
 
     /**
@@ -819,11 +823,13 @@ public class Stream implements AutoCloseable, IStream {
      * @param targetStreams    The destination streams to attach.
      * @param duration         The length of time, in log entries that this pull should last,
      *                         if -1, then the pull is permanent.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
      */
-    public void pullStream(List<UUID> targetStreams, int duration)
+    public Timestamp pullStream(List<UUID> targetStreams, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
-        pullStream(targetStreams, null, duration);
+        return pullStream(targetStreams, null, duration);
     }
 
     /**
@@ -835,8 +841,10 @@ public class Stream implements AutoCloseable, IStream {
      * @param payload          The serializable payload to insert
      * @param duration         The length of time, in log entries that this pull should last,
      *                         if -1, then the pull is permanent.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
      */
-    public void pullStream(List<UUID> targetStreams, Serializable payload, int duration)
+    public Timestamp pullStream(List<UUID> targetStreams, Serializable payload, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
@@ -844,7 +852,7 @@ public class Stream implements AutoCloseable, IStream {
             try (ObjectOutput out = new ObjectOutputStream(bs))
             {
                 out.writeObject(payload);
-                pullStream(targetStreams, bs.toByteArray(), duration);
+                return pullStream(targetStreams, bs.toByteArray(), duration);
             }
         }
     }
@@ -858,11 +866,40 @@ public class Stream implements AutoCloseable, IStream {
      * @param payload          The payload to insert
      * @param duration         The length of time, in log entries that this pull should last,
      *                         if -1, then the pull is permanent.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
      */
-    public void pullStream(List<UUID> targetStreams, byte[] payload, int duration)
+    public Timestamp pullStream(List<UUID> targetStreams, byte[] payload, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
-        pullStream(targetStreams, payload, 0, duration);
+        return pullStream(targetStreams, payload, 0, duration);
+    }
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a serializable payload in the
+     * remote move operation, and optionally reserve extra entries.
+     * This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The serializable payload to insert
+     * @param reservation      The number of entires to reserve, both in the local and global log.
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
+     */
+    public Timestamp pullStream(List<UUID> targetStreams, Serializable payload, int reservation, int duration)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
+        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
+        {
+            try (ObjectOutput out = new ObjectOutputStream(bs))
+            {
+                out.writeObject(payload);
+                return pullStream(targetStreams, bs.toByteArray(), reservation, duration);
+            }
+        }
     }
 
     /**
@@ -876,8 +913,10 @@ public class Stream implements AutoCloseable, IStream {
      * @param reservation      The number of entries to reserve, both in the local and the remote log.
      * @param duration         The length of time, in log entries that this pull should last,
      *                         if -1, then the pull is permanent.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
      */
-    public void pullStream(List<UUID> targetStreams, byte[] payload, int reservation, int duration)
+    public Timestamp pullStream(List<UUID> targetStreams, byte[] payload, int reservation, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
         HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
@@ -912,6 +951,10 @@ public class Stream implements AutoCloseable, IStream {
             WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
         }
+
+        Timestamp ts = new Timestamp(epochMap);
+        ts.setPhysicalPos(token);
+        return ts;
     }
 
     /**

@@ -230,7 +230,7 @@ public interface IStream extends AutoCloseable {
      *
      * @param targetStream     The destination stream to attach.
      */
-    public void pullStream(UUID targetStream)
+    public Timestamp pullStream(UUID targetStream)
     throws RemoteException, OutOfSpaceException, IOException;
 
     /**
@@ -241,7 +241,7 @@ public interface IStream extends AutoCloseable {
      * @param duration         The length of time, in log entries that this pull should last,
      *                         if -1, then the pull is permanent.
      */
-    public void pullStream(UUID targetStream, int duration)
+    public Timestamp pullStream(UUID targetStream, int duration)
     throws RemoteException, OutOfSpaceException, IOException;
 
     /**
@@ -252,7 +252,63 @@ public interface IStream extends AutoCloseable {
      * @param duration         The length of time, in log entries that this pull should last,
      *                         if -1, then the pull is permanent.
      */
-    public void pullStream(List<UUID> targetStreams, int duration)
+    public Timestamp pullStream(List<UUID> targetStreams, int duration)
+    throws RemoteException, OutOfSpaceException, IOException;
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a serializable payload in the
+     * remote move operation. This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The serializable payload to insert
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     */
+    public Timestamp pullStream(List<UUID> targetStreams, Serializable payload, int duration)
+    throws RemoteException, OutOfSpaceException, IOException;
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a payload in the
+     * remote move operation. This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The payload to insert
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     */
+    public Timestamp pullStream(List<UUID> targetStreams, byte[] payload, int duration)
+    throws RemoteException, OutOfSpaceException, IOException;
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a serializable payload in the
+     * remote move operation, and optionally reserve extra entries.
+     * This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The serializable payload to insert
+     * @param reservation      The number of entires to reserve, both in the local and global log.
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     */
+    public Timestamp pullStream(List<UUID> targetStreams, Serializable payload, int reservation, int duration)
+    throws RemoteException, OutOfSpaceException, IOException;
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a payload in the
+     * remote move operation, and optionally reserve extra entries.
+     * This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The payload to insert
+     * @param reservation      The number of entries to reserve, both in the local and the remote log.
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     */
+    public Timestamp pullStream(List<UUID> targetStreams, byte[] payload, int reservation, int duration)
     throws RemoteException, OutOfSpaceException, IOException;
 
     /**
