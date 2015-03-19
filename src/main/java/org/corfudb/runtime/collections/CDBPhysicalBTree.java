@@ -443,6 +443,11 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         super(tTR, tsf, toid);
         m_entries = new HashMap<Long, Entry>();
         m_nodes = new HashMap<Long, Node>();
+        m_root = oidnull;
+        m_size = 0;
+        m_height = 0;
+        Node oRoot = allocNode(0);
+        writeroot(oRoot.oid);
     }
 
     /**
@@ -455,11 +460,15 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
 
         BTreeOp cc = (BTreeOp) bs;
         switch (cc.cmd()) {
-            case BTreeOp.CMD_READ_HEIGHT: cc.setReturnValue(applyReadHeight()); break;
+            case BTreeOp.CMD_READ_HEIGHT: cc.setReturnValue(applyReadHeight());
+                break;
             case BTreeOp.CMD_WRITE_HEIGHT: applyWriteHeight(cc.iparam()); break;
-            case BTreeOp.CMD_READ_ROOT: cc.setReturnValue(applyReadRoot()); break;
-            case BTreeOp.CMD_WRITE_ROOT:  applyWriteRoot(cc.oidparam()); break;
-            case BTreeOp.CMD_READ_SIZE: cc.setReturnValue(applyReadSize()); break;
+            case BTreeOp.CMD_READ_ROOT: cc.setReturnValue(applyReadRoot());
+                break;
+            case BTreeOp.CMD_WRITE_ROOT:  applyWriteRoot(cc.oidparam());
+                break;
+            case BTreeOp.CMD_READ_SIZE: cc.setReturnValue(applyReadSize());
+                break;
             case BTreeOp.CMD_WRITE_SIZE: applyWriteSize(cc.iparam()); break;
         }
     }
@@ -481,12 +490,16 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      */
     private String
     print(Node<K, V> node, int height, String indent) {
+        if(node == null) return "";
         StringBuilder sb = new StringBuilder();
         long[] children = readchildren(node);
         int nChildren = readchildcount(node);
         if(height == 0) {
             for(int i=0; i<nChildren; i++) {
                 Entry child = entryById(children[i]);
+                boolean deleted = readdeleted(child);
+                if(!deleted)
+                    sb.append("DEL: ");
                 sb.append(indent);
                 sb.append(readkey(child));
                 sb.append(" ");

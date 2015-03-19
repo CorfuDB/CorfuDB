@@ -56,18 +56,16 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     {
         epochMap = new HashMap<UUID, Long>();
         epochMap.put(streamID, epoch);
-        this.pos = null;
-        this.physicalPos = null;
     }
 
     public Timestamp(Map<UUID, Long> epochMap)
     {
-        this.epochMap = epochMap;
+        this.epochMap = new HashMap<UUID, Long>(epochMap);
     }
 
     public Timestamp(Map<UUID, Long> epochMap, long pos, long physicalPos)
     {
-        this.epochMap = epochMap;
+        this.epochMap = new HashMap<UUID, Long>(epochMap);
         this.pos = pos;
         this.physicalPos = physicalPos;
     }
@@ -76,6 +74,14 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     public long getEpoch(UUID stream)
     {
         return epochMap.get(stream);
+    }
+
+    public void setTransientInfo(UUID log, UUID primaryStream, long pos, long physicalPos)
+    {
+        this.primaryStream = primaryStream;
+        this.pos = pos;
+        this.physicalPos = physicalPos;
+        this.logID = log;
     }
 
     public void setLogicalPos(long pos, UUID primaryStream)
@@ -125,6 +131,7 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
         return sb.toString();
     }
 
+    @Override
     public int compareTo(Timestamp t)
     {
         if (primaryStream != null && primaryStream.equals(t.primaryStream))
@@ -132,14 +139,24 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
             return (int) (pos - t.pos);
         }
 
-        for (UUID id : this.epochMap.keySet())
+        if (physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap))
         {
-            if (t.epochMap.containsKey(id))
-            {
-                return (int) (this.epochMap.get(id) - t.epochMap.get(id));
-            }
+            return (int) (physicalPos - t.physicalPos);
         }
-        throw new ClassCastException("Uncomparable timestamp objects!");
+        throw new ClassCastException("Uncomparable timestamp objects! [t1=" + this.toString() + "] [t2=" + t.toString() + "]");
+    }
+
+    @Override
+    public boolean equals(Object t)
+    {
+        if (!(t instanceof Timestamp)) { return false; }
+        return compareTo((Timestamp)t) == 0;
+    }
+
+    @Override
+    public int hashCode()
+    {
+        return physicalPos.intValue();
     }
 }
 

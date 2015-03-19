@@ -27,27 +27,27 @@ import org.slf4j.LoggerFactory;
 
 class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> implements Runnable {
 
-    public static enum testcase {
-        functional,     // single list, basic functionality, single-threaded
-        multifunctional,// multiple lists, basic functionality, single-threaded
-        concurrent,     // single list, random ops, concurrent
-        tx              // multiple lists, random ops, concurrent
-    }
-
-    public static enum optype {
+    public static enum OpType {
         get,
         put,
         rem,
         move
     }
 
+    public static enum TestCase {
+        functional,     // single list, basic functionality, single-threaded
+        multifunctional,// multiple lists, basic functionality, single-threaded
+        concurrent,     // single list, random ops, concurrent
+        tx              // multiple lists, random ops, concurrent
+    }
+
     public class Operation {
-        public optype op;
+        public OpType op;
         public L src;
         public L dst;
         public K key;
         public V val;
-        public Operation(optype o, L s, L d, K k, V v) {
+        public Operation(OpType o, L s, L d, K k, V v) {
             op = o;
             src = s;
             dst = d;
@@ -56,10 +56,10 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         }
     }
 
-    protected Operation newGet(L s, K k, V v) { return new Operation(optype.get, s, null, k, v); }
-    protected Operation newPut(L d, K k, V v) { return new Operation(optype.put, null, d, k, v); }
-    protected Operation newRemove(L s, K k, V v) { return new Operation(optype.rem, s, null, k, v); }
-    protected Operation newMove(L s, L d, K k, V v) { return new Operation(optype.move, s, d, k, v); }
+    protected Operation newGet(L s, K k, V v) { return new Operation(OpType.get, s, null, k, v); }
+    protected Operation newPut(L d, K k, V v) { return new Operation(OpType.put, null, d, k, v); }
+    protected Operation newRemove(L s, K k, V v) { return new Operation(OpType.rem, s, null, k, v); }
+    protected Operation newMove(L s, L d, K k, V v) { return new Operation(OpType.move, s, d, k, v); }
 
     private static Logger dbglog = LoggerFactory.getLogger(TXListTester.class);
 
@@ -87,8 +87,8 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     int m_numcommits;               // number of committed transactions
     int m_naborts;                  // number of aborts
     int m_ntotalretries;            // retries due to inconsistent views (opacity violations)
-    testcase m_testcase;            // which test scenario?
-    Map<optype, ArrayList<Operation>> m_funcops;  // functional test known scenario of ops
+    TestCase m_testcase;            // which test scenario?
+    Map<OpType, ArrayList<Operation>> m_funcops;  // functional test known scenario of ops
     ReentrantLock m_gtlock;         // ground truth lock
     TreeMap<K, V> m_entries;        // for functional tests--maintain the mapping from key to value
     TreeMap<K, L> m_membership;     // for functional tests--which b tree do we think holds the given key?
@@ -148,7 +148,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
      * create a list of operations to test basic functionality
      * @return
      */
-    Map<optype, ArrayList<Operation>> createOpList() {
+    Map<OpType, ArrayList<Operation>> createOpList() {
         ArrayList<Operation> pops = new ArrayList<Operation>();
         ArrayList<Operation> gops = new ArrayList<Operation>();
         ArrayList<Operation> rops = new ArrayList<Operation>();
@@ -169,10 +169,10 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
             Comparable<K> ckey = (Comparable) skey;
             rops.add(newRemove(singleTree, (K) ckey, (V) null));
         }
-        Map<optype, ArrayList<Operation>> ops = new TreeMap<optype, ArrayList<Operation>>();
-        ops.put(optype.put, pops);
-        ops.put(optype.get, gops);
-        ops.put(optype.rem, rops);
+        Map<OpType, ArrayList<Operation>> ops = new TreeMap<OpType, ArrayList<Operation>>();
+        ops.put(OpType.put, pops);
+        ops.put(OpType.get, gops);
+        ops.put(OpType.rem, rops);
         return ops;
     }
 
@@ -197,7 +197,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
             CyclicBarrier stopbarrier,
             AbstractRuntime tcr,
             List<L> v,
-            testcase tcase,
+            TestCase tcase,
             int nops,
             int nkeys,
             double rwpct,
@@ -373,6 +373,30 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         return op;
     }
 
+    private Operation
+    performRecordedOp(int i) {
+        ArrayList<Operation> curops;
+        if(i >= 2 * m_nKeys)
+            curops = m_funcops.get(OpType.rem);
+        else if(i >= m_nKeys)
+            curops = m_funcops.get(OpType.get);
+        else
+            curops = m_funcops.get(OpType.put);
+        Operation op = curops.get(i % 3);
+        L l = op.src == null ? op.dst : op.src;
+        K k = op.key;
+        V v = op.val;
+        String strOp = "unk";
+        switch(op.op) {
+            case put: l.put(k, v); strOp = "put"; break;
+            case get: op.val = l.get(k); strOp = "get"; break;
+            case rem: op.val = l.remove(k); strOp = "rem"; break;
+        }
+        String strVal = v == null ? "n/a" : v.toString();
+        inform("[T%d]   %s L%d[%s,%s]\n", m_nId, strOp, l.oid, k.toString(), strVal);
+        return op;
+    }
+
     /**
      * perform the next operation
      * @param i
@@ -380,26 +404,17 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
      */
     private Operation
     performNextOperation(int i) {
-        if(m_testcase == testcase.functional || m_testcase == testcase.multifunctional) {
-            ArrayList<Operation> curops;
-            if(i >= 2 * m_nKeys)
-                curops = m_funcops.get(optype.rem);
-            else if(i >= m_nKeys)
-                curops = m_funcops.get(optype.get);
-            else
-                curops = m_funcops.get(optype.put);
-            Operation op = curops.get(i % 3);
-            L l = op.src == null ? op.dst : op.src;
-            K k = op.key;
-            V v = op.val;
-            switch(op.op) {
-                case put: l.put(k, v); break;
-                case get: op.val = l.get(k); break;
-                case rem: op.val = l.remove(k); break;
-            }
-            return op;
+        switch(m_testcase) {
+            case functional:
+                return performRecordedOp(i);
+            case multifunctional:
+                return performRecordedOp(i);
+            case concurrent:
+                return performRandomOp();
+            case tx:
+                return performRandomOp();
         }
-        return performRandomOp();
+        return null;
     }
 
     /**
@@ -408,7 +423,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
      */
     private int
     numOperations() {
-        return (m_testcase == testcase.functional || m_testcase == testcase.multifunctional) ?
+        return (m_testcase == TestCase.multifunctional) ?
                 (m_nKeys * 3) : m_nOps;
     }
 
@@ -425,7 +440,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         if(m_nId != 0)
             return;
 
-        if(m_testcase == testcase.functional || m_testcase == testcase.multifunctional) {
+        if(m_testcase == TestCase.multifunctional) {
 
             // create a single list of known operations
             // and play them over a single tree
@@ -598,6 +613,119 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     }
 
     /**
+     * return a random string
+     * @param maxlength
+     * @return
+     */
+    protected static String randString(int maxlength) {
+        StringBuilder sb = new StringBuilder();
+        int len = (int) (Math.random() * maxlength);
+        for (int i = 0; i < len; i++) {
+            int cindex = (int) Math.floor(Math.random() * 26);
+            char character = (char) ('a' + cindex);
+            sb.append(character);
+        }
+        return (sb.toString());
+    }
+
+    /**
+     * populate a map randomly
+     * @param count
+     * @param maxlength
+     * @return
+     */
+    protected static TreeMap<String, String> randMap(int count, int maxlength) {
+        TreeMap<String, String> strings = new TreeMap<String, String>();
+        for(int j=0; j<count; j++)
+            strings.put(randString(maxlength), randString(maxlength));
+        return strings;
+    }
+
+    /**
+     * test get/put
+     * @param tree
+     * @param count
+     * @param maxlength
+     */
+    public static <K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> void
+    randomFunctionalTestPutGet(
+        AbstractRuntime TR,
+        L tree,
+        int count,
+        int maxlength
+        )
+    {
+        TreeMap<String, String> map = randMap(count, maxlength);
+        for(String key : map.keySet()) {
+            K okey = (K)(Object)key;
+            TR.BeginTX();
+            tree.put(okey, (V)map.get(key));
+            TR.EndTX();
+        }
+        System.out.println(tree.print());
+        for(String key : map.keySet()) {
+            K okey = (K)(Object)key;
+            TR.BeginTX();
+            V oval = (V) tree.get(okey);
+            TR.EndTX();
+            String tval = (String) oval;
+            if(tval.compareTo(map.get(key)) != 0)
+                System.out.println("FAIL: key="+key+" not present in BTree!");
+        }
+    }
+
+    /**
+     * random test of remove
+     * @param tree
+     * @param count
+     * @param maxlength
+     * @param removeProbability
+     */
+    public static <K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> void
+    randomFunctionalTestRemove(
+        L tree,
+        int count,
+        int maxlength,
+        double removeProbability
+        )
+    {
+        TreeMap<String, String> map = randMap(count, maxlength);
+        TreeMap<String, String> removed = new TreeMap<String, String>();
+        ArrayList<String> removeKeys = new ArrayList<String>();
+        for(String key : map.keySet()) {
+            tree.put((K)(Object)key, (V)map.get(key));
+            if(Math.random() < removeProbability)
+                removeKeys.add(key);
+        }
+        System.out.println(tree.print());
+        for(String key : removeKeys) {
+            if(Math.random() < removeProbability) {
+                //String tvalue = (V)(Object)
+                V rval = tree.remove((K)(Object)key);
+                String tvalue = (String) rval;
+                String mvalue = map.remove(key);
+                removed.put(key, mvalue);
+                if(tvalue.compareTo(mvalue) != 0)
+                    throw new RuntimeException("different remove results");
+            }
+        }
+        for(String key : map.keySet()) {
+            K okey = (K) (Object) key;
+            V oval = (V) tree.get(okey);
+            String tval = (String) oval;
+            if(tval.compareTo(map.get(key)) != 0)
+                System.out.println("FAIL: key="+key+" not present in BTree!");
+        }
+        for(String key : removed.keySet()) {
+            K okey = (K) (Object) key;
+            if(tree.get(okey)!=null)
+                System.out.println("FAIL: key="+key+" STILL present in BTree!");
+        }
+        System.out.println("TREE: size=" + tree.size() + "\n " + tree.print());
+    }
+
+
+    /**
      * run method (runnable)
      * wait for all worker threads to initialize
      * perform the specified number of random transactions
@@ -605,6 +733,11 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
      */
     public void run()
     {
+        if(m_testcase == TestCase.functional) {
+            randomFunctionalTestPutGet(m_rt, m_v.get(0), m_nOps, 10);
+            return;
+        }
+
         populate();
         awaitInit();
         for(int i=0;i<numOperations();i++)
@@ -629,7 +762,8 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
                     trackOperation(res, done);
                     dumpTrees(res, i, attempts, done, true);
                 } catch (Exception e) {
-                    inform("[T%d] force retry tx[%d, try%d] because of exception "+e+"\n", m_nId, i, attempts-1);
+                    String strException = "" + e + " " + e.getStackTrace();
+                    inform("[T%d] force retry tx[%d, try%d] because of exception %s\n", m_nId, i, attempts-1, strException);
                     icretries++;
                     if(inTX) m_rt.AbortTX();
                 }
@@ -779,6 +913,23 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     }
 
     /**
+     * parse a test case string
+     * @param strTestCase
+     * @return
+     */
+    protected static TestCase getTestCase(String strTestCase) {
+        if(strTestCase.compareToIgnoreCase("functional") == 0)
+            return TestCase.functional;
+        if(strTestCase.compareToIgnoreCase("multifunctional") == 0)
+            return TestCase.multifunctional;
+        if(strTestCase.compareToIgnoreCase("concurrent") == 0)
+            return TestCase.concurrent;
+        if(strTestCase.compareToIgnoreCase("tx") == 0)
+            return TestCase.tx;
+        throw new RuntimeException("invalid test scenario!");
+    }
+
+    /**
      * run a tx list test.
      * @param TR
      * @param sf
@@ -798,16 +949,17 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     runTest(
             AbstractRuntime TR,
             StreamFactory sf,
-            testcase tcase,
             int numthreads,
             int numlists,
             int nOperations,
             int numkeys,
             double rwpct,
             String strClass,
+            String strTestCase,
             boolean verbose
         ) throws InterruptedException
     {
+        TestCase tcase = getTestCase(strTestCase);
         ElemGenerator<K> keygen = (ElemGenerator<K>) (Object) new SeqKeyGenerator();
         ElemGenerator<V> valgen = (ElemGenerator<V>) new SeqValGenerator();
         ArrayList<L> trees = new ArrayList<L>();
