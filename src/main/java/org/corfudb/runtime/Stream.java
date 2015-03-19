@@ -14,6 +14,7 @@
  */
 package org.corfudb.runtime;
 
+import org.corfudb.client.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -106,12 +107,15 @@ interface StreamEntry extends Serializable
     public boolean isInStream(long streamid);
 }
 
+
+/*
 interface ITimestampConstants
 {
     ITimestamp getInvalidTimestamp();
     ITimestamp getMaxTimestamp();
     ITimestamp getMinTimestamp();
 }
+
 
 class TimestampConstants implements ITimestampConstants
 {
@@ -213,15 +217,15 @@ class Timestamp implements ITimestamp, Serializable
             throw new ClassCastException("different streams!");
         }
         //same log, different streams
-/*        else if(this.logid==T2.logid && this.streamid!=T2.streamid)
-        {
-            if(this.pos==T2.pos)
-                x = 0;
-            else if(this.pos<T2.pos)
-                x = -1;
-            else
-                x = 1;
-        }*/
+//        else if(this.logid==T2.logid && this.streamid!=T2.streamid)
+//        {
+//            if(this.pos==T2.pos)
+//                x = 0;
+//            else if(this.pos<T2.pos)
+//                x = -1;
+//           else
+//                x = 1;
+//        }
         return x;
 
     }
@@ -238,4 +242,86 @@ class Timestamp implements ITimestamp, Serializable
     {
         return (int)(streamid+logid+pos+epoch);
     }
+}*/
+
+class Timestamp implements ITimestamp, Serializable
+{
+    long streamid;
+    long logid; //todo: currently we seem to identify logs with strings... which makes for terribly inefficient timestamps
+    long pos;
+    long epoch;
+    public Timestamp(long tlogid, long tpos, long tepoch, long tstreamid)
+    {
+        logid = tlogid;
+        pos = tpos;
+        epoch = tepoch;
+        streamid = tstreamid;
+    }
+
+    @Override
+    public int compareTo(ITimestamp iT2)
+    {
+        if(ITimestamp.isMax(this) && ITimestamp.isMax(iT2)) return 0;
+        if(ITimestamp.isInvalid(this) && ITimestamp.isInvalid(iT2)) return 0;
+        if(ITimestamp.isMin(this) && ITimestamp.isMin(iT2)) return 0;
+
+        if(ITimestamp.isMax(this) || ITimestamp.isMin(iT2))
+            return 1;
+        if(ITimestamp.isMin(this) || ITimestamp.isMax(iT2))
+            return -1;
+        if(ITimestamp.isInvalid(this) || ITimestamp.isInvalid(iT2))
+            throw new ClassCastException("trying to compare invalid timestamp");
+
+        Timestamp T2 = (Timestamp)iT2;
+
+        int x = 0;
+        //todo: is it okay to (ab)use ClassCastException?
+        if(this.logid!=T2.logid && this.streamid!=T2.streamid)
+            throw new ClassCastException("timestamps are not comparable since they are on different logs");
+            //same stream
+        else if (this.streamid == T2.streamid)
+        {
+            if (this.epoch == T2.epoch && this.pos == T2.pos)
+                x = 0;
+            else if (this.epoch < T2.epoch || (this.epoch == T2.epoch && this.pos < T2.pos)) //on the same epoch, logpos must be comparable since they're on the same log
+                x = -1;
+            else
+                x = 1;
+        }
+        else
+        {
+            throw new ClassCastException("different streams!");
+        }
+        //same log, different streams
+//        else if(this.logid==T2.logid && this.streamid!=T2.streamid)
+//        {
+//            if(this.pos==T2.pos)
+//                x = 0;
+//            else if(this.pos<T2.pos)
+//                x = -1;
+//           else
+//                x = 1;
+//        }
+        return x;
+
+    }
+    public boolean equals(Object o)
+    {
+        ITimestamp tT = (ITimestamp)o;
+        if(ITimestamp.isInvalid(this) && ITimestamp.isInvalid(tT))
+            return true;
+        else if(ITimestamp.isInvalid(this) || ITimestamp.isInvalid(tT))
+            return false;
+        if(compareTo(tT)==0) return true;
+        return false;
+    }
+
+    public String toString()
+    {
+        if(ITimestamp.isInvalid(this)) return "T[INV]";
+        if(ITimestamp.isMax(this)) return "T[MAX]";
+        if(ITimestamp.isMin(this)) return "T[MIN]";
+        return "T[" + streamid + "," + logid + "," + epoch + "," + pos + "]";
+    }
+
 }

@@ -1,8 +1,8 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
-import org.corfudb.runtime.ITimestamp;
 import org.corfudb.runtime.StreamFactory;
+import org.corfudb.client.ITimestamp;
 
 public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
 

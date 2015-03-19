@@ -1,9 +1,11 @@
 package org.corfudb.client;
 
+import java.io.Serializable;
+
 /**
  *  This class represents constants for ITimestamp.
  */
-public class ITimestampConstant implements ITimestamp
+public class ITimestampConstant implements ITimestamp, Serializable
 {
     /**
      * This enumeration provides set constants for ITimestamp.

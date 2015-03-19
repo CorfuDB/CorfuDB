@@ -15,6 +15,7 @@
 package org.corfudb.runtime;
 
 import edu.umd.cs.findbugs.annotations.NoWarning;
+import org.corfudb.client.ITimestamp;
 
 import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicLong;
@@ -34,7 +35,7 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
     public long oid;
     public AbstractRuntime TR;
 
-    ITimestamp timestamp = TimestampConstants.singleton().getMinTimestamp();
+    ITimestamp timestamp = ITimestamp.getMinTimestamp();
 
     public ITimestamp getTimestamp()
     {
@@ -53,7 +54,7 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
 
     public void setTimestamp(ITimestamp newts, Serializable key)
     {
-        if(timestamp.equals(TimestampConstants.singleton().getInvalidTimestamp()))
+        if(timestamp.equals(ITimestamp.getInvalidTimestamp()))
             throw new RuntimeException("cannot set to invalid timestamp!");
         timestamp = newts;
     }

@@ -15,6 +15,7 @@
 package org.corfudb.runtime;
 
 import org.corfudb.client.CorfuDBClient;
+import org.corfudb.client.ITimestamp;
 import org.corfudb.client.OutOfSpaceException;
 import org.corfudb.client.entries.CorfuDBStreamEntry;
 import org.slf4j.Logger;
@@ -106,7 +107,7 @@ class HopAdapterStreamEntryImpl implements StreamEntry
     @Override
     public ITimestamp getLogpos()
     {
-        return (ITimestamp)(Object)cde.getTimestamp();
+        return cde.getTimestamp();
     }
 
     @Override
@@ -153,7 +154,7 @@ class HopAdapterStreamImpl implements Stream
         {
             try
             {
-                ITimestamp T = (ITimestamp)(Object)hopstream.append(s); //todo: remove the cast
+                ITimestamp T = hopstream.append(s);
             } catch (OutOfSpaceException oe)
             {
                 System.out.println(oe);
@@ -171,7 +172,7 @@ class HopAdapterStreamImpl implements Stream
         try
         {
             CorfuDBStreamEntry cde = hopstream.readNextEntry();
-            return new StreamEntryImpl(cde.deserializePayload(), (ITimestamp)(Object)cde.getTimestamp(), null); //todo: remove the cast
+            return new StreamEntryImpl(cde.deserializePayload(), cde.getTimestamp(), null);
         }
         catch (IOException e)
         {
@@ -195,7 +196,7 @@ class HopAdapterStreamImpl implements Stream
     {
         CorfuDBStreamEntry cde = hopstream.peek();
         if(cde==null) return null;
-        if(cde.getTimestamp().compareTo((org.corfudb.client.ITimestamp)(Object)stoppos)<0) //todo: remove the cast
+        if(cde.getTimestamp().compareTo(stoppos)<0)
             return new HopAdapterStreamEntryImpl(cde);
         return null;
     }
@@ -203,8 +204,8 @@ class HopAdapterStreamImpl implements Stream
     @Override
     public ITimestamp checkTail()
     {
-        return (ITimestamp)(Object)hopstream.check();
-    } //todo: remove the cast
+        return hopstream.check();
+    }
 
     @Override
     public void prefixTrim(ITimestamp trimpos)

@@ -2,12 +2,12 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.DirectoryService;
-import org.corfudb.runtime.ITimestamp;
 import org.corfudb.runtime.StreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.function.UnaryOperator;
+import org.corfudb.client.ITimestamp;
 
 /**
  *

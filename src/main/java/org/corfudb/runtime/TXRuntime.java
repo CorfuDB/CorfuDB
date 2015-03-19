@@ -14,6 +14,7 @@
  */
 package org.corfudb.runtime;
 
+import org.corfudb.client.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -241,7 +242,7 @@ public class TXRuntime extends BaseRuntime
                 rpcRemoteRuntime(cob, command);
             }
             else
-                smre.sync(TimestampConstants.singleton().getMaxTimestamp(), command);
+                smre.sync(ITimestamp.getMaxTimestamp(), command);
         }
         else
         {
@@ -254,7 +255,7 @@ public class TXRuntime extends BaseRuntime
                     //do what here??? apply the command through the apply thread
                     //passing TIMESTAMP_INVALID ensures that this applies the command
                     //through the upcall thread without triggering an actual sync
-                    smre.sync(TimestampConstants.singleton().getInvalidTimestamp(), command);
+                    smre.sync(ITimestamp.getInvalidTimestamp(), command);
                     dbglog.debug("applied cmd, marking read set: " + command);
                     curtx.get().mark_read(cob.getID(), command.getTimestamp(), command.getReadSummary());
                 } else {
@@ -439,25 +440,25 @@ class TXEngine implements SMRLearner
 
     }
 
-    Map<ITimestamp, TxInt> pendingtxes = new HashMap();
+    Map<UUID, TxInt> pendingtxes = new HashMap();
 
 
     public void addPending(ITimestamp timestamp, TxInt txint)
     {
         if(!pendingtxes.containsKey(timestamp))
         {
-            pendingtxes.put(timestamp, txint);
+            pendingtxes.put(txint.getTxid(), txint);
         }
     }
 
-    public TxInt getPending(ITimestamp timestamp)
+    public TxInt getPending(UUID txid)
     {
-        return pendingtxes.get(timestamp);
+        return pendingtxes.get(txid);
     }
 
-    public void removePending(ITimestamp timestamp)
+    public void removePending(UUID txid)
     {
-        pendingtxes.remove(timestamp);
+        pendingtxes.remove(txid);
     }
 
     //called by deliver
@@ -481,7 +482,7 @@ class TXEngine implements SMRLearner
         // essentially the same state it would have seen had it acquired
         // locks pessimistically.
 
-        if(timestamp.equals(TimestampConstants.singleton().getInvalidTimestamp())) throw new RuntimeException("validation timestamp cannot be invalid!");
+        if(timestamp.equals(ITimestamp.getInvalidTimestamp())) throw new RuntimeException("validation timestamp cannot be invalid!");
 
         boolean partialabort = false;
         //we see the intention if we play a stream that's either in the read set or the write set
@@ -499,13 +500,13 @@ class TXEngine implements SMRLearner
                 //is the current version of the object at a later timestamp than the version read by the transaction?
                 //if (txr.getObject(curread.objectid).getTimestamp(curread.key) > curread.readtimestamp)
                 //if no read summary is provided, use the read timestamp instead
-                //dbglog.warn("comparing " + txr.getObject(curread.objectid).getTimestamp() + " with " +
-                //        curread.readtimestamp + " == " + txr.getObject(curread.objectid).getTimestamp().compareTo(curread.readtimestamp));
+                dbglog.debug("comparing " + txr.getObject(curread.objectid).getTimestamp() + " with " +
+                        curread.readtimestamp + " == " + txr.getObject(curread.objectid).getTimestamp().compareTo(curread.readtimestamp));
                 if ((curread.readsummary != null && !txr.getObject(curread.objectid).isStillValid(curread.readsummary))
                         || (curread.readsummary == null && //txr.getObject(curread.objectid).getTimestamp()>curread.readtimestamp))
                         txr.getObject(curread.objectid).getTimestamp().compareTo(curread.readtimestamp) > 0))
                 {
-                    //System.out.println("partial decision is an abort: " + curread.objectid + ":" + curread.readsummary + ":" + curread.readtimestamp);
+                    dbglog.debug("partial decision is an abort: " + curread.objectid + ":" + curread.readsummary + ":" + curread.readtimestamp);
                     partialabort = true;
                     break;
                 }
@@ -524,7 +525,7 @@ class TXEngine implements SMRLearner
                     //does T2 write something that T reads?
                     if (T.readsSomethingWrittenBy(T2))
                     {
-                        //System.out.println("partial decision is an abort due to intervening tx");
+                        dbglog.debug("partial decision is an abort due to intervening tx");
                         partialabort = true;
                         break;
                     }
@@ -567,7 +568,7 @@ class TXEngine implements SMRLearner
         dbglog.debug("[" + cob.getID() + "] process_tx_dec " + curstream + "." + timestamp + " for txint at " + curstream + "." + decrec.txint_timestamp);
 
 
-        TxInt T = getPending(decrec.txint_timestamp);
+        TxInt T = getPending(decrec.txid);
         if(T==null) //already been decided and applied by this TXEngine
         {
             return;
@@ -591,7 +592,7 @@ class TXEngine implements SMRLearner
             {
                 ArrayList<CorfuDBObject> lockset = lockWriteSet(decrec, curstream);
                 try {
-                    Iterator<TxIntWriteSetEntry> it = getPending(decrec.txint_timestamp).get_bufferedupdates().iterator();
+                    Iterator<TxIntWriteSetEntry> it = getPending(decrec.txid).get_bufferedupdates().iterator();
                     while (it.hasNext()) {
                         TxIntWriteSetEntry P2 = it.next();
                         //no need to lock since each object can only be modified by its underlying TXEngine, which
@@ -627,7 +628,7 @@ class TXEngine implements SMRLearner
                     unlockWriteSet(lockset);
                 }
             }
-            removePending(decrec.txint_timestamp);
+            removePending(decrec.txid);
             //todo: if it's an abort, we can notify the app earlier
 //            if(txr.updateApplyStatus(decrec.txint_timestamp, T.get_updatestreams().get(decrec.stream), T.get_updatestreams().size()))
                 txr.updateFinalDecision(decrec.txid, P.second); //notify the application
@@ -640,7 +641,7 @@ class TXEngine implements SMRLearner
         ArrayList<CorfuDBObject> lockset = null;
         if (lockWritesetForCommit) {
             lockset = new ArrayList<CorfuDBObject>();
-            Iterator<TxIntWriteSetEntry> it = getPending(decrec.txint_timestamp).get_bufferedupdates().iterator();
+            Iterator<TxIntWriteSetEntry> it = getPending(decrec.txid).get_bufferedupdates().iterator();
             while (it.hasNext()) {
                 TxIntWriteSetEntry P2 = it.next();
                 if (P2.objectid != curstream) continue;
@@ -675,7 +676,7 @@ class TXEngine implements SMRLearner
     {
         if(txr.trackstats)
         {
-            if(!(timestamp.equals(TimestampConstants.singleton().getInvalidTimestamp())))
+            if(!(timestamp.equals(ITimestamp.getInvalidTimestamp())))
                 txr.ctr_numapplieslin.incrementAndGet();
             else
                 txr.ctr_numapplieslocal.incrementAndGet();

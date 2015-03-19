@@ -14,6 +14,7 @@
  */
 package org.corfudb.runtime;
 
+import org.corfudb.client.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -166,7 +167,7 @@ public class SMREngine
      */
     public void sync(ITimestamp syncpos, Object command)
     {
-        final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, (syncpos.equals(TimestampConstants.singleton().getInvalidTimestamp())));
+        final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, (syncpos.equals(ITimestamp.getInvalidTimestamp())));
         synchronized (syncobj)
         {
             synchronized(queuelock)
@@ -193,7 +194,7 @@ public class SMREngine
 
     public void sync()
     {
-        sync(TimestampConstants.singleton().getMaxTimestamp(), null);
+        sync(ITimestamp.getMaxTimestamp(), null);
     }
 
     //runs in a single thread
@@ -236,7 +237,7 @@ public class SMREngine
             {
                 if(sw.synccommand!=null)
                 {
-                    smrlearner.deliver(sw.synccommand, curstream.getStreamID(), TimestampConstants.singleton().getInvalidTimestamp());
+                    smrlearner.deliver(sw.synccommand, curstream.getStreamID(), ITimestamp.getInvalidTimestamp());
                 }
                 synchronized(sw)
                 {
@@ -276,7 +277,7 @@ public class SMREngine
                 if (localcmds.second != null)
                 {
 //                    System.out.println("deliver local command precommand " + localcmds.second);
-                    smrlearner.deliver(localcmds.second, curstream.getStreamID(), TimestampConstants.singleton().getInvalidTimestamp());
+                    smrlearner.deliver(localcmds.second, curstream.getStreamID(), ITimestamp.getInvalidTimestamp());
                 }
 //                System.out.println("deliver local command " + localcmds.first);
                 smrlearner.deliver(localcmds.first, curstream.getStreamID(), update.getLogpos());
@@ -301,7 +302,7 @@ public class SMREngine
             SyncObjectWrapper syncobj = it.next();
             if(syncobj.synccommand!=null)
             {
-                smrlearner.deliver(syncobj.synccommand, curstream.getStreamID(), TimestampConstants.singleton().getInvalidTimestamp());
+                smrlearner.deliver(syncobj.synccommand, curstream.getStreamID(), ITimestamp.getInvalidTimestamp());
             }
             synchronized(syncobj)
             {

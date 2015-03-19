@@ -14,6 +14,8 @@
  */
 package org.corfudb.runtime;
 
+import org.corfudb.client.ITimestamp;
+
 import java.io.Serializable;
 import java.util.UUID;
 
@@ -22,7 +24,7 @@ public class CorfuDBObjectCommand implements Serializable
     Exception E=null;
     Object retval=null;
     Serializable readsummary=null;
-    ITimestamp appliedtimestamp=TimestampConstants.singleton().getInvalidTimestamp();
+    ITimestamp appliedtimestamp=ITimestamp.getInvalidTimestamp();
     UUID txid=null;
     public Object getReturnValue()
     {
