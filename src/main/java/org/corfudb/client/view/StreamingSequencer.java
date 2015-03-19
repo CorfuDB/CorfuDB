@@ -54,6 +54,11 @@ public class StreamingSequencer {
 
     public long getNext(UUID streamID)
     {
+        return getNext(streamID, 1);
+    }
+
+    public long getNext(UUID streamID, int numTokens)
+    {
         while (true)
         {
             try {

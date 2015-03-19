@@ -24,6 +24,7 @@ import org.corfudb.client.NetworkException;
 
 public interface ISimpleSequencer {
     long sequenceGetNext() throws NetworkException;
+    long sequenceGetNext(int numTokens) throws NetworkException;
     long sequenceGetCurrent() throws NetworkException;
 }
 

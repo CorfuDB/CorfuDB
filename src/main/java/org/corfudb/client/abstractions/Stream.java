@@ -862,6 +862,24 @@ public class Stream implements AutoCloseable, IStream {
     public void pullStream(List<UUID> targetStreams, byte[] payload, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
+        pullStream(targetStreams, payload, 0, duration);
+    }
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a payload in the
+     * remote move operation, and optionally reserve extra entries.
+     * This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The payload to insert
+     * @param reservation      The number of entries to reserve, both in the local and the remote log.
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     */
+    public void pullStream(List<UUID> targetStreams, byte[] payload, int reservation, int duration)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
         HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
         for (UUID id : targetStreams)
         {
@@ -881,7 +899,7 @@ public class Stream implements AutoCloseable, IStream {
             epochMap.put(id, duration == -1 ? sd.epoch + 1 : sd.epoch);
         }
         CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams, payload);
-        long token = sequencer.getNext(streamIDstack.peekLast());
+        long token = sequencer.getNext(streamIDstack.peekLast(), reservation + 1);
         woas.write(token, (Serializable) cdbsme);
 
         for (UUID id : targetStreams)
@@ -889,7 +907,7 @@ public class Stream implements AutoCloseable, IStream {
             // Get a sequence in the remote stream
             StreamData sd = datamap.get(id);
             StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
-            long remoteToken = sremote.getNext(id);
+            long remoteToken = sremote.getNext(id, reservation + 1);
             // Write a move in the remote log
             WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));

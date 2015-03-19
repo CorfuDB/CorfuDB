@@ -89,6 +89,16 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
         }
     }
 
+    public long sequenceGetNext(int numTokens)
+    throws NetworkException
+    {
+        try (Jedis jedis = pool.getResource())
+        {
+            return jedis.incrBy(options.get("key"), numTokens);
+        }
+    }
+
+
     public long sequenceGetCurrent()
     throws NetworkException
     {
