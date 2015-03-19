@@ -1,6 +1,5 @@
-node
+/node
 node_modules
 bower_components
 build
-typings
 *.log
