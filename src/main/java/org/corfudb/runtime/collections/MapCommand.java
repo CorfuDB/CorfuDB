@@ -52,6 +52,6 @@ class MapCommand<K,V> extends CorfuDBObjectCommand
     }
     public String toString()
     {
-        return desc[cmdtype] + ":" + super.toString();
+        return desc[cmdtype] + "(" + key + "," + val + "):" + super.toString();
     }
 }

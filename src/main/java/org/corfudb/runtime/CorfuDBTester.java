@@ -568,7 +568,11 @@ class TXTesterThread implements Runnable
                     if (!map2.containsKey(map1.get(i)) || map2.get(map1.get(i)) != i)
                     {
                         consistent = false;
-                        System.out.println("inconsistency on " + i);
+                        System.out.println("inconsistency in map1 on " + i);
+                        System.out.println("map1 contains " + i);
+                        System.out.println("map1.get(" + i + ") is " + map1.get(i));
+                        System.out.println("map2 contains " + map1.get(i) + " = " + map2.containsKey(map1.get(i)));
+                        System.out.println("map2.get(" + map1.get(i) + ") is " + map2.get(map1.get(i)));
                         break;
                     }
                 }
@@ -577,7 +581,11 @@ class TXTesterThread implements Runnable
                     if (!map1.containsKey(map2.get(i)) || map1.get(map2.get(i)) != i)
                     {
                         consistent = false;
-                        System.out.println("inconsistency on " + i);
+                        System.out.println("inconsistency in map2 on " + i);
+                        System.out.println("map2 contains " + i);
+                        System.out.println("map2.get(" + i + ") is " + map2.get(i));
+                        System.out.println("map1 contains " + map2.get(i) + " = " + map1.containsKey(map2.get(i)));
+                        System.out.println("map1.get(" + map2.get(i) + ") is " + map1.get(map2.get(i)));
                         break;
                     }
                 }
@@ -609,24 +617,31 @@ class TXTesterThread implements Runnable
             int y = x;
             while(y==x)
                 y = (int) (Math.random() * numkeys);
-            System.out.println("Creating an edge between " + x + " and " + y);
             cr.BeginTX();
             if(map1.containsKey(x)) //if x is occupied, delete the edge from x
             {
-                map2.remove(map1.get(x));
+                int t = map1.get(x);
+                System.out.println("Deleting " + x + " from map1; deleting " + t + " from map2;");
+                map2.remove(t);
                 map1.remove(x);
             }
             else if(map2.containsKey(y)) //if y is occupied, delete the edge from y
             {
-                map1.remove(map2.get(y));
+                int t = map2.get(y);
+                System.out.println("Deleting " + y + " from map2; deleting " + t + " from map1;");
+                map1.remove(t);
                 map2.remove(y);
             }
             else
             {
+                System.out.println("Creating an edge between " + x + " and " + y);
                 map1.put(x, y);
                 map2.put(y, x);
             }
-            if(cr.EndTX()) numcommits++;
+            if(cr.EndTX())
+                numcommits++;
+//            else
+//                dbglog.warn("aborting...");
             dbglog.debug("Tx took {}", (System.currentTimeMillis()-curtime));
 /*            try
             {

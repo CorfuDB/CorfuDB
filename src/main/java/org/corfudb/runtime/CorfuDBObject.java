@@ -53,6 +53,8 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
 
     public void setTimestamp(ITimestamp newts, Serializable key)
     {
+        if(timestamp.equals(TimestampConstants.singleton().getInvalidTimestamp()))
+            throw new RuntimeException("cannot set to invalid timestamp!");
         timestamp = newts;
     }
 
@@ -80,7 +82,6 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
         TR = tTR;
         oid = tobjectid;
         TR.registerObject(this, remote);
-        timestamp = TimestampConstants.singleton().getInvalidTimestamp();
         statelock = new ReentrantReadWriteLock();
     }
 

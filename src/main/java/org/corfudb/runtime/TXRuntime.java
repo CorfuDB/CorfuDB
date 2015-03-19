@@ -481,7 +481,7 @@ class TXEngine implements SMRLearner
         // essentially the same state it would have seen had it acquired
         // locks pessimistically.
 
-        if(timestamp==TimestampConstants.singleton().getInvalidTimestamp()) throw new RuntimeException("validation timestamp cannot be invalid!");
+        if(timestamp.equals(TimestampConstants.singleton().getInvalidTimestamp())) throw new RuntimeException("validation timestamp cannot be invalid!");
 
         boolean partialabort = false;
         //we see the intention if we play a stream that's either in the read set or the write set
@@ -499,9 +499,11 @@ class TXEngine implements SMRLearner
                 //is the current version of the object at a later timestamp than the version read by the transaction?
                 //if (txr.getObject(curread.objectid).getTimestamp(curread.key) > curread.readtimestamp)
                 //if no read summary is provided, use the read timestamp instead
-                if((curread.readsummary!=null && !txr.getObject(curread.objectid).isStillValid(curread.readsummary))
-                    || (curread.readsummary==null && //txr.getObject(curread.objectid).getTimestamp()>curread.readtimestamp))
-                        txr.getObject(curread.objectid).getTimestamp().compareTo(curread.readtimestamp)>0))
+                //dbglog.warn("comparing " + txr.getObject(curread.objectid).getTimestamp() + " with " +
+                //        curread.readtimestamp + " == " + txr.getObject(curread.objectid).getTimestamp().compareTo(curread.readtimestamp));
+                if ((curread.readsummary != null && !txr.getObject(curread.objectid).isStillValid(curread.readsummary))
+                        || (curread.readsummary == null && //txr.getObject(curread.objectid).getTimestamp()>curread.readtimestamp))
+                        txr.getObject(curread.objectid).getTimestamp().compareTo(curread.readtimestamp) > 0))
                 {
                     //System.out.println("partial decision is an abort: " + curread.objectid + ":" + curread.readsummary + ":" + curread.readtimestamp);
                     partialabort = true;
@@ -608,6 +610,7 @@ class TXEngine implements SMRLearner
                         }
                         catch(Exception e)
                         {
+                            dbglog.warn(e.toString());
                             ((CorfuDBObjectCommand)P2.command).setException(e);
                         }
                         cob.setTimestamp(decrec.txint_timestamp, P2.key); //use the intention's timestamp

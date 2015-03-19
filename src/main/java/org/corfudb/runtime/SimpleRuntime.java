@@ -191,7 +191,7 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         //the alternative is to have the apply in the object always call a superclass version of apply
         //that sets the timestamp
         //only the apply thread sets the timestamp, so we only have to worry about concurrent reads
-        if(timestamp!=null)
+        if(!(timestamp.equals(TimestampConstants.singleton().getInvalidTimestamp())))
             cob.setTimestamp(timestamp);
         command.setTimestamp(cob.getTimestamp());
     }

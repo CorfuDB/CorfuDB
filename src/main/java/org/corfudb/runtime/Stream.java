@@ -147,10 +147,12 @@ class TimestampConstants implements ITimestampConstants
 
 class Timestamp implements ITimestamp, Serializable
 {
+    public static final int special_none = -1;
     public static final int special_ismax = 0;
     public static final int special_ismin = 1;
     public static final int special_isinvalid = 2;
-    boolean specialbits[] = new boolean[3];
+
+    int special_value = special_none;
 
     long streamid;
     long logid; //todo: currently we seem to identify logs with strings... which makes for terribly inefficient timestamps
@@ -163,14 +165,15 @@ class Timestamp implements ITimestamp, Serializable
         epoch = tepoch;
         streamid = tstreamid;
     }
-    public Timestamp(int specialbit)
+    public Timestamp(int tspecialvalue)
     {
-        specialbits[specialbit] = true;
+        special_value = tspecialvalue;
     }
 
     public boolean equals(Object o)
     {
-        ITimestamp tT = (ITimestamp)o;
+        Timestamp tT = (Timestamp)o;
+        if(tT.special_value!=this.special_value) return false;
         if(compareTo(tT)==0) return true;
         return false;
     }
@@ -181,10 +184,14 @@ class Timestamp implements ITimestamp, Serializable
     {
         Timestamp T2 = (Timestamp)iTimestamp;
         //check the special bits
-        for(int i=0;i<specialbits.length;i++)
-            if(specialbits[i] && T2.specialbits[i]) return 0;
-            else if(!specialbits[i] && T2.specialbits[i]) return -1;
-            else if(specialbits[i] && !T2.specialbits[i]) return 1;
+        if(special_value!=special_none && special_value==T2.special_value) return 0;
+
+        if(special_value == special_ismax || T2.special_value==special_ismin)
+            return 1;
+        else if(special_value == special_ismin || T2.special_value==special_ismax)
+            return -1;
+        else if(special_value == special_isinvalid || T2.special_value==special_isinvalid)
+            throw new ClassCastException("trying to compare invalid timestamp");
 
 
         int x = 0;
@@ -221,9 +228,9 @@ class Timestamp implements ITimestamp, Serializable
 
     public String toString()
     {
-        if(specialbits[special_isinvalid]) return "T[INV]";
-        if(specialbits[special_ismax]) return "T[MAX]";
-        if(specialbits[special_ismin]) return "T[MIN]";
+        if(special_value==special_isinvalid) return "T[INV]";
+        if(special_value==special_ismax) return "T[MAX]";
+        if(special_value==special_ismin) return "T[MIN]";
         return "T[" + streamid + "," + logid + "," + epoch + "," + pos + "]";
     }
 
