@@ -14,11 +14,16 @@
  */
 package org.corfudb.runtime;
 
+import org.corfudb.client.CorfuDBClient;
+import org.corfudb.client.OutOfSpaceException;
+import org.corfudb.client.entries.CorfuDBStreamEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -38,12 +43,18 @@ class StreamEntryImpl implements StreamEntry
         return payload;
     }
 
+    @Override
+    public boolean isInStream(long streamid)
+    {
+        return getStreams().contains(streamid);
+    }
+
     public Set<Long> getStreams()
     {
         return streams;
     }
 
-    public StreamEntryImpl(Object tbs, Timestamp position, Set<Long> tstreams)
+    public StreamEntryImpl(Object tbs, ITimestamp position, Set<Long> tstreams)
     {
         logpos = position;
         payload = tbs;
@@ -67,6 +78,145 @@ class StreamFactoryImpl implements StreamFactory
         return new StreamImpl(streamid, ss, was);
     }
 
+}
+
+class HopAdapterStreamFactoryImpl implements StreamFactory
+{
+    CorfuDBClient cdb;
+    public HopAdapterStreamFactoryImpl(CorfuDBClient tcdb)
+    {
+        cdb = tcdb;
+    }
+
+    @Override
+    public Stream newStream(long streamid)
+    {
+        return new HopAdapterStreamImpl(cdb, streamid);
+    }
+}
+
+class HopAdapterStreamEntryImpl implements StreamEntry
+{
+    CorfuDBStreamEntry cde;
+    public HopAdapterStreamEntryImpl(CorfuDBStreamEntry tcde)
+    {
+        cde = tcde;
+    }
+
+    @Override
+    public ITimestamp getLogpos()
+    {
+        return (ITimestamp)(Object)cde.getTimestamp();
+    }
+
+    @Override
+    public Object getPayload()
+    {
+        try
+        {
+            return cde.deserializePayload();
+        }
+        catch (IOException e)
+        {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+        catch (ClassNotFoundException e)
+        {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public boolean isInStream(long streamid)
+    {
+        return cde.containsStream(new UUID(streamid, 0));
+    }
+}
+
+class HopAdapterStreamImpl implements Stream
+{
+    org.corfudb.client.abstractions.IStream hopstream;
+    long streamid;
+
+    public HopAdapterStreamImpl(CorfuDBClient cdb, long tstreamid)
+    {
+        streamid = tstreamid;
+        hopstream = new org.corfudb.client.abstractions.Stream(cdb, new UUID(streamid, 0));
+    }
+
+    @Override
+    public ITimestamp append(Serializable s, Set<Long> streams)
+    {
+        if(streams.size()==1)
+        {
+            try
+            {
+                ITimestamp T = (ITimestamp)(Object)hopstream.append(s); //todo: remove the cast
+            } catch (OutOfSpaceException oe)
+            {
+                System.out.println(oe);
+                throw new RuntimeException(oe);
+            }
+            return null;
+        }
+        else
+            throw new RuntimeException("unimplemented");
+    }
+
+    @Override
+    public StreamEntry readNext()
+    {
+        try
+        {
+            CorfuDBStreamEntry cde = hopstream.readNextEntry();
+            return new StreamEntryImpl(cde.deserializePayload(), (ITimestamp)(Object)cde.getTimestamp(), null); //todo: remove the cast
+        }
+        catch (IOException e)
+        {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+        catch (InterruptedException e)
+        {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+        catch (ClassNotFoundException e)
+        {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public StreamEntry readNext(ITimestamp stoppos)
+    {
+        CorfuDBStreamEntry cde = hopstream.peek();
+        if(cde==null) return null;
+        if(cde.getTimestamp().compareTo((org.corfudb.client.ITimestamp)(Object)stoppos)<0) //todo: remove the cast
+            return new HopAdapterStreamEntryImpl(cde);
+        return null;
+    }
+
+    @Override
+    public ITimestamp checkTail()
+    {
+        return (ITimestamp)(Object)hopstream.check();
+    } //todo: remove the cast
+
+    @Override
+    public void prefixTrim(ITimestamp trimpos)
+    {
+        throw new RuntimeException("unimplemented");
+    }
+
+    @Override
+    public long getStreamID()
+    {
+        return streamid;
+    }
 }
 
 class StreamImpl implements Stream
@@ -134,7 +284,7 @@ class StreamImpl implements Stream
             biglock.unlock();
             BufferStack bs = addrspace.read(readpos);
             ret = (StreamEntry) bs.deserialize();
-            if(ret.getStreams().contains(this.getStreamID()))
+            if(ret.isInStream(this.getStreamID()))
                 break;
             dbglog.debug("skipping...");
         }

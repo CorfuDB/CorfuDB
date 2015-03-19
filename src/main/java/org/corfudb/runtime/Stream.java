@@ -103,7 +103,7 @@ interface StreamEntry extends Serializable
 {
     public ITimestamp getLogpos();
     public Object getPayload();
-    public Set<Long> getStreams();
+    public boolean isInStream(long streamid);
 }
 
 interface ITimestampConstants
