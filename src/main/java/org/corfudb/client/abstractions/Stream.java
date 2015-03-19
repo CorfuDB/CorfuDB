@@ -67,6 +67,12 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import java.util.function.Supplier;
 import org.corfudb.client.StreamData;
+import java.io.Serializable;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectOutputStream;
+import java.io.ObjectOutput;
+import java.io.IOException;
+
 
 /**
  *  A hop-aware stream implementation. The stream must be closed after the application is done using it
@@ -259,6 +265,75 @@ public class Stream implements AutoCloseable, IStream {
         );
     }
 
+    enum PayloadReadResult
+    {
+        VALID,
+        INVALID,
+        MOVECOMPLETE
+    }
+
+    private PayloadReadResult loadPayloadIntoQueue(CorfuDBStreamEntry cdbse, long physicalPos)
+    {
+        PayloadReadResult prr = PayloadReadResult.INVALID;
+        if (cdbse.checkEpoch(epochMap))
+        {
+            cdbse.getTimestamp().setTransientInfo(logID, streamID, streamPointer.getAndIncrement(), physicalPos);
+            synchronized (streamPointer) {
+                latest = cdbse.getTimestamp();
+                if (latest.epochMap == null)
+                {
+                    log.warn("uh, null epoch map? at {} ", physicalPos);
+                }
+                streamPointer.notifyAll();
+            }
+            prr = PayloadReadResult.VALID;
+            while (true) {
+               try {
+                streamQ.put(cdbse);
+                break;
+                } catch (InterruptedException e) {}
+            }
+            if (returnStack.size() != 0)
+            {
+                ReturnInfo currentReturn = returnStack.peekLast();
+                currentReturn.returnCounter = currentReturn.returnCounter - 1;
+                if (currentReturn.returnCounter <= 0)
+                {
+                    log.debug("Temporary move completed, returning to log {} at {}", currentReturn.returnLog, currentReturn.physicalPos);
+                    if (!currentReturn.returnLog.equals(logID))
+                    {
+                        woas = new WriteOnceAddressSpace(cdbc, currentReturn.returnLog);
+                        sequencer = new StreamingSequencer(cdbc, currentReturn.returnLog);
+                        logID = currentReturn.returnLog;
+                    }
+                    UUID curStream = null;
+                    while (true) {
+                        try {
+                            curStream = streamIDstack.takeLast();
+                            break;
+                        } catch (InterruptedException ie) {}
+                    }
+                    epochMap.remove(curStream);
+                    while (true) {
+                        try {
+                            returnStack.takeLast();
+                            break;
+                        } catch (InterruptedException ie) {}
+                    }
+                    dispatchedReads.set(currentReturn.physicalPos);
+                    currentDispatch = getStreamTailAndDispatch(1);
+                    prr = PayloadReadResult.MOVECOMPLETE;
+                }
+            }
+        }
+        else
+        {
+            log.warn("Ignored log entry from wrong epoch (expected {}, got {})", getCurrentEpoch(), cdbse.getTimestamp().getEpoch(streamID));
+        }
+
+        return prr;
+    }
+
     @SuppressWarnings("rawtypes")
     private CompletableFuture<Void> getStreamTailAndDispatch(long numReads)
     {
@@ -353,46 +428,20 @@ public class Stream implements AutoCloseable, IStream {
                                 }
                                 else if (payload instanceof CorfuDBStreamStartEntry)
                                 {
-
+                                    CorfuDBStreamStartEntry cdsse = (CorfuDBStreamStartEntry) payload;
+                                    if (cdsse.payload != null)
+                                    {
+                                        PayloadReadResult prr = loadPayloadIntoQueue(cdsse, r.pos);
+                                        if (prr == PayloadReadResult.VALID) { numReadable++; }
+                                        else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
+                                    }
                                 }
                                 else if (payload instanceof CorfuDBStreamEntry)
                                 {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
-                                    if (cdbse.checkEpoch(epochMap))
-                                    {
-                                        cdbse.getTimestamp().setTransientInfo(logID, streamID, streamPointer.getAndIncrement(), r.pos);
-                                        synchronized (streamPointer) {
-                                            latest = cdbse.getTimestamp();
-                                            streamPointer.notifyAll();
-                                        }
-                                        numReadable++;
-                                        streamQ.put(cdbse);
-                                        if (returnStack.size() != 0)
-                                        {
-                                            ReturnInfo currentReturn = returnStack.peekLast();
-                                            currentReturn.returnCounter = currentReturn.returnCounter - 1;
-                                            if (currentReturn.returnCounter <= 0)
-                                            {
-                                                log.debug("Temporary move completed, returning to log {} at {}", currentReturn.returnLog, currentReturn.physicalPos);
-                                                if (!currentReturn.returnLog.equals(logID))
-                                                {
-                                                    woas = new WriteOnceAddressSpace(cdbc, currentReturn.returnLog);
-                                                    sequencer = new StreamingSequencer(cdbc, currentReturn.returnLog);
-                                                    logID = currentReturn.returnLog;
-                                                }
-                                                UUID curStream = streamIDstack.takeLast();
-                                                epochMap.remove(curStream);
-                                                returnStack.takeLast();
-                                                dispatchedReads.set(currentReturn.physicalPos);
-                                                currentDispatch = getStreamTailAndDispatch(1);
-                                                return;
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        log.warn("Ignored log entry from wrong epoch (expected {}, got {})", getCurrentEpoch(), cdbse.getTimestamp().getEpoch(streamID));
-                                    }
+                                    PayloadReadResult prr = loadPayloadIntoQueue(cdbse, r.pos);
+                                    if (prr == PayloadReadResult.VALID) { numReadable++; }
+                                    else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
                                 }
                             }
                             catch (NullPointerException npe)
@@ -774,37 +823,29 @@ public class Stream implements AutoCloseable, IStream {
     public void pullStream(List<UUID> targetStreams, int duration)
     throws RemoteException, OutOfSpaceException, IOException
     {
-        HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
-        for (UUID id : targetStreams)
-        {
-            // Get information about remote stream
-            StreamData sd = getConfigMaster.get().getStream(id);
-            if (sd == null) { throw new RemoteException("Unable to find target stream " + id.toString(), logID); }
-            datamap.put(id, sd);
-        }
+        pullStream(targetStreams, null, duration);
+    }
 
-        // Write a stream start in the local log.
-        // This entry needs to contain the epoch+1 of the target stream as well as our own epoch
-        Map<UUID, Long> epochMap = new HashMap<UUID, Long>();
-        epochMap.put(streamID, getCurrentEpoch());
-        for (UUID id : targetStreams)
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a serializable payload in the
+     * remote move operation. This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The serializable payload to insert
+     * @param duration         The length of time, in log entries that this pull should last,
+     *                         if -1, then the pull is permanent.
+     */
+    public void pullStream(List<UUID> targetStreams, Serializable payload, int duration)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
+        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {
-            StreamData sd = datamap.get(id);
-            epochMap.put(id, duration == -1 ? sd.epoch + 1 : sd.epoch);
-        }
-        CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams);
-        long token = sequencer.getNext(streamIDstack.peekLast());
-        woas.write(token, (Serializable) cdbsme);
-
-        for (UUID id : targetStreams)
-        {
-            // Get a sequence in the remote stream
-            StreamData sd = datamap.get(id);
-            StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
-            long remoteToken = sremote.getNext(id);
-            // Write a move in the remote log
-            WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
-            woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch()));
+            try (ObjectOutput out = new ObjectOutputStream(bs))
+            {
+                out.writeObject(payload);
+                pullStream(targetStreams, bs.toByteArray(), duration);
+            }
         }
     }
 
@@ -839,7 +880,7 @@ public class Stream implements AutoCloseable, IStream {
             StreamData sd = datamap.get(id);
             epochMap.put(id, duration == -1 ? sd.epoch + 1 : sd.epoch);
         }
-        CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams);
+        CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams, payload);
         long token = sequencer.getNext(streamIDstack.peekLast());
         woas.write(token, (Serializable) cdbsme);
 
@@ -851,7 +892,7 @@ public class Stream implements AutoCloseable, IStream {
             long remoteToken = sremote.getNext(id);
             // Write a move in the remote log
             WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
-            woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch()));
+            woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
         }
     }
 

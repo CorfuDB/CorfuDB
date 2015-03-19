@@ -105,6 +105,7 @@ public class CorfuDBStreamingSequencerProtocol implements IServerProtocol, ISimp
         }
         catch (Exception e)
         {
+            log.warn("Exception getting next sequence", e);
             if (client != null ) {thriftPool.returnBrokenResource(client);}
             throw new NetworkException("Couldn't connect to endpoint!", this);
         }

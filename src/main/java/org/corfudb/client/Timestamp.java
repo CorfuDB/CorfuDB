@@ -71,9 +71,16 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     }
 
 
-    public long getEpoch(UUID stream)
+    public Long getEpoch(UUID stream)
     {
-        return epochMap.get(stream);
+        try {
+            return epochMap.get(stream);
+        }
+        catch (NullPointerException npe)
+        {
+            log.debug("Attempted to get epoch for stream {}, but it is not present in timestamp [ts={}]", stream.toString(), toString());
+            return null;
+        }
     }
 
     public void setTransientInfo(UUID log, UUID primaryStream, long pos, long physicalPos)
