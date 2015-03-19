@@ -185,6 +185,10 @@ public class CorfuDBTester
             throw new Exception("need at least one op!");
 
 
+        final int DUMMYSTREAMIMPL = 0;
+        final int HOPSTREAMIMPL = 1;
+        int streamimpl = DUMMYSTREAMIMPL;
+
         String rpchostname;
 
         try
@@ -205,7 +209,13 @@ public class CorfuDBTester
 
         Thread[] threads = new Thread[numthreads];
 
-        StreamFactory sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf, 0), new CorfuStreamingSequencer(crf)); //todo: fill in the right logid
+        StreamFactory sf;
+        if(streamimpl==DUMMYSTREAMIMPL)
+            sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf, 0), new CorfuStreamingSequencer(crf)); //todo: fill in the right logid
+        else if(streamimpl==HOPSTREAMIMPL)
+            sf = new HopAdapterStreamFactoryImpl(crf);
+        else
+            throw new RuntimeException("unknown stream implementation");
 
         long starttime = System.currentTimeMillis();
 

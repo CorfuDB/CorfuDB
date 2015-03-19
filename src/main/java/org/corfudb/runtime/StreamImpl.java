@@ -172,7 +172,7 @@ class HopAdapterStreamImpl implements Stream
         try
         {
             CorfuDBStreamEntry cde = hopstream.readNextEntry();
-            return new StreamEntryImpl(cde.deserializePayload(), cde.getTimestamp(), null);
+            return new HopAdapterStreamEntryImpl(cde);
         }
         catch (IOException e)
         {
@@ -180,11 +180,6 @@ class HopAdapterStreamImpl implements Stream
             throw new RuntimeException(e);
         }
         catch (InterruptedException e)
-        {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-        catch (ClassNotFoundException e)
         {
             e.printStackTrace();
             throw new RuntimeException(e);
@@ -197,7 +192,7 @@ class HopAdapterStreamImpl implements Stream
         CorfuDBStreamEntry cde = hopstream.peek();
         if(cde==null) return null;
         if(cde.getTimestamp().compareTo(stoppos)<0)
-            return new HopAdapterStreamEntryImpl(cde);
+            return readNext();
         return null;
     }
 
