@@ -141,9 +141,6 @@ public class Timestamp implements ITimestamp, Serializable {
     @Override
     public int compareTo(ITimestamp timestamp)
     {
-        // Take care of equality
-        if (this.equals(timestamp)) {return 0;}
-
         //always less than max
         if (ITimestamp.isMax(timestamp)) { return -1; }
         //always greater than min
