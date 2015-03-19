@@ -177,43 +177,6 @@ public interface IStream extends AutoCloseable {
     throws LinearizationException, InterruptedException;
 
     /**
-     *  Synchronously block until an epoch change is seen. Useful for quickly detecting
-     *  when a permanent move is successful.
-     */
-    public void waitForEpochChange()
-        throws InterruptedException;
-
-    /**
-     *  Synchronously block until an epoch change is seen, or a certain amount of real time has elapsed.
-     *  Useful for quickly detecting when a permanent move is successful.
-     *
-     * @param timeout   The amount of time to wait. A negative number is interpreted as infinite.
-     * @return          True, if an epoch change occurs, or false if the timeout was reached.
-     */
-    public boolean waitForEpochChange(long timeout)
-        throws InterruptedException;
-
-    /**
-     *  Synchronously block until an epoch change is seen compared to a given timestamp. Useful for quickly detecting
-     *  when a permanent move is successful.
-     *
-     *  @param t    The timestamp to compare against.
-     */
-    public void waitForEpochChange(Timestamp t)
-        throws InterruptedException;
-
-    /**
-     *  Synchronously block until an epoch change is seen compared to a given timestmap, or a certain amount of real time has elapsed.
-     *  Useful for quickly detecting when a permanent move is successful.
-     *
-     * @param t         The timestamp to compare against.
-     * @param timeout   The amount of time to wait. A negative number is interpreted as infinite.
-     * @return          True, if an epoch change occurs, or false if the timeout was reached.
-     */
-    public boolean waitForEpochChange(Timestamp t, long timeout)
-        throws InterruptedException;
-
-    /**
      * Permanently hop to another log. This function tries to hop this stream to
      * another log by obtaining a position in the destination log and inserting
      * a move entry from the source log to the destination log. It may or may not
