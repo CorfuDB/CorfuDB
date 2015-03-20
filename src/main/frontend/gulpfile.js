@@ -15,7 +15,7 @@ gulp.task('ts-typings', function(cb)
         config: './tsd.json'
     }, cb);
 });
-gulp.task('ts-compile', ['ts-typings'], function(cb) {
+gulp.task('ts-compile', function(cb) {
     var browserified = transform(function(filename) {
         return browserify(filename, {debug:true})
                 .plugin('tsify', {module: 'commonjs', target: 'ES5'})

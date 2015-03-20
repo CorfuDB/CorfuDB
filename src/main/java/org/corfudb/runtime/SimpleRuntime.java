@@ -20,6 +20,7 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.*;
+import org.corfudb.client.ITimestamp;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -191,7 +192,7 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         //the alternative is to have the apply in the object always call a superclass version of apply
         //that sets the timestamp
         //only the apply thread sets the timestamp, so we only have to worry about concurrent reads
-        if(!(timestamp.equals(TimestampConstants.singleton().getInvalidTimestamp())))
+        if(!(timestamp.equals(ITimestamp.getInvalidTimestamp())))
             cob.setTimestamp(timestamp);
         command.setTimestamp(cob.getTimestamp());
     }
@@ -284,7 +285,7 @@ public class SimpleRuntime extends BaseRuntime
             rpcRemoteRuntime(cob, command);
         }
         else
-            smre.sync(TimestampConstants.singleton().getInvalidTimestamp(), command);
+            smre.sync(ITimestamp.getInvalidTimestamp(), command);
         return true;
     }
 

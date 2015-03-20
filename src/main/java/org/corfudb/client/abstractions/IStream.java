@@ -177,43 +177,6 @@ public interface IStream extends AutoCloseable {
     throws LinearizationException, InterruptedException;
 
     /**
-     *  Synchronously block until an epoch change is seen. Useful for quickly detecting
-     *  when a permanent move is successful.
-     */
-    public void waitForEpochChange()
-        throws InterruptedException;
-
-    /**
-     *  Synchronously block until an epoch change is seen, or a certain amount of real time has elapsed.
-     *  Useful for quickly detecting when a permanent move is successful.
-     *
-     * @param timeout   The amount of time to wait. A negative number is interpreted as infinite.
-     * @return          True, if an epoch change occurs, or false if the timeout was reached.
-     */
-    public boolean waitForEpochChange(long timeout)
-        throws InterruptedException;
-
-    /**
-     *  Synchronously block until an epoch change is seen compared to a given timestamp. Useful for quickly detecting
-     *  when a permanent move is successful.
-     *
-     *  @param t    The timestamp to compare against.
-     */
-    public void waitForEpochChange(Timestamp t)
-        throws InterruptedException;
-
-    /**
-     *  Synchronously block until an epoch change is seen compared to a given timestmap, or a certain amount of real time has elapsed.
-     *  Useful for quickly detecting when a permanent move is successful.
-     *
-     * @param t         The timestamp to compare against.
-     * @param timeout   The amount of time to wait. A negative number is interpreted as infinite.
-     * @return          True, if an epoch change occurs, or false if the timeout was reached.
-     */
-    public boolean waitForEpochChange(Timestamp t, long timeout)
-        throws InterruptedException;
-
-    /**
      * Permanently hop to another log. This function tries to hop this stream to
      * another log by obtaining a position in the destination log and inserting
      * a move entry from the source log to the destination log. It may or may not
@@ -309,6 +272,21 @@ public interface IStream extends AutoCloseable {
      *                         if -1, then the pull is permanent.
      */
     public Timestamp pullStream(List<UUID> targetStreams, byte[] payload, int reservation, int duration)
+    throws RemoteException, OutOfSpaceException, IOException;
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a payload in the
+     * remote move operation, and optionally reserve extra entries, using a BundleEntry.
+     * This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The payload to insert
+     * @param slots            The length of time, in slots that this pull should last.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
+     */
+    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, byte[] payload, int slots)
     throws RemoteException, OutOfSpaceException, IOException;
 
     /**

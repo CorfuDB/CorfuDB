@@ -4,6 +4,7 @@ import java.util.*;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
+import org.corfudb.client.ITimestamp;
 
 public class PartitionedMap<K,V> implements Map<K,V>
 {

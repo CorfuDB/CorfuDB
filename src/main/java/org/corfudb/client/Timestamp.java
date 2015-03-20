@@ -32,7 +32,7 @@ import java.io.Serializable;
 import java.util.UUID;
 import java.lang.StringBuilder;
 
-public class Timestamp implements Comparable<Timestamp>, Serializable {
+public class Timestamp implements ITimestamp, Serializable {
     private static final Logger log = LoggerFactory.getLogger(Timestamp.class);
 
     public transient Long pos;
@@ -139,18 +139,30 @@ public class Timestamp implements Comparable<Timestamp>, Serializable {
     }
 
     @Override
-    public int compareTo(Timestamp t)
+    public int compareTo(ITimestamp timestamp)
     {
-        if (primaryStream != null && primaryStream.equals(t.primaryStream))
-        {
-            return (int) (pos - t.pos);
-        }
+        //always less than max
+        if (ITimestamp.isMax(timestamp)) { return -1; }
+        //always greater than min
+        if (ITimestamp.isMin(timestamp)) { return 1; }
+        //always invalid
+        if (ITimestamp.isInvalid(timestamp)) { throw new ClassCastException("Comparison of invalid timestamp!"); }
 
-        if (physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap))
+        if (timestamp instanceof Timestamp)
         {
-            return (int) (physicalPos - t.physicalPos);
+            Timestamp t = (Timestamp) timestamp;
+            if (primaryStream != null && primaryStream.equals(t.primaryStream))
+            {
+                return (int) (pos - t.pos);
+            }
+
+            if (physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap))
+            {
+                return (int) (physicalPos - t.physicalPos);
+            }
+            throw new ClassCastException("Uncomparable timestamp objects! [t1=" + this.toString() + "] [t2=" + t.toString() + "]");
         }
-        throw new ClassCastException("Uncomparable timestamp objects! [t1=" + this.toString() + "] [t2=" + t.toString() + "]");
+        throw new ClassCastException("I don't know how to compare these timestamps, (maybe you need to override comapreTo<ITimestamp> in your timestamp implementation?) [ts1=" + this.toString() + "] [ts2=" + timestamp.toString()+"]");
     }
 
     @Override

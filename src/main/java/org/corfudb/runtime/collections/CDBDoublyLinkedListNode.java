@@ -2,11 +2,10 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
-import org.corfudb.runtime.ITimestamp;
 import org.corfudb.runtime.StreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import org.corfudb.client.ITimestamp;
 
 public class CDBDoublyLinkedListNode<E> extends CorfuDBObject {
 

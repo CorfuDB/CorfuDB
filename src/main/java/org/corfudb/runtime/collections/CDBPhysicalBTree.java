@@ -4,6 +4,8 @@ import org.corfudb.runtime.*;
 
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.HashMap;
+import org.corfudb.client.ITimestamp;
 
 public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
 

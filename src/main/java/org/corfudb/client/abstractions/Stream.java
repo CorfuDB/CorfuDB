@@ -27,6 +27,7 @@ import org.corfudb.client.entries.CorfuDBEntry;
 import org.corfudb.client.entries.CorfuDBStreamEntry;
 import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.client.entries.CorfuDBStreamStartEntry;
+import org.corfudb.client.entries.BundleEntry;
 import org.corfudb.client.OutOfSpaceException;
 import org.corfudb.client.LinearizationException;
 
@@ -950,6 +951,61 @@ public class Stream implements AutoCloseable, IStream {
             // Write a move in the remote log
             WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
+        }
+
+        Timestamp ts = new Timestamp(epochMap);
+        ts.setPhysicalPos(token);
+        return ts;
+    }
+
+    /**
+     * Temporarily pull multiple remote streams into this stream, including a payload in the
+     * remote move operation, and optionally reserve extra entries, using a BundleEntry.
+     * This function tries to attach multiple remote stream to this stream.
+     * It may or may not succeed.
+     *
+     * @param targetStreams    The destination streams to attach.
+     * @param payload          The payload to insert
+     * @param slots            The length of time, in slots that this pull should last.
+     *
+     * @return                 A timestamp indicating where the attachment begins.
+     */
+    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, byte[] payload, int slots)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
+        HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
+        for (UUID id : targetStreams)
+        {
+            // Get information about remote stream
+            StreamData sd = getConfigMaster.get().getStream(id);
+            if (sd == null) { throw new RemoteException("Unable to find target stream " + id.toString(), logID); }
+            datamap.put(id, sd);
+        }
+
+        // Write a stream start in the local log.
+        // This entry needs to contain the epoch+1 of the target stream as well as our own epoch
+        Map<UUID, Long> epochMap = new HashMap<UUID, Long>();
+        epochMap.put(streamID, getCurrentEpoch());
+        for (UUID id : targetStreams)
+        {
+            StreamData sd = datamap.get(id);
+            epochMap.put(id, sd.epoch);
+        }
+        CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams, payload);
+        long token = sequencer.getNext(streamIDstack.peekLast(),  slots + 1);
+        woas.write(token, (Serializable) cdbsme);
+
+        int offset = 1;
+        for (UUID id : targetStreams)
+        {
+            // Get a sequence in the remote stream
+            StreamData sd = datamap.get(id);
+            StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
+            long remoteToken = sremote.getNext(id, slots + 1);
+            // Write a move in the remote log
+            WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
+            woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
+            offset++;
         }
 
         Timestamp ts = new Timestamp(epochMap);
