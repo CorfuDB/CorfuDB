@@ -60,6 +60,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.stream.Collectors;
 import org.corfudb.client.gossip.StreamEpochGossipEntry;
+import org.corfudb.client.gossip.StreamPullGossip;
 
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,7 +91,7 @@ public class Stream implements AutoCloseable, IStream {
     StreamingSequencer sequencer;
     WriteOnceAddressSpace woas;
 
-    ExecutorService executor;
+    public ExecutorService executor;
     boolean prefetch = true;
 
 
@@ -279,6 +280,13 @@ public class Stream implements AutoCloseable, IStream {
         if (cdbse.checkEpoch(epochMap))
         {
             cdbse.getTimestamp().setTransientInfo(logID, streamID, streamPointer.getAndIncrement(), physicalPos);
+            cdbse.restoreOriginalPhysical();
+            if (cdbse instanceof BundleEntry)
+            {
+                //a bundle entry actually represents an entry in the remote log (physically).
+                BundleEntry be = (BundleEntry) cdbse;
+                be.setTransientInfo(this, woas, sequencer, cdbc);
+            }
             synchronized (streamPointer) {
                 latest = cdbse.getTimestamp();
                 if (latest.epochMap == null)
@@ -359,7 +367,14 @@ public class Stream implements AutoCloseable, IStream {
                             highWatermark = r.pos + 1;
                             try {
                                 Object payload = r.payload.deserializePayload();
-                                if (payload instanceof CorfuDBStreamMoveEntry)
+                                if (payload instanceof BundleEntry)
+                                {
+                                    BundleEntry be = (BundleEntry) payload;
+                                    PayloadReadResult prr = loadPayloadIntoQueue(be, r.pos);
+                                    if (prr == PayloadReadResult.VALID) { numReadable++; }
+                                    else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
+                                }
+                                else if (payload instanceof CorfuDBStreamMoveEntry)
                                 {
                                     CorfuDBStreamMoveEntry cdbsme = (CorfuDBStreamMoveEntry) payload;
                                     if (cdbsme.containsStream(streamID))
@@ -512,7 +527,7 @@ public class Stream implements AutoCloseable, IStream {
                 long token = sequencer.getNext(streamIDstack.peekLast());
                 CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(epochMap, data);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(epochMap, -1, token);
+                return new Timestamp(epochMap, null, token);
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }
@@ -563,7 +578,7 @@ public class Stream implements AutoCloseable, IStream {
         {
             CorfuDBStreamEntry entry = streamQ.take();
             synchronized(streamQ){
-                streamQ.notify();
+                streamQ.notifyAll();
             }
             return entry;
         }
@@ -944,16 +959,23 @@ public class Stream implements AutoCloseable, IStream {
 
         for (UUID id : targetStreams)
         {
+            StreamPullGossip spg = new StreamPullGossip(id, logID, streamID, token, getCurrentEpoch(), reservation+1, duration, payload);
+            StreamData sd = datamap.get(id);
+            ((IConfigMaster)cdbc.getView(sd.currentLog).getConfigMasters().get(0)).sendGossip(spg);
+
+            // Old multi-hop code below
             // Get a sequence in the remote stream
+            /*
             StreamData sd = datamap.get(id);
             StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
             long remoteToken = sremote.getNext(id, reservation + 1);
             // Write a move in the remote log
             WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
+            */
         }
 
-        Timestamp ts = new Timestamp(epochMap);
+        Timestamp ts = new Timestamp(epochMap, null, token);
         ts.setPhysicalPos(token);
         return ts;
     }
@@ -1008,7 +1030,7 @@ public class Stream implements AutoCloseable, IStream {
             offset++;
         }
 
-        Timestamp ts = new Timestamp(epochMap);
+        Timestamp ts = new Timestamp(epochMap, null, token);
         ts.setPhysicalPos(token);
         return ts;
     }

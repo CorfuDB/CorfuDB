@@ -101,17 +101,26 @@ public class CorfuDBTester
         double rwpct = 0.25;
         String testCase = "functional";
 
+
+        final int DUMMYSTREAMIMPL = 0;
+        final int HOPSTREAMIMPL = 1;
+        int streamimpl = DUMMYSTREAMIMPL;
+
         if(args.length==0)
         {
             print_usage();
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
             {
+                case 's':
+                    strArg = g.getOptarg();
+                    System.out.println("streamimpl = "+ strArg);
+                    streamimpl = Integer.parseInt(strArg);
                 case 'T':
                     testCase = g.getOptarg();
                     break;
@@ -185,9 +194,6 @@ public class CorfuDBTester
             throw new Exception("need at least one op!");
 
 
-        final int DUMMYSTREAMIMPL = 0;
-        final int HOPSTREAMIMPL = 1;
-        int streamimpl = DUMMYSTREAMIMPL;
 
         String rpchostname;
 
@@ -226,7 +232,7 @@ public class CorfuDBTester
         if(testnum==LINTEST)
         {
             Map<Integer, Integer> cob1 = null;
-            int numpartitions = 10;
+            int numpartitions = 0;
             if(numpartitions==0)
             {
                 TR = new SimpleRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);

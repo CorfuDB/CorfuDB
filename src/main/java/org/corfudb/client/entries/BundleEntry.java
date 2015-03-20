@@ -45,12 +45,18 @@ import org.corfudb.client.abstractions.Stream;
 import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.CorfuDBClient;
+import org.corfudb.client.OverwriteException;
+import org.corfudb.client.UnwrittenException;
+import org.corfudb.client.TrimmedException;
 
+import java.util.concurrent.CompletableFuture;
 /**
  * This class implements a bundle entry, which is encountered inside the move entries of remotely bundled
  * logs. It enables remote logs to easily write results to remotes.
  */
-public class BundleEntry extends CorfuDBStreamMoveEntry {
+public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry {
+
+    private final Logger log = LoggerFactory.getLogger(BundleEntry.class);
 
     byte[] payload;
     long physicalPos;
@@ -75,6 +81,8 @@ public class BundleEntry extends CorfuDBStreamMoveEntry {
                         byte[] payload, int numSlots, long physicalPos)
     {
         super(epochMap, destinationLog, destinationStream, destinationPos, (int) numSlots+1, destinationEpoch, payload);
+        this.originalAddress = destinationPos;
+        this.isCopy = true;
         this.physicalPos = physicalPos;
         this.epochMap = new HashMap<UUID, Long>(epochMap);
         this.numSlots = numSlots;
@@ -113,13 +121,55 @@ public class BundleEntry extends CorfuDBStreamMoveEntry {
         }
 
         //  Write the payload to the remote (TODO: talk to the configuration master instead)
-        WriteOnceAddressSpace remote_woas = new WriteOnceAddressSpace(cdbc, destinationLog);
-        CorfuDBStreamEntry cdbse = new CorfuDBStreamEntry(epochMap, payload);
+        final WriteOnceAddressSpace remote_woas = new WriteOnceAddressSpace(cdbc, destinationLog);
+        final CorfuDBStreamEntry cdbse = new CorfuDBStreamEntry(epochMap, payload);
         remote_woas.write(physicalPos, cdbse);
 
         // Read all payloads from
         // Read the remote payload and write it to the local slots
-
-        return new Timestamp(epochMap, -1, physicalPos);
+        for (int i = 0; i < numSlots; i++)
+        {
+            final int slotNum = i;
+            CompletableFuture<Void> cf = CompletableFuture.runAsync( () -> {
+            while (true)
+            {
+                try {
+                    long posDest = destinationPos + slotNum + 1;
+                    CorfuDBStreamEntry cdbse2 = (CorfuDBStreamEntry)(new CorfuDBEntry(posDest, remote_woas.read(posDest))).deserializePayload();
+                    cdbse2.originalAddress = posDest;
+                    cdbse2.isCopy = true;
+                    woas.write(realPhysicalPos + slotNum + 1, cdbse2);
+                    break;
+                }
+                catch (UnwrittenException ue) {}
+                catch (OverwriteException oe) {break;}
+                catch (ClassNotFoundException cnfe) {break;}
+                catch (IOException e) { break;}
+            }
+            }, s.executor);
+        }
+        return new Timestamp(epochMap, null, physicalPos);
     }
+
+    /**
+     * Writes a serializable payload in the remote slot, and collects the result of the bundle into the local
+     * stream in 1 RTT.
+     *
+     * @param payloadObject       The payload to insert into the slot.
+     *
+     * @return                      The timestamp for the remote append operation, or null, if there was no remote slot.
+     */
+    public Timestamp writeSlot(Serializable payloadObject)
+    throws OverwriteException, IOException
+    {
+        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
+        {
+            try (ObjectOutput out = new ObjectOutputStream(bs))
+            {
+                out.writeObject(payloadObject);
+                return (writeSlot(bs.toByteArray()));
+            }
+        }
+    }
+
 }

@@ -35,11 +35,11 @@ import java.lang.StringBuilder;
 public class Timestamp implements ITimestamp, Serializable {
     private static final Logger log = LoggerFactory.getLogger(Timestamp.class);
 
-    public transient Long pos;
-    public transient UUID primaryStream;
+    public Long pos;
+    public UUID primaryStream;
 
-    public transient Long physicalPos;
-    public transient UUID logID;
+    public Long physicalPos;
+    public UUID logID;
     public Map<UUID, Long> epochMap;
 
     public static final long serialVersionUID = 0l;
@@ -63,7 +63,7 @@ public class Timestamp implements ITimestamp, Serializable {
         this.epochMap = new HashMap<UUID, Long>(epochMap);
     }
 
-    public Timestamp(Map<UUID, Long> epochMap, long pos, long physicalPos)
+    public Timestamp(Map<UUID, Long> epochMap, Long pos, Long physicalPos)
     {
         this.epochMap = new HashMap<UUID, Long>(epochMap);
         this.pos = pos;
@@ -99,9 +99,13 @@ public class Timestamp implements ITimestamp, Serializable {
 
     public void setPhysicalPos(long pos)
     {
-        this.physicalPos = physicalPos;
+        this.physicalPos = pos;
     }
 
+    public long getPhysicalPos()
+    {
+        return this.physicalPos;
+    }
     public void setLogId(UUID log)
     {
         this.logID = log;
@@ -134,6 +138,10 @@ public class Timestamp implements ITimestamp, Serializable {
             if (first) { first = false; }
             else { sb.append(", "); }
             sb.append(id).append(": ").append(epochMap.get(id)).append(".").append(physicalPos == null ? "?" : physicalPos);
+            if (pos != null && id.equals(primaryStream))
+            {
+                sb.append("(").append(pos).append(")");
+            }
         }
         return sb.toString();
     }
@@ -151,7 +159,7 @@ public class Timestamp implements ITimestamp, Serializable {
         if (timestamp instanceof Timestamp)
         {
             Timestamp t = (Timestamp) timestamp;
-            if (primaryStream != null && primaryStream.equals(t.primaryStream))
+            if (primaryStream != null && primaryStream.equals(t.primaryStream) && pos != null && t.pos != null)
             {
                 return (int) (pos - t.pos);
             }

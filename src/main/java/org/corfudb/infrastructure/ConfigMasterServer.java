@@ -80,6 +80,10 @@ import org.corfudb.client.RemoteLogView;
 import org.corfudb.client.RemoteException;
 import org.corfudb.client.StreamData;
 
+import org.corfudb.client.gossip.StreamPullGossip;
+import org.corfudb.client.view.StreamingSequencer;
+import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
+
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
     private Logger log = LoggerFactory.getLogger(ConfigMasterServer.class);
@@ -100,7 +104,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
         public GossipServer(final Map<String,Object> config)
         {
-            server = new Server();
+            server = new Server(16384, 8192);
             port = (Integer) config.get("port");
             port += 1;
             IGossip.registerSerializer(server.getKryo());
@@ -164,6 +168,17 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         {
                             currentStreamView.learnStream(sdrg.streamID, sdrg.currentLog, sdrg.startLog, sdrg.startPos, sdrg.epoch, sdrg.logPos);
                         }
+                    }
+                    else if (object instanceof StreamPullGossip)
+                    {
+                        StreamPullGossip spg = (StreamPullGossip) object;
+                        StreamingSequencer slocal = new StreamingSequencer(currentView);
+                        long remoteToken = slocal.getNext(spg.streamID, spg.reservation);
+                        WriteOnceAddressSpace woaslocal = new WriteOnceAddressSpace(currentView);
+                        long streamEpoch = currentStreamView.getStream(spg.streamID).epoch;
+                        try{
+                        woaslocal.write(remoteToken, new CorfuDBStreamMoveEntry(spg.streamID, spg.destinationLog, spg.destinationStream, spg.physicalPos, spg.duration, streamEpoch, spg.destinationEpoch, spg.payload));
+                        } catch (Exception e) {}
                     }
                 }
             });

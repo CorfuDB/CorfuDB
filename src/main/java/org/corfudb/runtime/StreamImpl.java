@@ -23,8 +23,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -138,6 +137,7 @@ class HopAdapterStreamEntryImpl implements StreamEntry
 
 class HopAdapterStreamImpl implements Stream
 {
+    private static Logger dbglog = LoggerFactory.getLogger(HopAdapterStreamImpl.class);
     org.corfudb.client.abstractions.IStream hopstream;
     long streamid;
 
@@ -155,23 +155,45 @@ class HopAdapterStreamImpl implements Stream
             try
             {
                 ITimestamp T = hopstream.append(s);
-            } catch (OutOfSpaceException oe)
+                return T;
+            }
+            catch (OutOfSpaceException oe)
             {
                 System.out.println(oe);
                 throw new RuntimeException(oe);
             }
-            return null;
         }
         else
-            throw new RuntimeException("unimplemented");
+        {
+            List<UUID> streamuuids = new LinkedList<>();
+            Iterator<Long> it = streams.iterator();
+            while(it.hasNext())
+            {
+                long x = it.next();
+                if(streamid==x) continue;
+                streamuuids.add(new UUID(x, 0));
+            }
+            try
+            {
+                ITimestamp T = hopstream.pullStream(streamuuids, s, 1);
+                return T;
+            }
+            catch (IOException e)
+            {
+                e.printStackTrace();
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     @Override
     public StreamEntry readNext()
     {
+        dbglog.debug("readNext...");
         try
         {
             CorfuDBStreamEntry cde = hopstream.readNextEntry();
+            dbglog.debug("done with readNext.");
             return new HopAdapterStreamEntryImpl(cde);
         }
         catch (IOException e)
@@ -189,10 +211,15 @@ class HopAdapterStreamImpl implements Stream
     @Override
     public StreamEntry readNext(ITimestamp stoppos)
     {
+        dbglog.debug("readNext {}", stoppos);
         CorfuDBStreamEntry cde = hopstream.peek();
+        dbglog.debug("peeked");
         if(cde==null) return null;
         if(cde.getTimestamp().compareTo(stoppos)<0)
+        {
+            dbglog.debug("calling readNext()");
             return readNext();
+        }
         return null;
     }
 
