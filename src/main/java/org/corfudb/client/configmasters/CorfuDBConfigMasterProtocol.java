@@ -101,7 +101,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
         try
         {
             jsonSession = new JSONRPC2Session(new URL("http://"+ host + ":" + port + "/control"));
-            client = new Client();
+            client = new Client(8192,8192);
             IGossip.registerSerializer(client.getKryo());
             client.start();
             client.connect(5000, host, port+1, port+1);

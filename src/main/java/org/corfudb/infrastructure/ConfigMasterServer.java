@@ -104,7 +104,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
         public GossipServer(final Map<String,Object> config)
         {
-            server = new Server();
+            server = new Server(16384, 8192);
             port = (Integer) config.get("port");
             port += 1;
             IGossip.registerSerializer(server.getKryo());
