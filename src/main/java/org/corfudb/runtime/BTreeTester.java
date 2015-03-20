@@ -228,6 +228,8 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         m_nReservedKeyFraction = 2;
         m_keycounter = new AtomicInteger(0);
         m_gtlock = new ReentrantLock();
+        for(L l : v)
+            m_rm.put(l, new HashSet<K>());
     }
 
     /**
@@ -253,10 +255,10 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         trees.addAll(m_v);
 
         while(trees.size() > 0 && result.size() < nTrees) {
-            int lidx = trees.size() == 1 ? 0 : (int) (Math.random() * trees.size());
+            int lidx = (int) Math.floor(Math.random() * trees.size());
             assert(lidx >= 0 && lidx < trees.size());
             L randtree = trees.remove(lidx);
-            result.add(trees.remove(lidx));
+            result.add(randtree);
         }
 
         return result;
@@ -303,7 +305,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         L src = selectRandomTrees(1).get(0);
         K key = getRandomKey(src);
         V val = src.get(key);
-        inform("T[%d]   get L%d(%s,%s)\n", m_nId, src.oid, key.toString(), val.toString());
+        inform("T[%d]   get L%d(%s,%s)\n", m_nId, src.oid, key.toString(), val == null ? "null":val.toString());
         return newGet(src, key, val);
     }
 
@@ -314,7 +316,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     randomPut() {
         L src = selectRandomTrees(1).get(0);
         K key = m_keygen.randElem(m_keycounter.getAndIncrement());
-        V val = m_valgen.randElem(Math.random());
+        V val = m_valgen.randElem((int)(Math.random()*100));
         src.put(key, val);
         inform("T[%d]   put L%d(%s,%s)\n", m_nId, src.oid, key.toString(), val.toString());
         return newPut(src, key, val);
@@ -329,7 +331,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         L src = selectRandomTrees(1).get(0);
         K key = getRandomKey(src);
         V val = src.remove(key);
-        inform("T[%d]   del L%d(%s,%s)\n", m_nId, src.oid, key.toString(), val.toString());
+        inform("T[%d]   del L%d(%s,%s)\n", m_nId, src.oid, key.toString(), val == null ? "null" : val.toString());
         return newRemove(src, key, val);
     }
 
@@ -346,9 +348,12 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         L dst = lists.get(1);
         K key = getRandomKey(src);
         V val = src.get(key);
-        src.remove(key);
-        dst.put(key, val);
-        inform("[T%d]   mov L%d[%s,%s]->L%d\n", m_nId, src.oid, key.toString(), val.toString(), dst.oid);
+        if(val != null) {
+            src.remove(key);
+            dst.put(key, val);
+            inform("[T%d]   mov L%d[%s,%s]->L%d\n", m_nId, src.oid, key.toString(), val.toString(), dst.oid);
+            return newMove(src, dst, key, val);
+        }
         return newMove(src, dst, key, val);
     }
 
@@ -453,10 +458,8 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
                 int lidx = (int) (Math.random() * m_v.size());
                 L randtree = m_v.get(lidx);
                 m_rt.BeginTX();
-                if (!writeOnlyTxSupport)
-                    randtree.size();
                 K key = m_keygen.randElem(m_keycounter.getAndIncrement());
-                V val = m_valgen.randElem(Math.random());
+                V val = m_valgen.randElem(i);
                 randtree.put(key, val);
                 inform("T[%d]   init-put L%d(%s,%s)\n", m_nId, randtree.oid, key.toString(), val.toString());
                 boolean success = m_rt.EndTX();
@@ -914,11 +917,12 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
                     inform("[T%d] endtx[#%d, try:%d]->%s\n", m_nId, i, attempts-1, (done?"COMMIT":"ABORT"));
                     m_numcommits += done ? 1 : 0;
                     m_naborts += done ? 0 : 1;
-                    trackOperation(res, done);
-                    dumpTrees(res, i, attempts, done, true);
+                    // trackOperation(res, done);
+                    // dumpTrees(res, i, attempts, done, true);
                 } catch (Exception e) {
-                    String strException = "" + e + " " + e.getStackTrace();
+                    String strException = "" + e;
                     inform("[T%d] force retry tx[%d, try%d] because of exception %s\n", m_nId, i, attempts-1, strException);
+                    e.printStackTrace();
                     icretries++;
                     if(inTX) m_rt.AbortTX();
                 }
