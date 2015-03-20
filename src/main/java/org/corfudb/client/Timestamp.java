@@ -63,11 +63,12 @@ public class Timestamp implements ITimestamp, Serializable {
         this.epochMap = new HashMap<UUID, Long>(epochMap);
     }
 
-    public Timestamp(Map<UUID, Long> epochMap, Long pos, Long physicalPos)
+    public Timestamp(Map<UUID, Long> epochMap, Long pos, Long physicalPos, UUID primaryStream)
     {
         this.epochMap = new HashMap<UUID, Long>(epochMap);
         this.pos = pos;
         this.physicalPos = physicalPos;
+        this.primaryStream = primaryStream;
     }
 
 

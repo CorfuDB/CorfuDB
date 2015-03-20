@@ -85,7 +85,7 @@ public class Stream implements AutoCloseable, IStream {
     private final Logger log = LoggerFactory.getLogger(Stream.class);
 
     CorfuDBClient cdbc;
-    UUID streamID;
+    public UUID streamID;
     UUID logID;
 
     StreamingSequencer sequencer;
@@ -527,7 +527,7 @@ public class Stream implements AutoCloseable, IStream {
                 long token = sequencer.getNext(streamIDstack.peekLast());
                 CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(epochMap, data);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(epochMap, null, token);
+                return new Timestamp(epochMap, null, token, streamID);
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }
@@ -617,7 +617,7 @@ public class Stream implements AutoCloseable, IStream {
      */
     public Timestamp check()
     {
-        return new Timestamp(epochMap, streamPointer.get(), sequencer.getCurrent(streamID));
+        return new Timestamp(epochMap, streamPointer.get()+1, sequencer.getCurrent(streamID), streamID);
     }
 
     /**
@@ -976,7 +976,7 @@ public class Stream implements AutoCloseable, IStream {
             }
        }
 
-        Timestamp ts = new Timestamp(epochMap, null, token);
+        Timestamp ts = new Timestamp(epochMap, null, token, streamID);
         ts.setPhysicalPos(token);
         return ts;
     }
@@ -1031,7 +1031,7 @@ public class Stream implements AutoCloseable, IStream {
             offset++;
         }
 
-        Timestamp ts = new Timestamp(epochMap, null, token);
+        Timestamp ts = new Timestamp(epochMap, null, token, streamID);
         ts.setPhysicalPos(token);
         return ts;
     }
