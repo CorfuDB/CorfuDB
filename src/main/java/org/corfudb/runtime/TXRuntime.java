@@ -41,7 +41,7 @@ public class TXRuntime extends BaseRuntime
     // during commit and detecting inconsistent views on reads, which
     // is necessary for opacity. Default setting is off, since only the list
     // objects actually take advantage of this setting.
-    static final Boolean prohibitMultiVersionReads = false;
+    Boolean prohibitMultiVersionReads = false;
 
     final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 
@@ -75,11 +75,15 @@ public class TXRuntime extends BaseRuntime
         }
     }
 
+    public TXRuntime(StreamFactory fact, long uniquenodeid, String rpchostname, int rpcport) {
+        this(fact, uniquenodeid, rpchostname, rpcport, false);
+    }
 
-    public TXRuntime(StreamFactory fact, long uniquenodeid, String rpchostname, int rpcport)
+    public TXRuntime(StreamFactory fact, long uniquenodeid, String rpchostname, int rpcport, boolean _prohibitMultiVersionReads)
     {
         super(fact, uniquenodeid, rpchostname, rpcport);
         decisionmap = new HashMap<>();
+        prohibitMultiVersionReads = _prohibitMultiVersionReads;
     }
 
     public void BeginTX()
@@ -611,6 +615,7 @@ class TXEngine implements SMRLearner
                         catch(Exception e)
                         {
                             dbglog.warn(e.toString());
+                            System.out.println(e.toString() + " " + e.getStackTrace());
                             ((CorfuDBObjectCommand)P2.command).setException(e);
                         }
                         cob.setTimestamp(decrec.txint_timestamp, P2.key); //use the intention's timestamp

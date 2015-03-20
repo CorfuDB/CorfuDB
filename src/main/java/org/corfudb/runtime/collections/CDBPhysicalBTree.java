@@ -2,7 +2,8 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.*;
 
-import java.util.HashMap;
+import java.util.*;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
 
@@ -13,63 +14,345 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     private int m_size;
     private HashMap<Long, Entry> m_entries;
     private HashMap<Long, Node> m_nodes;
+    private PendingUpdates m_pending;
 
-    private static class NodeOp extends CorfuDBObjectCommand {
+    private abstract static class PBTreeOp extends CorfuDBObjectCommand {
+
+        private int m_cmd;
+        private boolean m_mutator;
+        private UUID m_txid;
+        private long m_oid;
+        private PBTreeOp m_prevupdate;
+        private boolean m_prevvalid;
+        private UUID m_uuid;
+
+        public int cmd() { return m_cmd; }
+        public boolean mutator() { return m_mutator; }
+        public long oid() { return m_oid; }
+
+        /**
+         *
+         * @param p
+         * @param cmd
+         * @param mutator
+         * @param oid
+         */
+        public PBTreeOp(
+            PendingUpdates p,
+            int cmd,
+            boolean mutator,
+            long oid
+            ) {
+            m_cmd = cmd;
+            m_mutator = mutator;
+            m_txid = p.m_tr.getTxid();
+            m_oid = oid;
+            m_prevupdate = null;
+            m_prevvalid = false;
+            m_uuid = UUID.randomUUID();
+        }
+
+        /**
+         * return true if this is a read command
+         * which conflicts with a previous uncommitted write.
+         * @return
+         */
+        public boolean isReadAfterWrite(PendingUpdates p) {
+            return getPreviousWrite(p) != null;
+        }
+
+        /**
+         * return the last conflicting write that
+         * should serve this read
+         * @return
+         */
+        public PBTreeOp getPreviousWrite(PendingUpdates p) {
+            if(m_mutator) return null;
+            if(!m_prevvalid) {
+                m_prevupdate = getPreviousWriteImpl(p);
+                m_prevvalid = true;
+            }
+            return m_prevupdate;
+        }
+
+        /**
+         * subclasses know which commands conflict
+         * @return
+         */
+        public abstract PBTreeOp getPreviousWriteImpl(PendingUpdates p);
+    }
+
+    /**
+     * class to track pending updates -- implements read after write consistency
+     */
+    private static class PendingUpdates {
+
+        private ThreadLocal<UUID> m_lasttxid;
+        private HashMap<UUID, HashMap<Long, ArrayList<PBTreeOp>>> m_pending;
+        private HashMap<PBTreeOp, ArrayList<PBTreeOp>> m_rpending;
+        private TXRuntime m_tr;
+        private ReentrantReadWriteLock m_lock;
+        private static final UUID m_notxid = UUID.randomUUID();
+
+        /**
+         * ctor
+         */
+        public PendingUpdates(AbstractRuntime tr) {
+            m_tr = (TXRuntime) tr;
+            m_lock = new ReentrantReadWriteLock();
+            m_pending = new HashMap<UUID, HashMap<Long, ArrayList<PBTreeOp>>>();
+            m_rpending = new HashMap<PBTreeOp, ArrayList<PBTreeOp>>();
+            m_lasttxid = new ThreadLocal<UUID>();
+        }
+
+        /**
+         * get the last txid for this thread
+         *
+         * @return
+         */
+        private UUID lasttxid() {
+            UUID local = m_lasttxid.get();
+            if (local == null)
+                m_lasttxid.set(m_notxid);
+            return m_lasttxid.get();
+        }
+
+        /**
+         * return true if there are pending updates for this object
+         *
+         * @param cob
+         * @return
+         */
+        public boolean hasPendingUpdates(long cob) {
+            UUID curtx = m_tr.getTxid();
+            if (curtx == null) return false;
+            m_lock.readLock().lock();
+            try {
+                HashMap<Long, ArrayList<PBTreeOp>> txcmds = m_pending.getOrDefault(curtx, null);
+                if (txcmds == null) return false;
+                return !txcmds.isEmpty();
+            } finally {
+                m_lock.readLock().unlock();
+            }
+        }
+
+        /**
+         * return all pending updates for this object
+         *
+         * @param cob
+         * @return
+         */
+        public ArrayList<PBTreeOp> getPendingUpdates(long cob) {
+            UUID curtx = m_tr.getTxid();
+            if (curtx == null) return null;
+            m_lock.readLock().lock();
+            try {
+                HashMap<Long, ArrayList<PBTreeOp>> txcmds = m_pending.getOrDefault(curtx, null);
+                if (txcmds == null || txcmds.isEmpty()) return null;
+                ArrayList<PBTreeOp> cobcmds = txcmds.getOrDefault(cob, null);
+                if (cobcmds == null || cobcmds.isEmpty()) return null;
+                return cobcmds;
+            } finally {
+                m_lock.readLock().unlock();
+            }
+        }
+
+        /**
+         * add a pending update for this object
+         *
+         * @param cob
+         * @param cmd
+         */
+        public void addPendingUpdate(long cob, PBTreeOp cmd) {
+            UUID curtx = m_tr.getTxid();
+            if (curtx == null) return;
+            m_lock.writeLock().lock();
+            try {
+                HashMap<Long, ArrayList<PBTreeOp>> txcmds = m_pending.getOrDefault(curtx, null);
+                if (txcmds == null) {
+                    txcmds = new HashMap<Long, ArrayList<PBTreeOp>>();
+                    m_pending.put(curtx, txcmds);
+                }
+                ArrayList<PBTreeOp> cobcmds = txcmds.getOrDefault(cob, null);
+                if (cobcmds == null) {
+                    cobcmds = new ArrayList<PBTreeOp>();
+                    txcmds.put(cob, cobcmds);
+                }
+                cobcmds.add(cmd);
+                m_rpending.put(cmd, cobcmds);
+            } finally {
+                m_lock.writeLock().unlock();
+            }
+        }
+
+        /**
+         * retire a pending update
+         *
+         * @param cmd
+         */
+        public void retirePendingUpdate(PBTreeOp cmd) {
+            m_lock.writeLock().lock();
+            try {
+                ArrayList<PBTreeOp> cmds = m_rpending.getOrDefault(cmd, null);
+                if(cmds == null) {
+                    System.out.format("failed to retire cmd(%d) on L%d--not found!\n", cmd.cmd(), cmd.oid());
+                } else {
+                    cmds.remove(cmd);
+                    m_rpending.remove(cmd);
+                }
+            } finally {
+                m_lock.writeLock().unlock();
+            }
+        }
+
+        /**
+         * find commands that match the given object and command type
+         *
+         * @param cob
+         * @param cmd
+         * @return
+         */
+        public ArrayList<PBTreeOp> match(long cob, int cmd) {
+            int[] v = new int[1];
+            v[0] = cmd;
+            return match(cob, v);
+        }
+
+        /**
+         * find commands that match the given object and command type
+         *
+         * @param cob
+         * @param cmds
+         * @return
+         */
+        public ArrayList<PBTreeOp> match(long cob, int[] cmds) {
+            UUID curtx = m_tr.getTxid();
+            if (curtx == null) return null;
+            m_lock.readLock().lock();
+            try {
+                HashMap<Long, ArrayList<PBTreeOp>> txcmds = m_pending.getOrDefault(curtx, null);
+                if (txcmds == null) return null;
+                ArrayList<PBTreeOp> cobcmds = txcmds.getOrDefault(cob, null);
+                if (cobcmds == null || cobcmds.isEmpty()) return null;
+                ArrayList<PBTreeOp> matching = null;
+                Iterator it = cobcmds.iterator();
+                while (it.hasNext()) {
+                    PBTreeOp op = (PBTreeOp) it.next();
+                    for (int cmd : cmds) {
+                        if (op.cmd() == cmd) {
+                            if (matching == null)
+                                matching = new ArrayList<PBTreeOp>();
+                            matching.add(op);
+                        }
+                    }
+                }
+                return matching;
+            } finally {
+                m_lock.readLock().unlock();
+            }
+        }
+    }
+
+    private static class NodeOp extends PBTreeOp {
 
         static final int CMD_READ_CHILD_COUNT = 1;
+        static final int CMD_READ_CHILD = 3;
         static final int CMD_WRITE_CHILD_COUNT = 2;
-        static final int CMD_READ_CHILDREN = 3;
-        static final int CMD_READ_CHILD = 5;
         static final int CMD_WRITE_CHILD = 6;
 
-        public int m_cmd;
-        public long m_oidnode;
         public int m_childindex;
         public int m_childcount;
         public long m_oidparam;
-        public int cmd() { return m_cmd; }
-        public long oidnode() { return m_oidnode; }
         public int childindex() { return m_childindex; }
         public int childcount() { return m_childcount; }
         public long oidparam() { return m_oidparam; }
 
         public
-        NodeOp(
+        NodeOp( PendingUpdates p,
                 int _cmd,
+                boolean _mutator,
                 long _oid,
                 int _index,
                 int _num,
                 long _oidparam
             )
         {
-            m_cmd = _cmd;
-            m_oidnode = _oid;
+            super(p, _cmd, _mutator, _oid);
             m_childindex = _index;
             m_childcount = _num;
             m_oidparam = _oidparam;
+            if(!mutator())
+                getPreviousWrite(p);
         }
 
-        public static NodeOp readChildCountCmd(long _oidnode) { return new NodeOp(CMD_READ_CHILD_COUNT, _oidnode, 0, 0, 0); }
-        public static NodeOp readChildrenCmd(long _oidnode) { return new NodeOp(CMD_READ_CHILDREN, _oidnode, 0, 0, 0); }
-        public static NodeOp readChildCmd(long _oidnode, int _index) { return new NodeOp(CMD_READ_CHILD, _oidnode, _index, 0, 0); }
-        public static NodeOp writeChildCountCmd(long _oidnode, int _count) { return new NodeOp(CMD_WRITE_CHILD_COUNT, _oidnode, 0, _count, 0);}
-        public static NodeOp writeChildCmd(long _oidnode, int _index, long _oidparam) { return new NodeOp(CMD_WRITE_CHILD, _oidnode, _index, 0, _oidparam); }
+        public static NodeOp readChildCountCmd(PendingUpdates p, long _oidnode) { return new NodeOp(p, CMD_READ_CHILD_COUNT, false, _oidnode, 0, 0, 0); }
+        public static NodeOp readChildCmd(PendingUpdates p, long _oidnode, int idx) { return new NodeOp(p, CMD_READ_CHILD, false, _oidnode, idx, 0, 0); }
+        public static NodeOp writeChildCountCmd(PendingUpdates p, long _oidnode, int _count) {
+            NodeOp cmd = new NodeOp(p, CMD_WRITE_CHILD_COUNT, true, _oidnode, 0, _count, 0);
+            p.addPendingUpdate(_oidnode, cmd);
+            return cmd;
+        }
+        public static NodeOp writeChildCmd(PendingUpdates p, long _oidnode, int _index, long _oidparam) {
+            NodeOp cmd = new NodeOp(p, CMD_WRITE_CHILD, true, _oidnode, _index, 0, _oidparam);
+            p.addPendingUpdate(_oidnode, cmd);
+            return cmd;
+        }
+
+        /**
+         * look for previous writes that conflict with this read
+         * @return
+         */
+        public PBTreeOp getPreviousWriteImpl(PendingUpdates p) {
+            if (mutator()) return null;
+            ArrayList<PBTreeOp> m = null;
+            switch (cmd()) {
+                case CMD_READ_CHILD_COUNT:
+                    m = p.match(oid(), CMD_WRITE_CHILD_COUNT);
+                    break;
+                case CMD_READ_CHILD:
+                    m = p.match(oid(), CMD_WRITE_CHILD);
+                    if(m != null) {
+                        ArrayList<PBTreeOp> newM = new ArrayList<PBTreeOp>();
+                        for (PBTreeOp op : m) {
+                            if(m_childindex == ((NodeOp)op).m_childindex)
+                                newM.add(op);
+                        }
+                        if(!newM.isEmpty())
+                            m = newM;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            if (m != null)
+                return m.get(0);
+            return null;
+        }
     }
 
     private static class Node<K extends Comparable<K>, V> extends CorfuDBObject {
 
         private int m_nChildren;
         private long[] m_vChildren;
+        PendingUpdates m_pending;
 
+        /**
+         * ctor
+         * @param tr
+         * @param toid
+         * @param nChildren
+         */
         private Node(
             AbstractRuntime tr,
             long toid,
-            int nChildren
+            int nChildren,
+            PendingUpdates pending
             )
         {
             super(tr, toid);
             m_vChildren = new long[M];
             m_nChildren = nChildren;
+            m_pending = pending;
         }
 
         /**
@@ -84,10 +367,11 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
             switch (cc.cmd()) {
                 case NodeOp.CMD_READ_CHILD_COUNT: cc.setReturnValue(applyReadChildCount()); break;
                 case NodeOp.CMD_WRITE_CHILD_COUNT: applyWriteChildCount(cc.childcount()); break;
-                case NodeOp.CMD_READ_CHILDREN: cc.setReturnValue(applyReadChildren()); break;
-                case NodeOp.CMD_READ_CHILD: cc.setReturnValue(applyReadChild(cc.childindex())); break;
+                case NodeOp.CMD_READ_CHILD: cc.setReturnValue(applyReadChildren()); break;
                 case NodeOp.CMD_WRITE_CHILD: applyWriteChild(cc.childindex(), cc.oidparam()); break;
             }
+            if(cc.mutator())
+                m_pending.retirePendingUpdate(cc);
         }
 
         /**
@@ -136,13 +420,28 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         /**
          * apply a write child operation
          * @param n
-         * @param oid
+         * @param _oid
          */
         public void
-        applyWriteChild(int n, long oid) {
+        applyWriteChild(int n, long _oid) {
             wlock();
             try {
-                m_vChildren[n] = oid;
+                m_vChildren[n] = _oid;
+            } finally {
+                wunlock();
+            }
+        }
+
+        /**
+         * apply write all children operation (used to clear vector on init)
+         * @param _oid
+         */
+        public void
+        applyWriteAllChildren(long _oid) {
+            wlock();
+            try {
+                for(int i=0; i<M; i++)
+                    m_vChildren[i] = _oid;
             } finally {
                 wunlock();
             }
@@ -164,27 +463,23 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
 
     }
 
-    private static class EntryOp<K extends Comparable<K>, V> extends CorfuDBObjectCommand {
+    private static class EntryOp<K extends Comparable<K>, V> extends PBTreeOp {
 
-        static final int CMD_READ_KEY = 1;
-        static final int CMD_WRITE_KEY = 2;
-        static final int CMD_READ_VALUE = 3;
-        static final int CMD_WRITE_VALUE = 4;
-        static final int CMD_READ_NEXT = 5;
-        static final int CMD_WRITE_NEXT = 6;
-        static final int CMD_READ_DELETED = 7;
-        static final int CMD_WRITE_DELETED = 8;
+        static final int CMD_READ_KEY = 101;
+        static final int CMD_WRITE_KEY = 201;
+        static final int CMD_READ_VALUE = 301;
+        static final int CMD_WRITE_VALUE = 401;
+        static final int CMD_READ_NEXT = 501;
+        static final int CMD_WRITE_NEXT = 601;
+        static final int CMD_READ_DELETED = 701;
+        static final int CMD_WRITE_DELETED = 801;
 
-        public int m_cmd;
-        public long m_oid;
         public K m_key;
         public V m_value;
         public long m_oidnext;
         public boolean m_deleted;
-        public int cmd() { return m_cmd; }
         public K key() { return m_key; }
         public V value() { return m_value; }
-        public long oid() { return m_oid; }
         public long oidnext() { return m_oidnext; }
         public boolean deleted() { return m_deleted; }
 
@@ -198,8 +493,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
          * @param deleted
          */
         private
-        EntryOp(
+        EntryOp(PendingUpdates p,
                 int _cmd,
+                boolean _mutator,
                 long _oid,
                 K key,
                 V value,
@@ -207,22 +503,71 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                 boolean deleted
             )
         {
-            m_cmd = _cmd;
-            m_oid = _oid;
+            super(p, _cmd, _mutator, _oid);
             m_key = key;
             m_value = value;
             m_oidnext = oidnext;
             m_deleted = deleted;
+            if(!_mutator)
+                getPreviousWrite(p);
         }
 
-        public static <K extends Comparable<K>, V> EntryOp<K, V> readKeyCmd(long _oid) { return new EntryOp<K, V>(CMD_READ_KEY, _oid, null, null, oidnull, false); }
-        public static <K extends Comparable<K>, V> EntryOp<K, V> readValueCmd(long _oid) { return new EntryOp<K, V>(CMD_READ_VALUE, _oid, null, null, oidnull, false); }
-        public static <K extends Comparable<K>, V> EntryOp<K, V> readNextCmd(long _oid) { return new EntryOp<K, V>(CMD_READ_NEXT, _oid, null, null, oidnull, false); }
-        public static <K extends Comparable<K>, V> EntryOp<K, V> readDeletedCmd(long _oid) { return new EntryOp<K, V>(CMD_READ_DELETED, _oid, null, null, oidnull, false); }
-        public static <K extends Comparable<K>, V> EntryOp<K, V> writeKeyCmd(long _oid, K _key) { return new EntryOp<K, V>(CMD_WRITE_KEY, _oid, _key, null, oidnull, false); }
-        public static <K extends Comparable<K>, V> EntryOp<K, V> writeValueCmd(long _oid, V _value) { return new EntryOp<K, V>(CMD_WRITE_VALUE, _oid, null, _value, oidnull, false); }
-        public static <K extends Comparable<K>, V> EntryOp<K, V> writeNextCmd(long _oid, long _oidnext) { return new EntryOp<K, V>(CMD_WRITE_NEXT, _oid, null, null, _oidnext, false); }
-        public static <K extends Comparable<K>, V> EntryOp<K, V> writeDeletedCmd(long _oid, boolean b) { return new EntryOp<K, V>(CMD_WRITE_DELETED, _oid, null, null, oidnull, b); }
+        public static <K extends Comparable<K>, V> EntryOp<K, V> readKeyCmd(PendingUpdates p, long _oid) { return new EntryOp<K, V>(p, CMD_READ_KEY, false, _oid, null, null, oidnull, false); }
+        public static <K extends Comparable<K>, V> EntryOp<K, V> readValueCmd(PendingUpdates p,long _oid) { return new EntryOp<K, V>(p, CMD_READ_VALUE, false, _oid, null, null, oidnull, false); }
+        public static <K extends Comparable<K>, V> EntryOp<K, V> readNextCmd(PendingUpdates p, long _oid) { return new EntryOp<K, V>(p, CMD_READ_NEXT, false, _oid, null, null, oidnull, false); }
+        public static <K extends Comparable<K>, V> EntryOp<K, V> readDeletedCmd(PendingUpdates p, long _oid) { return new EntryOp<K, V>(p, CMD_READ_DELETED, false, _oid, null, null, oidnull, false); }
+
+        public static <K extends Comparable<K>, V> EntryOp<K, V> writeKeyCmd(PendingUpdates p, long _oid, K _key) {
+            EntryOp<K,V> cmd = new EntryOp<K, V>(p, CMD_WRITE_KEY, true, _oid, _key, null, oidnull, false);
+            p.addPendingUpdate(_oid, cmd);
+            return cmd;
+        }
+
+        public static <K extends Comparable<K>, V> EntryOp<K, V> writeValueCmd(PendingUpdates p, long _oid, V _value) {
+            EntryOp<K, V> cmd = new EntryOp<K, V>(p, CMD_WRITE_VALUE, true, _oid, null, _value, oidnull, false);
+            p.addPendingUpdate(_oid, cmd);
+            return cmd;
+        }
+
+        public static <K extends Comparable<K>, V> EntryOp<K, V> writeNextCmd(PendingUpdates p, long _oid, long _oidnext) {
+            EntryOp<K, V> cmd = new EntryOp<K, V>(p, CMD_WRITE_NEXT, true, _oid, null, null, _oidnext, false);
+            p.addPendingUpdate(_oid, cmd);
+            return cmd;
+        }
+
+        public static <K extends Comparable<K>, V> EntryOp<K, V> writeDeletedCmd(PendingUpdates p, long _oid, boolean b) {
+            EntryOp<K, V> cmd = new EntryOp<K, V>(p, CMD_WRITE_DELETED, true, _oid, null, null, oidnull, b);
+            p.addPendingUpdate(_oid, cmd);
+            return cmd;
+        }
+
+        /**
+         * look for previous writes that conflict with this read
+         * @return
+         */
+        public PBTreeOp getPreviousWriteImpl(PendingUpdates p) {
+            if (mutator()) return null;
+            ArrayList<PBTreeOp> m = null;
+            switch (cmd()) {
+                case CMD_READ_KEY:
+                    m = p.match(oid(), CMD_WRITE_KEY);
+                    break;
+                case CMD_READ_VALUE:
+                    m = p.match(oid(), CMD_WRITE_VALUE);
+                    break;
+                case CMD_READ_NEXT:
+                    m = p.match(oid(), CMD_WRITE_NEXT);
+                    break;
+                case CMD_READ_DELETED:
+                    m = p.match(oid(), CMD_WRITE_DELETED);
+                    break;
+                default:
+                    break;
+            }
+            if (m != null)
+                return m.get(0);
+            return null;
+        }
     }
 
     private static class Entry<K extends Comparable<K>, V> extends CorfuDBObject {
@@ -231,19 +576,31 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         private V value;
         private long oidnext;
         private boolean deleted;
+        private PendingUpdates m_pending;
+
+
+        /**
+         * ctor
+         * @param tr
+         * @param toid
+         * @param _key
+         * @param _value
+         * @param _next
+         */
         public Entry(
                 AbstractRuntime tr,
                 long toid,
                 K _key,
                 V _value,
-                long _next
-            )
-        {
+                long _next,
+                PendingUpdates pending
+            ) {
             super(tr, toid);
             key = _key;
             value = _value;
             oidnext = _next;
             deleted = false;
+            m_pending = pending;
         }
 
         /**
@@ -265,6 +622,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                 case EntryOp.CMD_READ_DELETED: cc.setReturnValue(applyReadDeleted()); break;
                 case EntryOp.CMD_WRITE_DELETED: cc.setReturnValue(applyWriteDeleted(cc.deleted())); break;
             }
+            m_pending.retirePendingUpdate(cc);
         }
 
         /**
@@ -381,21 +739,17 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         }
     }
 
-    public static class BTreeOp extends CorfuDBObjectCommand {
+    public static class BTreeOp extends PBTreeOp {
 
-        static final int CMD_READ_SIZE = 1;
-        static final int CMD_READ_HEIGHT = 2;
-        static final int CMD_READ_ROOT = 3;
-        static final int CMD_WRITE_SIZE = 4;
-        static final int CMD_WRITE_HEIGHT = 5;
-        static final int CMD_WRITE_ROOT = 6;
+        static final int CMD_READ_SIZE = 771;
+        static final int CMD_READ_HEIGHT = 772;
+        static final int CMD_READ_ROOT = 773;
+        static final int CMD_WRITE_SIZE = 774;
+        static final int CMD_WRITE_HEIGHT = 775;
+        static final int CMD_WRITE_ROOT = 776;
 
-        public int m_cmd;
-        public long m_oid;
         public int m_iparam;
         public long m_oidparam;
-        public int cmd() { return m_cmd; }
-        public long oid() { return m_oid; }
         public int iparam() { return m_iparam; }
         public long oidparam() { return m_oidparam; }
 
@@ -407,25 +761,64 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
          * @param _oidparam
          */
         private
-        BTreeOp(
+        BTreeOp(PendingUpdates p,
                 int _cmd,
+                boolean _mutator,
                 long _oid,
                 int _iparam,
                 long _oidparam
             )
         {
-            m_cmd = _cmd;
-            m_oid = _oid;
+            super(p, _cmd, _mutator, _oid);
             m_iparam = _iparam;
             m_oidparam = _oidparam;
+            if(!_mutator)
+                getPreviousWrite(p);
         }
 
-        public static BTreeOp readSizeCmd(long _oid) { return new BTreeOp(CMD_READ_SIZE, _oid, 0, oidnull); }
-        public static BTreeOp readHeightCmd(long _oid) { return new BTreeOp(CMD_READ_HEIGHT, _oid, 0, oidnull); }
-        public static BTreeOp readRootCmd(long _oid) { return new BTreeOp(CMD_READ_ROOT, _oid, 0, oidnull); }
-        public static BTreeOp writeSizeCmd(long _oid, int i) { return new BTreeOp(CMD_WRITE_SIZE, _oid, i, oidnull); }
-        public static BTreeOp writeHeightCmd(long _oid, int i) { return new BTreeOp(CMD_WRITE_HEIGHT, _oid, i, oidnull); }
-        public static BTreeOp writeRootCmd(long _oid, long _param) { return new BTreeOp(CMD_WRITE_ROOT, _oid, 0, _param); }
+        public static BTreeOp readSizeCmd(PendingUpdates p, long _oid) { return new BTreeOp(p, CMD_READ_SIZE, false, _oid, 0, oidnull); }
+        public static BTreeOp readHeightCmd(PendingUpdates p, long _oid) { return new BTreeOp(p, CMD_READ_HEIGHT, false, _oid, 0, oidnull); }
+        public static BTreeOp readRootCmd(PendingUpdates p, long _oid) { return new BTreeOp(p, CMD_READ_ROOT, false, _oid, 0, oidnull); }
+        public static BTreeOp writeSizeCmd(PendingUpdates p, long _oid, int i) {
+            BTreeOp cmd = new BTreeOp(p, CMD_WRITE_SIZE, true, _oid, i, oidnull);
+            p.addPendingUpdate(_oid, cmd);
+            return cmd;
+        }
+        public static BTreeOp writeHeightCmd(PendingUpdates p, long _oid, int i) {
+            BTreeOp cmd = new BTreeOp(p, CMD_WRITE_HEIGHT, true, _oid, i, oidnull);
+            p.addPendingUpdate(_oid, cmd);
+            return cmd;
+        }
+        public static BTreeOp writeRootCmd(PendingUpdates p, long _oid, long _param) {
+            BTreeOp cmd = new BTreeOp(p, CMD_WRITE_ROOT, true, _oid, 0, _param);
+            p.addPendingUpdate(_oid, cmd);
+            return cmd;
+        }
+
+        /**
+         * look for previous writes that conflict with this read
+         * @return
+         */
+        public PBTreeOp getPreviousWriteImpl(PendingUpdates p) {
+            if (mutator()) return null;
+            ArrayList<PBTreeOp> m = null;
+            switch (cmd()) {
+                case CMD_READ_ROOT:
+                    m = p.match(oid(), CMD_WRITE_ROOT);
+                    break;
+                case CMD_READ_SIZE:
+                    m = p.match(oid(), CMD_WRITE_SIZE);
+                    break;
+                case CMD_READ_HEIGHT:
+                    m = p.match(oid(), CMD_WRITE_HEIGHT);
+                    break;
+                default:
+                    break;
+            }
+            if (m != null)
+                return m.get(0);
+            return null;
+        }
     }
 
     /**
@@ -446,8 +839,13 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         m_root = oidnull;
         m_size = 0;
         m_height = 0;
+        m_pending = new PendingUpdates((TXRuntime)tTR);
+        tTR.BeginTX();
         Node oRoot = allocNode(0);
         writeroot(oRoot.oid);
+        if(!tTR.EndTX())
+            throw new RuntimeException("CDBPhysicalBTree constructor failed!");
+        System.out.format("created pbtree.oid=%d root-node=%d, m_root=%d\n", toid, oRoot.oid, m_root);
     }
 
     /**
@@ -460,17 +858,14 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
 
         BTreeOp cc = (BTreeOp) bs;
         switch (cc.cmd()) {
-            case BTreeOp.CMD_READ_HEIGHT: cc.setReturnValue(applyReadHeight());
-                break;
+            case BTreeOp.CMD_READ_HEIGHT: cc.setReturnValue(applyReadHeight()); break;
             case BTreeOp.CMD_WRITE_HEIGHT: applyWriteHeight(cc.iparam()); break;
-            case BTreeOp.CMD_READ_ROOT: cc.setReturnValue(applyReadRoot());
-                break;
-            case BTreeOp.CMD_WRITE_ROOT:  applyWriteRoot(cc.oidparam());
-                break;
-            case BTreeOp.CMD_READ_SIZE: cc.setReturnValue(applyReadSize());
-                break;
+            case BTreeOp.CMD_READ_ROOT: cc.setReturnValue(applyReadRoot()); break;
+            case BTreeOp.CMD_WRITE_ROOT:  applyWriteRoot(cc.oidparam());  break;
+            case BTreeOp.CMD_READ_SIZE: cc.setReturnValue(applyReadSize()); break;
             case BTreeOp.CMD_WRITE_SIZE: applyWriteSize(cc.iparam()); break;
         }
+        m_pending.retirePendingUpdate(cc);
     }
 
     /**
@@ -492,11 +887,10 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     print(Node<K, V> node, int height, String indent) {
         if(node == null) return "";
         StringBuilder sb = new StringBuilder();
-        long[] children = readchildren(node);
         int nChildren = readchildcount(node);
         if(height == 0) {
             for(int i=0; i<nChildren; i++) {
-                Entry child = entryById(children[i]);
+                Entry child = entryById(readchild(node, i));
                 boolean deleted = readdeleted(child);
                 if(!deleted)
                     sb.append("DEL: ");
@@ -511,10 +905,10 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                 if(i>0) {
                     sb.append(indent);
                     sb.append("(");
-                    sb.append(readkey(children[i]));
+                    sb.append(readkey(readchild(node, i)));
                     sb.append(")\n");
                 }
-                Node next = nodeById(readnext(children[i]));
+                Node next = nodeById(readnext(readchild(node, i)));
                 sb.append(print(next, height-1, indent + "    "));
             }
         }
@@ -599,11 +993,10 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         if(unodeoid != oidnull) {
             // split required
             Node t = allocNode(2);
-            long[] rootchildren = readchildren(nodeById(root));
-            long[] uchildren = readchildren(nodeById(unodeoid));
-            Comparable r0key = readkey(entryById(rootchildren[0]));
-            Comparable u0key = readkey(entryById(uchildren[0]));
-
+            long rootchild0 = readchild(nodeById(root), 0);
+            long uchild0 = readchild(nodeById(unodeoid), 0);
+            Comparable r0key = readkey(entryById(rootchild0));
+            Comparable u0key = readkey(entryById(uchild0));
             Entry tc0 = allocEntry((K) r0key, null);
             Entry tc1 = allocEntry((K) u0key, null);
             writenext(tc0, root);
@@ -629,13 +1022,12 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         )
     {
         Node<K,V> node = nodeById(oidnode);
-        long[] children = readchildren(node);
         int nChildren = readchildcount(node);
 
         if(height == 0) {
             // external node
             for(int i=0; i<nChildren; i++) {
-                long oidchild = children[i];
+                long oidchild = readchild(node, i);
                 Entry child = entryById(oidchild);
                 Comparable ckey = readkey(child);
                 if(eq(key, ckey))
@@ -644,8 +1036,8 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         } else {
             // internal node
             for(int i=0; i<nChildren; i++) {
-                if(i+1 == nChildren || lt(key, readkey(children[i + 1]))) {
-                    return search(readnext(children[i]), key, height-1);
+                if(i+1 == nChildren || lt(key, readkey(readchild(node, i+1)))) {
+                    return search(readnext(readchild(node, i)), key, height-1);
                 }
             }
         }
@@ -662,29 +1054,27 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      */
     private Entry
     searchEntry(
-            long oidnode,
-            K key,
-            int height
-    )
-    {
-        Node<K,V> node = nodeById(oidnode);
-        long[] children = readchildren(node);
+        long oidnode,
+        K key,
+        int height
+        ) {
+        Node<K, V> node = nodeById(oidnode);
         int nChildren = readchildcount(node);
 
-        if(height == 0) {
+        if (height == 0) {
             // external node
-            for(int i=0; i<nChildren; i++) {
-                long oidchild = children[i];
+            for (int i = 0; i < nChildren; i++) {
+                long oidchild = readchild(node, i);
                 Entry child = entryById(oidchild);
                 Comparable ckey = readkey(child);
-                if(eq(key, ckey))
+                if (eq(key, ckey))
                     return child;
             }
         } else {
             // internal node
-            for(int i=0; i<nChildren; i++) {
-                if(i+1 == nChildren || lt(key, readkey(children[i + 1]))) {
-                    return searchEntry(readnext(children[i]), key, height-1);
+            for (int i = 0; i < nChildren; i++) {
+                if (i + 1 == nChildren || lt(key, readkey(readchild(node, i + 1)))) {
+                    return searchEntry(readnext(readchild(node, i)), key, height - 1);
                 }
             }
         }
@@ -709,24 +1099,23 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     {
         int idx = 0;
         Node<K,V> node = nodeById(oidnode);
-        long[] children = readchildren(node);
         int nChildren = readchildcount(node);
         Entry entry = allocEntry(key, value);
 
         if(height == 0) {
             for(idx=0; idx<nChildren; idx++)
-                if(lt(key, readkey(children[idx])))
+                if(lt(key, readkey(readchild(node, idx))))
                     break;
         } else {
             // internal node
             for(idx=0; idx<nChildren; idx++) {
-                if(idx+1==nChildren || lt(key, readkey(children[idx+1]))) {
-                    long oidunode = insert(readnext(children[idx++]), key, value, height-1);
+                if(idx+1==nChildren || lt(key, readkey(readchild(node, idx+1)))) {
+                    long oidunode = insert(readnext(readchild(node, idx++)), key, value, height-1);
                     if(oidunode == oidnull)
-                        break;
+                        return oidnull;
                     Node<K, V> unode = nodeById(oidunode);
-                    long[] uchildren = readchildren(unode);
-                    Entry<K, V> uentry0 = entryById(uchildren[0]);
+                    long uchild0 = readchild(unode, 0);
+                    Entry<K, V> uentry0 = entryById(uchild0);
                     Comparable ukey = readkey(uentry0);
                     writekey(entry, ukey);
                     writenext(entry, oidunode);
@@ -736,7 +1125,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         }
 
         for(int i=nChildren; i>idx; i--)
-            writechild(node, i, children[i-1]);
+            writechild(node, i, readchild(node, i-1));
         writechild(node, idx, entry.oid);
         writechildcount(node, nChildren+1);
         if(nChildren+1 < M)
@@ -755,10 +1144,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         )
     {
         Node t = allocNode(M/2);
-        long[] children = readchildren(node);
         writechildcount(node, M/2);
         for(int i=0; i<M/2; i++)
-            writechild(t, i, children[M/2+i]);
+            writechild(t, i, readchild(node, M/2+i));
         return t.oid;
     }
 
@@ -771,6 +1159,8 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     nodeById(long noid) {
         rlock();
         try {
+            if (!m_nodes.containsKey(noid))
+                System.out.format("nodeById(L%d) request for oid=%d: not found!\n", oid, noid);
             return m_nodes.getOrDefault(noid, null);
         } finally {
             runlock();
@@ -800,7 +1190,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     private Node<K, V>
     allocNode(int nChildren) {
 
-        Node<K, V> newnode = new Node<K, V>(TR, DirectoryService.getUniqueID(sf), nChildren);
+        Node<K, V> newnode = new Node<K, V>(TR, DirectoryService.getUniqueID(sf), nChildren, m_pending);
 
         wlock();
         try {
@@ -810,7 +1200,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         }
 
         long noid = newnode.oid;
-        TR.update_helper(newnode, NodeOp.writeChildCountCmd(noid, nChildren));
+        TR.update_helper(newnode, NodeOp.writeChildCountCmd(m_pending, noid, nChildren));
+        for(int i=0; i<M; i++)
+            TR.update_helper(newnode, NodeOp.writeChildCmd(m_pending, noid, i, oidnull));
         return newnode;
     }
 
@@ -823,7 +1215,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     private Entry<K, V>
     allocEntry(K k, V v) {
 
-        Entry<K, V> newentry = new Entry<K, V>(TR, DirectoryService.getUniqueID(sf), k, v, oidnull);
+        Entry<K, V> newentry = new Entry<K, V>(TR, DirectoryService.getUniqueID(sf), k, v, oidnull, m_pending);
 
         wlock();
         try {
@@ -833,9 +1225,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         }
 
         long noid = newentry.oid;
-        TR.update_helper(newentry, EntryOp.writeKeyCmd(noid, k));
-        TR.update_helper(newentry, EntryOp.writeValueCmd(noid, v));
-        TR.update_helper(newentry, EntryOp.writeNextCmd(noid, oidnull));
+        TR.update_helper(newentry, EntryOp.writeKeyCmd(m_pending, noid, k));
+        TR.update_helper(newentry, EntryOp.writeValueCmd(m_pending, noid, v));
+        TR.update_helper(newentry, EntryOp.writeNextCmd(m_pending, noid, oidnull));
         return newentry;
     }
 
@@ -850,11 +1242,20 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      */
     protected Node<K, V>
     readroot() {
-        BTreeOp cmd = BTreeOp.readRootCmd(oid);
+
+        BTreeOp cmd = BTreeOp.readRootCmd(m_pending, oid);
+
+        if (cmd.isReadAfterWrite(m_pending)) {
+            BTreeOp op = (BTreeOp) cmd.getPreviousWrite(m_pending);
+            return nodeById(op.oidparam());
+        }
+
         if (TR.query_helper(this, null, cmd))
             return nodeById((long) cmd.getReturnValue());
+
         rlock();
         try {
+            System.out.format("readroot(L%d) returning current view root=%d\n", oid, m_root);
             return nodeById(m_root);
         } finally {
             runlock();
@@ -896,7 +1297,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         try {
             m_size = size;
         } finally {
-            runlock();
+            wunlock();
         }
     }
 
@@ -920,7 +1321,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     public long applyReadRoot() {
         rlock();
         try {
-            return m_size;
+            return m_root;
         } finally {
             runlock();
         }
@@ -929,6 +1330,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     public void applyWriteRoot(long _oid) {
         wlock();
         try {
+            System.out.format("L%d setting m_root = %d\n", oid, _oid);
             m_root = _oid;
         } finally {
             wunlock();
@@ -940,7 +1342,11 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @return
      */
     private long readrootoid() {
-        BTreeOp cmd = BTreeOp.readRootCmd(oid);
+        BTreeOp cmd = BTreeOp.readRootCmd(m_pending, oid);
+        if(cmd.isReadAfterWrite(m_pending)) {
+            BTreeOp op = (BTreeOp) cmd.getPreviousWrite(m_pending);
+            return op.oidparam();
+        }
         if(!TR.query_helper(this, null, cmd))
             return applyReadRoot();
         return (long) cmd.getReturnValue();
@@ -951,7 +1357,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @return
      */
     private int readsize() {
-        BTreeOp cmd = BTreeOp.readSizeCmd(oid);
+        BTreeOp cmd = BTreeOp.readSizeCmd(m_pending, oid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((BTreeOp)cmd.getPreviousWrite(m_pending)).iparam();
         if(!TR.query_helper(this, null, cmd))
             return applyReadSize();
         return (int) cmd.getReturnValue();
@@ -962,7 +1370,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @return
      */
     private int readheight() {
-        BTreeOp cmd = BTreeOp.readHeightCmd(oid);
+        BTreeOp cmd = BTreeOp.readHeightCmd(m_pending, oid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((BTreeOp)cmd.getPreviousWrite(m_pending)).iparam();
         if(!TR.query_helper(this, null, cmd))
             return applyReadHeight();
         return (int) cmd.getReturnValue();
@@ -981,7 +1391,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         long oidchild
         )
     {
-        NodeOp cmd = NodeOp.writeChildCmd(node.oid, index, oidchild);
+        NodeOp cmd = NodeOp.writeChildCmd(m_pending, node.oid, index, oidchild);
         TR.update_helper(node, cmd);
     }
 
@@ -996,7 +1406,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         int count
         )
     {
-        NodeOp cmd = NodeOp.writeChildCountCmd(node.oid, count);
+        NodeOp cmd = NodeOp.writeChildCountCmd(m_pending, node.oid, count);
         TR.update_helper(node, cmd);
     }
 
@@ -1011,7 +1421,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         Comparable ckey
         )
     {
-        EntryOp<K,V> cmd = EntryOp.writeKeyCmd(entry.oid, (K) ckey);
+        EntryOp<K,V> cmd = EntryOp.writeKeyCmd(m_pending, entry.oid, (K) ckey);
         TR.update_helper(entry, cmd);
     }
 
@@ -1026,7 +1436,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         V value
         )
     {
-        EntryOp<K,V> cmd = EntryOp.writeValueCmd(entry.oid, value);
+        EntryOp<K,V> cmd = EntryOp.writeValueCmd(m_pending, entry.oid, value);
         TR.update_helper(entry, cmd);
     }
 
@@ -1041,7 +1451,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         long next
         )
     {
-        EntryOp<K,V> cmd = EntryOp.writeNextCmd(entry.oid, next);
+        EntryOp<K,V> cmd = EntryOp.writeNextCmd(m_pending, entry.oid, next);
         TR.update_helper(entry, cmd);
     }
 
@@ -1056,7 +1466,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         boolean deleted
         )
     {
-        EntryOp<K,V> cmd = EntryOp.writeDeletedCmd(entry.oid, deleted);
+        EntryOp<K,V> cmd = EntryOp.writeDeletedCmd(m_pending, entry.oid, deleted);
         TR.update_helper(entry, cmd);
     }
 
@@ -1070,7 +1480,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         Entry<K, V> entry
         )
     {
-        EntryOp<K, V> cmd = EntryOp.readKeyCmd(entry.oid);
+        EntryOp<K, V> cmd = EntryOp.readKeyCmd(m_pending, entry.oid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((EntryOp<K,V>)cmd.getPreviousWrite(m_pending)).key();
         if(!TR.query_helper(entry, null, cmd))
             return entry.applyReadKey();
         return (Comparable) cmd.getReturnValue();
@@ -1086,7 +1498,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         Entry<K, V> entry
         )
     {
-        EntryOp<K, V> cmd = EntryOp.readDeletedCmd(entry.oid);
+        EntryOp<K, V> cmd = EntryOp.readDeletedCmd(m_pending, entry.oid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((EntryOp<K,V>)cmd.getPreviousWrite(m_pending)).deleted();
         if(!TR.query_helper(entry, null, cmd))
             return entry.applyReadDeleted();
         return (boolean) cmd.getReturnValue();
@@ -1102,7 +1516,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         long entryoid
         )
     {
-        EntryOp<K, V> cmd = EntryOp.readKeyCmd(entryoid);
+        EntryOp<K, V> cmd = EntryOp.readKeyCmd(m_pending, entryoid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((EntryOp<K,V>)cmd.getPreviousWrite(m_pending)).key();
         Entry<K, V> entry = entryById(entryoid);
         if(!TR.query_helper(entry, null, cmd))
             return entry.applyReadKey();
@@ -1119,7 +1535,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         Entry<K, V> entry
         )
     {
-        EntryOp<K,V> cmd = EntryOp.readValueCmd(entry.oid);
+        EntryOp<K,V> cmd = EntryOp.readValueCmd(m_pending, entry.oid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((EntryOp<K,V>)cmd.getPreviousWrite(m_pending)).value();
         if(!TR.query_helper(entry, null, cmd))
             return entry.applyReadValue();
         return (V) cmd.getReturnValue();
@@ -1135,7 +1553,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         Entry<K, V> entry
         )
     {
-        EntryOp<K,V> cmd = EntryOp.readNextCmd(entry.oid);
+        EntryOp<K,V> cmd = EntryOp.readNextCmd(m_pending, entry.oid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((EntryOp<K,V>)cmd.getPreviousWrite(m_pending)).oidnext();
         if(!TR.query_helper(entry, null, cmd))
             return entry.applyReadNext();
         return (long) cmd.getReturnValue();
@@ -1152,7 +1572,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         )
     {
         Entry<K, V> entry = entryById(entryoid);
-        EntryOp<K,V> cmd = EntryOp.readNextCmd(entry.oid);
+        EntryOp<K,V> cmd = EntryOp.readNextCmd(m_pending, entry.oid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((EntryOp<K,V>)cmd.getPreviousWrite(m_pending)).oidnext();
         if(!TR.query_helper(entry, null, cmd))
             return entry.applyReadNext();
         return (long) cmd.getReturnValue();
@@ -1164,16 +1586,19 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @param node
      * @return
      */
-    private long[]
-    readchildren(
-        Node<K,V> node
+    private long
+    readchild(
+        Node<K,V> node,
+        int idx
         )
     {
-        NodeOp cmd = NodeOp.readChildrenCmd(node.oid);
+        NodeOp cmd = NodeOp.readChildCmd(m_pending, node.oid, idx);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((NodeOp)cmd.getPreviousWrite(m_pending)).oidparam();
         if(!TR.query_helper(node, null, cmd)) {
-            return node.applyReadChildren();
+            return node.applyReadChild(idx);
         }
-        return (long[]) cmd.getReturnValue();
+        return (long) cmd.getReturnValue();
     }
 
     /**
@@ -1187,7 +1612,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         Node<K,V> node
         )
     {
-        NodeOp cmd = NodeOp.readChildCountCmd(node.oid);
+        NodeOp cmd = NodeOp.readChildCountCmd(m_pending, node.oid);
+        if(cmd.isReadAfterWrite(m_pending))
+            return ((NodeOp)cmd.getPreviousWrite(m_pending)).childcount();
         if(!TR.query_helper(node, null, cmd))
             return node.applyReadChildCount();
         return (int) cmd.getReturnValue();
@@ -1198,7 +1625,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @param size
      */
     private void writesize(int size) {
-        BTreeOp cmd = BTreeOp.writeSizeCmd(oid, size);
+        BTreeOp cmd = BTreeOp.writeSizeCmd(m_pending, oid, size);
         TR.update_helper(this, cmd);
     }
 
@@ -1207,7 +1634,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @param height
      */
     private void writeheight(int height) {
-        BTreeOp cmd = BTreeOp.writeHeightCmd(oid, height);
+        BTreeOp cmd = BTreeOp.writeHeightCmd(m_pending, oid, height);
         TR.update_helper(this, cmd);
     }
 
@@ -1216,10 +1643,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @param root
      */
     private void writeroot(long root) {
-        BTreeOp cmd = BTreeOp.writeRootCmd(oid, root);
+        BTreeOp cmd = BTreeOp.writeRootCmd(m_pending, oid, root);
         TR.update_helper(this, cmd);
     }
-
 
 }
 

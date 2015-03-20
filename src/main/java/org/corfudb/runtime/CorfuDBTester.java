@@ -318,27 +318,27 @@ public class CorfuDBTester
                 threads[i].join();
         }
         else if(testnum==TXLOGICALLIST) {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             TXListTester.<Integer, CDBLogicalList<Integer>>runListTest(
                     TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBLogicalList", verbose);
         }
         else if(testnum==TXLINKEDLIST) {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             TXListTester.<Integer, CDBLinkedList<Integer>>runListTest(
                     TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBLinkedList", verbose);
         }
         else if(testnum==TXDOUBLYLINKEDLIST) {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             TXListTester.<Integer, CDBDoublyLinkedList<Integer>>runListTest(
                     TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBDoublyLinkedList", verbose);
         }
         else if(testnum==TXLOGICALBTREE) {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             BTreeTester.<String, String, CDBLogicalBTree<String, String>>runTest(
                     TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBLogicalBTree", testCase, verbose);
         }
         else if(testnum==TXPHYSICALBTREE) {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             BTreeTester.<String, String, CDBPhysicalBTree<String, String>>runTest(
                     TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBPhysicalBTree", testCase, verbose);
         }
