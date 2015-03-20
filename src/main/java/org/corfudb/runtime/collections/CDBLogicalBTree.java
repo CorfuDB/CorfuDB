@@ -228,6 +228,11 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
         TR.update_helper(this, cmd);
     }
 
+    /**
+     * print the current view (consistent or otherwise)
+     * @return
+     */
+    public String printview() { return print(); }
 
     /**
      * print the b-tree

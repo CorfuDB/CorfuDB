@@ -25,6 +25,7 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends Corfu
     }
 
     public abstract String print();
+    public abstract String printview();
     public abstract int size();
     public abstract int height();
     public abstract V get(K key);

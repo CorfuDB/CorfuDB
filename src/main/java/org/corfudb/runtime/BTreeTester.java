@@ -617,9 +617,9 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
      * @param maxlength
      * @return
      */
-    protected static String randString(int maxlength) {
+    protected static String randString(int minlength, int maxlength) {
         StringBuilder sb = new StringBuilder();
-        int len = (int) (Math.random() * maxlength);
+        int len = ((int) ((Math.random() * (maxlength-minlength))))+minlength;
         for (int i = 0; i < len; i++) {
             int cindex = (int) Math.floor(Math.random() * 26);
             char character = (char) ('a' + cindex);
@@ -634,10 +634,10 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
      * @param maxlength
      * @return
      */
-    protected static TreeMap<String, String> randMap(int count, int maxlength) {
+    protected static TreeMap<String, String> randMap(int count, int minlength, int maxlength) {
         TreeMap<String, String> strings = new TreeMap<String, String>();
         for(int j=0; j<count; j++)
-            strings.put(randString(maxlength), randString(maxlength));
+            strings.put(randString(minlength, maxlength), randString(minlength, maxlength));
         return strings;
     }
 
@@ -655,23 +655,69 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         int maxlength
         )
     {
-        TreeMap<String, String> map = randMap(count, maxlength);
+        int putCount = 0;
+        int getCount = 0;
+        int putAttempts = 0;
+        int getAttempts = 0;
+        TreeMap<String, String> map = randMap(count, 1, maxlength);
         for(String key : map.keySet()) {
             K okey = (K)(Object)key;
-            TR.BeginTX();
-            tree.put(okey, (V)map.get(key));
-            TR.EndTX();
+            V oval = (V) map.get(key);
+            boolean inTX = false;
+            boolean done = false;
+            int localAttempts = 0;
+            while(!done) {
+                try {
+                    putAttempts++;
+                    localAttempts++;
+                    TR.BeginTX();
+                    inTX = true;
+                    tree.put(okey, oval);
+                    done = TR.EndTX();
+                    inTX = false;
+                } catch (Exception e) {
+                    if (inTX) {
+                        System.out.format("aborted put[%d,%d] due to %s\n", putCount+1, localAttempts, e.toString());
+                        TR.AbortTX();
+                    }
+                    inTX = false;
+                }
+            }
+            putCount++;
+            System.out.format("T%d put(%s, %s)->\n%s\n", tree.oid, key.toString(), oval.toString(), tree.printview());
         }
-        System.out.println(tree.print());
+
+        System.out.format("Completed %d puts in %d attempts...\n", putCount, putAttempts);
+        System.out.println(tree.printview());
+
         for(String key : map.keySet()) {
             K okey = (K)(Object)key;
-            TR.BeginTX();
-            V oval = (V) tree.get(okey);
-            TR.EndTX();
-            String tval = (String) oval;
-            if(tval.compareTo(map.get(key)) != 0)
-                System.out.println("FAIL: key="+key+" not present in BTree!");
+            boolean inTX = false;
+            boolean done = false;
+            int localAttempts = 0;
+            while(!done) {
+                try {
+                    getAttempts++;
+                    localAttempts++;
+                    TR.BeginTX();
+                    inTX = true;
+                    V oval = (V) tree.get(okey);
+                    done = TR.EndTX();
+                    inTX = false;
+                    String tval = (String) oval;
+                    if (tval.compareTo(map.get(key)) != 0)
+                        System.out.println("FAIL: key=" + key + " not present in BTree!");
+                } catch (Exception e) {
+                    if (inTX) TR.AbortTX();
+                    inTX = false;
+                }
+            }
+            getCount++;
         }
+
+        System.out.format("Completed %d gets in %d attempts...\n", getCount, getAttempts);
+        System.out.println(tree.printview());
+
     }
 
     /**
@@ -683,45 +729,151 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
      */
     public static <K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> void
     randomFunctionalTestRemove(
+        AbstractRuntime TR,
         L tree,
         int count,
         int maxlength,
         double removeProbability
         )
     {
-        TreeMap<String, String> map = randMap(count, maxlength);
+        TreeMap<String, String> map = randMap(count, 1, maxlength);
         TreeMap<String, String> removed = new TreeMap<String, String>();
         ArrayList<String> removeKeys = new ArrayList<String>();
+        int putCount = 0;
+        int removeCount = 0;
+        int putAttempts = 0;
+        int removeAttempts = 0;
+        int errorCount = 0;
+        int getCount = 0;
+        int getAttempts = 0;
+
+
         for(String key : map.keySet()) {
-            tree.put((K)(Object)key, (V)map.get(key));
+            K okey = (K)(Object)key;
+            V oval = (V) map.get(key);
+            boolean inTX = false;
+            boolean done = false;
+            int localAttempts = 0;
+            while(!done) {
+                try {
+                    putAttempts++;
+                    localAttempts++;
+                    TR.BeginTX();
+                    inTX = true;
+                    tree.put(okey, oval);
+                    done = TR.EndTX();
+                    inTX = false;
+                } catch (Exception e) {
+                    if (inTX) {
+                        System.out.format("aborted put[%d,%d] due to %s\n", putCount+1, localAttempts, e.toString());
+                        TR.AbortTX();
+                    }
+                    inTX = false;
+                }
+            }
+            putCount++;
+            System.out.format("T%d put(%s, %s)->\n%s\n", tree.oid, key.toString(), oval.toString(), tree.printview());
             if(Math.random() < removeProbability)
                 removeKeys.add(key);
         }
-        System.out.println(tree.print());
+
+        System.out.format("Completed %d puts in %d attempts...\n", putCount, putAttempts);
+        System.out.println(tree.printview());
+
         for(String key : removeKeys) {
-            if(Math.random() < removeProbability) {
-                //String tvalue = (V)(Object)
-                V rval = tree.remove((K)(Object)key);
-                String tvalue = (String) rval;
-                String mvalue = map.remove(key);
-                removed.put(key, mvalue);
-                if(tvalue.compareTo(mvalue) != 0)
-                    throw new RuntimeException("different remove results");
+            V rval = null;
+            K okey = (K) (Object) key;
+            boolean inTX = false;
+            boolean done = false;
+            int localAttempts = 0;
+            String mvalue = map.remove(key);
+            removed.put(key, mvalue);
+            while (!done) {
+                try {
+                    TR.BeginTX();
+                    inTX = true;
+                    localAttempts++;
+                    removeAttempts++;
+                    rval = tree.remove((K) (Object) key);
+                    done = TR.EndTX();
+                    inTX = false;
+                } catch (Exception e) {
+                    if (inTX) {
+                        System.out.format("aborted remove[%d,%d] due to %s\n", removeCount + 1, localAttempts, e.toString());
+                        TR.AbortTX();
+                    }
+                    inTX = false;
+                }
+                removeCount++;
+            }
+            String tvalue = (String) rval;
+            if (tvalue.compareTo(mvalue) != 0) {
+                errorCount++;
+                System.out.format("FAIL: L%d.remove(%s)->%s; map.remove(%s)->%s\n",
+                        tree.oid, key.toString(), tvalue, key.toString(), mvalue);
             }
         }
+
+        System.out.format("Completed %d removes in %d attempts...\n", removeCount, removeAttempts);
+        System.out.println(tree.printview());
+
         for(String key : map.keySet()) {
-            K okey = (K) (Object) key;
-            V oval = (V) tree.get(okey);
-            String tval = (String) oval;
-            if(tval.compareTo(map.get(key)) != 0)
-                System.out.println("FAIL: key="+key+" not present in BTree!");
+            K okey = (K)(Object)key;
+            boolean inTX = false;
+            boolean done = false;
+            int localAttempts = 0;
+            while(!done) {
+                try {
+                    getAttempts++;
+                    localAttempts++;
+                    TR.BeginTX();
+                    inTX = true;
+                    V oval = (V) tree.get(okey);
+                    done = TR.EndTX();
+                    inTX = false;
+                    String tval = (String) oval;
+                    if(tval.compareTo(map.get(key)) != 0) {
+                        errorCount++;
+                        System.out.println("FAIL: key=" + key + " not present in BTree!");
+                    }
+                } catch (Exception e) {
+                    if (inTX) TR.AbortTX();
+                    inTX = false;
+                }
+            }
+            getCount++;
         }
+
         for(String key : removed.keySet()) {
-            K okey = (K) (Object) key;
-            if(tree.get(okey)!=null)
-                System.out.println("FAIL: key="+key+" STILL present in BTree!");
+            K okey = (K)(Object)key;
+            boolean inTX = false;
+            boolean done = false;
+            int localAttempts = 0;
+            while(!done) {
+                try {
+                    getAttempts++;
+                    localAttempts++;
+                    TR.BeginTX();
+                    inTX = true;
+                    V oval = (V) tree.get(okey);
+                    done = TR.EndTX();
+                    inTX = false;
+                    if(oval != null) {
+                        errorCount++;
+                        System.out.println("FAIL: key="+key+" STILL present in BTree!");
+                    }
+                } catch (Exception e) {
+                    if (inTX) TR.AbortTX();
+                    inTX = false;
+                }
+            }
+            getCount++;
         }
+
+        System.out.format("Completed %d gets in %d attempts...\n", getCount, getAttempts);
+        System.out.println(tree.printview());
         System.out.println("TREE: size=" + tree.size() + "\n " + tree.print());
+        System.out.println("errorCount = " + errorCount);
     }
 
 
@@ -735,6 +887,9 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     {
         if(m_testcase == TestCase.functional) {
             randomFunctionalTestPutGet(m_rt, m_v.get(0), m_nOps, 10);
+            return;
+        } else if(m_testcase == TestCase.multifunctional) {
+            randomFunctionalTestRemove(m_rt, m_v.get(0), m_nOps, 10, m_readWriteRatio);
             return;
         }
 
