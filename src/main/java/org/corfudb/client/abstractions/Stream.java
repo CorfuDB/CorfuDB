@@ -527,7 +527,7 @@ public class Stream implements AutoCloseable, IStream {
                 long token = sequencer.getNext(streamIDstack.peekLast());
                 CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(epochMap, data);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(epochMap, -1, token);
+                return new Timestamp(epochMap, null, token);
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }
@@ -578,7 +578,7 @@ public class Stream implements AutoCloseable, IStream {
         {
             CorfuDBStreamEntry entry = streamQ.take();
             synchronized(streamQ){
-                streamQ.notify();
+                streamQ.notifyAll();
             }
             return entry;
         }
@@ -975,7 +975,7 @@ public class Stream implements AutoCloseable, IStream {
             */
         }
 
-        Timestamp ts = new Timestamp(epochMap);
+        Timestamp ts = new Timestamp(epochMap, null, token);
         ts.setPhysicalPos(token);
         return ts;
     }
@@ -1030,7 +1030,7 @@ public class Stream implements AutoCloseable, IStream {
             offset++;
         }
 
-        Timestamp ts = new Timestamp(epochMap);
+        Timestamp ts = new Timestamp(epochMap, null, token);
         ts.setPhysicalPos(token);
         return ts;
     }

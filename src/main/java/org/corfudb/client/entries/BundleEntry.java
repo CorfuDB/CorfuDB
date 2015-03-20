@@ -148,7 +148,7 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry 
             }
             }, s.executor);
         }
-        return new Timestamp(epochMap, -1, physicalPos);
+        return new Timestamp(epochMap, null, physicalPos);
     }
 
     /**
