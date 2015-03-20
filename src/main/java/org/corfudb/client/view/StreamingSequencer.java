@@ -16,6 +16,7 @@
 package org.corfudb.client.view;
 
 import org.corfudb.client.CorfuDBClient;
+import org.corfudb.client.CorfuDBView;
 import org.corfudb.client.IServerProtocol;
 import org.corfudb.client.sequencers.ISimpleSequencer;
 import org.corfudb.client.sequencers.IStreamSequencer;
@@ -25,6 +26,8 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.function.Supplier;
 
 /**
  * This view implements a streaming sequencer. It tries to use a streaming sequencer,
@@ -37,19 +40,41 @@ public class StreamingSequencer {
 
     private CorfuDBClient client;
     private UUID logID;
+    private CorfuDBView view;
+    private Supplier<CorfuDBView> getView;
 
     private final Logger log = LoggerFactory.getLogger(StreamingSequencer.class);
 
     public StreamingSequencer(CorfuDBClient client)
     {
         this.client = client;
-        this.logID = null;
+        this.getView = () ->  {
+            return this.client.getView();
+        };
     }
 
     public StreamingSequencer(CorfuDBClient client, UUID logID)
     {
         this.client = client;
         this.logID = logID;
+        this.getView = () -> {
+            try {
+            return this.client.getView(this.logID);
+            }
+            catch (RemoteException re)
+            {
+                log.warn("Error getting remote view", re);
+                return null;
+            }
+        };
+    }
+
+    public StreamingSequencer(CorfuDBView view)
+    {
+        this.view = view;
+        this.getView = () -> {
+            return this.view;
+        };
     }
 
     public long getNext(UUID streamID)
@@ -62,7 +87,7 @@ public class StreamingSequencer {
         while (true)
         {
             try {
-                IServerProtocol sequencer= client.getView(logID).getSequencers().get(0);
+                IServerProtocol sequencer= getView.get().getSequencers().get(0);
                 if (sequencer instanceof IStreamSequencer)
                 {
                     return ((IStreamSequencer)sequencer).sequenceGetNext(streamID, numTokens);
@@ -71,11 +96,6 @@ public class StreamingSequencer {
                 {
                     return ((ISimpleSequencer)sequencer).sequenceGetNext();
                 }
-            }
-            catch (RemoteException re)
-            {
-                log.warn("Unable to get next sequence from remote view, aborting", re);
-                return 0;
             }
             catch (Exception e)
             {
@@ -90,7 +110,7 @@ public class StreamingSequencer {
         while (true)
         {
             try {
-                IServerProtocol sequencer = client.getView(logID).getSequencers().get(0);
+                IServerProtocol sequencer = getView.get().getSequencers().get(0);
                 if (sequencer instanceof IStreamSequencer)
                 {
                     return ((IStreamSequencer)sequencer).sequenceGetCurrent(streamID);
@@ -113,7 +133,7 @@ public class StreamingSequencer {
         while (true)
         {
             try {
-                IServerProtocol sequencer = client.getView(logID).getSequencers().get(0);
+                IServerProtocol sequencer = getView.get().getSequencers().get(0);
                 if (sequencer instanceof IStreamSequencer)
                 {
                     ((IStreamSequencer)sequencer).setAllocationSize(streamID, size);

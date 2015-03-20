@@ -60,6 +60,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.stream.Collectors;
 import org.corfudb.client.gossip.StreamEpochGossipEntry;
+import org.corfudb.client.gossip.StreamPullGossip;
 
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.ConcurrentHashMap;
@@ -958,13 +959,20 @@ public class Stream implements AutoCloseable, IStream {
 
         for (UUID id : targetStreams)
         {
+            StreamPullGossip spg = new StreamPullGossip(id, logID, streamID, token, getCurrentEpoch(), reservation+1, duration, payload);
+            StreamData sd = datamap.get(id);
+            ((IConfigMaster)cdbc.getView(sd.currentLog).getConfigMasters().get(0)).sendGossip(spg);
+
+            // Old multi-hop code below
             // Get a sequence in the remote stream
+            /*
             StreamData sd = datamap.get(id);
             StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
             long remoteToken = sremote.getNext(id, reservation + 1);
             // Write a move in the remote log
             WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
+            */
         }
 
         Timestamp ts = new Timestamp(epochMap);

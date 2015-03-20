@@ -36,6 +36,7 @@ public interface IGossip extends Serializable {
         }
 
         kryo.register(UUID.class);
+        kryo.register(byte[].class);
 
     }
 }
