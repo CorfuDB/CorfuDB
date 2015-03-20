@@ -254,7 +254,7 @@ public class SMREngine
 
         dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
 
-        StreamEntry update = curstream.readNext();
+        StreamEntry update = curstream.readNext(curtail);
         while(update!=null)
         {
 //            System.out.println("SMREngine got message in stream " + curstream.getStreamID() + " with learner " +
