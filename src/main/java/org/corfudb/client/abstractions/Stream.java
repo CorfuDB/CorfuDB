@@ -85,7 +85,7 @@ public class Stream implements AutoCloseable, IStream {
     private final Logger log = LoggerFactory.getLogger(Stream.class);
 
     CorfuDBClient cdbc;
-    UUID streamID;
+    public UUID streamID;
     UUID logID;
 
     StreamingSequencer sequencer;
@@ -413,7 +413,7 @@ public class Stream implements AutoCloseable, IStream {
                                                 }
                                                 else
                                                 {
-                                                    log.debug("Detected temporary move operation into stream  " + cdbsme.destinationStream);
+                                                    log.debug("Detected temporary move operation into stream  " + cdbsme.destinationStream + ", destination " + cdbsme.destinationLog);
                                                     returnStack.putLast(new ReturnInfo(logID, r.pos+1, cdbsme.duration));
                                                 }
                                                 streamIDstack.putLast(cdbsme.destinationStream);
@@ -527,7 +527,7 @@ public class Stream implements AutoCloseable, IStream {
                 long token = sequencer.getNext(streamIDstack.peekLast());
                 CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(epochMap, data);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(epochMap, null, token);
+                return new Timestamp(epochMap, null, token, streamID);
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }
@@ -617,7 +617,7 @@ public class Stream implements AutoCloseable, IStream {
      */
     public Timestamp check()
     {
-        return new Timestamp(epochMap, streamPointer.get(), sequencer.getCurrent(streamID));
+        return new Timestamp(epochMap, streamPointer.get()+1, sequencer.getCurrent(streamID), streamID);
     }
 
     /**
@@ -959,23 +959,24 @@ public class Stream implements AutoCloseable, IStream {
 
         for (UUID id : targetStreams)
         {
-            StreamPullGossip spg = new StreamPullGossip(id, logID, streamID, token, getCurrentEpoch(), reservation+1, duration, payload);
             StreamData sd = datamap.get(id);
-            ((IConfigMaster)cdbc.getView(sd.currentLog).getConfigMasters().get(0)).sendGossip(spg);
 
-            // Old multi-hop code below
-            // Get a sequence in the remote stream
-            /*
-            StreamData sd = datamap.get(id);
-            StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
-            long remoteToken = sremote.getNext(id, reservation + 1);
-            // Write a move in the remote log
-            WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
-            woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
-            */
-        }
+            //remote, use a gossip message
+            if (sd.currentLog == logID)
+            {
+                StreamPullGossip spg = new StreamPullGossip(id, logID, streamID, token, getCurrentEpoch(), reservation+1, duration, payload);
+                ((IConfigMaster)cdbc.getView(sd.currentLog).getConfigMasters().get(0)).sendGossip(spg);
+            }
+            else {
+                StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
+                long remoteToken = sremote.getNext(id, reservation + 1);
+                // Write a move in the remote log
+                WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
+                woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
+            }
+       }
 
-        Timestamp ts = new Timestamp(epochMap, null, token);
+        Timestamp ts = new Timestamp(epochMap, null, token, streamID);
         ts.setPhysicalPos(token);
         return ts;
     }
@@ -1030,7 +1031,7 @@ public class Stream implements AutoCloseable, IStream {
             offset++;
         }
 
-        Timestamp ts = new Timestamp(epochMap, null, token);
+        Timestamp ts = new Timestamp(epochMap, null, token, streamID);
         ts.setPhysicalPos(token);
         return ts;
     }
