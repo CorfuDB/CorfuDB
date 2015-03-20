@@ -138,7 +138,7 @@ public class Timestamp implements ITimestamp, Serializable {
             if (first) { first = false; }
             else { sb.append(", "); }
             sb.append(id).append(": ").append(epochMap.get(id)).append(".").append(physicalPos == null ? "?" : physicalPos);
-            if (pos != null)
+            if (pos != null && id.equals(primaryStream))
             {
                 sb.append("(").append(pos).append(")");
             }
