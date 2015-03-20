@@ -94,9 +94,9 @@ public class Stream implements AutoCloseable, IStream {
     public ExecutorService executor;
     boolean prefetch = true;
 
-
     AtomicLong dispatchedReads;
     AtomicLong logPointer;
+    AtomicLong minorEpoch;
 
     ConcurrentHashMap<UUID, Long> epochMap;
 
@@ -177,6 +177,7 @@ public class Stream implements AutoCloseable, IStream {
         };
         this.prefetch = prefetch;
         this.executor = executor;
+        this.minorEpoch = new AtomicLong();
         //now, the stream starts reading from the beginning...
         StreamData sd = getConfigMaster.get().getStream(streamID);
         //it doesn't, so try to create
@@ -281,6 +282,7 @@ public class Stream implements AutoCloseable, IStream {
         {
             cdbse.getTimestamp().setTransientInfo(logID, streamID, streamPointer.getAndIncrement(), physicalPos);
             cdbse.restoreOriginalPhysical();
+            cdbse.getTimestamp().setContainingStream(streamIDstack.peekLast());
             if (cdbse instanceof BundleEntry)
             {
                 //a bundle entry actually represents an entry in the remote log (physically).
@@ -524,10 +526,13 @@ public class Stream implements AutoCloseable, IStream {
         while (true)
         {
             try {
-                long token = sequencer.getNext(streamIDstack.peekLast());
+                UUID containingStream = streamIDstack.peekLast();
+                long token = sequencer.getNext(containingStream);
                 CorfuDBStreamEntry cdse = new CorfuDBStreamEntry(epochMap, data);
                 woas.write(token, (Serializable) cdse);
-                return new Timestamp(epochMap, null, token, streamID);
+                Timestamp ts = new Timestamp(epochMap, null, token, streamID);
+                ts.setContainingStream(containingStream);
+                return ts;
             } catch(Exception e) {
                 log.warn("Issue appending to log, getting new sequence number...", e);
             }
@@ -617,7 +622,9 @@ public class Stream implements AutoCloseable, IStream {
      */
     public Timestamp check()
     {
-        return new Timestamp(epochMap, streamPointer.get()+1, sequencer.getCurrent(streamID), streamID);
+        Timestamp ts = new Timestamp(epochMap, null, sequencer.getCurrent(streamID), streamID);
+        ts.setContainingStream(streamID);
+        return ts;
     }
 
     /**
@@ -978,6 +985,7 @@ public class Stream implements AutoCloseable, IStream {
 
         Timestamp ts = new Timestamp(epochMap, null, token, streamID);
         ts.setPhysicalPos(token);
+        ts.setContainingStream(streamID);
         return ts;
     }
 
@@ -1033,6 +1041,7 @@ public class Stream implements AutoCloseable, IStream {
 
         Timestamp ts = new Timestamp(epochMap, null, token, streamID);
         ts.setPhysicalPos(token);
+        ts.setContainingStream(streamID);
         return ts;
     }
 

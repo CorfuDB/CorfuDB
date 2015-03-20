@@ -40,8 +40,10 @@ public class Timestamp implements ITimestamp, Serializable {
 
     public Long physicalPos;
     public UUID logID;
-    public Map<UUID, Long> epochMap;
 
+    public UUID containingStream;
+    public Map<UUID, Long> epochMap;
+    public boolean isAttachedTS = false;
     public static final long serialVersionUID = 0l;
 
     public Timestamp(UUID streamID, long epoch, long pos, long physicalPos)
@@ -71,6 +73,10 @@ public class Timestamp implements ITimestamp, Serializable {
         this.primaryStream = primaryStream;
     }
 
+    public void setContainingStream(UUID containingStream)
+    {
+        this.containingStream = containingStream;
+    }
 
     public Long getEpoch(UUID stream)
     {
@@ -160,12 +166,24 @@ public class Timestamp implements ITimestamp, Serializable {
         if (timestamp instanceof Timestamp)
         {
             Timestamp t = (Timestamp) timestamp;
+            // It's the same stream and we have logical addresses.
             if (primaryStream != null && primaryStream.equals(t.primaryStream) && pos != null && t.pos != null)
             {
                 return (int) (pos - t.pos);
             }
-
-            if (physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap))
+            // It's the same containing stream, in which case physical addresses can be used
+            // TODO: only need to check the epoch of the containing stream.
+            else if (containingStream != null && containingStream.equals(t.containingStream) && physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap))
+            {
+                return (int) (physicalPos - t.physicalPos);
+            }
+            // It's the same stream but the containing stream is different.
+            // We can't really say anything.
+            else if (primaryStream != null && primaryStream.equals(t.primaryStream) && containingStream != null && !containingStream.equals(t.containingStream))
+            {
+                return -1;
+            }
+            else if (physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap) )
             {
                 return (int) (physicalPos - t.physicalPos);
             }
