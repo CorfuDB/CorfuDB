@@ -48,6 +48,12 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     public Timestamp ts;
     /** The payload of the entry, which may be null. */
     public byte[] payload;
+    /** Whether or not this entry is a copy */
+    public boolean isCopy;
+    /** If it is a copy, what the original address was */
+    public long originalAddress;
+    /** A transient variable to hold the actual physical position */
+    transient long realPhysicalPos;
 
     /** Hidden default constructor */
     private CorfuDBStreamEntry() {}
@@ -147,6 +153,18 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
      */
     public byte[] getPayload() {
         return payload;
+    }
+
+    /**
+     * Restore the original address.
+     */
+    public void restoreOriginalPhysical()
+    {
+        if (isCopy)
+        {
+            this.realPhysicalPos = ts.getPhysicalPos();
+            ts.setPhysicalPos(originalAddress);
+        }
     }
 
     /**

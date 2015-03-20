@@ -65,7 +65,7 @@ public class StreamingSequencer {
                 IServerProtocol sequencer= client.getView(logID).getSequencers().get(0);
                 if (sequencer instanceof IStreamSequencer)
                 {
-                    return ((IStreamSequencer)sequencer).sequenceGetNext(streamID, 1);
+                    return ((IStreamSequencer)sequencer).sequenceGetNext(streamID, numTokens);
                 }
                 else
                 {

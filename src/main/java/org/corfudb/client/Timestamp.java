@@ -99,9 +99,13 @@ public class Timestamp implements ITimestamp, Serializable {
 
     public void setPhysicalPos(long pos)
     {
-        this.physicalPos = physicalPos;
+        this.physicalPos = pos;
     }
 
+    public long getPhysicalPos()
+    {
+        return this.physicalPos;
+    }
     public void setLogId(UUID log)
     {
         this.logID = log;

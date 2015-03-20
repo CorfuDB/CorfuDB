@@ -77,7 +77,7 @@ import java.io.IOException;
  * This class creates bundles, which abstracts away pulling multiple logs and inserting a stream
  * into a single operation.
  */
-class Bundle {
+public class Bundle {
 
     IStream stream;
     List<UUID> remoteStreams;

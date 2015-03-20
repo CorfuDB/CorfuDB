@@ -90,7 +90,7 @@ public class Stream implements AutoCloseable, IStream {
     StreamingSequencer sequencer;
     WriteOnceAddressSpace woas;
 
-    ExecutorService executor;
+    public ExecutorService executor;
     boolean prefetch = true;
 
 
@@ -279,6 +279,13 @@ public class Stream implements AutoCloseable, IStream {
         if (cdbse.checkEpoch(epochMap))
         {
             cdbse.getTimestamp().setTransientInfo(logID, streamID, streamPointer.getAndIncrement(), physicalPos);
+            cdbse.restoreOriginalPhysical();
+            if (cdbse instanceof BundleEntry)
+            {
+                //a bundle entry actually represents an entry in the remote log (physically).
+                BundleEntry be = (BundleEntry) cdbse;
+                be.setTransientInfo(this, woas, sequencer, cdbc);
+            }
             synchronized (streamPointer) {
                 latest = cdbse.getTimestamp();
                 if (latest.epochMap == null)
@@ -359,7 +366,14 @@ public class Stream implements AutoCloseable, IStream {
                             highWatermark = r.pos + 1;
                             try {
                                 Object payload = r.payload.deserializePayload();
-                                if (payload instanceof CorfuDBStreamMoveEntry)
+                                if (payload instanceof BundleEntry)
+                                {
+                                    BundleEntry be = (BundleEntry) payload;
+                                    PayloadReadResult prr = loadPayloadIntoQueue(be, r.pos);
+                                    if (prr == PayloadReadResult.VALID) { numReadable++; }
+                                    else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
+                                }
+                                else if (payload instanceof CorfuDBStreamMoveEntry)
                                 {
                                     CorfuDBStreamMoveEntry cdbsme = (CorfuDBStreamMoveEntry) payload;
                                     if (cdbsme.containsStream(streamID))
