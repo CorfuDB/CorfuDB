@@ -327,7 +327,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                     break;
             }
             if (m != null)
-                return m.get(0);
+                return m.get(m.size()-1);
             return null;
         }
     }
