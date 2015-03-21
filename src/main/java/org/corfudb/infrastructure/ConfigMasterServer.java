@@ -471,6 +471,15 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         }
         return result;
     }
+
+    private JsonObject streamInspector(JsonObject params)
+    {
+        long pos = params.getJsonNumber("pos").longValue();
+        JsonObjectBuilder output = Json.createObjectBuilder();
+        WriteOnceAddressSpace woas = new WriteOnceAddressSpace(currentView);
+        return null;
+    }
+
     private JsonObject logInfo(JsonObject params)
     {
         long pos = params.getJsonNumber("pos").longValue();
@@ -714,6 +723,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         break;
                     case "streaminfo":
                         job.add("result", streamInfo(params));
+                        break;
+                    case "streaminspector":
+                        job.add("result", streamInspector(params));
                         break;
                 }
                 JsonObject res =    job.add("calledmethod", apiCall)

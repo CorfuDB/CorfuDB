@@ -26,6 +26,8 @@
                 <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="remotes">Remotes</a></li>
                 <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="log">Log</a></li>
                 <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="streams">Streams</a></li>
+                <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="streamsinspector">Streams Inspector</a></li>
+
                 <li><a style="padding-top:10px;padding-bottom:0;" href="#" id="reset">Reset</a></li>
             </ul>
         </div>
@@ -93,6 +95,29 @@
               <table class="table">
                 <thead>
                     <tr><th>UUID</th><th>CurrentLog</th><th>StartLog</th><th>StartPos</th><th>Epoch</th></tr>
+                </thead>
+                <tbody id="streamtable">
+              </tbody></table>
+            </div>
+        </div>
+        <div class="container content hidden" id="STREAMINSPECTOR">
+            <form class="form-inline">
+                <div class="form-group">
+                    <div class="input-group">
+                        <div class="input-group-addon">Pos</div>
+                        <input type="text" class="form-control" id="streaminsepectorid" placeholder="id">
+                    </div>
+                 </div>
+                <button id="getstreaminfo" class="btn btn-primary">Go</button>
+            </form>
+            <br/>
+
+            <div class="panel panel-default">
+              <div class="panel-heading">Stream view</div>
+
+              <table class="table">
+                <thead>
+                    <tr><th>Logical Position</th><th>Physical Position</th></tr>
                 </thead>
                 <tbody id="streamtable">
               </tbody></table>
