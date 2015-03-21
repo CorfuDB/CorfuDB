@@ -1226,6 +1226,8 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @return
      */
     public V get(K key) {
+        if(key == null)
+            return null;
         long root = readrootoid();
         int height = readheight();
         Entry entry = searchEntry(root, key, height);
@@ -1245,6 +1247,8 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @return
      */
     public V remove(K key) {
+        if(key == null)
+            return null;
         V result = null;
         long root = readrootoid();
         int height = readheight();

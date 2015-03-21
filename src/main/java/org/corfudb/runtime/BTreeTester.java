@@ -275,25 +275,26 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     private K
     getRandomKey(L src) {
 
-        K randkey = null;
+        K headkey = null;
         m_gtlock.lock();
         try {
             int i = 0;
             HashSet<K> keys = m_rm.get(src);
             int range = keys.size();
+            if (range == 0)
+                return null;
             int lidx = (int) Math.floor(Math.random() * range);
             for (K k : keys) {
-                if (lidx == i) {
-                    randkey = k;
-                    break;
-                }
+                if (i == 0)
+                    headkey = k;
+                if (lidx == i)
+                    return k;
+                i++;
             }
-            if (randkey == null)
-                randkey = keys.iterator().next();
+            return headkey;
         } finally {
             m_gtlock.unlock();
         }
-        return randkey;
     }
 
     /**
@@ -305,7 +306,9 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         L src = selectRandomTrees(1).get(0);
         K key = getRandomKey(src);
         V val = src.get(key);
-        inform("T[%d]   get L%d(%s,%s)\n", m_nId, src.oid, key.toString(), val == null ? "null":val.toString());
+        inform("T[%d]   get L%d(%s,%s)\n", m_nId, src.oid,
+                key == null ? "null" : key.toString(),
+                val == null ? "null":val.toString());
         return newGet(src, key, val);
     }
 
@@ -331,7 +334,9 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         L src = selectRandomTrees(1).get(0);
         K key = getRandomKey(src);
         V val = src.remove(key);
-        inform("T[%d]   del L%d(%s,%s)\n", m_nId, src.oid, key.toString(), val == null ? "null" : val.toString());
+        inform("T[%d]   del L%d(%s,%s)\n", m_nId, src.oid,
+                key == null ? "null" : key.toString(),
+                val == null ? "null" : val.toString());
         return newRemove(src, key, val);
     }
 
@@ -348,11 +353,10 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
         L dst = lists.get(1);
         K key = getRandomKey(src);
         V val = src.get(key);
-        if(val != null) {
+        if(val != null && key != null) {
             src.remove(key);
             dst.put(key, val);
             inform("[T%d]   mov L%d[%s,%s]->L%d\n", m_nId, src.oid, key.toString(), val.toString(), dst.oid);
-            return newMove(src, dst, key, val);
         }
         return newMove(src, dst, key, val);
     }
@@ -490,7 +494,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
                 case get:
                     break;
                 case move:
-                    if(success) {
+                    if(success && key != null && val != null) {
                         assert(m_rm.containsKey(src));
                         assert(m_rm.containsKey(dst));
                         HashSet<K> srcKeys = m_rm.get(src);
@@ -514,7 +518,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
                     }
                     break;
                 case rem:
-                    if(success) {
+                    if(success && key != null) {
                         assert(m_rm.containsKey(src));
                         assert(!m_orphans.containsKey(key));
                         assert(m_membership.containsKey(key));
