@@ -150,6 +150,7 @@ class HopAdapterStreamImpl implements Stream
     @Override
     public ITimestamp append(Serializable s, Set<Long> streams)
     {
+        dbglog.debug("appending to streams " + streams + " from stream " + streamid);
         if(streams.size()==1)
         {
             try
@@ -213,7 +214,7 @@ class HopAdapterStreamImpl implements Stream
     {
         dbglog.debug("readNext {}", stoppos);
         CorfuDBStreamEntry cde = hopstream.peek();
-        dbglog.debug("peeked");
+        dbglog.debug("peeked " + ((cde==null)?null:cde.getTimestamp()));
         if(cde==null) return null;
         if(cde.getTimestamp().compareTo(stoppos)<0)
         {
@@ -226,7 +227,9 @@ class HopAdapterStreamImpl implements Stream
     @Override
     public ITimestamp checkTail()
     {
-        return hopstream.check();
+        ITimestamp curtail = hopstream.check();
+        dbglog.debug("curtail = {}", curtail);
+        return curtail;
     }
 
     @Override

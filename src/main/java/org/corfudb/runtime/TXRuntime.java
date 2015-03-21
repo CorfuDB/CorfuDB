@@ -123,12 +123,12 @@ public class TXRuntime extends BaseRuntime
 
 
         //append the intention
-        SMREngine smre = getEngine();
+        SMREngine smre = getEngine(curtx.get().get_allstreams().keySet().iterator().next());
         if(smre==null) throw new RuntimeException("no engine found for appending tx!");
         //todo: remove the egregious copy
 //        txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_updatestreams().keySet()));
         txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_allstreams().keySet()));
-        dbglog.debug("appended endtx at position {}; now syncing...", txpos);
+        dbglog.debug("appended endtx to streams " + curtx.get().get_allstreams().keySet() + " at position {}; now syncing...", txpos);
 
 
         //now that we appended the intention, we need to play the stream until the append point
@@ -538,7 +538,8 @@ class TXEngine implements SMRLearner
         }
         TxDec decrec = new TxDec(timestamp, curstream, !partialabort, T.getTxid());
         //todo: remove this egregious copy
-        smre.propose(decrec, new HashSet<Long>(T.get_allstreams().keySet()));
+        ITimestamp decT = smre.propose(decrec, new HashSet<Long>(T.get_allstreams().keySet()));
+        dbglog.debug("appending decision at " + decT + " for txint " + decrec.txid + " at " + decrec.txint_timestamp);
 
         //if stream appends are reliable, we can commit blind writes at this point
 
@@ -569,7 +570,7 @@ class TXEngine implements SMRLearner
 
         TxDec decrec = (TxDec)command;
 
-        dbglog.debug("[" + cob.getID() + "] process_tx_dec " + curstream + "." + timestamp + " for txint at " + curstream + "." + decrec.txint_timestamp);
+        dbglog.debug("[" + cob.getID() + "] process_tx_dec " + curstream + "." + timestamp + " for txint " + decrec.txid + " at " + curstream + "." + decrec.txint_timestamp);
 
 
         TxInt T = getPending(decrec.txid);

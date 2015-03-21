@@ -37,7 +37,9 @@ public class DirectoryService
     public DirectoryService(AbstractRuntime tTR)
     {
         TR = tTR;
+        System.out.println("Object ID for Object-to-Name Map = " + DS_RESERVED_MAP_ID);
         names = new CorfuDBMap(TR, DS_RESERVED_MAP_ID);
+        System.out.println("Object ID for Object-to-Name Counter = " + DS_RESERVED_CTR_ID);
         idctr = new CorfuDBCounter(TR, DS_RESERVED_CTR_ID);
 
     }
