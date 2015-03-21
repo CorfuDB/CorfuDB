@@ -90,7 +90,8 @@ enum Panels {
     MAIN,
     LOGINFO,
     REMOTELOG,
-    STREAMINFO
+    STREAMINFO,
+    STREAMINSPECTOR
 };
 
 function switchPanel(newPanel: Panels)
@@ -157,6 +158,9 @@ function updateLogDetail(pos: number) : Promise<any>
     });
 }
 
+function streaminspector(sid: String) : Promise<any> {
+    return null;
+};
 $("#remotes").on('click', function() {
     $("#remotelogtable").empty();
     rpc("getalllogs", {}).then(function(data) {
@@ -185,6 +189,16 @@ $("#loginfopage").on('click', function(e) {
     e.preventDefault();
     updateLogDetail(parseInt($("#loginfopos").val()));
 });
+
+$("#streamsinpector").on('click', function(e) {
+    switchPanel(Panels.STREAMINSPECTOR);
+});
+
+$("#getstreaminfo").on('click', function (e) {
+e.preventDefault();
+streaminspector($("#streaminspectorid").val());
+});
+
 }
 
 function initialize() : Promise<any> {
