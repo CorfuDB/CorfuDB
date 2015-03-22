@@ -234,7 +234,7 @@ public class Stream implements AutoCloseable, IStream {
     private CompletableFuture<ReadResult> dispatchDetailRead(long logPos)
     {
         return CompletableFuture.supplyAsync(() -> {
-            //log.debug("dispatch " + streamID.toString() + " " + logPos);
+          //  log.info("dispatch " + streamID.toString() + " " + logPos);
             ReadResult r = new ReadResult(logPos);
             try {
                 byte[] data = woas.read(logPos);
@@ -339,7 +339,7 @@ public class Stream implements AutoCloseable, IStream {
         }
         else
         {
-            log.warn("Ignored log entry from wrong epoch (expected {}, got {})", getCurrentEpoch(), cdbse.getTimestamp().getEpoch(streamID));
+            log.warn("Ignored log entry from wrong epoch (expected {}, got {}, pos {}, stream {})", getCurrentEpoch(), cdbse.getTimestamp().getEpoch(streamID), physicalPos, streamID);
         }
 
         return prr;
@@ -363,7 +363,17 @@ public class Stream implements AutoCloseable, IStream {
                     long highWatermark = toDispatch;
                     for (ReadResult r : results)
                     {
-                        if (r.resultType == ReadResultType.SUCCESS)
+                        if (r.resultType == ReadResultType.UNWRITTEN)
+                        {
+                            //got to an unwritten entry - we need to
+                            //1 - stop playback of the current stream until the entry is filled
+                            //2 - decide whether or not to fill a hole here, if there are valid entries ahead.
+                            //for now, we just stop playback, re-read, and hope for the best.
+                            dispatchedReads.set(highWatermark);
+                            getStreamTailAndDispatch(1);
+                            return;
+                        }
+                        else if (r.resultType == ReadResultType.SUCCESS)
                         {
                             if (closed) { return; }
                             highWatermark = r.pos + 1;
@@ -585,6 +595,7 @@ public class Stream implements AutoCloseable, IStream {
             synchronized(streamQ){
                 streamQ.notifyAll();
             }
+            //log.info("Read next {}", entry.getTimestamp());
             return entry;
         }
     }
