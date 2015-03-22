@@ -273,7 +273,7 @@ public class CorfuDBClient implements AutoCloseable {
                             catch (IOException ie)
                             {
                                 log.warn("Error retrieving view: " + ie.getMessage());
-                                currentView.invalidate();
+                                if (currentView != null) {currentView.invalidate();}
                             }
                             finally {
                                 viewLock.unlock(stamp);
