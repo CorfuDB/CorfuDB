@@ -234,7 +234,7 @@ public class Stream implements AutoCloseable, IStream {
     private CompletableFuture<ReadResult> dispatchDetailRead(long logPos)
     {
         return CompletableFuture.supplyAsync(() -> {
-          //  log.info("dispatch " + streamID.toString() + " " + logPos);
+          // log.info("dispatch " + streamID.toString() + " " + logPos);
             ReadResult r = new ReadResult(logPos);
             try {
                 byte[] data = woas.read(logPos);
@@ -393,8 +393,9 @@ public class Stream implements AutoCloseable, IStream {
                                     {
                                         // This move is just an allocation boundary change. The epoch doesn't change,
                                         // just the read pointer.
-                                        if (cdbsme.destinationLog.equals(logID) && cdbsme.getTimestamp().getEpoch(streamID) == -1 && cdbsme.destinationStream == null)
+                                        if (cdbsme.getTimestamp().getEpoch(streamID) == -1 && cdbsme.destinationStream == null)
                                         {
+                                            log.debug("allocation boundary, moving from {} to {} on stream {}", r.pos, cdbsme.destinationPos, streamID);
                                             //flush what we've read (unless the stream starts at the next allocation,)
                                             //it's all bound to be invalid...
                                             dispatchedReads.set(cdbsme.destinationPos);
