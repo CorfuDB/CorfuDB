@@ -16,6 +16,8 @@ package org.corfudb.runtime;
 
 import edu.umd.cs.findbugs.annotations.NoWarning;
 import org.corfudb.client.ITimestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicLong;
@@ -29,6 +31,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
 {
+
+    static Logger dbglog = LoggerFactory.getLogger(CorfuDBObject.class);
+
     public static final long oidnull = -1;
 
     //object ID -- corresponds to stream ID used underneath
@@ -56,6 +61,7 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
     {
         if(timestamp.equals(ITimestamp.getInvalidTimestamp()))
             throw new RuntimeException("cannot set to invalid timestamp!");
+        dbglog.debug("setting " + this.getID() + " ts to " + newts);
         timestamp = newts;
     }
 

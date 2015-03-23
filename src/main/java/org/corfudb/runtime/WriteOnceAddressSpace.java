@@ -19,6 +19,9 @@ import org.corfudb.client.UnwrittenException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 
 /**
  * This is the write-once address space providing storage for the shared log.
@@ -52,6 +55,22 @@ public interface WriteOnceAddressSpace
     int getID();
 }
 
+class CacheMap<K,V> extends LinkedHashMap<K,V>
+{
+    int numentries;
+    public CacheMap(int tnumentries)
+    {
+        super();
+        numentries = tnumentries;
+    }
+    protected boolean removeEldestEntry(Map.Entry<K, V> eldest)
+    {
+        if(size()>numentries)
+            return true;
+        return false;
+    }
+}
+
 /**
  * Implements the write-once address space over the default Corfu shared log implementation.
  */
@@ -60,6 +79,10 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
     Logger dbglog = LoggerFactory.getLogger(CorfuLogAddressSpace.class);
 
     int ID;
+
+    final boolean caching = true;
+    final int cachesize = 10000;
+    CacheMap<Long, byte[]> cache = new CacheMap(cachesize);
 
     CorfuDBClient cl;
     org.corfudb.client.view.WriteOnceAddressSpace cwoas;
@@ -83,9 +106,18 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
         }
     }
 
+
+
+
     public BufferStack read(long pos)
     {
         dbglog.debug("Reading {}", pos);
+        if(caching)
+            synchronized(cache)
+            {
+                if(cache.containsKey(pos))
+                    return new BufferStack(cache.get(pos));
+            }
         byte[] ret = null;
         int retrycounter = 0;
         final int retrymax = 12;
@@ -131,6 +163,11 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
 
         }
         dbglog.debug("Done Reading {}", pos);
+        if(caching)
+            synchronized(cache)
+            {
+                cache.put(pos, ret);
+            }
         return new BufferStack(ret);
 
     }
