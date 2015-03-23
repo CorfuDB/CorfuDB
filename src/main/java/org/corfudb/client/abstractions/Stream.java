@@ -101,6 +101,7 @@ public class Stream implements AutoCloseable, IStream {
     ConcurrentHashMap<UUID, Long> epochMap;
 
     Timestamp latest = null;
+    Timestamp latestPrimary = null;
 
     boolean closed = false;
     boolean killExecutor = false;
@@ -108,6 +109,8 @@ public class Stream implements AutoCloseable, IStream {
     CompletableFuture<Void> currentDispatch;
     AtomicLong streamPointer;
     int queueMax;
+
+    Long logpos;
 
     BlockingDeque<UUID> streamIDstack;
 
@@ -275,14 +278,15 @@ public class Stream implements AutoCloseable, IStream {
         MOVECOMPLETE
     }
 
-    private PayloadReadResult loadPayloadIntoQueue(CorfuDBStreamEntry cdbse, long physicalPos)
+    private PayloadReadResult loadPayloadIntoQueue(CorfuDBStreamEntry cdbse, long physicalPos, long logpos)
     {
         PayloadReadResult prr = PayloadReadResult.INVALID;
         if (cdbse.checkEpoch(epochMap))
         {
-            cdbse.getTimestamp().setTransientInfo(logID, streamID, streamPointer.getAndIncrement(), physicalPos);
+            cdbse.getTimestamp().setTransientInfo(logID, streamID, logpos, physicalPos);
             cdbse.restoreOriginalPhysical();
             cdbse.getTimestamp().setContainingStream(streamIDstack.peekLast());
+
             if (cdbse instanceof BundleEntry)
             {
                 //a bundle entry actually represents an entry in the remote log (physically).
@@ -291,7 +295,8 @@ public class Stream implements AutoCloseable, IStream {
             }
             synchronized (streamPointer) {
                 latest = cdbse.getTimestamp();
-                if (latest.epochMap == null)
+                //log.info("set latest = {}", cdbse.getTimestamp());
+                if (latest == null || latest.epochMap == null)
                 {
                     log.warn("uh, null epoch map? at {} ", physicalPos);
                 }
@@ -377,12 +382,22 @@ public class Stream implements AutoCloseable, IStream {
                         {
                             if (closed) { return; }
                             highWatermark = r.pos + 1;
+
+                            long logpos = streamPointer.getAndIncrement();
                             try {
                                 Object payload = r.payload.deserializePayload();
+                                if (returnStack.size() == 0 && payload instanceof CorfuDBStreamEntry)
+                                {
+                                    CorfuDBStreamEntry cdbse= ((CorfuDBStreamEntry) payload);
+                                    cdbse.getTimestamp().setTransientInfo(logID, streamID, logpos, r.pos);
+                                    cdbse.restoreOriginalPhysical();
+                                    cdbse.getTimestamp().setContainingStream(streamIDstack.peekLast());
+                                    latestPrimary = cdbse.getTimestamp();
+                                }
                                 if (payload instanceof BundleEntry)
                                 {
                                     BundleEntry be = (BundleEntry) payload;
-                                    PayloadReadResult prr = loadPayloadIntoQueue(be, r.pos);
+                                    PayloadReadResult prr = loadPayloadIntoQueue(be, r.pos, logpos);
                                     if (prr == PayloadReadResult.VALID) { numReadable++; }
                                     else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
                                 }
@@ -433,7 +448,6 @@ public class Stream implements AutoCloseable, IStream {
                                                 epochMap.put(cdbsme.destinationStream, cdbsme.destinationEpoch);
                                             }
                                             long newEpoch = getCurrentEpoch();
-                                            long logpos = streamPointer.getAndIncrement();
                                             if (cdbsme.duration == -1)
                                             {
                                                 getConfigMaster.get().sendGossip(new StreamEpochGossipEntry(streamID, cdbsme.destinationLog, newEpoch, logpos));
@@ -460,7 +474,7 @@ public class Stream implements AutoCloseable, IStream {
                                     CorfuDBStreamStartEntry cdsse = (CorfuDBStreamStartEntry) payload;
                                     if (cdsse.payload != null)
                                     {
-                                        PayloadReadResult prr = loadPayloadIntoQueue(cdsse, r.pos);
+                                        PayloadReadResult prr = loadPayloadIntoQueue(cdsse, r.pos, logpos);
                                         if (prr == PayloadReadResult.VALID) { numReadable++; }
                                         else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
                                     }
@@ -468,7 +482,7 @@ public class Stream implements AutoCloseable, IStream {
                                 else if (payload instanceof CorfuDBStreamEntry)
                                 {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
-                                    PayloadReadResult prr = loadPayloadIntoQueue(cdbse, r.pos);
+                                    PayloadReadResult prr = loadPayloadIntoQueue(cdbse, r.pos, logpos);
                                     if (prr == PayloadReadResult.VALID) { numReadable++; }
                                     else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
                                 }
@@ -650,6 +664,23 @@ public class Stream implements AutoCloseable, IStream {
      */
     public Timestamp check(boolean cached)
     {
+        if (cached) { return latest; }
+        else { return check(); }
+    }
+
+    /**
+     * Returns a fresh or cached timestamp, which can serve as a linearization point. This function
+     * may return a non-linearizable (invalid) timestamp which may never occur in the ordering
+     * due to a move/epoch change.
+     *
+     * @param       cached      Whether or not the timestamp returned is cached.
+     * @param       primary     Whether or not to return timestamps only on the primary stream.
+     * @return                  A timestamp, which reflects the most recently allocated timestamp in the stream,
+     *                          or currently read, depending on whether cached is set or not.
+     */
+    public Timestamp check(boolean cached, boolean primary)
+    {
+        if (cached && primary) { return latestPrimary; }
         if (cached) { return latest; }
         else { return check(); }
     }

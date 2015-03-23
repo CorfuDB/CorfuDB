@@ -21,6 +21,8 @@ import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.*;
 import org.corfudb.client.ITimestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -33,6 +35,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHandler
 {
+
+    static Logger dbglog = LoggerFactory.getLogger(BaseRuntime.class);
+
     //underlying SMREngines
     Map<Long, SMREngine> enginemap;
 
@@ -193,7 +198,11 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
         //that sets the timestamp
         //only the apply thread sets the timestamp, so we only have to worry about concurrent reads
         if(!(timestamp.equals(ITimestamp.getInvalidTimestamp())))
+        {
+            dbglog.debug("setting timestamp of object " + cob.getID() + " to " + timestamp);
             cob.setTimestamp(timestamp);
+        }
+        dbglog.debug("setting command timestamp to " + cob.getTimestamp());
         command.setTimestamp(cob.getTimestamp());
     }
 

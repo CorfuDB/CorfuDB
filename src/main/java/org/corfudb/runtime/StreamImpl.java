@@ -17,6 +17,7 @@ package org.corfudb.runtime;
 import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.ITimestamp;
 import org.corfudb.client.OutOfSpaceException;
+import org.corfudb.client.abstractions.Bundle;
 import org.corfudb.client.entries.CorfuDBStreamEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -176,7 +177,9 @@ class HopAdapterStreamImpl implements Stream
             }
             try
             {
-                ITimestamp T = hopstream.pullStream(streamuuids, s, 1);
+                Bundle B = new Bundle(hopstream, streamuuids, s, false);
+                ITimestamp T = B.apply();
+                //ITimestamp T = hopstream.pullStream(streamuuids, s, 1);
                 return T;
             }
             catch (IOException e)
@@ -214,9 +217,21 @@ class HopAdapterStreamImpl implements Stream
     {
         dbglog.debug("readNext {}", stoppos);
         CorfuDBStreamEntry cde = hopstream.peek();
+
         dbglog.debug("peeked " + ((cde==null)?null:cde.getTimestamp()));
-        if(cde==null) return null;
-        if(cde.getTimestamp().compareTo(stoppos)<0)
+        if(cde==null)
+        {
+            ITimestamp local = hopstream.check(true,true);
+            if (local != null) {
+            dbglog.debug("local ts = {} ", local);
+            if (local.compareTo(stoppos) < 0)
+            {
+                dbglog.debug("calling readNext() on entry not yet read, local {}, stoppos {} compare{}", local, stoppos, local.compareTo(stoppos));
+                return readNext();
+            }}
+            return null;
+        }
+        if(cde.getTimestamp().compareTo(stoppos)<=0)
         {
             dbglog.debug("calling readNext()");
             return readNext();
