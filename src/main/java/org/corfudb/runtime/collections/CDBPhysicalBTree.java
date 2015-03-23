@@ -1267,6 +1267,30 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     }
 
     /**
+     * update the value at the given key
+     * @param key
+     * @param value
+     * @return
+     */
+    public boolean update(K key, V value) {
+        if(key == null)
+            return false;
+        long root = readrootoid();
+        int height = readheight();
+        Entry entry = searchEntry(root, key, height);
+        if(entry != null) {
+            boolean deleted = readdeleted(entry);
+            if(!deleted) {
+                V oval = (V) readvalue(entry);
+                writevalue(entry, value);
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    /**
      * clear the tree
      */
     public void clear() {

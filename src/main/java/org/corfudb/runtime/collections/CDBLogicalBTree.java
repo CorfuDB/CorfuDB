@@ -69,6 +69,7 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
             case TreeOp.CMD_HEIGHT:  cc.setReturnValue(applyHeight()); break;
             case TreeOp.CMD_CLEAR: applyClear(); break;
             case TreeOp.CMD_REMOVE: cc.setReturnValue(applyRemove(cc.key())); break;
+            case TreeOp.CMD_UPDATE: cc.setReturnValue(applyUpdate(cc.key(), cc.value())); break;
         }
     }
 
@@ -147,6 +148,26 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
     }
 
     /**
+     * apply an update command
+     * @param key
+     * @param value
+     */
+    public Boolean applyUpdate(K key, V value) {
+        wlock();
+        try {
+            Entry entry = searchEntry(m_root, key, m_height);
+            if(entry != null && !entry.deleted) {
+                entry.value = value;
+                return true;
+            }
+            return false;
+        } finally {
+            wunlock();
+        }
+    }
+
+
+    /**
      * return the size based on the most recent view
      * @return
      */
@@ -218,6 +239,17 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
     public void put(K key, V value) {
         TreeOp cmd = new TreeOp(TreeOp.CMD_PUT, oid, key, value);
         TR.update_helper(this, cmd, oid);
+    }
+
+    /**
+     * update the value at the given key
+     * @param key
+     * @param value
+     */
+    public boolean update(K key, V value) {
+        TreeOp cmd = new TreeOp(TreeOp.CMD_UPDATE, oid, key, value);
+        TR.update_helper(this, cmd, oid);
+        return true;
     }
 
     /**

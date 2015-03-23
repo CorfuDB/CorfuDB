@@ -31,6 +31,7 @@ import gnu.getopt.Getopt;
 import org.apache.zookeeper.CreateMode;
 import org.corfudb.client.CorfuDBClient;
 import org.corfudb.runtime.collections.*;
+import org.corfudb.tests.BTreeFS;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,6 +86,8 @@ public class CorfuDBTester
         final int LINZK=9;
         final int TXLOGICALBTREE = 10;
         final int TXPHYSICALBTREE = 11;
+        final int BTREEFSLOGICAL = 12;
+        final int BTREEFSPHYSICAL  = 13;
 
         int c;
         int numclients = 2;
@@ -357,6 +360,14 @@ public class CorfuDBTester
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             BTreeTester.<String, String, CDBPhysicalBTree<String, String>>runTest(
                     TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBPhysicalBTree", testCase, verbose);
+        }
+        else if(testnum==BTREEFSLOGICAL) {
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
+            BTreeFS.fstestBasic(TR, sf, "CDBLogicalBTree");
+        }
+        else if(testnum==BTREEFSPHYSICAL) {
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
+            BTreeFS.fstestBasic(TR, sf, "CDBPhysicalBTree");
         }
         else if(testnum==REMOBJTEST)
         {
