@@ -214,9 +214,21 @@ class HopAdapterStreamImpl implements Stream
     {
         dbglog.debug("readNext {}", stoppos);
         CorfuDBStreamEntry cde = hopstream.peek();
+
         dbglog.debug("peeked " + ((cde==null)?null:cde.getTimestamp()));
-        if(cde==null) return null;
-        if(cde.getTimestamp().compareTo(stoppos)<0)
+        if(cde==null)
+        {
+            ITimestamp local = hopstream.check(true,true);
+            if (local != null) {
+            dbglog.debug("local ts = {} ", local);
+            if (local.compareTo(stoppos) < 0)
+            {
+                dbglog.debug("calling readNext() on entry not yet read, local {}, stoppos {} compare{}", local, stoppos, local.compareTo(stoppos));
+                return readNext();
+            }}
+            return null;
+        }
+        if(cde.getTimestamp().compareTo(stoppos)<=0)
         {
             dbglog.debug("calling readNext()");
             return readNext();

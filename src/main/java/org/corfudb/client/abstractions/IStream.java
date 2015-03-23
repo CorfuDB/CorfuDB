@@ -152,7 +152,18 @@ public interface IStream extends AutoCloseable {
     public Timestamp check(boolean cached);
 
     /**
-     * Requests a trim on this stream. This function informs the configuration master that the
+     * Returns a fresh or cached timestamp, which can serve as a linearization point. This function
+     * may return a non-linearizable (invalid) timestamp which may never occur in the ordering
+     * due to a move/epoch change.
+     *
+     * @param       cached      Whether or not the timestamp returned is cached.
+     * @param       primary     Whether or not to return timestamps only on the primary stream.
+     * @return                  A timestamp, which reflects the most recently allocated timestamp in the stream,
+     *                          or currently read, depending on whether cached is set or not.
+     */
+    public Timestamp check(boolean cached, boolean primary);
+
+    /* Requests a trim on this stream. This function informs the configuration master that the
      * position on this stream is trimmable, and moves the start position of this stream to the
      * new position.
      */

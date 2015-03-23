@@ -57,9 +57,11 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
 
         public StreamData(UUID streamID) {
             this.streamID = streamID;
+            this.lastPos = new AtomicLong();
         }
 
         AtomicLong internalPos = null;
+        AtomicLong lastPos = null;
         Long max = 0L;
         UUID streamID;
         int allocation = 10;
@@ -116,6 +118,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
         StreamSequence getToken(int range)
         {
             StreamSequence s = new StreamSequence();
+            if (range == 0) {s.position = lastPos.get(); return s;}
             if (internalPos == null) { allocate(); }
             s.position = internalPos.getAndAdd(range);
             s.totalTokens = Math.min(range, (int)(max-s.position));
@@ -123,6 +126,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
             {
                 return reallocate(s, range);
             }
+            lastPos.set(s.position + (range -1));
             return s;
         }
     }

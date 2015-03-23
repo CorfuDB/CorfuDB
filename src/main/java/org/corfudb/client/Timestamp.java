@@ -41,6 +41,8 @@ public class Timestamp implements ITimestamp, Serializable {
     public Long physicalPos;
     public UUID logID;
 
+    public Long copyAddress;
+
     public UUID containingStream;
     public Map<UUID, Long> epochMap;
     public boolean isAttachedTS = false;
@@ -71,6 +73,11 @@ public class Timestamp implements ITimestamp, Serializable {
         this.pos = pos;
         this.physicalPos = physicalPos;
         this.primaryStream = primaryStream;
+    }
+
+    public void setCopyAddress(Long copyAddress)
+    {
+        this.copyAddress = copyAddress;
     }
 
     public void setContainingStream(UUID containingStream)
@@ -126,9 +133,14 @@ public class Timestamp implements ITimestamp, Serializable {
             if (epochMap.containsKey(id))
             {
                 isContained = true;
-                if (!this.epochMap.get(id).equals(epochMap.get(id)))
+                long ourEpoch = this.epochMap.get(id);
+                long theirEpoch = epochMap.get(id);
+                if ((ourEpoch != -1) && (theirEpoch != -1))
                 {
-                    return false;
+                    if (ourEpoch != theirEpoch)
+                    {
+                        return false;
+                    }
                 }
             }
         }
@@ -181,6 +193,7 @@ public class Timestamp implements ITimestamp, Serializable {
             // We can't really say anything.
             else if (primaryStream != null && primaryStream.equals(t.primaryStream) && containingStream != null && !containingStream.equals(t.containingStream))
             {
+               // log.info("You're comparing a timestamp from a different containing stream! {} {}", containingStream, t.containingStream);
                 return -1;
             }
             else if (physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap) )
