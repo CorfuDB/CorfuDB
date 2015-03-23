@@ -284,8 +284,8 @@ public class Stream implements AutoCloseable, IStream {
         if (cdbse.checkEpoch(epochMap))
         {
             cdbse.getTimestamp().setTransientInfo(logID, streamID, logpos, physicalPos);
-            cdbse.restoreOriginalPhysical();
             cdbse.getTimestamp().setContainingStream(streamIDstack.peekLast());
+            cdbse.restoreOriginalPhysical(streamIDstack.peekLast());
 
             if (cdbse instanceof BundleEntry)
             {
@@ -390,8 +390,8 @@ public class Stream implements AutoCloseable, IStream {
                                 {
                                     CorfuDBStreamEntry cdbse= ((CorfuDBStreamEntry) payload);
                                     cdbse.getTimestamp().setTransientInfo(logID, streamID, logpos, r.pos);
-                                    cdbse.restoreOriginalPhysical();
                                     cdbse.getTimestamp().setContainingStream(streamIDstack.peekLast());
+                                    cdbse.restoreOriginalPhysical(streamIDstack.peekLast());
                                     latestPrimary = cdbse.getTimestamp();
                                 }
                                 if (payload instanceof BundleEntry)

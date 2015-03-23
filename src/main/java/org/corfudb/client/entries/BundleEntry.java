@@ -84,6 +84,7 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry 
         this.originalAddress = destinationPos;
         this.isCopy = true;
         this.physicalPos = physicalPos;
+        this.originalStream = destinationStream;
         this.epochMap = new HashMap<UUID, Long>(epochMap);
         this.numSlots = numSlots;
     }
