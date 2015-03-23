@@ -93,6 +93,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
                     CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos, -1, -1);
                     log.debug("Writing move entry from " + oldPos + " to " + newPos + " for stream " + streamID);
                     woas.write(oldPos, cdsme);
+                    log.debug("Finished writing move entry.");
                 } catch (Exception ie)
                 {
                     log.warn("Error placing move entry: ", ie);
