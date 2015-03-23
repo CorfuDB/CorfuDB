@@ -88,6 +88,7 @@ public class CorfuDBTester
         final int TXPHYSICALBTREE = 11;
         final int BTREEFSLOGICAL = 12;
         final int BTREEFSPHYSICAL  = 13;
+        final int BTREEFSSYNTH = 14;
 
         int c;
         int numclients = 2;
@@ -364,6 +365,10 @@ public class CorfuDBTester
         else if(testnum==BTREEFSLOGICAL) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             BTreeFS.fstestBasic(TR, sf, "CDBLogicalBTree");
+        }
+        else if(testnum==BTREEFSSYNTH) {
+            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
+            BTreeFS.fstestSynthetic(TR, sf, "CDBLogicalBTree");
         }
         else if(testnum==BTREEFSPHYSICAL) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);

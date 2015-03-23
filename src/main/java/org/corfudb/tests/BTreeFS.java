@@ -114,7 +114,7 @@ public class BTreeFS {
                 int nNewAllocChildren = nAllocChildren + VINCREMENT;
                 String[] newChildren = new String[nNewAllocChildren];
                 System.arraycopy(children, 0, newChildren, 0, nChildren);
-                nAllocChildren = nChildren;
+                nAllocChildren = nNewAllocChildren;
                 children = newChildren;
             }
             children[nChildren++] = child;
@@ -239,16 +239,17 @@ public class BTreeFS {
             if (nChildren <= 0)
                 throw new RuntimeException("Invalid operation on empty directory!!");
             ArrayList<String> survivors = new ArrayList<String>();
-            int i = 0;
             boolean found = false;
-            for (String s : children) {
+            int j=0;
+            for (int i=0; i<nChildren; i++) {
+                String s = children[i];
                 if (s.compareTo(child) == 0) {
                     found = true;
                 } else {
-                    children[i++] = s;
+                    children[j++] = s;
                 }
             }
-            nChildren = i;
+            nChildren = j;
             return found;
         }
 
@@ -391,7 +392,7 @@ public class BTreeFS {
         Integer i = m_refcnt.get(key);
         Integer newCount = i == null ? new Integer(0) : i;
         m_refcnt.put(key, newCount);
-        return i;
+        return newCount;
     }
 
     /**
@@ -438,6 +439,62 @@ public class BTreeFS {
         return result;
     }
 
+    /**
+     * randomly choose an FSEntry from somewhere in the tree
+     * @param rnd
+     * @param type
+     * @return
+     */
+    public FSEntry
+    randomSelect(Random rnd, etype type) {
+        ArrayList<FSEntry> children = new ArrayList<FSEntry>();
+        FSEntry result = randomSelect(rnd, get("root"), type, children);
+        if(result == null && children.size() > 0) {
+            int idx = (int) Math.floor(rnd.nextDouble()*children.size());
+            return children.get(idx);
+        }
+        return result;
+    }
+
+
+    /**
+     * randomly choose an FSEntry from somewhere in the tree
+     * @param rnd
+     * @param parent
+     * @param type
+     * @return
+     */
+    protected FSEntry
+    randomSelect(
+            Random rnd,
+            FSEntry parent,
+            etype type,
+            ArrayList<FSEntry> candidates
+        ) {
+
+        if (type == etype.dir && parent != null) {
+            if (rnd.nextDouble() < 0.1)
+                return parent;
+        }
+        ArrayList<FSEntry> dirs = new ArrayList<FSEntry>();
+        for (int i = 0; i < parent.nChildren; i++) {
+            String strChild = parent.children[i];
+            FSEntry child = get(parent.path() + "/" + strChild);
+            if (child.type == type) {
+                if (rnd.nextDouble() < 0.1)
+                    return child;
+                candidates.add(child);
+            }
+        }
+        int ndirs = 0;
+        for(FSEntry dir : dirs) {
+            FSEntry candidate = randomSelect(rnd, dir, type, candidates);
+            if (candidate != null)
+                return candidate;
+
+        }
+        return null;
+    }
 
 
     /**
@@ -1026,6 +1083,48 @@ public class BTreeFS {
     }
 
     /**
+     * read dir
+     * @param strPath
+     * @return
+     */
+    public FSEntry[]
+    readdir(String strPath) {
+        FSEntry[] result = null;
+        boolean inTX = false;
+        boolean done = false;
+        while(!done) {
+            try {
+                inTX = BeginTX();
+                FSEntry parent = get(strPath == null ? "root" : strPath);
+                result = readdir(parent);
+                done = EndTX();
+                inTX = false;
+            } catch (Exception e) {
+                inTX = AbortTX(inTX, e);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * read dir
+     * @param parent
+     * @return
+     */
+    public FSEntry[]
+    readdir(FSEntry parent) {
+        FSEntry[] result = null;
+        if(parent != null && parent.type == etype.dir) {
+            result = new FSEntry[parent.nChildren];
+            for(int i=0; i<parent.nChildren; i++) {
+                String childPath = parent.path() +"/"+parent.children[i];
+                result[i] = get(childPath);
+            }
+        }
+        return result;
+    }
+
+    /**
      * print the b-tree (not the file system tree)
      * @return
      */
@@ -1137,6 +1236,47 @@ public class BTreeFS {
                 minIdLength, maxIdLength, maxChildren, dirProbability, height);
         System.out.println("FS-tree:\n"+fs.printBTree());
         System.out.println("FS:\n"+fs.printFS());
+    }
+
+    /**
+     * synthetic fs populate/enumerate/mutate test
+     */
+    public static void
+    fstestSynthetic(
+            AbstractRuntime tTR,
+            StreamFactory tsf,
+            String strBTreeClass
+    ) {
+        double dirProbability = 0.4;
+        int maxChildren = 10;
+        int minIdLength = 1;
+        int maxIdLength = 8;
+        int height = 5;
+        fstestSynthetic(tTR, tsf, strBTreeClass, dirProbability, maxChildren, minIdLength, maxIdLength, height);
+    }
+
+    /**
+     * synthetic fs populate/enumerate/mutate test
+     */
+    public static void
+    fstestSynthetic(
+            AbstractRuntime tTR,
+            StreamFactory tsf,
+            String strBTreeClass,
+            double dirProbability,
+            int maxChildren,
+            int minIdLength,
+            int maxIdLength,
+            int height
+    ) {
+        BTreeFS fs = BTreeFS.createRandomFS(tTR, tsf, strBTreeClass,
+                minIdLength, maxIdLength, maxChildren, dirProbability, height);
+        System.out.println("FS-tree:\n"+fs.printBTree());
+        System.out.println("FS:\n"+fs.printFS());
+        FileSystemDriver driver = new FileSystemDriver(fs, 50, 100);
+        System.out.format("test case:\n%s\n", driver.toString());
+        driver.play();
+        System.out.println("FS after test:\n" + fs.printFS());
     }
 
 }
