@@ -17,6 +17,7 @@ package org.corfudb.client.abstractions;
 
 import org.corfudb.client.view.IWriteOnceAddressSpace;
 import org.corfudb.client.view.CachedWriteOnceAddressSpace;
+import org.corfudb.client.view.ObjectCachedWriteOnceAddressSpace;
 import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.view.Sequencer;
 import org.corfudb.client.configmasters.IConfigMaster;
@@ -183,7 +184,7 @@ public class Stream implements AutoCloseable, IStream {
             return (IConfigMaster) this.getView.get().getConfigMasters().get(0);
         };
         getAddressSpace = (client, logid) -> {
-            return new CachedWriteOnceAddressSpace(client, logid);
+            return new ObjectCachedWriteOnceAddressSpace(client, logid);
         };
         woas = getAddressSpace.apply(cdbc, logID);
         this.prefetch = prefetch;

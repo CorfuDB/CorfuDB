@@ -55,7 +55,7 @@ import java.util.UUID;
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
 
-public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
+public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
     private CorfuDBClient client;
     private UUID logID;
@@ -70,7 +70,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
 	private final Logger log = LoggerFactory.getLogger(CachedWriteOnceAddressSpace.class);
 
-    public CachedWriteOnceAddressSpace(CorfuDBClient client)
+    public ObjectCachedWriteOnceAddressSpace(CorfuDBClient client)
     {
         this.client = client;
         this.getView = () ->  {
@@ -79,7 +79,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         this.logID = getView.get().getUUID();
     }
 
-    public CachedWriteOnceAddressSpace(CorfuDBClient client, UUID logID)
+    public ObjectCachedWriteOnceAddressSpace(CorfuDBClient client, UUID logID)
     {
         this.client = client;
         this.logID = logID;
@@ -95,7 +95,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         };
     }
 
-    public CachedWriteOnceAddressSpace(CorfuDBView view)
+    public ObjectCachedWriteOnceAddressSpace(CorfuDBView view)
     {
         this.view = view;
         this.getView = () -> {
@@ -107,6 +107,16 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
     public void write(long address, Serializable s)
         throws IOException, OverwriteException, TrimmedException
     {
+        /*
+        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
+        {
+            try (ObjectOutput out = new ObjectOutputStream(bs))
+            {
+                out.writeObject(s);
+                write(address, bs.toByteArray());
+            }
+        }
+        */
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {
             try (DeflaterOutputStream dos = new DeflaterOutputStream(bs))
@@ -159,11 +169,11 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         {
             try {
                 byte[] data = null;
-                data = AddressSpaceCache.get(logID, address);
-                if (data != null) {
-                    log.debug("Cache hit @ {}", address);
-                    return data;
-                }
+             //   data = AddressSpaceCache.get(logID, address);
+//                if (data != null) {
+  //                  log.debug("ObjCache hit @ {}", address);
+    //                return data;
+      //          }
 
                 //TODO: handle multiple segments
                 CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
@@ -175,8 +185,8 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 //reads have to come from last unit in chain
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
                 data = wolu.read(mappedAddress);
-                log.debug("cache MISS @ {}", address);
-                AddressSpaceCache.put(logID, address, data);
+            //    log.debug("Objcache MISS @ {}", address);
+             //   AddressSpaceCache.put(logID, address, data);
                 return data;
             }
             catch (NetworkException e)
@@ -190,7 +200,13 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
     public Object readObject(long address)
         throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
     {
+         Object o = AddressSpaceObjectCache.get(logID, address);
+         if (o != null) {
+             log.debug("ObjCache hit @ {}", address);
+             return o; }
          Kryo k = kryos.get();
+        log.debug("ObjCache MISS @ {}", address);
+
          byte[] data = read(address);
          try (ByteArrayInputStream bais = new ByteArrayInputStream(data))
          {
@@ -198,7 +214,9 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
             {
                 try (Input input = new Input(dis, 16384))
                 {
-                    return k.readClassAndObject(input);
+                    o = k.readClassAndObject(input);
+                    AddressSpaceObjectCache.put(logID, address ,o);
+                    return o;
                 }
             }
          }
