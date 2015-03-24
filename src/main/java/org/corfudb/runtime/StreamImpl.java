@@ -27,6 +27,10 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutorService;
 
 class StreamEntryImpl implements StreamEntry
 {
@@ -142,10 +146,34 @@ class HopAdapterStreamImpl implements Stream
     org.corfudb.client.abstractions.IStream hopstream;
     long streamid;
 
+    static class globalThreadFactory implements ForkJoinPool.ForkJoinWorkerThreadFactory
+    {
+        AtomicInteger counter = new AtomicInteger();
+        @Override
+        public ForkJoinWorkerThread newThread(ForkJoinPool pool)
+        {
+            ForkJoinWorkerThread thread = new globalThread(pool);
+            thread.setName("GlobalStreamThread-" + counter.getAndIncrement());
+            return thread;
+        }
+    }
+
+    static class globalThread extends ForkJoinWorkerThread {
+        public globalThread(ForkJoinPool pool) {
+            super(pool);
+        }
+    }
+
+
+    static Thread.UncaughtExceptionHandler globalThreadExceptionHandler = (Thread t, Throwable e) ->  {
+                        dbglog.warn("Global thread " + t.getName() + "terminated due to exception", e); };
+    static ExecutorService globalThreadPool = new ForkJoinPool(32, new globalThreadFactory(), globalThreadExceptionHandler, true);
+
+
     public HopAdapterStreamImpl(CorfuDBClient cdb, long tstreamid)
     {
         streamid = tstreamid;
-        hopstream = new org.corfudb.client.abstractions.Stream(cdb, new UUID(streamid, 0));
+        hopstream = new org.corfudb.client.abstractions.Stream(cdb, new UUID(streamid, 0), 2, 10000, globalThreadPool, true);
     }
 
     @Override
@@ -229,6 +257,11 @@ class HopAdapterStreamImpl implements Stream
                 dbglog.debug("calling readNext() on entry not yet read, local {}, stoppos {} compare{}", local, stoppos, local.compareTo(stoppos));
                 return readNext();
             }}
+            else
+            {
+                //stream not read, all positions are greater.
+                return readNext();
+            }
             return null;
         }
         if(cde.getTimestamp().compareTo(stoppos)<=0)

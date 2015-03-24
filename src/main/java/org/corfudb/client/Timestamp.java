@@ -42,10 +42,12 @@ public class Timestamp implements ITimestamp, Serializable {
     public UUID logID;
 
     public Long copyAddress;
+    public UUID copyStreamID;
 
     public UUID containingStream;
     public Map<UUID, Long> epochMap;
     public boolean isAttachedTS = false;
+    public boolean isHole = false;
     public static final long serialVersionUID = 0l;
 
     public Timestamp(UUID streamID, long epoch, long pos, long physicalPos)
@@ -75,11 +77,16 @@ public class Timestamp implements ITimestamp, Serializable {
         this.primaryStream = primaryStream;
     }
 
-    public void setCopyAddress(Long copyAddress)
+    public void setCopyAddress(Long copyAddress, UUID copyStreamID)
     {
         this.copyAddress = copyAddress;
+        this.copyStreamID = copyStreamID;
     }
 
+    public void setHole(boolean ishole)
+    {
+        isHole = ishole;
+    }
     public void setContainingStream(UUID containingStream)
     {
         this.containingStream = containingStream;
@@ -178,6 +185,7 @@ public class Timestamp implements ITimestamp, Serializable {
         if (timestamp instanceof Timestamp)
         {
             Timestamp t = (Timestamp) timestamp;
+            if (t.isHole) {return -1;}
             // It's the same stream and we have logical addresses.
             if (primaryStream != null && primaryStream.equals(t.primaryStream) && pos != null && t.pos != null)
             {
@@ -189,11 +197,17 @@ public class Timestamp implements ITimestamp, Serializable {
             {
                 return (int) (physicalPos - t.physicalPos);
             }
+            else if (primaryStream != null && primaryStream.equals(t.primaryStream) && copyStreamID != null && (copyStreamID.equals(t.primaryStream) || copyStreamID.equals(t.copyStreamID)))
+            {
+                long ourAddress = copyAddress;
+                long theirAddress = t.physicalPos;
+                return (int) (ourAddress - theirAddress);
+            }
             // It's the same stream but the containing stream is different.
             // We can't really say anything.
             else if (primaryStream != null && primaryStream.equals(t.primaryStream) && containingStream != null && !containingStream.equals(t.containingStream))
             {
-               // log.info("You're comparing a timestamp from a different containing stream! {} {}", containingStream, t.containingStream);
+                log.info("You're comparing a timestamp from a different containing stream! {} {}", containingStream, t.containingStream);
                 return -1;
             }
             else if (physicalPos != null && t.physicalPos != null && checkEpoch(t.epochMap) )

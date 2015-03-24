@@ -54,6 +54,8 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     public long originalAddress;
     /** A transient variable to hold the actual physical position */
     transient long realPhysicalPos;
+    /** If it is a copy, what the original stream was */
+    UUID originalStream;
 
     /** Hidden default constructor */
     private CorfuDBStreamEntry() {}
@@ -158,12 +160,14 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     /**
      * Restore the original address.
      */
-    public void restoreOriginalPhysical()
+    public void restoreOriginalPhysical(UUID primaryStream)
     {
         if (isCopy)
         {
             this.realPhysicalPos = ts.getPhysicalPos();
             ts.setPhysicalPos(originalAddress);
+            ts.setContainingStream(originalStream);
+            ts.setCopyAddress(this.realPhysicalPos, primaryStream);
         }
     }
 

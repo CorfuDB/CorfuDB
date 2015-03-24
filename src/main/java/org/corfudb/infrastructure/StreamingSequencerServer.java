@@ -95,6 +95,8 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
                     CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos, -1, -1);
                     log.debug("Writing move entry from " + oldPos + " to " + newPos + " for stream " + streamID);
                     woas.write(oldPos, cdsme);
+                    lastPos.accumulateAndGet(oldPos, (cur, given) -> { return Math.max(cur,given);} );
+
                     log.debug("Finished writing move entry.");
                 } catch (Exception ie)
                 {
@@ -104,11 +106,13 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
                 max = newPos + allocation - 1;
                 s.position = internalPos.getAndAdd(range);
                 s.totalTokens = Math.min(range, (int)(max-s.position));
+                lastPos.accumulateAndGet(s.position, (cur, given) -> { return Math.max(cur,given);} );
                 log.debug("Reallocation for " + streamID + " new range " + s.position + " - " + max);
             }
             else
             {
                 s.position = internalPos.getAndAdd(range);
+                lastPos.accumulateAndGet(s.position, (cur, given) -> { return Math.max(cur,given);} );
                 s.totalTokens = Math.min(range, (int)(max-s.position));
             }
 
@@ -126,7 +130,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
             {
                 return reallocate(s, range);
             }
-            lastPos.set(s.position + (range -1));
+            lastPos.accumulateAndGet(s.position, (cur, given) -> { return Math.max(cur,given);} );
             return s;
         }
     }
