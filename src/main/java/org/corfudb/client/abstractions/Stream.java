@@ -30,6 +30,7 @@ import org.corfudb.client.entries.CorfuDBStreamStartEntry;
 import org.corfudb.client.entries.BundleEntry;
 import org.corfudb.client.OutOfSpaceException;
 import org.corfudb.client.LinearizationException;
+import org.corfudb.client.OverwriteException;
 
 import java.util.Map;
 import java.util.ArrayList;
@@ -61,6 +62,7 @@ import java.io.Serializable;
 import java.util.stream.Collectors;
 import org.corfudb.client.gossip.StreamEpochGossipEntry;
 import org.corfudb.client.gossip.StreamPullGossip;
+import org.corfudb.client.entries.CorfuDBStreamHoleEntry;
 
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.ConcurrentHashMap;
@@ -366,16 +368,32 @@ public class Stream implements AutoCloseable, IStream {
                 readfutures.thenAcceptAsync( (results) -> {
                     long numReadable = 0;
                     long highWatermark = toDispatch;
+                    int resultsindex = 0;
                     for (ReadResult r : results)
                     {
+                        resultsindex++;
                         if (r.resultType == ReadResultType.UNWRITTEN)
                         {
                             //got to an unwritten entry - we need to
                             //1 - stop playback of the current stream until the entry is filled
                             //2 - decide whether or not to fill a hole here, if there are valid entries ahead.
                             //for now, we just stop playback, re-read, and hope for the best.
+                            if (resultsindex + 1 < results.size())
+                            {
+                                //is the entry ahead of data?
+                                //if so, fill a hole.
+                                if (results.get(resultsindex + 1).resultType.equals(ReadResultType.SUCCESS))
+                                {
+                                    log.warn("Filling detected hole at address {}", r.pos);
+                                    try {
+                                    woas.write(r.pos, new CorfuDBStreamHoleEntry(epochMap));
+                                    }
+                                    catch (OverwriteException oe) { log.warn("Tried to fill a hole but it was written to."); }
+                                    catch (IOException ie) { log.warn("IOException attempting to fill hole", ie); }
+                                }
+                            }
                             dispatchedReads.set(highWatermark);
-                            getStreamTailAndDispatch(1);
+                            getStreamTailAndDispatch(2); //dispatch 2 so we can resolve any holes
                             return;
                         }
                         else if (r.resultType == ReadResultType.SUCCESS)
@@ -479,7 +497,7 @@ public class Stream implements AutoCloseable, IStream {
                                         else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
                                     }
                                 }
-                                else if (payload instanceof CorfuDBStreamEntry)
+                                else if (payload instanceof CorfuDBStreamEntry && !(payload instanceof CorfuDBStreamHoleEntry))
                                 {
                                     CorfuDBStreamEntry cdbse = (CorfuDBStreamEntry) payload;
                                     PayloadReadResult prr = loadPayloadIntoQueue(cdbse, r.pos, logpos);
