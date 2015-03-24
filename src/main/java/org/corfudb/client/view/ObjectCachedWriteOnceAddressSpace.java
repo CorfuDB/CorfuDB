@@ -64,6 +64,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     private ThreadLocal<Kryo> kryos = new ThreadLocal<Kryo>() {
         protected Kryo initialValue() {
             Kryo kryo = new Kryo();
+            SerializerRegistration.registerSerializer(kryo);
             return kryo;
         };
     };
