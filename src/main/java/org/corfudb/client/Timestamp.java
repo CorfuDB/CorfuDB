@@ -47,6 +47,7 @@ public class Timestamp implements ITimestamp, Serializable {
     public UUID containingStream;
     public Map<UUID, Long> epochMap;
     public boolean isAttachedTS = false;
+    public boolean isHole = false;
     public static final long serialVersionUID = 0l;
 
     public Timestamp(UUID streamID, long epoch, long pos, long physicalPos)
@@ -82,6 +83,10 @@ public class Timestamp implements ITimestamp, Serializable {
         this.copyStreamID = copyStreamID;
     }
 
+    public void setHole(boolean ishole)
+    {
+        isHole = ishole;
+    }
     public void setContainingStream(UUID containingStream)
     {
         this.containingStream = containingStream;
@@ -180,6 +185,7 @@ public class Timestamp implements ITimestamp, Serializable {
         if (timestamp instanceof Timestamp)
         {
             Timestamp t = (Timestamp) timestamp;
+            if (t.isHole) {return -1;}
             // It's the same stream and we have logical addresses.
             if (primaryStream != null && primaryStream.equals(t.primaryStream) && pos != null && t.pos != null)
             {

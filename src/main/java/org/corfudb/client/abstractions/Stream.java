@@ -371,7 +371,6 @@ public class Stream implements AutoCloseable, IStream {
                     int resultsindex = 0;
                     for (ReadResult r : results)
                     {
-                        resultsindex++;
                         if (r.resultType == ReadResultType.UNWRITTEN)
                         {
                             //got to an unwritten entry - we need to
@@ -384,12 +383,15 @@ public class Stream implements AutoCloseable, IStream {
                                 //if so, fill a hole.
                                 if (results.get(resultsindex + 1).resultType.equals(ReadResultType.SUCCESS))
                                 {
-                                    log.warn("Filling detected hole at address {}", r.pos);
                                     try {
+                                    //be nice and wait some time before trying to fill
+                                    Thread.sleep(50);
                                     woas.write(r.pos, new CorfuDBStreamHoleEntry(epochMap));
+                                    log.warn("Filled detected hole at address {}", r.pos);
                                     }
-                                    catch (OverwriteException oe) { log.warn("Tried to fill a hole but it was written to."); }
-                                    catch (IOException ie) { log.warn("IOException attempting to fill hole", ie); }
+                                    catch (InterruptedException ie) {}
+                                    catch (OverwriteException oe) { log.debug("Tried to fill a hole at {} but it was written to. {}", r.pos); }
+                                    catch (IOException ie) { log.warn("IOException attempting to fill hole at {}", r.pos, ie); }
                                 }
                             }
                             dispatchedReads.set(highWatermark);
@@ -514,6 +516,7 @@ public class Stream implements AutoCloseable, IStream {
                                 log.error("Exception reading payload", e);
                             }
                         }
+                        resultsindex++;
                     }
                     dispatchedReads.set(highWatermark);
                     //check if the queue is full

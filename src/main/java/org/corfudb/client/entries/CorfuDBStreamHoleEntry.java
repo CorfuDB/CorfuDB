@@ -30,5 +30,6 @@ public class CorfuDBStreamHoleEntry extends CorfuDBStreamEntry
     public CorfuDBStreamHoleEntry(Map<UUID, Long> streamMap)
     {
         super(streamMap);
+        ts.setHole(true);
     }
 }
