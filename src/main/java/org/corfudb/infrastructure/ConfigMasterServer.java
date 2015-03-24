@@ -83,6 +83,7 @@ import org.corfudb.client.StreamData;
 import org.corfudb.client.gossip.StreamPullGossip;
 import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
+import org.corfudb.client.view.CachedWriteOnceAddressSpace;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
@@ -484,16 +485,10 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     {
         long pos = params.getJsonNumber("pos").longValue();
         JsonObjectBuilder output = Json.createObjectBuilder();
-        WriteOnceAddressSpace woas = new WriteOnceAddressSpace(currentView);
+        CachedWriteOnceAddressSpace woas = new CachedWriteOnceAddressSpace(currentView);
         try {
-            byte[] data = woas.read(pos);
             output.add("state", "data");
-            Object obj = null;
-            try (ByteArrayInputStream bis = new ByteArrayInputStream(data))
-            {
-                try (ObjectInputStream ois = new ObjectInputStream(bis))
-                {
-                    obj = ois.readObject();
+            Object obj= woas.readObject(pos);
                     output.add("classname", obj.getClass().getName());
                     JsonObjectBuilder datan = Json.createObjectBuilder();
                     Class<?> current = obj.getClass();
@@ -562,20 +557,6 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         }
                     } while ((current = current.getSuperclass()) != null && current != Object.class);
                     output.add("data", datan);
-                }
-            }
-            catch (IOException ie)
-            {
-                output.add("classname", "unknown");
-                output.add("error", ie.getMessage());
-
-            }
-            catch (ClassNotFoundException cnfe)
-            {
-                output.add("classname", "unknown");
-                output.add("error", cnfe.getMessage());
-            }
-
         }
         catch (TrimmedException te)
         {
@@ -585,6 +566,18 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         {
             output.add("state", "unwritten");
         }
+        catch (IOException ie)
+        {
+            output.add("classname", "unknown");
+            output.add("error", ie.getMessage());
+
+        }
+        catch (ClassNotFoundException cnfe)
+        {
+            output.add("classname", "unknown");
+            output.add("error", cnfe.getMessage());
+        }
+
         return output.build();
     }
 

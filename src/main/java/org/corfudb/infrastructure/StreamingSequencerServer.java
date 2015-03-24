@@ -30,7 +30,8 @@ import org.corfudb.infrastructure.thrift.StreamingSequencerService;
 import org.corfudb.infrastructure.thrift.StreamSequence;
 
 import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.view.WriteOnceAddressSpace;
+import org.corfudb.client.view.IWriteOnceAddressSpace;
+import org.corfudb.client.view.CachedWriteOnceAddressSpace;
 import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
 
 import java.util.UUID;
@@ -51,7 +52,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
     private String configmasterURL = "";
     private Logger log = LoggerFactory.getLogger(StreamingSequencerServer.class);
     private CorfuDBClient c;
-    private WriteOnceAddressSpace woas;
+    private IWriteOnceAddressSpace woas;
     private ExecutorService tp = Executors.newCachedThreadPool();
     class StreamData {
 
@@ -200,7 +201,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
                 st.configmasterURL = (String) config.get("configmaster");
                 st.c = new CorfuDBClient(st.configmasterURL);
                 st.c.startViewManager();
-                st.woas = new WriteOnceAddressSpace(st.c);
+                st.woas = new CachedWriteOnceAddressSpace(st.c);
                 while (true) {
                     st.serverloop();
                 }

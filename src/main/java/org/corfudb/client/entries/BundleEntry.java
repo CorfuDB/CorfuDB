@@ -50,6 +50,7 @@ import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
 
 import org.corfudb.client.view.IWriteOnceAddressSpace;
+import org.corfudb.client.view.CachedWriteOnceAddressSpace;
 
 import java.util.concurrent.CompletableFuture;
 /**
@@ -118,40 +119,7 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry 
     public Timestamp writeSlot(byte[] payload)
     throws OverwriteException, IOException
     {
-        if (physicalPos == -1)
-        {
-            return null;
-        }
-
-        //  Write the payload to the remote (TODO: talk to the configuration master instead)
-        final WriteOnceAddressSpace remote_woas = new WriteOnceAddressSpace(cdbc, destinationLog);
-        final CorfuDBStreamEntry cdbse = new CorfuDBStreamEntry(epochMap, payload);
-        remote_woas.write(physicalPos, cdbse);
-
-        // Read all payloads from
-        // Read the remote payload and write it to the local slots
-        for (int i = 0; i < numSlots; i++)
-        {
-            final int slotNum = i;
-            CompletableFuture<Void> cf = CompletableFuture.runAsync( () -> {
-            while (true)
-            {
-                try {
-                    long posDest = destinationPos + slotNum + 1;
-                    CorfuDBStreamEntry cdbse2 = (CorfuDBStreamEntry)(new CorfuDBEntry(posDest, remote_woas.read(posDest))).deserializePayload();
-                    cdbse2.originalAddress = posDest;
-                    cdbse2.isCopy = true;
-                    woas.write(realPhysicalPos + slotNum + 1, cdbse2);
-                    break;
-                }
-                catch (UnwrittenException ue) {}
-                catch (OverwriteException oe) {break;}
-                catch (ClassNotFoundException cnfe) {break;}
-                catch (IOException e) { break;}
-            }
-            }, s.executor);
-        }
-        return new Timestamp(epochMap, null, physicalPos, s.streamID);
+        return writeSlot((Serializable) payload);
     }
 
     /**
@@ -165,14 +133,40 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry 
     public Timestamp writeSlot(Serializable payloadObject)
     throws OverwriteException, IOException
     {
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
+        if (physicalPos == -1)
         {
-            try (ObjectOutput out = new ObjectOutputStream(bs))
-            {
-                out.writeObject(payloadObject);
-                return (writeSlot(bs.toByteArray()));
-            }
+            return null;
         }
+
+        //  Write the payload to the remote (TODO: talk to the configuration master instead)
+        final IWriteOnceAddressSpace remote_woas = new CachedWriteOnceAddressSpace(cdbc, destinationLog);
+        final CorfuDBStreamEntry cdbse = new CorfuDBStreamEntry(epochMap, payloadObject);
+        remote_woas.write(physicalPos, cdbse);
+
+        // Read all payloads from
+        // Read the remote payload and write it to the local slots
+        for (int i = 0; i < numSlots; i++)
+        {
+            final int slotNum = i;
+            CompletableFuture<Void> cf = CompletableFuture.runAsync( () -> {
+            while (true)
+            {
+                try {
+                    long posDest = destinationPos + slotNum + 1;
+                    CorfuDBStreamEntry cdbse2 = (CorfuDBStreamEntry) remote_woas.readObject(posDest);
+                    cdbse2.originalAddress = posDest;
+                    cdbse2.isCopy = true;
+                    woas.write(realPhysicalPos + slotNum + 1, cdbse2);
+                    break;
+                }
+                catch (UnwrittenException ue) {}
+                catch (OverwriteException oe) {break;}
+                catch (ClassNotFoundException cnfe) {break;}
+                catch (IOException e) { break;}
+            }
+            }, s.executor);
+        }
+        return new Timestamp(epochMap, null, physicalPos, s.streamID);
     }
 
 }

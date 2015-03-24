@@ -33,7 +33,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutput;
 import java.io.IOException;
 
@@ -152,6 +154,20 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
             }
         }
     }
+
+    public Object readObject(long address)
+    throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
+    {
+        byte[] payload = read(address);
+        try (ByteArrayInputStream bis = new ByteArrayInputStream(payload))
+        {
+            try (ObjectInputStream ois = new ObjectInputStream(bis))
+            {
+                return ois.readObject();
+            }
+        }
+    }
+
 }
 
 

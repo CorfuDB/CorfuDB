@@ -35,5 +35,8 @@ public interface IWriteOnceAddressSpace {
 
     public byte[] read(long address)
     throws UnwrittenException, TrimmedException;
+
+    public Object readObject(long address)
+    throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException;
 }
 

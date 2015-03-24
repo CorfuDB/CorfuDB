@@ -235,7 +235,7 @@ public class Stream implements AutoCloseable, IStream {
     class ReadResult {
         public long pos;
         public ReadResultType resultType;
-        public CorfuDBEntry payload;
+        public Object payload;
 
         public ReadResult(long pos){
             this.pos = pos;
@@ -245,15 +245,12 @@ public class Stream implements AutoCloseable, IStream {
     private CompletableFuture<ReadResult> dispatchDetailRead(long logPos)
     {
         return CompletableFuture.supplyAsync(() -> {
-          // log.info("dispatch " + streamID.toString() + " " + logPos);
             ReadResult r = new ReadResult(logPos);
+            r.pos = logPos;
             try {
-                byte[] data = woas.read(logPos);
-                CorfuDBEntry cde = new CorfuDBEntry(logPos, data);
+                r.payload = woas.readObject(logPos);
                 //success
                 r.resultType = ReadResultType.SUCCESS;
-                r.payload = cde;
-
             } catch (UnwrittenException ue)
             {
                 //retry
@@ -264,6 +261,14 @@ public class Stream implements AutoCloseable, IStream {
                 //tell the main code this entry was trimmed
                 r.resultType = ReadResultType.TRIMMED;
             }
+            catch (ClassNotFoundException cnfe)
+            {
+                log.warn("Unable to read object at logpos {}, class not found!", cnfe);
+            } catch (IOException ie)
+            {
+                log.warn("Unable to read object at logpos {}, ioexception", ie);
+            }
+
             return r;
         },executor);
     }
@@ -411,7 +416,7 @@ public class Stream implements AutoCloseable, IStream {
 
                             long logpos = streamPointer.getAndIncrement();
                             try {
-                                Object payload = r.payload.deserializePayload();
+                                Object payload = r.payload;
                                 if (returnStack.size() == 0 && payload instanceof CorfuDBStreamEntry)
                                 {
                                     CorfuDBStreamEntry cdbse= ((CorfuDBStreamEntry) payload);
@@ -515,7 +520,7 @@ public class Stream implements AutoCloseable, IStream {
                             }
                             catch (NullPointerException npe)
                             {
-
+                                log.error("Null pointer exception during playback", npe);
                             }
                             catch (Exception e)
                             {
