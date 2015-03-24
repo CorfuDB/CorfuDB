@@ -63,7 +63,6 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry 
 
     private final Logger log = LoggerFactory.getLogger(BundleEntry.class);
 
-    byte[] payload;
     long physicalPos;
     long numSlots;
     Map<UUID, Long> epochMap;

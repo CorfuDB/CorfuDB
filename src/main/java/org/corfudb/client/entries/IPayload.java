@@ -56,46 +56,4 @@ import com.esotericsoftware.kryo.io.Input;
 public interface IPayload {
     static final Logger log = LoggerFactory.getLogger(IPayload.class);
 
-    /**
-     * Get the payload attached to this entry as a byte array.
-     */
-    byte[] getPayload();
-
-    /**
-     * Set the payload attached to this entry as a byte array.
-     */
-    void setPayload(byte[] payload);
-
-    /**
-     * Get the cached version of the entry, if it exists.
-     */
-    Object getDeserializedPayload();
-
-    /**
-     * Set the cached version of the entry.
-     */
-    void setDeserializedPayload(Object o);
-
-    /**
-     * Return the deserialized version of the payload.
-     *
-     * @return      A deserialized object representing the payload.
-     */
-    default Object deserializePayload()
-        throws IOException, ClassNotFoundException
-    {
-        Object o = getDeserializedPayload();
-        if (o != null) { return getDeserializedPayload(); }
-        o = Serializer.deserialize(getPayload());
-        setDeserializedPayload(o);
-        return o;
-    }
-
-    default void serializePayload (Object o)
-        throws IOException
-    {
-        byte[] payload = Serializer.serialize(o);
-        setPayload(payload);
-    }
-
 }

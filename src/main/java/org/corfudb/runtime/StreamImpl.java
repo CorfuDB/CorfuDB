@@ -117,20 +117,7 @@ class HopAdapterStreamEntryImpl implements StreamEntry
     @Override
     public Object getPayload()
     {
-        try
-        {
-            return cde.deserializePayload();
-        }
-        catch (IOException e)
-        {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-        catch (ClassNotFoundException e)
-        {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
+        return cde.payload;
     }
 
     @Override

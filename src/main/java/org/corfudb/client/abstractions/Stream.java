@@ -701,7 +701,7 @@ public class Stream implements AutoCloseable, IStream {
     public byte[] readNext()
     throws IOException, InterruptedException
     {
-        return readNextEntry().getPayload();
+        return (byte[])readNextEntry().payload;
     }
 
     /**
@@ -713,7 +713,7 @@ public class Stream implements AutoCloseable, IStream {
     public Object readNextObject()
     throws IOException, InterruptedException, ClassNotFoundException
     {
-        return readNextEntry().deserializePayload();
+        return readNextEntry().payload;
     }
 
     /**

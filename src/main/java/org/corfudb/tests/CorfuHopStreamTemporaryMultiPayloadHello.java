@@ -166,7 +166,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
         log.debug("Reading back 4 results from outer stream " + streamID.toString());
         cdse = s.readNextEntry();
         s1_mergedAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Merged stream entry!"))
                 {
@@ -175,7 +175,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s.readNextEntry();
         s1_firstAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from outer stream " + streamID.toString()))
                 {
@@ -184,7 +184,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s.readNextEntry();
         s1_secondAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from inner stream " + streamID2.toString()))
                 {
@@ -193,7 +193,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s.readNextEntry();
         s1_thirdAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from inner stream " + streamID3.toString()))
                 {
@@ -207,7 +207,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
         log.debug("Reading back 4 results from inner stream " + streamID2.toString());
         cdse = s2.readNextEntry();
         s2_mergedAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Merged stream entry!"))
                 {
@@ -216,7 +216,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s2.readNextEntry();
         s2_firstAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from outer stream " + streamID.toString()))
                 {
@@ -225,7 +225,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s2.readNextEntry();
         s2_secondAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from inner stream " + streamID2.toString()))
                 {
@@ -234,7 +234,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s2.readNextEntry();
         s2_thirdAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from inner stream " + streamID3.toString()))
                 {
@@ -246,7 +246,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
         log.debug("Reading back 4 results from inner stream " + streamID3.toString());
         cdse = s3.readNextEntry();
         s3_mergedAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Merged stream entry!"))
                 {
@@ -255,7 +255,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s3.readNextEntry();
         s3_firstAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from outer stream " + streamID.toString()))
                 {
@@ -264,7 +264,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s3.readNextEntry();
         s3_secondAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from inner stream " + streamID2.toString()))
                 {
@@ -273,7 +273,7 @@ public class CorfuHopStreamTemporaryMultiPayloadHello {
                 }
         cdse = s3.readNextEntry();
         s3_thirdAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("hello world remote from inner stream " + streamID3.toString()))
                 {
