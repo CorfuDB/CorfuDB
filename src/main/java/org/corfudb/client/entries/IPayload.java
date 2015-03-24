@@ -58,6 +58,16 @@ public interface IPayload {
     byte[] getPayload();
 
     /**
+     * Get the cached version of the entry, if it exists.
+     */
+    Object getDeserializedPayload();
+
+    /**
+     * Set the cached version of the entry.
+     */
+    void setDeserializedPayload(Object o);
+
+    /**
      * Return the deserialized version of the payload.
      *
      * @return      A deserialized object representing the payload.
@@ -65,11 +75,15 @@ public interface IPayload {
     default Object deserializePayload()
         throws IOException, ClassNotFoundException
     {
+        Object o = getDeserializedPayload();
+        if (o != null) { return getDeserializedPayload(); }
         try (ByteArrayInputStream bis = new ByteArrayInputStream(getPayload()))
         {
             try (ObjectInputStream ois = new ObjectInputStream(bis))
             {
-                return ois.readObject();
+                o = ois.readObject();
+                setDeserializedPayload(o);
+                return o;
             }
         }
     }

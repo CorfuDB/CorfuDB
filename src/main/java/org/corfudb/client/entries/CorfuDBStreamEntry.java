@@ -56,6 +56,17 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     transient long realPhysicalPos;
     /** If it is a copy, what the original stream was */
     UUID originalStream;
+    transient Object deserializedPayload;
+
+    public Object getDeserializedPayload()
+    {
+        return deserializedPayload;
+    }
+
+    public void setDeserializedPayload(Object o)
+    {
+        deserializedPayload = o;
+    }
 
     /** Hidden default constructor */
     private CorfuDBStreamEntry() {}

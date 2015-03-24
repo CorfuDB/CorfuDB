@@ -102,7 +102,8 @@ public class Stream implements AutoCloseable, IStream {
     AtomicLong dispatchedReads;
     AtomicLong logPointer;
     AtomicLong minorEpoch;
-
+    int backoffCounter;
+    static int MAX_BACKOFF = 12;
     ConcurrentHashMap<UUID, Long> epochMap;
 
     Timestamp latest = null;
@@ -186,6 +187,7 @@ public class Stream implements AutoCloseable, IStream {
         getAddressSpace = (client, logid) -> {
             return new ObjectCachedWriteOnceAddressSpace(client, logid);
         };
+        backoffCounter = 0;
         woas = getAddressSpace.apply(cdbc, logID);
         this.prefetch = prefetch;
         this.executor = executor;
@@ -407,11 +409,20 @@ public class Stream implements AutoCloseable, IStream {
                                 }
                             }
                             dispatchedReads.set(highWatermark);
+                            backoffCounter++;
+                            if (backoffCounter > MAX_BACKOFF)
+                            {
+                                backoffCounter = MAX_BACKOFF;
+                            }
+                            try {
+                            Thread.sleep((long)Math.pow(2, backoffCounter));}
+                            catch (InterruptedException ie) {}
                             getStreamTailAndDispatch(2); //dispatch 2 so we can resolve any holes
                             return;
                         }
                         else if (r.resultType == ReadResultType.SUCCESS)
                         {
+                            backoffCounter = 0;
                             if (closed) { return; }
                             highWatermark = r.pos + 1;
 
