@@ -101,20 +101,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
     public void write(long address, Serializable s)
         throws IOException, OverwriteException, TrimmedException
     {
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
-        {
-            try (DeflaterOutputStream dos = new DeflaterOutputStream(bs))
-            {
-                Kryo k = Serializer.kryos.get();
-                Output o = new Output(dos, 16384);
-                k.writeClassAndObject(o, s);
-                o.flush();
-                o.close();
-                dos.flush();
-                dos.finish();
-                write(address, bs.toByteArray());
-            }
-        }
+        write(address, Serializer.serialize_compressed(s));
     }
 
     public void write(long address, byte[] data)
@@ -184,18 +171,8 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
     public Object readObject(long address)
         throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
     {
-         Kryo k = Serializer.kryos.get();
          byte[] data = read(address);
-         try (ByteArrayInputStream bais = new ByteArrayInputStream(data))
-         {
-            try (InflaterInputStream dis = new InflaterInputStream(bais))
-            {
-                try (Input input = new Input(dis, 16384))
-                {
-                    return k.readClassAndObject(input);
-                }
-            }
-         }
+         return Serializer.deserialize_compressed(data);
     }
 }
 

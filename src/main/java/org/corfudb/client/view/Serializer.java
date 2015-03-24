@@ -147,11 +147,10 @@ public class Serializer
                 {
                     k.writeClassAndObject(output, o);
                     output.flush();
-                    dos.flush();
-                    dos.finish();
-                    return baos.toByteArray();
                 }
+                dos.finish();
             }
+            return baos.toByteArray();
         }
     }
 

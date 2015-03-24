@@ -101,16 +101,9 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     public void write(long address, Serializable s)
         throws IOException, OverwriteException, TrimmedException
     {
+        write(address, Serializer.serialize_compressed(s));
+
         /*
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
-        {
-            try (ObjectOutput out = new ObjectOutputStream(bs))
-            {
-                out.writeObject(s);
-                write(address, bs.toByteArray());
-            }
-        }
-        */
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {
             try (DeflaterOutputStream dos = new DeflaterOutputStream(bs))
@@ -124,7 +117,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 dos.finish();
                 write(address, bs.toByteArray());
             }
-        }
+        }*/
     }
 
     public void write(long address, byte[] data)
@@ -198,6 +191,12 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
          if (o != null) {
              log.debug("ObjCache hit @ {}", address);
              return o; }
+
+         byte[] data = read(address);
+         o = Serializer.deserialize_compressed(data);
+        AddressSpaceObjectCache.put(logID, address ,o);
+        return o;
+         /*
          Kryo k = Serializer.kryos.get();
         log.debug("ObjCache MISS @ {}", address);
 
@@ -214,6 +213,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 }
             }
          }
+         */
     }
 }
 
