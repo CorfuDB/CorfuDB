@@ -44,6 +44,10 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.io.Input;
 
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.DeflaterInputStream;
+import java.util.zip.InflaterInputStream;
+
 import java.util.UUID;
 /**
  * This view implements a cached write once address space
@@ -115,12 +119,17 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         */
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {
-            Kryo k = kryos.get();
-            Output o = new Output(bs, 16384);
-            k.writeClassAndObject(o, s);
-            o.flush();
-            o.close();
-            write(address, bs.toByteArray());
+            try (DeflaterOutputStream dos = new DeflaterOutputStream(bs))
+            {
+                Kryo k = kryos.get();
+                Output o = new Output(dos, 16384);
+                k.writeClassAndObject(o, s);
+                o.flush();
+                o.close();
+                dos.flush();
+                dos.finish();
+                write(address, bs.toByteArray());
+            }
         }
     }
 
@@ -195,9 +204,12 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
          byte[] data = read(address);
          try (ByteArrayInputStream bais = new ByteArrayInputStream(data))
          {
-            try (Input input = new Input(bais, 16384))
+            try (InflaterInputStream dis = new InflaterInputStream(bais))
             {
-                return k.readClassAndObject(input);
+                try (Input input = new Input(dis, 16384))
+                {
+                    return k.readClassAndObject(input);
+                }
             }
          }
     }
