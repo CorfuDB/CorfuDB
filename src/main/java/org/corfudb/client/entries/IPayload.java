@@ -86,31 +86,16 @@ public interface IPayload {
     {
         Object o = getDeserializedPayload();
         if (o != null) { return getDeserializedPayload(); }
-        Kryo k = Serializer.kryos.get();
-        try (ByteArrayInputStream bis = new ByteArrayInputStream(getPayload()))
-        {
-            try (Input i = new Input(bis, 16384))
-            {
-                o = k.readClassAndObject(i);
-                setDeserializedPayload(o);
-                return o;
-            }
-        }
+        o = Serializer.deserialize(getPayload());
+        setDeserializedPayload(o);
+        return o;
     }
 
     default void serializePayload (Object o)
         throws IOException
     {
-        Kryo k = Serializer.kryos.get();
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream())
-        {
-            try (Output output = new Output(baos, 16384))
-            {
-                k.writeClassAndObject(output, o);
-                output.flush();
-                setPayload(baos.toByteArray());
-            }
-        }
+        byte[] payload = Serializer.serialize(o);
+        setPayload(payload);
     }
 
 }
