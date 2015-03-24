@@ -33,6 +33,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.Set;
 import java.util.Map;
 
+import org.corfudb.runtime.SMRCommandWrapper;
+import org.corfudb.runtime.TxDec;
+import org.corfudb.runtime.TxInt;
+import org.corfudb.runtime.TxIntWriteSetEntry;
+import org.corfudb.runtime.TxIntReadSetEntry;
+import org.corfudb.client.ITimestamp;
+import java.util.LinkedList;
+
 /** This class provides helpers for serialization.
  */
 public class Serializer
@@ -53,6 +61,13 @@ public class Serializer
         k.register(AtomicLong.class);
         k.register(Set.class);
         k.register(Map.class);
+        k.register(SMRCommandWrapper.class);
+        k.register(ITimestamp.class);
+        k.register(LinkedList.class);
+        k.register(TxDec.class);
+        k.register(TxInt.class);
+        k.register(TxIntWriteSetEntry.class);
+        k.register(TxIntReadSetEntry.class);
     }
 
     /** Get a thread local kryo instance for desrialization */
