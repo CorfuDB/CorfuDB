@@ -31,6 +31,7 @@ import gnu.getopt.Getopt;
 import org.apache.zookeeper.CreateMode;
 import org.corfudb.client.CorfuDBClient;
 import org.corfudb.runtime.collections.*;
+import org.corfudb.client.view.Serializer;
 import org.corfudb.tests.BTreeFS;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -838,6 +839,10 @@ class BufferStack implements Serializable //todo: custom serialization
     }
     public static BufferStack serialize(Serializable obj)
     {
+        try {
+        return new BufferStack(Serializer.serialize_compressed(obj));
+        } catch (Exception e) { throw new RuntimeException(e); }
+        /*
         try
         {
             //todo: custom serialization
@@ -851,10 +856,15 @@ class BufferStack implements Serializable //todo: custom serialization
         catch(IOException e)
         {
             throw new RuntimeException(e);
-        }
+        }*/
     }
     public Object deserialize()
     {
+        try {
+        return Serializer.deserialize_compressed(this.flatten());
+        } catch (Exception e) { throw new RuntimeException(e); }
+
+        /*
         try
         {
             //todo: custom deserialization
@@ -870,7 +880,7 @@ class BufferStack implements Serializable //todo: custom serialization
         catch(ClassNotFoundException ce)
         {
             throw new RuntimeException(ce);
-        }
+        }*/
     }
     //todo: this is a terribly inefficient translation from the buffer
     //representation at the runtime layer to the one used by the logging layer
