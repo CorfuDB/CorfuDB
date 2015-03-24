@@ -49,6 +49,8 @@ import org.corfudb.client.OverwriteException;
 import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
 
+import org.corfudb.client.view.IWriteOnceAddressSpace;
+
 import java.util.concurrent.CompletableFuture;
 /**
  * This class implements a bundle entry, which is encountered inside the move entries of remotely bundled
@@ -65,7 +67,7 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry 
 
     transient Stream s;
     transient CorfuDBClient cdbc;
-    transient WriteOnceAddressSpace woas;
+    transient IWriteOnceAddressSpace woas;
     transient StreamingSequencer ss;
 
     /**
@@ -97,7 +99,7 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry 
      * @param ss            The streaming sequencer for the stream.
      * @param cdbc          The corfudbclient of the stream.
      */
-    public void setTransientInfo(Stream s, WriteOnceAddressSpace woas, StreamingSequencer ss, CorfuDBClient cdbc)
+    public void setTransientInfo(Stream s, IWriteOnceAddressSpace woas, StreamingSequencer ss, CorfuDBClient cdbc)
     {
         this.s = s;
         this.woas = woas;

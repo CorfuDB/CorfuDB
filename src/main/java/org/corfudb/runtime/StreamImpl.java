@@ -145,7 +145,7 @@ class HopAdapterStreamImpl implements Stream
     public HopAdapterStreamImpl(CorfuDBClient cdb, long tstreamid)
     {
         streamid = tstreamid;
-        hopstream = new org.corfudb.client.abstractions.Stream(cdb, new UUID(streamid, 0));
+        hopstream = new org.corfudb.client.abstractions.Stream(cdb, new UUID(streamid, 0), 10, 10000, true);
     }
 
     @Override

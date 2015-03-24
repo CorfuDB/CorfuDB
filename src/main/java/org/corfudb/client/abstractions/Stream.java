@@ -15,9 +15,10 @@
 
 package org.corfudb.client.abstractions;
 
+import org.corfudb.client.view.IWriteOnceAddressSpace;
+import org.corfudb.client.view.CachedWriteOnceAddressSpace;
 import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.view.Sequencer;
-import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.configmasters.IConfigMaster;
 import org.corfudb.client.IServerProtocol;
 
@@ -68,6 +69,7 @@ import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.function.BiFunction;
 
 import java.util.function.Supplier;
 import org.corfudb.client.StreamData;
@@ -91,7 +93,7 @@ public class Stream implements AutoCloseable, IStream {
     UUID logID;
 
     StreamingSequencer sequencer;
-    WriteOnceAddressSpace woas;
+    IWriteOnceAddressSpace woas;
 
     public ExecutorService executor;
     boolean prefetch = true;
@@ -132,6 +134,7 @@ public class Stream implements AutoCloseable, IStream {
     BlockingDeque<ReturnInfo> returnStack;
     Supplier<CorfuDBView> getView;
     Supplier<IConfigMaster> getConfigMaster;
+    BiFunction<CorfuDBClient, UUID, IWriteOnceAddressSpace> getAddressSpace;
 
     public Stream(CorfuDBClient cdbc, UUID uuid) {
         this(cdbc, uuid, 4, 10, Runtime.getRuntime().availableProcessors(), true);
@@ -162,7 +165,6 @@ public class Stream implements AutoCloseable, IStream {
         this.streamID = uuid;
         this.logID = cdbc.getView().getUUID();
         sequencer = new StreamingSequencer(cdbc);
-        woas = new WriteOnceAddressSpace(cdbc);
         streamQ = new LinkedBlockingQueue<CorfuDBStreamEntry>();
         streamIDstack = new LinkedBlockingDeque<UUID>();
         returnStack = new LinkedBlockingDeque<ReturnInfo>();
@@ -180,6 +182,10 @@ public class Stream implements AutoCloseable, IStream {
         getConfigMaster = () -> {
             return (IConfigMaster) this.getView.get().getConfigMasters().get(0);
         };
+        getAddressSpace = (client, logid) -> {
+            return new CachedWriteOnceAddressSpace(client, logid);
+        };
+        woas = getAddressSpace.apply(cdbc, logID);
         this.prefetch = prefetch;
         this.executor = executor;
         this.minorEpoch = new AtomicLong();
@@ -320,7 +326,7 @@ public class Stream implements AutoCloseable, IStream {
                     log.debug("Temporary move completed, returning to log {} at {}", currentReturn.returnLog, currentReturn.physicalPos);
                     if (!currentReturn.returnLog.equals(logID))
                     {
-                        woas = new WriteOnceAddressSpace(cdbc, currentReturn.returnLog);
+                        woas = getAddressSpace.apply(cdbc, currentReturn.returnLog);
                         sequencer = new StreamingSequencer(cdbc, currentReturn.returnLog);
                         logID = currentReturn.returnLog;
                     }
@@ -475,7 +481,7 @@ public class Stream implements AutoCloseable, IStream {
                                             //since this is on a different log, we change the address space and sequencer
                                             if (!cdbsme.destinationLog.equals(logID))
                                             {
-                                                woas = new WriteOnceAddressSpace(cdbc, cdbsme.destinationLog);
+                                                woas = getAddressSpace.apply(cdbc, cdbsme.destinationLog);
                                                 sequencer = new StreamingSequencer(cdbc, cdbsme.destinationLog);
                                             }
                                             dispatchedReads.set(cdbsme.destinationPos);
@@ -597,6 +603,48 @@ public class Stream implements AutoCloseable, IStream {
     }
 
     /**
+     * When the stream is not prefetching, manually requests a dispatch.
+     */
+    public void doDispatch()
+    {
+        if(!prefetch)
+        {
+            synchronized (streamQ)
+            {
+                if (currentDispatch == null || currentDispatch.isDone())
+                {
+                    currentDispatch = getStreamTailAndDispatch(queueMax);
+                }
+                else
+                {
+                }
+            }
+        }
+    }
+
+    /**When the stream is not prefetching, manually requests a dispatch, synchronously.
+     *
+     */
+    public void doDispatchSync()
+    {
+        if(!prefetch)
+        {
+            synchronized (streamQ)
+            {
+                if (currentDispatch == null || currentDispatch.isDone())
+                {
+                    currentDispatch = getStreamTailAndDispatch(queueMax);
+                    currentDispatch.join();
+                }
+                else
+                {
+                    currentDispatch.join();
+                }
+            }
+        }
+    }
+
+    /**
      * Read the next entry in the stream as a CorfuDBStreamEntry. This function
      * retireves the next entry in the stream, blocking if necessary.
      *
@@ -611,16 +659,7 @@ public class Stream implements AutoCloseable, IStream {
             CorfuDBStreamEntry entry = streamQ.poll();
             while (entry == null)
             {
-                synchronized (streamQ)
-                {
-                    if (currentDispatch == null || currentDispatch.isDone())
-                    {
-                        currentDispatch = getStreamTailAndDispatch(queueMax);
-                    }
-                    else
-                    {
-                    }
-                }
+                doDispatch();
                 entry = streamQ.poll(100, TimeUnit.MILLISECONDS);
             }
             return entry;
@@ -863,7 +902,7 @@ public class Stream implements AutoCloseable, IStream {
         StreamingSequencer sremote = new StreamingSequencer(cdbc, destinationLog);
         long remoteToken = sremote.getNext(streamIDstack.peekLast());
         // Write a start in the remote log
-        WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, destinationLog);
+        IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, destinationLog);
         woasremote.write(remoteToken, new CorfuDBStreamStartEntry(streamID, getCurrentEpoch() + 1));
         // Write the move request into the local log
         CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, destinationLog, null, remoteToken, -1, getCurrentEpoch());
@@ -1042,7 +1081,7 @@ public class Stream implements AutoCloseable, IStream {
                 StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
                 long remoteToken = sremote.getNext(id, reservation + 1);
                 // Write a move in the remote log
-                WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
+                IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
                 woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
             }
        }
@@ -1098,7 +1137,7 @@ public class Stream implements AutoCloseable, IStream {
             StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
             long remoteToken = sremote.getNext(id, slots + 1);
             // Write a move in the remote log
-            WriteOnceAddressSpace woasremote = new WriteOnceAddressSpace(cdbc, sd.currentLog);
+            IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
             offset++;
         }
