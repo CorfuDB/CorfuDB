@@ -52,6 +52,8 @@ import org.corfudb.client.TrimmedException;
 import org.corfudb.client.view.IWriteOnceAddressSpace;
 import org.corfudb.client.view.CachedWriteOnceAddressSpace;
 
+import org.corfudb.client.view.Serializer;
+
 import java.util.concurrent.CompletableFuture;
 /**
  * This class implements a bundle entry, which is encountered inside the move entries of remotely bundled
@@ -81,7 +83,8 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements IBundleEntry 
     * @param physicalPos    The physical position of the remote slot, if allocated, or -1, if there is no remote slot.
     */
     public BundleEntry(Map<UUID, Long> epochMap, UUID destinationLog, UUID destinationStream, long destinationPos, long destinationEpoch,
-                        byte[] payload, int numSlots, long physicalPos)
+                        Serializable payload, int numSlots, long physicalPos)
+        throws IOException
     {
         super(epochMap, destinationLog, destinationStream, destinationPos, (int) numSlots+1, destinationEpoch, payload);
         this.originalAddress = destinationPos;

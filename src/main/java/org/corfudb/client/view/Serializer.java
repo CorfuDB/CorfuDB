@@ -9,7 +9,7 @@ import org.corfudb.client.entries.CorfuDBStreamStartEntry;
 import org.corfudb.client.Timestamp;
 
 import java.util.HashMap;
-public class SerializerRegistration
+public class Serializer
 {
     static void registerSerializer(Kryo k)
     {
@@ -21,4 +21,13 @@ public class SerializerRegistration
         k.register(Timestamp.class);
         k.register(HashMap.class);
     }
+
+    public static ThreadLocal<Kryo> kryos = new ThreadLocal<Kryo>() {
+        protected Kryo initialValue() {
+            Kryo kryo = new Kryo();
+            Serializer.registerSerializer(kryo);
+            return kryo;
+        };
+    };
+
 }

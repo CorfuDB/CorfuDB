@@ -68,6 +68,10 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
         deserializedPayload = o;
     }
 
+    public void setPayload(byte[] data)
+    {
+        payload = data;
+    }
     /** Hidden default constructor */
     private CorfuDBStreamEntry() {}
 
@@ -81,15 +85,7 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     public CorfuDBStreamEntry(UUID streamID, Serializable payloadObject, long epoch)
         throws IOException
     {
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
-        {
-            try (ObjectOutput out = new ObjectOutputStream(bs))
-            {
-                out.writeObject(payloadObject);
-                payload = bs.toByteArray();
-            }
-        }
-
+        serializePayload(payloadObject);
         this.ts = new Timestamp(streamID, epoch);
     }
 
@@ -127,14 +123,7 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     public CorfuDBStreamEntry(Map<UUID, Long> epochMap, Serializable payloadObject)
     throws IOException
     {
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
-        {
-            try (ObjectOutput out = new ObjectOutputStream(bs))
-            {
-                out.writeObject(payloadObject);
-                payload = bs.toByteArray();
-            }
-        }
+        serializePayload(payloadObject);
 
         this.ts = new Timestamp(epochMap);
     }

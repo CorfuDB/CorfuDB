@@ -103,7 +103,7 @@ public class Stream implements AutoCloseable, IStream {
     AtomicLong logPointer;
     AtomicLong minorEpoch;
     int backoffCounter;
-    static int MAX_BACKOFF = 12;
+    static int MAX_BACKOFF = 10;
     ConcurrentHashMap<UUID, Long> epochMap;
 
     Timestamp latest = null;
@@ -1109,6 +1109,12 @@ public class Stream implements AutoCloseable, IStream {
         return ts;
     }
 
+    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, byte[] payload, int slots)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
+        return pullStreamAsBundle(targetStreams, (Serializable) payload, slots);
+    }
+
     /**
      * Temporarily pull multiple remote streams into this stream, including a payload in the
      * remote move operation, and optionally reserve extra entries, using a BundleEntry.
@@ -1121,9 +1127,17 @@ public class Stream implements AutoCloseable, IStream {
      *
      * @return                 A timestamp indicating where the attachment begins.
      */
-    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, byte[] payload, int slots)
+    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, Serializable payload, int slots)
     throws RemoteException, OutOfSpaceException, IOException
     {
+        final long token = sequencer.getNext(streamIDstack.peekLast(),  slots + 1);
+        Timestamp ts = new Timestamp(epochMap, null, token, streamID);
+        ts.setPhysicalPos(token);
+        ts.setContainingStream(streamID);
+
+        CompletableFuture<Void> cf = CompletableFuture.runAsync(() -> {
+        try
+        {
         HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
         for (UUID id : targetStreams)
         {
@@ -1143,8 +1157,7 @@ public class Stream implements AutoCloseable, IStream {
             epochMap.put(id, sd.epoch);
         }
         CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams, payload);
-        long token = sequencer.getNext(streamIDstack.peekLast(),  slots + 1);
-        woas.write(token, (Serializable) cdbsme);
+                woas.write(token, (Serializable) cdbsme);
 
         int offset = 1;
         for (UUID id : targetStreams)
@@ -1158,10 +1171,9 @@ public class Stream implements AutoCloseable, IStream {
             woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
             offset++;
         }
+        } catch (Exception ex) {}
+        }, executor);
 
-        Timestamp ts = new Timestamp(epochMap, null, token, streamID);
-        ts.setPhysicalPos(token);
-        ts.setContainingStream(streamID);
         return ts;
     }
 

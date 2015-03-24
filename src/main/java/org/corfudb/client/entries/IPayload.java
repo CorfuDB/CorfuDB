@@ -46,16 +46,25 @@ import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.CorfuDBClient;
 
-
+import org.corfudb.client.view.Serializer;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.io.Input;
 /**
  * This class represents entries which have a payload.
  */
 public interface IPayload {
+    static final Logger log = LoggerFactory.getLogger(IPayload.class);
 
     /**
      * Get the payload attached to this entry as a byte array.
      */
     byte[] getPayload();
+
+    /**
+     * Set the payload attached to this entry as a byte array.
+     */
+    void setPayload(byte[] payload);
 
     /**
      * Get the cached version of the entry, if it exists.
@@ -77,13 +86,29 @@ public interface IPayload {
     {
         Object o = getDeserializedPayload();
         if (o != null) { return getDeserializedPayload(); }
+        Kryo k = Serializer.kryos.get();
         try (ByteArrayInputStream bis = new ByteArrayInputStream(getPayload()))
         {
-            try (ObjectInputStream ois = new ObjectInputStream(bis))
+            try (Input i = new Input(bis, 16384))
             {
-                o = ois.readObject();
+                o = k.readClassAndObject(i);
                 setDeserializedPayload(o);
                 return o;
+            }
+        }
+    }
+
+    default void serializePayload (Object o)
+        throws IOException
+    {
+        Kryo k = Serializer.kryos.get();
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream())
+        {
+            try (Output output = new Output(baos, 16384))
+            {
+                k.writeClassAndObject(output, o);
+                output.flush();
+                setPayload(baos.toByteArray());
             }
         }
     }

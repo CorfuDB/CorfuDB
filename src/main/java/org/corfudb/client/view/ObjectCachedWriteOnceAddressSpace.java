@@ -61,13 +61,6 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     private UUID logID;
     private CorfuDBView view;
     private Supplier<CorfuDBView> getView;
-    private ThreadLocal<Kryo> kryos = new ThreadLocal<Kryo>() {
-        protected Kryo initialValue() {
-            Kryo kryo = new Kryo();
-            SerializerRegistration.registerSerializer(kryo);
-            return kryo;
-        };
-    };
 
 	private final Logger log = LoggerFactory.getLogger(CachedWriteOnceAddressSpace.class);
 
@@ -122,7 +115,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         {
             try (DeflaterOutputStream dos = new DeflaterOutputStream(bs))
             {
-                Kryo k = kryos.get();
+                Kryo k = Serializer.kryos.get();
                 Output o = new Output(dos, 16384);
                 k.writeClassAndObject(o, s);
                 o.flush();
@@ -205,7 +198,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
          if (o != null) {
              log.debug("ObjCache hit @ {}", address);
              return o; }
-         Kryo k = kryos.get();
+         Kryo k = Serializer.kryos.get();
         log.debug("ObjCache MISS @ {}", address);
 
          byte[] data = read(address);
