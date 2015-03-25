@@ -197,7 +197,6 @@ public class SMREngine
     public void sync(ITimestamp syncpos, Object command)
     {
         final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, (syncpos.equals(ITimestamp.getInvalidTimestamp())));
-
         synchronized(this) {
             curqueue.add(syncobj);
             if (!batch) {
@@ -211,6 +210,15 @@ public class SMREngine
         }
         cf.join();
         synchronized(this) {
+            if (curqueue.size() > 0)
+            {
+                final List<SyncObjectWrapper> newqueue = new LinkedList<SyncObjectWrapper>(curqueue);
+                curqueue.clear();
+                cf = CompletableFuture.runAsync(() -> {
+                    playback(newqueue);
+                }, SMREngineThreadPool);
+                cf.join();
+            }
             batch = false;
         }
     }
