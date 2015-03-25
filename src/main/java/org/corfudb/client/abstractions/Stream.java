@@ -133,6 +133,8 @@ public class Stream implements AutoCloseable, IStream {
         }
     }
 
+    static ConcurrentHashMap<UUID, StreamData> remoteStreamMap = new ConcurrentHashMap<UUID, StreamData>();
+
     BlockingDeque<ReturnInfo> returnStack;
     Supplier<CorfuDBView> getView;
     Supplier<IConfigMaster> getConfigMaster;
@@ -1142,7 +1144,12 @@ public class Stream implements AutoCloseable, IStream {
         for (UUID id : targetStreams)
         {
             // Get information about remote stream
-            StreamData sd = getConfigMaster.get().getStream(id);
+            StreamData sd = remoteStreamMap.get(id);
+            if (sd == null)
+            {
+                sd = getConfigMaster.get().getStream(id);
+                remoteStreamMap.put(id, sd);
+            }
             if (sd == null) { throw new RemoteException("Unable to find target stream " + id.toString(), logID); }
             datamap.put(id, sd);
         }

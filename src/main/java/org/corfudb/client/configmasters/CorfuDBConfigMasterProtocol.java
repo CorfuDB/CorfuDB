@@ -150,6 +150,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
 
     public StreamData getStream(UUID streamID)
     {
+        //probably should do this over UDP.
         try {
             JSONRPC2Request jr = new JSONRPC2Request("getstream", id.getAndIncrement());
             Map<String, Object> params = new HashMap<String,Object>();

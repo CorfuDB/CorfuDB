@@ -23,6 +23,11 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutorService;
 
 /**
  * This class is an SMR engine. It's unaware of CorfuDB objects (or transactions).
@@ -65,6 +70,30 @@ public class SMREngine
 
     long uniquenodeid;
 
+    static class globalThreadFactory implements ForkJoinPool.ForkJoinWorkerThreadFactory
+    {
+        AtomicInteger counter = new AtomicInteger();
+        @Override
+        public ForkJoinWorkerThread newThread(ForkJoinPool pool)
+        {
+            ForkJoinWorkerThread thread = new globalThread(pool);
+            thread.setName("SMREngine-" + counter.getAndIncrement());
+            return thread;
+        }
+    }
+
+    static class globalThread extends ForkJoinWorkerThread {
+        public globalThread(ForkJoinPool pool) {
+            super(pool);
+        }
+    }
+
+
+    static Thread.UncaughtExceptionHandler globalThreadExceptionHandler = (Thread t, Throwable e) ->  {
+                        dbglog.warn("SMREngine thread " + t.getName() + "terminated due to exception", e); };
+    static ExecutorService SMREngineThreadPool = new ForkJoinPool(8, new globalThreadFactory(), globalThreadExceptionHandler, true);
+
+
     public SMREngine(Stream sb, long tuniquenodeid)
     {
         // System.out.println("Creating new SMR engine on stream " + sb.getStreamID() + " with node id " + tuniquenodeid);
@@ -81,6 +110,7 @@ public class SMREngine
 
 
         //start the playback thread
+        /*
         new Thread(new Runnable()
         {
             public void run()
@@ -91,7 +121,14 @@ public class SMREngine
                 }
             }
         }).start();
+        */
 
+        CompletableFuture.runAsync(() -> {
+            while(true)
+            {
+                playback();
+            }
+        }, SMREngineThreadPool);
 
     }
 
