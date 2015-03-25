@@ -52,7 +52,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         public long oid() { return m_oid; }
         public long latency() { if(m_reqstart != 0 && m_reqcomplete != 0) return m_reqcomplete - m_reqstart; return 0; }
         public void start() { m_reqstart = System.currentTimeMillis(); }
-        public void complete() { m_reqstart = System.currentTimeMillis(); }
+        public void complete() { m_reqcomplete = System.currentTimeMillis(); }
         public static String cmdstr(int i) {
             if(NodeOp.isvalidcmd(i)) return NodeOp.cmdstring(i);
             if(EntryOp.isvalidcmd(i)) return EntryOp.cmdstring(i);
@@ -80,6 +80,8 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
             m_prevupdate = null;
             m_prevvalid = false;
             m_uuuid = UUID.randomUUID();
+            m_reqcomplete = 0;
+            start();
         }
 
         /**
@@ -456,7 +458,10 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     private static class Node<K extends Comparable<K>, V> extends CorfuDBObject {
 
         private int m_nChildren;
-        private long[] m_vChildren;
+        private long m_vChild0;
+        private long m_vChild1;
+        private long m_vChild2;
+        private long m_vChild3;
         PendingUpdates m_pending;
 
         /**
@@ -473,7 +478,10 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
             )
         {
             super(tr, toid);
-            m_vChildren = new long[M];
+            m_vChild0 = oidnull;
+            m_vChild1 = oidnull;
+            m_vChild2 = oidnull;
+            m_vChild3 = oidnull;
             m_nChildren = nChildren;
             m_pending = pending;
         }
@@ -495,6 +503,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                 case NodeOp.CMD_READ_CHILD: cc.setReturnValue(applyReadChild(cc.childindex())); break;
                 case NodeOp.CMD_WRITE_CHILD: applyWriteChild(cc.childindex(), cc.oidparam()); break;
             }
+            cc.complete();
             m_pending.retirePendingUpdate(cc);
         }
 
@@ -527,6 +536,26 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         }
 
         /**
+         * getChild
+         * @param index
+         * @return
+         */
+        protected long getChild(int index) {
+            switch(index) {
+                case 0:
+                    return m_vChild0;
+                case 1:
+                    return m_vChild1;
+                case 2:
+                    return m_vChild2;
+                case 3:
+                    return m_vChild3;
+                default:
+                    return oidnull;
+            }
+        }
+
+        /**
          * apply an indexed read child operation
          * @param index
          * @return
@@ -535,7 +564,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         applyReadChild(int index) {
             rlock();
             try {
-                return m_vChildren[index];
+                return getChild(index);
             } finally {
                 runlock();
             }
@@ -550,41 +579,22 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         applyWriteChild(int n, long _oid) {
             wlock();
             try {
-                m_vChildren[n] = _oid;
+                switch(n) {
+                    case 0: m_vChild0 = _oid; break;
+                    case 1: m_vChild1 = _oid; break;
+                    case 2: m_vChild2 = _oid; break;
+                    case 3: m_vChild3 = _oid; break;
+                    default: break;
+                }
             } finally {
                 wunlock();
             }
         }
 
         /**
-         * apply write all children operation (used to clear vector on init)
-         * @param _oid
-         */
-        public void
-        applyWriteAllChildren(long _oid) {
-            wlock();
-            try {
-                for(int i=0; i<M; i++)
-                    m_vChildren[i] = _oid;
-            } finally {
-                wunlock();
-            }
-        }
-
-        /**
-         * apply a read children operation
+         * toString
          * @return
          */
-        public long[]
-        applyReadChildren() {
-            rlock();
-            try {
-                return m_vChildren;
-            } finally {
-                runlock();
-            }
-        }
-
         @Override
         public String toString() {
             rlock();
@@ -603,7 +613,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                     sb.append("c");
                     sb.append(i);
                     sb.append("=");
-                    sb.append(m_vChildren[i]);
+                    sb.append(getChild(i));
                     if(last) sb.append("]");
                     first = false;
                 }
@@ -830,6 +840,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                 case EntryOp.CMD_READ_DELETED: cc.setReturnValue(applyReadDeleted()); break;
                 case EntryOp.CMD_WRITE_DELETED: cc.setReturnValue(applyWriteDeleted(cc.deleted())); break;
             }
+            cc.complete();
             m_pending.retirePendingUpdate(cc);
         }
 
@@ -1155,6 +1166,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         }
         StringBuilder sb = new StringBuilder();
         for(Integer cmd : map.keySet()) {
+            sb.append("FSCMDLAT, ");
             sb.append(PBTreeOp.cmdstr(cmd));
             ArrayList<PBTreeOp> list = map.get(cmd);
             for(PBTreeOp op : list) {
@@ -1212,6 +1224,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
             case BTreeOp.CMD_READ_SIZE: cc.setReturnValue(applyReadSize()); break;
             case BTreeOp.CMD_WRITE_SIZE: applyWriteSize(cc.iparam()); break;
         }
+        cc.complete();
         m_pending.retirePendingUpdate(cc);
     }
 
@@ -1235,7 +1248,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         int nChildren = node.m_nChildren;
         if(height == 0) {
             for(int i=0; i<nChildren; i++) {
-                Entry child = entryById(node.m_vChildren[i]);
+                Entry child = entryById(node.getChild(i));
                 if(child == null) {
                     sb.append("OIDNULL");
                 } else {
@@ -1253,10 +1266,10 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                 if(i>0) {
                     sb.append(indent);
                     sb.append("(");
-                    sb.append(entryById(node.m_vChildren[i]).key);
+                    sb.append(entryById(node.getChild(i)).key);
                     sb.append(")\n");
                 }
-                Entry<K,V> echild = entryById(node.m_vChildren[i]);
+                Entry<K,V> echild = entryById(node.getChild(i));
                 if(echild == null) {
                     sb.append("null-child-entry");
                 } else {
@@ -1500,6 +1513,10 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         K key,
         int height
         ) {
+
+        if(oidnode == oidnull)
+            return null;
+
         Node<K, V> node = nodeById(oidnode);
         int nChildren = readchildcount(node);
 

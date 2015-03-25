@@ -87,6 +87,7 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
         }
         StringBuilder sb = new StringBuilder();
         for(Integer cmd : map.keySet()) {
+            sb.append("FSCMDLAT, ");
             sb.append(TreeOp.cmdstr(cmd));
             ArrayList<TreeOp<K,V>> list = map.get(cmd);
             for(TreeOp<K, V> op : list) {

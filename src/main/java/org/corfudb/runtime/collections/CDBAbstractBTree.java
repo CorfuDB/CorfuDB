@@ -10,8 +10,22 @@ import java.util.Collection;
 
 public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends CorfuDBObject {
 
+    // true if we want to collect per request latency
+    // statistics. Best left out for end-to-end performance
+    // measurements, since the volume of data is non-trivial
+    // s_completed is a list of all commands that actually complete
+    // through the applyToObject upcall, which means they are the subset
+    // for which we have valid latency from helper function to apply.
     public static boolean s_collectLatencyStats = false;
     public static ArrayList<CorfuDBObjectCommand> s_completed = new ArrayList();
+
+    // set to true from the client *iff* the client process knows it's
+    // single-threaded. When this can be assumed, we know that exceptions taken
+    // mid-transaction cannot be the result of opacity violations and are therefore
+    // not worth retrying. Apparently Infinite loops of try/catch/retry are a very common
+    // scenario when executing under transactions, and distinguishing when they result
+    // from user code vs. runtime behavior is a challenge.
+    public static boolean s_singleThreadOptimization = false;
 
     StreamFactory sf;
 

@@ -1,0 +1,148 @@
+Running from development source
+Running test: CorfuDBTester
+ -cp C:\src\corfu\CorfuDB\target\corfudb-0.1-SNAPSHOT-shaded.jar  org.corfudb.runtime.CorfuDBTester -m http://localhost:8002/corfu -C CDBPhysicalBTree -A recover -z 21 -t 1 -n 20 -k 20 -r 0.25 -v -x -p 9091 -i bnc/initfs_tiny.ser -w bnc/wkldfs_tiny.ser -S -L bnc/data/crash-tiny-CDBPhysicalBTree-t1.txt
+master = http://localhost:8002/corfu
+numthreads = 1
+numops = 20
+numkeys = 20
+rwpct = 0.25
+rpcport = 9091
+log4j:WARN No appenders could be found for logger (org.apache.http.client.protocol.RequestAddCookies).
+log4j:WARN Please initialize the log4j system properly.
+log4j:WARN See http://logging.apache.org/log4j/1.2/faq.html#noconfig for more info.
+[Thread-0] INFO org.reflections.Reflections - Reflections took 127 ms to scan 1 urls, producing 5 keys and 16 values 
+[Thread-0] INFO org.reflections.Reflections - Reflections took 38 ms to scan 1 urls, producing 4 keys and 9 values 
+[Thread-0] INFO org.reflections.Reflections - Reflections took 31 ms to scan 1 urls, producing 3 keys and 5 values 
+[Thread-0] INFO org.reflections.Reflections - Reflections took 15 ms to scan 1 urls, producing 4 keys and 14 values 
+00:00  INFO: Connecting: localhost/127.0.0.1:8003/8003
+00:00  INFO: [kryonet] Connection 3 connected: localhost/127.0.0.1
+[Thread-0] INFO org.corfudb.client.CorfuDBClient - New view epoch 0 greater than old view epoch null, changing views
+listening on port 9091
+Recovering BTreeFS btreeOID:-7578383451623518913
+test case:
+INIT:
+WORKLOAD:
+0	mkdir(eewclm, root, 650)
+1	create(aixqyvb, root/eewclm, 219)
+2	create(m, root, 149)
+3	create(wskcbi, root, 55)
+4	create(yfkfy, root, 237)
+WKLD:
+WORKLOAD:
+0	delete(root/wskcbi)
+1	readdir(root/eewclm)
+2	access(root/wskcbi, 228)
+3	mkdir(fddfnuzs, root/eewclm, 156)
+4	access(root/wskcbi, 142)
+5	search(root/eewclm, wskcbi)
+6	search(root/eewclm, wskcbi)
+7	search(root/eewclm, wskcbi)
+8	open(root/wskcbi,76)
+9	access(root/wskcbi, 178)
+10	open(root/wskcbi,6)
+11	mkdir(ypbgf, root/eewclm, 63)
+12	access(root/wskcbi, 207)
+13	search(root/eewclm, mtupyuwq)
+14	readdir(root/eewclm)
+15	search(root/eewclm, qkz)
+16	readdir(root/eewclm)
+17	search(root/eewclm, wskcbi)
+18	search(root/eewclm, jy)
+19	rmdir(root/eewclm)
+20	readdir(root/eewclm)
+21	mkdir(hx, root/eewclm, 171)
+22	open(root/wskcbi,89)
+23	rmdir(root/eewclm)
+24	readdir(root/eewclm)
+25	mkdir(wqvvarxsi, root/eewclm, 142)
+26	search(root/eewclm, hnesgdy)
+27	readdir(root/eewclm)
+28	mkdir(k, root/eewclm, 157)
+29	readdir(root/eewclm)
+30	mkdir(i, root/eewclm, 139)
+31	open(root/wskcbi,208)
+32	search(root/eewclm, wskcbi)
+33	readdir(root/eewclm)
+34	readdir(root/eewclm)
+35	open(root/wskcbi,4)
+36	mkdir(e, root/eewclm, 207)
+37	readdir(root/eewclm)
+38	open(root/wskcbi,51)
+39	mkdir(qtxpqd, root/eewclm, 46)
+40	access(root/wskcbi, 171)
+41	readdir(root/eewclm)
+42	open(root/wskcbi,111)
+43	mkdir(o, root/eewclm, 37)
+44	readdir(root/eewclm)
+45	readdir(root/eewclm)
+46	open(root/wskcbi,135)
+47	search(root/eewclm, wskcbi)
+48	open(root/wskcbi,207)
+49	mkdir(jyicyykk, root/eewclm, 95)
+
+playing mkdir(hx, root/eewclm, 171)...
+FSREQLAT, 14, 	"mkdir(hx, root/eewclm, 171)"
+playing open(root/wskcbi,89)...
+FSREQLAT, 20, 	"open(root/wskcbi,89)"
+playing rmdir(root/eewclm)...
+FSREQLAT, 34, 	"rmdir(root/eewclm)"
+playing readdir(root/eewclm)...
+FSREQLAT, 9, 	"readdir(root/eewclm)"
+playing mkdir(wqvvarxsi, root/eewclm, 142)...
+FSREQLAT, 8, 	"mkdir(wqvvarxsi, root/eewclm, 142)"
+playing search(root/eewclm, hnesgdy)...
+FSREQLAT, 6, 	"search(root/eewclm, hnesgdy)"
+playing readdir(root/eewclm)...
+FSREQLAT, 5, 	"readdir(root/eewclm)"
+playing mkdir(k, root/eewclm, 157)...
+FSREQLAT, 8, 	"mkdir(k, root/eewclm, 157)"
+playing readdir(root/eewclm)...
+FSREQLAT, 8, 	"readdir(root/eewclm)"
+playing mkdir(i, root/eewclm, 139)...
+FSREQLAT, 7, 	"mkdir(i, root/eewclm, 139)"
+TPUT, 0, 10 121, 82.645, 30, 1427260839968
+playing open(root/wskcbi,208)...
+FSREQLAT, 14, 	"open(root/wskcbi,208)"
+playing search(root/eewclm, wskcbi)...
+FSREQLAT, 5, 	"search(root/eewclm, wskcbi)"
+playing readdir(root/eewclm)...
+FSREQLAT, 5, 	"readdir(root/eewclm)"
+playing readdir(root/eewclm)...
+FSREQLAT, 6, 	"readdir(root/eewclm)"
+playing open(root/wskcbi,4)...
+FSREQLAT, 7, 	"open(root/wskcbi,4)"
+playing mkdir(e, root/eewclm, 207)...
+FSREQLAT, 7, 	"mkdir(e, root/eewclm, 207)"
+playing readdir(root/eewclm)...
+FSREQLAT, 6, 	"readdir(root/eewclm)"
+playing open(root/wskcbi,51)...
+FSREQLAT, 8, 	"open(root/wskcbi,51)"
+playing mkdir(qtxpqd, root/eewclm, 46)...
+FSREQLAT, 5, 	"mkdir(qtxpqd, root/eewclm, 46)"
+playing access(root/wskcbi, 171)...
+FSREQLAT, 5, 	"access(root/wskcbi, 171)"
+TPUT, 1, 10 71, 140.845, 40, 1427260840039
+playing readdir(root/eewclm)...
+FSREQLAT, 5, 	"readdir(root/eewclm)"
+playing open(root/wskcbi,111)...
+FSREQLAT, 6, 	"open(root/wskcbi,111)"
+playing mkdir(o, root/eewclm, 37)...
+FSREQLAT, 5, 	"mkdir(o, root/eewclm, 37)"
+playing readdir(root/eewclm)...
+FSREQLAT, 6, 	"readdir(root/eewclm)"
+playing readdir(root/eewclm)...
+FSREQLAT, 11, 	"readdir(root/eewclm)"
+playing open(root/wskcbi,135)...
+FSREQLAT, 5, 	"open(root/wskcbi,135)"
+playing search(root/eewclm, wskcbi)...
+FSREQLAT, 5, 	"search(root/eewclm, wskcbi)"
+playing open(root/wskcbi,207)...
+FSREQLAT, 3, 	"open(root/wskcbi,207)"
+playing mkdir(jyicyykk, root/eewclm, 95)...
+FSREQLAT, 3, 	"mkdir(jyicyykk, root/eewclm, 95)"
+TPUT, 2, 9 52, 173.077, 49, 1427260840091
+FS after test:
+--missing--
+BTree REQ stats:
+
+Test done in 660

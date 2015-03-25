@@ -85,7 +85,7 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
 
     public CorfuDBObject(AbstractRuntime tTR, long tobjectid, boolean remote)
     {
-        System.out.println("Creating CorfuDBObject " + tobjectid);
+        // System.out.println("Creating CorfuDBObject " + tobjectid);
         TR = tTR;
         oid = tobjectid;
         TR.registerObject(this, remote);

@@ -44,7 +44,7 @@ class TreeOp<K extends Comparable<K>, V> extends CorfuDBObjectCommand {
     public long oid() { return m_oid; }
     public long latency() { if(m_reqstart != 0 && m_reqcomplete != 0) return m_reqcomplete - m_reqstart; return 0; }
     public void start() { m_reqstart = System.currentTimeMillis(); }
-    public void complete() { m_reqstart = System.currentTimeMillis(); }
+    public void complete() { m_reqcomplete = System.currentTimeMillis(); }
 
     public
     TreeOp(
@@ -52,12 +52,14 @@ class TreeOp<K extends Comparable<K>, V> extends CorfuDBObjectCommand {
         long _oid,
         K key,
         V value
-    )
+        )
     {
         m_cmd = _cmd;
         m_oid = _oid;
         m_key = key;
         m_value = value;
+        m_reqcomplete = 0;
+        start();
     }
 
 }

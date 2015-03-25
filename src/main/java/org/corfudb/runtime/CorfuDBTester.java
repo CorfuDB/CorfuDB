@@ -71,6 +71,7 @@ public class CorfuDBTester
         System.out.println("\t[-z crash/recover op number]\n");
         System.out.println("\t[-S collect latency stats]\n");
         System.out.println("\t[-h synthesized directory structure target depth]\n");
+        System.out.println("\t[-N non-transactional fs]\n");
 
 //        if(dbglog instanceof SimpleLogger)
 //            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
@@ -121,6 +122,7 @@ public class CorfuDBTester
         int nCrashRecoverOp = 0;
         int nTargetFSDepth = 5;
         String strCrashLog = "out.txt";
+        boolean transactionalFS = true;
 
 
         final int DUMMYSTREAMIMPL = 0;
@@ -133,11 +135,14 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:N");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
             {
+                case 'N':
+                    transactionalFS = false;
+                    break;
                 case 'h':
                     nTargetFSDepth = Integer.parseInt(g.getOptarg());
                     break;
@@ -204,6 +209,8 @@ public class CorfuDBTester
                     strArg = g.getOptarg();
                     System.out.println("numthreads = "+ strArg);
                     numthreads = Integer.parseInt(strArg);
+                    if(numthreads == 1)
+                        CDBAbstractBTree.s_singleThreadOptimization = true;
                     break;
                 case 'n':
                     strArg = g.getOptarg();
@@ -413,23 +420,23 @@ public class CorfuDBTester
         }
         else if(testnum==BTREEFS_BASIC) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestBasic(TR, sf, strBTreeClass);
+            BTreeFS.fstestBasic(TR, sf, strBTreeClass, transactionalFS);
         }
         else if(testnum== BTREEFS_RECORD) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestRecord(TR, sf, strBTreeClass, nTargetFSDepth, numops, strInitPath, strWkldPath);
+            BTreeFS.fstestRecord(TR, sf, strBTreeClass, transactionalFS, nTargetFSDepth, numops, strInitPath, strWkldPath);
         }
         else if(testnum==BTREEFS_PLAYBACK) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestPlayback(TR, sf, strBTreeClass, strInitPath, strWkldPath);
+            BTreeFS.fstestPlayback(TR, sf, strBTreeClass, strInitPath, strWkldPath,transactionalFS);
         }
         else if(testnum == BTREEFS_CRASH) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestCrash(TR, sf, strBTreeClass, strInitPath, strWkldPath, nCrashRecoverOp);
+            BTreeFS.fstestCrash(TR, sf, strBTreeClass, transactionalFS, strInitPath, strWkldPath, nCrashRecoverOp);
         }
         else if(testnum == BTREEFS_RECOVER) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestRecover(TR, sf, strBTreeClass, strInitPath, strWkldPath, strCrashLog, nCrashRecoverOp);
+            BTreeFS.fstestRecover(TR, sf, strBTreeClass, transactionalFS, strInitPath, strWkldPath, strCrashLog, nCrashRecoverOp);
         }
         else if(testnum==REMOBJTEST)
         {

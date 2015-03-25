@@ -50,6 +50,7 @@ public class BTreeFS {
     public AtomicLong m_gets;
     public AtomicLong m_removes;
     public AtomicLong m_updates;
+    protected boolean m_transactional;
 
     public static class Attrs implements Serializable {
 
@@ -583,7 +584,8 @@ public class BTreeFS {
             int nMaxDirEntries,
             int nMaxHeight,
             String strBTreeClass,
-            long btreeOID
+            long btreeOID,
+            boolean transactional
         ) {
         m_rt = tTR;
         m_sf = tsf;
@@ -596,6 +598,7 @@ public class BTreeFS {
         m_gets = new AtomicLong(0);
         m_removes = new AtomicLong(0);
         m_updates = new AtomicLong(0);
+        m_transactional = transactional;
     }
 
     /**
@@ -605,7 +608,8 @@ public class BTreeFS {
     BTreeFS(
         AbstractRuntime tTR,
         StreamFactory tsf,
-        String strBTreeClass
+        String strBTreeClass,
+        boolean transactional
         ) {
         this(tTR, tsf,
                 DEFAULT_MINATOM,
@@ -613,7 +617,8 @@ public class BTreeFS {
                 DEFAULT_MAXDIRENTIES,
                 DEFAULT_MAX_HEIGHT,
                 strBTreeClass,
-                CorfuDBObject.oidnull);
+                CorfuDBObject.oidnull,
+                transactional);
     }
 
     /**
@@ -624,7 +629,8 @@ public class BTreeFS {
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
-            long btreeOID
+            long btreeOID,
+            boolean transactional
         ) {
         this(tTR, tsf,
                 DEFAULT_MINATOM,
@@ -632,7 +638,8 @@ public class BTreeFS {
                 DEFAULT_MAXDIRENTIES,
                 DEFAULT_MAX_HEIGHT,
                 strBTreeClass,
-                btreeOID);
+                btreeOID,
+                transactional);
     }
 
     /**
@@ -700,7 +707,7 @@ public class BTreeFS {
         ) {
         ArrayList<FSEntry> children = new ArrayList<FSEntry>();
         FSEntry root = get("root");
-        FSEntry result = randomSelect(rnd, root, type, children);
+        FSEntry result = randomSelect(rnd, root, type, 0, children);
         if(result == null && children.size() > 0) {
             Collections.sort(children, new LengthSort());
             if(children.size() < 4)
@@ -725,11 +732,12 @@ public class BTreeFS {
             Random rnd,
             FSEntry parent,
             etype type,
+            int height,
             ArrayList<FSEntry> candidates
         ) {
 
         if (type == etype.dir && parent != null) {
-            if (rnd.nextDouble() < 0.08)
+            if (rnd.nextDouble() < (0.01*height))
                 return parent;
         }
         ArrayList<FSEntry> dirs = new ArrayList<FSEntry>();
@@ -737,14 +745,14 @@ public class BTreeFS {
             String strChild = parent.getChild(i);
             FSEntry child = get(parent.path() + "/" + strChild);
             if (child.type == type) {
-                if (rnd.nextDouble() < 0.08)
+                if (rnd.nextDouble() < (0.01*height))
                     return child;
                 candidates.add(child);
             }
         }
         int ndirs = 0;
         for(FSEntry dir : dirs) {
-            FSEntry candidate = randomSelect(rnd, dir, type, candidates);
+            FSEntry candidate = randomSelect(rnd, dir, type, height+1, candidates);
             if (candidate != null)
                 return candidate;
 
@@ -854,9 +862,10 @@ public class BTreeFS {
     createEmptyFS(
             AbstractRuntime tTR,
             StreamFactory tsf,
-            String strBTreeClass
+            String strBTreeClass,
+            boolean transactional
         ) {
-        BTreeFS fs = new BTreeFS(tTR, tsf, strBTreeClass);
+        BTreeFS fs = new BTreeFS(tTR, tsf, strBTreeClass, transactional);
         FSEntry root = new FSEntry("root", null, etype.dir);
         fs.put(root.path(), root);
         return fs;
@@ -874,9 +883,10 @@ public class BTreeFS {
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
-            long btreeOID
+            long btreeOID,
+            boolean transactional
         ) {
-        return new BTreeFS(tTR, tsf, strBTreeClass, btreeOID);
+        return new BTreeFS(tTR, tsf, strBTreeClass, btreeOID, transactional);
     }
 
 
@@ -902,9 +912,10 @@ public class BTreeFS {
             int maxChildren,
             double dirProbability,
             int height,
+            boolean transactional,
             Collection<FileSystemDriver.Op> ops
         ) {
-        BTreeFS fs = new BTreeFS(tTR, tsf, strBTreeClass);
+        BTreeFS fs = new BTreeFS(tTR, tsf, strBTreeClass, transactional);
         Random rnd = new Random();
         FSEntry root = new FSEntry("root", null, etype.dir);
         fs.put(root.path(), root);
@@ -1278,6 +1289,14 @@ public class BTreeFS {
                 for (int i = 0; i < fs.numChildren(); i++) {
                     String path = fs.path() + "/" + fs.getChild(i);
                     FSEntry child = get(path);
+                    if(child == null) {
+                        System.out.format("XXXX: inconsistent FS: no FSEntry for %s!\n", path);
+                        continue;  // umm...this shouldn't happen
+                    }
+                    if(child.name == null) {
+                        System.out.format("XXXX: inconsistent FS: FSEntry.name == null for %s!\n", path);
+                        continue;  // umm...this also shouldn't happen
+                    }
                     if (child.name.compareTo(fname) == 0)
                         matches.add(child);
                     matches.addAll(search(child, fname));
@@ -1408,7 +1427,9 @@ public class BTreeFS {
                 String canonicalParentPath = canonicalize(parentPath);
                 FSEntry parent = get(canonicalParentPath);
                 FSEntry existingEntry = get(canonicalParentPath + "/" + fsName);
-                if(parent != null && existingEntry == null) { // parent exists? new entry already exists?
+                if(parent != null &&                // parent exists?
+                   parent.type == etype.dir &&      // parent is actually a directory?
+                   existingEntry == null) {         // conflicting entry already exists?
                     FSEntry file = new FSEntry(fsName, parent.path(), etype.file, permissions);
                     setAncestorPermissions(file);
                     parent.addChild(file);
@@ -1593,7 +1614,7 @@ public class BTreeFS {
      * @return
      */
     protected boolean BeginTX() {
-        if(m_rt != null) {
+        if(m_rt != null && m_transactional) {
             m_rt.BeginTX();
             return true;
         }
@@ -1606,7 +1627,7 @@ public class BTreeFS {
      * @return
      */
     protected boolean EndTX() {
-        if(m_rt != null)
+        if(m_rt != null && m_transactional)
             return m_rt.EndTX();
         return true;
     }
@@ -1617,12 +1638,23 @@ public class BTreeFS {
      * @return
      */
     protected boolean AbortTX(boolean inTX, Exception e) {
-        if(m_rt != null) {
+        boolean retry = true;
+        if(m_rt != null && m_transactional) {
             if(inTX)
                 m_rt.AbortTX();
-            return false;
+            // retry only if the exception could be the
+            // result of an inconsistent view, which is only
+            // the case in the presence of concurrency. Generally,
+            // we must assume this, but if the programmer (ie debugger!)
+            // knows there is no concurrency, it's worth avoiding
+            // infinite loops for program bugs executing in txns.
+            retry = !CDBAbstractBTree.s_singleThreadOptimization;
         }
-        throw new RuntimeException(e);
+        System.out.format("%s: %s\n", (retry?"Abort/Retry":"Abort/Fail"), e.getMessage());
+        e.printStackTrace();
+        if(!retry)
+            throw new RuntimeException(e);
+        return false;
     }
 
 
@@ -1633,14 +1665,16 @@ public class BTreeFS {
     fstestBasic(
             AbstractRuntime tTR,
             StreamFactory tsf,
-            String strBTreeClass
+            String strBTreeClass,
+            boolean transactional
         ) {
         double dirProbability = 0.4;
         int maxChildren = 10;
         int minIdLength = 1;
         int maxIdLength = 8;
         int height = 5;
-        fstestBasic(tTR, tsf, strBTreeClass, dirProbability, maxChildren, minIdLength, maxIdLength, height);
+        fstestBasic(tTR, tsf, strBTreeClass, dirProbability, maxChildren,
+                minIdLength, maxIdLength, height, transactional);
     }
 
     /**
@@ -1655,11 +1689,12 @@ public class BTreeFS {
             int maxChildren,
             int minIdLength,
             int maxIdLength,
-            int height
+            int height,
+            boolean transactional
         ) {
         ArrayList<FileSystemDriver.Op> initOps = new ArrayList();
         BTreeFS fs = BTreeFS.createRandomFS(tTR, tsf, strBTreeClass,
-                minIdLength, maxIdLength, maxChildren, dirProbability, height, initOps);
+                minIdLength, maxIdLength, maxChildren, dirProbability, height, transactional, initOps);
         System.out.println("FS-tree:\n"+fs.printBTree());
         System.out.println("FS:\n"+fs.printFS());
     }
@@ -1672,13 +1707,14 @@ public class BTreeFS {
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
+            boolean transactional,
             int nTargetFSDepth,
             int nWorkloadOps,
             String initPath,
             String wkldPath
         ) {
         double dirProbability = 0.4;
-        int maxChildren = 12;
+        int maxChildren = 8;
         int minIdLength = 1;
         int maxIdLength = 8;
         long curTime = System.currentTimeMillis();
@@ -1686,7 +1722,7 @@ public class BTreeFS {
         if(initPath == null) initPath = "initfs_" + (curTime%100) + ".ser";
         if(wkldPath == null) wkldPath = "wkldfs_" + (curTime%100) + ".ser";
         fstestRecord(tTR, tsf, strBTreeClass, dirProbability, maxChildren, minIdLength, maxIdLength,
-                nTargetFSDepth, nWorkloadOps, nRandomSeed, initPath, wkldPath);
+                nTargetFSDepth, nWorkloadOps, nRandomSeed, transactional, initPath, wkldPath);
     }
 
     /**
@@ -1704,12 +1740,13 @@ public class BTreeFS {
             int height,
             int nWorkloadOperations,
             int nRandomSeed,
+            boolean transactional,
             String initPath,
             String wkldPath
         ) {
         ArrayList<FileSystemDriver.Op> initOps = new ArrayList();
         BTreeFS fs = BTreeFS.createRandomFS(tTR, tsf, strBTreeClass,
-                minIdLength, maxIdLength, maxChildren, dirProbability, height, initOps);
+                minIdLength, maxIdLength, maxChildren, dirProbability, height, transactional, initOps);
         System.out.println("FS-tree:\n"+fs.printBTree());
         System.out.println("FS:\n"+fs.printFS());
         FileSystemDriver driver = new FileSystemDriver(fs, nWorkloadOperations, nRandomSeed);
@@ -1730,9 +1767,10 @@ public class BTreeFS {
             StreamFactory tsf,
             String strBTreeClass,
             String strInitPath,
-            String strWkldPath
+            String strWkldPath,
+            boolean transactional
         ) {
-        BTreeFS fs = BTreeFS.createEmptyFS(tTR, tsf, strBTreeClass);
+        BTreeFS fs = BTreeFS.createEmptyFS(tTR, tsf, strBTreeClass, transactional);
         FileSystemDriver driver = new FileSystemDriver(fs, strInitPath, strWkldPath);
         System.out.format("test case:\n%s\n", driver.toString());
         driver.play();
@@ -1750,11 +1788,12 @@ public class BTreeFS {
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
+            boolean transactional,
             String strInitPath,
             String strWkldPath,
             int nCrashOp
         ) {
-        BTreeFS fs = BTreeFS.createEmptyFS(tTR, tsf, strBTreeClass);
+        BTreeFS fs = BTreeFS.createEmptyFS(tTR, tsf, strBTreeClass, transactional);
         FileSystemDriver driver = new FileSystemDriver(fs, strInitPath, strWkldPath);
         System.out.format("test case:\n%s\n", driver.toString());
         driver.playTo(nCrashOp);
@@ -1771,6 +1810,7 @@ public class BTreeFS {
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
+            boolean transactional,
             String strInitPath,
             String strWkldPath,
             String strCrashLogPath,
@@ -1779,7 +1819,7 @@ public class BTreeFS {
         Pair<Long, Long> oids = recoverOIDs(strCrashLogPath);
         long btreeOID = oids.first;
         System.out.format("Recovering BTreeFS btreeOID:%d\n", btreeOID);
-        BTreeFS fs = BTreeFS.attachFS(tTR, tsf, strBTreeClass, btreeOID);
+        BTreeFS fs = BTreeFS.attachFS(tTR, tsf, strBTreeClass, btreeOID, transactional);
         FileSystemDriver driver = new FileSystemDriver(fs, strInitPath, strWkldPath);
         System.out.format("test case:\n%s\n", driver.toString());
         driver.playFrom(nRecoverOp);

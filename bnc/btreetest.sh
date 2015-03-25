@@ -76,43 +76,63 @@ until [ -z $readmore ]; do
   fi
 done
 
-./bin/corfuDBsingle.sh stop
+recordWorkload() {
+  class=$1
+  ops=$2
+  case=${3}
+  height=${4}
+  verbose=${5}
+  xdebug=${6}
+  ./bin/corfuDBsingle.sh start > /dev/null 2>&1
+  ./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -A record -t 1 $verbose -p 9091 -n $ops -k 20 -r 0.25 -x -i bnc/initfs_$case.ser -w bnc/wkldfs_$case.ser -h $height -C $class
+  ./bin/corfuDBsingle.sh stop > /dev/null 2>&1
+}
 
+crashRecoverTest() {
+  class=$1
+  size=${2}
+  crashop=${3}
+  recoverop=${4}
+  verbose=${5}
+  xdebug=${6}
+  stats=${7}
+  threads=${8}
+
+  ./bin/corfuDBsingle.sh start > /dev/null 2>&1
+  ./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -C $class -A crash -z $crashop -t $threads -n 20 -k 20 -r 0.25 $verbose $xdebug -p 9091 -i bnc/initfs_$size.ser -w bnc/wkldfs_$size.ser $stats > bnc/data/crash-$size-$class-t$threads.txt
+  ./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -C $class -A recover -z $recoverop -t $threads -n 20 -k 20 -r 0.25 $verbose $xdebug -p 9091 -i bnc/initfs_$size.ser -w bnc/wkldfs_$size.ser $stats -L bnc/data/crash-$size-$class-t$threads.txt > bnc/data/recover-$size-$class-t$threads.txt
+  ./bin/corfuDBsingle.sh stop > /dev/null 2>&1
+
+  cat bnc/data/crash-$size-$class-t$threads.txt > tmp.txt
+  cat bnc/data/recover-$size-$class-t$threads.txt >> tmp.txt
+  echo $size-$class-t$threads >> bnc/data/tput-all.csv
+  grep TPUT tmp.txt >> bnc/data/tput-all.csv
+  grep TPUT tmp.txt > bnc/data/btree-tput-$size-$class-t$threads.csv
+  grep FSREQLAT tmp.txt > bnc/data/btree-reqlat-$size-$class-t$threads.csv
+  grep FSCMDLAT tmp.txt >> bnc/data/btree-reqlat-$size-$class-t$threads.csv
+}
+
+./bin/corfuDBsingle.sh stop > /dev/null 2>&1
 if [ "$record" = "TRUE" ]; then
   echo "recording workloads..."
-  ./bin/corfuDBsingle.sh start
-  ./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -A record -t 1 -v -p 9091 -n 50 -k 20 -r 0.25 -x -i bnc/initfs_tiny.ser -w bnc/wkldfs_tiny.ser -h 5 -C CDBLogicalBTree
-  ./bin/corfuDBsingle.sh stop
-
-  ./bin/corfuDBsingle.sh start
-  ./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -A record -t 1 -v -p 9091 -n 100 -k 20 -r 0.25 -x -i bnc/initfs_small.ser -w bnc/wkldfs_small.ser -h 7 -C CDBLogicalBTree
-  ./bin/corfuDBsingle.sh stop
-
-  ./bin/corfuDBsingle.sh start
-  ./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -A record -t 1 -v -p 9091 -n 1000 -k 20 -r 0.25 -x -i bnc/initfs_medium.ser -w bnc/wkldfs_medium.ser -h 10 -C CDBLogicalBTree
-  ./bin/corfuDBsingle.sh stop
-
-  ./bin/corfuDBsingle.sh start
-  ./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -A record -t 1 -v -p 9091 -n 10000 -k 20 -r 0.25 -x -i bnc/initfs_large.ser -w bnc/wkldfs_large.ser -h 12 -C CDBLogicalBTree
-  ./bin/corfuDBsingle.sh stop
-
+  #recordWorkload CDBLogicalBTree 30 miniscule 4 -v -x
+  #recordWorkload CDBLogicalBTree 50 tiny 5 -v -x
+  recordWorkload CDBLogicalBTree 100 small 7 -v -x
+  #recordWorkload CDBLogicalBTree 1000 medium 10 -v -x
+  #recordWorkload CDBLogicalBTree 10000 large 16 -v -x
   exit
 fi
 
-#for size in tiny small medium large; do
+#for size in miniscule tiny small medium large; do
 #for class in CDBLogicalBTree CDBPhysicalBTree; do
 
-for size in tiny small; do
-for class in CDBLogicalBTree; do
+echo "" > bnc/data/tput-all.csv
+for threads in 1; do
+for size in miniscule tiny small; do
+for class in CDBLogicalBTree CDBPhysicalBTree; do
 
-./bin/corfuDBsingle.sh start
-./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -C $class -A crash -z 20 -t 1 -n 20 -k 20 -r 0.25 -v -x -p 9091 -i bnc/initfs_$size.ser -w bnc/wkldfs_$size.ser -S > crash-$size-$class.txt
-./bin/corfuDBTestRuntime.sh CorfuDBTester -m http://localhost:8002/corfu -C $class -A recover -z 21 -t 1 -n 20 -k 20 -r 0.25 -v -x -p 9091 -i bnc/initfs_$size.ser -w bnc/wkldfs_$size.ser -S -L crash-$size-$class.txt > recover-$size-$class.txt
-./bin/corfuDBsingle.sh stop
+crashRecoverTest $class $size 20 21 -v -x -S $threads
 
-cat crash-$size-$class.txt > tmp.txt
-cat recover-$size-$class.txt >> tmp.txt
-grep TPUT tmp.txt > btree-tput-$size-$class.csv
-
+done
 done
 done

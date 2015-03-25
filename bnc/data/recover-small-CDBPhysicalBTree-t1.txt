@@ -1,0 +1,392 @@
+Running from development source
+Running test: CorfuDBTester
+ -cp C:\src\corfu\CorfuDB\target\corfudb-0.1-SNAPSHOT-shaded.jar  org.corfudb.runtime.CorfuDBTester -m http://localhost:8002/corfu -C CDBPhysicalBTree -A recover -z 21 -t 1 -n 20 -k 20 -r 0.25 -v -x -p 9091 -i bnc/initfs_small.ser -w bnc/wkldfs_small.ser -S -L bnc/data/crash-small-CDBPhysicalBTree-t1.txt
+master = http://localhost:8002/corfu
+numthreads = 1
+numops = 20
+numkeys = 20
+rwpct = 0.25
+rpcport = 9091
+log4j:WARN No appenders could be found for logger (org.apache.http.client.protocol.RequestAddCookies).
+log4j:WARN Please initialize the log4j system properly.
+log4j:WARN See http://logging.apache.org/log4j/1.2/faq.html#noconfig for more info.
+[Thread-0] INFO org.reflections.Reflections - Reflections took 135 ms to scan 1 urls, producing 5 keys and 16 values 
+[Thread-0] INFO org.reflections.Reflections - Reflections took 39 ms to scan 1 urls, producing 4 keys and 9 values 
+[Thread-0] INFO org.reflections.Reflections - Reflections took 39 ms to scan 1 urls, producing 3 keys and 5 values 
+[Thread-0] INFO org.reflections.Reflections - Reflections took 29 ms to scan 1 urls, producing 4 keys and 14 values 
+00:00  INFO: Connecting: localhost/127.0.0.1:8003/8003
+00:00  INFO: [kryonet] Connection 3 connected: localhost/127.0.0.1
+[Thread-0] INFO org.corfudb.client.CorfuDBClient - New view epoch 0 greater than old view epoch null, changing views
+listening on port 9091
+Recovering BTreeFS btreeOID:-8266391480588493984
+test case:
+INIT:
+WORKLOAD:
+0	create(ohqm, root, 246)
+1	create(uukznp, root, 111)
+2	create(reouk, root, 185)
+3	create(g, root, 230)
+4	mkdir(fxtlip, root, 564)
+5	create(qujlyvv, root/fxtlip, 111)
+6	mkdir(gkrts, root/fxtlip, 697)
+7	mkdir(iqr, root/fxtlip/gkrts, 757)
+8	create(b, root/fxtlip/gkrts/iqr, 141)
+9	mkdir(d, root/fxtlip/gkrts/iqr, 729)
+10	mkdir(gyrq, root/fxtlip/gkrts/iqr/d, 539)
+11	mkdir(bnakbx, root/fxtlip/gkrts/iqr/d/gyrq, 541)
+12	mkdir(ron, root/fxtlip/gkrts/iqr/d/gyrq/bnakbx, 529)
+13	create(faeh, root/fxtlip/gkrts/iqr/d/gyrq/bnakbx, 243)
+14	mkdir(seycft, root/fxtlip/gkrts/iqr/d/gyrq/bnakbx, 685)
+15	create(erwilig, root/fxtlip/gkrts/iqr/d/gyrq/bnakbx/seycft, 82)
+16	mkdir(tj, root/fxtlip/gkrts/iqr/d/gyrq/bnakbx, 754)
+17	create(jymi, root/fxtlip/gkrts/iqr/d/gyrq/bnakbx/tj, 187)
+18	create(dopede, root/fxtlip/gkrts/iqr/d/gyrq/bnakbx, 180)
+19	create(dczs, root/fxtlip/gkrts/iqr/d/gyrq, 50)
+20	mkdir(c, root/fxtlip, 637)
+21	create(czmbd, root/fxtlip/c, 197)
+22	create(bcc, root/fxtlip/c, 38)
+23	mkdir(nfmckw, root/fxtlip/c, 588)
+24	create(knccl, root/fxtlip/c/nfmckw, 163)
+25	create(qa, root/fxtlip/c, 247)
+26	mkdir(hafh, root/fxtlip/c, 723)
+27	mkdir(zw, root/fxtlip/c/hafh, 667)
+28	create(uuslau, root/fxtlip/c/hafh/zw, 238)
+29	mkdir(usyt, root/fxtlip/c/hafh/zw, 720)
+30	create(y, root/fxtlip/c/hafh/zw/usyt, 229)
+31	create(fsvhf, root/fxtlip/c/hafh/zw/usyt, 58)
+32	create(wo, root/fxtlip/c/hafh/zw, 50)
+33	create(kcf, root/fxtlip/c/hafh/zw, 65)
+34	create(mumdp, root/fxtlip/c/hafh/zw, 31)
+35	mkdir(alshg, root/fxtlip/c/hafh/zw, 534)
+36	mkdir(t, root/fxtlip/c/hafh/zw/alshg, 702)
+37	mkdir(sho, root/fxtlip/c/hafh/zw/alshg/t, 631)
+38	create(z, root/fxtlip/c/hafh/zw/alshg/t/sho, 64)
+39	create(lngbvh, root/fxtlip/c/hafh/zw/alshg/t/sho, 233)
+40	create(bjsm, root/fxtlip/c/hafh/zw/alshg/t/sho, 144)
+41	mkdir(oavqgs, root/fxtlip/c/hafh/zw/alshg, 596)
+42	create(roozyj, root/fxtlip/c/hafh/zw/alshg/oavqgs, 144)
+43	mkdir(pxll, root/fxtlip/c/hafh/zw/alshg/oavqgs, 664)
+44	mkdir(rxefo, root/fxtlip/c/hafh/zw/alshg/oavqgs, 713)
+45	create(priz, root/fxtlip/c/hafh/zw/alshg/oavqgs/rxefo, 69)
+46	mkdir(x, root/fxtlip/c/hafh/zw/alshg, 600)
+47	mkdir(skg, root/fxtlip/c/hafh/zw/alshg/x, 528)
+48	create(rj, root/fxtlip/c/hafh/zw/alshg/x, 54)
+49	create(tovhd, root/fxtlip/c/hafh/zw/alshg/x, 65)
+50	mkdir(ebau, root/fxtlip/c/hafh/zw/alshg/x, 624)
+51	create(suxfogh, root/fxtlip/c/hafh/zw/alshg/x/ebau, 5)
+52	create(msjmmqd, root/fxtlip/c/hafh/zw/alshg/x/ebau, 124)
+53	create(dtxnh, root/fxtlip/c/hafh/zw/alshg/x/ebau, 34)
+54	create(gj, root/fxtlip/c/hafh/zw/alshg/x/ebau, 191)
+55	mkdir(bf, root/fxtlip/c/hafh/zw/alshg/x, 666)
+56	create(slbqe, root/fxtlip/c/hafh/zw/alshg/x/bf, 125)
+57	create(alhqmcu, root/fxtlip/c/hafh/zw/alshg/x/bf, 80)
+58	create(xgrmx, root/fxtlip/c/hafh/zw/alshg/x/bf, 249)
+59	create(jbdjd, root/fxtlip/c/hafh/zw/alshg/x/bf, 158)
+60	create(ix, root/fxtlip/c/hafh/zw/alshg/x/bf, 144)
+61	mkdir(g, root/fxtlip/c/hafh/zw/alshg/x, 657)
+62	create(kiix, root/fxtlip/c/hafh/zw/alshg/x/g, 76)
+63	create(dac, root/fxtlip/c/hafh/zw/alshg/x/g, 171)
+64	create(oquo, root/fxtlip/c/hafh/zw/alshg/x/g, 18)
+65	create(oss, root/fxtlip/c/hafh/zw/alshg/x/g, 180)
+66	create(efuxktb, root/fxtlip/c/hafh/zw/alshg/x/g, 16)
+67	create(skdywf, root/fxtlip/c/hafh/zw/alshg, 244)
+68	create(rxyrj, root/fxtlip/c/hafh/zw/alshg, 247)
+69	mkdir(dxacho, root/fxtlip/c/hafh/zw/alshg, 750)
+70	mkdir(yz, root/fxtlip/c/hafh/zw/alshg/dxacho, 534)
+71	create(fcpyfdz, root/fxtlip/c/hafh/zw/alshg/dxacho/yz, 203)
+72	create(kn, root/fxtlip/c/hafh/zw/alshg/dxacho/yz, 33)
+73	create(zmjjeo, root/fxtlip/c/hafh/zw/alshg/dxacho, 9)
+74	mkdir(kmbxds, root/fxtlip/c/hafh/zw/alshg/dxacho, 710)
+75	create(u, root/fxtlip/c/hafh/zw/alshg/dxacho/kmbxds, 250)
+76	mkdir(aug, root/fxtlip/c/hafh/zw/alshg/dxacho, 515)
+77	create(sr, root/fxtlip/c/hafh/zw/alshg/dxacho/aug, 154)
+78	create(dsm, root/fxtlip/c/hafh/zw/alshg/dxacho, 6)
+79	create(yb, root/fxtlip/c/hafh/zw/alshg/dxacho, 36)
+80	create(ak, root/fxtlip/c/hafh/zw/alshg/dxacho, 129)
+81	mkdir(xkzyyiy, root/fxtlip/c/hafh, 576)
+82	create(vd, root/fxtlip/c/hafh/xkzyyiy, 89)
+83	mkdir(uaraja, root/fxtlip/c/hafh/xkzyyiy, 745)
+84	create(xla, root/fxtlip/c/hafh/xkzyyiy/uaraja, 65)
+85	create(kjmvgk, root/fxtlip/c/hafh/xkzyyiy/uaraja, 74)
+86	create(odfveei, root/fxtlip/c/hafh/xkzyyiy/uaraja, 37)
+87	create(hck, root/fxtlip/c/hafh, 34)
+88	create(sl, root/fxtlip/c, 124)
+89	create(tqibdxe, root/fxtlip/c, 179)
+90	create(d, root/fxtlip, 136)
+91	create(alprg, root/fxtlip, 215)
+92	create(acdocm, root/fxtlip, 48)
+93	mkdir(fhoepf, root/fxtlip, 690)
+WKLD:
+WORKLOAD:
+0	search(root/fxtlip, gurr)
+1	access(root/uukznp, 211)
+2	open(root/uukznp,154)
+3	readdir(root/fxtlip)
+4	search(root/fxtlip, oak)
+5	search(root/fxtlip, uukznp)
+6	readdir(root/fxtlip)
+7	search(root/fxtlip, jqvafybqt)
+8	search(root/fxtlip, uukznp)
+9	search(root/fxtlip, zzphm)
+10	readdir(root/fxtlip)
+11	search(root/fxtlip, reouk)
+12	mkdir(wzkkfsbxvvc, root/fxtlip, 161)
+13	search(root/fxtlip, uukznp)
+14	open(root/reouk,165)
+15	readdir(root/fxtlip)
+16	open(root/uukznp,42)
+17	search(root/fxtlip, reouk)
+18	mkdir(klvl, root/fxtlip, 210)
+19	open(root/uukznp,231)
+20	access(root/uukznp, 227)
+21	access(root/reouk, 215)
+22	delete(root/uukznp)
+23	rmdir(root/fxtlip)
+24	open(root/reouk,185)
+25	access(root/reouk, 62)
+26	readdir(root/fxtlip)
+27	mkdir(asn, root/fxtlip, 154)
+28	mkdir(xaunnij, root/fxtlip, 162)
+29	search(root/fxtlip, riealoxbxbb)
+30	readdir(root/fxtlip)
+31	search(root/fxtlip, dujpiso)
+32	open(root/reouk,217)
+33	delete(root/reouk)
+34	search(root/fxtlip, reouk)
+35	open(root/reouk,68)
+36	search(root/fxtlip, labe)
+37	readdir(root/fxtlip)
+38	access(root/reouk, 90)
+39	access(root/uukznp, 144)
+40	readdir(root/fxtlip)
+41	search(root/fxtlip, cffdnazkul)
+42	open(root/uukznp,197)
+43	search(root/fxtlip, ilpczegyut)
+44	search(root/fxtlip, reouk)
+45	mkdir(fptahndlc, root/fxtlip, 185)
+46	search(root/fxtlip, slsx)
+47	readdir(root/fxtlip)
+48	search(root/fxtlip, ztudmt)
+49	search(root/fxtlip, uukznp)
+50	open(root/reouk,10)
+51	mkdir(qvgy, root/fxtlip, 120)
+52	search(root/fxtlip, uukznp)
+53	open(root/uukznp,107)
+54	search(root/fxtlip, reouk)
+55	search(root/fxtlip, qpvbhh)
+56	search(root/fxtlip, uukznp)
+57	readdir(root/fxtlip)
+58	open(root/reouk,151)
+59	mkdir(iurosw, root/fxtlip, 41)
+60	access(root/reouk, 79)
+61	access(root/uukznp, 45)
+62	access(root/uukznp, 233)
+63	readdir(root/fxtlip)
+64	readdir(root/fxtlip)
+65	readdir(root/fxtlip)
+66	search(root/fxtlip, reouk)
+67	search(root/fxtlip, iir)
+68	open(root/reouk,159)
+69	readdir(root/fxtlip)
+70	search(root/fxtlip, l)
+71	mkdir(md, root/fxtlip, 248)
+72	search(root/fxtlip, wuglqllggs)
+73	mkdir(pbedhncpr, root/fxtlip, 237)
+74	rmdir(root/fxtlip)
+75	readdir(root/fxtlip)
+76	mkdir(lpovjd, root/fxtlip, 9)
+77	search(root/fxtlip, ailojgxfzrz)
+78	search(root/fxtlip, z)
+79	search(root/fxtlip, uukznp)
+80	search(root/fxtlip, fnmsbu)
+81	access(root/reouk, 140)
+82	mkdir(hfqrmgbb, root/fxtlip, 185)
+83	rmdir(root/fxtlip)
+84	search(root/fxtlip, uukznp)
+85	readdir(root/fxtlip)
+86	open(root/reouk,154)
+87	mkdir(iaz, root/fxtlip, 28)
+88	rmdir(root/fxtlip)
+89	access(root/reouk, 32)
+90	search(root/fxtlip, fllttttj)
+91	readdir(root/fxtlip)
+92	access(root/reouk, 251)
+93	open(root/uukznp,54)
+94	readdir(root/fxtlip)
+95	open(root/reouk,147)
+96	readdir(root/fxtlip)
+97	search(root/fxtlip, reouk)
+98	search(root/fxtlip, iebljk)
+99	mkdir(jm, root/fxtlip, 124)
+
+playing access(root/reouk, 215)...
+FSREQLAT, 5, 	"access(root/reouk, 215)"
+playing delete(root/uukznp)...
+FSREQLAT, 4, 	"delete(root/uukznp)"
+playing rmdir(root/fxtlip)...
+FSREQLAT, 5, 	"rmdir(root/fxtlip)"
+playing open(root/reouk,185)...
+FSREQLAT, 3, 	"open(root/reouk,185)"
+playing access(root/reouk, 62)...
+FSREQLAT, 3, 	"access(root/reouk, 62)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+playing mkdir(asn, root/fxtlip, 154)...
+FSREQLAT, 3, 	"mkdir(asn, root/fxtlip, 154)"
+playing mkdir(xaunnij, root/fxtlip, 162)...
+FSREQLAT, 4, 	"mkdir(xaunnij, root/fxtlip, 162)"
+playing search(root/fxtlip, riealoxbxbb)...
+FSREQLAT, 2, 	"search(root/fxtlip, riealoxbxbb)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+TPUT, 0, 10 37, 270.270, 30, 1427260657574
+playing search(root/fxtlip, dujpiso)...
+FSREQLAT, 3, 	"search(root/fxtlip, dujpiso)"
+playing open(root/reouk,217)...
+FSREQLAT, 2, 	"open(root/reouk,217)"
+playing delete(root/reouk)...
+FSREQLAT, 3, 	"delete(root/reouk)"
+playing search(root/fxtlip, reouk)...
+FSREQLAT, 4, 	"search(root/fxtlip, reouk)"
+playing open(root/reouk,68)...
+FSREQLAT, 2, 	"open(root/reouk,68)"
+playing search(root/fxtlip, labe)...
+FSREQLAT, 3, 	"search(root/fxtlip, labe)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+playing access(root/reouk, 90)...
+FSREQLAT, 3, 	"access(root/reouk, 90)"
+playing access(root/uukznp, 144)...
+FSREQLAT, 3, 	"access(root/uukznp, 144)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+TPUT, 1, 10 32, 312.500, 40, 1427260657606
+playing search(root/fxtlip, cffdnazkul)...
+FSREQLAT, 3, 	"search(root/fxtlip, cffdnazkul)"
+playing open(root/uukznp,197)...
+FSREQLAT, 3, 	"open(root/uukznp,197)"
+playing search(root/fxtlip, ilpczegyut)...
+FSREQLAT, 2, 	"search(root/fxtlip, ilpczegyut)"
+playing search(root/fxtlip, reouk)...
+FSREQLAT, 3, 	"search(root/fxtlip, reouk)"
+playing mkdir(fptahndlc, root/fxtlip, 185)...
+FSREQLAT, 3, 	"mkdir(fptahndlc, root/fxtlip, 185)"
+playing search(root/fxtlip, slsx)...
+FSREQLAT, 4, 	"search(root/fxtlip, slsx)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 5, 	"readdir(root/fxtlip)"
+playing search(root/fxtlip, ztudmt)...
+FSREQLAT, 4, 	"search(root/fxtlip, ztudmt)"
+playing search(root/fxtlip, uukznp)...
+FSREQLAT, 4, 	"search(root/fxtlip, uukznp)"
+playing open(root/reouk,10)...
+FSREQLAT, 3, 	"open(root/reouk,10)"
+TPUT, 2, 10 35, 285.714, 50, 1427260657641
+playing mkdir(qvgy, root/fxtlip, 120)...
+FSREQLAT, 4, 	"mkdir(qvgy, root/fxtlip, 120)"
+playing search(root/fxtlip, uukznp)...
+FSREQLAT, 7, 	"search(root/fxtlip, uukznp)"
+playing open(root/uukznp,107)...
+FSREQLAT, 3, 	"open(root/uukznp,107)"
+playing search(root/fxtlip, reouk)...
+FSREQLAT, 2, 	"search(root/fxtlip, reouk)"
+playing search(root/fxtlip, qpvbhh)...
+FSREQLAT, 3, 	"search(root/fxtlip, qpvbhh)"
+playing search(root/fxtlip, uukznp)...
+FSREQLAT, 3, 	"search(root/fxtlip, uukznp)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 4, 	"readdir(root/fxtlip)"
+playing open(root/reouk,151)...
+FSREQLAT, 2, 	"open(root/reouk,151)"
+playing mkdir(iurosw, root/fxtlip, 41)...
+FSREQLAT, 2, 	"mkdir(iurosw, root/fxtlip, 41)"
+playing access(root/reouk, 79)...
+FSREQLAT, 2, 	"access(root/reouk, 79)"
+TPUT, 3, 10 34, 294.118, 60, 1427260657675
+playing access(root/uukznp, 45)...
+FSREQLAT, 2, 	"access(root/uukznp, 45)"
+playing access(root/uukznp, 233)...
+FSREQLAT, 2, 	"access(root/uukznp, 233)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+playing search(root/fxtlip, reouk)...
+FSREQLAT, 5, 	"search(root/fxtlip, reouk)"
+playing search(root/fxtlip, iir)...
+FSREQLAT, 3, 	"search(root/fxtlip, iir)"
+playing open(root/reouk,159)...
+FSREQLAT, 3, 	"open(root/reouk,159)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 2, 	"readdir(root/fxtlip)"
+playing search(root/fxtlip, l)...
+FSREQLAT, 2, 	"search(root/fxtlip, l)"
+TPUT, 4, 10 32, 312.500, 70, 1427260657707
+playing mkdir(md, root/fxtlip, 248)...
+FSREQLAT, 3, 	"mkdir(md, root/fxtlip, 248)"
+playing search(root/fxtlip, wuglqllggs)...
+FSREQLAT, 2, 	"search(root/fxtlip, wuglqllggs)"
+playing mkdir(pbedhncpr, root/fxtlip, 237)...
+FSREQLAT, 2, 	"mkdir(pbedhncpr, root/fxtlip, 237)"
+playing rmdir(root/fxtlip)...
+FSREQLAT, 3, 	"rmdir(root/fxtlip)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+playing mkdir(lpovjd, root/fxtlip, 9)...
+FSREQLAT, 3, 	"mkdir(lpovjd, root/fxtlip, 9)"
+playing search(root/fxtlip, ailojgxfzrz)...
+FSREQLAT, 2, 	"search(root/fxtlip, ailojgxfzrz)"
+playing search(root/fxtlip, z)...
+FSREQLAT, 3, 	"search(root/fxtlip, z)"
+playing search(root/fxtlip, uukznp)...
+FSREQLAT, 2, 	"search(root/fxtlip, uukznp)"
+playing search(root/fxtlip, fnmsbu)...
+FSREQLAT, 2, 	"search(root/fxtlip, fnmsbu)"
+TPUT, 5, 10 25, 400.000, 80, 1427260657732
+playing access(root/reouk, 140)...
+FSREQLAT, 2, 	"access(root/reouk, 140)"
+playing mkdir(hfqrmgbb, root/fxtlip, 185)...
+FSREQLAT, 2, 	"mkdir(hfqrmgbb, root/fxtlip, 185)"
+playing rmdir(root/fxtlip)...
+FSREQLAT, 2, 	"rmdir(root/fxtlip)"
+playing search(root/fxtlip, uukznp)...
+FSREQLAT, 3, 	"search(root/fxtlip, uukznp)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 3, 	"readdir(root/fxtlip)"
+playing open(root/reouk,154)...
+FSREQLAT, 2, 	"open(root/reouk,154)"
+playing mkdir(iaz, root/fxtlip, 28)...
+FSREQLAT, 3, 	"mkdir(iaz, root/fxtlip, 28)"
+playing rmdir(root/fxtlip)...
+FSREQLAT, 2, 	"rmdir(root/fxtlip)"
+playing access(root/reouk, 32)...
+FSREQLAT, 2, 	"access(root/reouk, 32)"
+playing search(root/fxtlip, fllttttj)...
+FSREQLAT, 1, 	"search(root/fxtlip, fllttttj)"
+TPUT, 6, 10 24, 416.667, 90, 1427260657756
+playing readdir(root/fxtlip)...
+FSREQLAT, 2, 	"readdir(root/fxtlip)"
+playing access(root/reouk, 251)...
+FSREQLAT, 2, 	"access(root/reouk, 251)"
+playing open(root/uukznp,54)...
+FSREQLAT, 2, 	"open(root/uukznp,54)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 2, 	"readdir(root/fxtlip)"
+playing open(root/reouk,147)...
+FSREQLAT, 3, 	"open(root/reouk,147)"
+playing readdir(root/fxtlip)...
+FSREQLAT, 2, 	"readdir(root/fxtlip)"
+playing search(root/fxtlip, reouk)...
+FSREQLAT, 2, 	"search(root/fxtlip, reouk)"
+playing search(root/fxtlip, iebljk)...
+FSREQLAT, 3, 	"search(root/fxtlip, iebljk)"
+playing mkdir(jm, root/fxtlip, 124)...
+FSREQLAT, 2, 	"mkdir(jm, root/fxtlip, 124)"
+TPUT, 7, 9 21, 428.571, 99, 1427260657777
+FS after test:
+--missing--
+BTree REQ stats:
+
+Test done in 2611
