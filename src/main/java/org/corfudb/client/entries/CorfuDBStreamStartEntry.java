@@ -48,5 +48,12 @@ public class CorfuDBStreamStartEntry extends CorfuDBStreamEntry
         this.payload = payload;
     }
 
+    public CorfuDBStreamStartEntry(Map<UUID, Long> streamMap, List<UUID> startStreams, Serializable payload)
+        throws IOException
+    {
+        super(streamMap, payload);
+        streamID = startStreams;
+    }
+
 
 }

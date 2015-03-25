@@ -17,6 +17,7 @@ package org.corfudb.client.abstractions;
 
 import org.corfudb.client.view.IWriteOnceAddressSpace;
 import org.corfudb.client.view.CachedWriteOnceAddressSpace;
+import org.corfudb.client.view.ObjectCachedWriteOnceAddressSpace;
 import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.view.Sequencer;
 import org.corfudb.client.configmasters.IConfigMaster;
@@ -101,7 +102,8 @@ public class Stream implements AutoCloseable, IStream {
     AtomicLong dispatchedReads;
     AtomicLong logPointer;
     AtomicLong minorEpoch;
-
+    int backoffCounter;
+    static int MAX_BACKOFF = 10;
     ConcurrentHashMap<UUID, Long> epochMap;
 
     Timestamp latest = null;
@@ -183,8 +185,9 @@ public class Stream implements AutoCloseable, IStream {
             return (IConfigMaster) this.getView.get().getConfigMasters().get(0);
         };
         getAddressSpace = (client, logid) -> {
-            return new CachedWriteOnceAddressSpace(client, logid);
+            return new ObjectCachedWriteOnceAddressSpace(client, logid);
         };
+        backoffCounter = 0;
         woas = getAddressSpace.apply(cdbc, logID);
         this.prefetch = prefetch;
         this.executor = executor;
@@ -406,11 +409,20 @@ public class Stream implements AutoCloseable, IStream {
                                 }
                             }
                             dispatchedReads.set(highWatermark);
+                            backoffCounter++;
+                            if (backoffCounter > MAX_BACKOFF)
+                            {
+                                backoffCounter = MAX_BACKOFF;
+                            }
+                            try {
+                            Thread.sleep((long)Math.pow(2, backoffCounter));}
+                            catch (InterruptedException ie) {}
                             getStreamTailAndDispatch(2); //dispatch 2 so we can resolve any holes
                             return;
                         }
                         else if (r.resultType == ReadResultType.SUCCESS)
                         {
+                            backoffCounter = 0;
                             if (closed) { return; }
                             highWatermark = r.pos + 1;
 
@@ -689,7 +701,7 @@ public class Stream implements AutoCloseable, IStream {
     public byte[] readNext()
     throws IOException, InterruptedException
     {
-        return readNextEntry().getPayload();
+        return (byte[])readNextEntry().payload;
     }
 
     /**
@@ -701,7 +713,7 @@ public class Stream implements AutoCloseable, IStream {
     public Object readNextObject()
     throws IOException, InterruptedException, ClassNotFoundException
     {
-        return readNextEntry().deserializePayload();
+        return readNextEntry().payload;
     }
 
     /**
@@ -1097,6 +1109,12 @@ public class Stream implements AutoCloseable, IStream {
         return ts;
     }
 
+    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, byte[] payload, int slots)
+    throws RemoteException, OutOfSpaceException, IOException
+    {
+        return pullStreamAsBundle(targetStreams, (Serializable) payload, slots);
+    }
+
     /**
      * Temporarily pull multiple remote streams into this stream, including a payload in the
      * remote move operation, and optionally reserve extra entries, using a BundleEntry.
@@ -1109,9 +1127,17 @@ public class Stream implements AutoCloseable, IStream {
      *
      * @return                 A timestamp indicating where the attachment begins.
      */
-    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, byte[] payload, int slots)
+    public Timestamp pullStreamAsBundle(List<UUID> targetStreams, Serializable payload, int slots)
     throws RemoteException, OutOfSpaceException, IOException
     {
+        final long token = sequencer.getNext(streamIDstack.peekLast(),  slots + 1);
+        Timestamp ts = new Timestamp(epochMap, null, token, streamID);
+        ts.setPhysicalPos(token);
+        ts.setContainingStream(streamID);
+
+        CompletableFuture<Void> cf = CompletableFuture.runAsync(() -> {
+        try
+        {
         HashMap<UUID, StreamData> datamap = new HashMap<UUID, StreamData>();
         for (UUID id : targetStreams)
         {
@@ -1131,8 +1157,7 @@ public class Stream implements AutoCloseable, IStream {
             epochMap.put(id, sd.epoch);
         }
         CorfuDBStreamStartEntry cdbsme = new CorfuDBStreamStartEntry(epochMap, targetStreams, payload);
-        long token = sequencer.getNext(streamIDstack.peekLast(),  slots + 1);
-        woas.write(token, (Serializable) cdbsme);
+                woas.write(token, (Serializable) cdbsme);
 
         int offset = 1;
         for (UUID id : targetStreams)
@@ -1146,10 +1171,9 @@ public class Stream implements AutoCloseable, IStream {
             woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
             offset++;
         }
+        } catch (Exception ex) {}
+        }, executor);
 
-        Timestamp ts = new Timestamp(epochMap, null, token, streamID);
-        ts.setPhysicalPos(token);
-        ts.setContainingStream(streamID);
         return ts;
     }
 

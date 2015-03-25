@@ -46,32 +46,14 @@ import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.view.WriteOnceAddressSpace;
 import org.corfudb.client.CorfuDBClient;
 
-
+import org.corfudb.client.view.Serializer;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Output;
+import com.esotericsoftware.kryo.io.Input;
 /**
  * This class represents entries which have a payload.
  */
 public interface IPayload {
-
-    /**
-     * Get the payload attached to this entry as a byte array.
-     */
-    byte[] getPayload();
-
-    /**
-     * Return the deserialized version of the payload.
-     *
-     * @return      A deserialized object representing the payload.
-     */
-    default Object deserializePayload()
-        throws IOException, ClassNotFoundException
-    {
-        try (ByteArrayInputStream bis = new ByteArrayInputStream(getPayload()))
-        {
-            try (ObjectInputStream ois = new ObjectInputStream(bis))
-            {
-                return ois.readObject();
-            }
-        }
-    }
+    static final Logger log = LoggerFactory.getLogger(IPayload.class);
 
 }

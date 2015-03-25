@@ -511,14 +511,8 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                                     else if (field.getName().toString().equals("payload") && field.get(obj) != null)
                                     {
                                         try {
-                                        //deserialize the entire payload
                                         JsonObjectBuilder pdatan = Json.createObjectBuilder();
-                                        byte[] pdata = (byte[]) field.get(obj);
-                                        try (ByteArrayInputStream pbis = new ByteArrayInputStream(pdata))
-                                        {
-                                            try (ObjectInputStream pois = new ObjectInputStream(pbis))
-                                            {
-                                                Object pobj = pois.readObject();
+                                        Object pobj = field.get(obj);
                                                 pdatan.add("classname", pobj.getClass().getName());
                                                 Class<?> pcurrent = pobj.getClass();
                                                 try {
@@ -539,8 +533,6 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                                                         catch (IllegalAccessException iae) {}
                                                     }
                                                 } while ((pcurrent = pcurrent.getSuperclass()) != null && pcurrent != Object.class);
-                                            }
-                                        }
                                         output.add("payload", pdatan);
                                         } catch (Exception e)
                                         {

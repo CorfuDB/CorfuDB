@@ -119,7 +119,7 @@ public class CorfuBundleHello {
                 log.debug("Reading back bundled append.");
                 cdse = s.readNextEntry();
                 s1_bundle = cdse.getTimestamp();
-                sresult = (String) cdse.deserializePayload();
+                sresult = (String) cdse.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Bundled Hello World!"))
                 {
@@ -128,7 +128,7 @@ public class CorfuBundleHello {
                 }
                 b2 = (BundleEntry) s2.readNextEntry();
                 s2_bundle = b2.getTimestamp();
-                sresult = (String) b2.deserializePayload();
+                sresult = (String) b2.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Bundled Hello World!"))
                 {
@@ -137,7 +137,7 @@ public class CorfuBundleHello {
                 }
                 b3 = (BundleEntry) s3.readNextEntry();
                 s3_bundle = b3.getTimestamp();
-                sresult = (String) b3.deserializePayload();
+                sresult = (String) b3.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Bundled Hello World!"))
                 {
@@ -165,7 +165,7 @@ public class CorfuBundleHello {
         log.debug("Reading back 2 results from outer stream " + streamID.toString());
         cdse = s.readNextEntry();
         s1_firstAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Hello from bundle " + streamID2.toString()))
                 {
@@ -174,7 +174,7 @@ public class CorfuBundleHello {
                 }
         cdse = s.readNextEntry();
         s1_secondAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Hello from bundle " + streamID3.toString()))
                 {
@@ -186,7 +186,7 @@ public class CorfuBundleHello {
         log.debug("Reading back 2 results from inner stream " + streamID2.toString());
         cdse = s2.readNextEntry();
         s2_firstAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Hello from bundle " + streamID2.toString()))
                 {
@@ -195,7 +195,7 @@ public class CorfuBundleHello {
                 }
         cdse = s2.readNextEntry();
         s2_secondAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Hello from bundle " + streamID3.toString()))
                 {
@@ -207,7 +207,7 @@ public class CorfuBundleHello {
         log.debug("Reading back 2 results from inner stream " + streamID2.toString());
         cdse = s3.readNextEntry();
         s3_firstAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Hello from bundle " + streamID2.toString()))
                 {
@@ -216,7 +216,7 @@ public class CorfuBundleHello {
                 }
         cdse = s3.readNextEntry();
         s3_secondAddress = cdse.getTimestamp();
-        sresult = (String) cdse.deserializePayload();
+        sresult = (String) cdse.payload;
         log.info("Contents were: " + sresult);
         if (!sresult.toString().equals("Hello from bundle " + streamID3.toString()))
                 {
@@ -285,7 +285,7 @@ public class CorfuBundleHello {
                         }
                 cdbse = s2_1.readNextEntry();
                 s2_bundle = cdbse.getTimestamp();
-                sresult = (String) cdbse.deserializePayload();
+                sresult = (String) cdbse.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Bundled Hello World!"))
                 {
@@ -295,7 +295,7 @@ public class CorfuBundleHello {
                 log.debug("Reading back 2 results from inner stream " + streamID2.toString());
                 cdse = s2_1.readNextEntry();
                 s2_firstAddress = cdse.getTimestamp();
-                sresult = (String) cdse.deserializePayload();
+                sresult = (String) cdse.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Hello from bundle " + streamID2.toString()))
                         {
@@ -304,7 +304,7 @@ public class CorfuBundleHello {
                         }
                 cdse = s2_1.readNextEntry();
                 s2_secondAddress = cdse.getTimestamp();
-                sresult = (String) cdse.deserializePayload();
+                sresult = (String) cdse.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Hello from bundle " + streamID3.toString()))
                         {
@@ -327,7 +327,7 @@ public class CorfuBundleHello {
                         }
                 cdbse = s3_1.readNextEntry();
                 s3_bundle = cdbse.getTimestamp();
-                sresult = (String) cdbse.deserializePayload();
+                sresult = (String) cdbse.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Bundled Hello World!"))
                 {
@@ -337,7 +337,7 @@ public class CorfuBundleHello {
                 log.debug("Reading back 2 results from inner stream " + streamID3.toString());
                 cdse = s3_1.readNextEntry();
                 s3_firstAddress = cdse.getTimestamp();
-                sresult = (String) cdse.deserializePayload();
+                sresult = (String) cdse.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Hello from bundle " + streamID2.toString()))
                         {
@@ -346,7 +346,7 @@ public class CorfuBundleHello {
                         }
                 cdse = s3_1.readNextEntry();
                 s3_secondAddress = cdse.getTimestamp();
-                sresult = (String) cdse.deserializePayload();
+                sresult = (String) cdse.payload;
                 log.info("Contents were: " + sresult);
                 if (!sresult.toString().equals("Hello from bundle " + streamID3.toString()))
                         {

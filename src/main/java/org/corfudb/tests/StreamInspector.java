@@ -49,7 +49,7 @@ public class StreamInspector {
             {
                 CorfuDBStreamEntry cdse = s.readNextEntry();
                 Timestamp t = cdse.getTimestamp();
-                log.info("{} \t {} \t {}", t.pos, t.physicalPos, cdse.deserializePayload().getClass().toString());
+                log.info("{} \t {} \t {}", t.pos, t.physicalPos, cdse.payload.getClass().toString());
             }
         }
 

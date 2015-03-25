@@ -55,7 +55,7 @@ import java.util.UUID;
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
 
-public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
+public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
     private CorfuDBClient client;
     private UUID logID;
@@ -64,7 +64,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
 	private final Logger log = LoggerFactory.getLogger(CachedWriteOnceAddressSpace.class);
 
-    public CachedWriteOnceAddressSpace(CorfuDBClient client)
+    public ObjectCachedWriteOnceAddressSpace(CorfuDBClient client)
     {
         this.client = client;
         this.getView = () ->  {
@@ -73,7 +73,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         this.logID = getView.get().getUUID();
     }
 
-    public CachedWriteOnceAddressSpace(CorfuDBClient client, UUID logID)
+    public ObjectCachedWriteOnceAddressSpace(CorfuDBClient client, UUID logID)
     {
         this.client = client;
         this.logID = logID;
@@ -89,7 +89,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         };
     }
 
-    public CachedWriteOnceAddressSpace(CorfuDBView view)
+    public ObjectCachedWriteOnceAddressSpace(CorfuDBView view)
     {
         this.view = view;
         this.getView = () -> {
@@ -102,6 +102,22 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         throws IOException, OverwriteException, TrimmedException
     {
         write(address, Serializer.serialize_compressed(s));
+
+        /*
+        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
+        {
+            try (DeflaterOutputStream dos = new DeflaterOutputStream(bs))
+            {
+                Kryo k = Serializer.kryos.get();
+                Output o = new Output(dos, 16384);
+                k.writeClassAndObject(o, s);
+                o.flush();
+                o.close();
+                dos.flush();
+                dos.finish();
+                write(address, bs.toByteArray());
+            }
+        }*/
     }
 
     public void write(long address, byte[] data)
@@ -140,11 +156,11 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         {
             try {
                 byte[] data = null;
-                data = AddressSpaceCache.get(logID, address);
-                if (data != null) {
-                    log.debug("Cache hit @ {}", address);
-                    return data;
-                }
+             //   data = AddressSpaceCache.get(logID, address);
+//                if (data != null) {
+  //                  log.debug("ObjCache hit @ {}", address);
+    //                return data;
+      //          }
 
                 //TODO: handle multiple segments
                 CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
@@ -156,8 +172,8 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 //reads have to come from last unit in chain
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
                 data = wolu.read(mappedAddress);
-                log.debug("cache MISS @ {}", address);
-                AddressSpaceCache.put(logID, address, data);
+            //    log.debug("Objcache MISS @ {}", address);
+             //   AddressSpaceCache.put(logID, address, data);
                 return data;
             }
             catch (NetworkException e)
@@ -171,8 +187,33 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
     public Object readObject(long address)
         throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
     {
+         Object o = AddressSpaceObjectCache.get(logID, address);
+         if (o != null) {
+             log.debug("ObjCache hit @ {}", address);
+             return o; }
+
          byte[] data = read(address);
-         return Serializer.deserialize_compressed(data);
+         o = Serializer.deserialize_compressed(data);
+        AddressSpaceObjectCache.put(logID, address ,o);
+        return o;
+         /*
+         Kryo k = Serializer.kryos.get();
+        log.debug("ObjCache MISS @ {}", address);
+
+         byte[] data = read(address);
+         try (ByteArrayInputStream bais = new ByteArrayInputStream(data))
+         {
+            try (InflaterInputStream dis = new InflaterInputStream(bais))
+            {
+                try (Input input = new Input(dis, 16384))
+                {
+                    o = k.readClassAndObject(input);
+                    AddressSpaceObjectCache.put(logID, address ,o);
+                    return o;
+                }
+            }
+         }
+         */
     }
 }
 

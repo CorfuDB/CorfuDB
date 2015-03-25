@@ -47,7 +47,7 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     /** The timestamp of the entry */
     public Timestamp ts;
     /** The payload of the entry, which may be null. */
-    public byte[] payload;
+    public Serializable payload;
     /** Whether or not this entry is a copy */
     public boolean isCopy;
     /** If it is a copy, what the original address was */
@@ -70,15 +70,7 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     public CorfuDBStreamEntry(UUID streamID, Serializable payloadObject, long epoch)
         throws IOException
     {
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
-        {
-            try (ObjectOutput out = new ObjectOutputStream(bs))
-            {
-                out.writeObject(payloadObject);
-                payload = bs.toByteArray();
-            }
-        }
-
+        payload = payloadObject;
         this.ts = new Timestamp(streamID, epoch);
     }
 
@@ -92,7 +84,7 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     public CorfuDBStreamEntry(UUID streamID, byte[] payload, long epoch)
         throws IOException
     {
-        this.payload = payload;
+        this.payload  = (Serializable) payload;
         this.ts = new Timestamp(streamID, epoch);
     }
 
@@ -116,14 +108,7 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     public CorfuDBStreamEntry(Map<UUID, Long> epochMap, Serializable payloadObject)
     throws IOException
     {
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
-        {
-            try (ObjectOutput out = new ObjectOutputStream(bs))
-            {
-                out.writeObject(payloadObject);
-                payload = bs.toByteArray();
-            }
-        }
+        payload = payloadObject;
 
         this.ts = new Timestamp(epochMap);
     }
@@ -136,7 +121,7 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
      */
     public CorfuDBStreamEntry(Map<UUID, Long> epochMap, byte[] payload)
     {
-        this.payload = payload;
+        this.payload = (Serializable) payload;
         this.ts = new Timestamp(epochMap);
     }
 
@@ -148,13 +133,6 @@ public class CorfuDBStreamEntry implements IPayload, Serializable, Comparable<Co
     public CorfuDBStreamEntry(Map<UUID, Long> epochMap)
     {
         this.ts = new Timestamp(epochMap);
-    }
-
-    /**
-     * Get the payload attached to this entry as a byte array.
-     */
-    public byte[] getPayload() {
-        return payload;
     }
 
     /**

@@ -72,6 +72,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.ObjectOutputStream;
 import java.io.ObjectOutput;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This class creates bundles, which abstracts away pulling multiple logs and inserting a stream
@@ -81,10 +82,11 @@ public class Bundle {
 
     IStream stream;
     List<UUID> remoteStreams;
-    byte[] payload;
+    Serializable payload;
     boolean allocateSlots;
 
     public Bundle(IStream s, List<UUID> remoteStreams, byte[] payload, boolean allocateSlots)
+    throws IOException
     {
         this.stream = s;
         this.remoteStreams = remoteStreams;
@@ -97,15 +99,7 @@ public class Bundle {
     {
         this.stream = s;
         this.remoteStreams = remoteStreams;
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
-        {
-            try (ObjectOutput out = new ObjectOutputStream(bs))
-            {
-                out.writeObject(payload);
-                this.payload = bs.toByteArray();
-            }
-        }
-
+        this.payload = payload;
         this.allocateSlots = allocateSlots;
     }
 
@@ -114,6 +108,5 @@ public class Bundle {
     {
         return stream.pullStreamAsBundle(remoteStreams, payload, allocateSlots ? remoteStreams.size() : 0);
     }
-
 }
 

@@ -331,36 +331,4 @@ interface SMRLearner
     void deliver(Object command, long curstream, ITimestamp timestamp);
 }
 
-/**
- * This is used by SMREngine to wrap commands before serializing them in the stream,
- * so that it can add its own header information.
- *
- */
-class SMRCommandWrapper implements Serializable
-{
-    static boolean init = false;
-    static long uniquenodeid = Long.MAX_VALUE;
-    static AtomicLong ctr;
-    Pair<Long, Long> uniqueid;
-    Serializable cmd;
-    Set<Long> streams;
-    public SMRCommandWrapper(Serializable tcmd, Set<Long> tstreams)
-    {
-        if(!init) throw new RuntimeException("SMRCommandWrapper not initialized with unique node ID!");
-        cmd = tcmd;
-        uniqueid = new Pair(uniquenodeid, ctr.incrementAndGet());
-        streams = tstreams;
-    }
-    public synchronized static void initialize(long tuniquenodeid)
-    {
-        if(init) return;
-        uniquenodeid = tuniquenodeid;
-        ctr = new AtomicLong();
-        init = true;
-    }
-    public String toString()
-    {
-        return super.toString() + "::" + uniqueid + "::" + cmd;
-    }
-}
 

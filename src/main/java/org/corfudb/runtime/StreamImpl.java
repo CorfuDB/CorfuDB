@@ -117,20 +117,7 @@ class HopAdapterStreamEntryImpl implements StreamEntry
     @Override
     public Object getPayload()
     {
-        try
-        {
-            return cde.deserializePayload();
-        }
-        catch (IOException e)
-        {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-        catch (ClassNotFoundException e)
-        {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
+        return cde.payload;
     }
 
     @Override
@@ -167,7 +154,7 @@ class HopAdapterStreamImpl implements Stream
 
     static Thread.UncaughtExceptionHandler globalThreadExceptionHandler = (Thread t, Throwable e) ->  {
                         dbglog.warn("Global thread " + t.getName() + "terminated due to exception", e); };
-    static ExecutorService globalThreadPool = new ForkJoinPool(32, new globalThreadFactory(), globalThreadExceptionHandler, true);
+    static ExecutorService globalThreadPool = new ForkJoinPool(8, new globalThreadFactory(), globalThreadExceptionHandler, true);
 
 
     public HopAdapterStreamImpl(CorfuDBClient cdb, long tstreamid)
