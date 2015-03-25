@@ -8,12 +8,13 @@ import java.util.*;
 public class FileSystemDriver {
 
     public enum fsoptype {
+        access,
         create,
         open,
         close,
         read,
         write,
-        trunc,
+        resize,
         delete,
         mkdir,
         readdir,
@@ -24,27 +25,29 @@ public class FileSystemDriver {
         public static fsoptype fromInt(int i) { return s_vals[i]; }
         protected static HashMap<fsoptype, Double> s_thresholds = new HashMap<fsoptype, Double>();
         static {
-            s_thresholds.put(create, 5.0);                          // 5
-            s_thresholds.put(open, 10.0+s_thresholds.get(create));  // 15
-            s_thresholds.put(close, 10.0+s_thresholds.get(open));   // 25
-            s_thresholds.put(read, 20.0+s_thresholds.get(close));   // 45
-            s_thresholds.put(write, 15.0+s_thresholds.get(read));   // 60
-            s_thresholds.put(trunc, 4.0+s_thresholds.get(write));   // 64
-            s_thresholds.put(delete, 2.0+s_thresholds.get(trunc));  // 66
-            s_thresholds.put(mkdir, 8.0+s_thresholds.get(delete));  // 74
-            s_thresholds.put(readdir, 8.0+s_thresholds.get(mkdir)); // 82
-            s_thresholds.put(rmdir, 2.0+s_thresholds.get(readdir)); // 84
+            s_thresholds.put(access, 5.0);                          // 5
+            s_thresholds.put(create, 5.0);                          // 10
+            s_thresholds.put(open, 10.0+s_thresholds.get(create));  // 20
+            s_thresholds.put(close, 10.0+s_thresholds.get(open));   // 30
+            s_thresholds.put(read, 20.0+s_thresholds.get(close));   // 50
+            s_thresholds.put(write, 15.0+s_thresholds.get(read));   // 64
+            s_thresholds.put(resize, 4.0+s_thresholds.get(write));   // 69
+            s_thresholds.put(delete, 2.0+s_thresholds.get(resize));  // 71
+            s_thresholds.put(mkdir, 8.0+s_thresholds.get(delete));  // 79
+            s_thresholds.put(readdir, 8.0+s_thresholds.get(mkdir)); // 87
+            s_thresholds.put(rmdir, 2.0+s_thresholds.get(readdir)); // 89
             s_thresholds.put(search, 100.0);
         }
         protected static Double thresh(fsoptype op) { return s_thresholds.get(op); }
         public static fsoptype randomOp(Random random) {
             Double d = random.nextDouble() * 100.0;
+            if(d < thresh(access)) return access;
             if(d < thresh(create)) return create;
             if(d < thresh(open)) return open;
             if(d < thresh(close)) return close;
             if(d < thresh(read)) return read;
             if(d < thresh(write)) return write;
-            if(d < thresh(trunc)) return trunc;
+            if(d < thresh(resize)) return resize;
             if(d < thresh(delete)) return delete;
             if(d < thresh(mkdir)) return mkdir;
             if(d < thresh(readdir)) return readdir;
@@ -54,17 +57,24 @@ public class FileSystemDriver {
 
     }
 
-
     public static class Op implements Serializable {
+
+        protected transient static HashMap<String, BTreeFS.FSEntry> s_openfiles = new HashMap();
+        protected transient static HashMap<String, Integer> s_openstate = new HashMap();
+        protected transient static HashSet<String> s_deleted = new HashSet<String>();
 
         fsoptype optype;
         Map<String, Object> parameters;
         Object result;
-        protected static HashMap<String, BTreeFS.FSEntry> s_openfiles = new HashMap();
-        protected static HashMap<String, Integer> s_openstate = new HashMap();
-        protected static HashSet<String> s_deleted = new HashSet<String>();
+        protected transient long lStart;
+        protected transient long lComplete;
+        public void begin() { lStart = System.currentTimeMillis(); }
+        public void complete() { lComplete = System.currentTimeMillis(); }
+        public long getRequestLatencyMS() { return lComplete - lStart; }
 
         public Op(fsoptype _type, Pair<String, Object>... params) {
+            lStart = 0;
+            lComplete = 0;
             result = null;
             optype = _type;
             parameters = new HashMap<String, Object>();
@@ -72,23 +82,51 @@ public class FileSystemDriver {
                 parameters.put(p.first, p.second);
         }
 
+        /**
+         * get a request latency string
+         * @return
+         */
+        public String getRequestStats() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("FSREQLAT, ");
+            sb.append(getRequestLatencyMS());
+            sb.append(", \t\"");
+            sb.append(toString());
+            sb.append("\"");
+            return sb.toString();
+        }
+
+        /**
+         * toString
+         * @return
+         */
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
             switch(optype) {
+
+                case access: {
+                    // public int access(String path, int mode);
+                    sb.append("access(");
+                    sb.append((String) parameters.get("path"));
+                    sb.append(", ");
+                    sb.append((Integer) parameters.get("mode"));
+                    sb.append(")");
+                    return sb.toString();
+                }
 
                 case create: {
                     // public boolean
                     // create(
                     //        String fsName,
                     //        String parentPath,
-                    //        long permissions);
+                    //        int permissions);
                     sb.append("create(");
                     sb.append((String) parameters.get("fsname"));
                     sb.append(", ");
                     sb.append((String) parameters.get("parentPath"));
                     sb.append(", ");
-                    sb.append((Long) parameters.get("permissions"));
+                    sb.append((Integer) parameters.get("permissions"));
                     sb.append(")");
                     return sb.toString();
                 }
@@ -98,7 +136,7 @@ public class FileSystemDriver {
                     sb.append("open(");
                     sb.append((String) parameters.get("path"));
                     sb.append(",");
-                    sb.append((Long) parameters.get("mode"));
+                    sb.append((Integer) parameters.get("mode"));
                     sb.append(")");
                     return sb.toString();
                 }
@@ -128,19 +166,23 @@ public class FileSystemDriver {
                     sb.append("write(");
                     sb.append((String) parameters.get("file"));
                     sb.append(", ");
+                    sb.append((Integer) parameters.get("fOffset"));
+                    sb.append(", ");
                     sb.append((byte[]) parameters.get("buf"));
                     sb.append(",");
+                    sb.append((Integer) parameters.get("bufOffset"));
+                    sb.append(", ");
                     sb.append((Integer) parameters.get("count"));
                     sb.append(")");
                     return sb.toString();
                 }
 
-                case trunc: {
-                    // public int trunc(FSEntry file, int newlen)
-                    sb.append("trunc(");
+                case resize: {
+                    // public int resize(FSEntry file, long newlen)
+                    sb.append("resize(");
                     sb.append((String) parameters.get("file"));
                     sb.append(", ");
-                    sb.append((Integer) parameters.get("newlen"));
+                    sb.append((Long) parameters.get("newlen"));
                     sb.append(")");
                     return sb.toString();
                 }
@@ -157,13 +199,13 @@ public class FileSystemDriver {
                     //public boolean
                     //mkdir(String fsName,
                     //      String parentPath,
-                    //      long permissions);
+                    //      int permissions);
                     sb.append("mkdir(");
                     sb.append((String) parameters.get("fsName"));
                     sb.append(", ");
                     sb.append((String) parameters.get("parentPath"));
                     sb.append(", ");
-                    sb.append((Long) parameters.get("permissions"));
+                    sb.append((Integer) parameters.get("permissions"));
                     sb.append(")");
                     return sb.toString();
                 }
@@ -202,17 +244,26 @@ public class FileSystemDriver {
         public Object
         play(BTreeFS fs) {
 
+            begin();
             switch(optype) {
+
+                case access: {
+                    // public int access(String path, int mode)
+                    String path = (String) parameters.get("path");
+                    Integer mode = (Integer) parameters.get("mode");
+                    result = fs.access(path, mode);
+                    break;
+                }
 
                 case create: {
                     // public boolean
                     // create(
                     //        String fsName,
                     //        String parentPath,
-                    //        long permissions);
+                    //        int permissions);
                     String fsname = (String) parameters.get("fsname");
                     String parentPath = (String) parameters.get("parentPath");
-                    Long permissions = (Long) parameters.get("permissions");
+                    Integer permissions = (Integer) parameters.get("permissions");
                     result = new Boolean(fs.create(fsname, parentPath, permissions));
                     break;
                 }
@@ -220,7 +271,7 @@ public class FileSystemDriver {
                 case open: {
                     // public FSEntry open(String path, long mode)
                     String path = (String) parameters.get("path");
-                    Long mode = (Long) parameters.get("mode");
+                    Integer mode = (Integer) parameters.get("mode");
                     BTreeFS.FSEntry entry = fs.open(path, mode);
                     if(entry != null) {
                         s_openfiles.put(path, entry);
@@ -254,21 +305,23 @@ public class FileSystemDriver {
                 }
 
                 case write: {
-                    // public int write(FSEntry file, byte[] buf, int count)
+                    //     public int  write(FSEntry file, int fOffset, byte[] buf, int bufOffset, int count)
                     String strPath = (String) parameters.get("file");
                     BTreeFS.FSEntry file = s_openfiles.get(strPath);
+                    Integer fOffset = (Integer) parameters.get("fOffset");
                     byte[] buf = (byte[]) parameters.get("buf");
+                    Integer bufOffset = (Integer) parameters.get("bufOffset");
                     Integer count = (Integer) parameters.get("count");
-                    result = new Integer(fs.write(file, buf, count));
+                    result = new Integer(fs.write(file, fOffset, buf, bufOffset, count));
                     break;
                 }
 
-                case trunc: {
-                    // public int trunc(FSEntry file, int newlen)
+                case resize: {
+                    // public int resize(FSEntry file, int newlen)
                     String strPath = (String) parameters.get("file");
                     BTreeFS.FSEntry file = s_openfiles.get(strPath);
-                    Integer newlen = (Integer) parameters.get("newlen");
-                    result = new Integer(fs.trunc(file, newlen));
+                    Long newlen = (Long) parameters.get("newlen");
+                    result = new Long(fs.resize(file, newlen));
                     break;
                 }
 
@@ -286,7 +339,7 @@ public class FileSystemDriver {
                     //      long permissions);
                     String fsName = (String) parameters.get("fsName");
                     String parentPath = (String) parameters.get("parentPath");
-                    Long permissions = (Long) parameters.get("permissions");
+                    Integer permissions = (Integer) parameters.get("permissions");
                     result = new Boolean(fs.mkdir(fsName, parentPath, permissions));
                     break;
                 }
@@ -316,6 +369,7 @@ public class FileSystemDriver {
                 default:
                     throw new RuntimeException("unknown op type!");
             }
+            complete();
             return result;
         }
 
@@ -449,8 +503,8 @@ public class FileSystemDriver {
          * @param random
          * @return
          */
-        protected static long randomPermissions(Random random) {
-            return random.nextInt(8);
+        protected static int randomPermissions(Random random) {
+            return random.nextInt(BTreeFS._ACCESS_GLOBAL_EXEC);
         }
 
 
@@ -522,17 +576,27 @@ public class FileSystemDriver {
             fsoptype optype = fsoptype.randomOp(random);
             switch(optype) {
 
+                case access:
+                    // public int access(String path, int mode);
+                    String apath = randomFilePath(random, fs);
+                    if(apath == null)
+                        return null;
+                    Integer amode = (Integer) randomPermissions(random);
+                    return new Op(optype,
+                            new Pair("path", apath),
+                            new Pair("mode", amode));
+
                 case create:
                     // public boolean
                     // create(
                     //        String fsName,
                     //        String parentPath,
-                    //        long permissions);
+                    //        int permissions);
                     String parentPath = randomDirectoryPath(random, fs);
                     if(parentPath == null)
                         return null;
                     String fsname = randomChildName(random, null);
-                    Long permissions = (Long) randomPermissions(random);
+                    Integer permissions = (Integer) randomPermissions(random);
                     return new Op(optype,
                                   new Pair("fsname", fsname),
                                   new Pair("parentPath", parentPath),
@@ -543,7 +607,7 @@ public class FileSystemDriver {
                     String path = randomFilePath(random, fs);
                     if(path == null)
                         return null;
-                    Long mode = (Long) randomPermissions(random);
+                    Integer mode = (Integer) randomPermissions(random);
                     return new Op(optype,
                                   new Pair("path", path),
                                   new Pair("mode", mode));
@@ -571,16 +635,20 @@ public class FileSystemDriver {
                     if(wfp == null) return null;
                     byte[] wbuf = randomBuffer(random);
                     Integer wcount = wbuf.length;
+                    Integer fOffset = random.nextInt(wcount);
+                    Integer bufOffset = random.nextInt(wcount);
                     return new Op(optype,
                             new Pair("file", wfp),
+                            new Pair("fOffset", fOffset),
                             new Pair("buf", wbuf),
+                            new Pair("bufOffset", bufOffset),
                             new Pair("count", wcount));
 
-                case trunc:
-                    // public int trunc(FSEntry file, int newlen)
+                case resize:
+                    // public long resize(FSEntry file, long newlen)
                     String tfp = randomOpenFile(random);
                     if(tfp == null) return null;
-                    Integer newlen = (Integer) random.nextInt(4096);
+                    Long newlen = new Long((long)random.nextInt((int)BTreeFS.MAX_EXTENT*4));
                     return new Op(optype,
                                   new Pair("file", tfp),
                                   new Pair("newlen", newlen));
@@ -597,12 +665,12 @@ public class FileSystemDriver {
                     //public boolean
                     //mkdir(String fsName,
                     //      String parentPath,
-                    //      long permissions);
+                    //      int permissions);
                     String mparentPath = (String) randomDirectoryPath(random, fs);
                     if(mparentPath == null)
                         return null;
                     String fsName = (String) randomChildName(random, null);
-                    Long mpermissions = (Long) randomPermissions(random);
+                    Integer mpermissions = (Integer) randomPermissions(random);
                     return new Op(optype,
                                   new Pair("fsName", fsName),
                                   new Pair("parentPath", mparentPath),
@@ -957,6 +1025,7 @@ public class FileSystemDriver {
             Op op = next();
             System.out.println("playing " + op + "...");
             op.play(m_fs);
+            System.out.println(op.getRequestStats());
             m_curop++;
             m_nTotalOps++;
             if(++m_nEpochOps == EPOCH_SIZE || m_curop == nLastOp) {
@@ -989,6 +1058,7 @@ public class FileSystemDriver {
             Op op = next();
             System.out.println("playing " + op + "...");
             op.play(m_fs);
+            System.out.println(op.getRequestStats());
             m_curop++;
             m_nTotalOps++;
             if(++m_nEpochOps == EPOCH_SIZE || m_curop == m_wkld.m_nOps) {
@@ -1029,8 +1099,8 @@ public class FileSystemDriver {
 
     protected boolean hasNext() { return m_phases[m_curphase].hasNext(); }
     protected Op next() { return m_phases[m_curphase].next(); }
-    public static Op newMkdirOp(String n, String p, Long l) { return new Op(fsoptype.mkdir, new Pair("fsName", n), new Pair("parentPath", p), new Pair("permissions", l)); }
-    public static Op newCreateOp(String n, String p, Long l) { return new Op(fsoptype.create, new Pair("fsname", n), new Pair("parentPath", p), new Pair("permissions", l)); }
+    public static Op newMkdirOp(String n, String p, Integer l) { return new Op(fsoptype.mkdir, new Pair("fsName", n), new Pair("parentPath", p), new Pair("permissions", l)); }
+    public static Op newCreateOp(String n, String p, Integer l) { return new Op(fsoptype.create, new Pair("fsname", n), new Pair("parentPath", p), new Pair("permissions", l)); }
 
 
 }

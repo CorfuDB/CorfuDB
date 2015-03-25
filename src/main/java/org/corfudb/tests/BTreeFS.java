@@ -26,10 +26,20 @@ public class BTreeFS {
     public static final double DEFAULT_DIR_PROBABILITY = 0.3;
     public static final int DEFAULT_MAX_HEIGHT = 8;
     public static final long BEGINNING_OF_TIME = -946771200000L + ((60L * 365 * 24 * 60 * 60 * 1000)); // -946771200000L = January 1, 1940
-    public static final long MAX_EXTENT = 4096;
+    public static final long MAX_EXTENT = 65536;
+    public static final int _ACCESS_USER_READ = (0x1 << 0);
+    public static final int _ACCESS_USER_WRITE = (0x1 << 1);
+    public static final int _ACCESS_USER_EXEC = (0x1 << 2);
+    public static final int _ACCESS_GROUP_READ = (0x1 << 3);
+    public static final int _ACCESS_GROUP_WRITE = (0x1 << 4);
+    public static final int _ACCESS_GROUP_EXEC = (0x1 << 5);
+    public static final int _ACCESS_GLOBAL_READ = (0x1 << 6);
+    public static final int _ACCESS_GLOBAL_WRITE = (0x1 << 7);
+    public static final int _ACCESS_GLOBAL_EXEC = (0x1 << 8);
+    public static final int _ACCESS_DIRECTORY = (0x1 << 9);
+    public static final int _ACCESS_DEFAULTS = _ACCESS_USER_READ | _ACCESS_USER_WRITE | _ACCESS_USER_EXEC;
 
     protected CDBAbstractBTree<String, FSEntry> m_btree;
-    protected CDBAbstractBTree<String, Integer> m_refcnt;
     protected AbstractRuntime m_rt;
     protected StreamFactory m_sf;
     protected int m_nMinAtom;
@@ -41,93 +51,190 @@ public class BTreeFS {
     public AtomicLong m_removes;
     public AtomicLong m_updates;
 
-    public static class FSAttrs implements Serializable {
+    public static class Attrs implements Serializable {
 
-        public Date access;
-        public Date create;
-        public Date modified;
-        public long permissions;
-        public long size;
+        public long access;
+        public long create;
+        public long modified;
+        public int permissions;
 
-        public FSAttrs(long p, long s) {
-            access = new Date(BEGINNING_OF_TIME);
-            create = new Date(BEGINNING_OF_TIME);
-            modified = new Date(BEGINNING_OF_TIME);
-            permissions = p;
-            size = s;
+        /**
+         * ctor
+         * @param p - permissions
+         * @param type - dir/file?
+         */
+        public Attrs(int p, etype type) {
+            this(BEGINNING_OF_TIME, BEGINNING_OF_TIME, BEGINNING_OF_TIME, p, type);
         }
 
+        /**
+         * ctor
+         * @param a - access time/date
+         * @param c - create time/date
+         * @param m - modify time/date
+         * @param p - permissions
+         * @param type - dir/file?
+         */
+        public Attrs(Date a, Date c, Date m, int p, etype type) {
+            this(a.getTime(), c.getTime(), m.getTime(), p, type);
+        }
 
-        public FSAttrs(Date a, Date c, Date m, long p, long s) {
+        /**
+         * ctor
+         * @param a - access time/date
+         * @param c - create time/date
+         * @param m - modify time/date
+         * @param p - permissions
+         * @param type - dir/file?
+         */
+        public Attrs(long a, long c, long m, int p, etype type) {
             access = a;
             create = c;
             modified = m;
             permissions = p;
-            size = s;
+            if(type == etype.dir)
+                permissions |= _ACCESS_DIRECTORY;
         }
+
+        /**
+         * return unix-style permissions strings
+         * @return
+         */
+        public String getAccessString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append((permissions &_ACCESS_DIRECTORY) == 0 ? "-":"d");
+            sb.append((permissions &_ACCESS_GLOBAL_READ) == 0 ? "-":"r");
+            sb.append((permissions &_ACCESS_GLOBAL_WRITE) == 0 ? "-":"w");
+            sb.append((permissions &_ACCESS_GLOBAL_EXEC) == 0 ? "-":"x");
+            sb.append((permissions &_ACCESS_GROUP_READ) == 0 ? "-":"r");
+            sb.append((permissions &_ACCESS_GROUP_WRITE) == 0 ? "-":"w");
+            sb.append((permissions &_ACCESS_GROUP_EXEC) == 0 ? "-":"x");
+            sb.append((permissions &_ACCESS_USER_READ) == 0 ? "-":"r");
+            sb.append((permissions &_ACCESS_USER_WRITE) == 0 ? "-":"w");
+            sb.append((permissions &_ACCESS_USER_EXEC) == 0 ? "-":"x");
+            return sb.toString();
+        }
+
+        /**
+         * toString: for now just returns a permissions string
+         * TODO: implement date support too.
+         * @return
+         */
+        public String toString() {
+            return getAccessString();
+        }
+
     }
 
     public static class Extent implements Serializable {
-        public long logaddr;
-        public long phyaddr;
-        public long len;
+
+        public long block;
+        public long offset;
+        public long length;
+
+        /**
+         * ctor
+         * @param rnd
+         */
         public Extent(Random rnd) {
-            logaddr = rnd.nextLong();
-            phyaddr = rnd.nextLong();
-            len = (long) (rnd.nextDouble() * MAX_EXTENT);
+            block = rnd.nextLong();
+            offset = (long) (rnd.nextDouble() * MAX_EXTENT);
+            length = (long) (rnd.nextDouble() * MAX_EXTENT);
         }
+
+        /**
+         * ctor
+         * @param l
+         * @param p
+         * @param _len
+         */
         public Extent(long l, long p, long _len) {
-            logaddr = l;
-            phyaddr = p;
-            len = _len;
+            block = l;
+            offset = p;
+            length = _len;
+        }
+
+        /**
+         * to String
+         * @return
+         */
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("0x%08x", block));
+            sb.append("  ");
+            sb.append(offset);
+            sb.append("\t");
+            sb.append(length);
+            return sb.toString();
         }
     }
 
     public static class FSEntry implements Serializable {
 
         public static final int VINCREMENT = 8;
-        public static final long O_READ = 0x1;
-        public static final long O_WRITE = 0x2;
-        public static final long O_APPEND = 0x4;
-        public FSEntry parent;
+        public String parentPath;
         public String name;
-        public FSAttrs attrs;
+        public Attrs attrs;
         public etype type;
-        private int m_nChildren;
-        private int nAllocChildren;
+        private int nChildren;
         private int nExtents;
+        private int nAncestorPermissions;
+        private int nAllocChildren;
         private int nAllocExtents;
+        private int nAllocAncestorPermissions;
         private String[] vChildren;
         private Extent[] vExtents;
+        private Attrs[] vAncestorPermissions;
         public int nOpenForRead;
         public int nOpenForWrite;
         public int nOpenForAppend;
+        public int nRefCount;
 
-        public String getChild(int i) { return i < m_nChildren ? vChildren[i] : null; }
+        public String getChild(int i) { return i < nChildren ? vChildren[i] : null; }
         public void setChild(int i, String s) { vChildren[i] = s; }
-        public int numChildren() { return m_nChildren; }
+        public int numChildren() { return nChildren; }
+        public int numAncestors() { return nAncestorPermissions; }
+        public Attrs getAncestorPermissions(int i) { return i < nAncestorPermissions ? vAncestorPermissions[i] : null; }
+        public int addref() { return ++nRefCount; }
+        public int releaseref() { if(--nRefCount < 0) nRefCount = 0; return nRefCount; }
+        public int refcount() { return nRefCount; }
+
+        /**
+         * append an ancestor permissions entry
+         * @param attrs
+         */
+        protected void addAncestorPermissions(Attrs attrs) {
+            if(nAncestorPermissions >= nAllocAncestorPermissions) {
+                int nNewAllocAncestors = nAllocAncestorPermissions + VINCREMENT;
+                Attrs[] newAncestorPermissions = new Attrs[nNewAllocAncestors];
+                if(vAncestorPermissions != null && nAncestorPermissions > 0)
+                    System.arraycopy(vAncestorPermissions, 0, newAncestorPermissions, 0, nAllocAncestorPermissions);
+                nAllocAncestorPermissions = nNewAllocAncestors;
+                vAncestorPermissions = newAncestorPermissions;
+            }
+            vAncestorPermissions[nAncestorPermissions++] = attrs;
+            nAncestorPermissions++;
+        }
 
         /**
          * append a child string
-         *
          * @param child
          */
         protected void appendChild(String child) {
-            if (m_nChildren >= nAllocChildren) {
+            if (nChildren >= nAllocChildren) {
                 int nNewAllocChildren = nAllocChildren + VINCREMENT;
                 String[] newChildren = new String[nNewAllocChildren];
-                if(vChildren != null && m_nChildren > 0)
-                    System.arraycopy(vChildren, 0, newChildren, 0, m_nChildren);
+                if(vChildren != null && nChildren > 0)
+                    System.arraycopy(vChildren, 0, newChildren, 0, nChildren);
                 nAllocChildren = nNewAllocChildren;
                 vChildren = newChildren;
             }
-            vChildren[m_nChildren] = child;
-            m_nChildren++;
+            vChildren[nChildren] = child;
+            nChildren++;
         }
 
         /**
          * append a file extent
-         *
          * @param extent
          */
         protected void appendExtent(Extent extent) {
@@ -146,74 +253,106 @@ public class BTreeFS {
 
         /**
          * new fs entry
-         *
          * @param _name
-         * @param _parent
+         * @param _parentpath
          * @param _type
          */
         public FSEntry(
                 String _name,
-                FSEntry _parent,
+                String _parentpath,
                 etype _type,
-                long permissions,
-                long size
-        ) {
+                int permissions
+            ) {
             name = _name;
-            parent = _parent;
+            parentPath = _parentpath;
             type = _type;
-            attrs = new FSAttrs(permissions, size);
+            attrs = new Attrs(permissions, type);
             vChildren = null;
             vExtents = null;
-            m_nChildren = 0;
+            nChildren = 0;
             nExtents = 0;
+            nAncestorPermissions = 0;
+            nAllocExtents = 0;
+            nAllocChildren = 0;
+            nAllocAncestorPermissions = 0;
             nOpenForRead = 0;
             nOpenForWrite = 0;
             nOpenForAppend = 0;
+            nRefCount = 0;
         }
 
         /**
          * new fs entry
-         *
-         * @param rnd
          * @param _name
-         * @param _parent
+         * @param _parentpath
          * @param _type
          */
         public FSEntry(
+                String _name,
+                String _parentpath,
+                etype _type
+            ) {
+            this(_name, _parentpath, _type, _ACCESS_DEFAULTS);
+        }
+
+        /**
+         * random FSEntry generator
+         * @param rnd
+         * @param _name
+         * @param _parentpath
+         * @param _type
+         * @return
+         */
+        public static FSEntry
+        randomEntry(
                 Random rnd,
                 String _name,
-                FSEntry _parent,
+                String _parentpath,
                 etype _type
-        ) {
-            name = _name;
-            parent = _parent;
-            type = _type;
-            attrs = BTreeFS.randAttrs(rnd);
-            vChildren = null;
-            vExtents = null;
-            m_nChildren = 0;
-            nExtents = 0;
-            nOpenForRead = 0;
-            nOpenForWrite = 0;
-            nOpenForAppend = 0;
+            ) {
+            Attrs attrs = randAttrs(rnd, _type);
+            FSEntry entry = new FSEntry(_name, _parentpath, _type, rnd.nextInt(_ACCESS_GLOBAL_EXEC));
+            return entry;
         }
 
         /**
          * return the absolute path
-         *
          * @return
          */
         public String path() {
-            String ppath = parent == null ? "" : parent.path() + "/";
-            return ppath + name;
+            if(isImplicitRootPath(parentPath)) {
+                if(name.compareTo("root") != 0)
+                    throw new RuntimeException("malformed fs: multiple roots?");
+                return name;
+            }
+            return getParentPath() + "/" + name;
         }
 
         /**
          * parent path
          * @return
          */
-        public String parentpath() {
-            return parent == null ? "" : parent.path();
+        public String getParentPath() {
+            if(isImplicitRootPath(parentPath)) {
+                if(name.compareTo("root") != 0)
+                    throw new RuntimeException("malformed fs: multiple roots?");
+                return "";
+            }
+            return parentPath;
+        }
+
+        /**
+         * return the size
+         * applies only to a file FSEntry
+         * @return
+         */
+        public long size() {
+            long result = 0;
+            if(type == etype.file) {
+                for (int i = 0; i < nExtents; i++)
+                    result += vExtents[i] != null ? vExtents[i].length : 0;
+            }
+            return result;
         }
 
         /**
@@ -226,9 +365,47 @@ public class BTreeFS {
                 case dir:
                     return "DIR: " + name + "/[c-cnt:" + numChildren()+ "]";
                 case file:
-                    return "FILE: " + name + "[" + attrs.size + "KB, blkcnt:" + nExtents + "]";
+                    return "FILE: " + name + "[" + size() / 1024 + "KB in " + nExtents + " extents]";
             }
             return "";
+        }
+
+        /**
+         * return something like what "ls -l" would output
+         * @return
+         */
+        public String lsOutput() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("PATH:\n");
+            sb.append("\t");
+            sb.append(path());
+            sb.append("\n");
+            sb.append("CONTENTS:\n");
+            sb.append("\ttype:\t\t");
+            sb.append(type == etype.dir ? "directory" : "file");
+            sb.append("\n");
+            sb.append("\tpermissions:\t");
+            sb.append(attrs.getAccessString());
+            sb.append("\n");
+            sb.append("\tanc-perms:\t");
+            boolean first = true;
+            for(int i=0; i<nAncestorPermissions; i++) {
+                if(!first)
+                    sb.append("\t\t\t");
+                sb.append(vAncestorPermissions[i].getAccessString());
+                sb.append("\n");
+                first = false;
+            }
+            sb.append("\tcontents:\t");
+            first = true;
+            for(int i=0; i< nChildren; i++) {
+                if(!first && i % 4 == 0) sb.append("\n\t\t\t");
+                sb.append(vChildren[i]);
+                sb.append(" ");
+                i++;
+            }
+            sb.append("\n");
+            return sb.toString();
         }
 
         /**
@@ -264,7 +441,7 @@ public class BTreeFS {
                     vChildren[j++] = s;
                 }
             }
-            m_nChildren = j;
+            nChildren = j;
             return found;
         }
 
@@ -282,28 +459,82 @@ public class BTreeFS {
         }
 
         /**
+         * add new extents until the
+         * file size matches the target length
+         * @param newlen
+         */
+        public void addExtents(long newlen) {
+            Random random = new Random();
+            while(size() < newlen) {
+                long delta = newlen - size();
+                long eSize = delta % MAX_EXTENT;
+                Extent extent = new Extent(random.nextLong(), 0, eSize);
+                appendExtent(extent);
+            }
+        }
+
+        /**
+         * remove/truncate extents until
+         * the file size meets the spec.
+         * @param newlen
+         */
+        public void compactExtents(long newlen) {
+            if(newlen == 0) {
+                // optimize a common case
+                nExtents = 0;
+                for(int i=0; i<nAllocExtents; i++)
+                    vExtents[i] = null;
+                return;
+            }
+            while(size() > newlen) {
+                long delta = size() - newlen;
+                Extent tail = vExtents[nExtents-1];
+                if(delta > tail.length) {
+                    vExtents[nExtents-1] = null;
+                    nExtents--;
+                } else {
+                    tail.length -= delta;
+                }
+            }
+        }
+
+        /**
          * simulate open
-         *
          * @param perms
          */
-        public void open(long perms) {
-            nOpenForRead += (perms & O_READ) != 0 ? 1 : 0;
-            nOpenForWrite += (perms & O_WRITE) != 0 ? 1 : 0;
-            nOpenForAppend += (perms & O_APPEND) != 0 ? 1 : 0;
+        public void open(int perms) {
+            nOpenForRead += isRead(perms) ? 1 : 0;
+            nOpenForWrite += isWrite(perms) ? 1 : 0;
+            nOpenForAppend += isExec(perms) ? 1 : 0;
         }
 
         /**
          * simulate close
-         *
          * @param perms
          */
-        public void close(long perms) {
-            nOpenForRead -= (perms & O_READ) != 0 ? 1 : 0;
-            nOpenForWrite -= (perms & O_WRITE) != 0 ? 1 : 0;
-            nOpenForAppend -= (perms & O_APPEND) != 0 ? 1 : 0;
+        public void close(int perms) {
+            nOpenForRead -= isRead(perms) ? 1 : 0;
+            nOpenForWrite -= isWrite(perms) ? 1 : 0;
+            nOpenForAppend -= isExec(perms) ? 1 : 0;
             nOpenForRead = Math.max(nOpenForRead, 0);
             nOpenForWrite = Math.max(nOpenForRead, 0);
             nOpenForAppend = Math.max(nOpenForRead, 0);
+        }
+
+        protected boolean isRead(int perms) {
+            return ((perms & _ACCESS_GLOBAL_READ) |
+                    (perms & _ACCESS_GROUP_READ) |
+                    (perms & _ACCESS_USER_READ)) != 0;
+        }
+        protected boolean isWrite(int perms) {
+            return ((perms & _ACCESS_GLOBAL_WRITE) |
+                    (perms & _ACCESS_GROUP_WRITE) |
+                    (perms & _ACCESS_USER_WRITE)) != 0;
+        }
+        protected boolean isExec(int perms) {
+            return ((perms & _ACCESS_GLOBAL_EXEC) |
+                    (perms & _ACCESS_GROUP_EXEC) |
+                    (perms & _ACCESS_USER_EXEC)) != 0;
         }
     }
 
@@ -342,7 +573,6 @@ public class BTreeFS {
      * @param nMaxHeight
      * @param strBTreeClass
      * @param btreeOID
-     * @param indexOID
      */
     public
     BTreeFS(
@@ -353,13 +583,11 @@ public class BTreeFS {
             int nMaxDirEntries,
             int nMaxHeight,
             String strBTreeClass,
-            long btreeOID,
-            long indexOID
+            long btreeOID
         ) {
         m_rt = tTR;
         m_sf = tsf;
         m_btree = createBTree(tTR, tsf, strBTreeClass, btreeOID);
-        m_refcnt = createBTree(tTR, tsf, strBTreeClass, indexOID);
         m_nMinAtom = nMinAtom;
         m_nMaxAtom = nMaxAtom;
         m_nMaxDirEntries = nMaxDirEntries;
@@ -385,7 +613,6 @@ public class BTreeFS {
                 DEFAULT_MAXDIRENTIES,
                 DEFAULT_MAX_HEIGHT,
                 strBTreeClass,
-                CorfuDBObject.oidnull,
                 CorfuDBObject.oidnull);
     }
 
@@ -397,8 +624,7 @@ public class BTreeFS {
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
-            long btreeOID,
-            long indexOID
+            long btreeOID
         ) {
         this(tTR, tsf,
                 DEFAULT_MINATOM,
@@ -406,8 +632,7 @@ public class BTreeFS {
                 DEFAULT_MAXDIRENTIES,
                 DEFAULT_MAX_HEIGHT,
                 strBTreeClass,
-                btreeOID,
-                indexOID);
+                btreeOID);
     }
 
     /**
@@ -419,38 +644,6 @@ public class BTreeFS {
         FSEntry entry = m_btree.get(key);
         m_gets.incrementAndGet();
         return entry;
-    }
-
-    /**
-     * getrefcnt
-     * @param key
-     * @return
-     */
-    protected int refcount(String key) {
-        return m_refcnt.get(key);
-    }
-
-    /**
-     * addref
-     * @param key
-     * @return
-     */
-    protected int addref(String key) {
-        Integer i = m_refcnt.get(key);
-        Integer newCount = i == null ? new Integer(0) : i;
-        m_refcnt.put(key, newCount);
-        return newCount;
-    }
-
-    /**
-     * release
-     * @param key
-     * @return
-     */
-    protected int release(String key) {
-        Integer i = m_refcnt.get(key);
-        m_refcnt.put(key, new Integer(--i));
-        return i;
     }
 
     /**
@@ -501,7 +694,10 @@ public class BTreeFS {
      * @return
      */
     public FSEntry
-    randomSelect(Random rnd, etype type) {
+    randomSelect(
+            Random rnd,
+            etype type
+        ) {
         ArrayList<FSEntry> children = new ArrayList<FSEntry>();
         FSEntry root = get("root");
         FSEntry result = randomSelect(rnd, root, type, children);
@@ -560,13 +756,13 @@ public class BTreeFS {
     /**
      * @return
      */
-    public static FSAttrs
-    randAttrs(Random rnd) {
-        return new FSAttrs(randomDate(rnd),
-                randomDate(rnd),
-                randomDate(rnd),
-                rnd.nextLong(),
-                Math.abs(rnd.nextLong()) % 16384);
+    public static Attrs
+    randAttrs(Random rnd, etype type) {
+        return new Attrs(randomDate(rnd),
+                         randomDate(rnd),
+                         randomDate(rnd),
+                         rnd.nextInt(_ACCESS_DIRECTORY),
+                         type);
     }
 
     /**
@@ -578,6 +774,29 @@ public class BTreeFS {
     randomDate(Random rnd) {
         long ms = BEGINNING_OF_TIME + (Math.abs(rnd.nextLong()) % (20L * 365 * 24 * 60 * 60 * 1000));
         return new Date(ms);
+    }
+
+    /**
+     * root can be expressed a few ways:
+     * 1. null parent path
+     * 2. "" parent path
+     * 3. "root"
+     * @param strPath
+     * @return
+     */
+    static boolean isImplicitRootPath(String strPath) {
+        return strPath == null || strPath.compareTo("") == 0;
+    }
+
+    /**
+     * canonicalize root paths
+     * @param strParentPath
+     * @return
+     */
+    static String canonicalize(String strParentPath) {
+        if(isImplicitRootPath(strParentPath))
+            return "root";
+        return strParentPath;
     }
 
     /**
@@ -599,7 +818,7 @@ public class BTreeFS {
         ) {
         double diceRoll = rnd.nextDouble();
         String fsName = randEntryName(rnd, minIdLength, maxIdLength);
-        return new FSEntry(rnd, fsName, parent, diceRoll < dirProbability ? etype.dir : etype.file);
+        return FSEntry.randomEntry(rnd, fsName, parent.path(), diceRoll < dirProbability ? etype.dir : etype.file);
     }
 
     /**
@@ -638,9 +857,8 @@ public class BTreeFS {
             String strBTreeClass
         ) {
         BTreeFS fs = new BTreeFS(tTR, tsf, strBTreeClass);
-        FSEntry root = new FSEntry("root", null, etype.dir, Long.MIN_VALUE, 0);
+        FSEntry root = new FSEntry("root", null, etype.dir);
         fs.put(root.path(), root);
-        fs.addref(root.path());
         return fs;
     }
 
@@ -656,10 +874,9 @@ public class BTreeFS {
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
-            long btreeOID,
-            long indexOID
+            long btreeOID
         ) {
-        return new BTreeFS(tTR, tsf, strBTreeClass, btreeOID, indexOID);
+        return new BTreeFS(tTR, tsf, strBTreeClass, btreeOID);
     }
 
 
@@ -689,9 +906,8 @@ public class BTreeFS {
         ) {
         BTreeFS fs = new BTreeFS(tTR, tsf, strBTreeClass);
         Random rnd = new Random();
-        FSEntry root = new FSEntry("root", null, etype.dir, Long.MIN_VALUE, 0);
+        FSEntry root = new FSEntry("root", null, etype.dir);
         fs.put(root.path(), root);
-        fs.addref(root.path());
         fs.populateRandomFS(rnd, root, minIdLength, maxIdLength, maxChildren, dirProbability, height, ops);
         return fs;
     }
@@ -728,27 +944,24 @@ public class BTreeFS {
 
                 assert(height > 0);
                 ops.add(FileSystemDriver.newMkdirOp(child.name,
-                                                    child.parentpath(),
-                                                    new Long(child.attrs.permissions)));
+                                                    parent.path(),
+                                                    new Integer(child.attrs.permissions)));
+                setAncestorPermissions(child);
                 put(child.path(), child);
-                addref(child.path());
                 populateRandomFS(rnd, child, minIdLength, maxIdLength, maxChildren, dirProbability, height-1, ops);
 
             } else {
 
                 ops.add(FileSystemDriver.newCreateOp(child.name,
-                                                     child.parentpath(),
-                                                     new Long(child.attrs.permissions)));
+                                                     parent.path(),
+                                                     new Integer(child.attrs.permissions)));
+                setAncestorPermissions(child);
                 put(child.path(), child);
-                addref(child.path());
             }
             parent.addChild(child);
-            addref(parent.path());
             update(parent.path(), parent);
         }
     }
-
-
 
     /**
      * rename
@@ -769,6 +982,8 @@ public class BTreeFS {
                 done = EndTX();
             } catch(Exception e) {
                 inTX = AbortTX(inTX, e);
+                if(e.getMessage().startsWith("unimplemented!"))
+                    throw e;
             }
         }
         return result;
@@ -792,7 +1007,8 @@ public class BTreeFS {
      * @return
      */
     public FSEntry
-    open(String path, long mode) {
+    open(String path, int mode) {
+
         boolean inTX = false;
         boolean done = false;
         FSEntry file = null;
@@ -801,9 +1017,9 @@ public class BTreeFS {
                 inTX = BeginTX();
                 file = get(path);
                 if(file != null) {
+                    // TODO: implement access checks
                     file.open(mode);
                     put(file.path(), file);
-                    addref(file.path());
                 }
                 done = EndTX();
                 inTX = false;
@@ -812,6 +1028,40 @@ public class BTreeFS {
             }
         }
         return file;
+    }
+
+    /**
+     * access
+     * @param path
+     * @return
+     */
+    public int
+    access(String path, int mode) {
+
+        int actualmode = 0;
+        boolean inTX = false;
+        boolean done = false;
+        FSEntry file = null;
+        while(!done) {
+            try {
+                inTX = BeginTX();
+                file = get(path);
+                if(file != null) {
+                    actualmode = mode & file.attrs.permissions;
+                    String parentpath = file.getParentPath();
+                    while(parentpath.compareTo("root") != 0) {
+                        FSEntry parent = get(parentpath);
+                        actualmode &= parent.attrs.permissions;
+                        parentpath = parent.getParentPath();
+                    }
+                }
+                done = EndTX();
+                inTX = false;
+            } catch (Exception e) {
+                inTX = AbortTX(inTX, e);
+            }
+        }
+        return actualmode;
     }
 
     /**
@@ -828,9 +1078,8 @@ public class BTreeFS {
         while(!done) {
             try {
                 inTX = BeginTX();
-                entry.close(Long.MAX_VALUE);
+                entry.close(Integer.MAX_VALUE);
                 put(entry.path(), entry);
-                release(entry.path());
                 done = EndTX();
                 inTX = false;
             } catch (Exception e) {
@@ -863,8 +1112,10 @@ public class BTreeFS {
      * write system call.
      * Again, we're just managing file system
      * metadata here, so this really just comes
-     * down to a potential change in the length of
-     * the file.
+     * down to checking the write against the current
+     * file size--ultimately, under this design, it's just
+     * a read on the the meta data, even though there would
+     * be writes for extents
      * @param file
      * @param buf
      * @param count
@@ -872,15 +1123,18 @@ public class BTreeFS {
      */
     public int
     write(FSEntry file,
+          int fOffset,
           byte[] buf,
-          int count) {
+          int bufOffset,
+          int count
+        ) {
         int result = 0;
         boolean inTX = false;
         boolean done = false;
         while(!done) {
             try {
                 inTX = BeginTX();
-                result = _write(file, buf, count);
+                result = _write(file, fOffset, buf, bufOffset, count);
                 done = EndTX();
                 inTX = false;
             } catch (Exception e) {
@@ -903,12 +1157,20 @@ public class BTreeFS {
      */
     protected int
     _write(FSEntry file,
-          byte[] buf,
-          int count) {
+           int fOffset,
+           byte[] buf,
+           int bufOffset,
+           int count
+        ) {
         if(file == null || buf == null || count == 0)
             return 0;
-        file.attrs.size += count; // just a simulation...
-        put(file.path(), file);
+        if(buf.length - bufOffset > count)
+            return 0;
+        if(file.size() - fOffset > count)
+            return 0;
+        FSEntry entry = get(file.path());
+        if(entry == null)
+            return 0;
         return count;
     }
 
@@ -922,16 +1184,16 @@ public class BTreeFS {
      * @param newlen
      * @return
      */
-    public int
-    trunc(FSEntry file,
-          int newlen) {
-        int result = 0;
+    public long
+    resize(FSEntry file,
+           long newlen) {
+        long result = 0;
         boolean inTX = false;
         boolean done = false;
         while(!done) {
             try {
                 inTX = BeginTX();
-                result = _trunc(file, newlen);
+                result = _resize(file, newlen);
                 done = EndTX();
                 inTX = false;
             } catch (Exception e) {
@@ -951,12 +1213,20 @@ public class BTreeFS {
      * @param newlen
      * @return
      */
-    protected int
-    _trunc(FSEntry file,
-          int newlen) {
-        if(file == null)
+    protected long
+    _resize(FSEntry file, long newlen) {
+
+        // TODO: permissions checks!
+        if(file == null || newlen < 0 || file.type != etype.file)
             return 0;
-        file.attrs.size = newlen; // just a simulation...
+        long cursize = file.size();
+        if(newlen == cursize)
+            return newlen;
+        if(newlen > cursize) {
+            file.addExtents(newlen);
+        } else {
+            file.compactExtents(newlen);
+        }
         put(file.path(), file);
         return newlen;
     }
@@ -971,13 +1241,15 @@ public class BTreeFS {
     search(String parent,
            String name) {
 
+        // TODO: access checks!
         ArrayList<FSEntry> matches = null;
         boolean inTX = false;
         boolean done = false;
         while(!done) {
             try {
                 inTX = BeginTX();
-                FSEntry root = parent == null ? get("root") : get(parent);
+                String strCanonicalPath = canonicalize(parent);
+                FSEntry root = get(strCanonicalPath);
                 matches = search(root, name);
                 done = EndTX();
                 inTX = false;
@@ -1047,13 +1319,12 @@ public class BTreeFS {
      */
     protected boolean
     delete(FSEntry file) {
+        // TODO: access checks
         boolean result = false;
         if (file != null && file.type == etype.file) {
-            FSEntry parent = get(file.parent.path());
+            FSEntry parent = get(file.getParentPath());
             result = remove(file.path()) != null;
             result &= parent.removeChild(file.name);
-            release(file.path());       // decrement refcount
-            release(parent.path());     // decrement refcount
         }
         return result;
     }
@@ -1090,24 +1361,27 @@ public class BTreeFS {
      */
     protected boolean
     rmdir(FSEntry entry) {
+
+        //  TODO: access checks
         boolean result = false;
         if (entry != null && entry.type == etype.dir) {
-            if(entry.parent == null)
+            String parentPath = entry.getParentPath();
+            if(isImplicitRootPath(parentPath)) {
+                if(entry.path().compareTo("root") != 0)
+                    throw new RuntimeException("malformed fs: multiple roots?");
                 return false; // refuse to remove root.
-            for(int i=0; i<entry.numChildren(); i++) {
+            }
+            for (int i = 0; i < entry.numChildren(); i++) {
                 FSEntry child = get(entry.path() + "/" + entry.getChild(i));
-                if(child.type == etype.dir)
+                if (child.type == etype.dir)
                     result &= rmdir(child);
                 else
                     result &= delete(child);
             }
-            FSEntry parent = entry.parent == null ? null : get(entry.parent.path());
+            FSEntry parent = get(parentPath);
             result = remove(entry.path()) != null;
-            release(entry.path());
-            if(parent != null) {
+            if (parent != null)
                 result &= parent.removeChild(entry.name);
-                release(parent.path());
-            }
         }
         return result;
     }
@@ -1123,7 +1397,7 @@ public class BTreeFS {
     create(
         String fsName,
         String parentPath,
-        long permissions
+        int permissions
         ) {
         boolean result = false;
         boolean inTX = false;
@@ -1131,15 +1405,15 @@ public class BTreeFS {
         while(!done) {
             try {
                 inTX = BeginTX();
-                FSEntry parent = get(parentPath == null ? "root" : parentPath);
-                FSEntry existingEntry = get(parentPath + "/" + fsName);
+                String canonicalParentPath = canonicalize(parentPath);
+                FSEntry parent = get(canonicalParentPath);
+                FSEntry existingEntry = get(canonicalParentPath + "/" + fsName);
                 if(parent != null && existingEntry == null) { // parent exists? new entry already exists?
-                    FSEntry file = new FSEntry(fsName, parent, etype.file, 0, permissions);
+                    FSEntry file = new FSEntry(fsName, parent.path(), etype.file, permissions);
+                    setAncestorPermissions(file);
                     parent.addChild(file);
                     put(file.path(), file);
-                    addref(file.path());
                     update(parent.path(), parent);
-                    addref(parent.path());
                     result = true;
                 }
                 done = EndTX();
@@ -1148,7 +1422,7 @@ public class BTreeFS {
                 inTX = AbortTX(inTX, e);
             }
         }
-        return true;
+        return result;
     }
 
     /**
@@ -1162,7 +1436,7 @@ public class BTreeFS {
     mkdir(
             String fsName,
             String parentPath,
-            long permissions
+            int permissions
         ) {
         boolean result = false;
         boolean inTX = false;
@@ -1170,7 +1444,8 @@ public class BTreeFS {
         while(!done) {
             try {
                 inTX = BeginTX();
-                FSEntry parent = get(parentPath == null ? "root" : parentPath);
+                String strCanonicalPath = canonicalize(parentPath);
+                FSEntry parent = get(strCanonicalPath);
                 result = mkdir(fsName, parent, permissions);
                 done = EndTX();
                 inTX = false;
@@ -1178,7 +1453,7 @@ public class BTreeFS {
                 inTX = AbortTX(inTX, e);
             }
         }
-        return true;
+        return result;
     }
 
     /**
@@ -1191,21 +1466,37 @@ public class BTreeFS {
     protected boolean
     mkdir(String fsName,
           FSEntry parent,
-          long permissions) {
+          int permissions) {
 
+        // TODO: access checks
         if(parent == null || parent.type != etype.dir)
             return false;
         FSEntry existingDir = get(parent.path() + "/" + fsName);
-        FSEntry dir = new FSEntry(fsName, parent, etype.dir, 0, permissions);
-        if(dir != null && existingDir == null) {
+        if(existingDir == null) {
+            FSEntry dir = new FSEntry(fsName, parent.path(), etype.dir, permissions);
+            setAncestorPermissions(dir);
             parent.addChild(dir);
             put(dir.path(), dir);
             update(parent.path(), parent);
-            addref(dir.path());
-            addref(parent.path());
             return true;
         }
         return false;
+    }
+
+    /**
+     * set the ancestor permissions for
+     * a given entry
+     * @param entry
+     */
+    protected void
+    setAncestorPermissions(FSEntry entry) {
+        String parentPath = entry.getParentPath();
+        FSEntry parent = isImplicitRootPath(parentPath) ? null : get(parentPath);
+        while(parent != null) {
+            entry.addAncestorPermissions(parent.attrs);
+            parentPath = parent.getParentPath();
+            parent = isImplicitRootPath(parentPath) ? null : get(parentPath);
+        }
     }
 
     /**
@@ -1221,7 +1512,8 @@ public class BTreeFS {
         while(!done) {
             try {
                 inTX = BeginTX();
-                FSEntry parent = get(strPath == null ? "root" : strPath);
+                String strCanonicalPath = canonicalize(strPath);
+                FSEntry parent = get(strCanonicalPath);
                 result = readdir(parent);
                 done = EndTX();
                 inTX = false;
@@ -1239,6 +1531,7 @@ public class BTreeFS {
      */
     public FSEntry[]
     readdir(FSEntry parent) {
+        // TODO: access checks
         FSEntry[] result = null;
         if(parent != null && parent.type == etype.dir) {
             result = new FSEntry[parent.numChildren()];
@@ -1277,9 +1570,13 @@ public class BTreeFS {
         if(fs.type == etype.file) {
             sb.append("*");
             sb.append(fs.name);
+            sb.append("\t");
+            sb.append(fs.attrs.getAccessString());
             sb.append("\n");
         } else {
             sb.append(fs.name);
+            sb.append("\t");
+            sb.append(fs.attrs.getAccessString());
             sb.append("/\n");
             for(int i=0; i<fs.numChildren(); i++) {
                 String path = fs.path() + "/" + fs.getChild(i);
@@ -1371,24 +1668,32 @@ public class BTreeFS {
      * synthetic fs populate/enumerate/mutate test
      */
     public static void
-    fstestSynthetic(
+    fstestRecord(
             AbstractRuntime tTR,
             StreamFactory tsf,
-            String strBTreeClass
-    ) {
+            String strBTreeClass,
+            int nTargetFSDepth,
+            int nWorkloadOps,
+            String initPath,
+            String wkldPath
+        ) {
         double dirProbability = 0.4;
-        int maxChildren = 10;
+        int maxChildren = 12;
         int minIdLength = 1;
         int maxIdLength = 8;
-        int height = 5;
-        fstestSynthetic(tTR, tsf, strBTreeClass, dirProbability, maxChildren, minIdLength, maxIdLength, height);
+        long curTime = System.currentTimeMillis();
+        int nRandomSeed = (int) curTime;
+        if(initPath == null) initPath = "initfs_" + (curTime%100) + ".ser";
+        if(wkldPath == null) wkldPath = "wkldfs_" + (curTime%100) + ".ser";
+        fstestRecord(tTR, tsf, strBTreeClass, dirProbability, maxChildren, minIdLength, maxIdLength,
+                nTargetFSDepth, nWorkloadOps, nRandomSeed, initPath, wkldPath);
     }
 
     /**
      * synthetic fs populate/enumerate/mutate test
      */
     public static void
-    fstestSynthetic(
+    fstestRecord(
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
@@ -1396,22 +1701,23 @@ public class BTreeFS {
             int maxChildren,
             int minIdLength,
             int maxIdLength,
-            int height
+            int height,
+            int nWorkloadOperations,
+            int nRandomSeed,
+            String initPath,
+            String wkldPath
         ) {
         ArrayList<FileSystemDriver.Op> initOps = new ArrayList();
         BTreeFS fs = BTreeFS.createRandomFS(tTR, tsf, strBTreeClass,
                 minIdLength, maxIdLength, maxChildren, dirProbability, height, initOps);
         System.out.println("FS-tree:\n"+fs.printBTree());
         System.out.println("FS:\n"+fs.printFS());
-        FileSystemDriver driver = new FileSystemDriver(fs, 50, 100);
+        FileSystemDriver driver = new FileSystemDriver(fs, nWorkloadOperations, nRandomSeed);
         System.out.format("test case:\n%s\n", driver.toString());
         driver.play();
         driver.setInitOps(initOps);
         System.out.format("test case (with init):\n%s\n", driver.toString());
         System.out.println("FS after test:\n" + fs.printFS());
-        int unq = (int)(System.currentTimeMillis() % 100);
-        String initPath = "initfs_" + unq + ".ser";
-        String wkldPath = "wkldfs_" + unq + ".ser";
         driver.Persist(initPath, wkldPath);
     }
 
@@ -1419,7 +1725,7 @@ public class BTreeFS {
      * synthetic fs populate/enumerate/mutate test
      */
     public static void
-    fstestSynthetic(
+    fstestPlayback(
             AbstractRuntime tTR,
             StreamFactory tsf,
             String strBTreeClass,
@@ -1453,8 +1759,8 @@ public class BTreeFS {
         System.out.format("test case:\n%s\n", driver.toString());
         driver.playTo(nCrashOp);
         System.out.println("FS after test:\n" + fs.printFS());
+        System.out.println("BTree REQ stats:\n" + fs.m_btree.getLatencyStats());
         System.out.println(strBTREEOID + fs.m_btree.oid);
-        System.out.println(strINDEXOID + fs.m_refcnt.oid);
     }
 
     /**
@@ -1472,13 +1778,13 @@ public class BTreeFS {
         ) {
         Pair<Long, Long> oids = recoverOIDs(strCrashLogPath);
         long btreeOID = oids.first;
-        long indexOID = oids.second;
-        System.out.format("Recovering BTreeFS btreeOID:%d indexOID %d\n", btreeOID, indexOID);
-        BTreeFS fs = BTreeFS.attachFS(tTR, tsf, strBTreeClass, btreeOID, indexOID);
+        System.out.format("Recovering BTreeFS btreeOID:%d\n", btreeOID);
+        BTreeFS fs = BTreeFS.attachFS(tTR, tsf, strBTreeClass, btreeOID);
         FileSystemDriver driver = new FileSystemDriver(fs, strInitPath, strWkldPath);
         System.out.format("test case:\n%s\n", driver.toString());
         driver.playFrom(nRecoverOp);
         System.out.println("FS after test:\n" + fs.printFS());
+        System.out.println("BTree REQ stats:\n" + fs.m_btree.getLatencyStats());
     }
 
     /**
@@ -1509,7 +1815,4 @@ public class BTreeFS {
             return null;
         }
     }
-
-
-
 }

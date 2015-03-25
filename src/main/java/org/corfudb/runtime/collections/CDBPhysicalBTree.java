@@ -44,13 +44,24 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         protected PBTreeOp m_prevupdate;
         protected boolean m_prevvalid;
         private UUID m_uuuid;
+        public long m_reqstart;
+        public long m_reqcomplete;
 
         public int cmd() { return m_cmd; }
         public boolean mutator() { return m_mutator; }
         public long oid() { return m_oid; }
+        public long latency() { if(m_reqstart != 0 && m_reqcomplete != 0) return m_reqcomplete - m_reqstart; return 0; }
+        public void start() { m_reqstart = System.currentTimeMillis(); }
+        public void complete() { m_reqstart = System.currentTimeMillis(); }
+        public static String cmdstr(int i) {
+            if(NodeOp.isvalidcmd(i)) return NodeOp.cmdstring(i);
+            if(EntryOp.isvalidcmd(i)) return EntryOp.cmdstring(i);
+            if(BTreeOp.isvalidcmd(i)) return BTreeOp.cmdstring(i);
+            return "CMD_INVALID";
+        }
 
         /**
-         *
+         * ctor
          * @param p
          * @param cmd
          * @param mutator
@@ -306,9 +317,24 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     private static class NodeOp extends PBTreeOp {
 
         static final int CMD_READ_CHILD_COUNT = 1;
-        static final int CMD_READ_CHILD = 3;
-        static final int CMD_WRITE_CHILD_COUNT = 2;
-        static final int CMD_WRITE_CHILD = 6;
+        static final int CMD_READ_CHILD = 2;
+        static final int CMD_WRITE_CHILD_COUNT = 3;
+        static final int CMD_WRITE_CHILD = 4;
+        public static boolean isvalidcmd(int i) { return i>=CMD_READ_CHILD_COUNT && i<= CMD_WRITE_CHILD; }
+        public static String cmdstring(int i) {
+            switch(i) {
+                case CMD_READ_CHILD_COUNT:
+                    return "CMD_READ_CHILD_COUNT";
+                case CMD_READ_CHILD:
+                    return "CMD_READ_CHILD";
+                case CMD_WRITE_CHILD_COUNT:
+                    return "CMD_WRITE_CHILD_COUNT";
+                case CMD_WRITE_CHILD:
+                    return "CMD_WRITE_CHILD";
+                default:
+                    return "CMD_INVALID";
+            }
+        }
 
         public int m_childindex;
         public int m_childcount;
@@ -599,6 +625,19 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         static final int CMD_WRITE_NEXT = 601;
         static final int CMD_READ_DELETED = 701;
         static final int CMD_WRITE_DELETED = 801;
+        transient static HashMap<Integer, String> s_cmds = new HashMap();
+        static {
+            s_cmds.put(CMD_READ_KEY, "CMD_READ_KEY");
+            s_cmds.put(CMD_WRITE_KEY, "CMD_READ_KEY");
+            s_cmds.put(CMD_READ_VALUE, "CMD_READ_VALUE");
+            s_cmds.put(CMD_WRITE_VALUE, "CMD_WRITE_VALUE");
+            s_cmds.put(CMD_READ_NEXT, "CMD_READ_NEXT");
+            s_cmds.put(CMD_WRITE_NEXT, "CMD_WRITE_NEXT");
+            s_cmds.put(CMD_READ_DELETED, "CMD_READ_DELETED");
+            s_cmds.put(CMD_WRITE_DELETED, "CMD_WRITE_DELETED");
+        }
+        public static boolean isvalidcmd(int i) { return s_cmds.containsKey(new Integer(i)); }
+        public static String cmdstring(int i) { return s_cmds.getOrDefault(new Integer(i), "CMD_INVALID"); }
 
         public K m_key;
         public V m_value;
@@ -938,6 +977,25 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         static final int CMD_WRITE_SIZE = 774;
         static final int CMD_WRITE_HEIGHT = 775;
         static final int CMD_WRITE_ROOT = 776;
+        public static boolean isvalidcmd(int i) { return i>=CMD_READ_SIZE && i<= CMD_WRITE_ROOT; }
+        public static String cmdstring(int i) {
+            switch(i) {
+                case CMD_READ_SIZE:
+                    return "CMD_READ_SIZE";
+                case CMD_READ_HEIGHT:
+                    return "CMD_READ_HEIGHT";
+                case CMD_READ_ROOT:
+                    return "CMD_READ_ROOT";
+                case CMD_WRITE_SIZE:
+                    return "CMD_WRITE_SIZE";
+                case CMD_WRITE_HEIGHT:
+                    return "CMD_WRITE_HEIGHT";
+                case CMD_WRITE_ROOT:
+                    return "CMD_WRITE_ROOT";
+                default:
+                    return "CMD_INVALID";
+            }
+        }
 
         public int m_iparam;
         public long m_oidparam;
@@ -1047,6 +1105,65 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
                 return m.get(0);
             return null;
         }
+    }
+
+    /**
+     * if we are collecting latency
+     * statistics, note the start time for this
+     * request
+     * @param _op
+     */
+    @Override
+    protected void startRequestImpl(CorfuDBObjectCommand _op) {
+        PBTreeOp op = (PBTreeOp)_op;
+        if(op == null) return;
+        op.start();
+    }
+
+    /**
+     * log completion time. return true if
+     * we actually completed this request through the
+     * normal channels...
+     * @param _op
+     * @return
+     */
+    @Override
+    protected boolean completeRequestImpl(CorfuDBObjectCommand _op) {
+        PBTreeOp op = (PBTreeOp)_op;
+        if(op == null) return false;
+        op.complete();
+        return op.latency() != 0;
+    }
+
+    /**
+     * get the latency stats as a string
+     * @param ops
+     * @return
+     */
+    @Override
+    protected String
+    getLatencyStatsImpl(
+            Collection<CorfuDBObjectCommand> ops
+        ) {
+        HashMap<Integer, ArrayList<PBTreeOp>> map = new HashMap();
+        for(CorfuDBObjectCommand _op : ops) {
+            PBTreeOp op = (PBTreeOp)_op;
+            if(op == null) continue;
+            ArrayList<PBTreeOp> list = map.getOrDefault(new Integer(op.cmd()), new ArrayList());
+            list.add(op);
+            map.put(op.cmd(), list);
+        }
+        StringBuilder sb = new StringBuilder();
+        for(Integer cmd : map.keySet()) {
+            sb.append(PBTreeOp.cmdstr(cmd));
+            ArrayList<PBTreeOp> list = map.get(cmd);
+            for(PBTreeOp op : list) {
+                sb.append(", ");
+                sb.append(op.latency());
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
     }
 
     /**

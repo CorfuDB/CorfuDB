@@ -2,9 +2,16 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
+import org.corfudb.runtime.CorfuDBObjectCommand;
 import org.corfudb.runtime.StreamFactory;
 
+import java.util.ArrayList;
+import java.util.Collection;
+
 public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends CorfuDBObject {
+
+    public static boolean s_collectLatencyStats = false;
+    public static ArrayList<CorfuDBObjectCommand> s_completed = new ArrayList();
 
     StreamFactory sf;
 
@@ -33,9 +40,15 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends Corfu
     public abstract void put(K key, V value);
     public abstract boolean update(K key, V value);
     public abstract void clear();
+    protected abstract void startRequestImpl(CorfuDBObjectCommand op);
+    protected abstract boolean completeRequestImpl(CorfuDBObjectCommand op);
+    protected abstract String getLatencyStatsImpl(Collection<CorfuDBObjectCommand> ops);
 
     protected boolean eq(Comparable a, Comparable b) { return a.compareTo(b) == 0; }
     protected boolean lt(Comparable a, Comparable b) { return a.compareTo(b) < 0; }
+    protected void startRequest(CorfuDBObjectCommand op) { if(!s_collectLatencyStats) return; startRequestImpl(op); }
+    protected void completeRequest(CorfuDBObjectCommand op) { if(!s_collectLatencyStats) return; if(completeRequestImpl(op)) s_completed.add(op); }
+    public String getLatencyStats() { if(!s_collectLatencyStats) return null; return getLatencyStatsImpl(s_completed); }
 
 }
 

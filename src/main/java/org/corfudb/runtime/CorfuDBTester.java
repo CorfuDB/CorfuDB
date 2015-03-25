@@ -25,7 +25,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.CyclicBarrier;
 
 import gnu.getopt.Getopt;
 import org.apache.zookeeper.CreateMode;
@@ -64,12 +63,13 @@ public class CorfuDBTester
         System.out.println("\t[-x extreme debug mode (requires -v)]");
         System.out.println("\t[-r read write pct (double)]");
         System.out.println("\t[-T test case [functional|multifunctional|concurrent|tx]]\n");
-        System.out.println("\t[-i init fs trace path\n");
-        System.out.println("\t[-w fs wkld trace path\n");
-        System.out.println("\t[-L crash output log to use in recovery (BTreeFS)\n");
-        System.out.println("\t[-C B-Tree class name\n");
-        System.out.println("\t[-z crash/recover op number\n");
-
+        System.out.println("\t[-i init fs trace path]\n");
+        System.out.println("\t[-w fs wkld trace path]\n");
+        System.out.println("\t[-L crash output log to use in recovery (BTreeFS)]\n");
+        System.out.println("\t[-C B-Tree class name]\n");
+        System.out.println("\t[-z crash/recover op number]\n");
+        System.out.println("\t[-S collect latency stats]\n");
+        System.out.println("\t[-h synthesized directory structure target depth]\n");
 
 //        if(dbglog instanceof SimpleLogger)
 //            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
@@ -93,13 +93,11 @@ public class CorfuDBTester
         final int LINZK=9;
         final int TXLOGICALBTREE = 10;
         final int TXPHYSICALBTREE = 11;
-        final int BTREEFSLOGICAL = 12;
-        final int BTREEFSPHYSICAL  = 13;
-        final int BTREEFSSYNTH = 14;
-        final int BTREEFSTRACELOGICAL = 15;
-        final int BTREEFSTRACEPHYSICAL = 16;
-        final int BTREECRASH = 17;
-        final int BTREERECOVER = 18;
+        final int BTREEFS_BASIC  = 13;
+        final int BTREEFS_RECORD = 14;
+        final int BTREEFS_PLAYBACK = 15;
+        final int BTREEFS_CRASH = 16;
+        final int BTREEFS_RECOVER = 17;
 
         int c;
         int numclients = 2;
@@ -120,6 +118,7 @@ public class CorfuDBTester
         String strTestType = "";
         String strBTreeClass = "CDBLogicalBTree";
         int nCrashRecoverOp = 0;
+        int nTargetFSDepth = 5;
         String strCrashLog = "out.txt";
 
 
@@ -133,11 +132,17 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
             {
+                case 'h':
+                    nTargetFSDepth = Integer.parseInt(g.getOptarg());
+                    break;
+                case 'S':
+                    CDBAbstractBTree.s_collectLatencyStats = true;
+                    break;
                 case 'z':
                     nCrashRecoverOp = Integer.parseInt(g.getOptarg());
                     break;
@@ -150,9 +155,13 @@ public class CorfuDBTester
                 case 'A':
                     strTestType = g.getOptarg();
                     if(strTestType.compareToIgnoreCase("crash") == 0)
-                        testnum = BTREECRASH;
+                        testnum = BTREEFS_CRASH;
                     else if(strTestType.compareToIgnoreCase("recover") == 0)
-                        testnum = BTREERECOVER;
+                        testnum = BTREEFS_RECOVER;
+                    else if(strTestType.compareToIgnoreCase("record") == 0)
+                        testnum = BTREEFS_RECORD;
+                    else if(strTestType.compareToIgnoreCase("playback") == 0)
+                        testnum = BTREEFS_PLAYBACK;
                     break;
                 case 'i':
                     strInitPath = g.getOptarg();
@@ -401,31 +410,23 @@ public class CorfuDBTester
             BTreeTester.<String, String, CDBPhysicalBTree<String, String>>runTest(
                     TR, sf, numthreads, numlists, numops, numkeys, rwpct, "CDBPhysicalBTree", testCase, verbose);
         }
-        else if(testnum==BTREEFSLOGICAL) {
+        else if(testnum==BTREEFS_BASIC) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestBasic(TR, sf, "CDBLogicalBTree");
+            BTreeFS.fstestBasic(TR, sf, strBTreeClass);
         }
-        else if(testnum==BTREEFSSYNTH) {
+        else if(testnum== BTREEFS_RECORD) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestSynthetic(TR, sf, "CDBLogicalBTree");
+            BTreeFS.fstestRecord(TR, sf, strBTreeClass, nTargetFSDepth, numops, strInitPath, strWkldPath);
         }
-        else if(testnum==BTREEFSPHYSICAL) {
+        else if(testnum==BTREEFS_PLAYBACK) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestBasic(TR, sf, "CDBPhysicalBTree");
+            BTreeFS.fstestPlayback(TR, sf, strBTreeClass, strInitPath, strWkldPath);
         }
-        else if(testnum==BTREEFSTRACELOGICAL) {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestSynthetic(TR, sf, "CDBLogicalBTree", strInitPath, strWkldPath);
-        }
-        else if(testnum==BTREEFSTRACEPHYSICAL) {
-            TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestSynthetic(TR, sf, "CDBPhysicalBTree", strInitPath, strWkldPath);
-        }
-        else if(strTestType.compareToIgnoreCase("crash") == 0 || testnum == BTREECRASH) {
+        else if(testnum == BTREEFS_CRASH) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             BTreeFS.fstestCrash(TR, sf, strBTreeClass, strInitPath, strWkldPath, nCrashRecoverOp);
         }
-        else if(strTestType.compareToIgnoreCase("recover") == 0 || testnum == BTREERECOVER) {
+        else if(testnum == BTREEFS_RECOVER) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
             BTreeFS.fstestRecover(TR, sf, strBTreeClass, strInitPath, strWkldPath, strCrashLog, nCrashRecoverOp);
         }

@@ -1,8 +1,13 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
+import org.corfudb.runtime.CorfuDBObjectCommand;
 import org.corfudb.runtime.StreamFactory;
 import org.corfudb.client.ITimestamp;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 
 public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
 
@@ -32,6 +37,65 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
             next = _next;
             deleted = false;
         }
+    }
+
+    /**
+     * if we are collecting latency
+     * statistics, note the start time for this
+     * request
+     * @param _op
+     */
+    @Override
+    protected void startRequestImpl(CorfuDBObjectCommand _op) {
+        TreeOp<K, V> op = (TreeOp<K, V>)_op;
+        if(op == null) return;
+        op.start();
+    }
+
+    /**
+     * log completion time. return true if
+     * we actually completed this request through the
+     * normal channels...
+     * @param _op
+     * @return
+     */
+    @Override
+    protected boolean completeRequestImpl(CorfuDBObjectCommand _op) {
+        TreeOp<K, V> op = (TreeOp<K, V>)_op;
+        if(op == null) return false;
+        op.complete();
+        return op.latency() != 0;
+    }
+
+    /**
+     * get the latency stats as a string
+     * @param ops
+     * @return
+     */
+    @Override
+    protected String
+    getLatencyStatsImpl(
+            Collection<CorfuDBObjectCommand> ops
+        ) {
+        HashMap<Integer, ArrayList<TreeOp<K, V>>> map = new HashMap();
+        for(CorfuDBObjectCommand _op : ops) {
+            TreeOp<K, V> op = (TreeOp<K, V>)_op;
+            if(op == null) continue;
+            ArrayList<TreeOp<K,V>> list = map.getOrDefault(new Integer(op.cmd()), new ArrayList());
+            list.add(op);
+            map.put(op.cmd(), list);
+        }
+        StringBuilder sb = new StringBuilder();
+        for(Integer cmd : map.keySet()) {
+            sb.append(TreeOp.cmdstr(cmd));
+            ArrayList<TreeOp<K,V>> list = map.get(cmd);
+            for(TreeOp<K, V> op : list) {
+                sb.append(", ");
+                sb.append(op.latency());
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
     }
 
     /**
@@ -71,6 +135,7 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
             case TreeOp.CMD_REMOVE: cc.setReturnValue(applyRemove(cc.key())); break;
             case TreeOp.CMD_UPDATE: cc.setReturnValue(applyUpdate(cc.key(), cc.value())); break;
         }
+        cc.complete();
     }
 
     /**
