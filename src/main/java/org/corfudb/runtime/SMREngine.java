@@ -28,7 +28,7 @@ import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
-
+import java.util.concurrent.ConcurrentHashMap;
 /**
  * This class is an SMR engine. It's unaware of CorfuDB objects (or transactions).
  * It accepts new commands, totally orders them with respect to other clients in the
@@ -42,12 +42,11 @@ public class SMREngine
 
     SMRLearner smrlearner;
 
-    //used to coordinate between querying threads and the query_helper thread
-    final Object queuelock;
-
-    //pair of queues that get rotated between the playback thread and the sync threads
+    CompletableFuture<Void> cf;
     List<SyncObjectWrapper> curqueue;
-    List<SyncObjectWrapper> procqueue;
+
+    boolean batch = false;
+    //pair of queues that get rotated between the playback thread and the sync threads
 
     Set<Long> defaultstreamset;
     Stream curstream;
@@ -60,8 +59,8 @@ public class SMREngine
     //Each command consists of the primary command, which is serialized into the
     //total order, and a secondary command that is not inserted into the total order
     //but executes locally just before the primary command
-    HashMap<Long, Pair<Serializable, Object>> pendingcommands = new HashMap<Long, Pair<Serializable, Object>>();
-    Lock pendinglock = new ReentrantLock();
+    ConcurrentHashMap<Long, Pair<Serializable, Object>> pendingcommands = new ConcurrentHashMap<Long, Pair<Serializable, Object>>();
+  //  Lock pendinglock = new ReentrantLock();
 
     public void registerLearner(SMRLearner tlearner)
     {
@@ -101,14 +100,10 @@ public class SMREngine
         uniquenodeid = tuniquenodeid;
         SMRCommandWrapper.initialize(uniquenodeid);
 
-        queuelock = new Object();
-        curqueue = new LinkedList();
-        procqueue = new LinkedList();
-
         defaultstreamset = new HashSet();
         defaultstreamset.add(sb.getStreamID());
 
-
+        curqueue = new LinkedList<SyncObjectWrapper>();
         //start the playback thread
         /*
         new Thread(new Runnable()
@@ -122,14 +117,11 @@ public class SMREngine
             }
         }).start();
         */
-
+/*
         CompletableFuture.runAsync(() -> {
-            while(true)
-            {
                 playback();
-            }
         }, SMREngineThreadPool);
-
+*/
     }
 
     public ITimestamp propose(Serializable update, Set<Long> streams, Object precommand)
@@ -152,10 +144,10 @@ public class SMREngine
     public ITimestamp propose(Serializable update, Set<Long> streams, Object precommand, boolean sync)
     {
         SMRCommandWrapper cmd = new SMRCommandWrapper(update, streams);
-        pendinglock.lock();
+     //   pendinglock.lock();
         pendingcommands.put(cmd.uniqueid.second, new Pair(update, precommand));
 //        System.out.println("putting " + cmd + " as a pending local command");
-        pendinglock.unlock();
+     //   pendinglock.unlock();
         ITimestamp pos = curstream.append(cmd, streams);
         if (precommand != null || sync)
         //we play until the append point --- this may be sub-optimal in some cases where we want to append
@@ -205,22 +197,21 @@ public class SMREngine
     public void sync(ITimestamp syncpos, Object command)
     {
         final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, (syncpos.equals(ITimestamp.getInvalidTimestamp())));
-        synchronized (syncobj)
-        {
-            synchronized(queuelock)
-            {
-                curqueue.add(syncobj);
-                if(curqueue.size()==1) //first item, may need to wake up playback thread
-                    queuelock.notify();
+
+        synchronized(this) {
+            curqueue.add(syncobj);
+            if (!batch) {
+                batch = true;
+                final List<SyncObjectWrapper> newqueue = new LinkedList<SyncObjectWrapper>(curqueue);
+                curqueue.clear();
+                cf = CompletableFuture.runAsync(() -> {
+                    playback(newqueue);
+                }, SMREngineThreadPool);
             }
-            try
-            {
-                syncobj.wait();
-            }
-            catch (InterruptedException ie)
-            {
-                throw new RuntimeException(ie);
-            }
+        }
+        cf.join();
+        synchronized(this) {
+            batch = false;
         }
     }
 
@@ -235,8 +226,9 @@ public class SMREngine
     }
 
     //runs in a single thread
-    void playback()
+    void playback(List<SyncObjectWrapper> procqueue)
     {
+        /*
         List<SyncObjectWrapper> tqueue;
         synchronized(queuelock)
         {
@@ -257,9 +249,8 @@ public class SMREngine
             tqueue = procqueue;
             procqueue = curqueue;
             curqueue = tqueue;
-        }
+        }*/
 //        System.out.println("playback woken up...");
-
         if(procqueue.size()==0) throw new RuntimeException("queue cannot be empty at this point!");
 
 //        System.out.println("playback continuing...");
@@ -275,10 +266,6 @@ public class SMREngine
                 if(sw.synccommand!=null)
                 {
                     smrlearner.deliver(sw.synccommand, curstream.getStreamID(), ITimestamp.getInvalidTimestamp());
-                }
-                synchronized(sw)
-                {
-                    sw.notifyAll();
                 }
                 it2.remove();
             }
@@ -299,7 +286,7 @@ public class SMREngine
             SMRCommandWrapper cmdw = (SMRCommandWrapper)update.getPayload();
             //if this command was generated by us, swap out the version we read back with the local version
             //this allows return values to be transmitted via the local command object
-            pendinglock.lock();
+           // pendinglock.lock();
             Pair<Serializable, Object> localcmds = null;
             //did we generate this command, and is it pending?
 //            System.out.println(uniquenodeid + " is checking for local command on " + cmdw.uniqueid);
@@ -307,7 +294,7 @@ public class SMREngine
 ///            System.out.println(pendingcommands);
             if(cmdw.uniqueid.first==uniquenodeid && pendingcommands.containsKey(cmdw.uniqueid.second))
                 localcmds = pendingcommands.remove(cmdw.uniqueid.second);
-            pendinglock.unlock();
+          //  pendinglock.unlock();
             if(smrlearner==null) throw new RuntimeException("smr learner not set!");
             if(localcmds!=null)
             {
@@ -340,10 +327,6 @@ public class SMREngine
             if(syncobj.synccommand!=null)
             {
                 smrlearner.deliver(syncobj.synccommand, curstream.getStreamID(), ITimestamp.getInvalidTimestamp());
-            }
-            synchronized(syncobj)
-            {
-                syncobj.notifyAll();
             }
         }
         procqueue.clear();
