@@ -197,6 +197,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
             }
             return false;
         } catch(Exception e) {
+            log.debug("Error sending addstream", e);
             return false;
         }
     }
