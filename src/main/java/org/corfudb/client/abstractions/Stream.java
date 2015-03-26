@@ -1170,7 +1170,6 @@ public class Stream implements AutoCloseable, IStream {
         for (UUID id : targetStreams)
         {
             // Get a sequence in the remote stream
-            /*
             log.debug("targetSequence");
             StreamData sd = datamap.get(id);
             StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
@@ -1181,8 +1180,7 @@ public class Stream implements AutoCloseable, IStream {
             woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
            log.debug("hmm.");
             offset++;
-*/
-
+/*
             StreamData sd = datamap.get(id);
             //remote, use a gossip message
             if (sd.currentLog != logID)
@@ -1197,6 +1195,7 @@ public class Stream implements AutoCloseable, IStream {
                 IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
                 woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
             }
+            */
 
         }
         } catch (Exception ex) {
