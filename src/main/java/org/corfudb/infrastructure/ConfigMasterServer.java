@@ -355,7 +355,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
             boolean didnotalreadyexist = false;
             if (sd == null) {didnotalreadyexist = true;}
-            currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
+            currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), UUID.fromString(jo.getJsonString("logid").getString()), jo.getJsonNumber("startpos").longValue());
             sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
 
             if (didnotalreadyexist)
@@ -368,7 +368,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                     log.info("send addstream to {}", remote);
                     CorfuDBView cv = (CorfuDBView)currentRemoteView.getLog(remote);
                     IConfigMaster cm = (IConfigMaster) cv.getConfigMasters().get(0);
-                    cm.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
+                    cm.addStream(UUID.fromString(jo.getJsonString("logid").getString()), UUID.fromString(jo.getJsonString("streamid").getString()), jo.getJsonNumber("startpos").longValue());
                 } catch (Exception e)
                 {
                     log.debug("Error Broadcasting Gossip", e);
