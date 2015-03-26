@@ -193,6 +193,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         for (UUID remote : currentRemoteView.getAllLogs())
         {
             try {
+                log.info("send remote gossip to {}", remote);
                 CorfuDBView cv = (CorfuDBView)currentRemoteView.getLog(remote);
                 IConfigMaster cm = (IConfigMaster) cv.getConfigMasters().get(0);
                 cm.sendGossip(gossip);
