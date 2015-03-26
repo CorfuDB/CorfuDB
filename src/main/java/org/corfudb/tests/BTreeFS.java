@@ -686,9 +686,13 @@ public class BTreeFS {
         return result;
     }
 
-    private class LengthSort implements Comparator<FSEntry> {
+    private class PathDepthSort implements Comparator<FSEntry> {
         public int compare(FSEntry a, FSEntry b) {
-            return a.path().length() - b.path().length();
+            String aslashlesspath = (new String(a.path())).replace("/", "");
+            String bslashlesspath = (new String(b.path())).replace("/", "");
+            int adepth = a.path().length() - aslashlesspath.length();
+            int bdepth = b.path().length() - bslashlesspath.length();
+            return adepth - bdepth;
         }
     }
 
@@ -708,14 +712,17 @@ public class BTreeFS {
         ArrayList<FSEntry> children = new ArrayList<FSEntry>();
         FSEntry root = get("root");
         FSEntry result = randomSelect(rnd, root, type, 0, children);
-        if(result == null && children.size() > 0) {
-            Collections.sort(children, new LengthSort());
+        if(children.size() > 0) {
+            Collections.sort(children, new PathDepthSort());
             if(children.size() < 4)
                 return children.get(children.size()-1);
             int halfsize = children.size() / 2;
             int idx = (int) (Math.floor(rnd.nextDouble()*halfsize)) + halfsize;
             idx = Math.min(idx, children.size()-1);
-            return children.get(idx);
+            FSEntry oresult = children.get(idx);
+            if(result == null || result == root)
+                return oresult;
+            return oresult.path().length() > result.path().length() ? oresult : result;
         }
         return result == root ? null : result;
     }
@@ -909,6 +916,7 @@ public class BTreeFS {
             String strBTreeClass,
             int minIdLength,
             int maxIdLength,
+            int minChildren,
             int maxChildren,
             double dirProbability,
             int height,
@@ -919,7 +927,13 @@ public class BTreeFS {
         Random rnd = new Random();
         FSEntry root = new FSEntry("root", null, etype.dir);
         fs.put(root.path(), root);
-        fs.populateRandomFS(rnd, root, minIdLength, maxIdLength, maxChildren, dirProbability, height, ops);
+        fs.populateRandomFS(rnd, root, minIdLength, maxIdLength, minChildren, maxChildren, dirProbability, height-1, ops);
+        int actualHeight = fs.depth();
+        if(actualHeight < height) {
+            System.out.format("Failed to generate a tree of the required height (wanted %d, got %d)\n", height, actualHeight);
+            System.out.print(fs.printFS());
+            return null;
+        }
         return fs;
     }
 
@@ -939,16 +953,19 @@ public class BTreeFS {
             FSEntry parent,
             int minIdLength,
             int maxIdLength,
+            int minChildren,
             int maxChildren,
             double dirProbability,
             int height,
             Collection<FileSystemDriver.Op> ops
         )
     {
-        int nChildren = rnd.nextInt(maxChildren);
+        if(height == 0)
+            return;
+        int nChildren = rnd.nextInt(maxChildren-minChildren)+minChildren;
         for(int i=0; i<nChildren; i++) {
 
-            double nextDirProbability = height == 0 ? 0.0 : dirProbability;
+            double nextDirProbability = height <= 1 ? 0.0 : dirProbability;
             FSEntry child = randomChild(rnd, parent, minIdLength, maxIdLength, nextDirProbability);
 
             if(child.type == etype.dir) {
@@ -959,7 +976,9 @@ public class BTreeFS {
                                                     new Integer(child.attrs.permissions)));
                 setAncestorPermissions(child);
                 put(child.path(), child);
-                populateRandomFS(rnd, child, minIdLength, maxIdLength, maxChildren, dirProbability, height-1, ops);
+                populateRandomFS(rnd, child, minIdLength, maxIdLength,
+                        minChildren, maxChildren, dirProbability, height - 1, ops);
+                put(child.path(), child);
 
             } else {
 
@@ -1240,6 +1259,50 @@ public class BTreeFS {
         }
         put(file.path(), file);
         return newlen;
+    }
+
+    /**
+     * @return max depth of file system
+     */
+    public int depth() {
+
+        int nDepth = 0;
+        boolean inTX = false;
+        boolean done = false;
+        while(!done) {
+            try {
+                inTX = BeginTX();
+                FSEntry root = get("root");
+                nDepth = depth(root);
+                done = EndTX();
+                inTX = false;
+            } catch (Exception e) {
+                inTX = AbortTX(inTX, e);
+            }
+        }
+        return nDepth;
+    }
+
+    /**
+     * search for matching files
+     * @return
+     */
+    protected int depth(FSEntry fs) {
+        int nDepth = 0;
+        if(fs != null) {
+            if (fs.type == etype.file) {
+                nDepth = 1;
+            } else {
+                int nChildDepth = 0;
+                for (int i = 0; i < fs.numChildren(); i++) {
+                    String path = fs.path() + "/" + fs.getChild(i);
+                    FSEntry child = get(path);
+                    nChildDepth = Math.max(nChildDepth, depth(child));
+                }
+                nDepth = nChildDepth + 1;
+            }
+        }
+        return nDepth;
     }
 
     /**
@@ -1669,11 +1732,12 @@ public class BTreeFS {
             boolean transactional
         ) {
         double dirProbability = 0.4;
+        int minChildren = 2;
         int maxChildren = 10;
         int minIdLength = 1;
         int maxIdLength = 8;
         int height = 5;
-        fstestBasic(tTR, tsf, strBTreeClass, dirProbability, maxChildren,
+        fstestBasic(tTR, tsf, strBTreeClass, dirProbability, minChildren, maxChildren,
                 minIdLength, maxIdLength, height, transactional);
     }
 
@@ -1686,6 +1750,7 @@ public class BTreeFS {
             StreamFactory tsf,
             String strBTreeClass,
             double dirProbability,
+            int minChildren,
             int maxChildren,
             int minIdLength,
             int maxIdLength,
@@ -1694,7 +1759,7 @@ public class BTreeFS {
         ) {
         ArrayList<FileSystemDriver.Op> initOps = new ArrayList();
         BTreeFS fs = BTreeFS.createRandomFS(tTR, tsf, strBTreeClass,
-                minIdLength, maxIdLength, maxChildren, dirProbability, height, transactional, initOps);
+                minIdLength, maxIdLength, minChildren, maxChildren, dirProbability, height, transactional, initOps);
         System.out.println("FS-tree:\n"+fs.printBTree());
         System.out.println("FS:\n"+fs.printFS());
     }
@@ -1709,19 +1774,21 @@ public class BTreeFS {
             String strBTreeClass,
             boolean transactional,
             int nTargetFSDepth,
+            int nTargetFSFanout,
             int nWorkloadOps,
             String initPath,
             String wkldPath
         ) {
         double dirProbability = 0.4;
-        int maxChildren = 8;
+        int minChildren = 3;
         int minIdLength = 1;
         int maxIdLength = 8;
+        int maxChildren = Math.max(nTargetFSFanout, minChildren);
         long curTime = System.currentTimeMillis();
         int nRandomSeed = (int) curTime;
         if(initPath == null) initPath = "initfs_" + (curTime%100) + ".ser";
         if(wkldPath == null) wkldPath = "wkldfs_" + (curTime%100) + ".ser";
-        fstestRecord(tTR, tsf, strBTreeClass, dirProbability, maxChildren, minIdLength, maxIdLength,
+        fstestRecord(tTR, tsf, strBTreeClass, dirProbability, minChildren, maxChildren, minIdLength, maxIdLength,
                 nTargetFSDepth, nWorkloadOps, nRandomSeed, transactional, initPath, wkldPath);
     }
 
@@ -1734,6 +1801,7 @@ public class BTreeFS {
             StreamFactory tsf,
             String strBTreeClass,
             double dirProbability,
+            int minChildren,
             int maxChildren,
             int minIdLength,
             int maxIdLength,
@@ -1746,10 +1814,15 @@ public class BTreeFS {
         ) {
         ArrayList<FileSystemDriver.Op> initOps = new ArrayList();
         BTreeFS fs = BTreeFS.createRandomFS(tTR, tsf, strBTreeClass,
-                minIdLength, maxIdLength, maxChildren, dirProbability, height, transactional, initOps);
+                minIdLength, maxIdLength, minChildren, maxChildren, dirProbability, height, transactional, initOps);
         System.out.println("FS-tree:\n"+fs.printBTree());
         System.out.println("FS:\n"+fs.printFS());
-        FileSystemDriver driver = new FileSystemDriver(fs, nWorkloadOperations, nRandomSeed);
+        FileSystemDriver driver = new FileSystemDriver(fs, nWorkloadOperations);
+        if(!driver.SynthesizeWorkload(nRandomSeed)) {
+            System.out.println("failed to synthesize a random workoad over the given BTreeFS (too small?)");
+            System.out.println("FAILED.");
+            System.exit(-1);
+        }
         System.out.format("test case:\n%s\n", driver.toString());
         driver.play();
         driver.setInitOps(initOps);

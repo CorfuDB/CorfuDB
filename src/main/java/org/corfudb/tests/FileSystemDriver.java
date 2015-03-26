@@ -26,13 +26,13 @@ public class FileSystemDriver {
         protected static HashMap<fsoptype, Double> s_thresholds = new HashMap<fsoptype, Double>();
         static {
             s_thresholds.put(access, 5.0);                          // 5
-            s_thresholds.put(create, 5.0);                          // 10
+            s_thresholds.put(create, 5.0+s_thresholds.get(access)); // 10
             s_thresholds.put(open, 10.0+s_thresholds.get(create));  // 20
             s_thresholds.put(close, 10.0+s_thresholds.get(open));   // 30
             s_thresholds.put(read, 20.0+s_thresholds.get(close));   // 50
             s_thresholds.put(write, 15.0+s_thresholds.get(read));   // 64
-            s_thresholds.put(resize, 4.0+s_thresholds.get(write));   // 69
-            s_thresholds.put(delete, 2.0+s_thresholds.get(resize));  // 71
+            s_thresholds.put(resize, 4.0+s_thresholds.get(write));  // 69
+            s_thresholds.put(delete, 2.0+s_thresholds.get(resize)); // 71
             s_thresholds.put(mkdir, 8.0+s_thresholds.get(delete));  // 79
             s_thresholds.put(readdir, 8.0+s_thresholds.get(mkdir)); // 87
             s_thresholds.put(rmdir, 2.0+s_thresholds.get(readdir)); // 89
@@ -54,7 +54,6 @@ public class FileSystemDriver {
             if(d < thresh(rmdir)) return rmdir;
             return search;
         }
-
     }
 
     public static class Op implements Serializable {
@@ -716,18 +715,15 @@ public class FileSystemDriver {
          * ctor
          * @param fs
          * @param nOps
-         * @param seed
          */
         public
         FileSystemWorkload(
                 BTreeFS fs,
-                int nOps,
-                long seed
+                int nOps
             ) {
             m_ops = null;
             m_cur = 0;
             m_nOps = nOps;
-            initialize(fs, seed);
         }
 
         /**
@@ -753,18 +749,24 @@ public class FileSystemDriver {
          * initialize the workload
          * @param seed
          */
-        protected void initialize(BTreeFS fs, long seed) {
+        public boolean
+        Synthesize(BTreeFS fs, long seed) {
             Random random = new Random(seed);
             m_ops = new Op[m_nOps];
+            final int maxRetries = 25;
             for(int i=0; i<m_nOps; i++) {
                 Op op = null;
+                int retries = 0;
                 do {
                     op = Op.synthesizeOp(random, fs);
                     if(op != null) {
                         m_ops[i] = op;
                     }
+                    if(++retries >= maxRetries)
+                        return false;
                 } while(op == null);
             }
+            return true;
         }
 
         protected void reset() { m_cur = 0; }
@@ -800,13 +802,12 @@ public class FileSystemDriver {
      * randomized ctor
      * @param fs
      * @param nOps
-     * @param seed
      */
     public
-    FileSystemDriver(BTreeFS fs, int nOps, long seed) {
+    FileSystemDriver(BTreeFS fs, int nOps) {
         m_fs = fs;
         m_init = null;
-        m_wkld = new FileSystemWorkload(m_fs, nOps, seed);
+        m_wkld = new FileSystemWorkload(m_fs, nOps);
         m_phases = new FileSystemWorkload[2];
         m_phases[0] = m_init;
         m_phases[1] = m_wkld;
@@ -864,6 +865,15 @@ public class FileSystemDriver {
         m_nEpochOps = 0;
         m_lEpochStart = 0;
         m_nEpochNum = 0;
+    }
+
+    /**
+     * synthesize a workload
+     * @param nRandomSeed
+     * @return
+     */
+    public boolean SynthesizeWorkload(int nRandomSeed) {
+        return m_wkld.Synthesize(m_fs, nRandomSeed);
     }
 
     /**

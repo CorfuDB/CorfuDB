@@ -71,6 +71,7 @@ public class CorfuDBTester
         System.out.println("\t[-z crash/recover op number]\n");
         System.out.println("\t[-S collect latency stats]\n");
         System.out.println("\t[-h synthesized directory structure target depth]\n");
+        System.out.println("\t[-h synthesized directory structure fanout]\n");
         System.out.println("\t[-N non-transactional fs]\n");
 
 //        if(dbglog instanceof SimpleLogger)
@@ -121,6 +122,7 @@ public class CorfuDBTester
         String strBTreeClass = "CDBLogicalBTree";
         int nCrashRecoverOp = 0;
         int nTargetFSDepth = 5;
+        int nTargetFSFanout = 8;
         String strCrashLog = "out.txt";
         boolean transactionalFS = true;
 
@@ -135,7 +137,7 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:N");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:f:N");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
@@ -145,6 +147,9 @@ public class CorfuDBTester
                     break;
                 case 'h':
                     nTargetFSDepth = Integer.parseInt(g.getOptarg());
+                    break;
+                case 'f':
+                    nTargetFSFanout = Integer.parseInt(g.getOptarg());
                     break;
                 case 'S':
                     CDBAbstractBTree.s_collectLatencyStats = true;
@@ -424,7 +429,7 @@ public class CorfuDBTester
         }
         else if(testnum== BTREEFS_RECORD) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
-            BTreeFS.fstestRecord(TR, sf, strBTreeClass, transactionalFS, nTargetFSDepth, numops, strInitPath, strWkldPath);
+            BTreeFS.fstestRecord(TR, sf, strBTreeClass, transactionalFS, nTargetFSDepth, nTargetFSFanout, numops, strInitPath, strWkldPath);
         }
         else if(testnum==BTREEFS_PLAYBACK) {
             TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport, true);
