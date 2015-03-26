@@ -356,6 +356,20 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
 
             log.info("Adding new stream {}", sd.streamID);
+
+            for (UUID remote : currentRemoteView.getAllLogs())
+            {
+                try {
+                    log.info("send addstream to {}", remote);
+                    CorfuDBView cv = (CorfuDBView)currentRemoteView.getLog(remote);
+                    IConfigMaster cm = (IConfigMaster) cv.getConfigMasters().get(0);
+                    cm.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
+                } catch (Exception e)
+                {
+                    log.debug("Error Broadcasting Gossip", e);
+                }
+            }
+
             StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
                     sd.streamID,
                     sd.currentLog,
