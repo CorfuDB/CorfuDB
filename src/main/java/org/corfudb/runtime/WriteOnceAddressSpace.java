@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-
+import java.io.Serializable;
 
 /**
  * This is the write-once address space providing storage for the shared log.
@@ -37,6 +37,7 @@ public interface WriteOnceAddressSpace
      */
     void write(long pos, BufferStack bs); //todo: throw exception
 
+    void write(long pos, Serializable s);
     /**
      * Reads the entry at a particular position. Throws exceptions if the entry
      * is unwritten or trimmed.
@@ -44,7 +45,7 @@ public interface WriteOnceAddressSpace
      * @param pos
      */
     BufferStack read(long pos); //todo: throw exception
-
+    Object readObject(long pos);
     /**
      * Trims the prefix of the address space before the passed in position.
      *
@@ -85,13 +86,13 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
     CacheMap<Long, byte[]> cache = new CacheMap(cachesize);
 
     CorfuDBClient cl;
-    org.corfudb.client.view.WriteOnceAddressSpace cwoas;
+    org.corfudb.client.view.ObjectCachedWriteOnceAddressSpace cwoas;
 
     public CorfuLogAddressSpace(CorfuDBClient tcl, int ID)
     {
         this.ID = ID;
         cl = tcl;
-        cwoas = new org.corfudb.client.view.WriteOnceAddressSpace(cl);
+        cwoas = new org.corfudb.client.view.ObjectCachedWriteOnceAddressSpace(cl);
     }
 
     public void write(long pos, BufferStack bs)
@@ -106,18 +107,67 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
         }
     }
 
+    public void write(long pos, Serializable o)
+    {
+        try {
+        cwoas.write(pos, o);
+        } catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
 
+    public Object readObject(long pos)
+    {
+        Object ret = null;
+        int retrycounter = 0;
+        final int retrymax = 12;
+        while(true)
+        {
+            try
+            {
+                long difftime = -1;
 
+                long startts = System.currentTimeMillis();
+
+                ret = cwoas.readObject(pos);
+                long stopts = System.currentTimeMillis();
+                difftime = stopts-startts;
+
+                //for now, copy to a byte array and return
+              //  dbglog.debug("read back {} bytes, took {} ms", ret.length, difftime);
+                break;
+            }
+            catch (UnwrittenException uce)
+            {
+                //encountered a hole -- try again
+//                System.out.println("Hole..." + pos);
+                retrycounter++;
+                if(retrycounter==retrymax) throw new RuntimeException("Encountered non-transient hole at " + pos + "...");
+                try
+                {
+                    int sleepms = (int)Math.pow(2, retrycounter);
+                    dbglog.debug("Encountered hole; sleeping for {} ms...", sleepms);
+                    //exponential backoff
+                    Thread.sleep(sleepms);
+                }
+                catch(InterruptedException e)
+                {
+                    //ignore
+                }
+            }
+            catch(Exception e)
+            {
+                throw new RuntimeException(e);
+            }
+
+        }
+        return ret;
+    }
 
     public BufferStack read(long pos)
     {
         dbglog.debug("Reading {}", pos);
-        if(caching)
-            synchronized(cache)
-            {
-                if(cache.containsKey(pos))
-                    return new BufferStack(cache.get(pos));
-            }
         byte[] ret = null;
         int retrycounter = 0;
         final int retrymax = 12;
@@ -162,12 +212,6 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
             }
 
         }
-        dbglog.debug("Done Reading {}", pos);
-        if(caching)
-            synchronized(cache)
-            {
-                cache.put(pos, ret);
-            }
         return new BufferStack(ret);
 
     }

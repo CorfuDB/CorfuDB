@@ -40,6 +40,16 @@ public interface IConfigMaster extends IServerProtocol {
      * @return              True if the stream was successfully added to the system, false otherwise.
      */
     boolean addStream(UUID logID, UUID streamID, long startPos);
+    /**
+     * Adds a new stream to the system.
+     *
+     * @param logID         The ID of the log the stream starts on.
+     * @param streamID      The streamID of the stream.
+     * @param startPos      The start position of the stream.
+     *
+     * @return              True if the stream was successfully added to the system, false otherwise.
+     */
+    boolean addStreamCM(UUID logID, UUID streamID, long startPos, boolean nopass);
 
     /**
      * Gets information about a stream in the system.

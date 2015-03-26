@@ -189,6 +189,29 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
             params.put("logid", logID.toString());
             params.put("streamid", streamID.toString());
             params.put("startpos", pos);
+            params.put("nopass", false);
+            jr.setNamedParams(params);
+            JSONRPC2Response jres = jsonSession.send(jr);
+            if (jres.indicatesSuccess() && (Boolean) jres.getResult())
+            {
+                return true;
+            }
+            return false;
+        } catch(Exception e) {
+            log.debug("Error sending addstream", e);
+            return false;
+        }
+    }
+    public boolean addStreamCM(UUID logID, UUID streamID, long pos, boolean nopass)
+    {
+        try {
+            JSONRPC2Request jr = new JSONRPC2Request("addstream", id.getAndIncrement());
+            Map<String, Object> params = new HashMap<String,Object>();
+            params.put("logid", logID.toString());
+            params.put("streamid", streamID.toString());
+            params.put("startpos", pos);
+            params.put("nopass", nopass);
+
             jr.setNamedParams(params);
             JSONRPC2Response jres = jsonSession.send(jr);
             if (jres.indicatesSuccess() && (Boolean) jres.getResult())
