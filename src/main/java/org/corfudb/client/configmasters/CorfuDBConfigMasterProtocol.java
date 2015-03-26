@@ -145,7 +145,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
 
     public void sendGossip(IGossip gossip)
     {
-            client.sendUDP(gossip);
+            client.sendTCP(gossip);
     }
 
     public StreamData getStream(UUID streamID)
