@@ -356,18 +356,15 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
 
             log.info("Adding new stream {}", sd.streamID);
-            if (sd != null)
-            {
-                StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
-                        sd.streamID,
-                        sd.currentLog,
-                        sd.startLog,
-                        sd.startPos,
-                        sd.epoch,
-                        sd.lastUpdate
-                        );
-                sendGossipToAllRemotes(sdresp);
-            }
+            StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
+                    sd.streamID,
+                    sd.currentLog,
+                    sd.startLog,
+                    sd.startPos,
+                    sd.epoch,
+                    sd.lastUpdate
+                    );
+            sendGossipToAllRemotes(sdresp);
         }
         catch (Exception ex)
         {
