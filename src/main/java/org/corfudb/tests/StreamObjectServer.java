@@ -65,7 +65,7 @@ public class StreamObjectServer {
                 if (cdse instanceof BundleEntry)
                 {
                     BundleEntry b = (BundleEntry) cdse;
-                    b.writeSlot(new StreamObjectWrapper(serverNum));
+                    b.writeSlot(null);
                 }
             }
     }

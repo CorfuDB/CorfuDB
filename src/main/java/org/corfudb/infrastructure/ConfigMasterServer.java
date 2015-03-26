@@ -81,6 +81,8 @@ import org.corfudb.client.RemoteException;
 import org.corfudb.client.StreamData;
 
 import org.corfudb.client.gossip.StreamPullGossip;
+import org.corfudb.client.gossip.StreamBundleGossip;
+import org.corfudb.client.entries.BundleEntry;
 import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.client.view.CachedWriteOnceAddressSpace;
@@ -184,6 +186,19 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         woaslocal.write(remoteToken, new CorfuDBStreamMoveEntry(spg.streamID, spg.destinationLog, spg.destinationStream, spg.physicalPos, spg.duration, streamEpoch, spg.destinationEpoch, spg.payload));
                         } catch (Exception e) {}
                     }
+                    else if (object instanceof StreamBundleGossip)
+                    {
+                        log.debug("Executing bundle!");
+                        StreamBundleGossip spg = (StreamBundleGossip) object;
+                        StreamingSequencer slocal = new StreamingSequencer(currentView);
+                        long remoteToken = slocal.getNext(spg.streamID, spg.reservation);
+                        WriteOnceAddressSpace woaslocal = new WriteOnceAddressSpace(currentView);
+                        long streamEpoch = currentStreamView.getStream(spg.streamID).epoch;
+                        try{
+                        woaslocal.write(remoteToken, new BundleEntry(spg.epochMap, spg.destinationLog, spg.destinationStream, spg.physicalPos,  streamEpoch, spg.payload, (int) spg.duration, spg.offset ));
+                        } catch (Exception e) {}
+                    }
+
                 }
             });
         }
