@@ -1178,9 +1178,12 @@ public class Stream implements AutoCloseable, IStream {
             // Write a move in the remote log
             IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
+           log.debug("hmm.");
             offset++;
         }
-        } catch (Exception ex) {}
+        } catch (Exception ex) {
+            log.debug("Exception", ex);
+        }
         }, executor);
 
         return ts;
