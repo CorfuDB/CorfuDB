@@ -99,8 +99,6 @@ public class StreamObjectClient {
             ArrayList<UUID> remotes = new ArrayList<UUID>();
             remotes.add(new UUID(0,0));
             remotes.add(new UUID(0,1));
-            remotes.add(new UUID(0,2));
-            remotes.add(new UUID(0,3));
 
             Timer t_total = m.timer("total");
             Timer.Context c_total = t_total.time();
