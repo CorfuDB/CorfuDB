@@ -53,12 +53,9 @@ public class StreamObjectServer {
      * @param args
      */
     public static void main(String[] args) throws Exception {
-
-            String masteraddress = "http://localhost:8002/corfu";
-
             final int numthreads = 1;
 
-            CorfuDBClient client = new CorfuDBClient(masteraddress);
+            CorfuDBClient client = new CorfuDBClient("http://localhost:8002/corfu");
             client.startViewManager();
             final int serverNum = Integer.parseInt(args[0]);
             Stream s = new Stream(client, new UUID(0,serverNum));
