@@ -352,9 +352,14 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     {
         try {
             JsonObject jo = params;
-            currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
             StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
+            boolean didnotalreadyexist = false;
+            if (sd == null) {didnotalreadyexist = true;}
+            currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
+            sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
 
+            if (didnotalreadyexist)
+            {
             log.info("Adding new stream {}", sd.streamID);
 
             for (UUID remote : currentRemoteView.getAllLogs())
@@ -379,6 +384,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                     sd.lastUpdate
                     );
             sendGossipToAllRemotes(sdresp);
+            }
         }
         catch (Exception ex)
         {
