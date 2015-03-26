@@ -904,21 +904,47 @@ public class FileSystemDriver {
         }
     }
 
+    public static void
+    PersistFSSnapshot(
+            String strPhasePath,
+            String strPhaseState
+        ) {
+        try {
+            File phaseOut = new File(strPhasePath + ".txt");
+            FileOutputStream fosPhase = new FileOutputStream(phaseOut);
+            OutputStreamWriter oswPhase = new OutputStreamWriter(fosPhase);
+            oswPhase.write(strPhaseState);
+            oswPhase.write("\n");
+            oswPhase.close();
+        } catch (IOException io) {
+            System.out.println("failed to save phase FS state:\n"+io.getMessage());
+            io.printStackTrace();
+        }
+    }
+
     /**
      * persist the init and workload phases
      * @param initPath
      * @param wkldPath
      */
-    public void Persist(String initPath, String wkldPath) {
+    public void
+    Persist(
+            String initPath,
+            String wkldPath,
+            String initFSstate,
+            String wkldFSstate
+            ) {
 
         try(OutputStream initFile = new FileOutputStream(initPath);
             OutputStream wkldFile = new FileOutputStream(wkldPath);
             OutputStream initBuffer = new BufferedOutputStream(initFile);
             OutputStream wkldBuffer = new BufferedOutputStream(wkldFile);
             ObjectOutput initOutput = new ObjectOutputStream(initBuffer);
-            ObjectOutput wkldOutput = new ObjectOutputStream(wkldBuffer); ) {
+            ObjectOutput wkldOutput = new ObjectOutputStream(wkldBuffer);) {
             initOutput.writeObject(m_init);
             wkldOutput.writeObject(m_wkld);
+            PersistFSSnapshot(initPath, initFSstate);
+            PersistFSSnapshot(wkldPath, wkldFSstate);
         } catch(IOException io) {
             System.out.println("failed to save wkld:\n"+io.getMessage());
             io.printStackTrace();
@@ -1025,8 +1051,9 @@ public class FileSystemDriver {
     /**
      * "play" the workload forward to given op number
      */
-    public void playTo(int nLastOp) {
-        init();
+    public void playTo(int nLastOp, boolean init) {
+        if(init)
+            init();
         m_wkld.reset();
         m_curphase = 1;
         m_curop = 0;

@@ -1,0 +1,21 @@
+root	d------rwx/
+  *ogipg	-rw-rwx---
+  *qrdo	-r---w---x
+  cabth	d-w------x/
+    *zameya	------x-wx
+    *mmoquf	-rw-r-x-wx
+    xybuqek	dr--r-xr--/
+      *jftboq	-r---wxr-x
+      mot	d-w-r--rwx/
+        *l	-rw-r-x--x
+        *ycdqr	-r---wxr-x
+        *amyhco	----r-x--x
+        *hlbftv	--w-rwxr--
+        *yzzperf	--w---x-w-
+      *n	-r----x-w-
+      l	d-w----rwx/
+        *mw	-rw-rwxrwx
+        *lke	--w----r--
+        *ed	-r---w---x
+      *jdlg	--w--wx-w-
+

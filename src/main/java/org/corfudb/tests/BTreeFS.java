@@ -744,15 +744,17 @@ public class BTreeFS {
         ) {
 
         if (type == etype.dir && parent != null) {
-            if (rnd.nextDouble() < (0.01*height))
+            if (rnd.nextDouble() < (0.08*height))
                 return parent;
         }
         ArrayList<FSEntry> dirs = new ArrayList<FSEntry>();
         for (int i = 0; i < parent.numChildren(); i++) {
             String strChild = parent.getChild(i);
             FSEntry child = get(parent.path() + "/" + strChild);
+            if(child.type == etype.dir)
+                dirs.add(child);
             if (child.type == type) {
-                if (rnd.nextDouble() < (0.01*height))
+                if (rnd.nextDouble() < (0.08*height))
                     return child;
                 candidates.add(child);
             }
@@ -960,17 +962,41 @@ public class BTreeFS {
             Collection<FileSystemDriver.Op> ops
         )
     {
-        if(height == 0)
-            return;
+        boolean leaf = (height <= 0);
         int nChildren = rnd.nextInt(maxChildren-minChildren)+minChildren;
+        HashSet<String> siblings = new HashSet<>();
+        int nChildDirectories = 0;
+
         for(int i=0; i<nChildren; i++) {
 
-            double nextDirProbability = height <= 1 ? 0.0 : dirProbability;
+            // unless we are at the bottom level of the tree, we require
+            // at least one directory entry. Technically, all we really need
+            // to satisfy the height requirements is a single branch of the
+            // required depth, but a more balanced FS tree is likely to provide
+            // more easily understood behavior from the runtime anyway. In
+            // short, unless we are at the bottom-most level of the tree,
+            // adjust the probability of a directory dynamically to ensure
+            // we get at least one for non-leaf nodes, and 0 for leaves.
+
+            double nextDirProbability = leaf ?
+                    0.0 : (nChildDirectories == 0 && i == nChildren-1) ?
+                    1.0 : dirProbability;
+
+            // avoid duplicate names for siblings.
+            // a real FS of course should support this if
+            // one is a directory and the other a file, but
+            // handling such corner cases is not super-important
+            // in this context (where we just want a workload to drive CorfuDB}
             FSEntry child = randomChild(rnd, parent, minIdLength, maxIdLength, nextDirProbability);
+            while(siblings.contains(child.name)) {
+                long unq = System.currentTimeMillis() % 83;
+                child.name = child.name + unq;
+            }
+            siblings.add(child.name);
 
             if(child.type == etype.dir) {
-
                 assert(height > 0);
+                nChildDirectories++;
                 ops.add(FileSystemDriver.newMkdirOp(child.name,
                                                     parent.path(),
                                                     new Integer(child.attrs.permissions)));
@@ -1081,6 +1107,8 @@ public class BTreeFS {
                     String parentpath = file.getParentPath();
                     while(parentpath.compareTo("root") != 0) {
                         FSEntry parent = get(parentpath);
+                        if(parent == null)
+                            break;
                         actualmode &= parent.attrs.permissions;
                         parentpath = parent.getParentPath();
                     }
@@ -1290,16 +1318,15 @@ public class BTreeFS {
     protected int depth(FSEntry fs) {
         int nDepth = 0;
         if(fs != null) {
-            if (fs.type == etype.file) {
-                nDepth = 1;
-            } else {
+            nDepth = 1;
+            if (fs.type != etype.file) {
                 int nChildDepth = 0;
                 for (int i = 0; i < fs.numChildren(); i++) {
                     String path = fs.path() + "/" + fs.getChild(i);
                     FSEntry child = get(path);
                     nChildDepth = Math.max(nChildDepth, depth(child));
                 }
-                nDepth = nChildDepth + 1;
+                nDepth += nChildDepth;
             }
         }
         return nDepth;
@@ -1352,14 +1379,8 @@ public class BTreeFS {
                 for (int i = 0; i < fs.numChildren(); i++) {
                     String path = fs.path() + "/" + fs.getChild(i);
                     FSEntry child = get(path);
-                    if(child == null) {
-                        System.out.format("XXXX: inconsistent FS: no FSEntry for %s!\n", path);
-                        continue;  // umm...this shouldn't happen
-                    }
-                    if(child.name == null) {
-                        System.out.format("XXXX: inconsistent FS: FSEntry.name == null for %s!\n", path);
-                        continue;  // umm...this also shouldn't happen
-                    }
+                    if(child == null)
+                        continue;   // this is a legit case: delete just marks entries
                     if (child.name.compareTo(fname) == 0)
                         matches.add(child);
                     matches.addAll(search(child, fname));
@@ -1405,8 +1426,10 @@ public class BTreeFS {
         boolean result = false;
         if (file != null && file.type == etype.file) {
             FSEntry parent = get(file.getParentPath());
-            result = remove(file.path()) != null;
-            result &= parent.removeChild(file.name);
+            if(parent != null) {
+                result = remove(file.path()) != null;
+                result &= parent.removeChild(file.name);
+            }
         }
         return result;
     }
@@ -1455,10 +1478,12 @@ public class BTreeFS {
             }
             for (int i = 0; i < entry.numChildren(); i++) {
                 FSEntry child = get(entry.path() + "/" + entry.getChild(i));
-                if (child.type == etype.dir)
-                    result &= rmdir(child);
-                else
-                    result &= delete(child);
+                if(child != null) { // null-ok: the numChildren includes potentially deleted nodes!
+                    if (child.type == etype.dir)
+                        result &= rmdir(child);
+                    else
+                        result &= delete(child);
+                }
             }
             FSEntry parent = get(parentPath);
             result = remove(entry.path()) != null;
@@ -1647,8 +1672,7 @@ public class BTreeFS {
      * @return
      */
     protected String printFS(FSEntry fs, String indent) {
-        if(fs == null)
-            return "--missing--";
+        if(fs == null) return "";
         StringBuilder sb = new StringBuilder();
         sb.append(indent);
         if(fs.type == etype.file) {
@@ -1665,7 +1689,9 @@ public class BTreeFS {
             for(int i=0; i<fs.numChildren(); i++) {
                 String path = fs.path() + "/" + fs.getChild(i);
                 FSEntry child = get(path);
-                sb.append(printFS(child, indent+"  "));
+                if(child != null) {
+                    sb.append(printFS(child, indent + "  "));
+                }
             }
         }
         return sb.toString();
@@ -1815,8 +1841,14 @@ public class BTreeFS {
         ArrayList<FileSystemDriver.Op> initOps = new ArrayList();
         BTreeFS fs = BTreeFS.createRandomFS(tTR, tsf, strBTreeClass,
                 minIdLength, maxIdLength, minChildren, maxChildren, dirProbability, height, transactional, initOps);
+        if(fs == null) {
+            System.out.println("failed to generate a random FS tree of the required dimensions (too small?)");
+            System.out.println("FAILED.");
+            System.exit(-1);
+        }
+        String initFSstate = fs.printFS();
         System.out.println("FS-tree:\n"+fs.printBTree());
-        System.out.println("FS:\n"+fs.printFS());
+        System.out.println("FS:\n"+initFSstate);
         FileSystemDriver driver = new FileSystemDriver(fs, nWorkloadOperations);
         if(!driver.SynthesizeWorkload(nRandomSeed)) {
             System.out.println("failed to synthesize a random workoad over the given BTreeFS (too small?)");
@@ -1826,9 +1858,10 @@ public class BTreeFS {
         System.out.format("test case:\n%s\n", driver.toString());
         driver.play();
         driver.setInitOps(initOps);
+        String wkldFSstate = fs.printFS();
         System.out.format("test case (with init):\n%s\n", driver.toString());
-        System.out.println("FS after test:\n" + fs.printFS());
-        driver.Persist(initPath, wkldPath);
+        System.out.println("FS after test:\n" + wkldFSstate);
+        driver.Persist(initPath, wkldPath, initFSstate, wkldFSstate);
     }
 
     /**
@@ -1846,8 +1879,13 @@ public class BTreeFS {
         BTreeFS fs = BTreeFS.createEmptyFS(tTR, tsf, strBTreeClass, transactional);
         FileSystemDriver driver = new FileSystemDriver(fs, strInitPath, strWkldPath);
         System.out.format("test case:\n%s\n", driver.toString());
-        driver.play();
-        System.out.println("FS after test:\n" + fs.printFS());
+        driver.playPhase(0);
+        String initFSstate = fs.printFS();
+        driver.playPhase(1);
+        String wkldFSstate = fs.printFS();
+        System.out.println("FS after test:\n" + wkldFSstate);
+        FileSystemDriver.PersistFSSnapshot(strInitPath + ".post", initFSstate);
+        FileSystemDriver.PersistFSSnapshot(strWkldPath + ".post", wkldFSstate);
     }
 
     static final String strBTREEOID = "BTREEOID: ";
@@ -1869,10 +1907,16 @@ public class BTreeFS {
         BTreeFS fs = BTreeFS.createEmptyFS(tTR, tsf, strBTreeClass, transactional);
         FileSystemDriver driver = new FileSystemDriver(fs, strInitPath, strWkldPath);
         System.out.format("test case:\n%s\n", driver.toString());
-        driver.playTo(nCrashOp);
-        System.out.println("FS after test:\n" + fs.printFS());
+        driver.init();
+        String initFSstate = fs.printFS();
+        System.out.println("FS after init:\n" + initFSstate);
+        driver.playTo(nCrashOp, false);
+        String wkldFSstate = fs.printFS();
+        System.out.println("FS after test:\n" + wkldFSstate);
         System.out.println("BTree REQ stats:\n" + fs.m_btree.getLatencyStats());
         System.out.println(strBTREEOID + fs.m_btree.oid);
+        FileSystemDriver.PersistFSSnapshot(strInitPath + ".post", initFSstate);
+        FileSystemDriver.PersistFSSnapshot(strWkldPath + ".post-crash", wkldFSstate);
     }
 
     /**
@@ -1896,8 +1940,10 @@ public class BTreeFS {
         FileSystemDriver driver = new FileSystemDriver(fs, strInitPath, strWkldPath);
         System.out.format("test case:\n%s\n", driver.toString());
         driver.playFrom(nRecoverOp);
-        System.out.println("FS after test:\n" + fs.printFS());
+        String wkldFSstate = fs.printFS();
+        System.out.println("FS after test:\n" + wkldFSstate);
         System.out.println("BTree REQ stats:\n" + fs.m_btree.getLatencyStats());
+        FileSystemDriver.PersistFSSnapshot(strWkldPath + ".post-recover", wkldFSstate);
     }
 
     /**

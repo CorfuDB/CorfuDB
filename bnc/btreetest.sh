@@ -5,7 +5,7 @@
 # As per http://stackoverflow.com/questions/14598753/running-bash-script-in-cygwin-on-windows-7
 
 # btreetest.sh [--iter i] [--verbose] [--xdebug] [--treetype t] [--masternode m] [--port p] [--collectstats]
-#    [--recordonly] [--record] [--streamimpl s] [--workload c] [--help] [--debugscript]
+#    [--recordonly] [--record] [--streamimpl s] [--workload c] [--help] [--debugscript] [--checkfs]
 
 let SUCCEEDED=0
 let FAILURES=0
@@ -20,6 +20,7 @@ verbose="FALSE"
 xdebug="FALSE"
 collectstats="TRUE"
 debugscript="FALSE"
+checkfs="FALSE"
 showoutput=0
 readmore=1
 help=0
@@ -48,6 +49,7 @@ usage() {
   echo "--streamimpl s:     use *only* the specified stream implementation [DUMMY|HOP]"
   echo "--workload c:       run *only* the specified workload, rather than all [miniscule|tiny|small|medium|large]"
   echo "--debugscript:      emit script commands to console"
+  echo "--checkfs:          check playback on recorded workloads"
   echo "--help:             prints this message"
 }
 
@@ -83,6 +85,12 @@ until [ -z $readmore ]; do
     verbose="TRUE"
     verboseflags=" -v "
     inform "verbose mode"
+	shift
+	readmore=1
+  fi
+  if [ "x$1" == "x--checkfs" ]; then
+    checkfs="TRUE"
+    inform "checkfs mode"
 	shift
 	readmore=1
   fi
@@ -175,7 +183,7 @@ function getscript() {
   local __script=$2
   local sscript=""
   if [ "$streamlabel" == "HOP" ]; then
-	  sscript="corfuDBmultiple"
+	  sscript="corfuDBMultiple"
   else
 	  sscript="corfuDBsingle"
   fi
@@ -186,6 +194,7 @@ corfucmd() {
   local ccmd=$1
   local astreamlabel=$2
   getscript $astreamlabel corfuscript
+  inform "./bin/$corfuscript.sh $ccmd"
   ./bin/$corfuscript.sh $ccmd > /dev/null 2>$1
 }
 
@@ -197,7 +206,7 @@ stopcorfu() {
   corfucmd stop $1
 }
 
-runtester() {
+standalonetest() {
   local streamimpl=$1
   local args="${@:2}"
   getrtflags $streamimpl rtflags
@@ -206,16 +215,25 @@ runtester() {
   stopcorfu $streamimpl
 }
 
+runtest() {
+  inform "runtest"
+  local streamimpl=$1
+  local args="${@:2}"
+  getrtflags $streamimpl rtflags
+  local rcmd="./bin/corfuDBTestRuntime.sh CorfuDBTester $rtflags $args"
+  inform "$rcmd"
+  ./bin/corfuDBTestRuntime.sh CorfuDBTester $rtflags $args
+}
+
 function skipitem() {
   local item=$1
   local specificitem=$2
   local __skip=$3
+  local shouldskip="FALSE"
   if [ "$specificitem" != "___" ]; then
 	if [ "$specificitem" != "$item" ]; then
 	  shouldskip="TRUE"
-    else
-      shouldskip="FALSE"
-	fi
+    fi
   fi
   eval $__skip="'$shouldskip'"
 }
@@ -230,6 +248,11 @@ recordWorkload() {
   local streamimpl=DUMMY
   local initfile=bnc/initfs_$workload.ser
   local wkldfile=bnc/wkldfs_$workload.ser
+  local gtdir=bnc/groundtruth
+  local gtinit=bnc/initfs_$workload.ser.txt
+  local gtwkld=bnc/wkldfs_$workload.ser.txt
+  local postinit=bnc/initfs_$workload.ser.post.txt
+  local postwkld=bnc/wkldfs_$workload.ser.post.txt
   local skipit
 
   skipitem $workload $specificworkload skipit
@@ -237,7 +260,26 @@ recordWorkload() {
     inform "recordWorkload skipping workload=$workload..."
     return
   fi
-  runtester $streamimpl -A record -t 1 -n $ops -i $initfile -w $wkldfile -h $height -f $fanout -C $class
+  standalonetest $streamimpl -A record -t 1 -n $ops -i $initfile -w $wkldfile -h $height -f $fanout -C $class
+
+  if [ "$checkfs" == "TRUE" ]; then
+    standalonetest $streamimpl -A playback -t 1 -n $ops -i $initfile -w $wkldfile -h $height -f $fanout -C $class
+    initdiff=`diff $gtinit $postinit`
+    wklddiff=`diff $gtwkld $postwkld`
+    if [ ! -z "${initdiff// }" ] || [ ! -z "${wklddiff// }" ]; then
+      echo "FAILURE: record and playback yield different state!"
+      echo "initFSdiff=$initdiff"
+      echo "wkldFSdiff=$wklddiff"
+      exit
+    else
+      rm $postinit
+      rm $postwkld
+    fi
+  fi
+
+  mv $gtinit $gtdir
+  mv $gtwkld $gtdir
+
 }
 
 crashRecoverTest() {
@@ -246,57 +288,64 @@ crashRecoverTest() {
   local size=${2}
   local crashop=${3}
   local recoverop=${4}
-  local stats=${5}
-  local threads=${6}
-  local streamimpl=${7}
-  local run=${8}
+  local threads=${5}
+  local streamimpl=${6}
+  local run=${7}
+  local skclass
+  local skwkld
+  local skstream
 
   skipitem $class $specificclass skclass
   skipitem $size $specificworkload skwkld
   skipitem $streamimpl $specificstreamimpl skstream
-  getstreamflags $streamimpl streamflags
+  getrtflags $streamimpl rtflags
   if [ "$skclass" == "TRUE" ] || [ "$skwkld" == "TRUE" ] || [ "$skstream" == "TRUE" ]; then
-    inform "crashRecoverTest skipping $size-$class-t$threads-s$streamlabel-r$run"
+    inform "crashRecoverTest skipping $size-$class-t$threads-s$streamimpl-r$run"
+    inform "skclass=$skclass skwkld=$skwkld skstream=$skstream"
+    inform "class=$class size=$size streamimpl=$streamimpl"
+    inform "C=$specificclass W=$specificworkload S=$specificstreamimpl"
+    inform " "
     return;
   fi
 
   ddir=bnc/data
   initops=bnc/initfs_$size.ser
-  wlkdops=bnc/wkldfs_$size.ser
-  caselbl=$size-$class-t$threads-s$streamlabel-r$run
+  wkldops=bnc/wkldfs_$size.ser
+  caselbl=$size-$class-t$threads-s$streamimpl-r$run
   crashlog=$ddir/crash-$caselbl.txt
   recoverlog=$ddir/recover-$caselbl.txt
   tputlog=$ddir/btree-tput-$caselbl.csv
   rlatlog=$ddir/btree-reqlat-$caselbl.csv
   runstart="`date +%Y-%m-%d`"
-  runtimeparms=CorfuDBTester -m $masternode -p 9091 -s $streamimpl -t $threads $Xverbose $Xdebug $stats
-  caseparms=-C $class -i $initops -w $wkldops
-  crashcmd="./bin/corfuDBTestRuntime.sh $runtimeparms $caseparms -A crash -z $crashop  > $crashlog"
-  recovercmd="./bin/corfuDBTestRuntime.sh $runtimeparms $caseparms -A recover -z $recoverop -L $crashlog > $recoverlog"
+  caseparms="-C $class -i $initops -w $wkldops -t $threads"
 
   inform "running crash/recover $caselbl:"
-  inform "    $crashcmd"
-  inform "    $recovercmd"
-  startcorfu streamlabel
-  ./bin/corfuDBTestRuntime.sh $runtimeparms $caseparms -A crash -z $crashop  > $crashlog
-  ./bin/corfuDBTestRuntime.sh $runtimeparms $caseparms -A recover -z $recoverop -L $crashlog > $recoverlog
-  stopcorfu streamlabel
+  startcorfu $streamimpl
+  inform "corfu started, running crash phase..."
+  ./bin/corfuDBTestRuntime.sh CorfuDBTester $rtflags $caseparms -A crash -z $crashop > $crashlog
+  inform "running recover phase..."
+  ./bin/corfuDBTestRuntime.sh CorfuDBTester $rtflags $caseparms -A recover -z $recoverop -L $crashlog > $recoverlog
+  inform "complete...stopping corfu"
+  stopcorfu $streamimpl
   inform "...done"
 
   echo $runstart: $caselbl >> $ddir/tput-all.csv
-  grep TPUT $crashlog $recoverlog >> $ddir/tput-all.csv
-  grep TPUT $crashlog $recoverlog > $tputlog
-  grep FSREQLAT $crashlog $recoverlog > $rlatlog
-  grep FSCMDLAT $crashlog $recoverlog >> $rlatlog
+  cat $crashlog > tmp.txt
+  cat $recoverlog >> tmp.txt
+  grep TPUT tmp.txt >> $ddir/tput-all.csv
+  grep TPUT tmp.txt > $tputlog
+  grep FSREQLAT tmp.txt > $rlatlog
+  grep FSCMDLAT tmp.txt >> $rlatlog
+  rm tmp.txt
 }
 
 if [ "$record" == "TRUE" ] || [ "$recordonly" == "TRUE" ]; then
   echo "recording workloads..."
   recordWorkload CDBLogicalBTree 30 miniscule 4 6
   recordWorkload CDBLogicalBTree 50 tiny 5 10
-  recordWorkload CDBLogicalBTree 100 small 7 10
-  recordWorkload CDBLogicalBTree 1000 medium 10 12
-  recordWorkload CDBLogicalBTree 10000 large 16 20
+  #recordWorkload CDBLogicalBTree 100 small 7 10
+  #recordWorkload CDBLogicalBTree 1000 medium 10 12
+  #recordWorkload CDBLogicalBTree 10000 large 16 20
   if [ "$recordonly" == "TRUE" ]; then
     exit
   fi
@@ -305,14 +354,15 @@ fi
 DATETIME="`date +%Y-%m-%d`"
 echo -e "\nCorfuDB BTreeFS test $DATETIME"
 echo -e "-----------------------------------"
+echo -e "\nCorfuDB BTreeFS test $DATETIME" > bnc/data/tput-all.csv
 
 for run in `seq 1 $ITERATIONS`; do
-for size in miniscule tiny small medium large; do
+for size in miniscule tiny; do # small medium large; do
 for class in CDBLogicalBTree CDBPhysicalBTree; do
 for streamimpl in DUMMY HOP; do
 for threads in 1; do
 
-crashRecoverTest $class $size 20 21 $verbose $xdebug $collectstats $threads $streamimpl $streamlabel $corfustartscript $specificworkload $specificclass $specificstreamimpl $run
+crashRecoverTest $class $size 20 21 $threads $streamimpl $streamlabel $run
 
 done
 done
