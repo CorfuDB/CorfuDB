@@ -102,7 +102,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
         {
             jsonSession = new JSONRPC2Session(new URL("http://"+ host + ":" + port + "/control"));
             JSONRPC2SessionOptions opts = new JSONRPC2SessionOptions();
-            opts.setReadTimeout(20000);
+            opts.setReadTimeout(5000);
             jsonSession.setOptions(opts);
             client = new Client(8192,8192);
             IGossip.registerSerializer(client.getKryo());
@@ -186,6 +186,9 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
 
     public boolean addStream(UUID logID, UUID streamID, long pos)
     {
+        int counter = 0;
+        while (counter< 3)
+        {
         try {
             JSONRPC2Request jr = new JSONRPC2Request("addstream", id.getAndIncrement());
             Map<String, Object> params = new HashMap<String,Object>();
@@ -202,8 +205,10 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
             return false;
         } catch(Exception e) {
             log.debug("Error sending addstream", e);
-            return false;
         }
+        counter++;
+        }
+        return false;
     }
     public boolean addStreamCM(UUID logID, UUID streamID, long pos, boolean nopass)
     {

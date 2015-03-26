@@ -86,6 +86,8 @@ import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.client.view.CachedWriteOnceAddressSpace;
 import org.corfudb.client.view.Serializer;
 
+import java.util.concurrent.CompletableFuture;
+
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
     private Logger log = LoggerFactory.getLogger(ConfigMasterServer.class);
@@ -366,6 +368,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
             for (UUID remote : currentRemoteView.getAllLogs())
             {
+                CompletableFuture.runAsync(() -> {
                 try {
                     log.info("send addstream to {}", remote);
                     CorfuDBView cv = (CorfuDBView)currentRemoteView.getLog(remote);
@@ -374,7 +377,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                 } catch (Exception e)
                 {
                     log.debug("Error Broadcasting Gossip", e);
-                }
+                }});
             }
             }
 /*
