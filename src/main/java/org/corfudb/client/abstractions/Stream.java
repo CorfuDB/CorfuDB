@@ -1170,9 +1170,11 @@ public class Stream implements AutoCloseable, IStream {
         for (UUID id : targetStreams)
         {
             // Get a sequence in the remote stream
+            log.debug("targetSequence");
             StreamData sd = datamap.get(id);
             StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
             long remoteToken = sremote.getNext(id, slots + 1);
+            log.debug("remoteLog write");
             // Write a move in the remote log
             IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
