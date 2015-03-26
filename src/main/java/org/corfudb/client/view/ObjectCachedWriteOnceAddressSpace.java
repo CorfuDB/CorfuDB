@@ -189,7 +189,6 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     {
          Object o = AddressSpaceObjectCache.get(logID, address);
          if (o != null) {
-             log.debug("ObjCache hit @ {}", address);
              return o; }
 
          byte[] data = read(address);
