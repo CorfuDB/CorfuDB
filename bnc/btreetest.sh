@@ -322,9 +322,9 @@ crashRecoverTest() {
   inform "running crash/recover $caselbl:"
   startcorfu $streamimpl
   inform "corfu started, running crash phase..."
-  ./bin/corfuDBTestRuntime.sh CorfuDBTester $rtflags $caseparms -A crash -z $crashop > $crashlog
+  ./bin/corfuDBTestRuntime.sh CorfuDBTester $rtflags $caseparms -A crash -z $crashop | tee $crashlog
   inform "running recover phase..."
-  ./bin/corfuDBTestRuntime.sh CorfuDBTester $rtflags $caseparms -A recover -z $recoverop -L $crashlog > $recoverlog
+  ./bin/corfuDBTestRuntime.sh CorfuDBTester $rtflags $caseparms -A recover -z $recoverop -L $crashlog | tee $recoverlog
   inform "complete...stopping corfu"
   stopcorfu $streamimpl
   inform "...done"

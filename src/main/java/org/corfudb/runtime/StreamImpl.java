@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.ForkJoinPool;
@@ -283,16 +284,17 @@ class HopAdapterStreamImpl implements Stream
 class StreamImpl implements Stream
 {
     static Logger dbglog = LoggerFactory.getLogger(StreamImpl.class);
+    static final boolean cacheStreamEntries = true;
+
 
     long streamid;
 
     StreamingSequencer seq;
     WriteOnceAddressSpace addrspace;
-
+    ConcurrentHashMap<Long, StreamEntry> m_cache;
     Lock biglock;
     long curpos;
     long curtail;
-
 
     public long getStreamID()
     {
@@ -305,7 +307,7 @@ class StreamImpl implements Stream
         seq = tss;
         addrspace = tlas;
         biglock = new ReentrantLock();
-
+        m_cache = new ConcurrentHashMap();
     }
 
     @Override
@@ -335,16 +337,26 @@ class StreamImpl implements Stream
         StreamEntry ret = null;
         while(true)
         {
+            long readpos;
             biglock.lock();
-            if (!(curpos < curtail && (stoppos == null || curpos < stoppos.pos)))
-            {
+            try {
+                if (!(curpos < curtail && (stoppos == null || curpos < stoppos.pos)))
+                    return null;
+                readpos = curpos++;
+                ret = m_cache.getOrDefault(readpos, null);
+            } finally {
                 biglock.unlock();
-                return null;
             }
-            long readpos = curpos++;
-            biglock.unlock();
-            BufferStack bs = addrspace.read(readpos);
-            ret = (StreamEntry) bs.deserialize();
+            if(ret == null) {
+                BufferStack bs = addrspace.read(readpos);
+                ret = (StreamEntry) bs.deserialize();
+                biglock.lock();
+                try {
+                    m_cache.put(readpos, ret);
+                } finally {
+                    biglock.unlock();
+                }
+            }
             if(ret.isInStream(this.getStreamID()))
                 break;
             dbglog.debug("skipping...");
