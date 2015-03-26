@@ -84,6 +84,7 @@ import org.corfudb.client.gossip.StreamPullGossip;
 import org.corfudb.client.view.StreamingSequencer;
 import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.client.view.CachedWriteOnceAddressSpace;
+import org.corfudb.client.view.Serializer;
 
 public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
@@ -488,7 +489,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         CachedWriteOnceAddressSpace woas = new CachedWriteOnceAddressSpace(currentView);
         try {
             output.add("state", "data");
-            Object obj= woas.readObject(pos);
+            byte[] data = woas.read(pos);
+            output.add("size", data.length);
+            Object obj = Serializer.deserialize_compressed(data);
                     output.add("classname", obj.getClass().getName());
                     JsonObjectBuilder datan = Json.createObjectBuilder();
                     Class<?> current = obj.getClass();

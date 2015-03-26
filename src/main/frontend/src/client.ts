@@ -144,6 +144,11 @@ function updateLogDetail(pos: number) : Promise<any>
         {
               $("#loginfotable").append("<tr><td>Error</td><td>" + data.result.error + "</a></td></tr>");
         }
+        if (data.result.size !== undefined)
+        {
+              $("#loginfotable").append("<tr><td>Size</td><td>" + data.result.size + "</a></td></tr>");
+        }
+
         if (data.result.payload !== undefined)
         {
             $("#payload").removeClass("hidden");
