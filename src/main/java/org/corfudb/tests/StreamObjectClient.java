@@ -107,7 +107,7 @@ public class StreamObjectClient {
 
             Timer t_bundleapply = m.timer("bundle apply");
             Timer.Context c_bundleapply = t_bundleapply.time();
-            Bundle b = new Bundle(s, remotes, new StreamObjectServer.StreamClientObjectWrapper(clientNum), true);
+            Bundle b = new Bundle(s, remotes, null, true);
             b.apply();
             c_bundleapply.stop();
 
