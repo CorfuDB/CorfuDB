@@ -102,7 +102,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
         {
             jsonSession = new JSONRPC2Session(new URL("http://"+ host + ":" + port + "/control"));
             JSONRPC2SessionOptions opts = new JSONRPC2SessionOptions();
-            opts.setReadTimeout(1000);
+            opts.setReadTimeout(10000);
             jsonSession.setOptions(opts);
             client = new Client(8192,8192);
             IGossip.registerSerializer(client.getKryo());
