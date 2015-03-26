@@ -54,9 +54,7 @@ public class StreamObjectServer {
      */
     public static void main(String[] args) throws Exception {
 
-            String masteraddress = null;
-
-            masteraddress = "http://localhost:8002/corfu";
+            String masteraddress = "http://localhost:8002/corfu";
 
             final int numthreads = 1;
 
