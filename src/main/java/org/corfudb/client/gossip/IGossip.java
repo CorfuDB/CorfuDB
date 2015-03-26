@@ -11,6 +11,7 @@ import java.util.UUID;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 
 public interface IGossip extends Serializable {
     static final long serialVersionUID = 0L;
@@ -37,6 +38,7 @@ public interface IGossip extends Serializable {
 
         kryo.register(UUID.class);
         kryo.register(byte[].class);
+        kryo.register(HashMap.class);
 
     }
 }
