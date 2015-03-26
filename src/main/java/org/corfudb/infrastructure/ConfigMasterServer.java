@@ -374,7 +374,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                     log.debug("Error Broadcasting Gossip", e);
                 }
             }
-
+/*
             StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
                     sd.streamID,
                     sd.currentLog,
@@ -383,7 +383,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                     sd.epoch,
                     sd.lastUpdate
                     );
-            sendGossipToAllRemotes(sdresp);
+            sendGossipToAllRemotes(sdresp);*/
             }
         }
         catch (Exception ex)
