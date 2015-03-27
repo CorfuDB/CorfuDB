@@ -193,6 +193,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         for (UUID remote : currentRemoteView.getAllLogs())
         {
             try {
+                log.info("send remote gossip to {}", remote);
                 CorfuDBView cv = (CorfuDBView)currentRemoteView.getLog(remote);
                 IConfigMaster cm = (IConfigMaster) cv.getConfigMasters().get(0);
                 cm.sendGossip(gossip);
@@ -351,20 +352,41 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     {
         try {
             JsonObject jo = params;
-            currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), currentView.getUUID(), jo.getJsonNumber("startpos").longValue());
             StreamData sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
+            boolean didnotalreadyexist = false;
+            if (sd == null) {didnotalreadyexist = true;}
+            currentStreamView.addStream(UUID.fromString(jo.getJsonString("streamid").getString()), UUID.fromString(jo.getJsonString("logid").getString()), jo.getJsonNumber("startpos").longValue());
+            sd = currentStreamView.getStream(UUID.fromString(jo.getJsonString("streamid").getString()));
 
-            if (sd != null)
+            if (didnotalreadyexist)
             {
-                StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
-                        sd.streamID,
-                        sd.currentLog,
-                        sd.startLog,
-                        sd.startPos,
-                        sd.epoch,
-                        sd.lastUpdate
-                        );
-                sendGossipToAllRemotes(sdresp);
+            log.info("Adding new stream {}", sd.streamID);
+            if (!(Boolean) jo.getBoolean("nopass", false))
+            {
+
+            for (UUID remote : currentRemoteView.getAllLogs())
+            {
+                try {
+                    log.info("send addstream to {}", remote);
+                    CorfuDBView cv = (CorfuDBView)currentRemoteView.getLog(remote);
+                    IConfigMaster cm = (IConfigMaster) cv.getConfigMasters().get(0);
+                    cm.addStreamCM(UUID.fromString(jo.getJsonString("logid").getString()), UUID.fromString(jo.getJsonString("streamid").getString()), jo.getJsonNumber("startpos").longValue(), true);
+                } catch (Exception e)
+                {
+                    log.debug("Error Broadcasting Gossip", e);
+                }
+            }
+            }
+/*
+            StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
+                    sd.streamID,
+                    sd.currentLog,
+                    sd.startLog,
+                    sd.startPos,
+                    sd.epoch,
+                    sd.lastUpdate
+                    );
+            sendGossipToAllRemotes(sdresp);*/
             }
         }
         catch (Exception ex)

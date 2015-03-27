@@ -5,7 +5,8 @@
 # As per http://stackoverflow.com/questions/14598753/running-bash-script-in-cygwin-on-windows-7
 
 # btreetest.sh [--iter i] [--verbose] [--xdebug] [--treetype t] [--masternode m] [--port p] [--collectstats]
-#    [--recordonly] [--record] [--streamimpl s] [--workload c] [--help] [--debugscript] [--checkfs]
+#    [--recordonly] [--record] [--streamimpl s] [--workload c] [--help] [--debugscript] [--checkfs] [--notx]
+#    [--M btree-M]
 
 let SUCCEEDED=0
 let FAILURES=0
@@ -21,11 +22,13 @@ xdebug="FALSE"
 collectstats="TRUE"
 debugscript="FALSE"
 checkfs="FALSE"
+usetx="TRUE"
 showoutput=0
 readmore=1
 help=0
 record=0
 recordonly=0
+Mparms=""
 
 inform() {
   str=$1
@@ -36,7 +39,9 @@ inform() {
 
 usage() {
   echo "BTreeFS benchmark usage:"
-  echo "btreetest.sh [--iter i] [--verbose] [--xdebug] [--treetype t] [--masternode m] [--collectstats b] [--recordonly] [--record] [--streamimpl s] [--workload c] [--debugscript] [--help]"
+  echo "btreetest.sh [--iter i] [--verbose] [--xdebug] [--treetype t] [--masternode m] [--collectstats b] "
+  echo "             [--recordonly] [--record] [--streamimpl s] [--workload c] [--debugscript] [--help]"
+  echo "             [--notx] [--M btree-M]"
   echo "--iter i:           run each case i times"
   echo "--verbose:          extra output"
   echo "--xdebug:           extreme debug output"
@@ -50,6 +55,8 @@ usage() {
   echo "--workload c:       run *only* the specified workload, rather than all [miniscule|tiny|small|medium|large]"
   echo "--debugscript:      emit script commands to console"
   echo "--checkfs:          check playback on recorded workloads"
+  echo "--notx:             disable txns at FS API layer"
+  echo "--M m:              max children per b-tree node"
   echo "--help:             prints this message"
 }
 
@@ -57,6 +64,12 @@ until [ -z $readmore ]; do
   readmore=
   if [ "x$1" == "x--help" ]; then
     help=1
+	shift
+	readmore=1
+  fi
+  if [ "x$1" == "x--notx" ]; then
+    usetx="FALSE"
+    inform "not using txns in fs API"
 	shift
 	readmore=1
   fi
@@ -133,6 +146,13 @@ until [ -z $readmore ]; do
 	shift
 	readmore=1
   fi
+  if [ "x$1" == "x--M" ]; then
+    Mparms="-M $2"
+    inform "b-tree max children per node = $2"
+	shift
+	shift
+	readmore=1
+  fi
   if [ "x$1" == "x--port" ]; then
     port=$2
     inform "port = $port"
@@ -162,6 +182,10 @@ function getrtflags() {
   local xdebugflags=""
   local statsflags=""
   local streamflags=""
+  local txflags=""
+  if [ "$usetx" == "FALSE" ]; then
+	  txflags="-N"
+  fi
   if [ "$streamlabel" == "HOP" ]; then
 	  streamflags="-s 1"
   fi
@@ -174,7 +198,7 @@ function getrtflags() {
   if [ "$collectstats" == "TRUE" ]; then
 	  statsflags="-S"
   fi
-  flags="-m $masternode -p $port $streamflags $verboseflags $xdebugflags $statsflags"
+  flags="-m $masternode -p $port $txflags $streamflags $verboseflags $xdebugflags $statsflags $Mparms"
   eval $__rtflags="'$flags'"
 }
 
@@ -298,16 +322,16 @@ crashRecoverTest() {
   skipitem $class $specificclass skclass
   skipitem $size $specificworkload skwkld
   skipitem $streamimpl $specificstreamimpl skstream
-  getrtflags $streamimpl rtflags
   if [ "$skclass" == "TRUE" ] || [ "$skwkld" == "TRUE" ] || [ "$skstream" == "TRUE" ]; then
     inform "crashRecoverTest skipping $size-$class-t$threads-s$streamimpl-r$run"
-    inform "skclass=$skclass skwkld=$skwkld skstream=$skstream"
-    inform "class=$class size=$size streamimpl=$streamimpl"
-    inform "C=$specificclass W=$specificworkload S=$specificstreamimpl"
+    inform "   skclass=$skclass skwkld=$skwkld skstream=$skstream"
+    inform "   class=$class size=$size streamimpl=$streamimpl"
+    inform "   C=$specificclass W=$specificworkload S=$specificstreamimpl"
     inform " "
     return;
   fi
 
+  getrtflags $streamimpl rtflags
   ddir=bnc/data
   initops=bnc/initfs_$size.ser
   wkldops=bnc/wkldfs_$size.ser
@@ -341,9 +365,9 @@ crashRecoverTest() {
 
 if [ "$record" == "TRUE" ] || [ "$recordonly" == "TRUE" ]; then
   echo "recording workloads..."
-  recordWorkload CDBLogicalBTree 30 miniscule 4 6
-  recordWorkload CDBLogicalBTree 50 tiny 5 10
-  #recordWorkload CDBLogicalBTree 100 small 7 10
+  recordWorkload CDBLogicalBTree 40 miniscule 4 6
+  recordWorkload CDBLogicalBTree 70 tiny 5 7
+  recordWorkload CDBLogicalBTree 100 small 6 8
   #recordWorkload CDBLogicalBTree 1000 medium 10 12
   #recordWorkload CDBLogicalBTree 10000 large 16 20
   if [ "$recordonly" == "TRUE" ]; then
@@ -354,10 +378,11 @@ fi
 DATETIME="`date +%Y-%m-%d`"
 echo -e "\nCorfuDB BTreeFS test $DATETIME"
 echo -e "-----------------------------------"
-echo -e "\nCorfuDB BTreeFS test $DATETIME" > bnc/data/tput-all.csv
+echo -e "\nCorfuDB BTreeFS test $DATETIME" >> bnc/data/tput-all.csv
+echo -e "-----------------------------------" >> bnc/data/tput-all.csv
 
 for run in `seq 1 $ITERATIONS`; do
-for size in miniscule tiny; do # small medium large; do
+for size in miniscule tiny; do # medium large; do
 for class in CDBLogicalBTree CDBPhysicalBTree; do
 for streamimpl in DUMMY HOP; do
 for threads in 1; do

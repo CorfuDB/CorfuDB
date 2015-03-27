@@ -23,19 +23,34 @@ public class FileSystemDriver {
         maxoptypes;
         private static fsoptype[] s_vals = values();
         public static fsoptype fromInt(int i) { return s_vals[i]; }
+        protected static HashMap<fsoptype, Double> s_thresholds_d = new HashMap<fsoptype, Double>();
+        static {
+            s_thresholds_d.put(access, 5.0);                          // 5
+            s_thresholds_d.put(create, 5.0+ s_thresholds_d.get(access)); // 10
+            s_thresholds_d.put(open, 10.0+ s_thresholds_d.get(create));  // 20
+            s_thresholds_d.put(close, 10.0+ s_thresholds_d.get(open));   // 30
+            s_thresholds_d.put(read, 20.0+ s_thresholds_d.get(close));   // 50
+            s_thresholds_d.put(write, 15.0+ s_thresholds_d.get(read));   // 64
+            s_thresholds_d.put(resize, 4.0+ s_thresholds_d.get(write));  // 69
+            s_thresholds_d.put(delete, 2.0+ s_thresholds_d.get(resize)); // 71
+            s_thresholds_d.put(mkdir, 8.0+ s_thresholds_d.get(delete));  // 79
+            s_thresholds_d.put(readdir, 8.0+ s_thresholds_d.get(mkdir)); // 87
+            s_thresholds_d.put(rmdir, 2.0+ s_thresholds_d.get(readdir)); // 89
+            s_thresholds_d.put(search, 100.0);
+        }
         protected static HashMap<fsoptype, Double> s_thresholds = new HashMap<fsoptype, Double>();
         static {
             s_thresholds.put(access, 5.0);                          // 5
-            s_thresholds.put(create, 5.0+s_thresholds.get(access)); // 10
-            s_thresholds.put(open, 10.0+s_thresholds.get(create));  // 20
-            s_thresholds.put(close, 10.0+s_thresholds.get(open));   // 30
-            s_thresholds.put(read, 20.0+s_thresholds.get(close));   // 50
-            s_thresholds.put(write, 15.0+s_thresholds.get(read));   // 64
-            s_thresholds.put(resize, 4.0+s_thresholds.get(write));  // 69
-            s_thresholds.put(delete, 2.0+s_thresholds.get(resize)); // 71
-            s_thresholds.put(mkdir, 8.0+s_thresholds.get(delete));  // 79
-            s_thresholds.put(readdir, 8.0+s_thresholds.get(mkdir)); // 87
-            s_thresholds.put(rmdir, 2.0+s_thresholds.get(readdir)); // 89
+            s_thresholds.put(create, 3.0+ s_thresholds.get(access)); // 8
+            s_thresholds.put(open, 10.0+ s_thresholds.get(create));  // 18
+            s_thresholds.put(close, 10.0+ s_thresholds.get(open));   // 28
+            s_thresholds.put(read, 30.0+ s_thresholds.get(close));   // 58
+            s_thresholds.put(write, 15.0+ s_thresholds.get(read));   // 71
+            s_thresholds.put(resize, 4.0+ s_thresholds.get(write));  // 75
+            s_thresholds.put(delete, 0.0+ s_thresholds.get(resize)); // 75
+            s_thresholds.put(mkdir, 3.0+ s_thresholds.get(delete));  // 78
+            s_thresholds.put(readdir, 8.0+ s_thresholds.get(mkdir)); // 86
+            s_thresholds.put(rmdir, 0.0+ s_thresholds.get(readdir)); // 86
             s_thresholds.put(search, 100.0);
         }
         protected static Double thresh(fsoptype op) { return s_thresholds.get(op); }
@@ -973,13 +988,81 @@ public class FileSystemDriver {
         return fsw;
     }
 
+    protected int pathDepth(String path) {
+        if(path == null) return 0;
+        String slashlesspath = (new String(path)).replace("/", "");
+        return path.length() - slashlesspath.length();
+    }
+
+    /**
+     * initialization operations arrive ordered in accordance with
+     * the order in which the file system tree was generated: in BTreeFS,
+     * this typically means *randomly* generated, which in turn corresponds
+     * to a depth-first traversal; not necessarily the best order to play
+     * them back. Try re-ordering them to enable a breadth first traversal
+     * when re-building the tree.
+     * @param ops
+     */
+    protected Collection<Op>
+    reorderInitOpsDirsFirst(Collection<Op> ops) {
+        Map<Integer, ArrayList<Op>> dirops = new HashMap();
+        Map<Integer, ArrayList<Op>> fileops = new HashMap();
+        ArrayList<Map<Integer, ArrayList<Op>>> maps = new ArrayList<>();
+        maps.add(dirops);
+        maps.add(fileops);
+        for(Op op : ops) {
+            String path = (String) op.parameters.get("parentPath");
+            Integer depth = pathDepth(path);
+            Map<Integer, ArrayList<Op>> map = (op.optype == fsoptype.mkdir) ? dirops : fileops;
+            ArrayList<Op> dlist = map.getOrDefault(depth, new ArrayList());
+            map.put(depth, dlist);
+            dlist.add(op);
+        }
+        ArrayList<Op> reordered = new ArrayList<>();
+        for(Map<Integer, ArrayList<Op>> map : maps) {
+            for (Integer i : map.keySet()) {
+                for (Op op : map.get(i)) {
+                    reordered.add(op);
+                }
+            }
+        }
+        return reordered;
+    }
+
+    /**
+     * initialization operations arrive ordered in accordance with
+     * the order in which the file system tree was generated: in BTreeFS,
+     * this typically means *randomly* generated, which in turn corresponds
+     * to a depth-first traversal; not necessarily the best order to play
+     * them back. Try re-ordering them to enable a breadth first traversal
+     * when re-building the tree.
+     * @param ops
+     */
+    protected Collection<Op>
+    reorderInitOps(Collection<Op> ops) {
+        Map<Integer, ArrayList<Op>> map = new HashMap();
+        for (Op op : ops) {
+            String path = (String) op.parameters.get("parentPath");
+            Integer depth = pathDepth(path);
+            ArrayList<Op> dlist = map.getOrDefault(depth, new ArrayList());
+            map.put(depth, dlist);
+            dlist.add(op);
+        }
+        ArrayList<Op> reordered = new ArrayList<>();
+        for (Integer i : map.keySet()) {
+            for (Op op : map.get(i)) {
+                reordered.add(op);
+            }
+        }
+        return reordered;
+    }
 
     /**
      * set the init phase up after the fact
      * @param ops
      */
     public void setInitOps(Collection<Op> ops) {
-        m_init = new FileSystemWorkload(m_fs, ops);
+        m_init = new FileSystemWorkload(m_fs, reorderInitOps(ops));
         m_phases[0] = m_init;
     }
 
@@ -1004,6 +1087,8 @@ public class FileSystemDriver {
      */
     public void init() {
         if(m_init != null) {
+            boolean oTx = m_fs.m_transactional;
+            m_fs.m_transactional = false;
             m_init.reset();
             m_curphase = 0;
             m_curop = 0;
@@ -1013,6 +1098,7 @@ public class FileSystemDriver {
                 op.play(m_fs);
                 m_curop++;
             }
+            m_fs.m_transactional = oTx;
         }
     }
 

@@ -73,6 +73,7 @@ public class CorfuDBTester
         System.out.println("\t[-h synthesized directory structure target depth]\n");
         System.out.println("\t[-h synthesized directory structure fanout]\n");
         System.out.println("\t[-N non-transactional fs]\n");
+        System.out.println("\t[-M B-tree M parameter (max entries per node--must be even!) fs]\n");
 
 //        if(dbglog instanceof SimpleLogger)
 //            System.out.println("using SimpleLogger: run with -Dorg.slf4j.simpleLogger.defaultLogLevel=debug to " +
@@ -126,7 +127,6 @@ public class CorfuDBTester
         String strCrashLog = "out.txt";
         boolean transactionalFS = true;
 
-
         final int DUMMYSTREAMIMPL = 0;
         final int HOPSTREAMIMPL = 1;
         int streamimpl = DUMMYSTREAMIMPL;
@@ -137,11 +137,14 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:f:N");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:f:NM:");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
             {
+                case 'M':
+                    CDBAbstractBTree.M = Integer.parseInt(g.getOptarg());
+                    break;
                 case 'N':
                     transactionalFS = false;
                     break;
@@ -191,6 +194,7 @@ public class CorfuDBTester
                     TXListTester.extremeDebug = true;
                     BTreeTester.extremeDebug = true;
                     BTreeTester.trackOps = true;
+                    CDBPhysicalBTree.extremeDebug = true;
                     break;
                 case 'v':
                     verbose = true;

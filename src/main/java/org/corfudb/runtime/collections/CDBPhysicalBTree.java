@@ -9,7 +9,6 @@ import org.corfudb.client.ITimestamp;
 
 public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
 
-    public static final int M = 4;
     public static boolean extremeDebug = false;
 
     /**
@@ -41,8 +40,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         private boolean m_mutator;
         private UUID m_utxid;
         private long m_oid;
-        protected PBTreeOp m_prevupdate;
+        protected transient PBTreeOp m_prevupdate;
         protected boolean m_prevvalid;
+        protected boolean m_markedpending;
         private UUID m_uuuid;
         public long m_reqstart;
         public long m_reqcomplete;
@@ -81,6 +81,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
             m_prevvalid = false;
             m_uuuid = UUID.randomUUID();
             m_reqcomplete = 0;
+            m_markedpending = false;
             start();
         }
 
@@ -240,6 +241,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         public void addPendingUpdate(Long cob, PBTreeOp cmd) {
             UUID curtx = m_tr.getTxid();
             if (curtx == null) return;
+            cmd.m_markedpending = true;
             checknewtx();
             m_lock.writeLock().lock();
             try {
@@ -267,7 +269,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
          * @param cmd
          */
         public void retirePendingUpdate(PBTreeOp cmd) {
-            if(!cmd.mutator())
+            if(!cmd.mutator() || !cmd.m_markedpending)
                 return;
             m_lock.writeLock().lock();
             try {
@@ -458,11 +460,8 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     private static class Node<K extends Comparable<K>, V> extends CorfuDBObject {
 
         private int m_nChildren;
-        private long m_vChild0;
-        private long m_vChild1;
-        private long m_vChild2;
-        private long m_vChild3;
-        PendingUpdates m_pending;
+        private long[] m_vChildren;
+        transient PendingUpdates m_pending;
 
         /**
          * ctor
@@ -478,10 +477,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
             )
         {
             super(tr, toid);
-            m_vChild0 = oidnull;
-            m_vChild1 = oidnull;
-            m_vChild2 = oidnull;
-            m_vChild3 = oidnull;
+            m_vChildren = new long[M];
             m_nChildren = nChildren;
             m_pending = pending;
         }
@@ -541,18 +537,9 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
          * @return
          */
         protected long getChild(int index) {
-            switch(index) {
-                case 0:
-                    return m_vChild0;
-                case 1:
-                    return m_vChild1;
-                case 2:
-                    return m_vChild2;
-                case 3:
-                    return m_vChild3;
-                default:
-                    return oidnull;
-            }
+            if (index < 0 || index >= M)
+                return oidnull;
+            return m_vChildren[index];
         }
 
         /**
@@ -579,13 +566,8 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         applyWriteChild(int n, long _oid) {
             wlock();
             try {
-                switch(n) {
-                    case 0: m_vChild0 = _oid; break;
-                    case 1: m_vChild1 = _oid; break;
-                    case 2: m_vChild2 = _oid; break;
-                    case 3: m_vChild3 = _oid; break;
-                    default: break;
-                }
+                if(n>=0 && n<M)
+                    m_vChildren[n] = _oid;
             } finally {
                 wunlock();
             }
@@ -793,7 +775,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
         private V value;
         private long oidnext;
         private boolean deleted;
-        private PendingUpdates m_pending;
+        private transient PendingUpdates m_pending;
 
         /**
          * ctor

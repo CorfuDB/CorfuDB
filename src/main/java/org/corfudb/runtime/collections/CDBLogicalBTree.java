@@ -11,8 +11,6 @@ import java.util.HashMap;
 
 public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
 
-    public static final int M = 4;
-
     private Node m_root;
     private int m_height;
     private int m_size;

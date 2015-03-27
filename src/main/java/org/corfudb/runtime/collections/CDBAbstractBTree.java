@@ -18,6 +18,7 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends Corfu
     // for which we have valid latency from helper function to apply.
     public static boolean s_collectLatencyStats = false;
     public static ArrayList<CorfuDBObjectCommand> s_completed = new ArrayList();
+    public static int M = 4;
 
     // set to true from the client *iff* the client process knows it's
     // single-threaded. When this can be assumed, we know that exceptions taken

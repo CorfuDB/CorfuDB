@@ -103,7 +103,7 @@ public class Stream implements AutoCloseable, IStream {
     AtomicLong logPointer;
     AtomicLong minorEpoch;
     int backoffCounter;
-    static int MAX_BACKOFF = 10;
+    static int MAX_BACKOFF = 4;
     ConcurrentHashMap<UUID, Long> epochMap;
 
     Timestamp latest = null;

@@ -194,7 +194,7 @@ public class SMREngine
      * if syncpos == timestamp_max, the command should be applied after
      * syncing to the current tail.
      */
-    public void sync(ITimestamp syncpos, Object command)
+    public void osync(ITimestamp syncpos, Object command)
     {
         final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, (syncpos.equals(ITimestamp.getInvalidTimestamp())));
         synchronized(this) {
@@ -222,6 +222,28 @@ public class SMREngine
             batch = false;
         }
     }
+
+    /** returns once log has been played by playback thread
+     * until syncpos, inclusive.
+     * the command can be applied anytime after syncpos has been
+     * reached. syncpos is merely a hint to reduce the latency
+     * of the sync call.
+     * todo: right now syncpos is ignored unless it's TIMESTAMP_INVALID
+     *
+     * if syncpos == timestamp_invalid, the command should be applied
+     * immediately before/without syncing;
+     * if syncpos == timestamp_max, the command should be applied after
+     * syncing to the current tail.
+     */
+    public synchronized void sync(ITimestamp syncpos, Object command)
+    {
+        final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, (syncpos.equals(ITimestamp.getInvalidTimestamp())));
+        curqueue.add(syncobj);
+        final List<SyncObjectWrapper> newqueue = new LinkedList<SyncObjectWrapper>(curqueue);
+        curqueue.clear();
+        playback(newqueue);
+    }
+
 
     public void sync(ITimestamp syncpos)
     {

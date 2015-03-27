@@ -32,7 +32,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
-
+import org.corfudb.client.view.ObjectCachedWriteOnceAddressSpace;
 class StreamEntryImpl implements StreamEntry
 {
     private ITimestamp logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
@@ -284,11 +284,8 @@ class HopAdapterStreamImpl implements Stream
 class StreamImpl implements Stream
 {
     static Logger dbglog = LoggerFactory.getLogger(StreamImpl.class);
-    static final boolean cacheStreamEntries = true;
-
 
     long streamid;
-
     StreamingSequencer seq;
     WriteOnceAddressSpace addrspace;
     ConcurrentHashMap<Long, StreamEntry> m_cache;
@@ -307,17 +304,16 @@ class StreamImpl implements Stream
         seq = tss;
         addrspace = tlas;
         biglock = new ReentrantLock();
-        m_cache = new ConcurrentHashMap();
     }
 
     @Override
     public ITimestamp append(Serializable payload, Set<Long> streams)
     {
         long ret = seq.get_slot(streams);
-        Timestamp T = new Timestamp(addrspace.getID(), ret, 0, this.getStreamID()); //todo: fill in the right epoch
+        Timestamp T = new Timestamp(0, ret, 0, this.getStreamID()); //todo: fill in the right epoch
         dbglog.debug("reserved slot {}", ret);
         StreamEntry S = new StreamEntryImpl(payload, T, streams);
-        addrspace.write(ret, BufferStack.serialize(S));
+        addrspace.write(ret,(Serializable) S);
         dbglog.debug("wrote slot {}", ret);
         return T;
     }
@@ -343,20 +339,14 @@ class StreamImpl implements Stream
                 if (!(curpos < curtail && (stoppos == null || curpos < stoppos.pos)))
                     return null;
                 readpos = curpos++;
-                ret = m_cache.getOrDefault(readpos, null);
             } finally {
                 biglock.unlock();
             }
-            if(ret == null) {
-                BufferStack bs = addrspace.read(readpos);
-                ret = (StreamEntry) bs.deserialize();
-                biglock.lock();
-                try {
-                    m_cache.put(readpos, ret);
-                } finally {
-                    biglock.unlock();
-                }
-            }
+            ret = (StreamEntry) addrspace.readObject(readpos);
+            /*
+            BufferStack bs = addrspace.read(readpos);
+            ret = (StreamEntry) bs.deserialize();
+            */
             if(ret.isInStream(this.getStreamID()))
                 break;
             dbglog.debug("skipping...");
@@ -371,7 +361,7 @@ class StreamImpl implements Stream
         biglock.lock();
         if(tcurtail>curtail) curtail = tcurtail;
         biglock.unlock();
-        return new Timestamp(addrspace.getID(), tcurtail, 0, this.getStreamID()); //todo: populate epoch
+        return new Timestamp(0, tcurtail, 0, this.getStreamID()); //todo: populate epoch
     }
 
     @Override

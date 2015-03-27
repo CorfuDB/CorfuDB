@@ -14,6 +14,7 @@ root	d------rwx/
         *izr	-rw--wxr--
         *k	-r--r-xr--
         *y	-rw--wx---
+        *svirsym	-r--r-xrwx
   ozdrrys	d-w-rwx-wx/
     *hc	-r---wx--x
     ivi	d-w--wxrw-/

@@ -14,6 +14,8 @@ root	d------rwx/
           *mba	----rwx--x
           *gx	----rwxr--
           *epykx	-rw-rw-rwx
+        wyy	drw-----w-/
+        *nvegn	--w-r-x-w-
       *uydqwh	--w---xr--
       *ufaajd	-rw-rw-r-x
       *upxcaa	--w-rw----
@@ -100,4 +102,5 @@ root	d------rwx/
     *ejw	-r---wx-w-
     *capp	-------r--
     *qmjj	-r--------
+    ryrf	d---rw--w-/
 

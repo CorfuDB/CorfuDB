@@ -142,7 +142,6 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 byte[] data = null;
                 data = AddressSpaceCache.get(logID, address);
                 if (data != null) {
-                    log.debug("Cache hit @ {}", address);
                     return data;
                 }
 
@@ -156,7 +155,6 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 //reads have to come from last unit in chain
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
                 data = wolu.read(mappedAddress);
-                log.debug("cache MISS @ {}", address);
                 AddressSpaceCache.put(logID, address, data);
                 return data;
             }
