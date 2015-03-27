@@ -53,21 +53,11 @@ public class StreamObjectServer {
      * @param args
      */
     public static void main(String[] args) throws Exception {
-
-            String masteraddress = null;
-
-            if (args.length >= 1) {
-                masteraddress = args[0]; // TODO check arg.length
-            } else {
-                // throw new Exception("must provide master http address"); // TODO
-                masteraddress = "http://localhost:8002/corfu";
-            }
-
             final int numthreads = 1;
 
-            CorfuDBClient client = new CorfuDBClient(masteraddress);
+            CorfuDBClient client = new CorfuDBClient("http://localhost:8002/corfu");
             client.startViewManager();
-            final int serverNum = 0;
+            final int serverNum = Integer.parseInt(args[0]);
             Stream s = new Stream(client, new UUID(0,serverNum));
             while (true)
             {
@@ -75,7 +65,7 @@ public class StreamObjectServer {
                 if (cdse instanceof BundleEntry)
                 {
                     BundleEntry b = (BundleEntry) cdse;
-                    b.writeSlot(new StreamObjectWrapper(serverNum));
+                    b.writeSlot(null);
                 }
             }
     }

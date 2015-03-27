@@ -98,13 +98,14 @@ public class StreamObjectClient {
 
             ArrayList<UUID> remotes = new ArrayList<UUID>();
             remotes.add(new UUID(0,0));
+            remotes.add(new UUID(0,1));
 
             Timer t_total = m.timer("total");
             Timer.Context c_total = t_total.time();
 
             Timer t_bundleapply = m.timer("bundle apply");
             Timer.Context c_bundleapply = t_bundleapply.time();
-            Bundle b = new Bundle(s, remotes, new StreamObjectServer.StreamClientObjectWrapper(clientNum), true);
+            Bundle b = new Bundle(s, remotes, null, true);
             b.apply();
             c_bundleapply.stop();
 

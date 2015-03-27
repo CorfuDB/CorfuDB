@@ -33,7 +33,7 @@ import org.corfudb.client.entries.BundleEntry;
 import org.corfudb.client.OutOfSpaceException;
 import org.corfudb.client.LinearizationException;
 import org.corfudb.client.OverwriteException;
-
+import org.corfudb.client.gossip.StreamBundleGossip;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.Queue;
@@ -1170,15 +1170,37 @@ public class Stream implements AutoCloseable, IStream {
         for (UUID id : targetStreams)
         {
             // Get a sequence in the remote stream
+            log.debug("targetSequence");
             StreamData sd = datamap.get(id);
             StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
             long remoteToken = sremote.getNext(id, slots + 1);
+            log.debug("remoteLog write");
             // Write a move in the remote log
             IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
+           log.debug("hmm.");
             offset++;
+/*
+            StreamData sd = datamap.get(id);
+            //remote, use a gossip message
+            if (sd.currentLog != logID)
+            {
+                StreamBundleGossip spg = new StreamBundleGossip(id, epochMap, logID, streamID, token, getCurrentEpoch(), slots+1, slots, payload, token+offset);
+                ((IConfigMaster)cdbc.getView(sd.currentLog).getConfigMasters().get(0)).sendGossip(spg);
+            }
+            else {
+                StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
+                long remoteToken = sremote.getNext(id, slots + 1);
+                // Write a move in the remote log
+                IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
+                woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
+            }
+            */
+
         }
-        } catch (Exception ex) {}
+        } catch (Exception ex) {
+            log.debug("Exception", ex);
+        }
         }, executor);
 
         return ts;
