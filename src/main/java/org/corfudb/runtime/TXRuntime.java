@@ -76,11 +76,11 @@ public class TXRuntime extends BaseRuntime
         }
     }
 
-    public TXRuntime(StreamFactory fact, long uniquenodeid, String rpchostname, int rpcport) {
+    public TXRuntime(IStreamFactory fact, long uniquenodeid, String rpchostname, int rpcport) {
         this(fact, uniquenodeid, rpchostname, rpcport, false);
     }
 
-    public TXRuntime(StreamFactory fact, long uniquenodeid, String rpchostname, int rpcport, boolean _prohibitMultiVersionReads)
+    public TXRuntime(IStreamFactory fact, long uniquenodeid, String rpchostname, int rpcport, boolean _prohibitMultiVersionReads)
     {
         super(fact, uniquenodeid, rpchostname, rpcport);
         decisionmap = new HashMap<>();

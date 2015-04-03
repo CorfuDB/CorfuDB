@@ -2,18 +2,16 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
-import org.corfudb.runtime.StreamFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.corfudb.runtime.IStreamFactory;
+
 import java.util.*;
-import java.util.function.UnaryOperator;
 
 /**
  *
  */
 public abstract class CDBAbstractList<E> extends CorfuDBObject implements List<E> {
 
-    public CDBAbstractList(AbstractRuntime tTR, StreamFactory sf, long toid) {
+    public CDBAbstractList(AbstractRuntime tTR, IStreamFactory sf, long toid) {
         super(tTR, toid);
         TR = tTR;
         oid = toid;

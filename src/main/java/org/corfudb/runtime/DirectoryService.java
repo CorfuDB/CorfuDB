@@ -54,10 +54,10 @@ public class DirectoryService
      * Note: it is not guaranteed to be unique with respect to IDs returned
      * by nameToStreamID.
      *
-     * @param sf StreamFactory to use
+     * @param sf IStreamFactory to use
      * @return system-wide unique ID
      */
-    public static long getUniqueID(StreamFactory sf)
+    public static long getUniqueID(IStreamFactory sf)
     {
         Stream S = sf.newStream(DS_RESERVED_UNIQUE_ID);
         HashSet hs = new HashSet(); hs.add(DS_RESERVED_UNIQUE_ID);

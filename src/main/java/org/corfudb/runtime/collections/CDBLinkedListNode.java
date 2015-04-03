@@ -2,7 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
-import org.corfudb.runtime.StreamFactory;
+import org.corfudb.runtime.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.corfudb.client.ITimestamp;
@@ -16,11 +16,11 @@ public class CDBLinkedListNode<E> extends CorfuDBObject {
     public long oidnext;
     public long oidparent;
     protected transient CDBLinkedList<E> _parentlist;
-    public transient StreamFactory _sf;
+    public transient IStreamFactory _sf;
 
     public CDBLinkedListNode(
             AbstractRuntime tr,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             E _val,
             long oid,
             CDBLinkedList<E> parent

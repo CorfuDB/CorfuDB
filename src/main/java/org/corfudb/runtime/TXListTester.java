@@ -558,7 +558,7 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
     createList(
             String strClass,
             AbstractRuntime TR,
-            StreamFactory sf,
+            IStreamFactory sf,
             long oid
         )
     {
@@ -589,7 +589,7 @@ class TXListTester<E, L extends CDBAbstractList<E>> implements Runnable {
     public static <E, L extends CDBAbstractList<E>> void
     runListTest(
             AbstractRuntime TR,
-            StreamFactory sf,
+            IStreamFactory sf,
             int numthreads,
             int numlists,
             int nOperations,

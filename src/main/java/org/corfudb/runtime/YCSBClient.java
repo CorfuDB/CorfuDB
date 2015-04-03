@@ -22,7 +22,7 @@ public class YCSBClient extends DB {
     private CorfuDBClient crf;
     private String masternode;
     private String rpchostname;
-    private StreamFactory sf;
+    private IStreamFactory sf;
     private AbstractRuntime TR = null;
     private DirectoryService DS = null;
     private CorfuLogAddressSpace addressSpace = null;
@@ -52,7 +52,7 @@ public class YCSBClient extends DB {
 
         addressSpace = new CorfuLogAddressSpace(crf, 0);
         sequencer = new CorfuStreamingSequencer(crf);
-        sf = new StreamFactoryImpl(addressSpace, sequencer);
+        sf = new IStreamFactoryImpl(addressSpace, sequencer);
         TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
         DS = new DirectoryService(TR);
         map = new CDBOrderedMap(TR, DS.nameToStreamID("ycsbmap"));

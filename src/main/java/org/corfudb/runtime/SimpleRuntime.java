@@ -51,7 +51,7 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     final long reservedStreamIDStop = Long.MAX_VALUE;
     final long reservedRemoteReadMapID = Long.MAX_VALUE;
 
-    StreamFactory streamfactory;
+    IStreamFactory streamfactory;
 
     RPCClient rpcc;
     RPCServer rpcs;
@@ -60,7 +60,7 @@ abstract class BaseRuntime implements AbstractRuntime, SMRLearner, RPCServerHand
     int rpcportnum;
 
 
-    public BaseRuntime(StreamFactory fact, long tuniquenodeid, String trpchostname, int trpcportnum)
+    public BaseRuntime(IStreamFactory fact, long tuniquenodeid, String trpchostname, int trpcportnum)
     {
         streamfactory = fact;
         objectmap = new HashMap();
@@ -224,7 +224,7 @@ public class SimpleRuntime extends BaseRuntime
      * @param  fact  a factory for creating new Stream objects
      * @param  tuniquenodeid    an identifier unique to this client process
      */
-    public SimpleRuntime(StreamFactory fact, long tuniquenodeid, String trpchostname, int trpcportnum)
+    public SimpleRuntime(IStreamFactory fact, long tuniquenodeid, String trpchostname, int trpcportnum)
     {
         super(fact, tuniquenodeid, trpchostname, trpcportnum);
     }

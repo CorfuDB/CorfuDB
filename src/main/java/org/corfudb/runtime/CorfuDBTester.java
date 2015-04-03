@@ -15,11 +15,6 @@
 
 package org.corfudb.runtime;
 
-import java.io.ByteArrayOutputStream;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -276,19 +271,19 @@ public class CorfuDBTester
         }
 
 
-        CorfuDBClient crf;
+        CorfuDBClient crfa;
 
-        crf = new CorfuDBClient(masternode);
-        crf.startViewManager();
-        crf.waitForViewReady();
+        crfa = new CorfuDBClient(masternode);
+        crfa.startViewManager();
+        crfa.waitForViewReady();
 
         Thread[] threads = new Thread[numthreads];
 
-        StreamFactory sf;
+        IStreamFactory sf;
         if(streamimpl==DUMMYSTREAMIMPL)
-            sf = new StreamFactoryImpl(new CorfuLogAddressSpace(crf, 0), new CorfuStreamingSequencer(crf)); //todo: fill in the right logid
+            sf = new IStreamFactoryImpl(new CorfuLogAddressSpace(crfa, 0), new CorfuStreamingSequencer(crfa)); //todo: fill in the right logid
         else if(streamimpl==HOPSTREAMIMPL)
-            sf = new HopAdapterStreamFactoryImpl(crf);
+            sf = new HopAdapterIStreamFactoryImpl(crfa);
         else
             throw new RuntimeException("unknown stream implementation");
 
@@ -614,7 +609,7 @@ class TXTesterThread implements Runnable
     int numops;
 
     //creates thread-specific stack
-    public TXTesterThread(int tnumkeys, int tnumops, StreamFactory sf, String rpchostname, int rpcport, int numpartitions)
+    public TXTesterThread(int tnumkeys, int tnumops, IStreamFactory sf, String rpchostname, int rpcport, int numpartitions)
     {
         TXRuntime TR = new TXRuntime(sf, DirectoryService.getUniqueID(sf), rpchostname, rpcport);
 

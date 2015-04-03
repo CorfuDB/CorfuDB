@@ -1168,7 +1168,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      */
     public CDBPhysicalBTree(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             long toid
         )
     {

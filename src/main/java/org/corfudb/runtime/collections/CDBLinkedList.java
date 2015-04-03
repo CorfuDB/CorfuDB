@@ -2,7 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.DirectoryService;
-import org.corfudb.runtime.StreamFactory;
+import org.corfudb.runtime.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
@@ -19,7 +19,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
 
     public long m_head;                                 // oid of head node
     public HashMap<Long, CDBLinkedListNode<E>> m_nodes; // map of all nodes. TODO: prune on delete
-    public StreamFactory sf;                            // stream factory--simplifies new node creation
+    public IStreamFactory sf;                            // stream factory--simplifies new node creation
 
     /**
      * maintain a view of all known lists.
@@ -97,7 +97,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
     public
     CDBLinkedList(
         AbstractRuntime tTR,
-        StreamFactory tsf,
+        IStreamFactory tsf,
         long toid
         )
     {

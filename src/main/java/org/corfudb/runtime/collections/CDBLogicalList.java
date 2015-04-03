@@ -1,7 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
-import org.corfudb.runtime.StreamFactory;
+import org.corfudb.runtime.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
@@ -25,7 +25,7 @@ public class CDBLogicalList<E> extends CDBAbstractList<E> {
     public
     CDBLogicalList(
         AbstractRuntime tTR,
-        StreamFactory sf,
+        IStreamFactory sf,
         long toid
         )
     {

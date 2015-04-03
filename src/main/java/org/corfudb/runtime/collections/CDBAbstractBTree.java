@@ -3,7 +3,7 @@ package org.corfudb.runtime.collections;
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObject;
 import org.corfudb.runtime.CorfuDBObjectCommand;
-import org.corfudb.runtime.StreamFactory;
+import org.corfudb.runtime.IStreamFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,7 +28,7 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends Corfu
     // from user code vs. runtime behavior is a challenge.
     public static boolean s_singleThreadOptimization = false;
 
-    StreamFactory sf;
+    IStreamFactory sf;
 
     /**
      * ctor
@@ -38,7 +38,7 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends Corfu
      */
     public CDBAbstractBTree(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             long toid
         )
     {

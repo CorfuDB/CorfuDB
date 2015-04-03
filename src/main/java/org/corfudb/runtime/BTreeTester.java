@@ -1064,7 +1064,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     createTree(
             String strClass,
             AbstractRuntime TR,
-            StreamFactory sf,
+            IStreamFactory sf,
             long oid
         )
     {
@@ -1111,7 +1111,7 @@ class BTreeTester<K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> 
     public static <K extends Comparable<K>, V, L extends CDBAbstractBTree<K, V>> void
     runTest(
             AbstractRuntime TR,
-            StreamFactory sf,
+            IStreamFactory sf,
             int numthreads,
             int numlists,
             int nOperations,

@@ -32,7 +32,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
-import org.corfudb.client.view.ObjectCachedWriteOnceAddressSpace;
+
 class StreamEntryImpl implements StreamEntry
 {
     private ITimestamp logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
@@ -70,11 +70,11 @@ class StreamEntryImpl implements StreamEntry
 
 
 
-class StreamFactoryImpl implements StreamFactory
+class IStreamFactoryImpl implements IStreamFactory
 {
     WriteOnceAddressSpace was;
     StreamingSequencer ss;
-    public StreamFactoryImpl(WriteOnceAddressSpace twas, StreamingSequencer tss)
+    public IStreamFactoryImpl(WriteOnceAddressSpace twas, StreamingSequencer tss)
     {
         was = twas;
         ss = tss;
@@ -86,10 +86,10 @@ class StreamFactoryImpl implements StreamFactory
 
 }
 
-class HopAdapterStreamFactoryImpl implements StreamFactory
+class HopAdapterIStreamFactoryImpl implements IStreamFactory
 {
     CorfuDBClient cdb;
-    public HopAdapterStreamFactoryImpl(CorfuDBClient tcdb)
+    public HopAdapterIStreamFactoryImpl(CorfuDBClient tcdb)
     {
         cdb = tcdb;
     }

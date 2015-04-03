@@ -41,7 +41,7 @@ public class BTreeFS {
 
     protected CDBAbstractBTree<String, FSEntry> m_btree;
     protected AbstractRuntime m_rt;
-    protected StreamFactory m_sf;
+    protected IStreamFactory m_sf;
     protected int m_nMinAtom;
     protected int m_nMaxAtom;
     protected int m_nMaxDirEntries;
@@ -549,7 +549,7 @@ public class BTreeFS {
     protected <T> CDBAbstractBTree<String, T>
     createBTree(
         AbstractRuntime tTR,
-        StreamFactory tsf,
+        IStreamFactory tsf,
         String strBTreeClass,
         long toid
         ) {
@@ -578,7 +578,7 @@ public class BTreeFS {
     public
     BTreeFS(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             int nMinAtom,
             int nMaxAtom,
             int nMaxDirEntries,
@@ -607,7 +607,7 @@ public class BTreeFS {
     public
     BTreeFS(
         AbstractRuntime tTR,
-        StreamFactory tsf,
+        IStreamFactory tsf,
         String strBTreeClass,
         boolean transactional
         ) {
@@ -627,7 +627,7 @@ public class BTreeFS {
     public
     BTreeFS(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             long btreeOID,
             boolean transactional
@@ -870,7 +870,7 @@ public class BTreeFS {
     public static BTreeFS
     createEmptyFS(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             boolean transactional
         ) {
@@ -890,7 +890,7 @@ public class BTreeFS {
     public static BTreeFS
     attachFS(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             long btreeOID,
             boolean transactional
@@ -914,7 +914,7 @@ public class BTreeFS {
     public static BTreeFS
     createRandomFS(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             int minIdLength,
             int maxIdLength,
@@ -1753,7 +1753,7 @@ public class BTreeFS {
     public static void
     fstestBasic(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             boolean transactional
         ) {
@@ -1773,7 +1773,7 @@ public class BTreeFS {
     public static void
     fstestBasic(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             double dirProbability,
             int minChildren,
@@ -1796,7 +1796,7 @@ public class BTreeFS {
     public static void
     fstestRecord(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             boolean transactional,
             int nTargetFSDepth,
@@ -1824,7 +1824,7 @@ public class BTreeFS {
     public static void
     fstestRecord(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             double dirProbability,
             int minChildren,
@@ -1870,7 +1870,7 @@ public class BTreeFS {
     public static void
     fstestPlayback(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             String strInitPath,
             String strWkldPath,
@@ -1897,7 +1897,7 @@ public class BTreeFS {
     public static void
     fstestCrash(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             boolean transactional,
             String strInitPath,
@@ -1925,7 +1925,7 @@ public class BTreeFS {
     public static void
     fstestRecover(
             AbstractRuntime tTR,
-            StreamFactory tsf,
+            IStreamFactory tsf,
             String strBTreeClass,
             boolean transactional,
             String strInitPath,

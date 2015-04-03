@@ -2,7 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.CorfuDBObjectCommand;
-import org.corfudb.runtime.StreamFactory;
+import org.corfudb.runtime.IStreamFactory;
 import org.corfudb.client.ITimestamp;
 
 import java.util.ArrayList;
@@ -106,7 +106,7 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
     public
     CDBLogicalBTree(
         AbstractRuntime tTR,
-        StreamFactory tsf,
+        IStreamFactory tsf,
         long toid
         )
     {

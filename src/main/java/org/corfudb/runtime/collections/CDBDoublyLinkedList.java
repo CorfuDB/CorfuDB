@@ -2,7 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.AbstractRuntime;
 import org.corfudb.runtime.DirectoryService;
-import org.corfudb.runtime.StreamFactory;
+import org.corfudb.runtime.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
@@ -19,7 +19,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     public long m_head;
     public long m_tail;
     public HashMap<Long, CDBDoublyLinkedListNode<E>> m_nodes;
-    public StreamFactory sf;
+    public IStreamFactory sf;
 
     /**
      * track all instances
@@ -44,7 +44,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     public
     CDBDoublyLinkedList(
         AbstractRuntime tTR,
-        StreamFactory tsf,
+        IStreamFactory tsf,
         long toid
         )
     {

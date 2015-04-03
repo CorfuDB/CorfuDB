@@ -1,31 +1,52 @@
-/**
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *         http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package org.corfudb.runtime;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.corfudb.client.CorfuDBClient;
 
-import java.io.Serializable;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.HashMap;
 
-public interface StreamFactory
-{
-    public Stream newStream(long streamid);
+/**
+ * Created by crossbach on 4/3/15.
+ */
+public class StreamFactory {
+
+    public enum StreamImplType {
+        DUMMY ("DUMMY"),
+        HOP ("HOP");
+        private final String name;
+        StreamImplType(String s) { name = s; }
+        private static StreamImplType[] s_vals = values();
+        private static StreamImplType fromInt(int i) { return s_vals[i]; }
+        private static StreamImplType fromString(String s) {
+            for (StreamImplType t : s_vals)
+                if(t.name.compareToIgnoreCase(s) == 0)
+                    return t;
+            throw new RuntimeException("unknown stream implementation");
+        }
+        public String toString() { return name; }
+    }
+
+    /**
+     * get a new stream factory for the given
+     * client, of the specified type
+     * @param client
+     * @param type
+     * @return
+     */
+    public static IStreamFactory
+    getStreamFactory(
+            CorfuDBClient client,
+            StreamImplType type
+        ) {
+        switch(type) {
+            case DUMMY: return new IStreamFactoryImpl(new CorfuLogAddressSpace(client, 0), new CorfuStreamingSequencer(client));
+            case HOP: return new HopAdapterIStreamFactoryImpl(client);
+            default:
+                throw new RuntimeException("unknown stream implementation");
+        }
+    }
+
+    public static IStreamFactory getStreamFactory(CorfuDBClient c) { return getStreamFactory(c, StreamImplType.DUMMY); }
+    public static IStreamFactory getStreamFactory(CorfuDBClient c, int i) { return getStreamFactory(c, StreamImplType.fromInt(i)); }
+    public static IStreamFactory getStreamFactory(CorfuDBClient c, String s) { return getStreamFactory(c, StreamImplType.fromString(s)); }
+
 }
-
-
