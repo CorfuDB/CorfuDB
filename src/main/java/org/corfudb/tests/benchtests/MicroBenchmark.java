@@ -11,6 +11,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CyclicBarrier;
 
 /**
  * Created by crossbach on 4/3/15.
@@ -42,8 +43,85 @@ public abstract class MicroBenchmark {
     protected AbstractRuntime m_rt;
     protected IStreamFactory m_sf;
     protected CorfuDBClient m_client;
-    protected long m_start;
-    protected long m_end;
+    protected long m_exec;
+    CyclicBarrier m_startbarrier;   // start barrier to ensure all threads finish init before tx loop
+    CyclicBarrier m_stopbarrier;    // stop barrier to ensure no thread returns until all have finished
+    MicroBenchmarkPartition[] m_partitions;
+    public static boolean s_verbose = true;
+    public static transient long[] s_commandlatencies;
+
+    public static class MicroBenchmarkPartition implements Runnable {
+
+        CyclicBarrier m_startbarrier;
+        CyclicBarrier m_stopbarrier;
+        MicroBenchmark m_mb;
+        long m_start;
+        long m_end;
+        int m_nId;
+        int m_workItems;
+        int m_workIdx;
+
+        /**
+         * ctor
+         * @param s
+         * @param e
+         * @param m
+         * @param id
+         */
+        public
+        MicroBenchmarkPartition(CyclicBarrier s, CyclicBarrier e, MicroBenchmark m, int id) {
+            m_startbarrier = s;
+            m_stopbarrier = e;
+            m_nId = id;
+            m_mb = m;
+            int nThreads = m.m_options.getThreadCount();
+            int nOps = m.m_options.getOperationCount();
+            int nItemsPerWorker = nOps / nThreads;
+            m_workIdx = nItemsPerWorker * id;
+            m_workItems = (id == nThreads - 1) ? nOps - m_workIdx : nItemsPerWorker;
+        }
+
+        /**
+         * run method (runnable)
+         * wait for all worker threads to initialize
+         * perform the specified number of random transactions
+         * wait for all worker threads to complete the tx loop.
+         */
+        public void run()
+        {
+            awaitInit();
+            m_mb.executeImpl(m_workIdx, m_workItems);
+            awaitComplete();
+        }
+
+        /**
+         * use the start barrier to wait for
+         * all worker threads to initialize
+         */
+        private void awaitInit() {
+            try {
+                m_startbarrier.await();
+            } catch(Exception bbe) {
+                throw new RuntimeException(bbe);
+            }
+            inform("Entering run loop for tx list tester thread %d\n", m_nId);
+            m_start = curtime();
+        }
+
+        /**
+         * use the start barrier to wait for
+         * all worker threads to complete the tx loop
+         */
+        private void awaitComplete() {
+            m_end = curtime();
+            try {
+                m_stopbarrier.await();
+            } catch(Exception bbe) {
+                throw new RuntimeException(bbe);
+            }
+            inform("Leaving run loop for tx list tester thread %d\n", m_nId);
+        }
+    }
 
     public static class OpaqueObject extends CorfuDBObject {
         byte[] m_payload;
@@ -62,45 +140,287 @@ public abstract class MicroBenchmark {
                     oc.m_payload[i] = m_payload[i];
             }
             oc.setReturnValue(max);
+            s_commandlatencies[oc.m_id] = curtime() - oc.m_start;
         }
     }
 
+
     public static class OpaqueCommand extends CorfuDBObjectCommand {
+
         boolean m_read;
+        public long m_start;
+        public int m_id;
         byte[] m_payload;
-        public OpaqueCommand(boolean isRead, int payloadBytes) {
+        public OpaqueCommand(boolean isRead, int payloadBytes, int id) {
+            m_id = id;
             m_read = isRead;
             m_payload = new byte[payloadBytes];
         }
     }
 
     public static class BasicMicroBenchmark extends MicroBenchmark {
+
+        boolean m_tx;
         OpaqueObject[] m_objects;
-        public BasicMicroBenchmark(Options options) {
-            super(options);
+        OpaqueCommand[] m_commands;
+        long[] m_submit;
+        long[] m_endtoend;
+        int[] m_cmdidx;
+        int[] m_attempts;
+        long m_initlatency;
+
+        public BasicMicroBenchmark(Options options) { super(options); }
+        protected boolean BeginTX() { if(m_tx) m_rt.BeginTX(); return m_tx; }
+        protected boolean EndTX() { if(m_tx) return m_rt.EndTX(); return true; }
+        protected boolean AbortTX(boolean intx) { if(intx) m_rt.AbortTX(); return intx; }
+
+        /**
+         * execute the given command
+         * @param cmd
+         * @return the latency incurred by the command
+         */
+        protected long
+        executeCommand(OpaqueCommand cmd, int objectIdx, int commandIdx) {
+
+            boolean intx = false;
+            boolean done = false;
+            long start = curtime();
+            cmd.m_start = start;
+
+            while(!done) {
+                try {
+                    intx = BeginTX();
+                    m_attempts[commandIdx]++;
+                    OpaqueObject o = m_objects[objectIdx];
+                    if (cmd.m_read) {
+                        // inform("thread %d executing a read on oid %d\n", Thread.currentThread().getId(), o.oid);
+                        m_rt.query_helper(o, null, cmd);
+                    } else {
+                        // inform("thread %d executing a write on oid %d\n", Thread.currentThread().getId(), o.oid);
+                        m_rt.update_helper(o, cmd);
+                    }
+                    done = EndTX();
+                    intx = false;
+                } catch (Exception e) {
+                    done = AbortTX(intx);
+                    intx = false;
+                }
+            }
+
+            return curtime() - start;
         }
+
+        /**
+         * preconfigure the micro-benchmark so that no allocation
+         * occurs on the critical path. set up all the objects
+         * and commands in advance so we are looking only at RT
+         * overheads when we get to the execute phase.
+         */
         public void initialize() {
-            m_objects = new OpaqueObject[m_options.getObjectCount()];
-            for(int i=0; i<m_options.getObjectCount(); i++) {
-                m_objects[i] = new OpaqueObject(m_rt, DirectoryService.getUniqueID(m_sf), m_options.getObjectSize());
+
+            long lInitStart = curtime();
+            int nObjects = m_options.getObjectCount();
+            int nCommands = m_options.getOperationCount();
+            int nObjectSize = m_options.getObjectSize();
+            int nCommandSize = m_options.getCommandSize();
+            double dRWRatio = m_options.getRWRatio();
+            m_tx = m_options.getUseTransactions();
+
+            m_objects = new OpaqueObject[nObjects];
+            m_commands = new OpaqueCommand[nCommands];
+            m_submit = new long[nCommands];
+            m_endtoend = new long[nCommands];
+            s_commandlatencies = new long[nCommands];
+            m_attempts = new int[nCommands];
+            m_cmdidx = new int[nCommands];
+
+            for(int i=0; i<nObjects; i++)
+                m_objects[i] = new OpaqueObject(m_rt, DirectoryService.getUniqueID(m_sf), nObjectSize);
+            for(int i=0; i<nCommands; i++) {
+                m_commands[i] = new OpaqueCommand(Math.random() < dRWRatio, nCommandSize, i);
+                m_cmdidx[i] = (int) Math.floor(Math.random()*nObjects);
+                m_submit[i] = -1;
+                s_commandlatencies[i] = -1;
+                m_attempts[i] = 0;
+            }
+
+            m_initlatency = curtime() - lInitStart;
+        }
+
+        /**
+         * execute a list of pre-created commands,
+         * tracking the latency of the command submission,
+         * (which may or may not be synchronous with execution)
+         */
+        public void
+        executeImpl(int nStartIdx, int nItems) {
+
+            for(int i=nStartIdx; i<nStartIdx+nItems; i++) {
+                int objectIdx = m_cmdidx[i];
+                OpaqueObject o = m_objects[objectIdx];
+                OpaqueCommand cmd = m_commands[i];
+                m_submit[i] = executeCommand(cmd, objectIdx, i);
             }
         }
-        public void executeImpl() {
-            for(int i=0; i<m_options.getOperationCount(); i++) {
-                int idx = (int) Math.floor(Math.random()*m_objects.length);
-                if(m_options.getUseTransactions())
-                    m_rt.BeginTX();
-                OpaqueObject o = m_objects[idx];
-                OpaqueCommand cmd = new OpaqueCommand(Math.random() < m_options.getRWRatio(), m_options.getCommandSize());
-                if(cmd.m_read)
-                    m_rt.query_helper(o, null, cmd);
-                else
-                    m_rt.update_helper(o, cmd);
-                if(m_options.getUseTransactions())
-                    m_rt.EndTX();
+
+        public void finalize() {
+            int nCommands = m_options.getOperationCount();
+            for(int i=0; i<nCommands; i++) {
+                m_endtoend[i] = s_commandlatencies[i];
             }
         }
-        public void reportImpl() {}
+
+        /**
+         * micro-benchmark-specific reporting
+         * @param bShowHeaders
+         * @return
+         */
+        public void
+        reportImpl(StringBuilder sb, boolean bShowHeaders) {
+
+            if(bShowHeaders) {
+                sb.append("Benchmark: ");
+                sb.append(m_options.getTestScenario());
+                sb.append(" on ");
+                sb.append(m_options.getMaster());
+                sb.append(" (");
+                sb.append(m_options.getRPCHostName());
+                sb.append(")\n");
+                sb.append("bnc, rt, strmimpl, tx, opaque, rd_my_wr, thrds, objs, cmds, rwpct, objsize, cmdsize, init(msec), exec(msec), tput(tx/s), avg-sublat(usec), avg-cmdlat(usec), retry_per_tx\n");
+            }
+
+            int nObjects = m_options.getObjectCount();
+            int nCommands = m_options.getOperationCount();
+            double dRW = m_options.getRWRatio();
+            int nObjSize = m_options.getObjectSize();
+            int nCmdSize = m_options.getCommandSize();
+            String ustx = m_options.getUseTransactions() ? "tx":"notx";
+            long init = msec(m_initlatency);
+            long exec = msec(m_exec);
+            double tput = (double) nCommands / (((double) exec)/1000.0);
+
+            int nErrorSSamples = 0;
+            int nValidSSamples = 0;
+            int nErrorE2ESamples = 0;
+            int nValidE2ESamples = 0;
+            int nReads = 0;
+            int nWrites = 0;
+            int nValidSReads = 0;
+            int nValidSWrites = 0;
+            int nValidEReads = 0;
+            int nValidEWrites  = 0;
+
+            double avgsub = 0.0;
+            double avgrsub = 0.0;
+            double avgwsub = 0.0;
+            double avge2e = 0.0;
+            double avgre2e = 0.0;
+            double avgwe2e = 0.0;
+            double retpertx = 0.0;
+
+            for(int i=0; i<nCommands; i++) {
+
+                long submitlatency = m_submit[i];
+                long e2elatency = m_endtoend[i];
+                boolean svalid = submitlatency > 0;
+                boolean evalid = e2elatency > 0;
+                boolean isread = m_commands[i].m_read;
+
+                nReads += isread ? 1 : 0;
+                nWrites += isread ? 0 : 1;
+                nErrorSSamples += svalid ? 0 : 1;
+                nValidSSamples += svalid ? 1 : 0;
+                nErrorE2ESamples += evalid ? 0 : 1;
+                nValidE2ESamples += evalid ? 1 : 0;
+                nValidEReads += evalid && isread ? 1 : 0;
+                nValidEWrites += evalid && !isread ? 1 : 0;
+                nValidSReads += svalid && isread ? 1 : 0;
+                nValidSWrites += svalid && !isread ? 1 : 0;
+                avgsub += svalid ? m_submit[i] : 0;
+                avge2e += evalid ? m_endtoend[i] : 0;
+                avgrsub += svalid && isread ? m_submit[i] : 0;
+                avgwsub += svalid && !isread ? m_submit[i] : 0;
+                avgre2e += evalid && isread ? m_endtoend[i] : 0;
+                avgwe2e += evalid && !isread ? m_endtoend[i] : 0;
+                retpertx += m_attempts[i] - 1;
+            }
+
+            avgsub = nValidSSamples == 0 ? 0.0 : avgsub/nValidSSamples;
+            avge2e = nValidE2ESamples == 0 ? 0.0 : avge2e/nValidE2ESamples;
+            avgrsub = nValidSReads == 0 ? 0.0 : avgrsub/nValidSReads;
+            avgwsub = nValidSWrites == 0 ? 0.0 : avgwsub/nValidSWrites;
+            avgre2e = nValidEReads == 0 ? 0.0 : avgre2e/nValidEReads;
+            avgwe2e = nValidEWrites == 0 ? 0.0 : avgwe2e/nValidEWrites;
+            avgsub /= 1000000.0;
+            avge2e /= 1000000.0;
+            avgrsub /= 1000000.0;
+            avgwsub /= 1000000.0;
+            avgre2e /= 1000000.0;
+            avgwe2e /= 1000000.0;
+            retpertx /= nCommands;
+
+            sb.append(String.format("%s, %s, %s, %s, %s, %s, %d, %d, %d, %.2f, %d, %d, %d, %d, %.3f, %.3f, %.3f, %.3f\n",
+                    m_options.getTestScenario(),
+                    m_options.getRuntime(),
+                    m_options.getStreamImplementation(),
+                    (m_options.getUseTransactions() ? "tx":"notx"),
+                    (m_options.getOpacity() ? "opaque" : "not-opq"),
+                    (m_options.getReadMyWrites()? "RMW":"NRMW"),
+                    m_options.getThreadCount(),
+                    nObjects,
+                    nCommands,
+                    dRW,
+                    nObjSize,
+                    nCmdSize,
+                    init,
+                    exec,
+                    tput,
+                    avgsub,
+                    avge2e,
+                    retpertx
+                    ));
+
+            if(m_options.getCollectLatencyStats()) {
+                sb.append(String.format("upd-qry-lat(usec, avg=%.3f), ", avgsub));
+                for(int i=0; i<nCommands; i++) {
+                    sb.append(usec(m_submit[i]));
+                    sb.append(", ");
+                }
+                sb.append(String.format("\nquery_helper(avg=%.3f), ", avgrsub));
+                for(int i=0; i<nCommands; i++) {
+                    if(m_commands[i].m_read) {
+                        sb.append(usec(m_submit[i]));
+                        sb.append(", ");
+                    }
+                }
+                sb.append(String.format("\nupdate_helper (avg=%.3f),", avgwsub));
+                for(int i=0; i<nCommands; i++) {
+                    if(!m_commands[i].m_read) {
+                        sb.append(usec(m_submit[i]));
+                        sb.append(", ");
+                    }
+                }
+                sb.append(String.format("\napplyToObject(avg=%.3f), ", avge2e));
+                for(int i=0; i<nCommands; i++) {
+                    sb.append(usec(m_endtoend[i]));
+                    sb.append(", ");
+                }
+                sb.append(String.format("\napplyRead(R, avg=%.3f), ", avgre2e));
+                for(int i=0; i<nCommands; i++) {
+                    if(m_commands[i].m_read) {
+                        sb.append(usec(m_endtoend[i]));
+                        sb.append(", ");
+                    }
+                }
+                sb.append(String.format("\napplyWrite(avg=%.3f),", avgwe2e));
+                for(int i=0; i<nCommands; i++) {
+                    if(!m_commands[i].m_read) {
+                        sb.append(usec(m_endtoend[i]));
+                        sb.append(", ");
+                    }
+                }
+            }
+        }
     }
 
 
@@ -274,9 +594,9 @@ public abstract class MicroBenchmark {
          * list all supported tests
          */
         public static void listTests() {
-            System.out.println("supported test scenarios:");
+            System.err.println("supported test scenarios:");
             for (String s : s_tests) {
-                System.out.format("\t%s\n", s);
+                System.err.format("\t%s\n", s);
             }
         }
 
@@ -364,8 +684,8 @@ public abstract class MicroBenchmark {
                     }
                 }
             } catch (Exception e) {
-                System.out.println(e.getMessage());
-                e.printStackTrace();
+                System.err.println(e.getMessage());
+                e.printStackTrace(System.err);
                 printUsage();
                 return null;
             }
@@ -376,25 +696,25 @@ public abstract class MicroBenchmark {
          * print the usage
          */
         static void printUsage() {
-            System.out.println("usage: java MicroBenchmark");
-            System.out.println("\t[-m masternode] (default == \"http://localhost:8002/corfu\"");
-            System.out.println("\t[-p rpcport] (default == 9090)");
-            System.out.println("\t[-r read write pct (double, default=75% reads)]");
-            System.out.println("\t[-o object/stream count] number of distinct objects/streams, (default = 10)");
-            System.out.println("\t[-s object size] approximate serialized byte size of object (default = 256)");
-            System.out.println("\t[-c command size] approximate serialized size of object commands (default = 16)");
-            System.out.println("\t[-x true|false] use/don't use transactions (default is use-tx)");
-            System.out.println("\t[-w true|false] support/don't support read-after-write consistency (default is support)");
-            System.out.println("\t[-O true|false] support/don't support opaque transactions (default is support)");
-            System.out.println("\t[-t number of threads] default == 1");
-            System.out.println("\t[-n number of ops]");
-            System.out.println("\t[-S DUMMY|HOP] stream implementation--default == DUMMY");
-            System.out.println("\t[-R runtime] runtime implementation SIMPLE|TX");
-            System.out.println("\t[-L collect latency stats] true|false (default is true) \n");
-            System.out.println("\t[-A test scenario] default is 'basic'");
-            System.out.println("\t[-l] list available test scenarios");
-            System.out.println("\t[-h help] print this message\n");
-            System.out.println("\t[-v verbose mode...]");
+            System.err.println("usage: java MicroBenchmark");
+            System.err.println("\t[-m masternode] (default == \"http://localhost:8002/corfu\"");
+            System.err.println("\t[-p rpcport] (default == 9090)");
+            System.err.println("\t[-r read write pct (double, default=75% reads)]");
+            System.err.println("\t[-o object/stream count] number of distinct objects/streams, (default = 10)");
+            System.err.println("\t[-s object size] approximate serialized byte size of object (default = 256)");
+            System.err.println("\t[-c command size] approximate serialized size of object commands (default = 16)");
+            System.err.println("\t[-x true|false] use/don't use transactions (default is use-tx)");
+            System.err.println("\t[-w true|false] support/don't support read-after-write consistency (default is support)");
+            System.err.println("\t[-O true|false] support/don't support opaque transactions (default is support)");
+            System.err.println("\t[-t number of threads] default == 1");
+            System.err.println("\t[-n number of ops]");
+            System.err.println("\t[-S DUMMY|HOP] stream implementation--default == DUMMY");
+            System.err.println("\t[-R runtime] runtime implementation SIMPLE|TX");
+            System.err.println("\t[-L collect latency stats] true|false (default is true) \n");
+            System.err.println("\t[-A test scenario] default is 'basic'");
+            System.err.println("\t[-l] list available test scenarios");
+            System.err.println("\t[-h help] print this message\n");
+            System.err.println("\t[-v verbose mode...]");
         }
 
     }
@@ -433,7 +753,7 @@ public abstract class MicroBenchmark {
      * @return
      */
     public static MicroBenchmark getBenchmark(Options options) {
-        return null;
+        return new BasicMicroBenchmark(options);
     }
 
     /**
@@ -445,29 +765,57 @@ public abstract class MicroBenchmark {
         m_client = getClient();
         m_sf = StreamFactory.getStreamFactory(m_client, m_options.getStreamImplementation());
         m_rt = getRuntime();
+        m_startbarrier = new CyclicBarrier(m_options.getThreadCount());
+        m_stopbarrier = new CyclicBarrier(m_options.getThreadCount());
+        m_partitions = new MicroBenchmarkPartition[m_options.getThreadCount()];
     }
 
     /**
      * execute
      */
     public void execute() {
-        m_start = System.currentTimeMillis();
-        executeImpl();
-        m_end = System.currentTimeMillis();
+
+        int nOperations = m_options.getOperationCount();
+        int numthreads = m_options.getThreadCount();
+        try {
+            Thread[] threads = new Thread[numthreads];
+            for (int i = 0; i < numthreads; i++) {
+                MicroBenchmarkPartition p = new MicroBenchmarkPartition(m_startbarrier, m_stopbarrier, this, i);
+                m_partitions[i] = p;
+                threads[i] = new Thread(p);
+                threads[i].start();
+            }
+            for (int i = 0; i < numthreads; i++)
+                threads[i].join();
+            m_exec = getEndToEndLatency(m_partitions);
+        } catch(Exception e) {
+            throw new RuntimeException(e);
+        }
     }
+
 
     /**
      * report basic runtime, defer to subclass for
      * finer-grain information
      */
-    public void report() {
-        System.out.format("benchmark took %d ms\n", m_end - m_start);
-        reportImpl();
+    public String report(boolean bShowHeaders) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("benchmark took %d ms\n", msec(m_exec)));
+        reportImpl(sb, bShowHeaders);
+        return sb.toString();
     }
 
     public abstract void initialize();
-    public abstract void executeImpl();
-    public abstract void reportImpl();
+    public abstract void executeImpl(int nStartIdx, int nItems);
+    public abstract void finalize();
+    public abstract void reportImpl(StringBuilder sb, boolean bShowHeaders);
+    protected static long curtime() { return System.nanoTime(); }
+    protected static long deltaUS(long start, long end) { return usec(end - start); }
+    protected static long deltaMS(long start, long end) { return msec(end - start); }
+    protected static long deltaSec(long start, long end) { return sec(end - start); }
+    protected static long usec(long delta) { return (long) ((double)(delta) / 1000.0); }
+    protected static long msec(long delta) { return (long) ((double)(delta) / 1000000.0); }
+    protected static long sec(long delta) { return (long) ((double)(delta) / 1000000000.0); }
 
     /**
      * @param args
@@ -476,8 +824,47 @@ public abstract class MicroBenchmark {
 
         Options options = Options.getOptions(args);
         if(options == null) return;
+
         MicroBenchmark mb = getBenchmark(options);
+        mb.initialize();
         mb.execute();
-        mb.report();
+        mb.finalize();
+        System.err.println(mb.report(true));
+        System.exit(0);
+    }
+
+    /**
+     * console logging for verbose mode.
+     * @param strFormat
+     * @param args
+     */
+    protected static void
+    inform(
+            String strFormat,
+            Object... args
+        )
+    {
+        if(s_verbose)
+            System.out.format(strFormat, args);
+    }
+
+
+    /**
+     * getEndToEndLatency
+     * Execution time for the benchmark is the time delta between when the
+     * first tester thread enters its transaction phase and when the last
+     * thread exits the same. The run method tracks these per object.
+     * @param testers
+     * @return
+     */
+    static long
+    getEndToEndLatency(MicroBenchmarkPartition[] testers) {
+        long startmin = Long.MAX_VALUE;
+        long endmax = Long.MIN_VALUE;
+        for(MicroBenchmarkPartition tester : testers) {
+            startmin = Math.min(startmin, tester.m_start);
+            endmax = Math.max(endmax, tester.m_end);
+        }
+        return endmax - startmin;
     }
 }
