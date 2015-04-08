@@ -47,6 +47,8 @@ public class CorfuDBTester
         System.out.println("\t-m masternode");
         System.out.println("\t[-a testtype] (0==TXTest|1==LinMapTest|2==StreamTest|3==MultiClientTXTest|4==LinCounterTest)");
         System.out.println("\t[-A str-testtype] for those who find the numbers difficult to keep track of");
+        System.out.println("\t[-Z serialiZe in memory log]");
+        System.out.println("\t[-o cOmpress in memory log (implies serialize)]");
         System.out.println("\t[-t number of threads]");
         System.out.println("\t[-n number of ops]");
         System.out.println("\t[-k number of keys used in list tests]");
@@ -121,6 +123,8 @@ public class CorfuDBTester
         int nTargetFSFanout = 8;
         String strCrashLog = "out.txt";
         boolean transactionalFS = true;
+        boolean serialize = false;
+        boolean compress = false;
 
         final int DUMMYSTREAMIMPL = 0;
         final int HOPSTREAMIMPL = 1;
@@ -133,7 +137,7 @@ public class CorfuDBTester
             return;
         }
 
-        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:f:NM:");
+        Getopt g = new Getopt("CorfuDBTester", args, "a:m:t:n:p:e:k:c:l:r:vxT:s:i:w:A:L:C:z:Sh:f:NM:Zo");
         while ((c = g.getopt()) != -1)
         {
             switch(c)
@@ -246,6 +250,15 @@ public class CorfuDBTester
                     strArg = g.getOptarg();
                     System.out.println("expernum = " + strArg);
                     expernum = Integer.parseInt(strArg);
+                    break;
+                case 'Z':
+                    System.out.println("Serialize in memory log");
+                    serialize = true;
+                    break;
+                case 'o':
+                    System.out.println("Compress in memory log (implies serialize)");
+                    compress = true;
+                    break;
                 default:
                     System.out.print("getopt() returned " + c + "\n");
             }
@@ -272,11 +285,14 @@ public class CorfuDBTester
         }
 
 
-        CorfuDBClient crfa;
+        CorfuDBClient crfa = null;
 
-        crfa = new CorfuDBClient(masternode);
-        crfa.startViewManager();
-        crfa.waitForViewReady();
+        if (streamimpl != INMEMORYIMPL)
+        {
+            crfa = new CorfuDBClient(masternode);
+            crfa.startViewManager();
+            crfa.waitForViewReady();
+        }
 
         Thread[] threads = new Thread[numthreads];
 
@@ -286,7 +302,7 @@ public class CorfuDBTester
         else if(streamimpl==HOPSTREAMIMPL)
             sf = new HopAdapterIStreamFactoryImpl(crfa);
         else if(streamimpl==INMEMORYIMPL)
-            sf = new MemoryStreamFactoryImpl(false, false);
+            sf = new MemoryStreamFactoryImpl(serialize, compress);
         else
             throw new RuntimeException("unknown stream implementation");
 
