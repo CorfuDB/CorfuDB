@@ -124,6 +124,7 @@ public class CorfuDBTester
 
         final int DUMMYSTREAMIMPL = 0;
         final int HOPSTREAMIMPL = 1;
+        final int INMEMORYIMPL = 2;
         int streamimpl = DUMMYSTREAMIMPL;
 
         if(args.length==0)
@@ -284,6 +285,8 @@ public class CorfuDBTester
             sf = new IStreamFactoryImpl(new CorfuLogAddressSpace(crfa, 0), new CorfuStreamingSequencer(crfa)); //todo: fill in the right logid
         else if(streamimpl==HOPSTREAMIMPL)
             sf = new HopAdapterIStreamFactoryImpl(crfa);
+        else if(streamimpl==INMEMORYIMPL)
+            sf = new MemoryStreamFactoryImpl();
         else
             throw new RuntimeException("unknown stream implementation");
 

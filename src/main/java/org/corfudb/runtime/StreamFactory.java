@@ -11,7 +11,8 @@ public class StreamFactory {
 
     public enum StreamImplType {
         DUMMY ("DUMMY"),
-        HOP ("HOP");
+        HOP ("HOP"),
+        MEMORY ("MEMORY");
         private final String name;
         StreamImplType(String s) { name = s; }
         private static StreamImplType[] s_vals = values();
@@ -40,6 +41,7 @@ public class StreamFactory {
         switch(type) {
             case DUMMY: return new IStreamFactoryImpl(new CorfuLogAddressSpace(client, 0), new CorfuStreamingSequencer(client));
             case HOP: return new HopAdapterIStreamFactoryImpl(client);
+            case MEMORY: return new MemoryStreamFactoryImpl();
             default:
                 throw new RuntimeException("unknown stream implementation");
         }

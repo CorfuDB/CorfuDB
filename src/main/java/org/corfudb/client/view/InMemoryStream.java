@@ -13,7 +13,6 @@ public class InMemoryStream {
 
     public InMemoryStream(long streamID)
     {
-        this.streamID = streamID;
     }
 
     public class InMemoryWrapper {

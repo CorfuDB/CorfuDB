@@ -33,6 +33,9 @@ import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
 
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.ArrayList;
+
 class StreamEntryImpl implements StreamEntry
 {
     private ITimestamp logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
@@ -100,6 +103,21 @@ class HopAdapterIStreamFactoryImpl implements IStreamFactory
         return new HopAdapterStreamImpl(cdb, streamid);
     }
 }
+
+class MemoryStreamFactoryImpl implements IStreamFactory
+{
+    public MemoryStreamFactoryImpl()
+    {
+    }
+
+    @Override
+    public Stream newStream(long streamid)
+    {
+        return new MemoryStreamImpl(streamid);
+    }
+
+}
+
 
 class HopAdapterStreamEntryImpl implements StreamEntry
 {
@@ -278,6 +296,251 @@ class HopAdapterStreamImpl implements Stream
     public long getStreamID()
     {
         return streamid;
+    }
+}
+
+class MemoryStreamImpl implements Stream
+{
+    static Logger dbglog = LoggerFactory.getLogger(MemoryStreamImpl.class);
+
+    static class MemoryLog {
+        ConcurrentHashMap<Long, Serializable> addressSpace;
+        AtomicLong sequencer;
+        public MemoryLog()
+        {
+            addressSpace = new ConcurrentHashMap<Long, Serializable>();
+            sequencer = new AtomicLong();
+        }
+
+        public Long getNextSequence()
+        {
+            return sequencer.getAndIncrement();
+        }
+
+        public boolean write(Long address, Serializable payload)
+        {
+            Serializable prev = addressSpace.putIfAbsent(address, payload);
+            return prev == null;
+        }
+
+        public Long append(Serializable payload)
+        {
+            while (true) {
+                long sequence = sequencer.getAndIncrement();
+                Serializable prev = addressSpace.putIfAbsent(sequence, payload);
+                if (prev == null) {
+                    return sequence;
+                }
+            }
+        }
+
+        public Serializable read(Long address)
+        {
+            return addressSpace.get(address);
+        }
+
+        public Long getTail()
+        {
+            return sequencer.get();
+        }
+    }
+
+    static MemoryLog mlog = new MemoryLog();
+
+    static ConcurrentHashMap<Long, ArrayList<Long>> streamList = new ConcurrentHashMap<Long, ArrayList<Long>>();
+
+    static class MemoryStreamEntry implements Serializable, StreamEntry {
+        public Serializable payload;
+        public Long streamID;
+        public MemoryStreamEntry(Long streamID, Serializable payload)
+        {
+            this.streamID = streamID;
+            this.payload = payload;
+        }
+
+        @Override
+        public ITimestamp getLogpos()
+        {
+            return new MemoryTimestamp(streamID);
+        }
+
+        @Override
+        public Object getPayload()
+        {
+            return payload;
+        }
+
+        @Override
+        public boolean isInStream(long streamid)
+        {
+            return streamID == streamid;
+        }
+    }
+
+    static class MemoryStream {
+        Long streamID;
+        AtomicInteger logicalAddress;
+
+        public MemoryStream(Long streamid)
+        {
+            this.streamID = streamid;
+            streamList.putIfAbsent(streamid, new ArrayList<Long>());
+            logicalAddress = new AtomicInteger();
+        }
+
+        public Long append(Serializable payload)
+        {
+            return staticAppend(streamID, payload);
+        }
+
+        public static Long staticAppend(Long streamID, Serializable payload)
+        {
+            while (true)
+            {
+                Long address = mlog.getNextSequence();
+                if (mlog.write(address, new MemoryStreamEntry(streamID, payload)))
+                {
+                    ArrayList<Long> list = streamList.get(streamID);
+                    synchronized(list) {
+                        list.add(address);
+                    }
+                    return address;
+                }
+            }
+        }
+
+        public MemoryStreamEntry readNext(Long address) {
+            if (address != null && getTail() < address) {
+                return null;
+            }
+
+            ArrayList<Long> list = streamList.get(streamID);
+            synchronized(list) {
+                if (logicalAddress.get() >= list.size())
+                {
+                    return null;
+                }
+            }
+             int logicalCurrent = logicalAddress.getAndIncrement();
+             while (true)
+             {
+                try {
+                    synchronized(list) {
+                        Long nextAddress = list.get(logicalCurrent);
+                        return (MemoryStreamEntry)mlog.read(nextAddress);
+                    }
+                }
+                catch (Exception e) {
+                }
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException ie) {}
+            }
+        }
+
+        public Long getTail() {
+            ArrayList<Long> list = streamList.get(streamID);
+            synchronized(list) {
+                return list.get(list.size()-1);
+            }
+        }
+    }
+
+    static class MemoryTimestamp implements ITimestamp
+    {
+        public Long ts;
+        public MemoryTimestamp(Long ts)
+        {
+            this.ts = ts;
+        }
+
+        @Override
+        public String toString()
+        {
+            return ts.toString();
+        }
+
+        @Override
+        public int compareTo(ITimestamp timestamp)
+        {
+            //always less than max
+            if (ITimestamp.isMax(timestamp)) { return -1; }
+            //always greater than min
+            if (ITimestamp.isMin(timestamp)) { return 1; }
+            //always invalid
+            if (ITimestamp.isInvalid(timestamp)) { throw new ClassCastException("Comparison of invalid timestamp!"); }
+
+            if (timestamp instanceof MemoryTimestamp)
+            {
+                MemoryTimestamp t = (MemoryTimestamp) timestamp;
+                return ts.compareTo(t.ts);
+            }
+            throw new ClassCastException("I don't know how to compare these timestamps, (maybe you need to override comapreTo<ITimestamp> in your timestamp implementation?) [ts1=" + this.toString() + "] [ts2=" + timestamp.toString()+"]");
+        }
+
+        @Override
+        public boolean equals(Object t)
+        {
+            if (!(t instanceof MemoryTimestamp)) { return false; }
+            return compareTo((MemoryTimestamp)t) == 0;
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return ts.intValue();
+        }
+
+    }
+
+    long streamid;
+    MemoryStream ms;
+
+    public long getStreamID()
+    {
+        return streamid;
+    }
+
+    MemoryStreamImpl(long tstreamid)
+    {
+        streamid = tstreamid;
+        ms = new MemoryStream(streamid);
+    }
+
+    @Override
+    public ITimestamp append(Serializable payload, Set<Long> streams)
+    {
+        for (Long s : streams)
+        {
+            MemoryStream.staticAppend(s, payload);
+        }
+        return new MemoryTimestamp(ms.append(payload));
+    }
+
+    @Override
+    public StreamEntry readNext()
+    {
+        return readNext(null);
+    }
+
+    @Override
+    public StreamEntry readNext(ITimestamp istoppos)
+    {
+        MemoryTimestamp ts = (MemoryTimestamp) istoppos;
+        MemoryStreamEntry mse = ms.readNext(ts.ts);
+        return mse;
+    }
+
+    @Override
+    public ITimestamp checkTail()
+    {
+        return new MemoryTimestamp(ms.getTail());
+    }
+
+    @Override
+    public void prefixTrim(ITimestamp trimpos)
+    {
+        throw new RuntimeException("unimplemented");
     }
 }
 
