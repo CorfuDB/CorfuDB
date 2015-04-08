@@ -216,27 +216,35 @@ function skipitem() {
 
 runMicrobenchmark() {
 
-  local run=$1
-  local streamimpl=${2}
-  local threads=${3}
-  local nobj=${4}
-  local nops=${5}
-  local osize=${6}
-  local csize=${7}
-  local rwpct=${8}
+  local bnc=$1
+  local run=$2
+  local streamimpl=${3}
+  local threads=${4}
+  local nobj=${5}
+  local nops=${6}
+  local osize=${7}
+  local csize=${8}
+  local rwpct=${9}
 
   ddir=bnc/ubnc-data
   caselbl=r$run-s$streamimpl-t$threads-oc$nobj=ops$nops-os$osize-cs$csize-rw$rwpct
   dlog="$ddir/$caselbl.txt"
+  dcsv="$ddir/tput-all.csv"
   runstart="`date +%Y-%m-%d`"
 
   inform "running $caselbl:"
   startcorfu $streamimpl
   inform "corfu started, running ubnc..."
-  ./bin/runbnc.sh MicroBenchmark -L false -n $nops -c $csize -s $osize -t $threads -S $streamimpl -r $rwpct | tee $dlog
+  if [ "$verbose" == "TRUE" ]; then
+    ./bin/runbnc.sh $bnc -L false -o $nobj -n $nops -c $csize -s $osize -t $threads -S $streamimpl -r $rwpct | tee $dlog
+  else
+    ./bin/runbnc.sh $bnc -L false -o $nobj -n $nops -c $csize -s $osize -t $threads -S $streamimpl -r $rwpct > $dlog
+  fi
   inform "complete...stopping corfu"
   stopcorfu $streamimpl
   inform "...done"
+
+  grep $bnc $dlog | grep -v "Benchmark:" >> $dcsv
 }
 
 rm bnc/ubnc-data/*
@@ -246,16 +254,16 @@ echo -e "-----------------------------------"
 #echo -e "\nCorfuDB ubnc test $DATETIME" >> bnc/ubnc-data/ubnc.csv
 #echo -e "-----------------------------------" >> bnc/ubnc-data/ubnc.csv
 
+for bnc in CommandThroughput; do
 for run in `seq 1 $ITERATIONS`; do
 for streamimpl in DUMMY; do # HOP; do
 for threads in 1 2 4 8; do
-for nobj in 40; do
-for nops in 4096; do
-for osize in 16; do
-for csize in 16; do
-for rwpct in 0.1 0.95; do
+for nobj in 10 100 1000; do
+for nops in 2048; do
+for cosize in 0 128 2048; do
+for rwpct in 0.05 0.95; do
 
-runMicrobenchmark $run $streamimpl $threads $nobj $nops $osize $csize $rwpct
+runMicrobenchmark $bnc $run $streamimpl $threads $nobj $nops $cosize $cosize $rwpct
 
 
 done
@@ -266,3 +274,4 @@ done
 done
 done
 done
+
