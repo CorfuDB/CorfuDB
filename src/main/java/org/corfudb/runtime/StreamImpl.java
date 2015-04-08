@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.ArrayList;
+import org.corfudb.client.view.Serializer;
 
 class StreamEntryImpl implements StreamEntry
 {
@@ -106,14 +107,19 @@ class HopAdapterIStreamFactoryImpl implements IStreamFactory
 
 class MemoryStreamFactoryImpl implements IStreamFactory
 {
-    public MemoryStreamFactoryImpl()
+    boolean serialize;
+    boolean compress;
+
+    public MemoryStreamFactoryImpl(boolean serialize, boolean compress)
     {
+        this.serialize = serialize;
+        this.compress = compress;
     }
 
     @Override
     public Stream newStream(long streamid)
     {
-        return new MemoryStreamImpl(streamid);
+        return new MemoryStreamImpl(streamid, serialize, compress);
     }
 
 }
@@ -317,26 +323,50 @@ class MemoryStreamImpl implements Stream
             return sequencer.getAndIncrement();
         }
 
-        public boolean write(Long address, Serializable payload)
+        public boolean write(Long address, Serializable payload, boolean serialize, boolean compress)
         {
-            Serializable prev = addressSpace.putIfAbsent(address, payload);
+            try {
+            Serializable out_payload = (compress ? Serializer.serialize_compressed(payload) :
+                                                      serialize ? Serializer.serialize(payload) :
+                                                      payload);
+
+            Serializable prev = addressSpace.putIfAbsent(address, out_payload);
             return prev == null;
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
 
-        public Long append(Serializable payload)
+        public Long append(Serializable payload, boolean serialize, boolean compress)
         {
             while (true) {
+                try {
                 long sequence = sequencer.getAndIncrement();
-                Serializable prev = addressSpace.putIfAbsent(sequence, payload);
+                Serializable out_payload = (compress ? Serializer.serialize_compressed(payload) :
+                                          serialize ? Serializer.serialize(payload) :
+                                          payload);
+
+                Serializable prev = addressSpace.putIfAbsent(sequence, out_payload);
                 if (prev == null) {
                     return sequence;
+                }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
                 }
             }
         }
 
-        public Serializable read(Long address)
+        public Serializable read(Long address, boolean serialize, boolean compress)
         {
-            return addressSpace.get(address);
+            try {
+            Serializable payload = addressSpace.get(address);
+            return (compress ? Serializer.serialize_compressed(payload) :
+                                          serialize ? Serializer.serialize(payload) :
+                                          payload);
+            } catch (Exception e)
+            {
+                throw new RuntimeException(e);
+            }
         }
 
         public Long getTail()
@@ -380,25 +410,35 @@ class MemoryStreamImpl implements Stream
     static class MemoryStream {
         Long streamID;
         AtomicInteger logicalAddress;
+        boolean serialize;
+        boolean compress;
+
 
         public MemoryStream(Long streamid)
+        {
+            this(streamid, false, false);
+        }
+
+        public MemoryStream(Long streamid, boolean serialize, boolean compress)
         {
             this.streamID = streamid;
             streamList.putIfAbsent(streamid, new ArrayList<Long>());
             logicalAddress = new AtomicInteger();
+            this.serialize = serialize;
+            this.compress = compress;
         }
 
         public Long append(Serializable payload)
         {
-            return staticAppend(streamID, payload);
+            return staticAppend(streamID, payload, serialize, compress);
         }
 
-        public static Long staticAppend(Long streamID, Serializable payload)
+        public static Long staticAppend(Long streamID, Serializable payload, boolean serialize, boolean compress)
         {
             while (true)
             {
                 Long address = mlog.getNextSequence();
-                if (mlog.write(address, new MemoryStreamEntry(streamID, payload)))
+                if (mlog.write(address, new MemoryStreamEntry(streamID, payload), serialize, compress))
                 {
                     ArrayList<Long> list = streamList.get(streamID);
                     synchronized(list) {
@@ -427,7 +467,7 @@ class MemoryStreamImpl implements Stream
                 try {
                     synchronized(list) {
                         Long nextAddress = list.get(logicalCurrent);
-                        return (MemoryStreamEntry)mlog.read(nextAddress);
+                        return (MemoryStreamEntry)mlog.read(nextAddress, serialize, compress);
                     }
                 }
                 catch (Exception e) {
@@ -495,16 +535,20 @@ class MemoryStreamImpl implements Stream
 
     long streamid;
     MemoryStream ms;
+    boolean serialize;
+    boolean compress;
 
     public long getStreamID()
     {
         return streamid;
     }
 
-    MemoryStreamImpl(long tstreamid)
+    MemoryStreamImpl(long tstreamid, boolean serialize, boolean compress)
     {
         streamid = tstreamid;
-        ms = new MemoryStream(streamid);
+        this.serialize = serialize;
+        this.compress = compress;
+        ms = new MemoryStream(streamid, serialize, compress);
     }
 
     @Override
@@ -512,7 +556,7 @@ class MemoryStreamImpl implements Stream
     {
         for (Long s : streams)
         {
-            MemoryStream.staticAppend(s, payload);
+            MemoryStream.staticAppend(s, payload, serialize, compress);
         }
         return new MemoryTimestamp(ms.append(payload));
     }

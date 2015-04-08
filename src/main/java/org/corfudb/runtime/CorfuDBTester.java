@@ -286,7 +286,7 @@ public class CorfuDBTester
         else if(streamimpl==HOPSTREAMIMPL)
             sf = new HopAdapterIStreamFactoryImpl(crfa);
         else if(streamimpl==INMEMORYIMPL)
-            sf = new MemoryStreamFactoryImpl();
+            sf = new MemoryStreamFactoryImpl(false, false);
         else
             throw new RuntimeException("unknown stream implementation");
 

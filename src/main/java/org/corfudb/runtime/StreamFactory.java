@@ -41,7 +41,7 @@ public class StreamFactory {
         switch(type) {
             case DUMMY: return new IStreamFactoryImpl(new CorfuLogAddressSpace(client, 0), new CorfuStreamingSequencer(client));
             case HOP: return new HopAdapterIStreamFactoryImpl(client);
-            case MEMORY: return new MemoryStreamFactoryImpl();
+            case MEMORY: return new MemoryStreamFactoryImpl(false, false);
             default:
                 throw new RuntimeException("unknown stream implementation");
         }
