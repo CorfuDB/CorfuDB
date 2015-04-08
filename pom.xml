@@ -5,8 +5,7 @@
     <groupId>org.corfudb</groupId>
     <artifactId>corfudb</artifactId>
     <version>0.1-SNAPSHOT</version>
-    <packaging>jar</packaging>
-
+    <packaging>nar</packaging>
     <name>CorfuDB</name>
 
     <organization>
@@ -25,7 +24,7 @@
                     <artifactId>maven-javadoc-plugin</artifactId>
                     <configuration>
                         <links>
-                            <link>http://docs.oracle.com/javase7/docs/api</link>
+                            <link>http://docs.oracle.com/javase8/docs/api</link>
                         </links>
                         <failOnError>false</failOnError>
                         <additionalparam>-Xdoclint:none</additionalparam>
@@ -142,6 +141,11 @@
             <artifactId>concurrentlinkedhashmap-lru</artifactId>
             <version>1.4.2</version>
         </dependency>
+        <dependency>
+            <groupId>org.scijava</groupId>
+            <artifactId>native-lib-loader</artifactId>
+            <version>2.0.2</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -197,7 +201,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>2.2</version>
+                <version>2.3</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -212,7 +216,7 @@
 									<exclude>META-INF/*.SF</exclude>
 									<exclude>META-INF/*.DSA</exclude>
 									<exclude>META-INF/*.RSA</exclude>
-								</excludes>
+                                </excludes>
 								</filter>
 							</filters>
 						</configuration>
@@ -408,6 +412,31 @@
                       </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.github.maven-nar</groupId>
+                <artifactId>nar-maven-plugin</artifactId>
+                <version>3.2.2</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <javah>
+                        <includes>
+                            <include>**/InMemoryStream.class</include>
+                        </includes>
+                        <excludes>
+                        </excludes>
+                    </javah>
+                    <c>
+                        <sourceDirectory>src/main/c</sourceDirectory>
+                    </c>
+                    <libraries>
+                        <library>
+                            <!-- this should actually be jni, but due to nar bug using jnilib instead of dynlib on mac os X, it is set to shared-->
+                            <type>shared</type>
+                            <narSystemPackage>org.corfudb.client.view</narSystemPackage>
+                        </library>
+                    </libraries>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>com.github.eirslett</groupId>

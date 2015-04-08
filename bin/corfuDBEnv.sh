@@ -67,10 +67,13 @@ CLASSPATH="$CORFUDBCFGDIR:$CLASSPATH"
 if ls "$CORFUDBBINDIR"/../target/*.jar > /dev/null 2>&1; then
   echo "Running from development source"
   CLASSPATH=("$CORFUDBBINDIR"/../target/corfudb-*-shaded.jar)
+  CLASSPATHNAR=("$CORFUDBBINDIR"/../target/*.nar)
+  CLASSPATH="$CLASSPATH:$CLASSPATHNAR"
 elif ls "${CORFUDB_PREFIX}"/share/corfudb/lib/corfudb-*.jar > /dev/null 2>&1; then
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfudb/lib/*.jar)
 fi
 
+echo $CLASSPATH
 
 case "`uname`" in
     CYGWIN*) cygwin=true ;;

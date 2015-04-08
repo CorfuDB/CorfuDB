@@ -23,7 +23,8 @@ public class CorfuHello {
      * @param args
      */
     public static void main(String[] args) throws Exception {
-
+        org.corfudb.client.view.InMemoryStream ims = new org.corfudb.client.view.InMemoryStream();
+        log.warn(ims.test());
         String masteraddress = null;
 
         if (args.length >= 1) {
