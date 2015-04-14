@@ -360,10 +360,12 @@ class MemoryStreamImpl implements Stream
         {
             try {
             Serializable payload = addressSpace.get(address);
+            if(!compress && !serialize) { return payload; }
             byte[] b_payload = (byte[]) payload;
-            return (compress ? (Serializable) Serializer.deserialize_compressed(b_payload) :
+            Serializable ret = (compress ? (Serializable) Serializer.deserialize_compressed(b_payload) :
                                           serialize ? (Serializable) Serializer.deserialize(b_payload) :
                                           payload);
+            return ret;
             } catch (Exception e)
             {
                 throw new RuntimeException(e);
