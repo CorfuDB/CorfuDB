@@ -5,7 +5,7 @@
     <groupId>org.corfudb</groupId>
     <artifactId>corfudb</artifactId>
     <version>0.1-SNAPSHOT</version>
-    <packaging>nar</packaging>
+    <packaging>jar</packaging>
     <name>CorfuDB</name>
     <url>http://www.corfudb.org</url>
     <description>A cloud scale-consistency platform</description>
@@ -122,13 +122,6 @@
             <version>2.6.0</version>
             <type>jar</type>
             <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.yahoo.ycsb</groupId>
-            <artifactId>core</artifactId>
-            <version>0.1.4</version>
-			<scope>system</scope>
-			<systemPath>${basedir}/lib/ycsb-0.1.4/core/lib/core-0.1.4.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>com.offbytwo</groupId>
