@@ -64,14 +64,6 @@
             </plugins>
         </reporting>
 
-    <pluginRepositories>
-        <pluginRepository>
-        <id>davidtrott</id>
-        <name>davidtrott</name>
-        <url>http://maven.davidtrott.com/repository</url>
-        </pluginRepository>
-    </pluginRepositories>
-
     <dependencies>
         <dependency>
             <groupId>junit</groupId>
