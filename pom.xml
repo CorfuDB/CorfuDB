@@ -7,6 +7,8 @@
     <version>0.1-SNAPSHOT</version>
     <packaging>nar</packaging>
     <name>CorfuDB</name>
+    <url>http://www.corfudb.org</url>
+    <description>A cloud scale-consistency platform</description>
 
     <organization>
         <name>CorfuDB</name>
@@ -16,6 +18,35 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+    <scm>
+        <connection>scm:git:git://github.com/CorfuDB/CorfuDB.git</connection>
+        <developerConnection>scm:git:git://github.com:CorfuDB/CorfuDB.git</developerConnection>
+        <url>http://github.com/CorfuDB/CorfuDB</url>
+    </scm>
+
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Mahesh Balakrishnan</name>
+        </developer>
+        <developer>
+            <name>Dahlia Malkhi</name>
+        </developer>
+        <developer>
+            <name>Chris Rossbach</name>
+        </developer>
+        <developer>
+            <name>Michael Wei</name>
+            <email>mwei@cs.ucsd.edu</email>
+        </developer>
+    </developers>
 
     <reporting>
             <plugins>
