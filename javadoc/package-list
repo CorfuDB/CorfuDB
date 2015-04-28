@@ -10,5 +10,3 @@ org.corfudb.infrastructure
 org.corfudb.infrastructure.thrift
 org.corfudb.runtime
 org.corfudb.runtime.collections
-org.corfudb.tests
-org.corfudb.tests.benchtests
