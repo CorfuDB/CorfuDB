@@ -23,6 +23,19 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.io.Serializable;
 
+
+import java.io.Serializable;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.util.*;
+
+import org.corfudb.client.CorfuDBClient;
+import org.corfudb.runtime.collections.*;
+import org.corfudb.client.view.Serializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * This is the write-once address space providing storage for the shared log.
  */
@@ -228,3 +241,113 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
         return ID;
     }
 }
+
+class BufferStack implements Serializable //todo: custom serialization
+{
+    private Stack<byte[]> buffers;
+    private int totalsize;
+    public BufferStack()
+    {
+        buffers = new Stack<byte[]>();
+        totalsize = 0;
+    }
+    public BufferStack(byte[] initialbuf)
+    {
+        this();
+        push(initialbuf);
+    }
+    public void push(byte[] buf)
+    {
+        buffers.push(buf);
+        totalsize += buf.length;
+    }
+    public byte[] pop()
+    {
+        byte[] ret = buffers.pop();
+        if(ret!=null)
+            totalsize -= ret.length;
+        return ret;
+    }
+    public byte[] peek()
+    {
+        return buffers.peek();
+    }
+    public int flatten(byte[] buf)
+    {
+        if(buffers.size()==0) return 0;
+        if(buf.length<totalsize) throw new RuntimeException("buffer not big enough!");
+        if(buffers.size()>1) throw new RuntimeException("unimplemented");
+        System.arraycopy(buffers.peek(), 0, buf, 0, buffers.peek().length);
+        return buffers.peek().length;
+    }
+    public byte[] flatten()
+    {
+        if(buffers.size()==1) return buffers.peek();
+        else throw new RuntimeException("unimplemented");
+    }
+    public int numBufs()
+    {
+        return buffers.size();
+    }
+    public int numBytes()
+    {
+        return totalsize;
+    }
+    public static BufferStack serialize(Serializable obj)
+    {
+        try {
+        return new BufferStack(Serializer.serialize_compressed(obj));
+        } catch (Exception e) { throw new RuntimeException(e); }
+        /*
+        try
+        {
+            //todo: custom serialization
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(baos);
+            oos.writeObject(obj);
+            byte b[] = baos.toByteArray();
+            oos.close();
+            return new BufferStack(b);
+        }
+        catch(IOException e)
+        {
+            throw new RuntimeException(e);
+        }*/
+    }
+    public Object deserialize()
+    {
+        try {
+        return Serializer.deserialize_compressed(this.flatten());
+        } catch (Exception e) { throw new RuntimeException(e); }
+
+        /*
+        try
+        {
+            //todo: custom deserialization
+            ByteArrayInputStream bais = new ByteArrayInputStream(this.flatten());
+            ObjectInputStream ois = new ObjectInputStream(bais);
+            Object obj = ois.readObject();
+            return obj;
+        }
+        catch(IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+        catch(ClassNotFoundException ce)
+        {
+            throw new RuntimeException(ce);
+        }*/
+    }
+    //todo: this is a terribly inefficient translation from the buffer
+    //representation at the runtime layer to the one used by the logging layer
+    //we need a unified representation
+    public List<ByteBuffer> asList()
+    {
+        List<ByteBuffer> L = new LinkedList<ByteBuffer>();
+        L.add(ByteBuffer.wrap(this.flatten()));
+        return L;
+    }
+}
+
+
+
