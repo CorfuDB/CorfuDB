@@ -12,6 +12,7 @@ peer-reviewed research published at [SOSP](#references),
 CorfuDB consists of two layers: a logging layer
 which implements a distributed, fault-tolerant shared log; and a
 runtime layer that implements transactional services over the shared log.
+Check the CorfuDB [wiki](https://github.com/CorfuDB/CorfuDB/wiki) for a detailed overview of the sofware architecture and example usage.
 
 ## Prerequisites
 Currently we support and regularly test CorfuDB on Linux (Ubuntu), and
