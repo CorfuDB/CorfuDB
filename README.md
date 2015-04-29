@@ -19,12 +19,12 @@ Currently we support and regularly test CorfuDB on Linux (Ubuntu), and
 Mac OS X. CorfuDB should also run on Windows as well, but the scripts
 are not 100% there yet (pull requests welcome).
 
-To build and run CorfuDB, you will need the Java JDK as well as Apache
+To build and run CorfuDB, you will need the Java JDK 8 as well as Apache
 Thrift and Maven.
 
 On Linux (Debian/Ubuntu), run:
 ```
-$ sudo apt-get install openjdk-7-jdk maven thrift-compiler
+$ sudo apt-get install openjdk-8-jdk maven thrift-compiler
 ```
 
 On Mac OS X, the [homebrew](http://brew.sh) package manager should help.
