@@ -5,8 +5,10 @@
     <groupId>org.corfudb</groupId>
     <artifactId>corfudb</artifactId>
     <version>0.1-SNAPSHOT</version>
-    <packaging>nar</packaging>
+    <packaging>jar</packaging>
     <name>CorfuDB</name>
+    <url>http://www.corfudb.org</url>
+    <description>A cloud scale-consistency platform</description>
 
     <organization>
         <name>CorfuDB</name>
@@ -16,6 +18,35 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+    <scm>
+        <connection>scm:git:git://github.com/CorfuDB/CorfuDB.git</connection>
+        <developerConnection>scm:git:git://github.com:CorfuDB/CorfuDB.git</developerConnection>
+        <url>http://github.com/CorfuDB/CorfuDB</url>
+    </scm>
+
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Mahesh Balakrishnan</name>
+        </developer>
+        <developer>
+            <name>Dahlia Malkhi</name>
+        </developer>
+        <developer>
+            <name>Chris Rossbach</name>
+        </developer>
+        <developer>
+            <name>Michael Wei</name>
+            <email>mwei@cs.ucsd.edu</email>
+        </developer>
+    </developers>
 
     <reporting>
             <plugins>
@@ -33,15 +64,13 @@
             </plugins>
         </reporting>
 
-    <pluginRepositories>
-        <pluginRepository>
-        <id>davidtrott</id>
-        <name>davidtrott</name>
-        <url>http://maven.davidtrott.com/repository</url>
-        </pluginRepository>
-    </pluginRepositories>
-
     <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
@@ -93,13 +122,6 @@
             <version>2.6.0</version>
             <type>jar</type>
             <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.yahoo.ycsb</groupId>
-            <artifactId>core</artifactId>
-            <version>0.1.4</version>
-			<scope>system</scope>
-			<systemPath>${basedir}/lib/ycsb-0.1.4/core/lib/core-0.1.4.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>com.offbytwo</groupId>
@@ -481,6 +503,33 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.eluder.coveralls</groupId>
+                <artifactId>coveralls-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <jacocoReports>
+                    </jacocoReports>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.7.4.201502262128</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.18.1</version>
             </plugin>
         </plugins>
 

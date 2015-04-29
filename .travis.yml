@@ -9,6 +9,7 @@ install:
 - which thrift
 - travis_retry mvn clean install
 after_success:
+- mvn clean test jacoco:report coveralls:report
 - .travis_scripts/javadocs.sh
 script: mvn -e verify
 notifications:
