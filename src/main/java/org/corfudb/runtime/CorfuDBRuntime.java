@@ -71,7 +71,7 @@ public class CorfuDBRuntime implements AutoCloseable {
     /**
      * Suppressed default constructor.
      */
-    private CorfuDBRuntime() {}
+    private CorfuDBRugitntime() {}
 
     /**
      * Constructor. Generates an instance of a CorfuDB client, which
