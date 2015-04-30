@@ -15,7 +15,7 @@
 
 package org.corfudb.runtime.entries;
 
-import org.corfudb.runtime.abstractions.Timestamp;
+import org.corfudb.runtime.log.Timestamp;
 
 import java.util.Map;
 

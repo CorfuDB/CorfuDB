@@ -3,7 +3,7 @@ package org.corfudb.runtime.collections;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.HashMap;
-import org.corfudb.runtime.abstractions.ITimestamp;
+import org.corfudb.runtime.log.ITimestamp;
 import org.corfudb.runtime.smr.*;
 
 public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {

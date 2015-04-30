@@ -68,7 +68,7 @@ import org.corfudb.runtime.gossip.StreamDiscoveryRequestGossip;
 import org.corfudb.runtime.gossip.StreamDiscoveryResponseGossip;
 import org.corfudb.runtime.gossip.IGossip;
 
-import org.corfudb.runtime.abstractions.Timestamp;
+import org.corfudb.runtime.log.Timestamp;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.runtime.view.RemoteLogView;
 import org.corfudb.runtime.RemoteException;

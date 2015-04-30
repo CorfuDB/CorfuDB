@@ -5,7 +5,7 @@ import org.corfudb.runtime.smr.CorfuDBObject;
 import org.corfudb.runtime.smr.CorfuDBObjectCommand;
 
 import java.util.HashSet;
-import org.corfudb.runtime.abstractions.ITimestamp;
+import org.corfudb.runtime.log.ITimestamp;
 
 public class CorfuDBCounter extends CorfuDBObject
 {

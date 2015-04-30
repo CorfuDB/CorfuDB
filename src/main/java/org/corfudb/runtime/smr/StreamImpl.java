@@ -15,10 +15,10 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.abstractions.ITimestamp;
+import org.corfudb.runtime.log.ITimestamp;
 import org.corfudb.runtime.OutOfSpaceException;
-import org.corfudb.runtime.abstractions.Bundle;
-import org.corfudb.runtime.abstractions.IStream;
+import org.corfudb.runtime.log.Bundle;
+import org.corfudb.runtime.log.IStream;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -186,7 +186,7 @@ class HopAdapterStreamImpl implements org.corfudb.runtime.smr.Stream
     public HopAdapterStreamImpl(CorfuDBRuntime cdb, long tstreamid)
     {
         streamid = tstreamid;
-        hopstream = new org.corfudb.runtime.abstractions.Stream(cdb, new UUID(streamid, 0), 2, 10000, globalThreadPool, true);
+        hopstream = new org.corfudb.runtime.log.Stream(cdb, new UUID(streamid, 0), 2, 10000, globalThreadPool, true);
     }
 
     @Override

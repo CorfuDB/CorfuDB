@@ -14,7 +14,7 @@
  */
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.abstractions.ITimestamp;
+import org.corfudb.runtime.log.ITimestamp;
 
 import java.io.Serializable;
 import java.util.UUID;

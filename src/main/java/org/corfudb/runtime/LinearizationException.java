@@ -15,6 +15,8 @@
 
 package org.corfudb.runtime;
 
+import org.corfudb.runtime.log.Timestamp;
+
 /**
  * This exception is thrown when a linearization issue occurs (typically
  * when a non-linearizable timestamp is presented for comparison)
@@ -22,9 +24,9 @@ package org.corfudb.runtime;
 @SuppressWarnings("serial")
 public class LinearizationException extends Exception
 {
-    org.corfudb.runtime.abstractions.Timestamp ts1;
-    org.corfudb.runtime.abstractions.Timestamp ts2;
-    public LinearizationException(String desc, org.corfudb.runtime.abstractions.Timestamp ts1, org.corfudb.runtime.abstractions.Timestamp ts2)
+    Timestamp ts1;
+    Timestamp ts2;
+    public LinearizationException(String desc, Timestamp ts1, Timestamp ts2)
     {
         super(desc + "[ts1=" + ts1.toString() + ", ts2=" + ts2.toString() + "]");
         this.ts1 = ts1;

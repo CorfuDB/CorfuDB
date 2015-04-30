@@ -3,7 +3,7 @@ package org.corfudb.runtime.collections;
 import org.corfudb.runtime.smr.AbstractRuntime;
 import org.corfudb.runtime.smr.CorfuDBObjectCommand;
 import org.corfudb.runtime.smr.IStreamFactory;
-import org.corfudb.runtime.abstractions.ITimestamp;
+import org.corfudb.runtime.log.ITimestamp;
 
 import java.util.ArrayList;
 import java.util.Collection;
