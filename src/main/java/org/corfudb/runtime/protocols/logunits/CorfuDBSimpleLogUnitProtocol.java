@@ -16,7 +16,7 @@
 package org.corfudb.runtime.protocols.logunits;
 
 import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.client.PooledThriftClient;
+import org.corfudb.runtime.protocols.PooledThriftClient;
 
 import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
 import org.corfudb.infrastructure.thrift.UnitServerHdr;
@@ -39,10 +39,10 @@ import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.corfudb.client.NetworkException;
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
-import org.corfudb.client.OverwriteException;
+import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.OverwriteException;
 
 public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 {

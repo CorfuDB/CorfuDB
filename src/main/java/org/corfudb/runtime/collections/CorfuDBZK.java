@@ -17,7 +17,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import org.corfudb.client.ITimestamp;
+import org.corfudb.runtime.abstractions.ITimestamp;
 
 public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
 {

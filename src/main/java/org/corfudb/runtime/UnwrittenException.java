@@ -13,23 +13,20 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime;
 import java.io.IOException;
 
 /**
- * This exception is thrown when a linearization issue occurs (typically
- * when a non-linearizable timestamp is presented for comparison)
+ * This exception is thrown whenever a read is attempted on an unwritten page.
  */
 @SuppressWarnings("serial")
-public class LinearizationException extends Exception
+public class UnwrittenException extends IOException
 {
-    Timestamp ts1;
-    Timestamp ts2;
-    public LinearizationException(String desc, Timestamp ts1, Timestamp ts2)
+    public long address;
+    public UnwrittenException(String desc, long address)
     {
-        super(desc + "[ts1=" + ts1.toString() + ", ts2=" + ts2.toString() + "]");
-        this.ts1 = ts1;
-        this.ts2 = ts2;
+        super(desc + "[address=" + address + "]");
+        this.address = address;
     }
 }
 

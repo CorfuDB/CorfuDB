@@ -14,10 +14,11 @@
  */
 package org.corfudb.runtime.smr;
 
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.ITimestamp;
-import org.corfudb.client.OutOfSpaceException;
-import org.corfudb.client.abstractions.Bundle;
+import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.abstractions.ITimestamp;
+import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.abstractions.Bundle;
+import org.corfudb.runtime.abstractions.IStream;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,8 +93,8 @@ class IStreamFactoryImpl implements IStreamFactory
 
 class HopAdapterIStreamFactoryImpl implements IStreamFactory
 {
-    CorfuDBClient cdb;
-    public HopAdapterIStreamFactoryImpl(CorfuDBClient tcdb)
+    CorfuDBRuntime cdb;
+    public HopAdapterIStreamFactoryImpl(CorfuDBRuntime tcdb)
     {
         cdb = tcdb;
     }
@@ -155,7 +156,7 @@ class HopAdapterStreamEntryImpl implements org.corfudb.runtime.smr.StreamEntry
 class HopAdapterStreamImpl implements org.corfudb.runtime.smr.Stream
 {
     private static Logger dbglog = LoggerFactory.getLogger(HopAdapterStreamImpl.class);
-    org.corfudb.client.abstractions.IStream hopstream;
+    IStream hopstream;
     long streamid;
 
     static class globalThreadFactory implements ForkJoinPool.ForkJoinWorkerThreadFactory
@@ -182,10 +183,10 @@ class HopAdapterStreamImpl implements org.corfudb.runtime.smr.Stream
     static ExecutorService globalThreadPool = new ForkJoinPool(8, new globalThreadFactory(), globalThreadExceptionHandler, true);
 
 
-    public HopAdapterStreamImpl(CorfuDBClient cdb, long tstreamid)
+    public HopAdapterStreamImpl(CorfuDBRuntime cdb, long tstreamid)
     {
         streamid = tstreamid;
-        hopstream = new org.corfudb.client.abstractions.Stream(cdb, new UUID(streamid, 0), 2, 10000, globalThreadPool, true);
+        hopstream = new org.corfudb.runtime.abstractions.Stream(cdb, new UUID(streamid, 0), 2, 10000, globalThreadPool, true);
     }
 
     @Override

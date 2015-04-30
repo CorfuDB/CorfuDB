@@ -15,8 +15,8 @@
 
 package org.corfudb.runtime.entries;
 
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.Timestamp;
+import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.abstractions.Timestamp;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -29,10 +29,10 @@ import java.io.Serializable;
 
 import java.io.IOException;
 
-import org.corfudb.client.OverwriteException;
-import org.corfudb.client.abstractions.Stream;
+import org.corfudb.runtime.OverwriteException;
+import org.corfudb.runtime.abstractions.Stream;
 import org.corfudb.runtime.view.StreamingSequencer;
-import org.corfudb.client.UnwrittenException;
+import org.corfudb.runtime.UnwrittenException;
 
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
 import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
@@ -51,7 +51,7 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements org.corfudb.r
     Map<UUID, Long> epochMap;
 
     transient Stream s;
-    transient CorfuDBClient cdbc;
+    transient CorfuDBRuntime cdbc;
     transient IWriteOnceAddressSpace woas;
     transient StreamingSequencer ss;
 
@@ -85,7 +85,7 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements org.corfudb.r
      * @param ss            The streaming sequencer for the stream.
      * @param cdbc          The corfudbclient of the stream.
      */
-    public void setTransientInfo(Stream s, IWriteOnceAddressSpace woas, StreamingSequencer ss, CorfuDBClient cdbc)
+    public void setTransientInfo(Stream s, IWriteOnceAddressSpace woas, StreamingSequencer ss, CorfuDBRuntime cdbc)
     {
         this.s = s;
         this.woas = woas;

@@ -14,7 +14,7 @@
  */
 
 package org.corfudb.runtime.protocols.sequencers;
-import org.corfudb.client.NetworkException;
+import org.corfudb.runtime.NetworkException;
 import java.util.UUID;
 
 /**

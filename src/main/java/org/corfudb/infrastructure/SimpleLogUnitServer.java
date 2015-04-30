@@ -84,6 +84,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 		UNITCAPACITY = freewater = sz;
 		map = new byte[sz * (entsz)];
 		mapb = ByteBuffer.wrap(map);
+        masterIncarnation = new ArrayList<Integer>();
+        masterIncarnation.add(0);
 	}
 
 	public void initLogStore(byte[] initmap, int sz) throws Exception {
@@ -91,6 +93,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 		UNITCAPACITY = freewater = sz;
 		map = initmap;
 		mapb = ByteBuffer.wrap(map);
+        masterIncarnation = new ArrayList<Integer>();
+        masterIncarnation.add(0);
 	}
 
     public SimpleLogUnitServer() {

@@ -1,4 +1,4 @@
-package org.corfudb.client;
+package org.corfudb.runtime.view;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -7,6 +7,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
 import java.io.IOException;
 
+import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.RemoteException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +36,7 @@ public class RemoteLogView {
                 if (view == null)
                 {
                     String remoteLog = remoteString.replace("cdbcm", "http");
-                    view = CorfuDBClient.retrieveView(remoteLog + "/corfu");
+                    view = CorfuDBRuntime.retrieveView(remoteLog + "/corfu");
                     return view;
                 }
             }

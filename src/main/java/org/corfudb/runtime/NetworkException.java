@@ -13,21 +13,21 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime;
 import java.io.IOException;
-import java.util.UUID;
+import org.corfudb.runtime.protocols.IServerProtocol;
 /**
  * This exception is thrown whenever the result of an operation
  * is unknown due to a network error
  */
 @SuppressWarnings("serial")
-public class RemoteException extends IOException
+public class NetworkException extends IOException
 {
-    public UUID remote;
-    public RemoteException(String desc, UUID remote)
+    public IServerProtocol protocol;
+    public NetworkException(String desc, IServerProtocol protocol)
     {
-        super(desc + "[remote=" + remote.toString() + "]");
-        this.remote = remote;
+        super(desc + "[server=" + protocol.getFullString() + "]");
+        this.protocol = protocol;
     }
 }
 

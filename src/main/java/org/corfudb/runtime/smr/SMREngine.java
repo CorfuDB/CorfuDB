@@ -14,7 +14,7 @@
  */
 package org.corfudb.runtime.smr;
 
-import org.corfudb.client.ITimestamp;
+import org.corfudb.runtime.abstractions.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

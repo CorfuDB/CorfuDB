@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime.view;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,13 +24,10 @@ import java.util.Set;
 import java.util.List;
 import java.util.LinkedList;
 import java.util.ArrayList;
-import java.util.concurrent.ConcurrentHashMap;
 
-import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
 import java.lang.reflect.Method;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.StringBuilder;
 
 import javax.json.Json;
@@ -284,9 +281,9 @@ public class CorfuDBView {
 
     /**
      * Invalidate this view. This prevents this view from being used by
-     * clients accessing the view through CorfuDBClient.
+     * clients accessing the view through CorfuDBRuntime.
      */
-    void invalidate()
+    public void invalidate()
     {
         isInvalid = true;
     }
@@ -296,7 +293,7 @@ public class CorfuDBView {
      *
      * @return True if the view is valid, false otherwise.
      */
-    boolean isValid()
+    public boolean isValid()
     {
         return !isInvalid;
     }

@@ -15,13 +15,9 @@
 
 package org.corfudb.runtime.protocols.configmasters;
 import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.client.NetworkException;
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
-import org.corfudb.client.OverwriteException;
 
-import org.corfudb.client.gossip.IGossip;
-import org.corfudb.client.StreamData;
+import org.corfudb.runtime.gossip.IGossip;
+import org.corfudb.runtime.view.StreamData;
 import java.util.Map;
 import java.util.UUID;
 

@@ -13,18 +13,17 @@
  * limitations under the License.
  */
 
-package org.corfudb.client.abstractions;
+package org.corfudb.runtime.abstractions;
 
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
-import org.corfudb.client.OutOfSpaceException;
-import org.corfudb.client.LinearizationException;
+import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.LinearizationException;
 
 import java.util.List;
 
 import java.util.UUID;
 
-import org.corfudb.client.Timestamp;
-import org.corfudb.client.RemoteException;
+import org.corfudb.runtime.RemoteException;
 
 import java.lang.ClassNotFoundException;
 import java.io.IOException;

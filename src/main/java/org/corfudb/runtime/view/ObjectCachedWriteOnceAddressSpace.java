@@ -15,16 +15,10 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.CorfuDBView;
-import org.corfudb.client.CorfuDBViewSegment;
+import org.corfudb.runtime.*;
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
-import org.corfudb.client.OverwriteException;
-import org.corfudb.client.NetworkException;
-import org.corfudb.client.RemoteException;
 
 import java.util.List;
 
@@ -45,14 +39,14 @@ import java.util.UUID;
 
 public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
-    private CorfuDBClient client;
+    private CorfuDBRuntime client;
     private UUID logID;
     private CorfuDBView view;
     private Supplier<CorfuDBView> getView;
 
 	private final Logger log = LoggerFactory.getLogger(org.corfudb.runtime.view.CachedWriteOnceAddressSpace.class);
 
-    public ObjectCachedWriteOnceAddressSpace(CorfuDBClient client)
+    public ObjectCachedWriteOnceAddressSpace(CorfuDBRuntime client)
     {
         this.client = client;
         this.getView = () ->  {
@@ -61,7 +55,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         this.logID = getView.get().getUUID();
     }
 
-    public ObjectCachedWriteOnceAddressSpace(CorfuDBClient client, UUID logID)
+    public ObjectCachedWriteOnceAddressSpace(CorfuDBRuntime client, UUID logID)
     {
         this.client = client;
         this.logID = logID;

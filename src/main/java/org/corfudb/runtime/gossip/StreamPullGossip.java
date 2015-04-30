@@ -1,7 +1,6 @@
-package org.corfudb.client.gossip;
+package org.corfudb.runtime.gossip;
 
 import java.util.UUID;
-import java.io.Serializable;
 
 /** This gossip entry is used to tell the configuration master that a stream is being pulled.
  *

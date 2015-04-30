@@ -1,6 +1,6 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.client.CorfuDBClient;
+import org.corfudb.runtime.CorfuDBRuntime;
 
 /**
  * Created by crossbach on 4/3/15.
@@ -33,7 +33,7 @@ public class StreamFactory {
      */
     public static IStreamFactory
     getStreamFactory(
-            CorfuDBClient client,
+            CorfuDBRuntime client,
             StreamImplType type
         ) {
         switch(type) {
@@ -45,8 +45,8 @@ public class StreamFactory {
         }
     }
 
-    public static IStreamFactory getStreamFactory(CorfuDBClient c) { return getStreamFactory(c, StreamImplType.DUMMY); }
-    public static IStreamFactory getStreamFactory(CorfuDBClient c, int i) { return getStreamFactory(c, StreamImplType.fromInt(i)); }
-    public static IStreamFactory getStreamFactory(CorfuDBClient c, String s) { return getStreamFactory(c, StreamImplType.fromString(s)); }
+    public static IStreamFactory getStreamFactory(CorfuDBRuntime c) { return getStreamFactory(c, StreamImplType.DUMMY); }
+    public static IStreamFactory getStreamFactory(CorfuDBRuntime c, int i) { return getStreamFactory(c, StreamImplType.fromInt(i)); }
+    public static IStreamFactory getStreamFactory(CorfuDBRuntime c, String s) { return getStreamFactory(c, StreamImplType.fromString(s)); }
 
 }

@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime;
 import java.io.IOException;
 
 /**

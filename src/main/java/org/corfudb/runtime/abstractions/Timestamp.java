@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime.abstractions;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -25,7 +25,7 @@ import java.io.Serializable;
 import java.util.UUID;
 import java.lang.StringBuilder;
 
-public class Timestamp implements ITimestamp, Serializable {
+public class Timestamp implements org.corfudb.runtime.abstractions.ITimestamp, Serializable {
     private static final Logger log = LoggerFactory.getLogger(Timestamp.class);
 
     public Long pos;
@@ -166,14 +166,14 @@ public class Timestamp implements ITimestamp, Serializable {
     }
 
     @Override
-    public int compareTo(ITimestamp timestamp)
+    public int compareTo(org.corfudb.runtime.abstractions.ITimestamp timestamp)
     {
         //always less than max
-        if (ITimestamp.isMax(timestamp)) { return -1; }
+        if (org.corfudb.runtime.abstractions.ITimestamp.isMax(timestamp)) { return -1; }
         //always greater than min
-        if (ITimestamp.isMin(timestamp)) { return 1; }
+        if (org.corfudb.runtime.abstractions.ITimestamp.isMin(timestamp)) { return 1; }
         //always invalid
-        if (ITimestamp.isInvalid(timestamp)) { throw new ClassCastException("Comparison of invalid timestamp!"); }
+        if (org.corfudb.runtime.abstractions.ITimestamp.isInvalid(timestamp)) { throw new ClassCastException("Comparison of invalid timestamp!"); }
 
         if (timestamp instanceof Timestamp)
         {

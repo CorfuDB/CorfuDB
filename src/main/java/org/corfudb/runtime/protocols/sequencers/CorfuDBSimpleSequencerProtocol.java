@@ -16,8 +16,8 @@
 package org.corfudb.runtime.protocols.sequencers;
 
 import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.client.PooledThriftClient;
-import org.corfudb.client.NetworkException;
+import org.corfudb.runtime.protocols.PooledThriftClient;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.infrastructure.thrift.SimpleSequencerService;
 
 import org.apache.thrift.protocol.TProtocol;

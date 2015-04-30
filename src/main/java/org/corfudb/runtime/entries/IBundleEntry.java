@@ -15,13 +15,13 @@
 
 package org.corfudb.runtime.entries;
 
-import org.corfudb.client.Timestamp;
+import org.corfudb.runtime.abstractions.Timestamp;
 
 import java.io.Serializable;
 
 import java.io.IOException;
 
-import org.corfudb.client.OverwriteException;
+import org.corfudb.runtime.OverwriteException;
 
 /**
  * This is a bundle entry interface, which is encountered inside the move entries of remotely bundled

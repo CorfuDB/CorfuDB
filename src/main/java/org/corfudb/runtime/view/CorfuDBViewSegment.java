@@ -13,32 +13,14 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime.view;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.corfudb.runtime.protocols.IServerProtocol;
 
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Set;
 import java.util.List;
-import java.util.LinkedList;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-
-import java.lang.reflect.Method;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.StringBuilder;
-
-import javax.json.Json;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
-import javax.json.JsonArrayBuilder;
-
-import org.reflections.Reflections;
-import org.reflections.scanners.SubTypesScanner;
 
 /**
  * This class provides a view of the CorfuDB infrastructure. Clients

@@ -13,12 +13,12 @@
  * limitations under the License.
  */
 
-package org.corfudb.client.abstractions;
+package org.corfudb.runtime.abstractions;
 
 import org.corfudb.runtime.view.Sequencer;
 import org.corfudb.runtime.view.WriteOnceAddressSpace;
 
-import org.corfudb.client.OutOfSpaceException;
+import org.corfudb.runtime.OutOfSpaceException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

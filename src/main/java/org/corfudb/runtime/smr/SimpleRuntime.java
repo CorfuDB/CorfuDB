@@ -20,8 +20,7 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.*;
-import org.corfudb.client.ITimestamp;
-import org.corfudb.runtime.smr.RemoteReadService;
+import org.corfudb.runtime.abstractions.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

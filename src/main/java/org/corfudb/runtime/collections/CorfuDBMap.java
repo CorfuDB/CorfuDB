@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.util.*;
 
-import org.corfudb.client.ITimestamp;
+import org.corfudb.runtime.abstractions.ITimestamp;
 
 /**
  *

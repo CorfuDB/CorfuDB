@@ -13,16 +13,15 @@
  * limitations under the License.
  */
 
-package org.corfudb.client.abstractions;
+package org.corfudb.runtime.abstractions;
 
-import org.corfudb.client.OutOfSpaceException;
+import org.corfudb.runtime.OutOfSpaceException;
 
 import java.util.List;
 
 import java.util.UUID;
 
-import org.corfudb.client.Timestamp;
-import org.corfudb.client.RemoteException;
+import org.corfudb.runtime.RemoteException;
 
 import java.io.IOException;
 import java.io.Serializable;

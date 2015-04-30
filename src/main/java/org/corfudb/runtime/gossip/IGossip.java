@@ -1,4 +1,4 @@
-package org.corfudb.client.gossip;
+package org.corfudb.runtime.gossip;
 
 import java.io.Serializable;
 

@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +23,6 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 
-import javax.json.JsonObject;
 import javax.json.JsonReader;
 import javax.json.Json;
 
@@ -47,19 +46,19 @@ import java.util.concurrent.locks.StampedLock;
  *
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
-public class CorfuDBClient implements AutoCloseable {
+public class CorfuDBRuntime implements AutoCloseable {
 
     private String configurationString;
     private StampedLock viewLock;
     private Thread viewManagerThread;
-    private CorfuDBView currentView;
+    private org.corfudb.runtime.view.CorfuDBView currentView;
     private BooleanLock viewUpdatePending;
     private Boolean closed = false;
     private UUID localID = null;
-    private RemoteLogView remoteView;
+    private org.corfudb.runtime.view.RemoteLogView remoteView;
 
 
-    private static final Logger log = LoggerFactory.getLogger(CorfuDBClient.class);
+    private static final Logger log = LoggerFactory.getLogger(CorfuDBRuntime.class);
 
     private class BooleanLock
     {
@@ -72,7 +71,7 @@ public class CorfuDBClient implements AutoCloseable {
     /**
      * Suppressed default constructor.
      */
-    private CorfuDBClient() {}
+    private CorfuDBRuntime() {}
 
     /**
      * Constructor. Generates an instance of a CorfuDB client, which
@@ -83,11 +82,11 @@ public class CorfuDBClient implements AutoCloseable {
      *                              CorfuDB instance. This is usually a http address for a \
      *                              configuration master.
      */
-    public CorfuDBClient(String configurationString) {
+    public CorfuDBRuntime(String configurationString) {
         this.configurationString = configurationString;
 
         viewLock = new StampedLock();
-        remoteView = new RemoteLogView();
+        remoteView = new org.corfudb.runtime.view.RemoteLogView();
         viewUpdatePending = new BooleanLock();
         viewUpdatePending.lock = true;
         viewManagerThread = getViewManagerThread();
@@ -111,7 +110,7 @@ public class CorfuDBClient implements AutoCloseable {
      * Retrieves the CorfuDBView from a configuration string. The view manager
      * uses this method to fetch the most recent view.
      */
-    public static CorfuDBView retrieveView(String configString)
+    public static org.corfudb.runtime.view.CorfuDBView retrieveView(String configString)
         throws IOException
     {
         HttpClient httpClient = HttpClients.createDefault();
@@ -123,7 +122,7 @@ public class CorfuDBClient implements AutoCloseable {
         }
         try (JsonReader jr = Json.createReader(new BufferedReader(new InputStreamReader(response.getEntity().getContent()))))
         {
-            return new CorfuDBView(jr.readObject());
+            return new org.corfudb.runtime.view.CorfuDBView(jr.readObject());
         }
     }
 
@@ -176,7 +175,7 @@ public class CorfuDBClient implements AutoCloseable {
      * @return          A CorfuDBView, if the remote log can be retrieved, or
      *                  null, if the UUID cannot be resolved.
      */
-    public CorfuDBView getView(UUID logID)
+    public org.corfudb.runtime.view.CorfuDBView getView(UUID logID)
     throws RemoteException
     {
         if (logID == null) {return getView();}
@@ -204,7 +203,7 @@ public class CorfuDBClient implements AutoCloseable {
      * Get the current view. This method optimisically acquires the
      * current view.
      */
-    public CorfuDBView getView()
+    public org.corfudb.runtime.view.CorfuDBView getView()
     {
         if (viewManagerThread == null || currentView == null || !currentView.isValid())
         {
@@ -224,7 +223,7 @@ public class CorfuDBClient implements AutoCloseable {
             }
         }
         long stamp = viewLock.tryOptimisticRead();
-        CorfuDBView view = currentView;
+        org.corfudb.runtime.view.CorfuDBView view = currentView;
         if (!viewLock.validate(stamp))
         {
             //We should only get here if the view is being updated.
@@ -259,7 +258,7 @@ public class CorfuDBClient implements AutoCloseable {
                             //lock, preventing old view from being read.
                             long stamp = viewLock.writeLock();
                             try {
-                                CorfuDBView newView = retrieveView(configurationString);
+                                org.corfudb.runtime.view.CorfuDBView newView = retrieveView(configurationString);
                                 if (currentView == null || newView.getEpoch() > currentView.getEpoch())
                                 {
                                     String oldEpoch = (currentView == null) ? "null" : Long.toString(currentView.getEpoch());

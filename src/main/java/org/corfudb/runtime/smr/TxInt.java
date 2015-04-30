@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.LinkedList;
 import java.util.HashMap;
-import org.corfudb.client.ITimestamp;
+import org.corfudb.runtime.abstractions.ITimestamp;
 import java.util.UUID;
 import java.util.HashSet;
 import java.util.Iterator;

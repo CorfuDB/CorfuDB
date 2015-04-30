@@ -13,21 +13,22 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
-import java.io.IOException;
+package org.corfudb.runtime;
 
 /**
- * This exception is thrown whenever a read or write is attempted on a
- * trimmed region.
+ * This exception is thrown when a linearization issue occurs (typically
+ * when a non-linearizable timestamp is presented for comparison)
  */
 @SuppressWarnings("serial")
-public class TrimmedException extends IOException
+public class LinearizationException extends Exception
 {
-    public long address;
-    public TrimmedException(String desc, long address)
+    org.corfudb.runtime.abstractions.Timestamp ts1;
+    org.corfudb.runtime.abstractions.Timestamp ts2;
+    public LinearizationException(String desc, org.corfudb.runtime.abstractions.Timestamp ts1, org.corfudb.runtime.abstractions.Timestamp ts2)
     {
-        super(desc + "[address=" + address + "]");
-        this.address = address;
+        super(desc + "[ts1=" + ts1.toString() + ", ts2=" + ts2.toString() + "]");
+        this.ts1 = ts1;
+        this.ts2 = ts2;
     }
 }
 

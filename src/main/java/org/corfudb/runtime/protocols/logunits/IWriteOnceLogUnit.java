@@ -15,10 +15,10 @@
 
 package org.corfudb.runtime.protocols.logunits;
 
-import org.corfudb.client.NetworkException;
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
-import org.corfudb.client.OverwriteException;
+import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.OverwriteException;
 
 /**
  * This interface represents the simplest type of log unit.

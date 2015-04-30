@@ -13,21 +13,21 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime;
 import java.io.IOException;
-import org.corfudb.runtime.protocols.IServerProtocol;
+
 /**
- * This exception is thrown whenever the result of an operation
- * is unknown due to a network error
+ * This exception is thrown whenever a write is attempted on a page
+ * that already has been written to. (Applies to write once address spaces)
  */
 @SuppressWarnings("serial")
-public class NetworkException extends IOException
+public class OverwriteException extends IOException
 {
-    public IServerProtocol protocol;
-    public NetworkException(String desc, IServerProtocol protocol)
+    public long address;
+    public OverwriteException(String desc, long address)
     {
-        super(desc + "[server=" + protocol.getFullString() + "]");
-        this.protocol = protocol;
+        super(desc + "[address=" + address + "]");
+        this.address = address;
     }
 }
 

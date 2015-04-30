@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.StringBuilder;
 import java.lang.reflect.InvocationTargetException;
 
-import org.corfudb.client.NetworkException;
+import org.corfudb.runtime.NetworkException;
 
 /**
  * This interface represents the minimum APIs a server protocol must implement.

@@ -1,4 +1,4 @@
-package org.corfudb.client;
+package org.corfudb.runtime.abstractions;
 
 /**
  *  This interface represents comparable timestamps with max, min and invalid values.

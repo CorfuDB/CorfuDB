@@ -15,7 +15,7 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.client.CorfuDBClient;
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 
 import org.slf4j.Logger;
@@ -29,10 +29,10 @@ import org.slf4j.LoggerFactory;
 
 public class Sequencer {
 
-    private CorfuDBClient client;
+    private CorfuDBRuntime client;
 	private final Logger log = LoggerFactory.getLogger(Sequencer.class);
 
-    public Sequencer(CorfuDBClient client)
+    public Sequencer(CorfuDBRuntime client)
     {
         this.client = client;
     }

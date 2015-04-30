@@ -1,7 +1,6 @@
-package org.corfudb.client.gossip;
+package org.corfudb.runtime.gossip;
 
 import java.util.UUID;
-import java.io.Serializable;
 
 /** This gossip message is sent whenever a stream needs to be discovered.
  */

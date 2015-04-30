@@ -1,4 +1,4 @@
-package org.corfudb.client;
+package org.corfudb.runtime.abstractions;
 
 import java.io.Serializable;
 

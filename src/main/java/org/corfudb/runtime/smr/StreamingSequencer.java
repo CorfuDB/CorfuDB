@@ -14,7 +14,7 @@
  */
 package org.corfudb.runtime.smr;
 
-import org.corfudb.client.CorfuDBClient;
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.Sequencer;
 
 import java.util.Set;
@@ -35,7 +35,7 @@ public interface StreamingSequencer
 class CorfuStreamingSequencer implements StreamingSequencer
 {
     Sequencer s;
-    public CorfuStreamingSequencer(CorfuDBClient tcl)
+    public CorfuStreamingSequencer(CorfuDBRuntime tcl)
     {
         s = new Sequencer(tcl);
     }

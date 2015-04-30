@@ -23,13 +23,13 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.corfudb.infrastructure.thrift.StreamingSequencerService;
 import org.corfudb.infrastructure.thrift.StreamSequence;
 
-import org.corfudb.client.CorfuDBClient;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
 import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
 import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
@@ -48,7 +48,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
     private int port = 0;
     private String configmasterURL = "";
     private Logger log = LoggerFactory.getLogger(StreamingSequencerServer.class);
-    private CorfuDBClient c;
+    private CorfuDBRuntime c;
     private IWriteOnceAddressSpace woas;
     private ExecutorService tp = Executors.newCachedThreadPool();
     class StreamData {
@@ -196,7 +196,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
             public void run() {
                 st.port = (Integer) config.get("port");
                 st.configmasterURL = (String) config.get("configmaster");
-                st.c = new CorfuDBClient(st.configmasterURL);
+                st.c = new CorfuDBRuntime(st.configmasterURL);
                 st.c.startViewManager();
                 st.woas = new CachedWriteOnceAddressSpace(st.c);
                 while (true) {

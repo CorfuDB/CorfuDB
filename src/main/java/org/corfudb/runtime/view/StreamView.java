@@ -1,4 +1,4 @@
-package org.corfudb.client;
+package org.corfudb.runtime.view;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
@@ -8,7 +8,6 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.Set;
 
 /**

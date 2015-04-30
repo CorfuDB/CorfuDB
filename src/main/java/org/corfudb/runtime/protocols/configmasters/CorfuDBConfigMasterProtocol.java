@@ -19,18 +19,9 @@ import org.corfudb.runtime.protocols.IServerProtocol;
 
 import java.util.Map;
 import java.util.HashMap;
-import java.util.ArrayList;
-import java.util.List;
-
-import java.nio.ByteBuffer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.corfudb.client.NetworkException;
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
-import org.corfudb.client.OverwriteException;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -38,19 +29,8 @@ import com.thetransactioncompany.jsonrpc2.client.*;
 import com.thetransactioncompany.jsonrpc2.*;
 import java.net.*;
 
-import javax.json.Json;
-import javax.json.JsonValue;
-import javax.json.JsonString;
-import javax.json.JsonArray;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
-import javax.json.JsonArrayBuilder;
-import javax.json.JsonReader;
-
-import java.io.StringReader;
-
-import org.corfudb.client.gossip.IGossip;
-import org.corfudb.client.StreamData;
+import org.corfudb.runtime.gossip.IGossip;
+import org.corfudb.runtime.view.StreamData;
 
 import com.esotericsoftware.kryonet.Client;
 

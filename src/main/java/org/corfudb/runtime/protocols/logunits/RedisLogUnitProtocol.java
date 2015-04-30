@@ -20,7 +20,6 @@ import org.corfudb.runtime.protocols.IServerProtocol;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.BinaryJedis;
-import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.Transaction;
 import redis.clients.jedis.Response;
 
@@ -28,15 +27,13 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 
-import java.nio.ByteBuffer;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.corfudb.client.NetworkException;
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
-import org.corfudb.client.OverwriteException;
+import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.OverwriteException;
 
 public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 {

@@ -5,7 +5,7 @@ import org.corfudb.runtime.smr.CorfuDBObject;
 import org.corfudb.runtime.smr.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.corfudb.client.ITimestamp;
+import org.corfudb.runtime.abstractions.ITimestamp;
 
 public class CDBDoublyLinkedListNode<E> extends CorfuDBObject {
 

@@ -15,9 +15,9 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.client.OverwriteException;
-import org.corfudb.client.TrimmedException;
-import org.corfudb.client.UnwrittenException;
+import org.corfudb.runtime.OverwriteException;
+import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.UnwrittenException;
 
 import java.io.IOException;
 import java.io.Serializable;

@@ -13,22 +13,20 @@
  * limitations under the License.
  */
 
-package org.corfudb.client.abstractions;
+package org.corfudb.runtime.abstractions;
 
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
 import org.corfudb.runtime.view.ObjectCachedWriteOnceAddressSpace;
 import org.corfudb.runtime.view.StreamingSequencer;
 import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.CorfuDBView;
+import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.runtime.entries.CorfuDBStreamStartEntry;
 import org.corfudb.runtime.entries.BundleEntry;
-import org.corfudb.client.OutOfSpaceException;
-import org.corfudb.client.LinearizationException;
-import org.corfudb.client.OverwriteException;
 
 import java.util.Map;
 import java.util.ArrayList;
@@ -46,17 +44,13 @@ import java.util.concurrent.CompletableFuture;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.TimeUnit;
-import org.corfudb.client.Timestamp;
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
-import org.corfudb.client.RemoteException;
 
 import java.lang.ClassNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.stream.Collectors;
-import org.corfudb.client.gossip.StreamEpochGossipEntry;
-import org.corfudb.client.gossip.StreamPullGossip;
+import org.corfudb.runtime.gossip.StreamEpochGossipEntry;
+import org.corfudb.runtime.gossip.StreamPullGossip;
 import org.corfudb.runtime.entries.CorfuDBStreamHoleEntry;
 
 import java.util.concurrent.BlockingDeque;
@@ -66,7 +60,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.BiFunction;
 
 import java.util.function.Supplier;
-import org.corfudb.client.StreamData;
+import org.corfudb.runtime.view.StreamData;
 
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectOutputStream;
@@ -81,7 +75,7 @@ public class Stream implements AutoCloseable, IStream {
 
     private final Logger log = LoggerFactory.getLogger(Stream.class);
 
-    CorfuDBClient cdbc;
+    CorfuDBRuntime cdbc;
     public UUID streamID;
     UUID logID;
 
@@ -130,17 +124,17 @@ public class Stream implements AutoCloseable, IStream {
     BlockingDeque<ReturnInfo> returnStack;
     Supplier<CorfuDBView> getView;
     Supplier<IConfigMaster> getConfigMaster;
-    BiFunction<CorfuDBClient, UUID, IWriteOnceAddressSpace> getAddressSpace;
+    BiFunction<CorfuDBRuntime, UUID, IWriteOnceAddressSpace> getAddressSpace;
 
-    public Stream(CorfuDBClient cdbc, UUID uuid) {
+    public Stream(CorfuDBRuntime cdbc, UUID uuid) {
         this(cdbc, uuid, 4, 10, Runtime.getRuntime().availableProcessors(), true);
     }
 
-    public Stream(CorfuDBClient cdbc, UUID uuid, int queueSize, int allocationSize, boolean prefetch) {
+    public Stream(CorfuDBRuntime cdbc, UUID uuid, int queueSize, int allocationSize, boolean prefetch) {
         this(cdbc,uuid,queueSize, allocationSize, Runtime.getRuntime().availableProcessors(), prefetch);
     }
 
-    public Stream(CorfuDBClient cdbc, UUID uuid, int queueSize, int allocationSize, int numThreads, boolean prefetch) {
+    public Stream(CorfuDBRuntime cdbc, UUID uuid, int queueSize, int allocationSize, int numThreads, boolean prefetch) {
         this(cdbc, uuid, queueSize, allocationSize, Executors.newFixedThreadPool(numThreads), prefetch);
         killExecutor = true;
     }
@@ -155,7 +149,7 @@ public class Stream implements AutoCloseable, IStream {
      * @param executor          The executor service thread pool to serve threads on.
      * @param prefetch          Whether or not to prefetch data (up to the size of the internal queue)
      */
-    public Stream(CorfuDBClient cdbc, UUID uuid, int queueSize,  int allocationSize, ExecutorService executor, boolean prefetch)
+    public Stream(CorfuDBRuntime cdbc, UUID uuid, int queueSize,  int allocationSize, ExecutorService executor, boolean prefetch)
     {
         this.cdbc  = cdbc;
         this.streamID = uuid;

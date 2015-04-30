@@ -14,8 +14,8 @@
  */
 package org.corfudb.infrastructure;
 
-import org.corfudb.client.CorfuDBView;
-import org.corfudb.client.CorfuDBViewSegment;
+import org.corfudb.runtime.view.CorfuDBView;
+import org.corfudb.runtime.view.CorfuDBViewSegment;
 import org.corfudb.runtime.view.WriteOnceAddressSpace;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
@@ -50,8 +50,8 @@ import javax.json.JsonReader;
 import javax.json.JsonArray;
 import javax.json.JsonArrayBuilder;
 
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
+import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.TrimmedException;
 
 import java.util.UUID;
 import java.lang.reflect.Field;
@@ -63,19 +63,19 @@ import com.esotericsoftware.kryonet.Server;
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Connection;
 
-import org.corfudb.client.gossip.StreamEpochGossipEntry;
-import org.corfudb.client.gossip.StreamDiscoveryRequestGossip;
-import org.corfudb.client.gossip.StreamDiscoveryResponseGossip;
-import org.corfudb.client.gossip.IGossip;
+import org.corfudb.runtime.gossip.StreamEpochGossipEntry;
+import org.corfudb.runtime.gossip.StreamDiscoveryRequestGossip;
+import org.corfudb.runtime.gossip.StreamDiscoveryResponseGossip;
+import org.corfudb.runtime.gossip.IGossip;
 
-import org.corfudb.client.Timestamp;
-import org.corfudb.client.StreamView;
-import org.corfudb.client.RemoteLogView;
-import org.corfudb.client.RemoteException;
-import org.corfudb.client.StreamData;
+import org.corfudb.runtime.abstractions.Timestamp;
+import org.corfudb.runtime.view.StreamView;
+import org.corfudb.runtime.view.RemoteLogView;
+import org.corfudb.runtime.RemoteException;
+import org.corfudb.runtime.view.StreamData;
 
-import org.corfudb.client.gossip.StreamPullGossip;
-import org.corfudb.client.gossip.StreamBundleGossip;
+import org.corfudb.runtime.gossip.StreamPullGossip;
+import org.corfudb.runtime.gossip.StreamBundleGossip;
 import org.corfudb.runtime.entries.BundleEntry;
 import org.corfudb.runtime.view.StreamingSequencer;
 import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;

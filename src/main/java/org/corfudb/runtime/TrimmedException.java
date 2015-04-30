@@ -13,17 +13,18 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
+package org.corfudb.runtime;
 import java.io.IOException;
 
 /**
- * This exception is thrown whenever a read is attempted on an unwritten page.
+ * This exception is thrown whenever a read or write is attempted on a
+ * trimmed region.
  */
 @SuppressWarnings("serial")
-public class UnwrittenException extends IOException
+public class TrimmedException extends IOException
 {
     public long address;
-    public UnwrittenException(String desc, long address)
+    public TrimmedException(String desc, long address)
     {
         super(desc + "[address=" + address + "]");
         this.address = address;

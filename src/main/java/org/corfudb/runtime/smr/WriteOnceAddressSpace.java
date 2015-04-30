@@ -14,8 +14,8 @@
  */
 package org.corfudb.runtime.smr;
 
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.UnwrittenException;
+import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.UnwrittenException;
 import org.corfudb.runtime.view.ObjectCachedWriteOnceAddressSpace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,10 +92,10 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
     final int cachesize = 10000;
     CacheMap<Long, byte[]> cache = new CacheMap(cachesize);
 
-    CorfuDBClient cl;
+    CorfuDBRuntime cl;
     ObjectCachedWriteOnceAddressSpace cwoas;
 
-    public CorfuLogAddressSpace(CorfuDBClient tcl, int ID)
+    public CorfuLogAddressSpace(CorfuDBRuntime tcl, int ID)
     {
         this.ID = ID;
         cl = tcl;

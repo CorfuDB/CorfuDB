@@ -15,12 +15,11 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.CorfuDBView;
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
-import org.corfudb.client.RemoteException;
+import org.corfudb.runtime.RemoteException;
 
 import java.util.UUID;
 
@@ -38,14 +37,14 @@ import java.util.function.Supplier;
 
 public class StreamingSequencer {
 
-    private CorfuDBClient client;
+    private CorfuDBRuntime client;
     private UUID logID;
     private CorfuDBView view;
     private Supplier<CorfuDBView> getView;
 
     private final Logger log = LoggerFactory.getLogger(StreamingSequencer.class);
 
-    public StreamingSequencer(CorfuDBClient client)
+    public StreamingSequencer(CorfuDBRuntime client)
     {
         this.client = client;
         this.getView = () ->  {
@@ -53,7 +52,7 @@ public class StreamingSequencer {
         };
     }
 
-    public StreamingSequencer(CorfuDBClient client, UUID logID)
+    public StreamingSequencer(CorfuDBRuntime client, UUID logID)
     {
         this.client = client;
         this.logID = logID;
