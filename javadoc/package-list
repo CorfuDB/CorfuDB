@@ -1,9 +1,13 @@
 org.corfudb.client
 org.corfudb.client.abstractions
-org.corfudb.client.entries
 org.corfudb.client.gossip
-org.corfudb.client.view
 org.corfudb.infrastructure
 org.corfudb.infrastructure.thrift
 org.corfudb.runtime.collections
+org.corfudb.runtime.entries
+org.corfudb.runtime.protocols
+org.corfudb.runtime.protocols.configmasters
+org.corfudb.runtime.protocols.logunits
+org.corfudb.runtime.protocols.sequencers
 org.corfudb.runtime.smr
+org.corfudb.runtime.view
