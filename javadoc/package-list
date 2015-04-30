@@ -5,5 +5,5 @@ org.corfudb.client.gossip
 org.corfudb.client.view
 org.corfudb.infrastructure
 org.corfudb.infrastructure.thrift
-org.corfudb.runtime
 org.corfudb.runtime.collections
+org.corfudb.runtime.smr
