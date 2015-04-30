@@ -16,21 +16,18 @@ package org.corfudb.infrastructure;
 
 import org.corfudb.client.CorfuDBView;
 import org.corfudb.client.CorfuDBViewSegment;
-import org.corfudb.client.view.WriteOnceAddressSpace;
-import org.corfudb.client.IServerProtocol;
-import org.corfudb.client.configmasters.IConfigMaster;
+import org.corfudb.runtime.view.WriteOnceAddressSpace;
+import org.corfudb.runtime.protocols.IServerProtocol;
+import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.Headers;
-import org.apache.thrift.TException;
 
 import org.slf4j.MarkerFactory;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
@@ -47,7 +44,6 @@ import javax.json.JsonWriter;
 import javax.json.Json;
 import javax.json.JsonValue;
 import javax.json.JsonObject;
-import javax.json.JsonString;
 import javax.json.JsonNumber;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonReader;
@@ -56,8 +52,6 @@ import javax.json.JsonArrayBuilder;
 
 import org.corfudb.client.UnwrittenException;
 import org.corfudb.client.TrimmedException;
-import java.io.ByteArrayInputStream;
-import java.io.ObjectInputStream;
 
 import java.util.UUID;
 import java.lang.reflect.Field;
@@ -82,11 +76,11 @@ import org.corfudb.client.StreamData;
 
 import org.corfudb.client.gossip.StreamPullGossip;
 import org.corfudb.client.gossip.StreamBundleGossip;
-import org.corfudb.client.entries.BundleEntry;
-import org.corfudb.client.view.StreamingSequencer;
-import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
-import org.corfudb.client.view.CachedWriteOnceAddressSpace;
-import org.corfudb.client.view.Serializer;
+import org.corfudb.runtime.entries.BundleEntry;
+import org.corfudb.runtime.view.StreamingSequencer;
+import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
+import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
+import org.corfudb.runtime.view.Serializer;
 
 import java.util.concurrent.CompletableFuture;
 

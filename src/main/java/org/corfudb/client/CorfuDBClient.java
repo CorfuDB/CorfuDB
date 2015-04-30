@@ -33,7 +33,7 @@ import java.io.InputStreamReader;
 
 import java.util.UUID;
 
-import org.corfudb.client.configmasters.IConfigMaster;
+import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
 /**
  * Note, the following imports require Java 8

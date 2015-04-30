@@ -18,7 +18,7 @@ import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.ITimestamp;
 import org.corfudb.client.OutOfSpaceException;
 import org.corfudb.client.abstractions.Bundle;
-import org.corfudb.client.entries.CorfuDBStreamEntry;
+import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +35,7 @@ import java.util.concurrent.ExecutorService;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.ArrayList;
-import org.corfudb.client.view.Serializer;
+import org.corfudb.runtime.view.Serializer;
 
 class StreamEntryImpl implements org.corfudb.runtime.smr.StreamEntry
 {

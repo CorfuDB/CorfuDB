@@ -13,21 +13,18 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
-import java.io.IOException;
-import org.corfudb.runtime.protocols.IServerProtocol;
+package org.corfudb.runtime.protocols.sequencers;
+import org.corfudb.client.NetworkException;
+import java.util.UUID;
+
 /**
- * This exception is thrown whenever the result of an operation
- * is unknown due to a network error
+ * This interface represents a sequencer with support for streaming. Streaming
+ * sequencers store additional information about the streams they are serving.
  */
-@SuppressWarnings("serial")
-public class NetworkException extends IOException
-{
-    public IServerProtocol protocol;
-    public NetworkException(String desc, IServerProtocol protocol)
-    {
-        super(desc + "[server=" + protocol.getFullString() + "]");
-        this.protocol = protocol;
-    }
+
+public interface IStreamSequencer {
+    long sequenceGetNext(UUID stream, int count) throws NetworkException;
+    long sequenceGetCurrent(UUID stream) throws NetworkException;
+    void setAllocationSize(UUID stream, int count) throws NetworkException;
 }
 

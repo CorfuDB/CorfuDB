@@ -15,15 +15,8 @@
 
 package org.corfudb.client;
 
-import org.corfudb.client.view.Sequencer;
-import org.corfudb.client.view.WriteOnceAddressSpace;
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.OutOfSpaceException;
-
 import java.util.Map;
 import java.util.HashMap;
-import java.util.ArrayList;
-import java.util.Queue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

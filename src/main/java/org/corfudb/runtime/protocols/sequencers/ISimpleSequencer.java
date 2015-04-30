@@ -13,21 +13,18 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
-import java.io.IOException;
-import org.corfudb.runtime.protocols.IServerProtocol;
+package org.corfudb.runtime.protocols.sequencers;
+import org.corfudb.client.NetworkException;
+
 /**
- * This exception is thrown whenever the result of an operation
- * is unknown due to a network error
+ * This interface represents the simplest type of sequencer. Simple sequencers
+ * implement only sequenceGetNext(), which returns the next value in the
+ * sequence.
  */
-@SuppressWarnings("serial")
-public class NetworkException extends IOException
-{
-    public IServerProtocol protocol;
-    public NetworkException(String desc, IServerProtocol protocol)
-    {
-        super(desc + "[server=" + protocol.getFullString() + "]");
-        this.protocol = protocol;
-    }
+
+public interface ISimpleSequencer {
+    long sequenceGetNext() throws NetworkException;
+    long sequenceGetNext(int numTokens) throws NetworkException;
+    long sequenceGetCurrent() throws NetworkException;
 }
 

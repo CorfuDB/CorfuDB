@@ -15,59 +15,20 @@
 
 package org.corfudb.client.abstractions;
 
-import org.corfudb.client.view.StreamingSequencer;
-import org.corfudb.client.view.Sequencer;
-import org.corfudb.client.view.WriteOnceAddressSpace;
-import org.corfudb.client.configmasters.IConfigMaster;
-import org.corfudb.client.IServerProtocol;
-
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.CorfuDBView;
-import org.corfudb.client.entries.CorfuDBEntry;
-import org.corfudb.client.entries.CorfuDBStreamEntry;
-import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
-import org.corfudb.client.entries.CorfuDBStreamStartEntry;
+import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.client.OutOfSpaceException;
 import org.corfudb.client.LinearizationException;
 
-import java.util.Map;
-import java.util.ArrayList;
-import java.util.Queue;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.UUID;
-import java.util.HashMap;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.TimeUnit;
 import org.corfudb.client.Timestamp;
-import org.corfudb.client.UnwrittenException;
-import org.corfudb.client.TrimmedException;
 import org.corfudb.client.RemoteException;
-import org.corfudb.client.OutOfSpaceException;
+
 import java.lang.ClassNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.stream.Collectors;
-import org.corfudb.client.gossip.StreamEpochGossipEntry;
-
-import java.util.concurrent.BlockingDeque;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.LinkedBlockingQueue;
-
-import java.util.function.Supplier;
-import org.corfudb.client.ITimestamp;
-import org.corfudb.client.StreamData;
 
 /**
  *  A hop-aware stream interface.

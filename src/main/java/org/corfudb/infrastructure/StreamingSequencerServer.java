@@ -30,19 +30,16 @@ import org.corfudb.infrastructure.thrift.StreamingSequencerService;
 import org.corfudb.infrastructure.thrift.StreamSequence;
 
 import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.view.IWriteOnceAddressSpace;
-import org.corfudb.client.view.CachedWriteOnceAddressSpace;
-import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
+import org.corfudb.runtime.view.IWriteOnceAddressSpace;
+import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
+import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
 
 import java.util.UUID;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.lang.Math;
-import java.util.concurrent.locks.StampedLock;
 import java.util.concurrent.CompletableFuture;
 
-import org.corfudb.client.Timestamp;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 

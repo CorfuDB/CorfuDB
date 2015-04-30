@@ -15,13 +15,10 @@
 
 package org.corfudb.client.abstractions;
 
-import org.corfudb.client.view.Sequencer;
-import org.corfudb.client.view.WriteOnceAddressSpace;
+import org.corfudb.runtime.view.Sequencer;
+import org.corfudb.runtime.view.WriteOnceAddressSpace;
 
 import org.corfudb.client.OutOfSpaceException;
-
-import java.util.Map;
-import java.util.ArrayList;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

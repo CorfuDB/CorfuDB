@@ -41,13 +41,13 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
 
-import org.corfudb.client.configmasters.IConfigMaster;
+import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
 import java.util.UUID;
 
 import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
-
+import org.corfudb.runtime.protocols.IServerProtocol;
 /**
  * This class provides a view of the CorfuDB infrastructure. Clients
  * should not directly access the view without an interface.
@@ -436,7 +436,7 @@ public class CorfuDBView {
     @SuppressWarnings("unchecked")
     private static Map<String,Class<? extends IServerProtocol>> getSequencerProtocolClasses()
     {
-        Reflections reflections = new Reflections("org.corfudb.client.protocols.sequencers", new SubTypesScanner(false));
+        Reflections reflections = new Reflections("org.corfudb.runtime.protocols.sequencers", new SubTypesScanner(false));
         Set<Class<? extends Object>> allClasses = reflections.getSubTypesOf(Object.class);
         Map<String, Class<? extends IServerProtocol>> sequencerMap = new HashMap<String,Class<? extends IServerProtocol>>();
 
@@ -465,7 +465,7 @@ public class CorfuDBView {
     @SuppressWarnings("unchecked")
     private static Map<String,Class<? extends IServerProtocol>> getLogUnitProtocolClasses()
     {
-        Reflections reflections = new Reflections("org.corfudb.client.protocols.logunits", new SubTypesScanner(false));
+        Reflections reflections = new Reflections("org.corfudb.runtime.protocols.logunits", new SubTypesScanner(false));
         Set<Class<? extends Object>> allClasses = reflections.getSubTypesOf(Object.class);
         Map<String, Class<? extends IServerProtocol>> logunitMap = new HashMap<String,Class<? extends IServerProtocol>>();
 
@@ -494,7 +494,7 @@ public class CorfuDBView {
     @SuppressWarnings("unchecked")
     private static Map<String,Class<? extends IServerProtocol>> getConfigMasterProtocolClasses()
     {
-        Reflections reflections = new Reflections("org.corfudb.client.protocols.configmasters", new SubTypesScanner(false));
+        Reflections reflections = new Reflections("org.corfudb.runtime.protocols.configmasters", new SubTypesScanner(false));
         Set<Class<? extends Object>> allClasses = reflections.getSubTypesOf(Object.class);
         Map<String, Class<? extends IServerProtocol>> logunitMap = new HashMap<String,Class<? extends IServerProtocol>>();
 

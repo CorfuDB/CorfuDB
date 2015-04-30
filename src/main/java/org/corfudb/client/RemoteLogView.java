@@ -10,7 +10,7 @@ import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.corfudb.client.configmasters.IConfigMaster;
+import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
 /**
  *      This class manages and caches views of remote logs.

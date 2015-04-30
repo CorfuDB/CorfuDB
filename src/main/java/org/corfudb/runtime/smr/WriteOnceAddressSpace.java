@@ -16,6 +16,7 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.UnwrittenException;
+import org.corfudb.runtime.view.ObjectCachedWriteOnceAddressSpace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +28,7 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.corfudb.client.view.Serializer;
+import org.corfudb.runtime.view.Serializer;
 
 /**
  * This is the write-once address space providing storage for the shared log.
@@ -92,13 +93,13 @@ class CorfuLogAddressSpace implements WriteOnceAddressSpace
     CacheMap<Long, byte[]> cache = new CacheMap(cachesize);
 
     CorfuDBClient cl;
-    org.corfudb.client.view.ObjectCachedWriteOnceAddressSpace cwoas;
+    ObjectCachedWriteOnceAddressSpace cwoas;
 
     public CorfuLogAddressSpace(CorfuDBClient tcl, int ID)
     {
         this.ID = ID;
         cl = tcl;
-        cwoas = new org.corfudb.client.view.ObjectCachedWriteOnceAddressSpace(cl);
+        cwoas = new ObjectCachedWriteOnceAddressSpace(cl);
     }
 
     public void write(long pos, BufferStack bs)

@@ -13,21 +13,15 @@
  * limitations under the License.
  */
 
-package org.corfudb.client;
-import java.io.IOException;
-import org.corfudb.runtime.protocols.IServerProtocol;
-/**
- * This exception is thrown whenever the result of an operation
- * is unknown due to a network error
- */
-@SuppressWarnings("serial")
-public class NetworkException extends IOException
-{
-    public IServerProtocol protocol;
-    public NetworkException(String desc, IServerProtocol protocol)
-    {
-        super(desc + "[server=" + protocol.getFullString() + "]");
-        this.protocol = protocol;
-    }
-}
+package org.corfudb.runtime.entries;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This class represents entries which have a payload.
+ */
+public interface IPayload {
+    static final Logger log = LoggerFactory.getLogger(IPayload.class);
+
+}

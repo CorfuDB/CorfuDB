@@ -15,7 +15,7 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.client.CorfuDBClient;
-import org.corfudb.client.view.Sequencer;
+import org.corfudb.runtime.view.Sequencer;
 
 import java.util.Set;
 
