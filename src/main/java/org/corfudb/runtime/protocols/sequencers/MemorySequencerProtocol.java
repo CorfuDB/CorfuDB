@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -21,12 +22,19 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
     private Integer port;
     private AtomicLong sequenceNumber;
     private Long epoch;
+    static ConcurrentHashMap<Integer, MemorySequencerProtocol> memorySequencers =
+            new ConcurrentHashMap<Integer, MemorySequencerProtocol>();
     public MemorySequencerProtocol() {
         this("localhost", 0, new HashMap<String,String>(), 0L);
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
     {
+        IServerProtocol res;
+        if ((res = memorySequencers.get(port)) != null)
+        {
+            return res;
+        }
         return new MemorySequencerProtocol(host, port, options, epoch);
     }
 
@@ -39,13 +47,8 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
         sequenceNumber = new AtomicLong();
     }
 
-    /**
-     * Returns the full server string.
-     *
-     * @return A server string.
-     */
-    @Override
-    public String getFullString() {
+    public static String getProtocolString()
+    {
         return "ms";
     }
 

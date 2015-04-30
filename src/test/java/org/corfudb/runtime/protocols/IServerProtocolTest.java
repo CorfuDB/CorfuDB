@@ -4,6 +4,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
+
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
@@ -37,12 +39,29 @@ public class IServerProtocolTest {
             }
         }
     }
+
     @Test
     public void TestIfServerProtocolsImplementFactory() throws Exception{
         protocols.stream().forEach(p ->
         {
             assertTrue(p.getName() + " does not implement protocol factory!",
                     Arrays.stream(p.getMethods()).anyMatch(m->m.getName().equals("protocolFactory")));
+        });
+    }
+
+    @Test
+    public void TestIfServerContainsProtocolString() throws Exception {
+        protocols.stream().forEach(p ->
+        {
+            assertTrue(p.getName() + " does not implement getProtocolString!",
+                     Arrays.stream(p.getMethods()).anyMatch(m -> m.getName().equals("getProtocolString")));
+            try {
+                assertNotEquals(p.getName() + " does not override getProtocolString!",
+                        p.getMethod("getProtocolString").invoke(null), "unknown");
+            } catch (Exception e)
+            {
+                throw new RuntimeException(e);
+            }
         });
     }
 }

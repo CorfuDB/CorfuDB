@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime;
 
+import org.corfudb.runtime.view.CorfuDBView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +31,8 @@ import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.UUID;
 
 import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
@@ -78,9 +81,12 @@ public class CorfuDBRuntime implements AutoCloseable {
      * manages views of the CorfuDB infrastructure and provides interfaces
      * for clients to access.
      *
-     * @param configurationString   A configuration string which describes how to reach the \
-     *                              CorfuDB instance. This is usually a http address for a \
+     * @param configurationString   A configuration string which describes how to reach the
+     *                              CorfuDB instance. This is usually a http address for a
      *                              configuration master.
+     *                              The string "memory" is also acceptable, it will generate
+     *                              a local in memory instance of CorfuDB with a single
+     *                              log unit and sequencer.
      */
     public CorfuDBRuntime(String configurationString) {
         this.configurationString = configurationString;
@@ -90,6 +96,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         viewUpdatePending = new BooleanLock();
         viewUpdatePending.lock = true;
         viewManagerThread = getViewManagerThread();
+        startViewManager();
     }
 
     /**
@@ -111,17 +118,49 @@ public class CorfuDBRuntime implements AutoCloseable {
      * uses this method to fetch the most recent view.
      */
     public static org.corfudb.runtime.view.CorfuDBView retrieveView(String configString)
-        throws IOException
-    {
+        throws IOException {
+        if (configString.equals("memory"))
+        {
+            //this is an in-memory request.
+            HashMap<String, Object> MemoryView = new HashMap<String, Object>();
+            MemoryView.put("epoch", 0L);
+
+            MemoryView.put("logid", UUID.randomUUID().toString());
+            MemoryView.put("pagesize", 4096);
+
+            LinkedList<String> configMasters = new LinkedList<String>();
+            configMasters.push("mcm://localhost:0");
+            MemoryView.put("configmasters", configMasters);
+
+            LinkedList<String> sequencers = new LinkedList<String>();
+            sequencers.push("ms://localhost:0");
+            MemoryView.put("sequencers", sequencers);
+
+            HashMap<String,Object> layout = new HashMap<String,Object>();
+            LinkedList<HashMap<String,Object>> segments = new LinkedList<HashMap<String,Object>>();
+            HashMap<String,Object> segment = new HashMap<String,Object>();
+            segment.put("start", 0L);
+            segment.put("sealed", 0L);
+            LinkedList<HashMap<String,Object>> groups = new LinkedList<HashMap<String,Object>>();
+            HashMap<String,Object> group0 = new HashMap<String,Object>();
+            LinkedList<String> group0nodes = new LinkedList<String>();
+            group0nodes.add("mlu://localhost:0");
+            group0.put("nodes", group0nodes);
+            groups.add(group0);
+            segment.put("groups", groups);
+            segments.add(segment);
+            layout.put("segments", segments);
+            MemoryView.put("layout", layout);
+
+            return new CorfuDBView(MemoryView);
+        }
         HttpClient httpClient = HttpClients.createDefault();
         HttpResponse response = httpClient.execute(new HttpGet(configString));
-        if (response.getStatusLine().getStatusCode() != 200)
-        {
+        if (response.getStatusLine().getStatusCode() != 200) {
             log.warn("Failed to get view from configuration string", response.getStatusLine());
             throw new IOException("Couldn't get view from configuration string");
         }
-        try (JsonReader jr = Json.createReader(new BufferedReader(new InputStreamReader(response.getEntity().getContent()))))
-        {
+        try (JsonReader jr = Json.createReader(new BufferedReader(new InputStreamReader(response.getEntity().getContent())))) {
             return new org.corfudb.runtime.view.CorfuDBView(jr.readObject());
         }
     }

@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMapLong;
@@ -28,12 +29,20 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 
     private ConcurrentMap<Long, byte[]> memoryArray;
 
+    static ConcurrentHashMap<Integer, MemoryLogUnitProtocol> memoryUnits =
+            new ConcurrentHashMap<Integer, MemoryLogUnitProtocol>();
+
     public MemoryLogUnitProtocol() {
         this("localhost", 0, new HashMap<String,String>(), 0L);
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
     {
+        IServerProtocol res;
+        if ((res = memoryUnits.get(port)) != null)
+        {
+            return res;
+        }
         return new MemoryLogUnitProtocol(host, port, options, epoch);
     }
 
@@ -47,14 +56,9 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         memoryArray = new NonBlockingHashMapLong<byte[]>();
     }
 
-    /**
-     * Returns the full server string.
-     *
-     * @return A server string.
-     */
-    @Override
-    public String getFullString() {
-        return "memlu";
+    public static String getProtocolString()
+    {
+        return "mlu";
     }
 
     /**
