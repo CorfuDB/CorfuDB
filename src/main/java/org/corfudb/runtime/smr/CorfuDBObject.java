@@ -12,15 +12,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
-import edu.umd.cs.findbugs.annotations.NoWarning;
 import org.corfudb.client.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 

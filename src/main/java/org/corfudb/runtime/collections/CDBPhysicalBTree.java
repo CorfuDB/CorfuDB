@@ -1,11 +1,10 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.*;
-
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.HashMap;
 import org.corfudb.client.ITimestamp;
+import org.corfudb.runtime.smr.*;
 
 public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
 

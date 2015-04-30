@@ -1,4 +1,4 @@
-namespace java org.corfudb.runtime
+namespace java org.corfudb.runtime.smr
 
 
 service RemoteReadService {

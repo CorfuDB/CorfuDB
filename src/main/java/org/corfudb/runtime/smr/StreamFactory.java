@@ -1,8 +1,6 @@
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
 import org.corfudb.client.CorfuDBClient;
-
-import java.util.HashMap;
 
 /**
  * Created by crossbach on 4/3/15.

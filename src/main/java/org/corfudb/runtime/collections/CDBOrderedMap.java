@@ -1,7 +1,7 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.AbstractRuntime;
-import org.corfudb.runtime.CorfuDBObject;
+import org.corfudb.runtime.smr.AbstractRuntime;
+import org.corfudb.runtime.smr.CorfuDBObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

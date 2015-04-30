@@ -8,23 +8,14 @@ import org.corfudb.client.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.client.entries.CorfuDBStreamStartEntry;
 import org.corfudb.client.Timestamp;
 
-import java.io.Serializable;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
-import java.io.ObjectOutputStream;
-import java.io.ObjectOutput;
 import java.io.IOException;
 
-import java.util.function.Supplier;
-
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.UnsafeOutput;
 import com.esotericsoftware.kryo.io.UnsafeInput;
 
 import java.util.zip.DeflaterOutputStream;
-import java.util.zip.DeflaterInputStream;
 import java.util.zip.InflaterInputStream;
 
 import java.util.HashMap;
@@ -34,16 +25,16 @@ import java.util.Set;
 import java.util.Map;
 import java.util.HashSet;
 
-import org.corfudb.runtime.SMRCommandWrapper;
-import org.corfudb.runtime.TxDec;
-import org.corfudb.runtime.TxInt;
-import org.corfudb.runtime.TxIntWriteSetEntry;
-import org.corfudb.runtime.TxIntReadSetEntry;
+import org.corfudb.runtime.smr.SMRCommandWrapper;
+import org.corfudb.runtime.smr.TxDec;
+import org.corfudb.runtime.smr.TxInt;
+import org.corfudb.runtime.smr.TxIntWriteSetEntry;
+import org.corfudb.runtime.smr.TxIntReadSetEntry;
 import org.corfudb.client.ITimestamp;
 import java.util.ArrayList;
 import java.util.LinkedList;
-import org.corfudb.runtime.Triple;
-import org.corfudb.runtime.Pair;
+import org.corfudb.runtime.smr.Triple;
+import org.corfudb.runtime.smr.Pair;
 
 /** This class provides helpers for serialization.
  */

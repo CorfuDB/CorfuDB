@@ -1,8 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.AbstractRuntime;
-import org.corfudb.runtime.DirectoryService;
-import org.corfudb.runtime.IStreamFactory;
+import org.corfudb.runtime.smr.AbstractRuntime;
+import org.corfudb.runtime.smr.DirectoryService;
+import org.corfudb.runtime.smr.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;

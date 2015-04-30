@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -21,6 +21,7 @@ import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.*;
 import org.corfudb.client.ITimestamp;
+import org.corfudb.runtime.smr.RemoteReadService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

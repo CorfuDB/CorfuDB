@@ -1,4 +1,4 @@
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
 import org.corfudb.client.ITimestamp;
 import java.io.Serializable;

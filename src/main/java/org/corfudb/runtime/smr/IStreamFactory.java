@@ -12,16 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.Serializable;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+package org.corfudb.runtime.smr;
 
 public interface IStreamFactory
 {

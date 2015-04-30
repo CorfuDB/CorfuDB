@@ -13,9 +13,10 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
 import java.util.*;
+
 import org.corfudb.runtime.collections.CorfuDBMap;
 import org.corfudb.runtime.collections.CorfuDBCounter;
 

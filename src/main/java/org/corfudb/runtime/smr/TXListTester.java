@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
 import java.util.*;
 import java.util.concurrent.CyclicBarrier;

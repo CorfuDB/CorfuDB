@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
 import org.corfudb.client.CorfuDBClient;
 import org.corfudb.client.UnwrittenException;
@@ -24,17 +24,10 @@ import java.util.Map;
 import java.io.Serializable;
 
 
-import java.io.Serializable;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.corfudb.client.CorfuDBClient;
-import org.corfudb.runtime.collections.*;
 import org.corfudb.client.view.Serializer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * This is the write-once address space providing storage for the shared log.

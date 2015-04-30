@@ -1,4 +1,4 @@
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 import java.io.Serializable;
 
 //todo: custom serialization + unit tests

@@ -1,8 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.AbstractRuntime;
-import org.corfudb.runtime.CorfuDBObject;
-import org.corfudb.runtime.IStreamFactory;
+import org.corfudb.runtime.smr.AbstractRuntime;
+import org.corfudb.runtime.smr.CorfuDBObject;
+import org.corfudb.runtime.smr.IStreamFactory;
 
 import java.util.*;
 

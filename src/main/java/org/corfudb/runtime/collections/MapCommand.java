@@ -1,6 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.CorfuDBObjectCommand;
+import org.corfudb.runtime.smr.CorfuDBObjectCommand;
 
 class MapCommand<K,V> extends CorfuDBObjectCommand
 {

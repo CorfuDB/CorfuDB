@@ -1,12 +1,15 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.*;
+import org.corfudb.runtime.smr.AbstractRuntime;
+import org.corfudb.runtime.smr.CorfuDBObject;
+import org.corfudb.runtime.smr.Pair;
+import org.corfudb.runtime.smr.Triple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
+
 import org.corfudb.client.ITimestamp;
 
 /**

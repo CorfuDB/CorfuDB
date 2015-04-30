@@ -1,8 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.AbstractRuntime;
-import org.corfudb.runtime.CorfuDBObjectCommand;
-import org.corfudb.runtime.IStreamFactory;
+import org.corfudb.runtime.smr.AbstractRuntime;
+import org.corfudb.runtime.smr.CorfuDBObjectCommand;
+import org.corfudb.runtime.smr.IStreamFactory;
 import org.corfudb.client.ITimestamp;
 
 import java.util.ArrayList;

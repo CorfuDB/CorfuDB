@@ -3,7 +3,10 @@ package org.corfudb.runtime.collections;
 import org.apache.zookeeper.*;
 import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Stat;
-import org.corfudb.runtime.*;
+import org.corfudb.runtime.smr.AbstractRuntime;
+import org.corfudb.runtime.smr.CorfuDBObject;
+import org.corfudb.runtime.smr.CorfuDBObjectCommand;
+import org.corfudb.runtime.smr.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
 import org.corfudb.client.ITimestamp;
 import org.slf4j.Logger;
@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * It extends SimpleRuntime and overloads apply, update_helper and query_helper.
  *
  */
-public class TXRuntime extends BaseRuntime
+public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
 {
 
     static Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
@@ -44,7 +44,7 @@ public class TXRuntime extends BaseRuntime
     // objects actually take advantage of this setting.
     Boolean prohibitMultiVersionReads = false;
 
-    final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
+    final ThreadLocal<org.corfudb.runtime.smr.TxInt> curtx = new ThreadLocal<org.corfudb.runtime.smr.TxInt>();
 
     //used to communicate decisions from the query_helper thread to waiting endtx calls
     final Map<UUID, Boolean> decisionmap;
@@ -91,7 +91,7 @@ public class TXRuntime extends BaseRuntime
     {
         if (curtx.get() != null) //there's already an executing tx
             throw new RuntimeException("tx already executing!"); //should we do something different to support nested txes?
-        curtx.set(new TxInt());
+        curtx.set(new org.corfudb.runtime.smr.TxInt());
     }
 
     public UUID getTxid() {
@@ -427,7 +427,7 @@ class TXEngine implements SMRLearner
     {
         dbglog.debug("[{}] deliver {}", cob.getID(), timestamp);
 
-        if (command instanceof TxInt) //is the command a transaction or a linearizable singleton?
+        if (command instanceof org.corfudb.runtime.smr.TxInt) //is the command a transaction or a linearizable singleton?
         {
             process_tx_intention(command, curstream, timestamp);
         }
@@ -444,10 +444,10 @@ class TXEngine implements SMRLearner
 
     }
 
-    Map<UUID, TxInt> pendingtxes = new HashMap();
+    Map<UUID, org.corfudb.runtime.smr.TxInt> pendingtxes = new HashMap();
 
 
-    public void addPending(ITimestamp timestamp, TxInt txint)
+    public void addPending(ITimestamp timestamp, org.corfudb.runtime.smr.TxInt txint)
     {
         if(!pendingtxes.containsKey(timestamp))
         {
@@ -455,7 +455,7 @@ class TXEngine implements SMRLearner
         }
     }
 
-    public TxInt getPending(UUID txid)
+    public org.corfudb.runtime.smr.TxInt getPending(UUID txid)
     {
         return pendingtxes.get(txid);
     }
@@ -475,7 +475,7 @@ class TXEngine implements SMRLearner
             txr.ctr_numtxint.incrementAndGet();
         }
 
-        TxInt T = (TxInt) command;
+        org.corfudb.runtime.smr.TxInt T = (org.corfudb.runtime.smr.TxInt) command;
 
         txr.initDecisionState(T.getTxid());
 
@@ -521,10 +521,10 @@ class TXEngine implements SMRLearner
                 //we now need to check if the transaction conflicts with any of the pending transactions
                 //to this object; if so, for now we abort immediately. in the future, we need to maintain
                 //a dependency graph
-                Iterator<TxInt> it = pendingtxes.values().iterator();
+                Iterator<org.corfudb.runtime.smr.TxInt> it = pendingtxes.values().iterator();
                 while (it.hasNext())
                 {
-                    TxInt T2 = it.next();
+                    org.corfudb.runtime.smr.TxInt T2 = it.next();
                     if(T.getTxid().equals(T2.getTxid())) continue;
                     //does T2 write something that T reads?
                     if (T.readsSomethingWrittenBy(T2))
@@ -573,7 +573,7 @@ class TXEngine implements SMRLearner
         dbglog.debug("[" + cob.getID() + "] process_tx_dec " + curstream + "." + timestamp + " for txint " + decrec.txid + " at " + curstream + "." + decrec.txint_timestamp);
 
 
-        TxInt T = getPending(decrec.txid);
+        org.corfudb.runtime.smr.TxInt T = getPending(decrec.txid);
         if(T==null) //already been decided and applied by this TXEngine
         {
             return;

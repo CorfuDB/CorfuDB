@@ -12,10 +12,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime;
+package org.corfudb.runtime.smr;
 
 import java.io.Serializable;
-import java.util.Set;
 
 /**
  * This is the interface exposed by CorfuDB to developers of new objects.
@@ -35,9 +34,9 @@ public interface AbstractRuntime
      *
      * @param cob the calling CorfuDB object
      */
-    boolean query_helper(CorfuDBObject cob);
-    boolean query_helper(CorfuDBObject cob, Serializable key);
-    boolean query_helper(CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command);
+    boolean query_helper(org.corfudb.runtime.smr.CorfuDBObject cob);
+    boolean query_helper(org.corfudb.runtime.smr.CorfuDBObject cob, Serializable key);
+    boolean query_helper(org.corfudb.runtime.smr.CorfuDBObject cob, Serializable key, CorfuDBObjectCommand command);
 
     /**
      * This function is to be called within any mutator method in the CorfuDB object.
@@ -49,10 +48,10 @@ public interface AbstractRuntime
      *  @param cob the calling CorfuDB object
      * @param update a serializable description of the update
      */
-    void update_helper(CorfuDBObject cob, CorfuDBObjectCommand update);
+    void update_helper(org.corfudb.runtime.smr.CorfuDBObject cob, CorfuDBObjectCommand update);
 
 
-    void update_helper(CorfuDBObject cob, CorfuDBObjectCommand update, Serializable key);
+    void update_helper(org.corfudb.runtime.smr.CorfuDBObject cob, CorfuDBObjectCommand update, Serializable key);
 
 
     /**
@@ -72,9 +71,9 @@ public interface AbstractRuntime
      * @param query a description of the query
      * @param update a serializable description of the update
      */
-    void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update);
+    void query_then_update_helper(org.corfudb.runtime.smr.CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update);
 
-    void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update, Serializable key);
+    void query_then_update_helper(org.corfudb.runtime.smr.CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update, Serializable key);
 
     /**
      * This function is used to register a CorfuDB object with the runtime. Future updates that
@@ -82,9 +81,9 @@ public interface AbstractRuntime
      *
      * @param obj
      */
-    void registerObject(CorfuDBObject obj);
+    void registerObject(org.corfudb.runtime.smr.CorfuDBObject obj);
 
-    void registerObject(CorfuDBObject obj, boolean remote);
+    void registerObject(org.corfudb.runtime.smr.CorfuDBObject obj, boolean remote);
 
     /**
      * Starts a new transaction tied to the executing thread. Transactions cannot span threads.
