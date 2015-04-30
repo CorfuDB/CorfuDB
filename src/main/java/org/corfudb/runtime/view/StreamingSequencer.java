@@ -47,9 +47,7 @@ public class StreamingSequencer {
     public StreamingSequencer(CorfuDBRuntime client)
     {
         this.client = client;
-        this.getView = () ->  {
-            return this.client.getView();
-        };
+        this.getView = this.client::getView;
     }
 
     public StreamingSequencer(CorfuDBRuntime client, UUID logID)

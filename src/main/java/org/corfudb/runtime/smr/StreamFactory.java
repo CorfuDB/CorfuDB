@@ -1,6 +1,7 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
 
 /**
  * Created by crossbach on 4/3/15.
@@ -37,7 +38,7 @@ public class StreamFactory {
             StreamImplType type
         ) {
         switch(type) {
-            case DUMMY: return new IStreamFactoryImpl(new CorfuLogAddressSpace(client, 0), new CorfuStreamingSequencer(client));
+            case DUMMY: return new IStreamFactoryImpl(new CachedWriteOnceAddressSpace(client), new CorfuStreamingSequencer(client));
             case HOP: return new HopAdapterIStreamFactoryImpl(client);
             case MEMORY: return new MemoryStreamFactoryImpl(false, false);
             default:

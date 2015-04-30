@@ -77,9 +77,9 @@ class StreamEntryImpl implements org.corfudb.runtime.smr.StreamEntry
 
 class IStreamFactoryImpl implements IStreamFactory
 {
-    org.corfudb.runtime.smr.WriteOnceAddressSpace was;
+    org.corfudb.runtime.view.IWriteOnceAddressSpace was;
     org.corfudb.runtime.smr.StreamingSequencer ss;
-    public IStreamFactoryImpl(org.corfudb.runtime.smr.WriteOnceAddressSpace twas, org.corfudb.runtime.smr.StreamingSequencer tss)
+    public IStreamFactoryImpl(org.corfudb.runtime.view.IWriteOnceAddressSpace twas, org.corfudb.runtime.smr.StreamingSequencer tss)
     {
         was = twas;
         ss = tss;
@@ -598,7 +598,7 @@ class StreamImpl implements org.corfudb.runtime.smr.Stream
 
     long streamid;
     org.corfudb.runtime.smr.StreamingSequencer seq;
-    org.corfudb.runtime.smr.WriteOnceAddressSpace addrspace;
+    org.corfudb.runtime.view.IWriteOnceAddressSpace addrspace;
     ConcurrentHashMap<Long, org.corfudb.runtime.smr.StreamEntry> m_cache;
     Lock biglock;
     long curpos;
@@ -609,7 +609,7 @@ class StreamImpl implements org.corfudb.runtime.smr.Stream
         return streamid;
     }
 
-    StreamImpl(long tstreamid, org.corfudb.runtime.smr.StreamingSequencer tss, org.corfudb.runtime.smr.WriteOnceAddressSpace tlas)
+    StreamImpl(long tstreamid, org.corfudb.runtime.smr.StreamingSequencer tss, org.corfudb.runtime.view.IWriteOnceAddressSpace tlas)
     {
         streamid = tstreamid;
         seq = tss;
@@ -624,7 +624,15 @@ class StreamImpl implements org.corfudb.runtime.smr.Stream
         Timestamp T = new Timestamp(0, ret, 0, this.getStreamID()); //todo: fill in the right epoch
         dbglog.debug("reserved slot {}", ret);
         org.corfudb.runtime.smr.StreamEntry S = new StreamEntryImpl(payload, T, streams);
-        addrspace.write(ret,(Serializable) S);
+        try
+        {
+            addrspace.write(ret,Serializer.serialize_compressed(S));
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeException(ex);
+        }
+
         dbglog.debug("wrote slot {}", ret);
         return T;
     }
@@ -640,7 +648,7 @@ class StreamImpl implements org.corfudb.runtime.smr.Stream
     {
         //this is a hacky implementation that doesn't take multi-log hopping (epochs, logids) into account
         Timestamp stoppos = (Timestamp)istoppos;
-        if(stoppos!=null && stoppos.logid!=addrspace.getID()) throw new RuntimeException("readnext using timestamp of different log!");
+        //if(stoppos!=null && stoppos.logid!=addrspace.getID()) throw new RuntimeException("readnext using timestamp of different log!");
         org.corfudb.runtime.smr.StreamEntry ret = null;
         while(true)
         {
@@ -653,11 +661,14 @@ class StreamImpl implements org.corfudb.runtime.smr.Stream
             } finally {
                 biglock.unlock();
             }
-            ret = (org.corfudb.runtime.smr.StreamEntry) addrspace.readObject(readpos);
-            /*
-            BufferStack bs = addrspace.read(readpos);
-            ret = (StreamEntry) bs.deserialize();
-            */
+            try {
+                ret = (org.corfudb.runtime.smr.StreamEntry) Serializer.deserialize_compressed(addrspace.read(readpos));
+            }
+            catch (Exception ex)
+            {
+                throw new RuntimeException(ex);
+            }
+
             if(ret.isInStream(this.getStreamID()))
                 break;
             dbglog.debug("skipping...");
