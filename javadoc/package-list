@@ -1,10 +1,10 @@
 org.corfudb.infrastructure
 org.corfudb.infrastructure.thrift
 org.corfudb.runtime
-org.corfudb.runtime.abstractions
 org.corfudb.runtime.collections
 org.corfudb.runtime.entries
 org.corfudb.runtime.gossip
+org.corfudb.runtime.log
 org.corfudb.runtime.protocols
 org.corfudb.runtime.protocols.configmasters
 org.corfudb.runtime.protocols.logunits
