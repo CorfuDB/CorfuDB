@@ -3,6 +3,7 @@ package org.corfudb.runtime.stream;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
+import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.IStreamingSequencer;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
 
@@ -16,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class SimpleStream implements IStream {
 
-    IStreamingSequencer sequencer;
+    ISequencer sequencer;
     IWriteOnceAddressSpace addressSpace;
     UUID streamID;
     AtomicLong streamPointer;
@@ -27,7 +28,7 @@ public class SimpleStream implements IStream {
      * @param sequencer         A streaming sequencer to use
      * @param addressSpace      A write once address space to use
      */
-    public SimpleStream(UUID streamID, IStreamingSequencer sequencer, IWriteOnceAddressSpace addressSpace) {
+    public SimpleStream(UUID streamID, ISequencer sequencer, IWriteOnceAddressSpace addressSpace) {
         this.sequencer = sequencer;
         this.addressSpace = addressSpace;
         this.streamID = streamID;
@@ -43,7 +44,7 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp append(Serializable data) throws OutOfSpaceException, IOException {
-        long sequence = sequencer.getNext(streamID);
+        long sequence = sequencer.getNext();
         SimpleTimestamp timestamp = new SimpleTimestamp(sequence);
         addressSpace.write(sequence, new SimpleStreamEntry(streamID, data, timestamp));
         return timestamp;
@@ -59,7 +60,7 @@ public class SimpleStream implements IStream {
      */
     @Override
     public IStreamEntry readNextEntry() throws HoleEncounteredException, TrimmedException, IOException {
-        long current = sequencer.getCurrent(streamID);
+        long current = sequencer.getCurrent();
         synchronized (this)
         {
             for (long i = streamPointer.get(); i < current; i++) {
@@ -94,7 +95,7 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp check(boolean cached) {
-        return new SimpleTimestamp(sequencer.getCurrent(streamID)-1);
+        return new SimpleTimestamp(sequencer.getCurrent()-1);
     }
 
     /**
