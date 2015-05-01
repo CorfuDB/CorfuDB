@@ -68,7 +68,7 @@ import org.corfudb.runtime.gossip.StreamDiscoveryRequestGossip;
 import org.corfudb.runtime.gossip.StreamDiscoveryResponseGossip;
 import org.corfudb.runtime.gossip.IGossip;
 
-import org.corfudb.runtime.log.Timestamp;
+import org.corfudb.runtime.stream.Timestamp;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.runtime.view.RemoteLogView;
 import org.corfudb.runtime.RemoteException;
@@ -229,7 +229,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         currentRemoteView = new RemoteLogView();
         //UUID is going to be random for now, since this configuration is not persistent
         UUID logID =  UUID.randomUUID();
-        log.info("New log instance id= " + logID.toString());
+        log.info("New stream instance id= " + logID.toString());
         currentView.setUUID(logID);
         return this;
     }
@@ -253,17 +253,17 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                            {
                                if (currentRemoteView.addLog(rlog, remoteLogList.get(rlog)))
                                {
-                                   log.info("Discovered new remote log " + rlog);
+                                   log.info("Discovered new remote stream " + rlog);
                                }
                            }
                         }
-                        //Tell the remote log that we exist
+                        //Tell the remote stream that we exist
                         cm.addLog(currentView.getUUID(), currentView.getConfigMasters().get(0).getFullString());
                     }
                 }
                 catch (Exception e)
                 {
-                    log.warn("Error talking to remote log" ,e);
+                    log.warn("Error talking to remote stream" ,e);
                 }
             }
         }
@@ -489,7 +489,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     {
        if (currentRemoteView.addLog(UUID.fromString(params.getString("logid")), params.getString("path")))
        {
-           log.info("Learned new remote log " + params.getString("logid"));
+           log.info("Learned new remote stream " + params.getString("logid"));
        }
 
         return JsonValue.FALSE;

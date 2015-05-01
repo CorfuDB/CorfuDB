@@ -57,10 +57,10 @@ public class RemoteLogView {
     }
 
     /**
-     * Add a log to the remote view.
+     * Add a stream to the remote view.
      *
-     * @param   logID       The ID of the remote log.
-     * @param   logRemote   The master string of the remote log.
+     * @param   logID       The ID of the remote stream.
+     * @param   logRemote   The master string of the remote stream.
      */
     public boolean addLog(UUID logID, String logRemote)
     {
@@ -68,7 +68,7 @@ public class RemoteLogView {
     }
 
     /**
-     * Add a log to the remote view, dynamically discovering the logID.
+     * Add a stream to the remote view, dynamically discovering the logID.
      *
      * @param logRemote     The master string of the remote.
      */
@@ -78,7 +78,7 @@ public class RemoteLogView {
     }
 
     /**
-     * Add a log to the remote view, dynamically discovering the logID,
+     * Add a stream to the remote view, dynamically discovering the logID,
      * only if it is not a given UUId.
      *
      * @param logRemote     The master string of the remote.
@@ -105,7 +105,7 @@ public class RemoteLogView {
         }
         catch (NullPointerException ie)
         {
-           log.debug("Exception dynamically discovering remote log", ie);
+           log.debug("Exception dynamically discovering remote stream", ie);
             return null;
         }
     }
@@ -123,9 +123,9 @@ public class RemoteLogView {
     }
 
     /**
-     * Check if the log is accessible. If it is not, it is removed from the view.
+     * Check if the stream is accessible. If it is not, it is removed from the view.
      *
-     * @return  True if the log was accessible, false otherwise.
+     * @return  True if the stream was accessible, false otherwise.
      */
     public boolean checkLog(UUID logID)
     {
@@ -137,20 +137,20 @@ public class RemoteLogView {
             {
                 return true;
             }
-            log.info("Couldn't communicate with remote configmaster for log "+ logID + ", removing from view.");
+            log.info("Couldn't communicate with remote configmaster for stream "+ logID + ", removing from view.");
         }
         catch (Exception ex)
         {
-            log.info("Exception communicating with remote log " + logID + ", removing from view.");
+            log.info("Exception communicating with remote stream " + logID + ", removing from view.");
         }
         remoteMap.remove(logID);
         return false;
     }
 
     /**
-     * Get the view to the remote log.
+     * Get the view to the remote stream.
      *
-     * @param logID     The ID of the remote log.
+     * @param logID     The ID of the remote stream.
      */
     public CorfuDBView getLog(UUID logID)
     throws RemoteException
@@ -158,7 +158,7 @@ public class RemoteLogView {
         RemoteData rd = remoteMap.get(logID);
         if (rd == null)
         {
-            throw new RemoteException("Couldn't access remote log, no path to remote log.", logID);
+            throw new RemoteException("Couldn't access remote stream, no path to remote stream.", logID);
         }
         else
         {
@@ -167,9 +167,9 @@ public class RemoteLogView {
     }
 
     /**
-     * Get the configuration string of the remote log.
+     * Get the configuration string of the remote stream.
      *
-     * @param logID     The ID of the remote log.
+     * @param logID     The ID of the remote stream.
      */
     public String getLogString(UUID logID)
     throws RemoteException
@@ -177,7 +177,7 @@ public class RemoteLogView {
         RemoteData rd = remoteMap.get(logID);
         if (rd == null)
         {
-            throw new RemoteException("Couldn't access remote log, no path to remote log.", logID);
+            throw new RemoteException("Couldn't access remote stream, no path to remote stream.", logID);
         }
         else
         {

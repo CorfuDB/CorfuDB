@@ -2,7 +2,7 @@ package org.corfudb.runtime.smr;
 
 import java.io.Serializable;
 import java.util.UUID;
-import org.corfudb.runtime.log.ITimestamp;
+import org.corfudb.runtime.stream.ITimestamp;
 
 public class TxDec implements Serializable
 {

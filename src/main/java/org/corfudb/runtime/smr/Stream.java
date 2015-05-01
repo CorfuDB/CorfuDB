@@ -14,15 +14,15 @@
  */
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.log.ITimestamp;
+import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.Serializable;
 import java.util.Set;
 
 /**
  * A Stream is a subsequence of entries residing in a single
- * underlying log.
- * It enables playback of entries in the stream in strict log order.
+ * underlying stream.
+ * It enables playback of entries in the stream in strict stream order.
  * Entries can belong to multiple streams.
  * The Stream object allows appends to arbitrary other streams.
  */
@@ -45,14 +45,14 @@ public interface Stream
     /**
      * reads the next entry in the stream
      *
-     * @return       the next log entry
+     * @return       the next stream entry
      */
     StreamEntry readNext();
 
     /**
      * reads the next entry in the stream that has a position strictly lower than stoppos.
-     * stoppos is required so that the runtime can check the current tail of the log using checkTail() and
-     * then play the log until that tail position and no further, in order to get linearizable
+     * stoppos is required so that the runtime can check the current tail of the stream using checkTail() and
+     * then play the stream until that tail position and no further, in order to get linearizable
      * semantics with a minimum number of reads.
      *
      * @param  stoppos  the stopping position for the read
@@ -63,7 +63,7 @@ public interface Stream
     /**
      * returns the current tail position of the stream (this is exclusive, so a checkTail
      * on an empty stream returns 0). this also synchronizes local stream metadata with the underlying
-     * log and establishes a linearization point for subsequent readNexts; any subsequent readnext will
+     * stream and establishes a linearization point for subsequent readNexts; any subsequent readnext will
      * reflect entries that were appended before the checkTail was issued.
      *
      * @return          the current tail of the stream
@@ -91,7 +91,7 @@ public interface Stream
 
 /**
  * Used by Stream to wrap read values, so that some metadata
- * (e.g., the position of the entry in the underlying log) can be returned
+ * (e.g., the position of the entry in the underlying stream) can be returned
  * along with the payload.
  */
 
@@ -202,7 +202,7 @@ class Timestamp implements ITimestamp, Serializable
         {
             if (this.epoch == T2.epoch && this.pos == T2.pos)
                 x = 0;
-            else if (this.epoch < T2.epoch || (this.epoch == T2.epoch && this.pos < T2.pos)) //on the same epoch, logpos must be comparable since they're on the same log
+            else if (this.epoch < T2.epoch || (this.epoch == T2.epoch && this.pos < T2.pos)) //on the same epoch, logpos must be comparable since they're on the same stream
                 x = -1;
             else
                 x = 1;
@@ -211,7 +211,7 @@ class Timestamp implements ITimestamp, Serializable
         {
             throw new ClassCastException("different streams!");
         }
-        //same log, different streams
+        //same stream, different streams
 //        else if(this.logid==T2.logid && this.streamid!=T2.streamid)
 //        {
 //            if(this.pos==T2.pos)
@@ -278,7 +278,7 @@ class Timestamp implements ITimestamp, Serializable
         {
             if (this.epoch == T2.epoch && this.pos == T2.pos)
                 x = 0;
-            else if (this.epoch < T2.epoch || (this.epoch == T2.epoch && this.pos < T2.pos)) //on the same epoch, logpos must be comparable since they're on the same log
+            else if (this.epoch < T2.epoch || (this.epoch == T2.epoch && this.pos < T2.pos)) //on the same epoch, logpos must be comparable since they're on the same stream
                 x = -1;
             else
                 x = 1;
@@ -287,7 +287,7 @@ class Timestamp implements ITimestamp, Serializable
         {
             throw new ClassCastException("different streams!");
         }
-        //same log, different streams
+        //same stream, different streams
 //        else if(this.logid==T2.logid && this.streamid!=T2.streamid)
 //        {
 //            if(this.pos==T2.pos)

@@ -8,9 +8,9 @@ import java.util.UUID;
 public class StreamData {
     /** The ID of the stream */
     public UUID streamID;
-    /** The log the stream is currently on (at lastupdate) */
+    /** The stream the stream is currently on (at lastupdate) */
     public UUID currentLog;
-    /** The log the stream starts on. */
+    /** The stream the stream starts on. */
     public UUID startLog;
     /** The epoch the stream is in (at lastupdate) */
     public long epoch;

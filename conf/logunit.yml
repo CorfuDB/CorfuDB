@@ -5,10 +5,10 @@
 # on port 8001.
 #
 # Required:
-# role (string) - org.corfudb.sharedlog.loggingunit.LogUnitTask selects the log unit
+# role (string) - org.corfudb.sharedlog.loggingunit.LogUnitTask selects the stream unit
 # port (number) - the port number to run on
 # capacity (number) - the size of the loggingunit (in?)
-# ramdisk (boolean) - whether or not the log unit is backed by disk or RAM
+# ramdisk (boolean) - whether or not the stream unit is backed by disk or RAM
 # pagesize (number) - the size of each page, in bytes
 # trim (number) - the offet of the trim marker
 #

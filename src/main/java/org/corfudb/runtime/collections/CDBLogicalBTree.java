@@ -3,7 +3,7 @@ package org.corfudb.runtime.collections;
 import org.corfudb.runtime.smr.AbstractRuntime;
 import org.corfudb.runtime.smr.CorfuDBObjectCommand;
 import org.corfudb.runtime.smr.IStreamFactory;
-import org.corfudb.runtime.log.ITimestamp;
+import org.corfudb.runtime.stream.ITimestamp;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -51,7 +51,7 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
     }
 
     /**
-     * log completion time. return true if
+     * stream completion time. return true if
      * we actually completed this request through the
      * normal channels...
      * @param _op

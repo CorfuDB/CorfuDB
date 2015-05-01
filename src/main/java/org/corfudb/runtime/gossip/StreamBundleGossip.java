@@ -14,7 +14,7 @@ public class StreamBundleGossip implements IGossip {
     public UUID streamID;
     /** The stream that is being pulled */
     public Map<UUID,Long> epochMap;
-    /** The destination log of the stream */
+    /** The destination stream of the stream */
     public UUID destinationLog;
     /** The destination stream of the stream */
     public UUID destinationStream;

@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime.log;
+package org.corfudb.runtime.stream;
 
 import org.corfudb.runtime.OutOfSpaceException;
 
@@ -32,12 +32,12 @@ import java.io.Serializable;
  */
 public class Bundle {
 
-    IStream stream;
+    IHopStream stream;
     List<UUID> remoteStreams;
     Serializable payload;
     boolean allocateSlots;
 
-    public Bundle(IStream s, List<UUID> remoteStreams, byte[] payload, boolean allocateSlots)
+    public Bundle(IHopStream s, List<UUID> remoteStreams, byte[] payload, boolean allocateSlots)
     throws IOException
     {
         this.stream = s;
@@ -46,7 +46,7 @@ public class Bundle {
         this.allocateSlots = allocateSlots;
     }
 
-    public Bundle(IStream s, List<UUID> remoteStreams, Serializable payload, boolean allocateSlots)
+    public Bundle(IHopStream s, List<UUID> remoteStreams, Serializable payload, boolean allocateSlots)
     throws IOException
     {
         this.stream = s;

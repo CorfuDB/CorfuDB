@@ -479,7 +479,7 @@ public class CorfuDBView {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Found ").append(logunitMap.size()).append(" supported log unit(s):\n");
+        sb.append("Found ").append(logunitMap.size()).append(" supported stream unit(s):\n");
         for(String proto : logunitMap.keySet())
         {
             sb.append(proto + "\t\t- " + logunitMap.get(proto).toString() + "\n");

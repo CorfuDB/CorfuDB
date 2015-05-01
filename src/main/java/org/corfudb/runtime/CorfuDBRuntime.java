@@ -86,7 +86,7 @@ public class CorfuDBRuntime implements AutoCloseable {
      *                              configuration master.
      *                              The string "memory" is also acceptable, it will generate
      *                              a local in memory instance of CorfuDB with a single
-     *                              log unit and sequencer.
+     *                              stream unit and sequencer.
      */
     public CorfuDBRuntime(String configurationString) {
         this.configurationString = configurationString;
@@ -207,11 +207,11 @@ public class CorfuDBRuntime implements AutoCloseable {
     }
 
     /**
-     * Get the view for a remote log.
+     * Get the view for a remote stream.
      *
-     * @param logID     The UUID of the remote log to retrieve the view for.
+     * @param logID     The UUID of the remote stream to retrieve the view for.
      *
-     * @return          A CorfuDBView, if the remote log can be retrieved, or
+     * @return          A CorfuDBView, if the remote stream can be retrieved, or
      *                  null, if the UUID cannot be resolved.
      */
     public org.corfudb.runtime.view.CorfuDBView getView(UUID logID)
@@ -220,7 +220,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         if (logID == null) {return getView();}
         if (logID.equals(localID)) { return getView(); }
         /** Go to the current view, and communicate with the local configuration
-         *  master to resolve the log.
+         *  master to resolve the stream.
          */
         try{
             return remoteView.getLog(logID);
@@ -229,7 +229,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         {
             IConfigMaster cm = (IConfigMaster) getView().getConfigMasters().get(0);
             String remoteLog = cm.getLog(logID);
-            /** Go to the remote log, communicate with the remote configuration master
+            /** Go to the remote stream, communicate with the remote configuration master
              * and resolve the remote configuration.
              */
             remoteLog = remoteLog.replace("cdbcm", "http");

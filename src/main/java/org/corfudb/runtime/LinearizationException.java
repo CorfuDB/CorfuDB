@@ -15,7 +15,7 @@
 
 package org.corfudb.runtime;
 
-import org.corfudb.runtime.log.Timestamp;
+import org.corfudb.runtime.stream.Timestamp;
 
 /**
  * This exception is thrown when a linearization issue occurs (typically

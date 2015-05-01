@@ -14,7 +14,7 @@
  */
 // @author Dahlia Malkhi
 //
-// implement a cyclic log store: logically infinite log sequence mapped onto a UNICAPACITY array of fixed-entrys
+// implement a cyclic stream store: logically infinite stream sequence mapped onto a UNICAPACITY array of fixed-entrys
 package org.corfudb.infrastructure;
 
 import java.io.FileNotFoundException;
@@ -56,7 +56,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     protected int PORT=-1;	// REQUIRED: port number this unit listens on
     protected String DRIVENAME = null; // where to persist data (unless rammode is on)
     protected boolean RAMMODE = true; // command line switch: work in memory (no data persistence)
-    protected boolean RECOVERY = false; // command line switch: indicate whether we load log from disk on startup
+    protected boolean RECOVERY = false; // command line switch: indicate whether we load stream from disk on startup
     protected boolean REBUILD = false;
     protected String rebuildnode = null;
 
@@ -434,11 +434,11 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         TMultiplexedProtocol mprot = new TMultiplexedProtocol(prot, "CONFIG");
 
         SimpleLogUnitConfigService.Client cl = new SimpleLogUnitConfigService.Client(mprot);
-        log.info("established connection with rebuild-node {}", rebuildnode);
+        stream.info("established connection with rebuild-node {}", rebuildnode);
         SimpleLogUnitWrap wr = null;
         try {
             wr = cl.rebuild();
-            log.info("obtained mirror lowwater={} highwater={} trimmark={} ctnt-length={}",
+            stream.info("obtained mirror lowwater={} highwater={} trimmark={} ctnt-length={}",
                     wr.getLowwater(), wr.getHighwater(), wr.getTrimmark(), wr.getCtntSize());
             initLogStore(wr.getBmap(), UNITCAPACITY);
             lowwater = highwater = wr.getLowwater();
@@ -446,7 +446,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             ckmark = (int)wr.getCkmark();
             put(wr.getCtnt());
             if (highwater != wr.getHighwater())
-                log.error("rebuildfromnode lowwater={} highwater={} received ({},{})",
+                stream.error("rebuildfromnode lowwater={} highwater={} received ({},{})",
                         lowwater, highwater,
                         wr.getLowwater(), wr.getHighwater());
         } catch (TException e) {
@@ -491,7 +491,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	 * @return OK if succeeds in marking the extent for 'skip'
 	 * 		ERROR_TRIMMED if the extent-range has already been trimmed
 	 * 		ERROR_OVERWRITE if the extent is occupied (could be a good thing)
-	 * 		ERROR_FULL if the extent spills over the capacity of the log
+	 * 		ERROR_FULL if the extent spills over the capacity of the stream
 	 * @throws TException
 	 */
 	@Override
@@ -531,7 +531,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	 *
 	 * @param off- the offset to read from
 	 * @return the meta-info record "wrapped" in ExtntWrap.
-	 *         The wrapping contains error code: UNWRITTEN if reading beyond the tail of the log
+	 *         The wrapping contains error code: UNWRITTEN if reading beyond the tail of the stream
 	 *
 	 * (non-Javadoc)
 	 * @see CorfuUnitServer.Iface#readmeta(long)
@@ -545,7 +545,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	}
 
 	/**
-	 * wait until any previously written log entries have been forced to persistent store
+	 * wait until any previously written stream entries have been forced to persistent store
 	 */
     @Override
 	synchronized public void sync() throws org.apache.thrift.TException {
@@ -636,7 +636,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
                 if (cmp == 0)
                     return ErrorCode.OK;
 
-                log.info("set new configuration: {}", xmlconfig);
+                stream.info("set new configuration: {}", xmlconfig);
             //    if (nc.getTrimmark() > CM.getTrimmark())
             //        trim(nc.getTrimmark());
           //      CM = nc;

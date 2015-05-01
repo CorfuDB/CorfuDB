@@ -140,7 +140,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 byte[] data = null;
              //   data = AddressSpaceCache.get(logID, address);
 //                if (data != null) {
-  //                  log.debug("ObjCache hit @ {}", address);
+  //                  stream.debug("ObjCache hit @ {}", address);
     //                return data;
       //          }
 
@@ -154,7 +154,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 //reads have to come from last unit in chain
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
                 data = wolu.read(mappedAddress);
-            //    log.debug("Objcache MISS @ {}", address);
+            //    stream.debug("Objcache MISS @ {}", address);
              //   AddressSpaceCache.put(logID, address, data);
                 return data;
             }
@@ -179,7 +179,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         return o;
          /*
          Kryo k = Serializer.kryos.get();
-        log.debug("ObjCache MISS @ {}", address);
+        stream.debug("ObjCache MISS @ {}", address);
 
          byte[] data = read(address);
          try (ByteArrayInputStream bais = new ByteArrayInputStream(data))

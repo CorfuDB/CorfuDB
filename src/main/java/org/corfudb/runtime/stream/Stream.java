@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime.log;
+package org.corfudb.runtime.stream;
 
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
@@ -71,7 +71,7 @@ import java.io.ObjectOutput;
  *  A hop-aware stream implementation. The stream must be closed after the application is done using it
  *  to free resources, or enclosed in a try-resource block.
  */
-public class Stream implements AutoCloseable, IStream {
+public class Stream implements AutoCloseable {
 
     private final Logger log = LoggerFactory.getLogger(Stream.class);
 
@@ -293,13 +293,13 @@ public class Stream implements AutoCloseable, IStream {
 
             if (cdbse instanceof BundleEntry)
             {
-                //a bundle entry actually represents an entry in the remote log (physically).
+                //a bundle entry actually represents an entry in the remote stream (physically).
                 BundleEntry be = (BundleEntry) cdbse;
                 be.setTransientInfo(this, woas, sequencer, cdbc);
             }
             synchronized (streamPointer) {
                 latest = cdbse.getTimestamp();
-                //log.info("set latest = {}", cdbse.getTimestamp());
+                //stream.info("set latest = {}", cdbse.getTimestamp());
                 if (latest == null || latest.epochMap == null)
                 {
                     log.warn("uh, null epoch map? at {} ", physicalPos);
@@ -319,7 +319,7 @@ public class Stream implements AutoCloseable, IStream {
                 currentReturn.returnCounter = currentReturn.returnCounter - 1;
                 if (currentReturn.returnCounter <= 0)
                 {
-                    log.debug("Temporary move completed, returning to log {} at {}", currentReturn.returnLog, currentReturn.physicalPos);
+                    log.debug("Temporary move completed, returning to stream {} at {}", currentReturn.returnLog, currentReturn.physicalPos);
                     if (!currentReturn.returnLog.equals(logID))
                     {
                         woas = getAddressSpace.apply(cdbc, currentReturn.returnLog);
@@ -348,7 +348,7 @@ public class Stream implements AutoCloseable, IStream {
         }
         else
         {
-            log.warn("Ignored log entry from wrong epoch (expected {}, got {}, pos {}, stream {})", getCurrentEpoch(), cdbse.getTimestamp().getEpoch(streamID), physicalPos, streamID);
+            log.warn("Ignored stream entry from wrong epoch (expected {}, got {}, pos {}, stream {})", getCurrentEpoch(), cdbse.getTimestamp().getEpoch(streamID), physicalPos, streamID);
         }
 
         return prr;
@@ -454,11 +454,11 @@ public class Stream implements AutoCloseable, IStream {
                                             if (cdbsme.duration == -1)
                                             {
                                                 if (!cdbsme.destinationLog.equals(logID)){
-                                                    log.debug("Detected permanent move operation to different log " + cdbsme.destinationLog);
+                                                    log.debug("Detected permanent move operation to different stream " + cdbsme.destinationLog);
                                                 }
                                                 else
                                                 {
-                                                    log.debug("Detected permanent move operation to same log " + cdbsme.destinationLog);
+                                                    log.debug("Detected permanent move operation to same stream " + cdbsme.destinationLog);
                                                 }
                                                 //since this is a perma-move, we increment the epoch
                                                 incrementAllEpochs();
@@ -483,7 +483,7 @@ public class Stream implements AutoCloseable, IStream {
                                             {
                                                 getConfigMaster.get().sendGossip(new StreamEpochGossipEntry(streamID, cdbsme.destinationLog, newEpoch, logpos));
                                             }
-                                            //since this is on a different log, we change the address space and sequencer
+                                            //since this is on a different stream, we change the address space and sequencer
                                             if (!cdbsme.destinationLog.equals(logID))
                                             {
                                                 woas = getAddressSpace.apply(cdbc, cdbsme.destinationLog);
@@ -591,7 +591,7 @@ public class Stream implements AutoCloseable, IStream {
                 ts.setContainingStream(containingStream);
                 return ts;
             } catch(Exception e) {
-                log.warn("Issue appending to log, getting new sequence number...", e);
+                log.warn("Issue appending to stream, getting new sequence number...", e);
             }
         }
     }
@@ -675,7 +675,7 @@ public class Stream implements AutoCloseable, IStream {
             synchronized(streamQ){
                 streamQ.notifyAll();
             }
-            //log.info("Read next {}", entry.getTimestamp());
+            //stream.info("Read next {}", entry.getTimestamp());
             return entry;
         }
     }
@@ -893,23 +893,23 @@ public class Stream implements AutoCloseable, IStream {
 
 
     /**
-     * Permanently hop to another log. This function tries to hop this stream to
-     * another log by obtaining a position in the destination log and inserting
-     * a move entry from the source log to the destination log. It may or may not
+     * Permanently hop to another stream. This function tries to hop this stream to
+     * another stream by obtaining a position in the destination stream and inserting
+     * a move entry from the source stream to the destination stream. It may or may not
      * be successful.
      *
-     * @param destinationlog    The destination log to hop to.
+     * @param destinationlog    The destination stream to hop to.
      */
     public void hopLog(UUID destinationLog)
     throws RemoteException, OutOfSpaceException, IOException
     {
-        // Get a sequence in the remote log
+        // Get a sequence in the remote stream
         StreamingSequencer sremote = new StreamingSequencer(cdbc, destinationLog);
         long remoteToken = sremote.getNext(streamIDstack.peekLast());
-        // Write a start in the remote log
+        // Write a start in the remote stream
         IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, destinationLog);
         woasremote.write(remoteToken, new CorfuDBStreamStartEntry(streamID, getCurrentEpoch() + 1));
-        // Write the move request into the local log
+        // Write the move request into the local stream
         CorfuDBStreamMoveEntry cdbsme = new CorfuDBStreamMoveEntry(streamID, destinationLog, null, remoteToken, -1, getCurrentEpoch());
         long token = sequencer.getNext(streamID);
         woas.write(token, (Serializable) cdbsme);
@@ -934,7 +934,7 @@ public class Stream implements AutoCloseable, IStream {
      * attach a remote stream to this stream. It may or may not succeed.
      *
      * @param targetStream     The destination stream to attach.
-     * @param duration         The length of time, in log entries that this pull should last,
+     * @param duration         The length of time, in stream entries that this pull should last,
      *                         if -1, then the pull is permanent.
      *
      * @return                 A timestamp indicating where the attachment begins.
@@ -952,7 +952,7 @@ public class Stream implements AutoCloseable, IStream {
      * attach multiple remote stream to this stream. It may or may not succeed.
      *
      * @param targetStreams    The destination streams to attach.
-     * @param duration         The length of time, in log entries that this pull should last,
+     * @param duration         The length of time, in stream entries that this pull should last,
      *                         if -1, then the pull is permanent.
      *
      * @return                 A timestamp indicating where the attachment begins.
@@ -970,7 +970,7 @@ public class Stream implements AutoCloseable, IStream {
      *
      * @param targetStreams    The destination streams to attach.
      * @param payload          The serializable payload to insert
-     * @param duration         The length of time, in log entries that this pull should last,
+     * @param duration         The length of time, in stream entries that this pull should last,
      *                         if -1, then the pull is permanent.
      *
      * @return                 A timestamp indicating where the attachment begins.
@@ -995,7 +995,7 @@ public class Stream implements AutoCloseable, IStream {
      *
      * @param targetStreams    The destination streams to attach.
      * @param payload          The payload to insert
-     * @param duration         The length of time, in log entries that this pull should last,
+     * @param duration         The length of time, in stream entries that this pull should last,
      *                         if -1, then the pull is permanent.
      *
      * @return                 A timestamp indicating where the attachment begins.
@@ -1014,8 +1014,8 @@ public class Stream implements AutoCloseable, IStream {
      *
      * @param targetStreams    The destination streams to attach.
      * @param payload          The serializable payload to insert
-     * @param reservation      The number of entires to reserve, both in the local and global log.
-     * @param duration         The length of time, in log entries that this pull should last,
+     * @param reservation      The number of entires to reserve, both in the local and global stream.
+     * @param duration         The length of time, in stream entries that this pull should last,
      *                         if -1, then the pull is permanent.
      *
      * @return                 A timestamp indicating where the attachment begins.
@@ -1041,8 +1041,8 @@ public class Stream implements AutoCloseable, IStream {
      *
      * @param targetStreams    The destination streams to attach.
      * @param payload          The payload to insert
-     * @param reservation      The number of entries to reserve, both in the local and the remote log.
-     * @param duration         The length of time, in log entries that this pull should last,
+     * @param reservation      The number of entries to reserve, both in the local and the remote stream.
+     * @param duration         The length of time, in stream entries that this pull should last,
      *                         if -1, then the pull is permanent.
      *
      * @return                 A timestamp indicating where the attachment begins.
@@ -1059,7 +1059,7 @@ public class Stream implements AutoCloseable, IStream {
             datamap.put(id, sd);
         }
 
-        // Write a stream start in the local log.
+        // Write a stream start in the local stream.
         // This entry needs to contain the epoch+1 of the target stream as well as our own epoch
         Map<UUID, Long> epochMap = new HashMap<UUID, Long>();
         epochMap.put(streamID, getCurrentEpoch());
@@ -1085,7 +1085,7 @@ public class Stream implements AutoCloseable, IStream {
             else {
                 StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
                 long remoteToken = sremote.getNext(id, reservation + 1);
-                // Write a move in the remote log
+                // Write a move in the remote stream
                 IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
                 woasremote.write(remoteToken, new CorfuDBStreamMoveEntry(id, logID, streamID, token, duration, sd.epoch, getCurrentEpoch(), payload));
             }
@@ -1140,7 +1140,7 @@ public class Stream implements AutoCloseable, IStream {
             datamap.put(id, sd);
         }
 
-        // Write a stream start in the local log.
+        // Write a stream start in the local stream.
         // This entry needs to contain the epoch+1 of the target stream as well as our own epoch
         Map<UUID, Long> epochMap = new HashMap<UUID, Long>();
         epochMap.put(streamID, getCurrentEpoch());
@@ -1161,7 +1161,7 @@ public class Stream implements AutoCloseable, IStream {
             StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
             long remoteToken = sremote.getNext(id, slots + 1);
             log.debug("remoteLog write");
-            // Write a move in the remote log
+            // Write a move in the remote stream
             IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
             woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
            log.debug("hmm.");
@@ -1177,7 +1177,7 @@ public class Stream implements AutoCloseable, IStream {
             else {
                 StreamingSequencer sremote = new StreamingSequencer(cdbc, sd.currentLog);
                 long remoteToken = sremote.getNext(id, slots + 1);
-                // Write a move in the remote log
+                // Write a move in the remote stream
                 IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
                 woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
             }

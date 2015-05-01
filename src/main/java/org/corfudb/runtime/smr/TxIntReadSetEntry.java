@@ -1,6 +1,6 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.log.ITimestamp;
+import org.corfudb.runtime.stream.ITimestamp;
 import java.io.Serializable;
 
 public class TxIntReadSetEntry implements Serializable

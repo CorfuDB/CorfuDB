@@ -1,4 +1,4 @@
-package org.corfudb.runtime.log;
+package org.corfudb.runtime.stream;
 
 import java.io.Serializable;
 

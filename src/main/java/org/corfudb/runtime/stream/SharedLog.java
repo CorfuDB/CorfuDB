@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime.log;
+package org.corfudb.runtime.stream;
 
 import org.corfudb.runtime.view.Sequencer;
 import org.corfudb.runtime.view.WriteOnceAddressSpace;
@@ -45,7 +45,7 @@ public class SharedLog {
                 woas.write(token, data);
                 return token;
             } catch(Exception e) {
-                log.warn("Issue appending to log, getting new sequence number...", e);
+                log.warn("Issue appending to stream, getting new sequence number...", e);
             }
         }
     }

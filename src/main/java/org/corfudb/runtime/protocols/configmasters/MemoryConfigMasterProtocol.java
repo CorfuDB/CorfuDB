@@ -58,7 +58,7 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     /**
      * Adds a new stream to the system.
      *
-     * @param logID    The ID of the log the stream starts on.
+     * @param logID    The ID of the stream the stream starts on.
      * @param streamID The streamID of the stream.
      * @param startPos The start position of the stream.
      * @return True if the stream was successfully added to the system, false otherwise.
@@ -71,7 +71,7 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     /**
      * Adds a new stream to the system.
      *
-     * @param logID    The ID of the log the stream starts on.
+     * @param logID    The ID of the stream the stream starts on.
      * @param streamID The streamID of the stream.
      * @param startPos The start position of the stream.
      * @param nopass
@@ -95,10 +95,10 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     }
 
     /**
-     * Adds a log to the system.
+     * Adds a stream to the system.
      *
-     * @param logID The ID of the log to add.
-     * @param path  True, if the log was added to the system, or false otherwise.
+     * @param logID The ID of the stream to add.
+     * @param path  True, if the stream was added to the system, or false otherwise.
      */
     @Override
     public boolean addLog(UUID logID, String path) {
@@ -116,10 +116,10 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     }
 
     /**
-     * Gets the configuration string for a log, given its id.
+     * Gets the configuration string for a stream, given its id.
      *
-     * @param logID The ID of the log to retrieve.
-     * @return The configuration string used to access that log.
+     * @param logID The ID of the stream to retrieve.
+     * @return The configuration string used to access that stream.
      */
     @Override
     public String getLog(UUID logID) {
@@ -137,7 +137,7 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     }
 
     /**
-     * Resets the entire log, and increments the epoch. Use only during testing to restore the system to a
+     * Resets the entire stream, and increments the epoch. Use only during testing to restore the system to a
      * known state.
      */
     @Override

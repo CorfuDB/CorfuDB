@@ -16,7 +16,7 @@
 package org.corfudb.runtime.entries;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.log.Timestamp;
+import org.corfudb.runtime.stream.Timestamp;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -30,7 +30,7 @@ import java.io.Serializable;
 import java.io.IOException;
 
 import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.log.Stream;
+import org.corfudb.runtime.stream.Stream;
 import org.corfudb.runtime.view.StreamingSequencer;
 import org.corfudb.runtime.UnwrittenException;
 
@@ -60,7 +60,7 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements org.corfudb.r
     *
     * @param payload        The payload to insert into the bundle.
     * @param epochMap       A mapping of the current epochs which will be at the remote stream start entry.
-    * @param remoteLog      The remote log the bundle is attached to.
+    * @param remoteLog      The remote stream the bundle is attached to.
     * @param numSlots       t
     * @param physicalPos    The physical position of the remote slot, if allocated, or -1, if there is no remote slot.
     */

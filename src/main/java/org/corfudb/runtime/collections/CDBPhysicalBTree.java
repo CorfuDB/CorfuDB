@@ -3,7 +3,7 @@ package org.corfudb.runtime.collections;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.HashMap;
-import org.corfudb.runtime.log.ITimestamp;
+import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.smr.*;
 
 public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTree<K, V> {
@@ -1113,7 +1113,7 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
     }
 
     /**
-     * log completion time. return true if
+     * stream completion time. return true if
      * we actually completed this request through the
      * normal channels...
      * @param _op

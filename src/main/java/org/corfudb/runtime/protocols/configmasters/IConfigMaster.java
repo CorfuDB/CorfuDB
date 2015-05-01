@@ -29,7 +29,7 @@ public interface IConfigMaster extends IServerProtocol {
     /**
      * Adds a new stream to the system.
      *
-     * @param logID         The ID of the log the stream starts on.
+     * @param logID         The ID of the stream the stream starts on.
      * @param streamID      The streamID of the stream.
      * @param startPos      The start position of the stream.
      *
@@ -39,7 +39,7 @@ public interface IConfigMaster extends IServerProtocol {
     /**
      * Adds a new stream to the system.
      *
-     * @param logID         The ID of the log the stream starts on.
+     * @param logID         The ID of the stream the stream starts on.
      * @param streamID      The streamID of the stream.
      * @param startPos      The start position of the stream.
      *
@@ -58,10 +58,10 @@ public interface IConfigMaster extends IServerProtocol {
     StreamData getStream(UUID streamID);
 
     /**
-     * Adds a log to the system.
+     * Adds a stream to the system.
      *
-     * @param logID         The ID of the log to add.
-     * @param path          True, if the log was added to the system, or false otherwise.
+     * @param logID         The ID of the stream to add.
+     * @param path          True, if the stream was added to the system, or false otherwise.
      */
     boolean addLog(UUID logID, String path);
 
@@ -73,11 +73,11 @@ public interface IConfigMaster extends IServerProtocol {
     Map<UUID, String> getAllLogs();
 
     /**
-     * Gets the configuration string for a log, given its id.
+     * Gets the configuration string for a stream, given its id.
      *
-     * @param logID         The ID of the log to retrieve.
+     * @param logID         The ID of the stream to retrieve.
      *
-     * @return              The configuration string used to access that log.
+     * @return              The configuration string used to access that stream.
      */
     String getLog(UUID logID);
 
@@ -89,7 +89,7 @@ public interface IConfigMaster extends IServerProtocol {
     void sendGossip(IGossip gossip);
 
     /**
-     * Resets the entire log, and increments the epoch. Use only during testing to restore the system to a
+     * Resets the entire stream, and increments the epoch. Use only during testing to restore the system to a
      * known state.
      */
     void resetAll();

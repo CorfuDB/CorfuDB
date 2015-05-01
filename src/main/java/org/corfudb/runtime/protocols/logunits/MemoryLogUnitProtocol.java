@@ -125,7 +125,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     }
 
     /**
-     * Write to the log unit.
+     * Write to the stream unit.
      * @param address                   The address to write to
      * @param payload                   The payload to be written
      * @throws OverwriteException       If the address has already been written to.

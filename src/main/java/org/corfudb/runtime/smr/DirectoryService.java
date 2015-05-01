@@ -49,8 +49,8 @@ public class DirectoryService
      * Returns a unique ID. This ID is guaranteed to be unique
      * system-wide with respect to other IDs generated across the system
      * by the getUniqueID call parameterized with a streamfactory running over
-     * the same log address space. It's implemented by appending an entry
-     * to the underlying log and returning the timestamp/position.
+     * the same stream address space. It's implemented by appending an entry
+     * to the underlying stream and returning the timestamp/position.
      *
      * Note: it is not guaranteed to be unique with respect to IDs returned
      * by nameToStreamID.

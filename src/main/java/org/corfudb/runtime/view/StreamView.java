@@ -52,7 +52,7 @@ public class StreamView {
      * a new stream was added.
      *
      * @param stream        The UUID of the stream to add.
-     * @param startLog      The UUID of the log the stream starts on.
+     * @param startLog      The UUID of the stream the stream starts on.
      * @param startPos      The position that the stream starts at.
      *
      * @return              True, if the stream was added to the view, or false, if
@@ -85,11 +85,11 @@ public class StreamView {
      * a stream was added or updated.
      *
      * @param stream        The UUID of the stream.
-     * @param currentLog    The UUID of the log the stream is currently in.
-     * @param startLog      The UUID of the log the stream resides on.
+     * @param currentLog    The UUID of the stream the stream is currently in.
+     * @param startLog      The UUID of the stream the stream resides on.
      * @param epoch         The epoch the stream is currently in.
-     * @param startPos      The position the log currently starts on.
-     * @param lastUpdate    The logical position this log was last updated at
+     * @param startPos      The position the stream currently starts on.
+     * @param lastUpdate    The logical position this stream was last updated at
      */
     public boolean learnStream(UUID stream, UUID currentLog, UUID startLog, long startPos, long epoch, long lastUpdate)
     {

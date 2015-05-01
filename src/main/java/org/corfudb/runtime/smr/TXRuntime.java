@@ -14,7 +14,7 @@
  */
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.log.ITimestamp;
+import org.corfudb.runtime.stream.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,11 +32,11 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
 
     static Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
 
-    // playing the log forward to multiple versions of the same
+    // playing the stream forward to multiple versions of the same
     // object within a single transaction context is just one of
     // a number of problems with the combination of programming model
     // and concurrency management. It is possible to avoid playing
-    // the log forward for reads already in the read set, (a setting
+    // the stream forward for reads already in the read set, (a setting
     // that is controlled by the boolean flag below) but the problem
     // is not fixed without additional mechanisms for locking writesets
     // during commit and detecting inconsistent views on reads, which
@@ -117,7 +117,7 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
             else
             {
                 //todo: smarter read-only txes
-                //for now, we treat read-only as a normal tx that appends to the log
+                //for now, we treat read-only as a normal tx that appends to the stream
             }
         }
 
@@ -264,7 +264,7 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
                     curtx.get().mark_read(cob.getID(), command.getTimestamp(), command.getReadSummary());
                 } else {
                     // give the programmer some hint that we couldn't satisfy the
-                    // read operation by playing the log further forward because this
+                    // read operation by playing the stream further forward because this
                     // object has already been played forward within the current transaction.
                     // this allows the programmer to satisfy the read by making the upcall
                     // themselves, or simply performing the operation on the local in memory view.

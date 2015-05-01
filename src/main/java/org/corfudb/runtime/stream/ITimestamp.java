@@ -1,4 +1,4 @@
-package org.corfudb.runtime.log;
+package org.corfudb.runtime.stream;
 
 /**
  *  This interface represents comparable timestamps with max, min and invalid values.

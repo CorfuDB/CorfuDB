@@ -14,7 +14,7 @@
  */
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.log.ITimestamp;
+import org.corfudb.runtime.stream.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +48,7 @@ public class SMREngine
     Set<Long> defaultstreamset;
     Stream curstream;
 
-    //list of pending commands -- when we encounter entries in the log
+    //list of pending commands -- when we encounter entries in the stream
     //we check this list to see if the entry was appended by us.
     //in that case we retrieve the original version of the object and pass
     //it back to the application. this allows context to flow between
@@ -179,7 +179,7 @@ public class SMREngine
         }
     }
 
-    /** returns once log has been played by playback thread
+    /** returns once stream has been played by playback thread
      * until syncpos, inclusive.
      * the command can be applied anytime after syncpos has been
      * reached. syncpos is merely a hint to reduce the latency
@@ -220,7 +220,7 @@ public class SMREngine
         }
     }
 
-    /** returns once log has been played by playback thread
+    /** returns once stream has been played by playback thread
      * until syncpos, inclusive.
      * the command can be applied anytime after syncpos has been
      * reached. syncpos is merely a hint to reduce the latency

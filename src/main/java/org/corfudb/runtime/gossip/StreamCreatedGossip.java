@@ -8,7 +8,7 @@ public class StreamCreatedGossip implements IGossip {
     private static final long serialVersionUID = 0L;
     /** The stream that was created */
     public UUID streamID;
-    /** The new log the stream lives in */
+    /** The new stream the stream lives in */
     public UUID logID;
     /** The position that the stream starts at */
     public long startPos;

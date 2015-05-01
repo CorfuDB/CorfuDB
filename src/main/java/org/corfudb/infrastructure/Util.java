@@ -40,7 +40,7 @@ public class Util {
 		to.setMetaLength(from.getMetaLength());
 	}
 
-	/** utility method to compute the log-offset succeeding an extent
+	/** utility method to compute the stream-offset succeeding an extent
 	 * @param inf the extent's meta-info
 	 * @return the offset succeeding this extent
 	 */

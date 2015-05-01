@@ -6,7 +6,7 @@ import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.runtime.entries.CorfuDBStreamHoleEntry;
 import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.runtime.entries.CorfuDBStreamStartEntry;
-import org.corfudb.runtime.log.Timestamp;
+import org.corfudb.runtime.stream.Timestamp;
 
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
@@ -30,7 +30,7 @@ import org.corfudb.runtime.smr.TxDec;
 import org.corfudb.runtime.smr.TxInt;
 import org.corfudb.runtime.smr.TxIntWriteSetEntry;
 import org.corfudb.runtime.smr.TxIntReadSetEntry;
-import org.corfudb.runtime.log.ITimestamp;
+import org.corfudb.runtime.stream.ITimestamp;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import org.corfudb.runtime.smr.Triple;

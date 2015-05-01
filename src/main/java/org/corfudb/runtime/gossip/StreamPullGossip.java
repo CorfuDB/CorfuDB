@@ -11,7 +11,7 @@ public class StreamPullGossip implements IGossip {
     private static final long serialVersionUID = 0L;
     /** The stream that is being pulled */
     public UUID streamID;
-    /** The destination log of the stream */
+    /** The destination stream of the stream */
     public UUID destinationLog;
     /** The destination stream of the stream */
     public UUID destinationStream;

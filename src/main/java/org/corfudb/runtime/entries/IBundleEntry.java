@@ -15,7 +15,7 @@
 
 package org.corfudb.runtime.entries;
 
-import org.corfudb.runtime.log.Timestamp;
+import org.corfudb.runtime.stream.Timestamp;
 
 import java.io.Serializable;
 

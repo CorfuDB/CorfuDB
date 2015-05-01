@@ -21,8 +21,8 @@ import org.corfudb.runtime.TrimmedException;
 import org.corfudb.runtime.OverwriteException;
 
 /**
- * This interface represents the simplest type of log unit.
- * Write once log units provide these simple features:
+ * This interface represents the simplest type of stream unit.
+ * Write once stream units provide these simple features:
  *
  * Write, which takes an address and payload and returns success/failure
  *          It is guranteed that any address once written to is immutable (write-once)

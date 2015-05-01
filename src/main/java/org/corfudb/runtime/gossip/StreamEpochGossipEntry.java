@@ -8,7 +8,7 @@ public class StreamEpochGossipEntry implements IGossip {
     private static final long serialVersionUID = 0L;
     /** The stream that is changing epochs */
     public UUID streamID;
-    /** The new log the stream lives in */
+    /** The new stream the stream lives in */
     public UUID logID;
     /** The new epoch that the stream is in */
     public long epoch;
