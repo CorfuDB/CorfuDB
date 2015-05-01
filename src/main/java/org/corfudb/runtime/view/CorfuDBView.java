@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.view;
 
+import org.corfudb.runtime.NetworkException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,7 +124,7 @@ public class CorfuDBView {
     {
         epoch = config.get("epoch").getClass() == Long.class ? (Long) config.get("epoch") : (Integer) config.get("epoch");
         pagesize = config.get("pagesize").getClass() == Long.class ? (Long) config.get("pagesize") : (Integer) config.get("pagesize");
-        sequencers = populateSequencersFromList((List<String>)config.get("sequencers"));
+        sequencers = populateSequencersFromList((List<String>) config.get("sequencers"));
         configmasters = populateConfigMastersFromList((List<String>)config.get("configmasters"));
         segments = populateSegmentsFromList((List<Map<String,Object>>)((Map<String,Object>)config.get("layout")).get("segments"));
     }
