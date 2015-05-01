@@ -75,25 +75,24 @@ public class StreamingSequencer implements IStreamingSequencer {
     }
 
     @Override
-    public long getNext(UUID streamID)
-    {
-        return getNext(streamID, 1);
-    }
-
-    @Override
     public long getNext(UUID streamID, int numTokens)
     {
         while (true)
         {
             try {
                 IServerProtocol sequencer= getView.get().getSequencers().get(0);
+                if (streamID == null)
+                {
+                    //when the stream ID is null, get a global sequence #
+                    return ((ISimpleSequencer)sequencer).sequenceGetNext(numTokens);
+                }
                 if (sequencer instanceof IStreamSequencer)
                 {
                     return ((IStreamSequencer)sequencer).sequenceGetNext(streamID, numTokens);
                 }
                 else
                 {
-                    return ((ISimpleSequencer)sequencer).sequenceGetNext();
+                    return ((ISimpleSequencer)sequencer).sequenceGetNext(numTokens);
                 }
             }
             catch (Exception e)
@@ -104,29 +103,6 @@ public class StreamingSequencer implements IStreamingSequencer {
         }
     }
 
-    @Override
-    public long getCurrent(UUID streamID)
-    {
-        while (true)
-        {
-            try {
-                IServerProtocol sequencer = getView.get().getSequencers().get(0);
-                if (sequencer instanceof IStreamSequencer)
-                {
-                    return ((IStreamSequencer)sequencer).sequenceGetCurrent(streamID);
-                }
-                else
-                {
-                    return ((ISimpleSequencer)sequencer).sequenceGetCurrent();
-                }
-            }
-            catch (Exception e)
-            {
-                log.warn("Unable to get current sequence, requesting new view.", e);
-                client.invalidateViewAndWait();
-            }
-        }
-    }
 
     public void setAllocationSize(UUID streamID, int size)
     {

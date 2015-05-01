@@ -22,7 +22,7 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
     private Integer port;
     private AtomicLong sequenceNumber;
     private Long epoch;
-    static ConcurrentHashMap<Integer, MemorySequencerProtocol> memorySequencers =
+    public static ConcurrentHashMap<Integer, MemorySequencerProtocol> memorySequencers =
             new ConcurrentHashMap<Integer, MemorySequencerProtocol>();
     public MemorySequencerProtocol() {
         this("localhost", 0, new HashMap<String,String>(), 0L);
@@ -45,6 +45,7 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
         this.options = options;
         this.epoch = epoch;
         sequenceNumber = new AtomicLong();
+        memorySequencers.put(this.port, this);
     }
 
     public static String getProtocolString()
@@ -110,7 +111,7 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
      */
     @Override
     public void reset(long epoch) throws NetworkException {
-        sequenceNumber.set(epoch);
+        sequenceNumber.set(0);
     }
 
     @Override

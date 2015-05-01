@@ -29,7 +29,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 
     private ConcurrentMap<Long, byte[]> memoryArray;
 
-    static ConcurrentHashMap<Integer, MemoryLogUnitProtocol> memoryUnits =
+    public static ConcurrentHashMap<Integer, MemoryLogUnitProtocol> memoryUnits =
             new ConcurrentHashMap<Integer, MemoryLogUnitProtocol>();
 
     public MemoryLogUnitProtocol() {
@@ -54,6 +54,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         this.epoch = epoch;
         trimMark = 0L;
         memoryArray = new NonBlockingHashMapLong<byte[]>();
+        memoryUnits.put(this.port, this);
     }
 
     public static String getProtocolString()

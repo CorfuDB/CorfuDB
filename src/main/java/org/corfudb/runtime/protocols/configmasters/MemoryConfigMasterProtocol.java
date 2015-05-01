@@ -3,6 +3,8 @@ package org.corfudb.runtime.protocols.configmasters;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.gossip.IGossip;
 import org.corfudb.runtime.protocols.IServerProtocol;
+import org.corfudb.runtime.protocols.logunits.MemoryLogUnitProtocol;
+import org.corfudb.runtime.protocols.sequencers.MemorySequencerProtocol;
 import org.corfudb.runtime.view.StreamData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -142,7 +144,20 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
      */
     @Override
     public void resetAll() {
-
+        /* just reset everything in memory */
+        setEpoch(epoch + 1);
+        for (MemorySequencerProtocol msp : MemorySequencerProtocol.memorySequencers.values())
+        {
+            try {
+            msp.reset(epoch+1);}
+            catch (Exception e) {}
+        }
+        for (MemoryLogUnitProtocol mlu : MemoryLogUnitProtocol.memoryUnits.values())
+        {
+            try {
+                mlu.reset(epoch+1);}
+            catch (Exception e) {}
+        }
     }
 
     /**

@@ -1,10 +1,15 @@
 package org.corfudb.util;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.stream.ILog;
+import org.corfudb.runtime.stream.IStream;
+import org.corfudb.runtime.stream.SimpleLog;
+import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Created by mwei on 5/1/15.
@@ -49,5 +54,15 @@ public class CorfuDBFactory {
     public IConfigurationMaster getConfigurationMaster(CorfuDBRuntime cdr)
     {
         return new ConfigurationMaster(cdr);
+    }
+
+    public ILog getLog(ISequencer sequencer, IWriteOnceAddressSpace woas)
+    {
+        return new SimpleLog(sequencer, woas);
+    }
+
+    public IStream getStream(UUID id, IStreamingSequencer sequencer, IWriteOnceAddressSpace woas)
+    {
+        return new SimpleStream(id, sequencer, woas);
     }
 }

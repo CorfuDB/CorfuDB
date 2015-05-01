@@ -21,6 +21,8 @@ public class WriteOnceAddressSpaceTest {
     public void getRuntime()
     {
         cdr = new CorfuDBRuntime("memory");
+        ConfigurationMaster cm = new ConfigurationMaster(cdr);
+        cm.resetAll();
     }
 
     @Test

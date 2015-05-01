@@ -5,7 +5,7 @@ import java.util.UUID;
 /**
  * Created by mwei on 4/30/15.
  */
-public interface IStreamingSequencer {
+public interface IStreamingSequencer extends ISequencer {
 
     /**
      * This convenience function returns the most recent token not yet issued.
@@ -34,4 +34,16 @@ public interface IStreamingSequencer {
      * @return              The next token in the sequence.
      */
     long getNext(UUID stream, int numTokens);
+
+    /**
+     * Shim function for non-streaming requests. This function
+     * passes null for the stream ID.
+     * @param numTokens     The number of tokens to issue. 0 means no tokens.
+     * @return              The next token in the sequence.
+     */
+    @Override
+    default long getNext(int numTokens)
+    {
+        return getNext(null, numTokens);
+    }
 }
