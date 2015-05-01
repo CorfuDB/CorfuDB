@@ -3,6 +3,7 @@ package org.corfudb.runtime.smr;
 import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.Serializable;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -14,7 +15,7 @@ public interface ISMREngine<T> {
 
     interface ISMREngineOptions
     {
-
+        CompletableFuture<Object> getReturnResult();
     }
 
     /**
@@ -33,11 +34,14 @@ public interface ISMREngine<T> {
 
     /**
      * Propose a new command to the SMR engine.
-     * @param command   A lambda (BiConsumer) representing the command to be proposed.
-     *                  The first argument of the lambda is the object the engine is acting on.
-     *                  The second argument of the lambda contains some TX that the engine
+     * @param command       A lambda (BiConsumer) representing the command to be proposed.
+     *                      The first argument of the lambda is the object the engine is acting on.
+     *                      The second argument of the lambda contains some TX that the engine
      *
-     * @return          A timestamp representing the timestamp that the command was proposed to.
+     * @param completion    A completable future which will be fulfilled once the command is proposed,
+     *                      which is to be completed by the command.
+     *
+     * @return              A timestamp representing the timestamp that the command was proposed to.
      */
-    ITimestamp propose(ISMREngineCommand<T> command);
+    ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion);
 }

@@ -8,6 +8,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
@@ -37,14 +38,38 @@ public class SimpleSMREngineTest {
         SimpleSMREngine<AtomicInteger> smr = new SimpleSMREngine<AtomicInteger>(s, AtomicInteger.class);
         ISMREngineCommand<AtomicInteger> increment = (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndIncrement();
         ISMREngineCommand<AtomicInteger> decrement = (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndDecrement();
-        ITimestamp ts1 = smr.propose(increment);
+        ITimestamp ts1 = smr.propose(increment, null);
         smr.sync(ts1);
         assertThat(smr.getObject().get())
                 .isEqualTo(1);
 
-        ITimestamp ts2 = smr.propose(decrement);
+        ITimestamp ts2 = smr.propose(decrement, null);
         smr.sync(ts2);
         assertThat(smr.getObject().get())
                 .isEqualTo(0);
+    }
+
+    @Test
+    public void mutatorAccessorSMRTest() throws Exception
+    {
+        SimpleSMREngine<AtomicInteger> smr = new SimpleSMREngine<AtomicInteger>(s, AtomicInteger.class);
+        ISMREngineCommand<AtomicInteger> getAndIncrement =
+                (ISMREngineCommand<AtomicInteger>) (a,o) -> {o.getReturnResult().complete(a.getAndIncrement());};
+        CompletableFuture<Object> previous = new CompletableFuture<Object>();
+
+        ITimestamp ts1 = smr.propose(getAndIncrement, previous);
+        smr.sync(ts1);
+        assertThat(smr.getObject().get())
+                .isEqualTo(1);
+        assertThat(previous.get())
+                .isEqualTo(0);
+
+        previous = new CompletableFuture<Object>();
+        ITimestamp ts2 = smr.propose(getAndIncrement, previous);
+        smr.sync(ts2);
+        assertThat(smr.getObject().get())
+                .isEqualTo(2);
+        assertThat(previous.get())
+                .isEqualTo(1);
     }
 }
