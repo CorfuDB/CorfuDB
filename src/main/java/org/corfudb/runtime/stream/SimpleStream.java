@@ -1,7 +1,6 @@
 package org.corfudb.runtime.stream;
 
-import org.corfudb.runtime.LinearizationException;
-import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
 import org.corfudb.runtime.view.IStreamingSequencer;
@@ -59,17 +58,26 @@ public class SimpleStream implements IStream {
      * @return A CorfuDBStreamEntry containing the payload of the next entry in the stream.
      */
     @Override
-    public IStreamEntry readNextEntry() throws IOException, InterruptedException {
+    public IStreamEntry readNextEntry() throws HoleEncounteredException, TrimmedException, IOException {
         long current = sequencer.getCurrent(streamID);
-        long thisPointer;
-        while ((thisPointer = streamPointer.getAndIncrement()) < current)
+        synchronized (this)
         {
-            try {
-                return (SimpleStreamEntry) addressSpace.readObject(thisPointer);
-            }
-            catch (ClassNotFoundException|ClassCastException e)
-            {
-                //ignore, not a entry we understand.
+            for (long i = streamPointer.get(); i < current; i++) {
+                try {
+                    SimpleStreamEntry sse = (SimpleStreamEntry) addressSpace.readObject(i);
+                    sse.timestamp = new SimpleTimestamp(i);
+                    streamPointer.set(i+1);
+                    if (sse.getStreamId().equals(streamID)) {
+                        return sse;
+                    }
+                } catch (ClassNotFoundException | ClassCastException e) {
+                    //ignore, not a entry we understand.
+                }
+                catch (UnwrittenException ue)
+                {
+                    //hole, should fill.
+                    throw new HoleEncounteredException(ue.address);
+                }
             }
         }
         return null;
@@ -86,7 +94,7 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp check(boolean cached) {
-        return new SimpleTimestamp(sequencer.getCurrent(streamID));
+        return new SimpleTimestamp(sequencer.getCurrent(streamID)-1);
     }
 
     /**
@@ -97,7 +105,7 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp getCurrentPosition() {
-        return new SimpleTimestamp(streamPointer.get());
+        return new SimpleTimestamp(streamPointer.get()-1);
     }
 
     /**

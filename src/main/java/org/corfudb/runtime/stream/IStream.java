@@ -15,6 +15,8 @@
 
 package org.corfudb.runtime.stream;
 
+import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.TrimmedException;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.LinearizationException;
@@ -53,7 +55,7 @@ public interface IStream extends AutoCloseable {
      * @return      A CorfuDBStreamEntry containing the payload of the next entry in the stream.
      */
     IStreamEntry readNextEntry()
-    throws IOException, InterruptedException;
+    throws HoleEncounteredException, TrimmedException, IOException;
 
     /**
      * Read the next entry in the stream as an Object. This convenience function
@@ -62,9 +64,10 @@ public interface IStream extends AutoCloseable {
      * @return      A deserialized object containing the payload of the next entry in the stream.
      */
     default Object readNextObject()
-    throws IOException, InterruptedException, ClassNotFoundException
+    throws HoleEncounteredException, TrimmedException, IOException, InterruptedException, ClassNotFoundException
     {
-        return readNextEntry().getPayload();
+        IStreamEntry next = readNextEntry();
+        return next == null ? null : next.getPayload();
     }
 
     /**

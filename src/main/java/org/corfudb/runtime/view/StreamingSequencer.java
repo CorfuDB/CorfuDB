@@ -35,7 +35,7 @@ import java.util.function.Supplier;
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
 
-public class StreamingSequencer {
+public class StreamingSequencer implements IStreamingSequencer {
 
     private CorfuDBRuntime client;
     private UUID logID;
@@ -74,11 +74,13 @@ public class StreamingSequencer {
         };
     }
 
+    @Override
     public long getNext(UUID streamID)
     {
         return getNext(streamID, 1);
     }
 
+    @Override
     public long getNext(UUID streamID, int numTokens)
     {
         while (true)
@@ -102,6 +104,7 @@ public class StreamingSequencer {
         }
     }
 
+    @Override
     public long getCurrent(UUID streamID)
     {
         while (true)

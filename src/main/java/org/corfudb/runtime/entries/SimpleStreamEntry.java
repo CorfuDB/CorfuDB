@@ -52,4 +52,15 @@ public class SimpleStreamEntry implements IStreamEntry, Serializable{
     public Object getPayload() {
         return payload;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        return (o instanceof SimpleStreamEntry) && getTimestamp().equals(((SimpleStreamEntry) o).getTimestamp());
+    }
+
+    @Override
+    public int hashCode()
+    {
+        return getTimestamp().hashCode();
+    }
 }

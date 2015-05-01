@@ -8,8 +8,28 @@ import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
  * Created by mwei on 4/30/15.
  */
 public class SimpleTimestampTest {
+
     @Test
-    public void TestComparisons() {
+    public void testStringRepresentation()
+    {
+        assertThat(new SimpleTimestamp(0).toString())
+            .isEqualTo("0");
+
+        assertThat(new SimpleTimestamp(100).toString())
+                .isEqualTo("100");
+    }
+
+    @Test
+    public void testSymmetry()
+    {
+        assertThat(new SimpleTimestamp(0))
+                .isEqualTo(new SimpleTimestamp(0));
+        assertThat(new SimpleTimestamp(43).hashCode())
+                .isEqualTo(new SimpleTimestamp(43).hashCode());
+    }
+
+    @Test
+    public void testComparisons() {
         assertThat((ITimestamp) new SimpleTimestamp(0))
                 .isLessThanOrEqualTo(new SimpleTimestamp(0))
                 .isLessThan(new SimpleTimestamp(1))
@@ -18,6 +38,7 @@ public class SimpleTimestampTest {
                 .isLessThan(ITimestamp.getMaxTimestamp());
 
         assertThat((ITimestamp)new SimpleTimestamp(600))
+                .isNotEqualTo(new SimpleTimestamp(6000))
                 .isEqualTo(new SimpleTimestamp(600))
                 .isLessThan(new SimpleTimestamp(1000))
                 .isGreaterThan(new SimpleTimestamp(Long.MIN_VALUE))
