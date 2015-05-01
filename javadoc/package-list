@@ -11,3 +11,4 @@ org.corfudb.runtime.protocols.sequencers
 org.corfudb.runtime.smr
 org.corfudb.runtime.stream
 org.corfudb.runtime.view
+org.corfudb.util
