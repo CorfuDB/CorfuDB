@@ -11,7 +11,7 @@ import org.corfudb.runtime.view.CorfuDBView;
 /**
  * Created by mwei on 4/30/15.
  */
-public class CorfuDBRuntimeTester {
+public class CorfuDBRuntimeTest {
     @Test
     public void MemoryCorfuDBRuntimeHasComponents() {
         CorfuDBRuntime runtime = new CorfuDBRuntime("memory");
