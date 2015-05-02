@@ -18,6 +18,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     IStream stream;
     T underlyingObject;
     ITimestamp streamPointer;
+    ITimestamp lastProposal;
     HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
 
     class SimpleSMREngineOptions implements ISMREngineOptions
@@ -103,6 +104,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         try {
             ITimestamp t = stream.append(command);
             if (completion != null) { completionTable.put(t, completion); }
+            lastProposal = t;
             return t;
         }
         catch (Exception e)
@@ -111,5 +113,25 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             //any exceptions.
             return null;
         }
+    }
+
+    /**
+     * Get the timestamp of the most recently proposed command.
+     *
+     * @return A timestamp representing the most recently proposed command.
+     */
+    @Override
+    public ITimestamp getLastProposal() {
+        return lastProposal;
+    }
+
+    /**
+     * Pass through to check for the underlying stream.
+     *
+     * @return A timestamp representing the most recently proposed command on a stream.
+     */
+    @Override
+    public ITimestamp check() {
+        return stream.check();
     }
 }

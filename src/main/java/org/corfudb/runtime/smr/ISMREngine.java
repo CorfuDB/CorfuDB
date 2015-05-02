@@ -44,4 +44,29 @@ public interface ISMREngine<T> {
      * @return              A timestamp representing the timestamp that the command was proposed to.
      */
     ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion);
+
+    /**
+     * Propose a new command to the SMR engine. This convience function allows you to pass
+     * the command without the completable future.
+     * @param command       A lambda (BiConsumer) representing the command to be proposed.
+     *                      The first argument of the lambda is the object the engine is acting on.
+     *                      The second argument of the lambda contains some TX that the engine
+     * @return              A timestamp representing the timestamp the command was proposed to.
+     */
+    default ITimestamp propose(ISMREngineCommand<T> command)
+    {
+        return propose(command, null);
+    }
+
+    /**
+     * Get the timestamp of the most recently proposed command.
+     * @return              A timestamp representing the most recently proposed command.
+     */
+    ITimestamp getLastProposal();
+
+    /**
+     * Pass through to check for the underlying stream.
+     * @return              A timestamp representing the most recently proposed command on a stream.
+     */
+    ITimestamp check();
 }
