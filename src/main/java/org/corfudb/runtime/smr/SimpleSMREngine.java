@@ -6,6 +6,8 @@ import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 
 /**
@@ -16,12 +18,28 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     IStream stream;
     T underlyingObject;
     ITimestamp streamPointer;
+    HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
+
+    class SimpleSMREngineOptions implements ISMREngineOptions
+    {
+        CompletableFuture<Object> returnResult;
+
+        public SimpleSMREngineOptions(CompletableFuture<Object> returnResult)
+        {
+            this.returnResult = returnResult;
+        }
+        public CompletableFuture<Object> getReturnResult()
+        {
+            return this.returnResult;
+        }
+    }
 
     public SimpleSMREngine(IStream stream, Class<T> type)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
         this.stream = stream;
         streamPointer = stream.getCurrentPosition();
+        completionTable = new HashMap<ITimestamp,CompletableFuture<Object>>();
         underlyingObject = type.getConstructor().newInstance();
     }
 
@@ -45,47 +63,52 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     @Override
     @SuppressWarnings("unchecked")
     public void sync(ITimestamp ts) {
-        if (ts == null)
-        {
-            ts = stream.check();
-            if (ts.compareTo(streamPointer) <= 0)
-            {
-                //we've already read to the most recent position, no need to keep reading.
-                return;
+        synchronized (this) {
+            if (ts == null) {
+                ts = stream.check();
+                if (ts.compareTo(streamPointer) <= 0) {
+                    //we've already read to the most recent position, no need to keep reading.
+                    return;
+                }
             }
-        }
-        while (ts.compareTo(streamPointer) > 0)
-        {
-            try {
-                IStreamEntry entry = stream.readNextEntry();
-                ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
-                function.accept(underlyingObject, null);
-            } catch (Exception e)
-            {
-                //ignore entries we don't know what to do about.
+            while (ts.compareTo(streamPointer) > 0) {
+                try {
+                    IStreamEntry entry = stream.readNextEntry();
+                    ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
+                    CompletableFuture<Object> completion = completionTable.remove(entry.getTimestamp());
+                    function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                } catch (Exception e) {
+                    //ignore entries we don't know what to do about.
+                }
+                streamPointer = stream.getCurrentPosition();
             }
-            streamPointer = stream.getCurrentPosition();
         }
     }
 
     /**
      * Propose a new command to the SMR engine.
      *
-     * @param command A lambda (BiConsumer) representing the command to be proposed.
-     *                The first argument of the lambda is the object the engine is acting on.
-     *                The second argument of the lambda contains some TX that the engine
-     *                The lambda must be serializable TODO:should figure out how to check serializability.
+     * @param command       A lambda (BiConsumer) representing the command to be proposed.
+     *                      The first argument of the lambda is the object the engine is acting on.
+     *                      The second argument of the lambda contains some TX that the engine
+     *                      The lambda must be serializable.
+     *
+     * @param completion    A completable future which will be fulfilled once the command is proposed,
+     *                      which is to be completed by the command.
+     *
+     * @return              The timestamp the command was proposed at.
      */
     @Override
-    public ITimestamp propose(ISMREngineCommand<T> command) {
+    public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion) {
         try {
-            return stream.append(command);
+            ITimestamp t = stream.append(command);
+            if (completion != null) { completionTable.put(t, completion); }
+            return t;
         }
         catch (Exception e)
         {
             //well, propose is technically not reliable, so we can just silently drop
             //any exceptions.
-            System.out.println(e.getMessage());
             return null;
         }
     }
