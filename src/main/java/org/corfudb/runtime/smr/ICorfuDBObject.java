@@ -2,17 +2,34 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.stream.ITimestamp;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * Created by mwei on 5/1/15.
  */
-public interface ICorfuDBObject {
+public interface ICorfuDBObject<T> {
 
     /**
      * Returns the SMR engine associated with this object.
      */
     ISMREngine getSMREngine();
+
+    /**
+     * Gets a transactional context for this object.
+     * @return              A transactional context to be used during a transaction.
+     */
+    @SuppressWarnings("unchecked")
+    default T getTransactionalContext(ITransaction tx)
+    {
+        try {
+            return (T) this.getClass().getConstructor(this.getClass(), ISMREngine.class)
+                    .newInstance(this, tx.getEngine(getSMREngine().getStreamID()));
+        } catch (InvocationTargetException | IllegalAccessException | InstantiationException | NoSuchMethodException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
 
     /**
      * Must be called whenever the object is accessed, in order to ensure

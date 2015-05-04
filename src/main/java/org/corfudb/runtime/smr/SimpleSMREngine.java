@@ -7,6 +7,7 @@ import org.corfudb.runtime.stream.ITimestamp;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 
@@ -133,5 +134,15 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     @Override
     public ITimestamp check() {
         return stream.check();
+    }
+
+    /**
+     * Get the underlying stream ID.
+     *
+     * @return A UUID representing the ID for the underlying stream.
+     */
+    @Override
+    public UUID getStreamID() {
+        return stream.getStreamID();
     }
 }

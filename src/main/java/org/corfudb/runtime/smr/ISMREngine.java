@@ -3,6 +3,7 @@ package org.corfudb.runtime.smr;
 import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.Serializable;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -69,4 +70,10 @@ public interface ISMREngine<T> {
      * @return              A timestamp representing the most recently proposed command on a stream.
      */
     ITimestamp check();
+
+    /**
+     * Get the underlying stream ID.
+     * @return              A UUID representing the ID for the underlying stream.
+     */
+    UUID getStreamID();
 }

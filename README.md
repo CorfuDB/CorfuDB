@@ -24,7 +24,11 @@ Thrift and Maven.
 
 On Linux (Debian/Ubuntu), run:
 ```
-$ sudo apt-get install openjdk-8-jdk maven thrift-compiler
+$ sudo add-apt-repository ppa:webupd8team/java
+$ sudo apt-get update
+$ sudo apt-get install oracle-java8-installer maven git
+$ wget http://people.apache.org/~jfarrell/thrift/0.9.2/contrib/ubuntu/thrift-compiler_0.9.2_amd64.deb -O /tmp/thrift-compiler.deb
+$ sudo dpkg -i /tmp/thrift-compiler.deb
 ```
 
 On Mac OS X, the [homebrew](http://brew.sh) package manager should help.

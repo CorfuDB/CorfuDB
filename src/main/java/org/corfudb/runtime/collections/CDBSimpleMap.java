@@ -9,17 +9,26 @@ import org.corfudb.runtime.stream.IStream;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by mwei on 5/1/15.
  */
-public class CDBSimpleMap<K,V> implements ICorfuDBObject, Map<K,V> {
+public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map<K,V> {
 
-    ISMREngine<ConcurrentHashMap> smr;
+    transient ISMREngine<ConcurrentHashMap> smr;
+    UUID streamID;
+
+    public CDBSimpleMap(CDBSimpleMap<K,V> map, ISMREngine<ConcurrentHashMap> smr)
+    {
+        this.streamID = map.streamID;
+        this.smr = smr;
+    }
 
     public CDBSimpleMap(IStream stream) throws Exception
     {
+        streamID = stream.getStreamID();
         smr = new SimpleSMREngine<ConcurrentHashMap>(stream, ConcurrentHashMap.class);
     }
 

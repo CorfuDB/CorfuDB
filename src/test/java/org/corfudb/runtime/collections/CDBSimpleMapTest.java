@@ -1,6 +1,8 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.smr.ITransactionCommand;
+import org.corfudb.runtime.smr.SimpleTransaction;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
@@ -8,6 +10,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.UUID;
+import java.util.function.Supplier;
+
 import static org.assertj.core.api.Assertions.*;
 /**
  * Created by mwei on 5/1/15.
@@ -63,5 +67,22 @@ public class CDBSimpleMapTest {
         testMap.put(0, 10);
         assertThat(testMap.put(0, 100))
                 .isEqualTo(10);
+    }
+
+    @Test
+    public void simpleTransactionalTest() throws Exception
+    {
+        SimpleTransaction tx = new SimpleTransaction();
+        testMap.put(10,100);
+        final CDBSimpleMap<Integer,Integer> txMap = testMap.getTransactionalContext(tx);
+        tx.setTransaction((ITransactionCommand) () -> {
+            Integer result = txMap.get(10);
+            if (result == 100)
+            {
+                txMap.put(10, 1000);
+                return true;
+            }
+            return false;
+        });
     }
 }
