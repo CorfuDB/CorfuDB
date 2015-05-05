@@ -2,13 +2,15 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.stream.ITimestamp;
 
+import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 /**
  * Created by mwei on 5/1/15.
  */
-public interface ICorfuDBObject<T> {
+public interface ICorfuDBObject<T> extends Serializable {
 
     /**
      * Returns the SMR engine associated with this object.
@@ -23,8 +25,9 @@ public interface ICorfuDBObject<T> {
     default T getTransactionalContext(ITransaction tx)
     {
         try {
-            return (T) this.getClass().getConstructor(this.getClass(), ISMREngine.class)
-                    .newInstance(this, tx.getEngine(getSMREngine().getStreamID()));
+            tx.registerStream(getSMREngine().getStreamID());
+            return (T) this.getClass().getConstructor(this.getClass(), ITransaction.class)
+                    .newInstance(this, tx);
         } catch (InvocationTargetException | IllegalAccessException | InstantiationException | NoSuchMethodException e)
         {
             throw new RuntimeException(e);
@@ -35,9 +38,13 @@ public interface ICorfuDBObject<T> {
      * Must be called whenever the object is accessed, in order to ensure
      * that every write is read.
      */
-    default void accessorHelper()
+    @SuppressWarnings("unchecked")
+    default Object accessorHelper(ISMREngineCommand command)
     {
+        CompletableFuture<Object> o = new CompletableFuture<Object>();
         getSMREngine().sync(getSMREngine().check());
+        getSMREngine().propose(command, o, true);
+        return o.join();
     }
 
     /**

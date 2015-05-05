@@ -4,6 +4,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.ITransactionCommand;
 import org.corfudb.runtime.smr.SimpleTransaction;
 import org.corfudb.runtime.stream.IStream;
+import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
 import org.junit.Before;
@@ -23,10 +24,12 @@ public class CDBSimpleMapTest {
     IStreamingSequencer ss;
     CDBSimpleMap<Integer, Integer> testMap;
     UUID streamID;
+    CorfuDBRuntime cdr;
+
     @Before
     public void generateStream() throws Exception
     {
-        CorfuDBRuntime cdr = new CorfuDBRuntime("memory");
+        cdr = new CorfuDBRuntime("memory");
         ConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
         woas = new WriteOnceAddressSpace(cdr);
@@ -72,17 +75,20 @@ public class CDBSimpleMapTest {
     @Test
     public void simpleTransactionalTest() throws Exception
     {
-        SimpleTransaction tx = new SimpleTransaction();
-        testMap.put(10,100);
+        SimpleTransaction tx = new SimpleTransaction(cdr);
+        testMap.put(10, 100);
         final CDBSimpleMap<Integer,Integer> txMap = testMap.getTransactionalContext(tx);
-        tx.setTransaction((ITransactionCommand) () -> {
+        tx.setTransaction((ITransactionCommand) (opts) -> {
             Integer result = txMap.get(10);
-            if (result == 100)
-            {
+            if (result == 100) {
                 txMap.put(10, 1000);
                 return true;
             }
             return false;
         });
+        ITimestamp txStamp = tx.propose();
+        testMap.getSMREngine().sync(txStamp);
+        assertThat(testMap.get(10))
+                .isEqualTo(1000);
     }
 }

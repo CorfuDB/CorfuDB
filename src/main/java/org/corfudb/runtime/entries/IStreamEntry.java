@@ -1,6 +1,8 @@
 package org.corfudb.runtime.entries;
 
 import org.corfudb.runtime.stream.ITimestamp;
+
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -11,16 +13,29 @@ import java.util.UUID;
 public interface IStreamEntry extends Comparable<IStreamEntry> {
 
     /**
-     * Gets the ID of the stream this entry belongs to.
-     * @return  The UUID of the stream this entry belongs to.
+     * Gets the list of of the streams this entry belongs to.
+     * @return  The list of streams this entry belongs to.
      */
-    UUID getStreamId();
+    List<UUID> getStreamIds();
+
+    /**
+     * Returns whether this entry belongs to a given stream ID.
+     * @param stream    The stream ID to check
+     * @return          True, if this entry belongs to that stream, false otherwise.
+     */
+    boolean containsStream(UUID stream);
 
     /**
      * Gets the timestamp of the stream this entry belongs to.
      * @return The timestamp of the stream this entry belongs to.
      */
     ITimestamp getTimestamp();
+
+    /**
+     * Set the timestamp.
+     * @param   newTs   The timestamp of this entry.
+     */
+    void setTimestamp(ITimestamp ts);
 
     /**
      * Gets the payload of this stream.

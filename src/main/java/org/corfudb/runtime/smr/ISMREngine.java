@@ -42,12 +42,30 @@ public interface ISMREngine<T> {
      * @param completion    A completable future which will be fulfilled once the command is proposed,
      *                      which is to be completed by the command.
      *
+     * @param readOnly      Whether or not the command is read only.
+     *
      * @return              A timestamp representing the timestamp that the command was proposed to.
      */
-    ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion);
+    ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly);
 
     /**
-     * Propose a new command to the SMR engine. This convience function allows you to pass
+     * Propose a new command to the SMR engine.
+     * @param command       A lambda (BiConsumer) representing the command to be proposed.
+     *                      The first argument of the lambda is the object the engine is acting on.
+     *                      The second argument of the lambda contains some TX that the engine
+     *
+     * @param completion    A completable future which will be fulfilled once the command is proposed,
+     *                      which is to be completed by the command.
+     *
+     * @return              A timestamp representing the timestamp that the command was proposed to.
+     */
+    default ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion)
+    {
+        return propose(command, completion, false);
+    }
+
+    /**
+     * Propose a new command to the SMR engine. This convenience function allows you to pass
      * the command without the completable future.
      * @param command       A lambda (BiConsumer) representing the command to be proposed.
      *                      The first argument of the lambda is the object the engine is acting on.
@@ -56,7 +74,7 @@ public interface ISMREngine<T> {
      */
     default ITimestamp propose(ISMREngineCommand<T> command)
     {
-        return propose(command, null);
+        return propose(command, null, false);
     }
 
     /**

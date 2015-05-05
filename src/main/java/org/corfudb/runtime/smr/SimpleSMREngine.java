@@ -6,6 +6,7 @@ import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -37,12 +38,17 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     }
 
     public SimpleSMREngine(IStream stream, Class<T> type)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        this.stream = stream;
-        streamPointer = stream.getCurrentPosition();
-        completionTable = new HashMap<ITimestamp,CompletableFuture<Object>>();
-        underlyingObject = type.getConstructor().newInstance();
+        try {
+            this.stream = stream;
+            streamPointer = stream.getCurrentPosition();
+            completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
+            underlyingObject = type.getConstructor().newInstance();
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -76,9 +82,16 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             while (ts.compareTo(streamPointer) > 0) {
                 try {
                     IStreamEntry entry = stream.readNextEntry();
-                    ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
-                    CompletableFuture<Object> completion = completionTable.remove(entry.getTimestamp());
-                    function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                    if (entry instanceof ITransaction)
+                    {
+                        ITransaction transaction = (ITransaction) entry;
+                        transaction.executeTransaction(this);
+                    }
+                    else {
+                        ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
+                        CompletableFuture<Object> completion = completionTable.remove(entry.getTimestamp());
+                        function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                    }
                 } catch (Exception e) {
                     //ignore entries we don't know what to do about.
                 }
@@ -98,10 +111,17 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
      * @param completion    A completable future which will be fulfilled once the command is proposed,
      *                      which is to be completed by the command.
      *
+     * @param readOnly      Whether or not the command is read only.
+     *
      * @return              The timestamp the command was proposed at.
      */
     @Override
-    public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion) {
+    public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
+        if (readOnly)
+        {
+            command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+            return streamPointer;
+        }
         try {
             ITimestamp t = stream.append(command);
             if (completion != null) { completionTable.put(t, completion); }

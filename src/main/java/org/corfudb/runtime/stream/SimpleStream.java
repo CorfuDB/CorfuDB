@@ -65,10 +65,10 @@ public class SimpleStream implements IStream {
         {
             for (long i = streamPointer.get(); i < current; i++) {
                 try {
-                    SimpleStreamEntry sse = (SimpleStreamEntry) addressSpace.readObject(i);
-                    sse.timestamp = new SimpleTimestamp(i);
+                    IStreamEntry sse = (IStreamEntry) addressSpace.readObject(i);
+                    sse.setTimestamp(new SimpleTimestamp(i));
                     streamPointer.set(i+1);
-                    if (sse.getStreamId().equals(streamID)) {
+                    if (sse.containsStream(streamID)) {
                         return sse;
                     }
                 } catch (ClassNotFoundException | ClassCastException e) {

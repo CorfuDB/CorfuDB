@@ -1,9 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.ICorfuDBObject;
-import org.corfudb.runtime.smr.ISMREngine;
-import org.corfudb.runtime.smr.ISMREngineCommand;
-import org.corfudb.runtime.smr.SimpleSMREngine;
+import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 
 import java.util.Collection;
@@ -11,6 +8,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Created by mwei on 5/1/15.
@@ -18,15 +17,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map<K,V> {
 
     transient ISMREngine<ConcurrentHashMap> smr;
+    ITransaction tx;
     UUID streamID;
 
-    public CDBSimpleMap(CDBSimpleMap<K,V> map, ISMREngine<ConcurrentHashMap> smr)
+    public CDBSimpleMap(CDBSimpleMap<K,V> map, ITransaction tx)
     {
         this.streamID = map.streamID;
-        this.smr = smr;
+        this.tx = tx;
     }
 
-    public CDBSimpleMap(IStream stream) throws Exception
+    public CDBSimpleMap(IStream stream)
     {
         streamID = stream.getStreamID();
         smr = new SimpleSMREngine<ConcurrentHashMap>(stream, ConcurrentHashMap.class);
@@ -41,8 +41,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
      */
     @Override
     public int size() {
-        accessorHelper();
-        return smr.getObject().size();
+        return (int) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+            opts.getReturnResult().complete(map.size());
+        });
     }
 
     /**
@@ -52,8 +53,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
      */
     @Override
     public boolean isEmpty() {
-        accessorHelper();
-        return smr.getObject().isEmpty();
+        return (boolean) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+            opts.getReturnResult().complete(map.isEmpty());
+        });
     }
 
     /**
@@ -75,8 +77,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
      */
     @Override
     public boolean containsKey(Object key) {
-        accessorHelper();
-        return smr.getObject().containsKey(key);
+        return (boolean) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+            opts.getReturnResult().complete(map.containsKey(key));
+        });
     }
 
     /**
@@ -99,8 +102,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
      */
     @Override
     public boolean containsValue(Object value) {
-        accessorHelper();
-        return smr.getObject().containsValue(value);
+        return (boolean) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+            opts.getReturnResult().complete(map.containsValue(value));
+        });
     }
 
     /**
@@ -131,8 +135,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     @Override
     @SuppressWarnings("unchecked")
     public V get(Object key) {
-        accessorHelper();
-        return (V) smr.getObject().get(key);
+        return (V) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+            opts.getReturnResult().complete(map.get(key));
+        });
     }
 
     /**
@@ -264,8 +269,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     @Override
     @SuppressWarnings("unchecked")
     public Set<K> keySet() {
-        accessorHelper();
-        return smr.getObject().keySet();
+        return (Set<K>) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+            opts.getReturnResult().complete(map.keySet());
+        });
     }
 
     /**
@@ -286,8 +292,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     @Override
     @SuppressWarnings("unchecked")
     public Collection<V> values() {
-        accessorHelper();
-        return smr.getObject().values();
+        return (Collection<V>) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+            opts.getReturnResult().complete(map.values());
+        });
     }
 
     /**
@@ -308,8 +315,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
      */
     @Override
     public Set<Entry<K, V>> entrySet() {
-        accessorHelper();
-        return smr.getObject().entrySet();
+        return (Set<Entry<K,V>>) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+            opts.getReturnResult().complete(map.entrySet());
+        });
     }
 
     /**
@@ -317,6 +325,10 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
      */
     @Override
     public ISMREngine getSMREngine() {
+        if (tx != null)
+        {
+            return tx.getEngine(streamID);
+        }
         return smr;
     }
 }
