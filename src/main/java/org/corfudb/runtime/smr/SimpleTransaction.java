@@ -38,6 +38,7 @@ public class SimpleTransaction implements ITransaction, IStreamEntry, Serializab
             return null;
         }
     }
+
     public SimpleTransaction(CorfuDBRuntime runtime)
     {
         streamList = new ArrayList<UUID>();
@@ -88,7 +89,10 @@ public class SimpleTransaction implements ITransaction, IStreamEntry, Serializab
     public void executeTransaction(ISMREngine engine) {
         ITransactionCommand command = getTransaction();
         executingEngine = engine;
-        command.apply(new SimpleTransactionOptions());
+        if (!command.apply(new SimpleTransactionOptions()))
+        {
+            throw new RuntimeException("Transaction was aborted but SimpleTX does not support aborted TX!");
+        }
     }
 
     /**

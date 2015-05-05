@@ -26,6 +26,12 @@ public interface ISMREngine<T> {
     T getObject();
 
     /**
+     * Set the underlying object. This method should ONLY be used by a TX engine to
+     * restore state.
+     */
+    void setObject(T object);
+
+    /**
      * Synchronize the SMR engine to a given timestamp, or pass null to synchronize
      * the SMR engine as far as possible.
      * @param ts        The timestamp to synchronize to, or null, to synchronize to the most

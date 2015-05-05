@@ -168,5 +168,27 @@ public class Serializer
         }
     }
 
+    /** Deep copy an object.
+     *
+     * @param o     The object to copy.
+     * @return      A deep copy of the object.
+     */
+    public static Object copy(Object o)
+    {
+        Kryo k = kryos.get();
+        return k.copy(o);
+    }
+
+    /** Shallow copy an object.
+     *
+     * @param o
+     * @return
+     */
+    public static Object copyShallow(Object o)
+    {
+        Kryo k = kryos.get();
+        return k.copyShallow(o);
+    }
+
 
 }

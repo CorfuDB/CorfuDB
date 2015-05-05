@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.ITransactionCommand;
+import org.corfudb.runtime.smr.OpaqueTransaction;
 import org.corfudb.runtime.smr.SimpleTransaction;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -89,6 +90,43 @@ public class CDBSimpleMapTest {
         ITimestamp txStamp = tx.propose();
         testMap.getSMREngine().sync(txStamp);
         assertThat(testMap.get(10))
+                .isEqualTo(1000);
+    }
+
+    @Test
+    public void opaqueTransactionalTest() throws Exception
+    {
+        OpaqueTransaction tx = new OpaqueTransaction(cdr);
+        testMap.put(10, 100);
+        final CDBSimpleMap<Integer, Integer> txMap = testMap.getTransactionalContext(tx);
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            Integer result = txMap.get(10);
+            if (result == 100) {
+                txMap.put(10, 1000);
+                return true;
+            }
+            return false;
+        });
+        ITimestamp txStamp = tx.propose();
+        testMap.getSMREngine().sync(txStamp);
+        assertThat(testMap.get(10))
+                .isEqualTo(1000);
+        OpaqueTransaction txAbort = new OpaqueTransaction(cdr);
+        final CDBSimpleMap<Integer, Integer> txMap2 = testMap.getTransactionalContext(tx);
+        txAbort.setTransaction((ITransactionCommand) (opts) -> {
+            Integer result = txMap2.get(10);
+            assertThat(result)
+                    .isEqualTo(1000);
+            txMap2.put(10, 42);
+            result = txMap2.get(10);
+            assertThat(result)
+                    .isEqualTo(42);
+            return false;
+        });
+        ITimestamp abortStamp = txAbort.propose();
+        testMap.getSMREngine().sync(abortStamp);
+        assertThat(testMap.get(10))
+                .isNotEqualTo(42)
                 .isEqualTo(1000);
     }
 }

@@ -62,6 +62,17 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     }
 
     /**
+     * Set the underlying object. This method should ONLY be used by a TX engine to
+     * restore state.
+     *
+     * @param object
+     */
+    @Override
+    public void setObject(T object) {
+        underlyingObject = object;
+    }
+
+    /**
      * Synchronize the SMR engine to a given timestamp, or pass null to synchronize
      * the SMR engine as far as possible.
      *
