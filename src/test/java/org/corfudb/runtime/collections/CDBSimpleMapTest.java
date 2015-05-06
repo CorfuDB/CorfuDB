@@ -2,8 +2,8 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.ITransactionCommand;
-import org.corfudb.runtime.smr.OpaqueTransaction;
-import org.corfudb.runtime.smr.SimpleTransaction;
+import org.corfudb.runtime.smr.OpaqueDeferredTransaction;
+import org.corfudb.runtime.smr.DeferredTransaction;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
@@ -74,9 +74,9 @@ public class CDBSimpleMapTest {
     }
 
     @Test
-    public void simpleTransactionalTest() throws Exception
+    public void DeferredTransactionalTest() throws Exception
     {
-        SimpleTransaction tx = new SimpleTransaction(cdr);
+        DeferredTransaction tx = new DeferredTransaction(cdr);
         testMap.put(10, 100);
         final CDBSimpleMap<Integer,Integer> txMap = testMap.getTransactionalContext(tx);
         tx.setTransaction((ITransactionCommand) (opts) -> {
@@ -96,7 +96,7 @@ public class CDBSimpleMapTest {
     @Test
     public void crossMapSwapTransactionalTest() throws Exception
     {
-        SimpleTransaction tx = new SimpleTransaction(cdr);
+        DeferredTransaction tx = new DeferredTransaction(cdr);
         IStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
         CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
 
@@ -124,7 +124,7 @@ public class CDBSimpleMapTest {
     @Test
     public void mapOfMapsTest() throws Exception
     {
-        SimpleTransaction tx = new SimpleTransaction(cdr);
+        DeferredTransaction tx = new DeferredTransaction(cdr);
         IStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
         CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =
                 new CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>>(s2);
@@ -135,9 +135,9 @@ public class CDBSimpleMapTest {
     }
 
     @Test
-    public void opaqueTransactionalTest() throws Exception
+    public void OpaqueDeferredTransactionalTest() throws Exception
     {
-        OpaqueTransaction tx = new OpaqueTransaction(cdr);
+        OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr);
         testMap.put(10, 100);
         final CDBSimpleMap<Integer, Integer> txMap = testMap.getTransactionalContext(tx);
         tx.setTransaction((ITransactionCommand) (opts) -> {
@@ -152,7 +152,7 @@ public class CDBSimpleMapTest {
         testMap.getSMREngine().sync(txStamp);
         assertThat(testMap.get(10))
                 .isEqualTo(1000);
-        OpaqueTransaction txAbort = new OpaqueTransaction(cdr);
+        OpaqueDeferredTransaction txAbort = new OpaqueDeferredTransaction(cdr);
         final CDBSimpleMap<Integer, Integer> txMap2 = testMap.getTransactionalContext(tx);
         txAbort.setTransaction((ITransactionCommand) (opts) -> {
             Integer result = txMap2.get(10);

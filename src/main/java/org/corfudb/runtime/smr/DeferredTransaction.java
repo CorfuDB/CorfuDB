@@ -19,9 +19,11 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
+ * A deferred transaction gets resolved at runtime - that is,
+ *
  * Created by mwei on 5/3/15.
  */
-public class SimpleTransaction implements ITransaction, IStreamEntry, Serializable {
+public class DeferredTransaction implements ITransaction, IStreamEntry, Serializable {
 
     ITransactionCommand transaction;
     List<UUID> streamList;
@@ -29,10 +31,10 @@ public class SimpleTransaction implements ITransaction, IStreamEntry, Serializab
     transient CorfuDBRuntime runtime;
     transient ISMREngine executingEngine;
 
-    class SimpleTransactionOptions implements ITransactionOptions
+    class DeferredTransactionOptions implements ITransactionOptions
     {
 
-        public SimpleTransactionOptions() {
+        public DeferredTransactionOptions() {
         }
 
         @Override
@@ -41,7 +43,7 @@ public class SimpleTransaction implements ITransaction, IStreamEntry, Serializab
         }
     }
 
-    public SimpleTransaction(CorfuDBRuntime runtime)
+    public DeferredTransaction(CorfuDBRuntime runtime)
     {
         streamList = new ArrayList<UUID>();
         this.runtime = runtime;
@@ -112,7 +114,7 @@ public class SimpleTransaction implements ITransaction, IStreamEntry, Serializab
     public void executeTransaction(ISMREngine engine) {
         ITransactionCommand command = getTransaction();
         executingEngine = engine;
-        if (!command.apply(new SimpleTransactionOptions()))
+        if (!command.apply(new DeferredTransactionOptions()))
         {
             throw new RuntimeException("Transaction was aborted but SimpleTX does not support aborted TX!");
         }

@@ -3,15 +3,12 @@ package org.corfudb.runtime.smr;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.Serializer;
 
-import java.util.ArrayList;
-import java.util.UUID;
-
 /**
  * Created by mwei on 5/5/15.
  */
-public class OpaqueTransaction extends SimpleTransaction {
+public class OpaqueDeferredTransaction extends DeferredTransaction {
 
-    public OpaqueTransaction(CorfuDBRuntime runtime)
+    public OpaqueDeferredTransaction(CorfuDBRuntime runtime)
     {
         super(runtime);
     }
@@ -29,7 +26,7 @@ public class OpaqueTransaction extends SimpleTransaction {
         engine.getStreamID();
         executingEngine = engine;
         ITransactionCommand command = getTransaction();
-        if (!command.apply(new SimpleTransactionOptions()))
+        if (!command.apply(new DeferredTransactionOptions()))
         {
             engine.setObject(clone);
         }
