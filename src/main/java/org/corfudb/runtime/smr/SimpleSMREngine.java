@@ -97,8 +97,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     if (entry instanceof ITransaction)
                     {
                         ITransaction transaction = (ITransaction) entry;
-                        //Use this until we figure out how to pass the runtime
-                        transaction.setCorfuDBRuntime(new CorfuDBRuntime("memory"));
+                        transaction.setCorfuDBRuntime(stream.getRuntime());
                         transaction.executeTransaction(this);
                     }
                     else {

@@ -3,9 +3,7 @@ package org.corfudb.runtime.stream;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
-import org.corfudb.runtime.view.ISequencer;
-import org.corfudb.runtime.view.IStreamingSequencer;
-import org.corfudb.runtime.view.IWriteOnceAddressSpace;
+import org.corfudb.runtime.view.*;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -21,6 +19,7 @@ public class SimpleStream implements IStream {
     IWriteOnceAddressSpace addressSpace;
     UUID streamID;
     AtomicLong streamPointer;
+    transient CorfuDBRuntime runtime;
 
     /**
      * Open a simple stream. If the simple stream already exists, it is re-opened.
@@ -28,11 +27,21 @@ public class SimpleStream implements IStream {
      * @param sequencer         A streaming sequencer to use
      * @param addressSpace      A write once address space to use
      */
-    public SimpleStream(UUID streamID, ISequencer sequencer, IWriteOnceAddressSpace addressSpace) {
+    public SimpleStream(UUID streamID, ISequencer sequencer, IWriteOnceAddressSpace addressSpace, CorfuDBRuntime runtime) {
         this.sequencer = sequencer;
         this.addressSpace = addressSpace;
         this.streamID = streamID;
         this.streamPointer = new AtomicLong();
+        this.runtime = runtime;
+    }
+
+    public SimpleStream(UUID streamID, CorfuDBRuntime runtime)
+    {
+        this.sequencer = new StreamingSequencer(runtime);
+        this.addressSpace = new WriteOnceAddressSpace(runtime);
+        this.streamID = streamID;
+        this.streamPointer = new AtomicLong();
+        this.runtime = runtime;
     }
 
     /**
@@ -82,6 +91,53 @@ public class SimpleStream implements IStream {
             }
         }
         return null;
+    }
+
+    /**
+     * Given a timestamp, reads the entry at the timestamp
+     *
+     * @param timestamp The timestamp to read from.
+     * @return The entry located at that timestamp.
+     */
+    @Override
+    public IStreamEntry readEntry(ITimestamp timestamp) throws HoleEncounteredException, TrimmedException, IOException {
+        try {
+            IStreamEntry sse = (IStreamEntry) addressSpace.readObject(((SimpleTimestamp)timestamp).address);
+            sse.setTimestamp(new SimpleTimestamp(((SimpleTimestamp)timestamp).address));
+            if (sse.containsStream(streamID)) {
+                return sse;
+            }
+        } catch (ClassNotFoundException | ClassCastException e) {
+            throw new HoleEncounteredException(((SimpleTimestamp)timestamp).address);
+        }
+        catch (UnwrittenException ue)
+        {
+            //hole, should fill.
+            throw new HoleEncounteredException(ue.address);
+        }
+        throw new HoleEncounteredException(((SimpleTimestamp)timestamp).address);
+    }
+
+    /**
+     * Given a timestamp, get the timestamp in the stream
+     *
+     * @param ts The timestamp to increment.
+     * @return The next timestamp in the stream, or null, if there are no next timestamps in the stream.
+     */
+    @Override
+    public ITimestamp getNextTimestamp(ITimestamp ts) {
+        return new SimpleTimestamp(((SimpleTimestamp)ts).address + 1);
+    }
+
+    /**
+     * Given a timestamp, get a proceeding timestamp in the stream.
+     *
+     * @param ts The timestamp to decrement.
+     * @return The previous timestamp in the stream, or null, if there are no previous timestamps in the stream.
+     */
+    @Override
+    public ITimestamp getPreviousTimestamp(ITimestamp ts) {
+        return new SimpleTimestamp(((SimpleTimestamp)ts).address - 1);
     }
 
     /**
@@ -138,5 +194,15 @@ public class SimpleStream implements IStream {
     @Override
     public UUID getStreamID() {
         return streamID;
+    }
+
+    /**
+     * Get the runtime that this stream belongs to.
+     *
+     * @return The runtime the stream belongs to.
+     */
+    @Override
+    public CorfuDBRuntime getRuntime() {
+        return runtime;
     }
 }

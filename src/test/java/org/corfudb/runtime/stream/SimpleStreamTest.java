@@ -23,15 +23,17 @@ public class SimpleStreamTest {
     SimpleStream s;
     IWriteOnceAddressSpace woas;
     IStreamingSequencer ss;
+    CorfuDBRuntime cdr;
+
     @Before
     public void generateStream()
     {
-        CorfuDBRuntime cdr = new CorfuDBRuntime("memory");
+        cdr = new CorfuDBRuntime("memory");
         ConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
         woas = new WriteOnceAddressSpace(cdr);
         ss = new StreamingSequencer(cdr);
-        s = new SimpleStream(UUID.randomUUID(), ss, woas);
+        s = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
     }
 
     @Test
@@ -52,7 +54,7 @@ public class SimpleStreamTest {
     public void streamHasCorrectUUID() throws Exception
     {
         UUID uuid = UUID.randomUUID();
-        SimpleStream s2 = new SimpleStream(uuid, ss, woas);
+        SimpleStream s2 = new SimpleStream(uuid, ss, woas, cdr);
         assertEquals(uuid, s2.getStreamID());
     }
 
@@ -72,8 +74,8 @@ public class SimpleStreamTest {
     @Test
     public void multipleWritesAndReadsFromDifferentStreams() throws Exception
     {
-        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
-        SimpleStream s3 = new SimpleStream(UUID.randomUUID(), ss, woas);
+        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
+        SimpleStream s3 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
 
         s.append("hello world 0");
         assertNull(s2.readNextObject());
@@ -102,7 +104,7 @@ public class SimpleStreamTest {
     @Test
     public void entriesAreOrdered() throws Exception
     {
-        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
+        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
         ITimestamp t1 = s.append("hello world 0");
         ITimestamp t2 = s2.append("hello world 1");
         ITimestamp t3 = s.append("hello world 2");
@@ -154,8 +156,8 @@ public class SimpleStreamTest {
     @Test
     public void entriesAreLinearizable() throws Exception
     {
-        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
-        SimpleStream s3 = new SimpleStream(UUID.randomUUID(), ss, woas);
+        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
+        SimpleStream s3 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
         ITimestamp t1 = s.append("hello world 0");
         ITimestamp t2 = s2.append("hello world 1");
         ITimestamp t3 = s.append("hello world 2");

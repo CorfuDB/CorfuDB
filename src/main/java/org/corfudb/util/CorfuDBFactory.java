@@ -23,9 +23,15 @@ public class CorfuDBFactory {
         this.options = options;
     }
 
+    CorfuDBRuntime runtime;
+
     public CorfuDBRuntime getRuntime()
     {
-        return new CorfuDBRuntime((String) options.get("--master"));
+        if (runtime == null)
+        {
+            runtime = new CorfuDBRuntime((String) options.get("--master"));
+        }
+        return runtime;
     }
 
     @SuppressWarnings("unchecked")
@@ -63,6 +69,6 @@ public class CorfuDBFactory {
 
     public IStream getStream(UUID id, IStreamingSequencer sequencer, IWriteOnceAddressSpace woas)
     {
-        return new SimpleStream(id, sequencer, woas);
+        return new SimpleStream(id, sequencer, woas, runtime);
     }
 }

@@ -167,9 +167,14 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     @Override
     @SuppressWarnings("unchecked")
     public V put(K key, V value) {
-        return (V) mutatorAccessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.put(key, value));
-        });
+        return (V) mutatorAccessorHelper(new ReversibleSMREngineCommand<ConcurrentHashMap>(
+                (ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+                    opts.getReturnResult().complete(map.put(key, value));
+                },
+                (ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+                    map.remove(key);
+                }
+        ));
     }
 
     /**

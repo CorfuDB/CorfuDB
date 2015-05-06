@@ -39,7 +39,7 @@ public interface ICorfuDBObject<T> extends Serializable {
             CorfuDBRuntime cdr = new CorfuDBRuntime("memory");
             IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(cdr);
             IStreamingSequencer seq = new StreamingSequencer(cdr);
-            IStream stream = new SimpleStream(getStreamID(), seq, woas);
+            IStream stream = new SimpleStream(getStreamID(), seq, woas, cdr);
             SimpleSMREngine e = new SimpleSMREngine(stream, getUnderlyingType());
             e.sync(null);
             setUnderlyingSMREngine(e);

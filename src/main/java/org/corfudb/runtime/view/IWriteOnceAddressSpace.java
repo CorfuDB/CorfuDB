@@ -27,16 +27,17 @@ import java.io.Serializable;
  */
 
 public interface IWriteOnceAddressSpace {
-    public void write(long address, Serializable s)
+    void write(long address, Serializable s)
     throws IOException, OverwriteException, TrimmedException;
 
-    public void write(long address, byte[] data)
+    void write(long address, byte[] data)
     throws OverwriteException, TrimmedException;
 
-    public byte[] read(long address)
+    byte[] read(long address)
     throws UnwrittenException, TrimmedException;
 
-    public Object readObject(long address)
+    Object readObject(long address)
     throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException;
+
 }
 

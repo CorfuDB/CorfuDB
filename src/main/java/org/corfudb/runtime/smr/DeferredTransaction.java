@@ -19,7 +19,14 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * A deferred transaction gets resolved at runtime - that is,
+ * A deferred transaction gets resolved at runtime:
+ * Deferred transactions are always successful if they are successfully proposed to the
+ * log. They are only executed on the upcall, and as a result, it is not possible
+ * a priori to know which streams the deferred transaction will be a part of.
+ *
+ * This means that while deferred transactions are guaranteed to execute, every single
+ * stream must execute the deferred transaction to determine whether the transaction
+ * will affect it.
  *
  * Created by mwei on 5/3/15.
  */
@@ -45,7 +52,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
 
     public DeferredTransaction(CorfuDBRuntime runtime)
     {
-        streamList = new ArrayList<UUID>();
+        streamList = null;
         this.runtime = runtime;
     }
 
@@ -65,9 +72,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         }
         else
         {
-            IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(runtime);
-            StreamingSequencer ss = new StreamingSequencer(runtime);
-            IStream sTemp = new SimpleStream(streamID, ss, woas);
+            IStream sTemp = runtime.openStream(streamID, SimpleStream.class);
             ISMREngine engine = new OneShotSMREngine(sTemp, objClass, timestamp);
             engine.sync(timestamp);
             return engine;
@@ -81,7 +86,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
      */
     @Override
     public void registerStream(UUID stream) {
-        streamList.add(stream);
+        //streamList.add(stream);
     }
 
     /**
@@ -159,7 +164,8 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
      */
     @Override
     public List<UUID> getStreamIds() {
-        return streamList;
+        return null;
+        //return streamList;
     }
 
     /**
@@ -170,7 +176,8 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
      */
     @Override
     public boolean containsStream(UUID stream) {
-        return streamList.contains(stream);
+        return true;
+        //return streamList.contains(stream);
     }
 
     /**

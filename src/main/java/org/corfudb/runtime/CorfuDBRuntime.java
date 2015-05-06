@@ -15,7 +15,8 @@
 
 package org.corfudb.runtime;
 
-import org.corfudb.runtime.view.CorfuDBView;
+import org.corfudb.runtime.stream.IStream;
+import org.corfudb.runtime.view.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +32,7 @@ import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.UUID;
@@ -110,6 +112,26 @@ public class CorfuDBRuntime implements AutoCloseable {
         {
             log.debug("Starting view manager thread.");
             viewManagerThread.start();
+        }
+    }
+
+
+    /**
+     * Opens a stream given the type of stream to open.
+     * @param streamID      The UUID of the stream.
+     * @param type          The type of stream to open.
+     * @return              A new stream.
+     */
+    public IStream openStream(UUID streamID, Class<? extends IStream> type)
+    {
+        try {
+            return type.getConstructor(UUID.class, CorfuDBRuntime.class)
+                    .newInstance(streamID, this);
+        }
+        catch (InstantiationException | NoSuchMethodException | IllegalAccessException
+                 | InvocationTargetException e)
+        {
+            throw new RuntimeException(e);
         }
     }
 

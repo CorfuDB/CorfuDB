@@ -15,11 +15,8 @@
 
 package org.corfudb.runtime.stream;
 
-import org.corfudb.runtime.HoleEncounteredException;
-import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
-import org.corfudb.runtime.OutOfSpaceException;
-import org.corfudb.runtime.LinearizationException;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.view.Serializer;
 
@@ -71,6 +68,41 @@ public interface IStream extends AutoCloseable {
     }
 
     /**
+     * Given a timestamp, reads the entry at the timestamp
+     * @param timestamp     The timestamp to read from.
+     * @return              The entry located at that timestamp.
+     */
+    IStreamEntry readEntry(ITimestamp timestamp)
+    throws HoleEncounteredException, TrimmedException, IOException;
+
+    /**
+     * Read a entry in the stream as an Object. This convenience function
+     * retrieves an entry in the stream.
+     * @param timestamp     The timestamp to read from.
+     * @return              The entry located at that timestamp.
+     */
+    default Object readObject(ITimestamp timestamp)
+    throws HoleEncounteredException, TrimmedException, IOException, InterruptedException, ClassNotFoundException
+    {
+        IStreamEntry entry = readEntry(timestamp);
+        return entry == null ? null : entry.getPayload();
+    }
+
+    /**
+     * Given a timestamp, get the timestamp in the stream
+     * @param ts            The timestamp to increment.
+     * @return              The next timestamp in the stream, or null, if there are no next timestamps in the stream.
+     */
+    ITimestamp getNextTimestamp(ITimestamp ts);
+
+    /**
+     * Given a timestamp, get a proceeding timestamp in the stream.
+     * @param ts            The timestamp to decrement.
+     * @return              The previous timestamp in the stream, or null, if there are no previous timestamps in the stream.
+     */
+    ITimestamp getPreviousTimestamp(ITimestamp ts);
+
+    /**
      * Returns a fresh timestamp, which can serve as a linearization point. This function
      * may return a non-linearizable (invalid) timestamp which may never occur in the ordering
      * due to a move/epoch change.
@@ -116,4 +148,10 @@ public interface IStream extends AutoCloseable {
      * @return                  The ID of the stream.
      */
     UUID getStreamID();
+
+    /**
+     * Get the runtime that this stream belongs to.
+     * @return                  The runtime the stream belongs to.
+     */
+    CorfuDBRuntime getRuntime();
 }

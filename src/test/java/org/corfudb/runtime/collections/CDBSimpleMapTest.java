@@ -10,6 +10,7 @@ import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
 import org.junit.Before;
 import org.junit.Test;
+import sun.java2d.pipe.SpanShapeRenderer;
 
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -36,7 +37,7 @@ public class CDBSimpleMapTest {
         woas = new WriteOnceAddressSpace(cdr);
         ss = new StreamingSequencer(cdr);
         streamID = UUID.randomUUID();
-        s = new SimpleStream(streamID, ss, woas);
+        s = new SimpleStream(streamID, ss, woas, cdr);
         testMap = new CDBSimpleMap<Integer, Integer>(s);
     }
 
@@ -57,7 +58,7 @@ public class CDBSimpleMapTest {
     {
         testMap.put(0, 10);
         testMap.put(10, 100);
-        IStream s2 = new SimpleStream(streamID, ss, woas);
+        IStream s2 = cdr.openStream(streamID, SimpleStream.class);
         CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
         assertThat(testMap2.get(0))
                 .isEqualTo(10);
@@ -97,7 +98,7 @@ public class CDBSimpleMapTest {
     public void crossMapSwapTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
-        IStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
+        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
         CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
 
         testMap.put(10, 100);
@@ -125,7 +126,7 @@ public class CDBSimpleMapTest {
     public void mapOfMapsTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
-        IStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
+        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
         CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =
                 new CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>>(s2);
         testMap2.put(10, testMap);

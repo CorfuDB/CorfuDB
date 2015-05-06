@@ -29,7 +29,7 @@ public class SimpleSMREngineTest {
         cm.resetAll();
         woas = new WriteOnceAddressSpace(cdr);
         ss = new StreamingSequencer(cdr);
-        s = new SimpleStream(UUID.randomUUID(), ss, woas);
+        s = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
     }
 
     @Test
