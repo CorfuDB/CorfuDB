@@ -94,6 +94,47 @@ public class CDBSimpleMapTest {
     }
 
     @Test
+    public void crossMapSwapTransactionalTest() throws Exception
+    {
+        SimpleTransaction tx = new SimpleTransaction(cdr);
+        IStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
+        CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
+
+        testMap.put(10, 100);
+        testMap2.put(10, 1000);
+        final CDBSimpleMap<Integer,Integer> txMap = testMap.getTransactionalContext(tx);
+        final CDBSimpleMap<Integer,Integer> txMap2 = testMap2.getTransactionalContext(tx);
+
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            Integer old1 = txMap.get(10);
+            Integer old2 = txMap2.put(10, old1);
+            txMap.put(10, old2);
+            return true;
+        });
+
+        ITimestamp txStamp = tx.propose();
+        testMap.getSMREngine().sync(txStamp);
+        testMap2.getSMREngine().sync(txStamp);
+        assertThat(testMap.get(10))
+                .isEqualTo(1000);
+        assertThat(testMap2.get(10))
+                .isEqualTo(100);
+    }
+
+    @Test
+    public void mapOfMapsTest() throws Exception
+    {
+        SimpleTransaction tx = new SimpleTransaction(cdr);
+        IStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas);
+        CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =
+                new CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>>(s2);
+        testMap2.put(10, testMap);
+        testMap.put(100, 1000);
+        assertThat(testMap2.get(10).get(100))
+                .isEqualTo(1000);
+    }
+
+    @Test
     public void opaqueTransactionalTest() throws Exception
     {
         OpaqueTransaction tx = new OpaqueTransaction(cdr);

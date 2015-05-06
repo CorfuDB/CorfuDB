@@ -1,34 +1,37 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 
-import java.io.Serializable;
-import java.lang.reflect.InvocationTargetException;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.BiConsumer;
 
 /**
- * Created by mwei on 5/1/15.
+ * This is a special SMR engine that syncs to a given timestamp ONCE
+ * and stays locked there.
+ *
+ * Write commands are reflected immediately on the object (for TX support)
+ * and not written to the log.
+ *
+ * So you should NEVER, EVER, use this engine unless you are IMPLEMENTING
+ * TRANSACTIONS.
+ *
+ * Created by mwei on 5/5/15.
  */
-public class SimpleSMREngine<T> implements ISMREngine<T> {
+public class OneShotSMREngine<T> implements ISMREngine<T> {
 
     IStream stream;
     T underlyingObject;
     ITimestamp streamPointer;
-    ITimestamp lastProposal;
-    HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
+    ITimestamp syncPoint;
 
-    class SimpleSMREngineOptions implements ISMREngineOptions
+    class OneShotSMREngineOptions implements ISMREngineOptions
     {
         CompletableFuture<Object> returnResult;
 
-        public SimpleSMREngineOptions(CompletableFuture<Object> returnResult)
+        public OneShotSMREngineOptions(CompletableFuture<Object> returnResult)
         {
             this.returnResult = returnResult;
         }
@@ -38,13 +41,13 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         }
     }
 
-    public SimpleSMREngine(IStream stream, Class<T> type)
+    public OneShotSMREngine(IStream stream, Class<T> type, ITimestamp syncPoint)
     {
         try {
             this.stream = stream;
             streamPointer = stream.getCurrentPosition();
-            completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
             underlyingObject = type.getConstructor().newInstance();
+            this.syncPoint = syncPoint;
         }
         catch (Exception e)
         {
@@ -74,8 +77,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     }
 
     /**
-     * Synchronize the SMR engine to a given timestamp, or pass null to synchronize
-     * the SMR engine as far as possible.
+     * Sync the SMR engine until JUST BEFORE the sync point.
      *
      * @param ts The timestamp to synchronize to, or null, to synchronize to the most
      *           recent version.
@@ -84,27 +86,25 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     @SuppressWarnings("unchecked")
     public void sync(ITimestamp ts) {
         synchronized (this) {
-            if (ts == null) {
-                ts = stream.check();
-                if (ts.compareTo(streamPointer) <= 0) {
-                    //we've already read to the most recent position, no need to keep reading.
-                    return;
-                }
-            }
+            ts = syncPoint;
             while (ts.compareTo(streamPointer) > 0) {
                 try {
                     IStreamEntry entry = stream.readNextEntry();
+                    if (entry.getTimestamp().compareTo(ts) == 0)
+                    {
+                        //don't read the sync point, since that contains
+                        //the transaction...
+                        streamPointer = stream.getCurrentPosition();
+                        return;
+                    }
                     if (entry instanceof ITransaction)
                     {
                         ITransaction transaction = (ITransaction) entry;
-                        //Use this until we figure out how to pass the runtime
-                        transaction.setCorfuDBRuntime(new CorfuDBRuntime("memory"));
                         transaction.executeTransaction(this);
                     }
                     else {
                         ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
-                        CompletableFuture<Object> completion = completionTable.remove(entry.getTimestamp());
-                        function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                        function.accept(underlyingObject, new OneShotSMREngineOptions(new CompletableFuture<Object>()));
                     }
                 } catch (Exception e) {
                     //ignore entries we don't know what to do about.
@@ -117,37 +117,18 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     /**
      * Propose a new command to the SMR engine.
      *
-     * @param command       A lambda (BiConsumer) representing the command to be proposed.
-     *                      The first argument of the lambda is the object the engine is acting on.
-     *                      The second argument of the lambda contains some TX that the engine
-     *                      The lambda must be serializable.
-     *
-     * @param completion    A completable future which will be fulfilled once the command is proposed,
-     *                      which is to be completed by the command.
-     *
-     * @param readOnly      Whether or not the command is read only.
-     *
-     * @return              The timestamp the command was proposed at.
+     * @param command    A lambda (BiConsumer) representing the command to be proposed.
+     *                   The first argument of the lambda is the object the engine is acting on.
+     *                   The second argument of the lambda contains some TX that the engine
+     * @param completion A completable future which will be fulfilled once the command is proposed,
+     *                   which is to be completed by the command.
+     * @param readOnly   Whether or not the command is read only.
+     * @return A timestamp representing the timestamp that the command was proposed to.
      */
     @Override
     public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
-        if (readOnly)
-        {
-            command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+            command.accept(underlyingObject, new OneShotSMREngineOptions(completion));
             return streamPointer;
-        }
-        try {
-            ITimestamp t = stream.append(command);
-            if (completion != null) { completionTable.put(t, completion); }
-            lastProposal = t;
-            return t;
-        }
-        catch (Exception e)
-        {
-            //well, propose is technically not reliable, so we can just silently drop
-            //any exceptions.
-            return null;
-        }
     }
 
     /**
@@ -157,7 +138,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
      */
     @Override
     public ITimestamp getLastProposal() {
-        return lastProposal;
+        return streamPointer;
     }
 
     /**
@@ -167,7 +148,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
      */
     @Override
     public ITimestamp check() {
-        return stream.check();
+        return syncPoint;
     }
 
     /**

@@ -2,7 +2,9 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
@@ -49,15 +51,25 @@ public class SimpleTransaction implements ITransaction, IStreamEntry, Serializab
      * Returns an SMR engine for a transactional context.
      *
      * @param streamID The streamID the SMR engine should run on.
+     * @param objClass The class that the SMR engine runs against.
      * @return The SMR engine to be used for a transactional context.
      */
     @Override
-    public ISMREngine getEngine(UUID streamID) {
+    @SuppressWarnings("unchecked")
+    public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
         if (streamID.equals(executingEngine.getStreamID()))
         {
-            return executingEngine;
+            return new PassThroughSMREngine(executingEngine.getObject(), timestamp);
         }
-        throw new RuntimeException("Cross Object TX not supported by SimpleTransaction");
+        else
+        {
+            IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(runtime);
+            StreamingSequencer ss = new StreamingSequencer(runtime);
+            IStream sTemp = new SimpleStream(streamID, ss, woas);
+            ISMREngine engine = new OneShotSMREngine(sTemp, objClass, timestamp);
+            engine.sync(timestamp);
+            return engine;
+        }
     }
 
     /**
@@ -68,6 +80,17 @@ public class SimpleTransaction implements ITransaction, IStreamEntry, Serializab
     @Override
     public void registerStream(UUID stream) {
         streamList.add(stream);
+    }
+
+    /**
+     * Sets the CorfuDB runtime for this transaction. Used when deserializing
+     * the transaction.
+     *
+     * @param runtime The runtime to use for this transaction.
+     */
+    @Override
+    public void setCorfuDBRuntime(CorfuDBRuntime runtime) {
+        this.runtime = runtime;
     }
 
     /**

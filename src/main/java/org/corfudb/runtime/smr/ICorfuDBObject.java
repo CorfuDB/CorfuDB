@@ -1,9 +1,18 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.stream.SimpleStream;
+import org.corfudb.runtime.view.IStreamingSequencer;
+import org.corfudb.runtime.view.IWriteOnceAddressSpace;
+import org.corfudb.runtime.view.StreamingSequencer;
+import org.corfudb.runtime.view.WriteOnceAddressSpace;
 
+import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
@@ -15,7 +24,56 @@ public interface ICorfuDBObject<T> extends Serializable {
     /**
      * Returns the SMR engine associated with this object.
      */
-    ISMREngine getSMREngine();
+    @SuppressWarnings("unchecked")
+    default ISMREngine getSMREngine()
+    {
+        ITransaction tx = getUnderlyingTransaction();
+        if (tx != null)
+        {
+            return tx.getEngine(getStreamID(), getUnderlyingType());
+        }
+
+        //We need this until we implement custom serialization
+        if (getUnderlyingSMREngine() == null)
+        {
+            CorfuDBRuntime cdr = new CorfuDBRuntime("memory");
+            IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(cdr);
+            IStreamingSequencer seq = new StreamingSequencer(cdr);
+            IStream stream = new SimpleStream(getStreamID(), seq, woas);
+            SimpleSMREngine e = new SimpleSMREngine(stream, getUnderlyingType());
+            e.sync(null);
+            setUnderlyingSMREngine(e);
+        }
+        return getUnderlyingSMREngine();
+    }
+
+    /**
+     * Get the type of the underlying object
+     */
+    Class<?> getUnderlyingType();
+
+    /**
+     * Get the UUID of the underlying stream
+     */
+    UUID getStreamID();
+
+    /**
+     * Get underlying SMR engine
+     * @return  The SMR engine this object was instantiated under.
+     */
+    ISMREngine getUnderlyingSMREngine();
+
+    /**
+     * Set underlying SMR engine
+     * @param smrEngine The SMR engine to replace.
+     */
+    void setUnderlyingSMREngine(ISMREngine engine);
+
+    /**
+     * Get the underlying transaction
+     * @return  The transaction this object is currently participating in.
+     */
+    ITransaction getUnderlyingTransaction();
 
     /**
      * Gets a transactional context for this object.

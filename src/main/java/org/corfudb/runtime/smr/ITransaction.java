@@ -1,5 +1,6 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 
@@ -17,23 +18,23 @@ public interface ITransaction {
     /**
      * Returns an SMR engine for a transactional context.
      * @param streamID  The streamID the SMR engine should run on.
+     * @param objClass  The class that the SMR engine runs against.
      * @return          The SMR engine to be used for a transactional context.
      */
-    ISMREngine getEngine(UUID streamID);
+    ISMREngine getEngine(UUID streamID, Class<?> objClass);
 
-    /**
-     * Functional version of getEngine().
-     * @return          A function which returns an SMR engine given a stream ID.
-     */
-    default Function<UUID, ISMREngine> getEngine()
-    {
-        return this::getEngine;
-    }
     /**
      * Registers a stream to be part of a transactional context.
      * @param stream    A stream that will be joined into this transaction.
      */
     void registerStream(UUID stream);
+
+    /**
+     * Sets the CorfuDB runtime for this transaction. Used when deserializing
+     * the transaction.
+     * @param runtime   The runtime to use for this transaction.
+     */
+    void setCorfuDBRuntime(CorfuDBRuntime runtime);
 
     /**
      * Set the command to be executed for this transaction.

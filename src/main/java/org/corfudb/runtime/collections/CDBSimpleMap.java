@@ -321,14 +321,49 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     }
 
     /**
-     * Returns the SMR engine associated with this object.
+     * Get the type of the underlying object
      */
     @Override
-    public ISMREngine getSMREngine() {
-        if (tx != null)
-        {
-            return tx.getEngine(streamID);
-        }
+    public Class<?> getUnderlyingType() {
+        return ConcurrentHashMap.class;
+    }
+
+    /**
+     * Get the UUID of the underlying stream
+     */
+    @Override
+    public UUID getStreamID() {
+        return streamID;
+    }
+
+    /**
+     * Get underlying SMR engine
+     *
+     * @return The SMR engine this object was instantiated under.
+     */
+    @Override
+    public ISMREngine getUnderlyingSMREngine() {
         return smr;
+    }
+
+    /**
+     * Set underlying SMR engine
+     *
+     * @param engine
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public void setUnderlyingSMREngine(ISMREngine engine) {
+        this.smr = engine;
+    }
+
+    /**
+     * Get the underlying transaction
+     *
+     * @return The transaction this object is currently participating in.
+     */
+    @Override
+    public ITransaction getUnderlyingTransaction() {
+        return tx;
     }
 }
