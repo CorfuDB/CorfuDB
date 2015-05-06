@@ -26,6 +26,19 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
         this.tx = tx;
     }
 
+    @SuppressWarnings("unchecked")
+    public CDBSimpleMap(IStream stream, Class<? extends ISMREngine> smrClass)
+    {
+        try {
+            streamID = stream.getStreamID();
+            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, ConcurrentHashMap.class);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
     public CDBSimpleMap(IStream stream)
     {
         streamID = stream.getStreamID();
@@ -167,14 +180,11 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     @Override
     @SuppressWarnings("unchecked")
     public V put(K key, V value) {
-        return (V) mutatorAccessorHelper(new ReversibleSMREngineCommand<ConcurrentHashMap>(
+        return (V) mutatorAccessorHelper(
                 (ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
                     opts.getReturnResult().complete(map.put(key, value));
-                },
-                (ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-                    map.remove(key);
                 }
-        ));
+        );
     }
 
     /**

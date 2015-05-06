@@ -3,6 +3,7 @@ package org.corfudb.runtime.smr;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.stream.SimpleStream;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -71,6 +72,11 @@ public class TimeTravelSMREngine<T> extends SimpleSMREngine<T> {
                             ReversibleSMREngineCommand c = (ReversibleSMREngineCommand) o;
                             c.reverse(underlyingObject, new SimpleSMREngineOptions(new CompletableFuture<Object>()));
                         }
+                        //this operation is non reversible, so unfortunately we have to play from the beginning...
+                        OneShotSMREngine<T> smrOS = new OneShotSMREngine<T>(stream.getRuntime().openStream(stream.getStreamID(),
+                                SimpleStream.class), type, streamPointer);
+                        smrOS.sync(streamPointer);
+                        underlyingObject = smrOS.getObject();
                     } catch (Exception e) {
 
                     }

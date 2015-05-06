@@ -1,9 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.smr.ITransactionCommand;
-import org.corfudb.runtime.smr.OpaqueDeferredTransaction;
-import org.corfudb.runtime.smr.DeferredTransaction;
+import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
@@ -170,5 +168,55 @@ public class CDBSimpleMapTest {
         assertThat(testMap.get(10))
                 .isNotEqualTo(42)
                 .isEqualTo(1000);
+    }
+
+    @Test
+    public void TimeTravelSMRTest()
+    {
+        IStream s1 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        CDBSimpleMap<Integer, Integer> map = new CDBSimpleMap<Integer,Integer>(
+                s1,
+                TimeTravelSMREngine.class
+        );
+
+        map.put(10, 100);
+        map.put(100, 1000);
+        ITimestamp ts1 = map.getSMREngine().getLastProposal();
+        map.put(100, 1234);
+        ITimestamp ts2 = map.getSMREngine().getLastProposal();
+        map.remove(100);
+        ITimestamp ts3 = map.getSMREngine().getLastProposal();
+        map.put(100, 5678);
+        ITimestamp ts4 = map.getSMREngine().getLastProposal();
+
+        assertThat(map.get(100))
+                .isEqualTo(5678);
+        assertThat(map.get(10))
+                .isEqualTo(100);
+
+        TimeTravelSMREngine t = (TimeTravelSMREngine) map.getSMREngine();
+        t.travelAndLock(ts1);
+        assertThat(map.get(100))
+                .isEqualTo(1000);
+        assertThat(map.get(10))
+                .isEqualTo(100);
+
+        t.travelAndLock(ts4);
+        assertThat(map.get(100))
+                .isEqualTo(5678);
+        assertThat(map.get(10))
+                .isEqualTo(100);
+
+        t.travelAndLock(ts3);
+        assertThat(map.get(100))
+                .isEqualTo(null);
+        assertThat(map.get(10))
+                .isEqualTo(100);
+
+        t.travelAndLock(ts2);
+        assertThat(map.get(100))
+                .isEqualTo(1234);
+        assertThat(map.get(10))
+                .isEqualTo(100);
     }
 }

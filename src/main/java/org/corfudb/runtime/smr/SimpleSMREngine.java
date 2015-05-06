@@ -22,6 +22,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     T underlyingObject;
     ITimestamp streamPointer;
     ITimestamp lastProposal;
+    Class<T> type;
     HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
 
     class SimpleSMREngineOptions implements ISMREngineOptions
@@ -42,6 +43,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     {
         try {
             this.stream = stream;
+            this.type = type;
             streamPointer = stream.getCurrentPosition();
             completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
             underlyingObject = type.getConstructor().newInstance();
