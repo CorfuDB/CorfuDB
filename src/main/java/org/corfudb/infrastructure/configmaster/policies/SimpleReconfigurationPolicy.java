@@ -29,7 +29,7 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
                 /* in the case of a write, find the segment belonging to the protocol,
                    and remove that protocol from the segment.
                  */
-                CorfuDBView newView = (CorfuDBView) Serializer.copy(oldView);
+                CorfuDBView newView = (CorfuDBView) Serializer.copyShallow(oldView);
 
                 for (CorfuDBViewSegment segment : newView.getSegments())
                 {

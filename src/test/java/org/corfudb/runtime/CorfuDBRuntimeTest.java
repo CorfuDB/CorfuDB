@@ -136,6 +136,25 @@ public class CorfuDBRuntimeTest {
         /* cause a unit to fail */
         MemoryLogUnitProtocol.memoryUnits.get(1).simulateFailure(true);
         woas.write(s.getNext(), "Hello World 2".getBytes());
-        
+
+        /* make sure that it is written to unit 0 */
+        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(1))
+                .isEqualTo("Hello World 2".getBytes());
+
+        /* make sure that reads work */
+        assertThat(woas.read(1))
+                .isEqualTo("Hello World 2".getBytes());
+
+        /* make sure that transient failures aren't an issue */
+        MemoryLogUnitProtocol.memoryUnits.get(1).simulateFailure(false);
+        woas.write(s.getNext(), "Hello World 3".getBytes());
+
+        assertThat(woas.read(1))
+                .isEqualTo("Hello World 2".getBytes());
+        assertThat(woas.read(2))
+                .isEqualTo("Hello World 3".getBytes());
+
+        /* and make sure that writes to the wrong epoch fail */
+
     }
 }
