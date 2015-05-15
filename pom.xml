@@ -561,6 +561,38 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>com.bazaarvoice.maven.plugins</groupId>
+                <artifactId>process-exec-maven-plugin</artifactId>
+                <version>0.7</version>
+                <executions>
+                    <!--Start process 1, eg., a dropwizard app dependency-->
+                    <execution>
+                        <id>redis-process</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                        <configuration>
+                            <name>redis</name>
+                            <waitForInterrupt>false</waitForInterrupt>
+                            <waitAfterLaunch>5</waitAfterLaunch>
+                            <arguments>
+                                <argument>redis-server</argument>
+                                <argument>--port 12900</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <!--Stop all processes in reverse order-->
+                    <execution>
+                        <id>stop-all</id>
+                        <phase>post-integration-test</phase>
+                        <goals>
+                            <goal>stop-all</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
 
     <resources>

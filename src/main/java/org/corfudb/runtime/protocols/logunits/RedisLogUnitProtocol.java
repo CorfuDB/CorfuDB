@@ -23,6 +23,7 @@ import redis.clients.jedis.BinaryJedis;
 import redis.clients.jedis.Transaction;
 import redis.clients.jedis.Response;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,7 +75,15 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     {
         this.host = host;
         this.port = port;
-        this.options = options;
+        if (options == null)
+        {
+            this.options = new HashMap<String,String>();
+            this.options.put("prefix", "corfudb_data");
+            this.options.put("meta", "corfudb_meta");
+        }
+        else {
+            this.options = options;
+        }
         this.epoch = epoch;
 
         try
