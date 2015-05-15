@@ -26,6 +26,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     private Integer port;
     private Long epoch;
     private Long trimMark;
+    private boolean simFailure = false;
 
     private ConcurrentMap<Long, byte[]> memoryArray;
 
@@ -99,7 +100,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
      */
     @Override
     public boolean ping() {
-        return true;
+        return !simFailure;
     }
 
     /**
@@ -126,6 +127,17 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     }
 
     /**
+     * Simulates a failure by causing the node to not respond.
+     * If not implemented, will throw an UnsupportedOperation exception.
+     *
+     * @param fail True, to simulate failure, False, to restore the unit to responsiveness.
+     */
+    @Override
+    public void simulateFailure(boolean fail) {
+        simFailure = fail;
+    }
+
+    /**
      * Write to the stream unit.
      * @param address                   The address to write to
      * @param payload                   The payload to be written
@@ -135,6 +147,10 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
      */
     @Override
     public void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException {
+        if (simFailure)
+        {
+            throw new NetworkException("Unit in simulated failure mode!", this, address, true);
+        }
         if (address < trimMark)
         {
             throw new TrimmedException("Address is trimmed", address);
@@ -155,6 +171,10 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
      */
     @Override
     public byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException {
+        if (simFailure)
+        {
+            throw new NetworkException("Unit in simulated failure mode!", this, address, false);
+        }
         if (address < trimMark)
         {
             throw new TrimmedException("Address is trimmed", address);

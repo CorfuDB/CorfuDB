@@ -2,6 +2,7 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.stream.ITimestamp;
 
+import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -68,6 +69,18 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
     @Override
     public void sync(ITimestamp ts) {
         // Always in sync.
+    }
+
+    /**
+     * Checkpoint the current state of the SMR engine.
+     *
+     * @return The timestamp the checkpoint was inserted at.
+     */
+    @Override
+    public ITimestamp checkpoint()
+            throws IOException
+    {
+         throw new UnsupportedOperationException("Checkpointing not supported!");
     }
 
     /**

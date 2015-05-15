@@ -4,6 +4,7 @@ import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -129,6 +130,19 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
     public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
             command.accept(underlyingObject, new OneShotSMREngineOptions(completion));
             return streamPointer;
+    }
+
+    /**
+     * Checkpoint the current state of the SMR engine.
+     *
+     * @return The timestamp the checkpoint was inserted at.
+     */
+    @Override
+    public ITimestamp checkpoint()
+            throws IOException
+    {
+        SMRCheckpoint<T> checkpoint = new SMRCheckpoint<T>(streamPointer, underlyingObject);
+        return stream.append(checkpoint);
     }
 
     /**

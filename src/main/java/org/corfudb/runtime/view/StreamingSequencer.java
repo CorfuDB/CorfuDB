@@ -16,6 +16,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
@@ -95,10 +96,10 @@ public class StreamingSequencer implements IStreamingSequencer {
                     return ((ISimpleSequencer)sequencer).sequenceGetNext(numTokens);
                 }
             }
-            catch (Exception e)
+            catch (NetworkException e)
             {
                 log.warn("Unable to get next sequence, requesting new view.", e);
-                client.invalidateViewAndWait();
+                client.invalidateViewAndWait(e);
             }
         }
     }
@@ -120,10 +121,10 @@ public class StreamingSequencer implements IStreamingSequencer {
                     return;
                 }
             }
-            catch (Exception e)
+            catch (NetworkException e)
             {
                 log.warn("Unable to get current sequencer, requesting new view.", e);
-                client.invalidateViewAndWait();
+                client.invalidateViewAndWait(e);
             }
         }
 

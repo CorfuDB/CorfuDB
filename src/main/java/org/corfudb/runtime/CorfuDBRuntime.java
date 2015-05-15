@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime;
 
+import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.*;
 import org.slf4j.Logger;
@@ -141,8 +142,19 @@ public class CorfuDBRuntime implements AutoCloseable {
      */
     public static org.corfudb.runtime.view.CorfuDBView retrieveView(String configString)
         throws IOException {
-        if (configString.equals("memory"))
+        if (configString.equals("custom"))
         {
+            if (MemoryConfigMasterProtocol.memoryConfigMasters.get(0) != null)
+            {
+                return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
+            }
+        }
+        else if (configString.equals("memory"))
+        {
+            if (MemoryConfigMasterProtocol.memoryConfigMasters.get(0) != null)
+            {
+                return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
+            }
             //this is an in-memory request.
             HashMap<String, Object> MemoryView = new HashMap<String, Object>();
             MemoryView.put("epoch", 0L);
@@ -173,8 +185,9 @@ public class CorfuDBRuntime implements AutoCloseable {
             segments.add(segment);
             layout.put("segments", segments);
             MemoryView.put("layout", layout);
-
-            return new CorfuDBView(MemoryView);
+            CorfuDBView newView = new CorfuDBView(MemoryView);
+            MemoryConfigMasterProtocol.memoryConfigMasters.get(0).setInitialView(newView);
+            return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
         }
         HttpClient httpClient = HttpClients.createDefault();
         HttpResponse response = httpClient.execute(new HttpGet(configString));
@@ -190,12 +203,14 @@ public class CorfuDBRuntime implements AutoCloseable {
     /**
      * Invalidate the current view and wait for a new view.
      */
-    public void invalidateViewAndWait()
+    public void invalidateViewAndWait(NetworkException e)
     {
         log.warn("Client requested invalidation of current view");
         if (currentView != null)
         {
             currentView.invalidate();
+            IConfigurationMaster cm = new ConfigurationMaster(this);
+            cm.requestReconfiguration(e);
         }
             synchronized(viewUpdatePending)
             {

@@ -24,10 +24,21 @@ import org.corfudb.runtime.protocols.IServerProtocol;
 public class NetworkException extends IOException
 {
     public IServerProtocol protocol;
+    public long address;
+    public boolean write;
+
     public NetworkException(String desc, IServerProtocol protocol)
     {
         super(desc + "[server=" + protocol.getFullString() + "]");
         this.protocol = protocol;
+    }
+
+    public NetworkException(String desc, IServerProtocol protocol, long address, boolean write)
+    {
+        super(desc + "[server=" + protocol.getFullString() + ", address= " + address + ", r/w=" + (write ? "W" : "R") + "]");
+        this.protocol = protocol;
+        this.address = address;
+        this.write = write;
     }
 }
 

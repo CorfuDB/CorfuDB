@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
+import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -179,4 +180,14 @@ public interface IServerProtocol {
      */
     void reset(long epoch)
         throws NetworkException;
+
+    /**
+     * Simulates a failure by causing the node to not respond.
+     * If not implemented, will throw an UnsupportedOperation exception.
+     * @param fail  True, to simulate failure, False, to restore the unit to responsiveness.
+     */
+    default void simulateFailure(boolean fail)
+    {
+        throw new UnsupportedOperationException("Can't set failure mode, not supported!");
+    }
 }

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
 /**
@@ -21,6 +22,20 @@ public class ConfigurationMaster implements IConfigurationMaster {
                 ((IConfigMaster) cdr.getView().getConfigMasters().get(0)).resetAll();
                 return;
             } catch (Exception e) {
+
+            }
+        }
+    }
+
+    @Override
+    public void requestReconfiguration(NetworkException e) {
+        while (true) {
+            try {
+                ((IConfigMaster) cdr.getView().getConfigMasters().get(0)).requestReconfiguration(e);
+                return;
+            }
+            catch (Exception ex)
+            {
 
             }
         }

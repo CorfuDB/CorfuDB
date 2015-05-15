@@ -14,9 +14,11 @@
  */
 
 package org.corfudb.runtime.protocols.configmasters;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
 import org.corfudb.runtime.gossip.IGossip;
+import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.StreamData;
 import java.util.Map;
 import java.util.UUID;
@@ -93,5 +95,17 @@ public interface IConfigMaster extends IServerProtocol {
      * known state.
      */
     void resetAll();
+
+    /**
+     * Gets the current view from the configuration master.
+     * @return  The current view.
+     */
+    CorfuDBView getView();
+
+    /**
+     * Request reconfiguration due to a network exception.
+     * @param e             The network exception that caused the reconfiguration request.
+     */
+    void requestReconfiguration(NetworkException e);
 }
 

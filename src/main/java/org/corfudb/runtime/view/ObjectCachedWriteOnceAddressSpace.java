@@ -124,7 +124,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
             catch (NetworkException e)
             {
                 log.warn("Unable to write, requesting new view.", e);
-                client.invalidateViewAndWait();
+                client.invalidateViewAndWait(e);
             }
         }
     }
@@ -161,7 +161,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
             catch (NetworkException e)
             {
                 log.warn("Unable to read, requesting new view.", e);
-                client.invalidateViewAndWait();
+                client.invalidateViewAndWait(e);
             }
         }
     }

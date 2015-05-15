@@ -1,10 +1,12 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
@@ -149,6 +151,19 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             //any exceptions.
             return null;
         }
+    }
+
+    /**
+     * Checkpoint the current state of the SMR engine.
+     *
+     * @return The timestamp the checkpoint was inserted at.
+     */
+    @Override
+    public ITimestamp checkpoint()
+        throws IOException
+    {
+        SMRCheckpoint<T> checkpoint = new SMRCheckpoint<T>(streamPointer, underlyingObject);
+        return stream.append(checkpoint);
     }
 
     /**

@@ -15,11 +15,15 @@
 
 package org.corfudb.runtime.protocols.configmasters;
 
+import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
+import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
 import java.util.Map;
 import java.util.HashMap;
 
+import org.corfudb.runtime.view.CorfuDBView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +48,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
     private JSONRPC2Session jsonSession;
     private AtomicInteger id;
     private Client client;
+
 
      public static String getProtocolString()
     {
@@ -77,6 +82,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
         this.options = options;
         this.epoch = epoch;
         this.id = new AtomicInteger();
+
 
         try
         {
@@ -283,6 +289,26 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
             }
         } catch(Exception e) {
         }
+
+    }
+
+    /**
+     * Gets the current view from the configuration master.
+     *
+     * @return The current view.
+     */
+    @Override
+    public CorfuDBView getView() {
+        return null;
+    }
+
+    /**
+     * Request reconfiguration due to a network exception.
+     *
+     * @param e The network exception that caused the reconfiguration request.
+     */
+    @Override
+    public void requestReconfiguration(NetworkException e) {
 
     }
 

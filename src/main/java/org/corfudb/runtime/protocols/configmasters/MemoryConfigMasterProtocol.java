@@ -1,10 +1,13 @@
 package org.corfudb.runtime.protocols.configmasters;
 
+import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
+import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.gossip.IGossip;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.MemoryLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.MemorySequencerProtocol;
+import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.StreamData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,9 +28,11 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     private String host;
     private Integer port;
     private Long epoch;
-    private ConcurrentMap<Long, byte[]> memoryArray;
+    private CorfuDBView view;
+    private CorfuDBView initialView;
+    private IReconfigurationPolicy reconfigPolicy;
 
-    static ConcurrentHashMap<Integer, MemoryConfigMasterProtocol> memoryConfigMasters =
+    public static ConcurrentHashMap<Integer, MemoryConfigMasterProtocol> memoryConfigMasters =
             new ConcurrentHashMap<Integer, MemoryConfigMasterProtocol>();
 
     public MemoryConfigMasterProtocol() {
@@ -55,8 +60,23 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
         this.port = port;
         this.options = options;
         this.epoch = epoch;
+        this.reconfigPolicy = new SimpleReconfigurationPolicy();
+        memoryConfigMasters.put(this.port, this);
     }
 
+    public void setInitialView(CorfuDBView view)
+    {
+        this.view = view;
+        this.initialView = view;
+    }
+
+    /** Resets (removes) all in memory units from view */
+    public static void inMemoryClear()
+    {
+        MemoryConfigMasterProtocol.memoryConfigMasters.clear();
+        MemoryLogUnitProtocol.memoryUnits.clear();
+        MemorySequencerProtocol.memorySequencers.clear();
+    }
     /**
      * Adds a new stream to the system.
      *
@@ -145,7 +165,9 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     @Override
     public void resetAll() {
         /* just reset everything in memory */
-        setEpoch(epoch + 1);
+        try {
+            this.reset(epoch + 1);
+        } catch (Exception e) {}
         for (MemorySequencerProtocol msp : MemorySequencerProtocol.memorySequencers.values())
         {
             try {
@@ -158,6 +180,29 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
                 mlu.reset(epoch+1);}
             catch (Exception e) {}
         }
+
+        this.epoch++;
+    }
+
+    /**
+     * Gets the current view from the configuration master.
+     *
+     * @return The current view.
+     */
+    @Override
+    public CorfuDBView getView() {
+        return view;
+    }
+
+    /**
+     * Request reconfiguration due to a network exception.
+     *
+     * @param e The network exception that caused the reconfiguration request.
+     */
+    @Override
+    public void requestReconfiguration(NetworkException e) {
+        this.view = reconfigPolicy.getNewView(this.view, e);
+        log.info("Reconfiguration requested, moving to new view epoch " + this.view.getEpoch());
     }
 
     /**
@@ -228,6 +273,7 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
      */
     @Override
     public void reset(long epoch) throws NetworkException {
-
+        this.view = this.initialView;
+        this.initialView.setEpoch(epoch);
     }
 }

@@ -20,6 +20,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -110,13 +111,23 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 for (IServerProtocol unit : chain)
                 {
                     ((IWriteOnceLogUnit)unit).write(mappedAddress,data);
-                    return;
                 }
+                return;
             }
             catch (NetworkException e)
             {
                 log.warn("Unable to write, requesting new view.", e);
-                client.invalidateViewAndWait();
+                client.invalidateViewAndWait(e);
+                //okay so, if we read on the same address, is it now successful?
+                try {
+                    if (Arrays.equals(read(address), data)) {
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    log.warn("View refreshed, but write was not successful: retrying.", ex);
+                }
             }
         }
     }
@@ -142,7 +153,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
             catch (NetworkException e)
             {
                 log.warn("Unable to read, requesting new view.", e);
-                client.invalidateViewAndWait();
+                client.invalidateViewAndWait(e);
             }
         }
     }

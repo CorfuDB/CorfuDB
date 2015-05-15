@@ -2,6 +2,7 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.stream.ITimestamp;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -82,6 +83,13 @@ public interface ISMREngine<T> {
     {
         return propose(command, null, false);
     }
+
+    /**
+     * Checkpoint the current state of the SMR engine.
+     * @return              The timestamp the checkpoint was inserted at.
+     */
+    ITimestamp checkpoint()
+        throws IOException;
 
     /**
      * Get the timestamp of the most recently proposed command.

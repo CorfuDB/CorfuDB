@@ -16,6 +16,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 
 import org.slf4j.Logger;
@@ -45,10 +46,10 @@ public class Sequencer {
                 ISimpleSequencer sequencer = (ISimpleSequencer) client.getView().getSequencers().get(0);
                 return sequencer.sequenceGetNext();
             }
-            catch (Exception e)
+            catch (NetworkException e)
             {
                 log.warn("Unable to get next sequence, requesting new view.", e);
-                client.invalidateViewAndWait();
+                client.invalidateViewAndWait(e);
             }
         }
     }
@@ -61,10 +62,10 @@ public class Sequencer {
                 ISimpleSequencer sequencer = (ISimpleSequencer) client.getView().getSequencers().get(0);
                 return sequencer.sequenceGetCurrent();
             }
-            catch (Exception e)
+            catch (NetworkException e)
             {
                 log.warn("Unable to get current sequence, requesting new view.", e);
-                client.invalidateViewAndWait();
+                client.invalidateViewAndWait(e);
             }
         }
     }

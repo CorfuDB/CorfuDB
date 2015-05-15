@@ -186,6 +186,19 @@ public class CorfuDBView {
         return segments;
     }
 
+    public void moveAllToNewEpoch(long epoch)
+    {
+        this.epoch = epoch;
+        this.getSegments().stream().forEach(segment ->
+                segment.getGroups().stream().forEach(
+                        group -> group.stream().forEach(
+                                node -> node.setEpoch(epoch)
+                        )
+                ));
+
+        this.getSequencers().stream().forEach(sequencer -> sequencer.setEpoch(epoch));
+    }
+
     public List<IServerProtocol> getConfigMasters() {
         return configmasters;
     }
