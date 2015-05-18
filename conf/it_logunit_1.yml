@@ -1,0 +1,25 @@
+---
+# CorfuDB Integration Test Logunit 1
+#
+# This simple configuration file spawns a simple ramdisk logunit
+# on port 8001.
+#
+# Required:
+# role (string) - org.corfudb.sharedlog.loggingunit.LogUnitTask selects the stream unit
+# port (number) - the port number to run on
+# capacity (number) - the size of the loggingunit (in?)
+# ramdisk (boolean) - whether or not the stream unit is backed by disk or RAM
+# pagesize (number) - the size of each page, in bytes
+# trim (number) - the offet of the trim marker
+#
+# Optional:
+# recovery (boolean) - whether or not to attempt recovery when the logunit starts
+# drive (string) - the path to serve from, if not a ramdisk (required if not a ramdisk)
+
+role: org.corfudb.infrastructure.SimpleLogUnitServer
+port: 12800
+capacity: 100000000
+ramdisk: true
+pagesize: 4096
+trim: 0
+master: http://localhost:12700/corfu
