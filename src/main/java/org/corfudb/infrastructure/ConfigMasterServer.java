@@ -516,6 +516,12 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         return null;
     }
 
+    private JsonObject newView(JsonObject params)
+    {
+        currentView = new CorfuDBView(params.getJsonObject("view"));
+        return null;
+    }
+
     private JsonObject logInfo(JsonObject params)
     {
         long pos = params.getJsonNumber("pos").longValue();
@@ -748,6 +754,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         break;
                     case "streaminspector":
                         job.add("result", streamInspector(params));
+                        break;
+                    case "newview":
+                        job.add("result", newView(params));
                         break;
                 }
                 JsonObject res =    job.add("calledmethod", apiCall)

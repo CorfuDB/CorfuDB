@@ -107,5 +107,12 @@ public interface IConfigMaster extends IServerProtocol {
      * @param e             The network exception that caused the reconfiguration request.
      */
     void requestReconfiguration(NetworkException e);
+
+    /**
+     * Force the configuration master to install a new view. This method should only be called during
+     * testing.
+     * @param v             The new view to install.
+     */
+    void forceNewView(CorfuDBView v);
 }
 

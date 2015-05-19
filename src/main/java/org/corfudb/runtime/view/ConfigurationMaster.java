@@ -40,4 +40,18 @@ public class ConfigurationMaster implements IConfigurationMaster {
             }
         }
     }
+
+    @Override
+    public void forceNewView(CorfuDBView v) {
+        while (true) {
+            try {
+                ((IConfigMaster) cdr.getView().getConfigMasters().get(0)).forceNewView(v);
+                return;
+            }
+            catch (Exception ex)
+            {
+
+            }
+        }
+    }
 }

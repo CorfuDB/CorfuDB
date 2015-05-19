@@ -206,6 +206,17 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     }
 
     /**
+     * Force the configuration master to install a new view. This method should only be called during
+     * testing.
+     *
+     * @param v The new view to install.
+     */
+    @Override
+    public void forceNewView(CorfuDBView v) {
+        this.view = v;
+    }
+
+    /**
      * Returns the full server string.
      *
      * @return A server string.

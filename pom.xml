@@ -17,7 +17,6 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     </properties>
 
     <scm>
@@ -623,6 +622,26 @@
                                 <argument>${basedir}/conf/it_logunit_1.yml</argument>
                             </arguments>
                             <processLogFile>${project.build.directory}/it_logunit_1.log</processLogFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>logunit2-process</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                        <configuration>
+                            <name>logunit-2</name>
+                            <waitForInterrupt>false</waitForInterrupt>
+                            <waitAfterLaunch>5</waitAfterLaunch>
+                            <arguments>
+                                <argument>java</argument>
+                                <argument>-cp</argument>
+                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
+                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
+                                <argument>${basedir}/conf/it_logunit_2.yml</argument>
+                            </arguments>
+                            <processLogFile>${project.build.directory}/it_logunit_2.log</processLogFile>
                         </configuration>
                     </execution>
                     <execution>

@@ -9,4 +9,5 @@ public interface IConfigurationMaster {
 
     void resetAll();
     void requestReconfiguration(NetworkException e);
+    void forceNewView(CorfuDBView v);
 }

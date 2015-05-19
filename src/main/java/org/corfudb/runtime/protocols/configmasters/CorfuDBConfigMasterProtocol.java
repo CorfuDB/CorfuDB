@@ -312,4 +312,25 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
 
     }
 
+    /**
+     * Force the configuration master to install a new view. This method should only be called during
+     * testing.
+     *
+     * @param v The new view to install.
+     */
+    @Override
+    public void forceNewView(CorfuDBView v) {
+        try {
+            JSONRPC2Request jr = new JSONRPC2Request("forceView", id.getAndIncrement());
+            Map<String, Object> params = new HashMap<String,Object>();
+            params.put("newview", v.getSerializedJSONView().toString());
+            jr.setNamedParams(params);
+            JSONRPC2Response jres = jsonSession.send(jr);
+            if (jres.indicatesSuccess() && (Boolean) jres.getResult())
+            {
+            }
+        } catch(Exception e) {
+        }
+    }
+
 }

@@ -58,6 +58,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     protected boolean RAMMODE = true; // command line switch: work in memory (no data persistence)
     protected boolean RECOVERY = false; // command line switch: indicate whether we load stream from disk on startup
     protected boolean REBUILD = false;
+    boolean simFailure = false;
     protected String rebuildnode = null;
 
     protected int PAGESIZE;
@@ -99,6 +100,11 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
     public SimpleLogUnitServer() {
         //default constructor
+    }
+
+    public void simulateFailure(boolean fail)
+    {
+        this.simFailure = fail;
     }
 
     public Runnable getInstance (final Map<String,Object> config)
@@ -455,6 +461,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     }*/
     @Override
     public boolean ping() throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         return true;
     }
 
@@ -470,6 +480,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	@Override
 	synchronized public ErrorCode write(UnitServerHdr hdr, List<ByteBuffer> ctnt, ExtntMarkType et) throws org.apache.thrift.TException {
 
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) {
             log.info("write request has stale incarnation={} cur incarnation={}",
                     hdr.getEpoch(), masterIncarnation);
@@ -496,6 +510,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	 */
 	@Override
 	synchronized public ErrorCode fix(UnitServerHdr hdr) throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
 		return write(hdr, new ArrayList<ByteBuffer>(), ExtntMarkType.EX_SKIP);
 	}
 
@@ -517,6 +535,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	 */
 	@Override
 	synchronized public ExtntWrap read(UnitServerHdr hdr) throws org.apache.thrift.TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return genWrap(ErrorCode.ERR_STALEEPOCH);
 		log.debug("read({})", hdr.off);
         try {
@@ -549,6 +571,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	 */
     @Override
 	synchronized public void sync() throws org.apache.thrift.TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
     	synchronized(DriveLck) { try { DriveLck.wait(); } catch (Exception e) {
     		log.error("forcing sync to persistent store failed, quitting");
     		System.exit(1);
@@ -610,6 +636,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 	@Override
     synchronized public void ckpoint(UnitServerHdr hdr) throws org.apache.thrift.TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         // if (hdr.getEpoch() < epoch) return ErrorCode.ERR_STALEEPOCH;
 		log.info("mark latest checkpoint offset={}", hdr.off);
 		if (hdr.off > ckmark) ckmark = (int) (hdr.off % UNITCAPACITY);
