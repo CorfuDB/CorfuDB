@@ -34,8 +34,7 @@ $ sudo dpkg -i /tmp/thrift-compiler.deb
 On Mac OS X, the [homebrew](http://brew.sh) package manager should help.
 After installing homebrew, run:
 ```
-$ brew install maven thrift
-$ brew install redis
+$ brew install maven thrift redis
 ```
 
 On Windows, you can get thrift here:
