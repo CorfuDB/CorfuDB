@@ -20,7 +20,7 @@ Mac OS X. CorfuDB should also run on Windows as well, but the scripts
 are not 100% there yet (pull requests welcome).
 
 To build and run CorfuDB, you will need the Java JDK 8 as well as Apache
-Thrift and Maven.
+Thrift, Redis and Maven.
 
 On Linux (Debian/Ubuntu), run:
 ```
@@ -35,6 +35,7 @@ On Mac OS X, the [homebrew](http://brew.sh) package manager should help.
 After installing homebrew, run:
 ```
 $ brew install maven thrift
+$ brew install redis
 ```
 
 On Windows, you can get thrift here:
@@ -49,6 +50,7 @@ CorfuDB uses Apache maven for building. To build, from the root
 directory, run:
 
 ```
+$ mvn clean   (only if not first time and junk is left over)
 $ mvn install
 ```
 
