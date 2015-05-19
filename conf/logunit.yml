@@ -18,7 +18,7 @@
 
 role: org.corfudb.infrastructure.SimpleLogUnitServer
 port: 8001
-capacity: 100000000
+capacity: 10000
 ramdisk: true
 pagesize: 4096
 trim: 0
