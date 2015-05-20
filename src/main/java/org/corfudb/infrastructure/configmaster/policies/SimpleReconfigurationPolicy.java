@@ -20,6 +20,8 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
 
     @Override
     public CorfuDBView getNewView(CorfuDBView oldView, NetworkException e) {
+        /* it's null, don't change anything */
+        if (e == null) { return oldView; }
         /* Is the exception for a Logging Unit? */
         if (e.protocol instanceof IWriteOnceLogUnit)
         {
@@ -45,12 +47,13 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
             }
             /* for reads, we don't do anything, for now...
              */
-            return null;
+            log.warn("Reconfigure due to read, ignoring");
+            return oldView;
         }
         else
         {
             log.warn("Request reconfiguration for protocol we don't know how to reconfigure", e.protocol);
-            return null;
+            return oldView;
         }
     }
 }

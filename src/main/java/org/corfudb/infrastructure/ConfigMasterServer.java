@@ -14,6 +14,9 @@
  */
 package org.corfudb.infrastructure;
 
+import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
+import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;
 import org.corfudb.runtime.view.WriteOnceAddressSpace;
@@ -28,14 +31,9 @@ import org.slf4j.MarkerFactory;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.BufferedReader;
-import java.io.OutputStream;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URI;
 import java.net.URLConnection;
-import java.io.StringWriter;
 import java.net.InetSocketAddress;
 import java.security.SecureRandom;
 import java.util.*;
@@ -516,9 +514,52 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         return null;
     }
 
+    private JsonObject reconfig(JsonObject params)
+    {
+        try {
+            log.warn("Reconfiguration requested!");
+
+            NetworkException ne = null;
+            if (params.getJsonString("exception") != null) {
+                String ex = params.getJsonString("exception").getString();
+                ne = (NetworkException) Serializer.deserialize_compressed(Base64.getDecoder().decode(ex));
+                log.warn("Reconfigure due to " +ne.getMessage());
+            }
+            IReconfigurationPolicy policy = new SimpleReconfigurationPolicy();
+            currentView = policy.getNewView(currentView, ne);
+            log.warn("Reconfiguration completed, view is now " + currentView.getSerializedJSONView().toString());
+        }
+        catch (Exception e)
+        {
+            log.warn("Exception" , e);
+        }
+        return null;
+    }
+
     private JsonObject newView(JsonObject params)
     {
-        currentView = new CorfuDBView(params.getJsonObject("view"));
+        try {
+            log.warn("Forcibly installing new view");
+            log.warn("newview=", params.getJsonString("newview").getString());
+            try (StringReader isr  = new StringReader(params.getJsonString("newview").getString()))
+            {
+                try (BufferedReader br = new BufferedReader(isr))
+                {
+                    try (JsonReader jr = Json.createReader(br))
+                    {
+                        JsonObject jo  = jr.readObject();
+                        currentView = new CorfuDBView(jo);;
+                    }
+                    catch (Exception e)
+                    {
+                        log.error("error", e);
+                    }
+                }
+            }
+        } catch (Exception e)
+        {
+            log.warn("exception", e);
+        }
         return null;
     }
 
@@ -757,6 +798,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         break;
                     case "newview":
                         job.add("result", newView(params));
+                        break;
+                    case "reconfig":
+                        job.add("reconfig", reconfig(params));
                         break;
                 }
                 JsonObject res =    job.add("calledmethod", apiCall)

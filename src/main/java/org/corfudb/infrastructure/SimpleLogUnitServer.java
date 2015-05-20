@@ -468,6 +468,15 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         return true;
     }
 
+    @Override
+    public void setEpoch(long epoch) throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
+        Long lEpoch = epoch;
+        this.masterIncarnation.set(0, lEpoch.intValue());
+    }
     /////////////////////////////////////////////////////////////////////////////////////////////
 	/* (non-Javadoc)
 	 * implements to CorfuUnitServer.Iface write() method.

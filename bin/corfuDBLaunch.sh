@@ -17,6 +17,7 @@ then
     CORFUDBCFG="$CORFUDBCFGDIR/$1.yml"
 else
     echo "Usage: $0 [--config <conf-dir>] <node-name> {start|stop|restart|status}" >&2
+    exit
 fi
 
 if $cygwin
