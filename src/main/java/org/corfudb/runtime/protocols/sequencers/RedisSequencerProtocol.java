@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
+import java.util.HashMap;
 import java.util.Map;
 public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
 {
@@ -61,12 +62,19 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
         return new RedisSequencerProtocol(host, port, options);
     }
 
-    private RedisSequencerProtocol(String host, Integer port, Map<String,String> options)
+    public RedisSequencerProtocol(String host, Integer port, Map<String,String> options)
     throws NetworkException
     {
         this.host = host;
         this.port = port;
-        this.options = options;
+        if (options == null)
+        {
+            this.options = new HashMap<String,String>();
+            this.options.put("key", "corfudb_seq");
+        }
+        else {
+            this.options = options;
+        }
 
         try
         {

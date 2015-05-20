@@ -31,9 +31,13 @@ public class CorfuDBRuntimeIT {
     public void isCorfuViewUsable() throws Exception
     {
         CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+
         cdr.waitForViewReady();
         assertThat(cdr.getView())
                 .isNotNull();
+
+        IConfigurationMaster cm = new ConfigurationMaster(cdr);
+        cm.resetAll();
 
         Sequencer s = new Sequencer(cdr);
         assertThat(s.getCurrent())
