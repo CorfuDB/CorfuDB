@@ -15,8 +15,6 @@
 
 package org.corfudb.runtime.protocols.configmasters;
 
-import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
-import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
@@ -24,6 +22,7 @@ import java.util.Map;
 import java.util.HashMap;
 
 import org.corfudb.runtime.view.CorfuDBView;
+import org.corfudb.runtime.view.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +43,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
     private Integer port;
     private Map<String,String> options;
     private long epoch;
-    private Logger log = LoggerFactory.getLogger(CorfuDBConfigMasterProtocol.class);
+    private static final transient Logger log = LoggerFactory.getLogger(CorfuDBConfigMasterProtocol.class);
     private JSONRPC2Session jsonSession;
     private AtomicInteger id;
     private Client client;
@@ -309,7 +308,19 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
      */
     @Override
     public void requestReconfiguration(NetworkException e) {
-
+        try {
+            JSONRPC2Request jr = new JSONRPC2Request("reconfig", id.getAndIncrement());
+            Map<String, Object> params = new HashMap<String,Object>();
+            if (e != null) {
+                params.put("exception", java.util.Base64.getEncoder().encodeToString(Serializer.serialize_compressed(e)));
+            }
+            jr.setNamedParams(params);
+            JSONRPC2Response jres = jsonSession.send(jr);
+            if (jres.indicatesSuccess() && (Boolean) jres.getResult())
+            {
+            }
+        } catch(Exception ex) {
+        }
     }
 
     /**
@@ -321,7 +332,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
     @Override
     public void forceNewView(CorfuDBView v) {
         try {
-            JSONRPC2Request jr = new JSONRPC2Request("forceView", id.getAndIncrement());
+            JSONRPC2Request jr = new JSONRPC2Request("newview", id.getAndIncrement());
             Map<String, Object> params = new HashMap<String,Object>();
             params.put("newview", v.getSerializedJSONView().toString());
             jr.setNamedParams(params);

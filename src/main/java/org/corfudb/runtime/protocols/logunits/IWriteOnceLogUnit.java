@@ -19,6 +19,7 @@ import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.UnwrittenException;
 import org.corfudb.runtime.TrimmedException;
 import org.corfudb.runtime.OverwriteException;
+import org.corfudb.runtime.protocols.IServerProtocol;
 
 /**
  * This interface represents the simplest type of stream unit.
@@ -35,7 +36,7 @@ import org.corfudb.runtime.OverwriteException;
  * of the command.
  */
 
-public interface IWriteOnceLogUnit {
+public interface IWriteOnceLogUnit extends IServerProtocol {
     void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException;
     byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException;
     void trim(long address) throws NetworkException;

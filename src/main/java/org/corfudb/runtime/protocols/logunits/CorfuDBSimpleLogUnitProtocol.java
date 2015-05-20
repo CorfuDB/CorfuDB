@@ -49,12 +49,12 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     private String host;
     private Integer port;
     private Map<String,String> options;
-    private Long epoch;
+    public Long epoch;
 
-    private final PooledThriftClient<SimpleLogUnitService.Client> thriftPool;
-    private Logger log = LoggerFactory.getLogger(CorfuDBSimpleLogUnitProtocol.class);
+    private final transient PooledThriftClient<SimpleLogUnitService.Client> thriftPool;
+    private final transient Logger log = LoggerFactory.getLogger(CorfuDBSimpleLogUnitProtocol.class);
 
-     public static String getProtocolString()
+    public static String getProtocolString()
     {
         return "cdbslu";
     }
@@ -146,12 +146,16 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             {
                 throw new TrimmedException("Trim error", address);
             }
+            else if(ec.equals(ErrorCode.ERR_STALEEPOCH))
+            {
+                throw new NetworkException("Writing to log unit in wrong epoch", this, address, false);
+            }
         }
         catch (TException e)
         {
             broken = true;
             thriftPool.returnBrokenResource(client);
-            throw new NetworkException("Error connecting to endpoint: " + e.getMessage(), this);
+            throw new NetworkException("Error writing to log unit: " + e.getMessage(), this, address, true);
         }
         finally {
             if (!success && !broken)
@@ -207,7 +211,16 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
 
     public void setEpoch(long epoch)
     {
-
+        SimpleLogUnitService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            client.setEpoch(epoch);
+            thriftPool.returnResourceObject(client);
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+        }
     }
 
     public void reset(long epoch)
@@ -224,7 +237,6 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             if (client != null ) {thriftPool.returnBrokenResource(client);}
             throw new NetworkException("Couldn't connect to endpoint!", this);
         }
-
     }
 
     /**

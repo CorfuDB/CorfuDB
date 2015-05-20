@@ -122,6 +122,10 @@ public class CorfuDBView {
     @SuppressWarnings("unchecked")
     public CorfuDBView(Map<String,Object> config)
     {
+        if (config.containsKey("logid"))
+        {
+            logID = UUID.fromString((String) config.get("logid"));
+        }
         epoch = config.get("epoch").getClass() == Long.class ? (Long) config.get("epoch") : (Integer) config.get("epoch");
         pagesize = config.get("pagesize").getClass() == Long.class ? (Long) config.get("pagesize") : (Integer) config.get("pagesize");
         sequencers = populateSequencersFromList((List<String>) config.get("sequencers"));

@@ -6,12 +6,10 @@ before_install:
 - travis_retry wget http://people.apache.org/~jfarrell/thrift/0.9.2/contrib/ubuntu/thrift-compiler_0.9.2_amd64.deb -O thrift-compiler.deb
 - sudo dpkg -i thrift-compiler.deb
 install:
-- which thrift
 - travis_retry mvn clean install
 after_success:
-- mvn clean verify jacoco:report coveralls:report
+- mvn jacoco:report coveralls:report
 - .travis_scripts/javadocs.sh
-script: mvn -e verify
 notifications:
   email:
   - corfudb-dev@googlegroups.com
