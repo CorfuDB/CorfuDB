@@ -40,7 +40,9 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
                 {
                     for (List<IServerProtocol> nodeList : segment.getGroups())
                     {
-                        nodeList.removeIf(n ->n.getFullString().equals(e.protocol.getFullString()));
+                        if (nodeList.size() > 1) {
+                            nodeList.removeIf(n -> n.getFullString().equals(e.protocol.getFullString()));
+                        }
                     }
                 }
 
