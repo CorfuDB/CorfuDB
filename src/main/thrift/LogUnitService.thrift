@@ -26,5 +26,7 @@ service SimpleLogUnitService {
 
     void simulateFailure(1:bool fail, 2:i64 length),
 
-    void setEpoch(1:i64 epoch);
+    void setEpoch(1:i64 epoch),
+
+    i64 highestAddress();
 }

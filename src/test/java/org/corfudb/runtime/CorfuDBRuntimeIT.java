@@ -239,7 +239,12 @@ public class CorfuDBRuntimeIT {
         IStreamSequencer S2 = (IStreamSequencer) cdr.getView().getSequencers().get(1);
 
         //force failure
-        S2.simulateFailure(true);
+        S1.simulateFailure(true);
+
+        //try to get another sequence number
+        //long seq2 = s.getNext();
+        //assertThat(seq2)
+        //        .isGreaterThan(seq);
 
         /* Restore the original view */
         oldView.resetEpoch(cdr.getView().getEpoch() + 1);
