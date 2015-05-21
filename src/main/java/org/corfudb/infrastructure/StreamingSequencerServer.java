@@ -15,6 +15,8 @@
 
 package org.corfudb.infrastructure;
 
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.thrift.TException;
@@ -50,6 +52,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
     private Logger log = LoggerFactory.getLogger(StreamingSequencerServer.class);
     private CorfuDBRuntime c;
     private IWriteOnceAddressSpace woas;
+    private boolean simFailure = false;
     private ExecutorService tp = Executors.newCachedThreadPool();
     class StreamData {
 
@@ -137,6 +140,10 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
 
     @Override
     public StreamSequence nextstreampos(String streamID, int range) throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         StreamData sd = streamMap.get(streamID);
         if (sd == null)
         {
@@ -150,7 +157,33 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
     }
 
     @Override
+    public void simulateFailure(boolean fail, long length)
+            throws TException
+    {
+        if (fail && length != -1)
+        {
+            this.simFailure = true;
+            final StreamingSequencerServer t = this;
+            new Timer().schedule(
+                    new TimerTask() {
+                        @Override
+                        public void run() {
+                            t.simFailure = false;
+                        }
+                    },
+                    length
+            );
+        }
+        else {
+            this.simFailure = fail;
+        }
+    }
+    @Override
     public void setAllocationSize(String streamID, int size) throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         StreamData sd = streamMap.get(streamID);
         if (sd == null)
         {
@@ -168,10 +201,15 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
         log.info("Reset requested, resetting maps and counters...");
         streamMap = new ConcurrentHashMap<String, StreamData>();
         pos = new AtomicLong(0);
+        simFailure = false;
     }
 
 	@Override
 	public long nextpos(int range) throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
 		// if (pos % 10000 == 0) System.out.println("issue token " + pos + "...");
 		long ret = pos.getAndAdd(range);
 		return ret;
@@ -179,11 +217,19 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
 
     @Override
     public void recover(long lowbound) throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         pos.set(lowbound);
     }
 
     @Override
     public boolean ping() throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         return true;
     }
 

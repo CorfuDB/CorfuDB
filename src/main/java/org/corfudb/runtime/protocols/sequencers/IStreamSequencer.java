@@ -15,6 +15,8 @@
 
 package org.corfudb.runtime.protocols.sequencers;
 import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.protocols.IServerProtocol;
+
 import java.util.UUID;
 
 /**
@@ -22,7 +24,7 @@ import java.util.UUID;
  * sequencers store additional information about the streams they are serving.
  */
 
-public interface IStreamSequencer {
+public interface IStreamSequencer extends IServerProtocol {
     long sequenceGetNext(UUID stream, int count) throws NetworkException;
     long sequenceGetCurrent(UUID stream) throws NetworkException;
     void setAllocationSize(UUID stream, int count) throws NetworkException;

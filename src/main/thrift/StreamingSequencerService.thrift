@@ -11,6 +11,7 @@ service StreamingSequencerService {
     StreamSequence nextstreampos(1:string streamID, 2:i32 ntokens);
     void setAllocationSize(1: string streamID, 2:i32 size);
 	void recover(1:i64 lowbound);
+	void simulateFailure(1:bool fail, 2:i64 length),
     void reset();
 	bool ping();
 }
