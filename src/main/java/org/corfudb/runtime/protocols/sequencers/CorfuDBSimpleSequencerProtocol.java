@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.protocols.sequencers;
 
+import org.corfudb.infrastructure.thrift.StreamingSequencerService;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.PooledThriftClient;
 import org.corfudb.runtime.NetworkException;
@@ -170,6 +171,21 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
         try {
             client = thriftPool.getResource();
             client.reset();
+            thriftPool.returnResourceObject(client);
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+            throw new NetworkException("Couldn't connect to endpoint!", this);
+        }
+    }
+
+    @Override
+    public void recover(long lastPos) throws NetworkException {
+        SimpleSequencerService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            client.recover(lastPos);
             thriftPool.returnResourceObject(client);
         }
         catch (Exception e)

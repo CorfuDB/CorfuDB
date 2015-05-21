@@ -635,6 +635,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             inmemoryStore = new ByteBuffer[UNITCAPACITY];
             initLogStore(UNITCAPACITY);
             writegcmark();
+            highWatermark = -1L;
         }
         }
         catch (Exception e)

@@ -3,6 +3,7 @@ package org.corfudb.runtime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
 import org.corfudb.runtime.view.*;
 import org.junit.Test;
@@ -232,19 +233,34 @@ public class CorfuDBRuntimeIT {
         IStreamingSequencer s = new StreamingSequencer(cdr);
         IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(cdr);
 
+        ISimpleSequencer S1 = (ISimpleSequencer) cdr.getView().getSequencers().get(0);
+        ISimpleSequencer S2 = (ISimpleSequencer) cdr.getView().getSequencers().get(1);
+
         long seq = s.getNext();
         woas.write(seq, "hello world".getBytes());
 
-        IStreamSequencer S1 = (IStreamSequencer) cdr.getView().getSequencers().get(0);
-        IStreamSequencer S2 = (IStreamSequencer) cdr.getView().getSequencers().get(1);
+        seq = s.getNext();
+        woas.write(seq, "hello world 2".getBytes());
 
+
+        assertThat(S1.sequenceGetCurrent())
+                .isEqualTo(seq + 1);
         //force failure
         S1.simulateFailure(true);
+        assertThat(S1.ping())
+                .isEqualTo(false);
 
         //try to get another sequence number
-        //long seq2 = s.getNext();
-        //assertThat(seq2)
-        //        .isGreaterThan(seq);
+        long seq2 = s.getNext();
+        assertThat(seq2)
+                .isGreaterThan(seq);
+
+        assertThat(s.getNext())
+                .isGreaterThan(seq2);
+
+        S1.simulateFailure(false);
+        assertThat(S1.ping())
+                .isEqualTo(true);
 
         /* Restore the original view */
         oldView.resetEpoch(cdr.getView().getEpoch() + 1);

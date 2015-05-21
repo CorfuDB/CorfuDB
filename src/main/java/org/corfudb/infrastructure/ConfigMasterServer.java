@@ -540,7 +540,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     {
         try {
             log.warn("Forcibly installing new view");
-            log.warn("newview=", params.getJsonString("newview").getString());
+            log.warn("newview= " + params.getJsonString("newview").getString());
             try (StringReader isr  = new StringReader(params.getJsonString("newview").getString()))
             {
                 try (BufferedReader br = new BufferedReader(isr))
