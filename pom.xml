@@ -665,6 +665,26 @@
                         <processLogFile>${project.build.directory}/it_sequencer_1.log</processLogFile>
                     </configuration>
                     </execution>
+                    <execution>
+                        <id>sequencer-2-process</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                        <configuration>
+                            <name>sequencer-2</name>
+                            <waitForInterrupt>false</waitForInterrupt>
+                            <waitAfterLaunch>5</waitAfterLaunch>
+                            <arguments>
+                                <argument>java</argument>
+                                <argument>-cp</argument>
+                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
+                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
+                                <argument>${basedir}/conf/it_sequencer_2.yml</argument>
+                            </arguments>
+                            <processLogFile>${project.build.directory}/it_sequencer_2.log</processLogFile>
+                        </configuration>
+                    </execution>
                     <!--Stop all processes in reverse order-->
                     <execution>
                         <id>stop-all</id>

@@ -336,11 +336,11 @@ class ThriftRPCClient implements RPCClient
             TTransport transport = new TSocket(hostname, portnum);
             transport.open();
             TProtocol protocol = new TBinaryProtocol(transport);
-            RemoteReadService.Client client = new RemoteReadService.Client(protocol);
+          //  RemoteReadService.Client client = new RemoteReadService.Client(protocol);
 
-            Object ret = Utils.deserialize(client.remote_read(Utils.serialize(command)));
-            transport.close();
-            return ret;
+        //    Object ret = Utils.deserialize(client.remote_read(Utils.serialize(command)));
+           // transport.close();
+            return null;
         }
         catch (TTransportException e)
         {
@@ -366,25 +366,25 @@ class ThriftRPCServer implements RPCServer
         final RPCServerHandler handler = h;
         final TServer server;
         TServerSocket serverTransport;
-        RemoteReadService.Processor<RemoteReadService.Iface> processor;
+        //RemoteReadService.Processor<RemoteReadService.Iface> processor;
         try
         {
             serverTransport = new TServerSocket(portnum);
-            processor = new RemoteReadService.Processor(new RemoteReadService.Iface()
-            {
-                @Override
-                public ByteBuffer remote_read(ByteBuffer arg) throws TException
-                {
-                    return Utils.serialize(handler.deliverRPC(Utils.deserialize(arg)));
-                }
-            });
-            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
+           // processor = new RemoteReadService.Processor(new RemoteReadService.Iface()
+          //  {
+            //    @Override
+           //     public ByteBuffer remote_read(ByteBuffer arg) throws TException
+          //      {
+           //         return Utils.serialize(handler.deliverRPC(Utils.deserialize(arg)));
+          //      }
+          //  });
+           // server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
             new Thread(new Runnable()
             {
                 @Override
                 public void run()
                 {
-                    server.serve(); //this seems to be a blocking call, putting it in its own thread
+                  //  server.serve(); //this seems to be a blocking call, putting it in its own thread
                 }
             }).start();
             System.out.println("listening on port " + portnum);

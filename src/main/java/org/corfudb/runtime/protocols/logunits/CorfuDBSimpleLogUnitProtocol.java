@@ -246,11 +246,11 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
      * @param fail True, to simulate failure, False, to restore the unit to responsiveness.
      */
     @Override
-    public void simulateFailure(boolean fail) {
+    public void simulateFailure(boolean fail, long length) {
         SimpleLogUnitService.Client client = null;
         try {
             client = thriftPool.getResource();
-            client.simulateFailure(fail);
+            client.simulateFailure(fail, length);
             thriftPool.returnResourceObject(client);
         }
         catch (Exception e)

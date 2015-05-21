@@ -24,7 +24,7 @@ service SimpleLogUnitService {
 
     void reset(),
 
-    void simulateFailure(1:bool fail),
+    void simulateFailure(1:bool fail, 2:i64 length),
 
     void setEpoch(1:i64 epoch);
 }

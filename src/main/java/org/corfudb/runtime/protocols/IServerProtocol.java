@@ -188,6 +188,18 @@ public interface IServerProtocol {
      */
     default void simulateFailure(boolean fail)
     {
+        simulateFailure(fail, -1);
+    }
+
+    /**
+     * Simulate a transient or permanent failure, causing the node to not respond.
+     * If not implemented, will throw an UnsupportedOperation exception.
+     * @param fail      True, to simulate failure, False, to restore the unit to responsiveness.
+     * @param length    The amount of time to simulate the failure, if fail is set to True,
+     *                  or -1 for a permanent failure.
+     */
+    default void simulateFailure(boolean fail, long length)
+    {
         throw new UnsupportedOperationException("Can't set failure mode, not supported!");
     }
 }

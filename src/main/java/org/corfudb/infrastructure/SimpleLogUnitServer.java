@@ -22,9 +22,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import org.apache.thrift.TMultiplexedProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -102,9 +100,26 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         //default constructor
     }
 
-    public void simulateFailure(boolean fail)
+    public void simulateFailure(boolean fail, long length)
+            throws TException
     {
-        this.simFailure = fail;
+        if (fail && length != -1)
+        {
+            this.simFailure = true;
+            final SimpleLogUnitServer t = this;
+            new Timer().schedule(
+                    new TimerTask() {
+                        @Override
+                        public void run() {
+                            t.simFailure = false;
+                        }
+                    },
+                    length
+            );
+        }
+        else {
+            this.simFailure = fail;
+        }
     }
 
     public Runnable getInstance (final Map<String,Object> config)

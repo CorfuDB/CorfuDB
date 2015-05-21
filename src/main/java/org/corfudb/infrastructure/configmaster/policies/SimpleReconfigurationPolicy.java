@@ -3,8 +3,10 @@ package org.corfudb.infrastructure.configmaster.policies;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;
+import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +50,14 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
             /* for reads, we don't do anything, for now...
              */
             log.warn("Reconfigure due to read, ignoring");
+            return oldView;
+        }
+        else if (e.protocol instanceof ISequencer || e.protocol instanceof IStreamSequencer)
+        {
+            if (oldView.getSequencers().size() <= 1)
+            {
+                log.warn("Request reconfiguration of sequencers but there is no fail-over available!");
+            }
             return oldView;
         }
         else
