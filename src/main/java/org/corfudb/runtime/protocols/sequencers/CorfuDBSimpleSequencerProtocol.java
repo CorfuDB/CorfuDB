@@ -195,6 +195,25 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
         }
     }
 
+    /**
+     * Simulates a failure by causing the node to not respond.
+     * If not implemented, will throw an UnsupportedOperation exception.
+     *
+     * @param fail True, to simulate failure, False, to restore the unit to responsiveness.
+     */
+    @Override
+    public void simulateFailure(boolean fail, long length) {
+        SimpleSequencerService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            client.simulateFailure(fail, length);
+            thriftPool.returnResourceObject(client);
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+        }
+    }
 }
 
 

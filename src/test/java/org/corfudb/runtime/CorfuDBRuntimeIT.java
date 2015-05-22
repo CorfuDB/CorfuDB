@@ -11,6 +11,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -270,5 +271,33 @@ public class CorfuDBRuntimeIT {
         /* Make sure that old view only has a single log sequencer*/
         assertThat(cdr.getView().getSequencers().size())
                 .isEqualTo(1);
+    }
+
+
+    @Test
+    public void viewFailureDoesNotLoop() throws Exception {
+        CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        cdr.waitForViewReady();
+        IConfigurationMaster cm = new ConfigurationMaster(cdr);
+        cm.resetAll();
+
+
+        ISimpleSequencer S1 = (ISimpleSequencer) cdr.getView().getSequencers().get(0);
+        S1.simulateFailure(true);
+
+        CompletableFuture<Long> v = CompletableFuture.supplyAsync(
+                () -> {
+                    IStreamingSequencer s = new StreamingSequencer(cdr);
+                    s.getNext();
+                    return s.getNext();
+                }
+        );
+
+        Thread.sleep(1000);
+        S1.simulateFailure(false);
+        Thread.sleep(1000);
+
+        assertThat(v.join())
+            .isEqualTo(1);
     }
 }
