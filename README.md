@@ -35,7 +35,7 @@ $ sudo dpkg -i /tmp/thrift-compiler.deb
 On Mac OS X, the [homebrew](http://brew.sh) package manager should help.
 After installing homebrew, run:
 ```
-$ brew install maven thrift redis
+$ brew install maven thrift
 ```
 
 On Windows, you can get thrift here:
@@ -50,8 +50,8 @@ CorfuDB uses Apache maven for building. To build, from the root
 directory, run:
 
 ```
-$ mvn clean   (only if not first time and junk is left over)
-$ mvn install
+$ mvn clean install -DskipTests -Dexec.skip
+
 ```
 
 ## CorfuDB quick deployment
@@ -133,6 +133,21 @@ on most Debian-based systems. Furthermore, the [CorfuDB-Ansible](https://github.
 repository provides a Ansible playbook to configure, deploy and orchestrate
 complex multi-node CorfuDB deployments.
 
+## Running the tests
+
+The repository contains a set of unit tests and integration tests that we run CorfuDB against.
+To run the tests, you will need to install some additional dependencies - currently this is only
+Redis.
+
+To install on Ubuntu:
+```
+$ sudo apt-get install redis-server
+```
+
+On Mac OSX:
+```
+$ brew install redis
+```
 ## Common Issues
 
 Q: *I get a bunch of errors that look like*
