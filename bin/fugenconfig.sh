@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # script for generating config files
 # command line params are:
-usage="--role {master|sequencer|logunit} --baseport <port #> -cnt <# logunits> --config <filename> [--port <port>]"
+usage="--role {master|sequencer|logunit} --baseport <port #> --cnt <# logunits> --configfile <filename> [--port <port>]"
 
 baseport=0
 cnt=0
@@ -26,7 +26,7 @@ do
 		shift
 		role=$1
 		shift
-	elif [ "--config" == "$1" ]
+	elif [ "--configfile" == "$1" ]
 	then
 		shift
 		cfg=$1
@@ -108,5 +108,9 @@ _EOF
 
 ;;
 
+# ........................................
+*)
+echo $0 ": bad role $role" >&2
+;;
 
 esac
