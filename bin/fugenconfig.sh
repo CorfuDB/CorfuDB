@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # script for generating config files
 # command line params are:
-usage="--type {master|sequencer|logunit} --baseport <port #> -cnt <# logunits> --config <filename> [--port <port>]"
+usage="--role {master|sequencer|logunit} --baseport <port #> -cnt <# logunits> --config <filename> [--port <port>]"
 
 baseport=0
 cnt=0
-type="illegal"
+role="illegal"
 cfg=""
 
 # parse arguments
@@ -21,10 +21,10 @@ do
 		shift
 		cnt=$1
 		shift
-	elif [ "--type" == "$1" ]
+	elif [ "--role" == "$1" ]
 	then
 		shift
-		type=$1
+		role=$1
 		shift
 	elif [ "--config" == "$1" ]
 	then
@@ -43,8 +43,8 @@ do
 	fi
 done
 
-echo "building config type $type config-file $cfg baseport $baseport cnt $cnt"
-if [ $baseport -eq 0 ]  || [ $cnt -eq 0 ] || [ $type = "illegal" ] || [ X$cfg = X"" ] || ( [ $type == "logunit" ] && [ X$port = X"" ] )
+echo "building config role $role config-file $cfg baseport $baseport cnt $cnt"
+if [ $baseport -eq 0 ]  || [ $cnt -eq 0 ] || [ $role = "illegal" ] || [ X$cfg = X"" ] || ( [ $role == "logunit" ] && [ X$port = X"" ] )
 then
 	echo "Usage: $0 $usage"
 	exit 1
@@ -52,7 +52,7 @@ fi
 
 ####################################
 
-case $type in
+case $role in
 
 # ........................................
 master)
