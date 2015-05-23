@@ -64,7 +64,7 @@ $CORFUDBBINDIR/fugenconfig.sh --role $role --configfile $seqcfg --baseport $base
 $CORFUDBBINDIR/furun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd
 #  rm -f $seqcfg
 
-role=gmaster
+role=master
 unit=configmaster
 mastercfg="$TMPCFGDIR/corfudb.$unit.yml"
 if [ -f $mastercfg ]; then
@@ -79,7 +79,7 @@ for (( port=$baseport+2; port < $baseport+2+$cnt; port++ ))
 do
 	role="logunit"
 	unit="logunit.$port"
-	lgcfg="$TMPCFGDIR/corfudb.$role.yml" 
+	lgcfg="$TMPCFGDIR/corfudb.$unit.yml" 
 	if [ -f $lgcfg ]; then
 		rm -f $lgcfg
 	fi
