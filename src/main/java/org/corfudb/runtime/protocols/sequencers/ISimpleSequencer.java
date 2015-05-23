@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.protocols.sequencers;
 import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.protocols.IServerProtocol;
 
 /**
  * This interface represents the simplest type of sequencer. Simple sequencers
@@ -22,9 +23,10 @@ import org.corfudb.runtime.NetworkException;
  * sequence.
  */
 
-public interface ISimpleSequencer {
+public interface ISimpleSequencer extends IServerProtocol {
     long sequenceGetNext() throws NetworkException;
     long sequenceGetNext(int numTokens) throws NetworkException;
     long sequenceGetCurrent() throws NetworkException;
+    void recover(long lastPos) throws NetworkException;
 }
 

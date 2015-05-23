@@ -17,6 +17,7 @@ package org.corfudb.infrastructure;
 import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
 import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
 import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.entries.OldBundleEntry;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;
 import org.corfudb.runtime.view.WriteOnceAddressSpace;
@@ -74,7 +75,6 @@ import org.corfudb.runtime.view.StreamData;
 
 import org.corfudb.runtime.gossip.StreamPullGossip;
 import org.corfudb.runtime.gossip.StreamBundleGossip;
-import org.corfudb.runtime.entries.BundleEntry;
 import org.corfudb.runtime.view.StreamingSequencer;
 import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
@@ -187,7 +187,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                         WriteOnceAddressSpace woaslocal = new WriteOnceAddressSpace(currentView);
                         long streamEpoch = currentStreamView.getStream(spg.streamID).epoch;
                         try{
-                        woaslocal.write(remoteToken, new BundleEntry(spg.epochMap, spg.destinationLog, spg.destinationStream, spg.physicalPos,  streamEpoch, spg.payload, (int) spg.duration, spg.offset ));
+                        woaslocal.write(remoteToken, new OldBundleEntry(spg.epochMap, spg.destinationLog, spg.destinationStream, spg.physicalPos,  streamEpoch, spg.payload, (int) spg.duration, spg.offset ));
                         } catch (Exception e) {}
                     }
 
@@ -540,7 +540,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     {
         try {
             log.warn("Forcibly installing new view");
-            log.warn("newview=", params.getJsonString("newview").getString());
+            log.warn("newview= " + params.getJsonString("newview").getString());
             try (StringReader isr  = new StringReader(params.getJsonString("newview").getString()))
             {
                 try (BufferedReader br = new BufferedReader(isr))

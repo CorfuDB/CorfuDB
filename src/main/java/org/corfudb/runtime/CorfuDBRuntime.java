@@ -34,9 +34,9 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.UUID;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 
 import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
@@ -62,7 +62,11 @@ public class CorfuDBRuntime implements AutoCloseable {
     private Boolean closed = false;
     private UUID localID = null;
     private org.corfudb.runtime.view.RemoteLogView remoteView;
+    private LocalDateTime lastInvalidation;
+    private LocalDateTime backOffTime;
+    private long backOff = 0;
 
+    private ICorfuDBInstance localInstance;
 
     private static final Logger log = LoggerFactory.getLogger(CorfuDBRuntime.class);
 
@@ -99,6 +103,12 @@ public class CorfuDBRuntime implements AutoCloseable {
         viewUpdatePending = new BooleanLock();
         viewUpdatePending.lock = true;
         viewManagerThread = getViewManagerThread();
+        try {
+            localInstance = new LocalCorfuDBInstance(this);
+        } catch (Exception e)
+        {
+            log.error("Exception creating local instance", e);
+        }
         startViewManager();
     }
 
@@ -116,6 +126,11 @@ public class CorfuDBRuntime implements AutoCloseable {
         }
     }
 
+
+    public ICorfuDBInstance getLocalInstance()
+    {
+        return localInstance;
+    }
 
     /**
      * Opens a stream given the type of stream to open.
@@ -205,7 +220,33 @@ public class CorfuDBRuntime implements AutoCloseable {
      */
     public void invalidateViewAndWait(NetworkException e)
     {
-        log.warn("Client requested invalidation of current view");
+        log.warn("Client requested invalidation of current view, backoff level=" + backOff);
+        lastInvalidation = LocalDateTime.now();
+
+        if (backOffTime != null)
+        {
+            if (backOffTime.compareTo(lastInvalidation) > 0)
+            {
+                //backoff!
+                try {
+                    Thread.sleep((long) Math.pow(2, backOff) * 1000);
+                } catch (Exception ex) {}
+                //increment backoff
+                backOff++;
+                backOffTime = LocalDateTime.now().plus((long)Math.pow(2, backOff), ChronoUnit.SECONDS);
+            }
+            else
+            {
+                //no need to backoff
+                backOff = 0;
+            }
+        }
+        else
+        {
+            backOff++;
+            backOffTime = LocalDateTime.now().plus((long)Math.pow(2, backOff), ChronoUnit.SECONDS);
+        }
+
         if (currentView != null)
         {
             currentView.invalidate();
@@ -341,6 +382,12 @@ public class CorfuDBRuntime implements AutoCloseable {
                                     log.info("New view epoch " + newView.getEpoch() + " greater than old view epoch " + oldEpoch + ", changing views");
                                     currentView = newView;
                                     localID = currentView.getUUID();
+                                    viewUpdatePending.lock = false;
+                                    viewUpdatePending.notifyAll();
+                                }
+                                else
+                                {
+                                    log.info("New view epoch " + newView.getEpoch() + " is the same as previous...");
                                     viewUpdatePending.lock = false;
                                     viewUpdatePending.notifyAll();
                                 }

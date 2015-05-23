@@ -15,6 +15,8 @@
 
 package org.corfudb.infrastructure;
 
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.thrift.TException;
@@ -36,10 +38,15 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
     private Logger log = LoggerFactory.getLogger(SimpleSequencerServer.class);
 
 	AtomicLong pos = new AtomicLong(0);
+    boolean simFailure;
 
 	@Override
 	public long nextpos(int range) throws TException {
 		// if (pos % 10000 == 0) System.out.println("issue token " + pos + "...");
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
 		long ret = pos.getAndAdd(range);
 		return ret;
 	}
@@ -47,16 +54,25 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
     @Override
     public void reset() throws TException {
         log.info("Reset requested, setting sequence to 0");
+        simFailure = false;
         pos = new AtomicLong(0);
     }
 
     @Override
     public void recover(long lowbound) throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         pos.set(lowbound);
     }
 
     @Override
     public boolean ping() throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
         return true;
     }
 
@@ -73,6 +89,29 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
                 }
             }
         };
+    }
+
+    @Override
+    public void simulateFailure(boolean fail, long length)
+            throws TException
+    {
+        if (fail && length != -1)
+        {
+            this.simFailure = true;
+            final SimpleSequencerServer t = this;
+            new Timer().schedule(
+                    new TimerTask() {
+                        @Override
+                        public void run() {
+                            t.simFailure = false;
+                        }
+                    },
+                    length
+            );
+        }
+        else {
+            this.simFailure = fail;
+        }
     }
 
 	public void serverloop() {

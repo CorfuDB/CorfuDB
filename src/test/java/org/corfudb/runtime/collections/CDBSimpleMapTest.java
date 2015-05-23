@@ -19,9 +19,8 @@ import static org.assertj.core.api.Assertions.*;
  */
 public class CDBSimpleMapTest {
 
-    SimpleStream s;
-    IWriteOnceAddressSpace woas;
-    IStreamingSequencer ss;
+    IStream s;
+    ICorfuDBInstance instance;
     CDBSimpleMap<Integer, Integer> testMap;
     UUID streamID;
     CorfuDBRuntime cdr;
@@ -32,10 +31,9 @@ public class CDBSimpleMapTest {
         cdr = new CorfuDBRuntime("memory");
         ConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
-        woas = new WriteOnceAddressSpace(cdr);
-        ss = new StreamingSequencer(cdr);
+        instance = cdr.getLocalInstance();
         streamID = UUID.randomUUID();
-        s = new SimpleStream(streamID, ss, woas, cdr);
+        s = instance.openStream(streamID);
         testMap = new CDBSimpleMap<Integer, Integer>(s);
     }
 
@@ -173,7 +171,7 @@ public class CDBSimpleMapTest {
     @Test
     public void TimeTravelSMRTest()
     {
-        IStream s1 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        IStream s1 = instance.openStream(UUID.randomUUID());
         CDBSimpleMap<Integer, Integer> map = new CDBSimpleMap<Integer,Integer>(
                 s1,
                 TimeTravelSMREngine.class

@@ -16,6 +16,7 @@
 package org.corfudb.runtime.stream;
 
 import org.corfudb.runtime.*;
+import org.corfudb.runtime.entries.*;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
 import org.corfudb.runtime.view.ObjectCachedWriteOnceAddressSpace;
 import org.corfudb.runtime.view.StreamingSequencer;
@@ -23,10 +24,6 @@ import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.CorfuDBView;
-import org.corfudb.runtime.entries.CorfuDBStreamEntry;
-import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
-import org.corfudb.runtime.entries.CorfuDBStreamStartEntry;
-import org.corfudb.runtime.entries.BundleEntry;
 
 import java.util.Map;
 import java.util.ArrayList;
@@ -51,7 +48,6 @@ import java.io.Serializable;
 import java.util.stream.Collectors;
 import org.corfudb.runtime.gossip.StreamEpochGossipEntry;
 import org.corfudb.runtime.gossip.StreamPullGossip;
-import org.corfudb.runtime.entries.CorfuDBStreamHoleEntry;
 
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.ConcurrentHashMap;
@@ -291,10 +287,10 @@ public class Stream implements AutoCloseable {
             cdbse.getTimestamp().setContainingStream(streamIDstack.peekLast());
             cdbse.restoreOriginalPhysical(streamIDstack.peekLast());
 
-            if (cdbse instanceof BundleEntry)
+            if (cdbse instanceof OldBundleEntry)
             {
                 //a bundle entry actually represents an entry in the remote stream (physically).
-                BundleEntry be = (BundleEntry) cdbse;
+                OldBundleEntry be = (OldBundleEntry) cdbse;
                 be.setTransientInfo(this, woas, sequencer, cdbc);
             }
             synchronized (streamPointer) {
@@ -425,9 +421,9 @@ public class Stream implements AutoCloseable {
                                     cdbse.restoreOriginalPhysical(streamIDstack.peekLast());
                                     latestPrimary = cdbse.getTimestamp();
                                 }
-                                if (payload instanceof BundleEntry)
+                                if (payload instanceof OldBundleEntry)
                                 {
-                                    BundleEntry be = (BundleEntry) payload;
+                                    OldBundleEntry be = (OldBundleEntry) payload;
                                     PayloadReadResult prr = loadPayloadIntoQueue(be, r.pos, logpos);
                                     if (prr == PayloadReadResult.VALID) { numReadable++; }
                                     else if (prr == PayloadReadResult.MOVECOMPLETE) { return; }
@@ -1105,7 +1101,7 @@ public class Stream implements AutoCloseable {
 
     /**
      * Temporarily pull multiple remote streams into this stream, including a payload in the
-     * remote move operation, and optionally reserve extra entries, using a BundleEntry.
+     * remote move operation, and optionally reserve extra entries, using a OldBundleEntry.
      * This function tries to attach multiple remote stream to this stream.
      * It may or may not succeed.
      *
@@ -1163,7 +1159,7 @@ public class Stream implements AutoCloseable {
             log.debug("remoteLog write");
             // Write a move in the remote stream
             IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
-            woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
+            woasremote.write(remoteToken, new OldBundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
            log.debug("hmm.");
             offset++;
 /*
@@ -1179,7 +1175,7 @@ public class Stream implements AutoCloseable {
                 long remoteToken = sremote.getNext(id, slots + 1);
                 // Write a move in the remote stream
                 IWriteOnceAddressSpace woasremote = getAddressSpace.apply(cdbc, sd.currentLog);
-                woasremote.write(remoteToken, new BundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
+                woasremote.write(remoteToken, new OldBundleEntry(epochMap, logID, streamID, token, sd.epoch, payload, slots, token + offset));
             }
             */
 

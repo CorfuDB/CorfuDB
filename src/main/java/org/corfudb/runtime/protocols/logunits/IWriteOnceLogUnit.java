@@ -40,5 +40,16 @@ public interface IWriteOnceLogUnit extends IServerProtocol {
     void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException;
     byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException;
     void trim(long address) throws NetworkException;
+
+    /**
+     * Gets the highest address written to this log unit. Some units may not support this operation and
+     * will throw an UnsupportedOperationException
+     * @return                      The highest address written to this logunit.
+     * @throws NetworkException     If the log unit could not be contacted.
+     */
+    default long highestAddress() throws NetworkException
+    {
+        throw new UnsupportedOperationException("Log unit doesn't support querying latest address!");
+    }
 }
 

@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.protocols.sequencers;
 
+import org.corfudb.infrastructure.thrift.StreamingSequencerService;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.PooledThriftClient;
 import org.corfudb.runtime.NetworkException;
@@ -179,6 +180,40 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
         }
     }
 
+    @Override
+    public void recover(long lastPos) throws NetworkException {
+        SimpleSequencerService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            client.recover(lastPos);
+            thriftPool.returnResourceObject(client);
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+            throw new NetworkException("Couldn't connect to endpoint!", this);
+        }
+    }
+
+    /**
+     * Simulates a failure by causing the node to not respond.
+     * If not implemented, will throw an UnsupportedOperation exception.
+     *
+     * @param fail True, to simulate failure, False, to restore the unit to responsiveness.
+     */
+    @Override
+    public void simulateFailure(boolean fail, long length) {
+        SimpleSequencerService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            client.simulateFailure(fail, length);
+            thriftPool.returnResourceObject(client);
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+        }
+    }
 }
 
 

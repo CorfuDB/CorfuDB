@@ -42,9 +42,9 @@ import java.util.concurrent.CompletableFuture;
  * This class implements a bundle entry, which is encountered inside the move entries of remotely bundled
  * logs. It enables remote logs to easily write results to remotes.
  */
-public class BundleEntry extends CorfuDBStreamMoveEntry implements org.corfudb.runtime.entries.IBundleEntry {
+public class OldBundleEntry extends CorfuDBStreamMoveEntry implements org.corfudb.runtime.entries.IBundleEntry {
 
-    private final Logger log = LoggerFactory.getLogger(BundleEntry.class);
+    private final Logger log = LoggerFactory.getLogger(OldBundleEntry.class);
 
     long physicalPos;
     long numSlots;
@@ -64,8 +64,8 @@ public class BundleEntry extends CorfuDBStreamMoveEntry implements org.corfudb.r
     * @param numSlots       t
     * @param physicalPos    The physical position of the remote slot, if allocated, or -1, if there is no remote slot.
     */
-    public BundleEntry(Map<UUID, Long> epochMap, UUID destinationLog, UUID destinationStream, long destinationPos, long destinationEpoch,
-                        Serializable payload, int numSlots, long physicalPos)
+    public OldBundleEntry(Map<UUID, Long> epochMap, UUID destinationLog, UUID destinationStream, long destinationPos, long destinationEpoch,
+                          Serializable payload, int numSlots, long physicalPos)
         throws IOException
     {
         super(epochMap, destinationLog, destinationStream, destinationPos, (int) numSlots+1, destinationEpoch, payload);

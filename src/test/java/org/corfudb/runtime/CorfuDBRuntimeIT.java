@@ -3,6 +3,7 @@ package org.corfudb.runtime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
 import org.corfudb.runtime.view.*;
 import org.junit.Test;
@@ -10,6 +11,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -232,14 +234,34 @@ public class CorfuDBRuntimeIT {
         IStreamingSequencer s = new StreamingSequencer(cdr);
         IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(cdr);
 
+        ISimpleSequencer S1 = (ISimpleSequencer) cdr.getView().getSequencers().get(0);
+        ISimpleSequencer S2 = (ISimpleSequencer) cdr.getView().getSequencers().get(1);
+
         long seq = s.getNext();
         woas.write(seq, "hello world".getBytes());
 
-        IStreamSequencer S1 = (IStreamSequencer) cdr.getView().getSequencers().get(0);
-        IStreamSequencer S2 = (IStreamSequencer) cdr.getView().getSequencers().get(1);
+        seq = s.getNext();
+        woas.write(seq, "hello world 2".getBytes());
 
+
+        assertThat(S1.sequenceGetCurrent())
+                .isEqualTo(seq + 1);
         //force failure
-        S2.simulateFailure(true);
+        S1.simulateFailure(true);
+        assertThat(S1.ping())
+                .isEqualTo(false);
+
+        //try to get another sequence number
+        long seq2 = s.getNext();
+        assertThat(seq2)
+                .isGreaterThan(seq);
+
+        assertThat(s.getNext())
+                .isGreaterThan(seq2);
+
+        S1.simulateFailure(false);
+        assertThat(S1.ping())
+                .isEqualTo(true);
 
         /* Restore the original view */
         oldView.resetEpoch(cdr.getView().getEpoch() + 1);
@@ -249,5 +271,33 @@ public class CorfuDBRuntimeIT {
         /* Make sure that old view only has a single log sequencer*/
         assertThat(cdr.getView().getSequencers().size())
                 .isEqualTo(1);
+    }
+
+
+    @Test
+    public void viewFailureDoesNotLoop() throws Exception {
+        CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        cdr.waitForViewReady();
+        IConfigurationMaster cm = new ConfigurationMaster(cdr);
+        cm.resetAll();
+
+
+        ISimpleSequencer S1 = (ISimpleSequencer) cdr.getView().getSequencers().get(0);
+        S1.simulateFailure(true);
+
+        CompletableFuture<Long> v = CompletableFuture.supplyAsync(
+                () -> {
+                    IStreamingSequencer s = new StreamingSequencer(cdr);
+                    s.getNext();
+                    return s.getNext();
+                }
+        );
+
+        Thread.sleep(1000);
+        S1.simulateFailure(false);
+        Thread.sleep(1000);
+
+        assertThat(v.join())
+            .isEqualTo(1);
     }
 }
