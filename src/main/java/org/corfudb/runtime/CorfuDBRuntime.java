@@ -66,6 +66,7 @@ public class CorfuDBRuntime implements AutoCloseable {
     private LocalDateTime backOffTime;
     private long backOff = 0;
 
+    private ICorfuDBInstance localInstance;
 
     private static final Logger log = LoggerFactory.getLogger(CorfuDBRuntime.class);
 
@@ -102,6 +103,12 @@ public class CorfuDBRuntime implements AutoCloseable {
         viewUpdatePending = new BooleanLock();
         viewUpdatePending.lock = true;
         viewManagerThread = getViewManagerThread();
+        try {
+            localInstance = new LocalCorfuDBInstance(this);
+        } catch (Exception e)
+        {
+            log.error("Exception creating local instance", e);
+        }
         startViewManager();
     }
 
@@ -119,6 +126,11 @@ public class CorfuDBRuntime implements AutoCloseable {
         }
     }
 
+
+    public ICorfuDBInstance getLocalInstance()
+    {
+        return localInstance;
+    }
 
     /**
      * Opens a stream given the type of stream to open.
