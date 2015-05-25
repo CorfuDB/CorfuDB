@@ -1,12 +1,10 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.smr.Stream;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.SimpleStream;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.NoSuchElementException;
 import java.util.UUID;
 
 /**

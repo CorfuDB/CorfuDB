@@ -107,7 +107,7 @@ class HopAdapterStream implements IAdapterStream
             {
                 ArrayList<UUID> listuuids = new ArrayList();
                 listuuids.addAll(listuuids);
-                Bundle B = new Bundle((IHopStream)hopstream, listuuids, s, false);
+                OldBundle B = new OldBundle((IHopStream)hopstream, listuuids, s, false);
                 ITimestamp T = B.apply();
                 return T;
             }
