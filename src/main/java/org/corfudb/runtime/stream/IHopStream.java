@@ -112,7 +112,7 @@ public interface IHopStream extends IStream {
 
     /**
      * Temporarily pull multiple remote streams into this stream, including a payload in the
-     * remote move operation, and optionally reserve extra entries, using a BundleEntry.
+     * remote move operation, and optionally reserve extra entries, using a OldBundleEntry.
      * This function tries to attach multiple remote stream to this stream.
      * It may or may not succeed.
      *
@@ -127,7 +127,7 @@ public interface IHopStream extends IStream {
 
     /**
      * Temporarily pull multiple remote streams into this stream, including a payload in the
-     * remote move operation, and optionally reserve extra entries, using a BundleEntry.
+     * remote move operation, and optionally reserve extra entries, using a OldBundleEntry.
      * This function tries to attach multiple remote stream to this stream.
      * It may or may not succeed.
      *

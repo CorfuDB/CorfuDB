@@ -6,45 +6,77 @@ CORFUDBBINDIR="$(cd "${CORFUDBBIN}"; pwd)"
 
 . "$CORFUDBBINDIR"/corfuDBEnv.sh 
 
-usage="[--config <conf-dir>] <role> {start|stop|restart|status}"
-if [ $# -lt 2 ]
+# handle commnad line params
+# ...............................
+usage="--unit {sequencer|configmaster|logunit.port} --cmd {start|stop|restart|status} [--configdir <conf-dir>] "
+
+unit=""
+cmd=""
+cfgdir=$CORFUDBCFGDIR
+
+# parse arguments
+while  [ $# -ge 2 ] 
+do
+	if [ "--unit" == "$1" ]
+	then
+		shift
+		unit=$1
+		shift
+	elif [ "--configdir" == "$1" ]
+	then
+		shift
+		cfgdir=$1
+		shift
+	elif [ "--cmd" == "$1" ]
+	then
+		shift
+		cmd=$1
+		shift
+	else
+		echo "unrecognized command-line switch: $1" >&2
+		echo "Usage: $0 $usage" >&2
+		exit 1
+	fi
+done
+
+echo "running unit $unit cmd $cmd config-dir $cfgdir" >&2
+if [ X$unit = X"" ] || [ X$cmd = X"" ] 
 then
-    echo "Usage:" $0 $usage >&2
-    exit
-else
-    echo $1
-    CORFUDBCFG="$CORFUDBCFGDIR/corfudb.$1.yml"
+	echo "Usage: $0 $usage" >&2
+	exit 1
 fi
+# ............................
+
+CORFUDBCFG="$cfgdir/corfudb.$unit.yml"
+CORFUDB_DAEMON_OUT="/var/log/corfudb.$unit.log"
+CORFUDBMAIN="org.corfudb.infrastructure.ConfigParser"
 
 if $cygwin
 then
-    CORFUDBCFG=`cygpath -wp "$CORFUDBCFGDIR/corfudb.$1.yml"`
+    CORFUDBCFG=`cygpath -wp "$CORFUDBCFGDIR/corfudb.$unit.yml"`
+    CORFUDB_DAEMON_OUT=`cygpath -wp "/var/log/corfudb.$unit.log"`
     KILL=/bin/kill
 else
     KILL=kill
 fi
 
-CORFUDB_DAEMON_OUT="/var/log/corfudb.${1}.log"
-CORFUDBMAIN="org.corfudb.infrastructure.ConfigParser"
-
-echo "Using config: $CORFUDBCFG" >&2
-echo "Logging to: $CORFUDB_DAEMON_OUT" >&2
-
 if [ -z "$CORFUDBPIDFILE" ]; then
-    CORFUDBPIDFILE="/var/run/corfudb.${1}.pid"
+    CORFUDBPIDFILE="/var/run/corfudb.$unit.pid"
 else
     mkdir -p "$(dirname $CORFUDBPIDFILE)"
 fi
 
+echo "Using config: $CORFUDBCFG" >&2
+echo "Logging to: $CORFUDB_DAEMON_OUT" >&2
 echo "PID to: $CORFUDBPIDFILE" >&2
 
-case $2 in
+case $cmd in
 start)
-    echo -n "Starting CorfuDB role ${1}..." >&2
+    echo -n "Starting CorfuDB unit $unit..." >&2
     if [ -f "$CORFUDBPIDFILE" ]; then
 	echo "trying to kill previous ..."
         if kill -0 `cat $CORFUDBPIDFILE` > /dev/null 2>&1; then
-            echo ${1} already running as process `cat "$CORFUDBPIDFILE"`.
+            echo $unit already running as process `cat "$CORFUDBPIDFILE"`.
             exit 0
         fi
     fi
@@ -73,7 +105,7 @@ start)
     fi
     ;;
 stop)
-    echo -n "Stopping CorfuDB role ${1}..."
+    echo -n "Stopping CorfuDB unit $unit..."
     if [ ! -f "$CORFUDBPIDFILE" ];
     then
         echo "Could not find a PID file to stop..."
@@ -96,7 +128,7 @@ status)
         echo "Could not find a PID file..."
         exit 0 #should this be exit 1, maybe?
     else
-        echo -n "CorfuDB role ${1} running as PID "
+        echo -n "CorfuDB unit $unit running as PID "
         echo $(cat "$CORFUDBPIDFILE")
         echo "Last 100 lines of log:"
         cat $CORFUDB_DAEMON_OUT | tail -100

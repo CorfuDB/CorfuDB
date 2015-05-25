@@ -156,6 +156,6 @@ public class CorfuDBRuntimeTest {
                 .isEqualTo("Hello World 3".getBytes());
 
         /* and make sure that writes to the wrong epoch fail */
-
     }
+
 }

@@ -30,14 +30,14 @@ import java.io.Serializable;
  * This class creates bundles, which abstracts away pulling multiple logs and inserting a stream
  * into a single operation.
  */
-public class Bundle {
+public class OldBundle {
 
     IHopStream stream;
     List<UUID> remoteStreams;
     Serializable payload;
     boolean allocateSlots;
 
-    public Bundle(IHopStream s, List<UUID> remoteStreams, byte[] payload, boolean allocateSlots)
+    public OldBundle(IHopStream s, List<UUID> remoteStreams, byte[] payload, boolean allocateSlots)
     throws IOException
     {
         this.stream = s;
@@ -46,7 +46,7 @@ public class Bundle {
         this.allocateSlots = allocateSlots;
     }
 
-    public Bundle(IHopStream s, List<UUID> remoteStreams, Serializable payload, boolean allocateSlots)
+    public OldBundle(IHopStream s, List<UUID> remoteStreams, Serializable payload, boolean allocateSlots)
     throws IOException
     {
         this.stream = s;

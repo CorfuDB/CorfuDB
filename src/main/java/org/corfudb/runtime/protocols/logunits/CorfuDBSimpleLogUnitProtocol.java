@@ -209,6 +209,29 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
 
     }
 
+    /**
+     * Gets the highest address written to this log unit. Some units may not support this operation and
+     * will throw an UnsupportedOperationException
+     *
+     * @return The highest address written to this logunit.
+     * @throws NetworkException If the log unit could not be contacted.
+     */
+    @Override
+    public long highestAddress() throws NetworkException {
+        SimpleLogUnitService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            long address = client.highestAddress();
+            thriftPool.returnResourceObject(client);
+            return address;
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+            throw new NetworkException("Couldn't connect to endpoint!", this);
+        }
+    }
+
     public void setEpoch(long epoch)
     {
         SimpleLogUnitService.Client client = null;

@@ -115,6 +115,14 @@ public class RedisSequencerProtocol implements IServerProtocol, ISimpleSequencer
         }
     }
 
+    @Override
+    public void recover(long lastPos) throws NetworkException {
+        try (Jedis jedis = pool.getResource())
+        {
+            jedis.set(options.get("key"), Long.toString(lastPos));
+        }
+    }
+
     public boolean ping()
     {
         try (Jedis jedis = pool.getResource())

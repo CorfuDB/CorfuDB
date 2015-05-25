@@ -69,6 +69,9 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
     private long gcmark = 0; // pages up to 'gcmark' have been evicted; note, we must have gcmark <= CM.trimmark
 	private int lowwater = 0, highwater = 0, freewater = -1;
+
+    long highWatermark = -1L;
+
 	private ByteBuffer[] inmemoryStore; // use in rammode
 	private byte map[] = null;
 	private ByteBuffer mapb = null;
@@ -516,7 +519,9 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 		log.debug("write({} size={} marktype={})", hdr.off, ctnt.size(), et);
         try {
-            return appendExtntLogStore(hdr.off, ctnt, et);
+            ErrorCode ec = appendExtntLogStore(hdr.off, ctnt, et);
+            highWatermark = Long.max(highWatermark, hdr.off);
+            return ec;
         } catch (IOException e) {
             e.printStackTrace();
             return ErrorCode.ERR_IO;
@@ -613,6 +618,15 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         }
 
     @Override
+    synchronized public long highestAddress()
+    throws TException {
+        if (simFailure)
+        {
+            throw new TException("Simulated failure mode!");
+        }
+        return highWatermark;
+    }
+    @Override
     synchronized public void reset() {
         log.debug("Reset requested, resetting state");
         try {
@@ -621,6 +635,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             inmemoryStore = new ByteBuffer[UNITCAPACITY];
             initLogStore(UNITCAPACITY);
             writegcmark();
+            highWatermark = -1L;
         }
         }
         catch (Exception e)

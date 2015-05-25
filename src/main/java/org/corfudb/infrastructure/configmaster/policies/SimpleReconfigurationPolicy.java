@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.configmaster.policies;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;
@@ -39,7 +40,9 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
                 {
                     for (List<IServerProtocol> nodeList : segment.getGroups())
                     {
-                        nodeList.removeIf(n ->n.getFullString().equals(e.protocol.getFullString()));
+                        if (nodeList.size() > 1) {
+                            nodeList.removeIf(n -> n.getFullString().equals(e.protocol.getFullString()));
+                        }
                     }
                 }
 
@@ -52,13 +55,44 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
             log.warn("Reconfigure due to read, ignoring");
             return oldView;
         }
-        else if (e.protocol instanceof ISequencer || e.protocol instanceof IStreamSequencer)
+        else if (e.protocol instanceof ISimpleSequencer)
         {
             if (oldView.getSequencers().size() <= 1)
             {
-                log.warn("Request reconfiguration of sequencers but there is no fail-over available!");
+                log.warn("Request reconfiguration of sequencers but there is no fail-over available! [available sequencers=" + oldView.getSequencers().size() + "]");
+                return oldView;
             }
-            return oldView;
+            else
+            {
+                CorfuDBView newView = (CorfuDBView) Serializer.copyShallow(oldView);
+                newView.moveAllToNewEpoch(oldView.getEpoch() + 1);
+
+                /* Interrogate each log unit to figure out last issued token */
+                long last = -1;
+                for (CorfuDBViewSegment segment : newView.getSegments())
+                {
+                    int groupNum = 1;
+                    for (List<IServerProtocol> nodeList : segment.getGroups()) {
+                        for (IServerProtocol n : nodeList) {
+                                try {
+                                    last = Long.max(last, ((IWriteOnceLogUnit) n).highestAddress() * segment.getGroups().size() + groupNum);
+                                } catch (NetworkException ne) {
+
+                                }
+                        }
+                        groupNum++;
+                    }
+                }
+
+                log.warn("Removing sequencer " + e.protocol.getFullString() + " from configuration, discover last sequence was " + last);
+                newView.getSequencers().removeIf(n -> n.getFullString().equals(e.protocol.getFullString()));
+                try {
+                    ((ISimpleSequencer) newView.getSequencers().get(0)).recover(last);
+                } catch (Exception ex){
+                    log.warn("Tried to install recovered sequence from sequencer, but failed", e);
+                }
+                return newView;
+            }
         }
         else
         {

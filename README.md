@@ -35,7 +35,7 @@ $ sudo dpkg -i /tmp/thrift-compiler.deb
 On Mac OS X, the [homebrew](http://brew.sh) package manager should help.
 After installing homebrew, run:
 ```
-$ brew install maven thrift redis
+$ brew install maven thrift
 ```
 
 On Windows, you can get thrift here:
@@ -50,8 +50,8 @@ CorfuDB uses Apache maven for building. To build, from the root
 directory, run:
 
 ```
-$ mvn clean   (only if not first time and junk is left over)
-$ mvn install
+$ mvn clean install -DskipTests -Dexec.skip
+
 ```
 
 ## CorfuDB quick deployment
@@ -60,12 +60,16 @@ The default configuration files will start a single-node deployment
 of corfuDB. To start this default deployment, run:
 
 ```
-$ bin/corfuDBsingle.sh start
+$ bin/furunall.sh --cmd start
 ```
 
 You may have to run the script as superuser (i.e., with `sudo`).
-To stop the deployment, simply call the script with `stop` as
-an argument. Other options include `restart` and `status`.
+To stop the deployment, simply call the script with `--cmd stop` as
+an argument. Other options include `--cmd restart` and `--cmd status`. to run a replicated log with `n` copies on a single node, use:
+
+```
+$ bin/furunall.sh --cmd start --unitcnt n
+```
 
 ## Checking if the deployment is working
 
@@ -88,10 +92,7 @@ one of sequencer, logunit, configmaster.
 
 ## Bringing up a custom CorfuDB deployment
 
-The single-node deployment configuration uses the `configmaster.yml` file in the conf directory.
-It describes the configuration which a CorfuDB deployment requires: a Sequencer, 
-one or more groups of replicated logging units,
-and a configuration master.
+The `furunall.sh` single node deployment brings up all the components of a single corfu log. They are:
 
 *Sequencer* - provides unique sequence numbers to clients. Only one
 sequencer is required per deployment.
@@ -102,28 +103,27 @@ these may exist in a deployment.
 *Configuration Master* - provides the configuration to clients. Only
 one of these may exist per deployment.
 
-Each service uses a configuration file located in the `conf` directory.
-Sample configurations for each service type are provided, you will
-probably want to modify these for your needs.
+Each corfudb role needs a configuration file that contains its port number and other essential parameters. 
 
-The `bin/corfuDBLaunch.sh` script is used to launch each service
-configuration. The script takes the following syntax:
+The single-node deployment script `furunall.sh` generates configuration files for all roles under the `/var/tmp` directory. Sample configuration files are provided in the `conf` directory and may be changed manually.
 
-`bin/corfuDBLaunch.sh <configuration> {start|stop|restart|status}`
+The `bin/furun.sh` script is used to launch each component. The script takes the following syntax:
+
+`bin/furun.sh --unit {sequencer|configmaster|logunit.port> --cmd {start|stop|restart|status} [--configdir <dir>]`
 
 For example, running:
 
-`bin/corfuDBLaunch.sh sequencer start`
+`bin/corfuDBLaunch.sh --unit sequencer --cmd start`
 
-Will look for a file `conf/sequencer.yml`, and start the service.
+Will look for a file `/var/tmp/sequencer.yml`, and start the service.
 
 For example, running the simple deployment script
-`bin/corfuDBsingle.sh start` runs:
+`bin/furunall.sh start` runs:
 
 ```
-$ bin/corfuDBLaunch.sh sequencer start
-$ bin/corfuDBLaunch.sh logunit start
-$ bin/corfuDBLaunch.sh configmaster start
+$ bin/furun.sh --unit sequencer --cmd start
+$ bin/furun.sh -unit logunit --cmd start
+$ bin/furun.sh --unit configmaster --cmd start
 ```
 
 ## Deployment Tools
@@ -133,6 +133,21 @@ on most Debian-based systems. Furthermore, the [CorfuDB-Ansible](https://github.
 repository provides a Ansible playbook to configure, deploy and orchestrate
 complex multi-node CorfuDB deployments.
 
+## Running the tests
+
+The repository contains a set of unit tests and integration tests that we run CorfuDB against.
+To run the tests, you will need to install some additional dependencies - currently this is only
+Redis.
+
+To install on Ubuntu:
+```
+$ sudo apt-get install redis-server
+```
+
+On Mac OSX:
+```
+$ brew install redis
+```
 ## Common Issues
 
 Q: *I get a bunch of errors that look like*

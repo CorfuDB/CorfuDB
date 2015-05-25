@@ -1,11 +1,7 @@
 package org.corfudb.runtime.view;
 
 import com.esotericsoftware.kryo.Kryo;
-import org.corfudb.runtime.entries.BundleEntry;
-import org.corfudb.runtime.entries.CorfuDBStreamEntry;
-import org.corfudb.runtime.entries.CorfuDBStreamHoleEntry;
-import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
-import org.corfudb.runtime.entries.CorfuDBStreamStartEntry;
+import org.corfudb.runtime.entries.*;
 import org.corfudb.runtime.stream.Timestamp;
 
 import java.io.ByteArrayOutputStream;
@@ -45,7 +41,7 @@ public class Serializer
      */
     static void registerSerializer(Kryo k)
     {
-        k.register(BundleEntry.class);
+        k.register(OldBundleEntry.class);
         k.register(CorfuDBStreamEntry.class);
         k.register(CorfuDBStreamHoleEntry.class);
         k.register(CorfuDBStreamMoveEntry.class);

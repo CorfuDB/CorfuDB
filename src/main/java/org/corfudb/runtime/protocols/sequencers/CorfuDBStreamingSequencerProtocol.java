@@ -180,6 +180,21 @@ public class CorfuDBStreamingSequencerProtocol implements IServerProtocol, ISimp
         }
     }
 
+    @Override
+    public void recover(long lastPos) throws NetworkException {
+        StreamingSequencerService.Client client = null;
+        try {
+            client = thriftPool.getResource();
+            client.recover(lastPos);
+            thriftPool.returnResourceObject(client);
+        }
+        catch (Exception e)
+        {
+            if (client != null ) {thriftPool.returnBrokenResource(client);}
+            throw new NetworkException("Couldn't connect to endpoint!", this);
+        }
+    }
+
     public boolean ping()
     {
         StreamingSequencerService.Client client = null;

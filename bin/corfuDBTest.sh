@@ -30,4 +30,4 @@ CORFUDBMAIN="org.corfudb.tests.${1}"
 #"$JAVA" -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" "${*:2}" 2>&1 < /dev/null
 #
 
-"$JAVA" -cp "$CLASSPATH" "-Dorg.slf4j.simpleLogger.defaultLogLevel=${CORFUDB_LOG4J_PROP}" $JVMFLAGS -Xmx16g "$CORFUDBMAIN" ${*:2} 2>&1 < /dev/null
+"$JAVA" -cp "$CLASSPATH" "-Dorg.slf4j.simpleLogger.defaultLogLevel=${CORFUDB_LOG4J_PROP}" $JVMFLAGS -Xmx16g "$CORFUDBMAIN" ${*:2} 2>&1

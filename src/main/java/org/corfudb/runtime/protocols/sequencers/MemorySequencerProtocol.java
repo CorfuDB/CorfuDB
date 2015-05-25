@@ -130,6 +130,11 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
     }
 
     @Override
+    public void recover(long lastPos) throws NetworkException {
+        sequenceNumber.set(lastPos);
+    }
+
+    @Override
     public long sequenceGetNext(UUID stream, int count) throws NetworkException {
         return sequenceNumber.getAndAccumulate(count, (p, n) -> n + p);
     }

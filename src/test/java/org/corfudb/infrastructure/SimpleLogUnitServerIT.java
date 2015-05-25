@@ -108,4 +108,22 @@ public class SimpleLogUnitServerIT  {
         //trimmed addresses must cause an overwrite exception
         assertRaises(() -> lu.write(0,t), OverwriteException.class);
     }
+
+    @Test
+    public void highestAddressIsHighest() throws Exception {
+        byte[] t = getTestPayload(1024);
+
+        assertThat(lu.highestAddress())
+                .isEqualTo(-1);
+
+        lu.write(0, t);
+
+        assertThat(lu.highestAddress())
+                .isEqualTo(0);
+
+        lu.write(100, t);
+
+        assertThat(lu.highestAddress())
+                .isEqualTo(100);
+    }
 }
