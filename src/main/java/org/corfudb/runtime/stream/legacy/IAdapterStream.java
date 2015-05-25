@@ -12,15 +12,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime.smr;
 
+package org.corfudb.runtime.stream.legacy;
 import org.corfudb.runtime.stream.IStream;
-import java.util.UUID;
 
-public interface IStreamFactory
-{
-    IStream newStream(UUID streamid);
-    //default IStream newStream(long streamid) { return newStream(new UUID(streamid, 0)); }
+/**
+ *  A stream interface.
+ *
+ *  Streams are slightly more restrictive than logs:
+ *  Random reads are only possible when given a timestamp, and they must be read starting
+ *  from the head of the stream.
+ */
+public interface IAdapterStream extends IStream {
+
+
+    /**
+     * Get the ID of the stream.
+     * @return                  The ID of the stream.
+     */
+    long getIntegerStreamID();
+
 }
-
-

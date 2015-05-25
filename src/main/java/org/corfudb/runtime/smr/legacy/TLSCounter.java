@@ -1,4 +1,4 @@
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
 public class TLSCounter extends ThreadLocal<Integer>  {
 

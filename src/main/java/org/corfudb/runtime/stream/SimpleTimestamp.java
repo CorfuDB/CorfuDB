@@ -8,7 +8,7 @@ package org.corfudb.runtime.stream;
  */
 public class SimpleTimestamp implements ITimestamp {
 
-    long address;
+    public long address;
 
     public SimpleTimestamp(long address)
     {

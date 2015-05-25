@@ -26,10 +26,10 @@ import java.util.Map;
 import java.util.HashSet;
 
 import org.corfudb.runtime.smr.SMRCommandWrapper;
-import org.corfudb.runtime.smr.TxDec;
-import org.corfudb.runtime.smr.TxInt;
-import org.corfudb.runtime.smr.TxIntWriteSetEntry;
-import org.corfudb.runtime.smr.TxIntReadSetEntry;
+import org.corfudb.runtime.smr.legacy.TxDec;
+import org.corfudb.runtime.smr.legacy.TxInt;
+import org.corfudb.runtime.smr.legacy.TxIntWriteSetEntry;
+import org.corfudb.runtime.smr.legacy.TxIntReadSetEntry;
 import org.corfudb.runtime.stream.ITimestamp;
 import java.util.ArrayList;
 import java.util.LinkedList;

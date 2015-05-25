@@ -3,9 +3,9 @@ package org.corfudb.runtime.collections;
 import org.apache.zookeeper.*;
 import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Stat;
-import org.corfudb.runtime.smr.AbstractRuntime;
-import org.corfudb.runtime.smr.CorfuDBObject;
-import org.corfudb.runtime.smr.CorfuDBObjectCommand;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.CorfuDBObject;
+import org.corfudb.runtime.smr.legacy.CorfuDBObjectCommand;
 import org.corfudb.runtime.smr.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -225,7 +225,7 @@ public class CorfuDBZK extends CorfuDBObject implements IZooKeeper
         }
     }
 
-    public CorfuDBZK(AbstractRuntime truntime, long objectid, boolean remote, Watcher twatcher) throws IOException
+    public CorfuDBZK(AbstractRuntime truntime, UUID objectid, boolean remote, Watcher twatcher) throws IOException
     {
         super(truntime, objectid, remote);
         defaultwatcher = twatcher;

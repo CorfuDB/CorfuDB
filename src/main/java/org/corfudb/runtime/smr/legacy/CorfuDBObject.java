@@ -12,13 +12,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
 import org.corfudb.runtime.stream.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
+import java.util.UUID;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -32,10 +33,10 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
 
     static Logger dbglog = LoggerFactory.getLogger(CorfuDBObject.class);
 
-    public static final long oidnull = -1;
+    public static final UUID oidnull = new UUID(0, 0);
 
     //object ID -- corresponds to stream ID used underneath
-    public long oid;
+    public UUID oid;
     public AbstractRuntime TR;
 
     ITimestamp timestamp = ITimestamp.getMinTimestamp();
@@ -71,17 +72,17 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
         throw new RuntimeException("unimplemented! override this in subclass...");
     }
 
-    public long getID()
+    public UUID getID()
     {
         return oid;
     }
 
-    public CorfuDBObject(AbstractRuntime tTR, long tobjectid)
+    public CorfuDBObject(AbstractRuntime tTR, UUID tobjectid)
     {
         this(tTR, tobjectid, false);
     }
 
-    public CorfuDBObject(AbstractRuntime tTR, long tobjectid, boolean remote)
+    public CorfuDBObject(AbstractRuntime tTR, UUID tobjectid, boolean remote)
     {
         // System.out.println("Creating CorfuDBObject " + tobjectid);
         TR = tTR;
@@ -97,7 +98,7 @@ public abstract class CorfuDBObject implements Comparable<CorfuDBObject>
         // int thisHashCode = System.identityHashCode(this);
         // int thatHashCode = System.identityHashCode(compareCob);
         // return thisHashCode - thatHashCode;
-        long result = (this.oid - compareCob.oid);
+        long result = oid.compareTo(compareCob.oid);
         return result == 0 ? 0 : result > 0 ? 1 : -1;
     }
 

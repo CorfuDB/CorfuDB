@@ -2,23 +2,23 @@ package org.corfudb.runtime.collections;
 
 import java.util.*;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
 
 public class PartitionedMap<K,V> implements Map<K,V>
 {
-    List<Long> partitionlist;
+    List<UUID> partitionlist;
     AbstractRuntime TR;
 
-    public PartitionedMap(List<Long> tpartitionlist, AbstractRuntime tTR)
+    public PartitionedMap(List<UUID> tpartitionlist, AbstractRuntime tTR)
     {
         partitionlist = tpartitionlist;
         TR = tTR;
     }
 
     //objectid to object instance map
-    Map<Long, CorfuDBMap<K,V>> soft_mapobjs = new HashMap();
+    Map<UUID, CorfuDBMap<K,V>> soft_mapobjs = new HashMap();
 
-    CorfuDBMap<K,V> objidtomap(long objid)
+    CorfuDBMap<K,V> objidtomap(UUID objid)
     {
         CorfuDBMap<K,V> curmap = null;
         if(soft_mapobjs.containsKey(objid))
@@ -37,7 +37,7 @@ public class PartitionedMap<K,V> implements Map<K,V>
         if(O!=null)
             index = O.hashCode()%partitionlist.size();
 //        System.out.println("XYZ " + partitionlist.size() + ", " + index + ": " + partitionlist.get(index));
-        long objid = partitionlist.get(index);
+        UUID objid = partitionlist.get(index);
         return objidtomap(objid);
     }
 

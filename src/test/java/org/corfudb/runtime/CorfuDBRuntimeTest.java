@@ -76,6 +76,7 @@ public class CorfuDBRuntimeTest {
                 assertThat(stream)
                         .isInstanceOf(IStream.class);
             } catch (Exception e) {
+                e.printStackTrace(System.out);
                 Assert.fail("Exception while creating stream of type " + p.getName() + ": " + e.getMessage());
             }
         });

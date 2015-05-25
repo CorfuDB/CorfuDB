@@ -1,11 +1,13 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
-import org.corfudb.runtime.smr.CorfuDBObject;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.CorfuDBObject;
 import org.corfudb.runtime.smr.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.corfudb.runtime.stream.ITimestamp;
+
+import java.util.UUID;
 
 public class CDBDoublyLinkedListNode<E> extends CorfuDBObject {
 
@@ -13,9 +15,9 @@ public class CDBDoublyLinkedListNode<E> extends CorfuDBObject {
     static Logger dbglog = LoggerFactory.getLogger(CDBDoublyLinkedListNode.class);
 
     public E value;
-    public long oidnext;
-    public long oidprev;
-    public long oidparent;
+    public UUID oidnext;
+    public UUID oidprev;
+    public UUID oidparent;
     protected transient CDBDoublyLinkedList<E> _parentlist;
     public transient IStreamFactory _sf;
 
@@ -23,7 +25,7 @@ public class CDBDoublyLinkedListNode<E> extends CorfuDBObject {
             AbstractRuntime tr,
             IStreamFactory tsf,
             E _val,
-            long oid,
+            UUID oid,
             CDBDoublyLinkedList<E> parent
         )
     {
@@ -58,7 +60,7 @@ public class CDBDoublyLinkedListNode<E> extends CorfuDBObject {
         return (E) cc.getReturnValue();
     }
 
-    public long applyReadNext(NodeOp<E> cc) {
+    public UUID applyReadNext(NodeOp<E> cc) {
         rlock();
         try {
             assert (oid == cc.nodeid());
@@ -66,10 +68,10 @@ public class CDBDoublyLinkedListNode<E> extends CorfuDBObject {
         } finally {
             runlock();
         }
-        return (long) cc.getReturnValue();
+        return (UUID) cc.getReturnValue();
     }
 
-    public long applyReadPrev(NodeOp<E> cc) {
+    public UUID applyReadPrev(NodeOp<E> cc) {
         rlock();
         try {
             assert (oid == cc.nodeid());
@@ -77,7 +79,7 @@ public class CDBDoublyLinkedListNode<E> extends CorfuDBObject {
         } finally {
             runlock();
         }
-        return (long) cc.getReturnValue();
+        return (UUID) cc.getReturnValue();
     }
 
     public void applyWriteValue(NodeOp<E> cc) {

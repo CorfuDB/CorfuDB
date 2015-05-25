@@ -1,13 +1,14 @@
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
 import java.io.Serializable;
+import java.util.UUID;
 
 public class TxIntWriteSetEntry implements Serializable
 {
     Serializable command;
-    long objectid;
+    UUID objectid;
     Serializable key;
-    public TxIntWriteSetEntry(Serializable tcommand, long tobjid, Serializable tkey)
+    public TxIntWriteSetEntry(Serializable tcommand, UUID tobjid, Serializable tkey)
     {
         command = tcommand;
         objectid = tobjid;

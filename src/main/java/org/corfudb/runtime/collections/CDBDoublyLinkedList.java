@@ -1,7 +1,7 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
-import org.corfudb.runtime.smr.DirectoryService;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.DirectoryService;
 import org.corfudb.runtime.smr.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,10 +15,10 @@ import org.corfudb.runtime.stream.ITimestamp;
 public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
 
     static Logger dbglog = LoggerFactory.getLogger(CDBDoublyLinkedList.class);
-    static protected final HashMap<Long, CDBDoublyLinkedList> s_lists = new HashMap<>();
-    public long m_head;
-    public long m_tail;
-    public HashMap<Long, CDBDoublyLinkedListNode<E>> m_nodes;
+    static protected final HashMap<UUID, CDBDoublyLinkedList> s_lists = new HashMap<>();
+    public UUID m_head;
+    public UUID m_tail;
+    public HashMap<UUID, CDBDoublyLinkedListNode<E>> m_nodes;
     public IStreamFactory sf;
 
     /**
@@ -27,7 +27,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      * @return
      */
     static public
-    CDBDoublyLinkedList findList(long loid) {
+    CDBDoublyLinkedList findList(UUID loid) {
         synchronized (s_lists) {
             if (s_lists.containsKey(loid))
                 return s_lists.get(loid);
@@ -45,7 +45,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     CDBDoublyLinkedList(
         AbstractRuntime tTR,
         IStreamFactory tsf,
-        long toid
+        UUID toid
         )
     {
         super(tTR, tsf, toid);
@@ -82,7 +82,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      * @param cc
      * @return
      */
-    protected long
+    protected UUID
     applyReadHead(NodeOp<E> cc) {
         rlock();
         try {
@@ -90,7 +90,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         } finally {
             runlock();
         }
-        return (long) cc.getReturnValue();
+        return (UUID) cc.getReturnValue();
     }
 
     /**
@@ -98,7 +98,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      * @param cc
      * @return
      */
-    protected long
+    protected UUID
     applyReadTail(NodeOp<E> cc) {
         rlock();
         try {
@@ -106,7 +106,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         } finally {
             runlock();
         }
-        return (long) cc.getReturnValue();
+        return (UUID) cc.getReturnValue();
     }
 
     /**
@@ -145,7 +145,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     protected
     CDBDoublyLinkedListNode<E>
     nodeById_nolock(
-        long noid
+        UUID noid
         )
     {
         assert(lockheld());
@@ -159,7 +159,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      */
     protected CDBDoublyLinkedListNode<E>
     nodeById(
-        long noid
+        UUID noid
         )
     {
         rlock();
@@ -174,11 +174,11 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      * read the head field
      * @return
      */
-    protected long
+    protected UUID
     readhead() {
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_HEAD, oid, oid);
         if (TR.query_helper(this, null, cmd))
-            return (long) cmd.getReturnValue();
+            return (UUID) cmd.getReturnValue();
         rlock();
         try {
             return m_head;
@@ -191,11 +191,11 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      * read the tail field
      * @return
      */
-    protected long
+    protected UUID
     readtail() {
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_TAIL, oid, oid);
         if(TR.query_helper(this, null, cmd))
-            return (long) cmd.getReturnValue();
+            return (UUID) cmd.getReturnValue();
         rlock();
         try {
             return m_tail;
@@ -209,12 +209,12 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      * @param node
      * @return
      */
-    protected long
+    protected UUID
     readnext(CDBDoublyLinkedListNode<E> node) {
 
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_NEXT, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
-            return (long) cmd.getReturnValue();
+            return (UUID) cmd.getReturnValue();
         node.rlock();
         try {
             return node.oidnext;
@@ -228,12 +228,12 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      * @param node
      * @return
      */
-    protected long
+    protected UUID
     readprev(CDBDoublyLinkedListNode<E> node) {
 
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_PREV, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
-            return (long) cmd.getReturnValue();
+            return (UUID) cmd.getReturnValue();
         node.rlock();
         try {
             return node.oidprev;
@@ -269,7 +269,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     public int size() {
 
         int size = 0;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         while(nodeoid != oidnull) {
             size++;
             nodeoid = readnext(nodeById(nodeoid));
@@ -288,7 +288,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         E value;
         int index = 0;
         if(!isTypeE(o)) return -1;
-        long oidnode = readhead();
+        UUID oidnode = readhead();
 
         while(oidnode != oidnull) {
             CDBDoublyLinkedListNode<E> node = nodeById(oidnode);
@@ -311,7 +311,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         rlock();
         try {
             int size = 0;
-            long oidnode = m_head;
+            UUID oidnode = m_head;
             while (oidnode != oidnull) {
                 size++;
                 CDBDoublyLinkedListNode<E> node = nodeById_nolock(oidnode);
@@ -342,7 +342,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         int index = size-1;
 
         E value;
-        long oidnode = readtail();
+        UUID oidnode = readtail();
         while(oidnode != oidnull) {
             CDBDoublyLinkedListNode<E> node = nodeById(oidnode);
             value = readvalue(node);
@@ -360,7 +360,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
      */
     @Override
     public boolean isEmpty() {
-        long head = readhead();
+        UUID head = readhead();
         return head == oidnull;
     }
 
@@ -396,7 +396,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     public E get(int index) {
 
         int cindex=0;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         while(nodeoid != oidnull) {
             CDBDoublyLinkedListNode<E> node = nodeById(nodeoid);
             if(index == cindex)
@@ -417,7 +417,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
 
         int cindex=0;
         boolean found = false;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         CDBDoublyLinkedListNode<E> node = null;
 
         while(nodeoid != oidnull) {
@@ -434,8 +434,8 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
             return null;
 
         E result = readvalue(node);
-        long oidnext = readnext(node);
-        long oidprev = readprev(node);
+        UUID oidnext = readnext(node);
+        UUID oidprev = readprev(node);
 
         if(oidnext == oidnull && oidprev == oidnull) {
             // remove singleton from list. equivalent:
@@ -543,7 +543,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         NodeOp<E> cmd;
         int cindex=0;
         CDBDoublyLinkedListNode<E> node;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
 
         while(nodeoid != oidnull) {
             node = nodeById(nodeoid);
@@ -639,7 +639,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     private CDBDoublyLinkedListNode<E>
     allocNode(
         E e,
-        long oidtail
+        UUID oidtail
         )
     {
         CDBDoublyLinkedListNode<E> newnode =
@@ -666,7 +666,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
     @Override
     public boolean add(E e) {
 
-        long oidtail = readtail();
+        UUID oidtail = readtail();
         CDBDoublyLinkedListNode<E> newnode = allocNode(e, oidtail);
 
         if(oidtail == oidnull) {
@@ -732,7 +732,7 @@ public class CDBDoublyLinkedList<E> extends CDBAbstractList<E> {
         StringBuilder sb = new StringBuilder();
         sb.append("[");
         boolean first = true;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         while(nodeoid != oidnull) {
             CDBDoublyLinkedListNode<E> node = nodeById(nodeoid);
             E value = readvalue(node);

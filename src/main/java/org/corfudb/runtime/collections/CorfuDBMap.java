@@ -1,7 +1,7 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
-import org.corfudb.runtime.smr.CorfuDBObject;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.CorfuDBObject;
 import org.corfudb.runtime.smr.Pair;
 import org.corfudb.runtime.smr.Triple;
 import org.slf4j.Logger;
@@ -24,12 +24,12 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     boolean optimizereads = false;
     boolean finegrainconflictdetection = false;
 
-    public CorfuDBMap(AbstractRuntime tTR, long toid)
+    public CorfuDBMap(AbstractRuntime tTR, UUID toid)
     {
         this(tTR, toid, false);
     }
 
-    public CorfuDBMap(AbstractRuntime tTR, long toid, boolean remote)
+    public CorfuDBMap(AbstractRuntime tTR, UUID toid, boolean remote)
     {
         super(tTR, toid, remote);
         backingmap = new HashMap<K,V>();
@@ -197,8 +197,6 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     public V remove(Object o)
     {
         //will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
-        HashSet<Long> H = new HashSet<Long>();
-        H.add(this.getID());
         MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, (K)o);
         TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o), new Pair(MapCommand.CMD_REMOVE, o.hashCode()));
         return (V)precmd.getReturnValue();
@@ -215,8 +213,6 @@ public class CorfuDBMap<K,V> extends CorfuDBObject implements Map<K,V>
     public void clear()
     {
         //will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
-        HashSet<Long> H = new HashSet<Long>();
-        H.add(this.getID());
         TR.update_helper(this, new MapCommand<K, V>(MapCommand.CMD_CLEAR), new Pair(MapCommand.CMD_CLEAR, null));
     }
 

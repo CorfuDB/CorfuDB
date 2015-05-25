@@ -1,12 +1,13 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
-import org.corfudb.runtime.smr.CorfuDBObject;
-import org.corfudb.runtime.smr.CorfuDBObjectCommand;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.CorfuDBObject;
+import org.corfudb.runtime.smr.legacy.CorfuDBObjectCommand;
 import org.corfudb.runtime.smr.IStreamFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.UUID;
 
 public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends CorfuDBObject {
 
@@ -39,7 +40,7 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends Corfu
     public CDBAbstractBTree(
             AbstractRuntime tTR,
             IStreamFactory tsf,
-            long toid
+            UUID toid
         )
     {
         super(tTR, toid);

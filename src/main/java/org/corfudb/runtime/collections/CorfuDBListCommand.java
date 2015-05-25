@@ -1,8 +1,10 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.CorfuDBObjectCommand;
+import org.corfudb.runtime.smr.legacy.CorfuDBObject;
+import org.corfudb.runtime.smr.legacy.CorfuDBObjectCommand;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 class ListCommand<E> extends CorfuDBObjectCommand {
 
@@ -37,10 +39,10 @@ class ListCommand<E> extends CorfuDBObjectCommand {
     int m_index = 0;
     List<E> m_parm;
     int m_cmd;
-    long m_oid = -1;
+    UUID m_oid = CorfuDBObject.oidnull;
 
-    public void setID(long oid) { m_oid = oid;}
-    public long oid() { return m_oid; }
+    public void setID(UUID oid) { m_oid = oid;}
+    public UUID oid() { return m_oid; }
 
     public int getcmd() {
         return m_cmd;

@@ -13,12 +13,14 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
 import java.util.*;
 
 import org.corfudb.runtime.collections.CorfuDBMap;
 import org.corfudb.runtime.collections.CorfuDBCounter;
+import org.corfudb.runtime.smr.IStreamFactory;
+import org.corfudb.runtime.stream.IStream;
 
 /**
  * This is a directory service that maps from human-readable names to CorfuDB object IDs.
@@ -27,11 +29,11 @@ import org.corfudb.runtime.collections.CorfuDBCounter;
 public class DirectoryService
 {
     AbstractRuntime TR;
-    CorfuDBMap<String, Long> names;
+    CorfuDBMap<String, UUID> names;
     CorfuDBCounter idctr;
 
-    static long DS_RESERVED_MAP_ID = 0;
-    static long DS_RESERVED_CTR_ID = 1;
+    static UUID DS_RESERVED_MAP_ID = new UUID(0, 0);
+    static UUID DS_RESERVED_CTR_ID = new UUID(0, 1);
     static long DS_RESERVED_UNIQUE_ID = 2;
     static long FIRST_VALID_STREAM_ID = 3;
 
@@ -58,12 +60,11 @@ public class DirectoryService
      * @param sf IStreamFactory to use
      * @return system-wide unique ID
      */
-    public static long getUniqueID(IStreamFactory sf)
+    public static UUID getUniqueID(IStreamFactory sf)
     {
-        Stream S = sf.newStream(DS_RESERVED_UNIQUE_ID);
-        HashSet hs = new HashSet(); hs.add(DS_RESERVED_UNIQUE_ID);
-        //return ((Timestamp)S.append("DummyString", hs)).pos; //todo: this is a hack
-        return UUID.randomUUID().getLeastSignificantBits(); //todo: this is an even worse hack --- fix!
+        // IStream S = sf.newStream(DS_RESERVED_UNIQUE_ID);
+        // HashSet hs = new HashSet(); hs.add(DS_RESERVED_UNIQUE_ID);
+        return UUID.randomUUID();
     }
 
 
@@ -74,10 +75,10 @@ public class DirectoryService
      * @param X
      * @return
      */
-    public long nameToStreamID(String X)
+    public UUID nameToStreamID(String X)
     {
         System.out.println("Mapping " + X);
-        long ret;
+        UUID ret;
         while(true)
         {
             TR.BeginTX();
@@ -85,7 +86,7 @@ public class DirectoryService
                 ret = names.get(X);
             else
             {
-                ret = idctr.read() + FIRST_VALID_STREAM_ID;
+                ret = new UUID(0, idctr.read() + FIRST_VALID_STREAM_ID);
                 idctr.increment();
                 names.put(X, ret);
             }

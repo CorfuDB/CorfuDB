@@ -1,14 +1,15 @@
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
 import org.corfudb.runtime.stream.ITimestamp;
 import java.io.Serializable;
+import java.util.UUID;
 
 public class TxIntReadSetEntry implements Serializable
 {
-    public long objectid;
+    public UUID objectid;
     public ITimestamp readtimestamp;
     public Serializable readsummary;
-    public TxIntReadSetEntry(long tobjid, ITimestamp ttimestamp, Serializable treadsummary)
+    public TxIntReadSetEntry(UUID tobjid, ITimestamp ttimestamp, Serializable treadsummary)
     {
         objectid = tobjid;
         readtimestamp = ttimestamp;

@@ -1,12 +1,14 @@
 package org.corfudb.util;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.smr.IStreamFactory;
 import org.corfudb.runtime.stream.ILog;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.SimpleLog;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
 
+import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
@@ -69,6 +71,48 @@ public class CorfuDBFactory {
 
     public IStream getStream(UUID id, IStreamingSequencer sequencer, IWriteOnceAddressSpace woas)
     {
-        return new SimpleStream(id, sequencer, woas, runtime);
+        try {
+            String type = (String) options.getOrDefault("--stream-impl", "SimpleStream");
+            Class<? extends IStream> streamClass;
+            try {
+                streamClass = (Class<? extends IStream>) Class.forName("org.corfudb.runtime.stream." + type);
+            } catch(ClassNotFoundException cnfe) {
+                streamClass = (Class<? extends IStream>) Class.forName("org.corfudb.runtime.stream.legacy." + type);
+            }
+            if (!Arrays.asList(streamClass.getInterfaces()).contains(IStream.class))
+            {
+                throw new Exception("Not a stream implementation type!");
+            }
+            Constructor ctor = streamClass.getConstructor(UUID.class, IStreamingSequencer.class, IWriteOnceAddressSpace.class, CorfuDBRuntime.class);
+            return (IStream) ctor.newInstance(id, sequencer, woas, runtime);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
     }
+
+    public IStreamFactory getStreamFactory(IStreamingSequencer sequencer, IWriteOnceAddressSpace woas)
+    {
+        try {
+            String type = (String) options.getOrDefault("--stream-impl", "SimpleStream");
+            Class<? extends IStreamFactory> factoryClass;
+            try {
+                factoryClass = (Class<? extends IStreamFactory>) Class.forName("org.corfudb.runtime.stream." + type + "Factory");
+            } catch(ClassNotFoundException cnfe) {
+                factoryClass = (Class<? extends IStreamFactory>) Class.forName("org.corfudb.runtime.stream.legacy." + type + "Factory");
+            }
+            if (!Arrays.asList(factoryClass.getInterfaces()).contains(IStreamFactory.class))
+            {
+                throw new Exception("Not a stream implementation type!");
+            }
+            Constructor ctor = factoryClass.getConstructor(IWriteOnceAddressSpace.class, IStreamingSequencer.class, CorfuDBRuntime.class);
+            return (IStreamFactory) ctor.newInstance(woas, sequencer, runtime);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
 }

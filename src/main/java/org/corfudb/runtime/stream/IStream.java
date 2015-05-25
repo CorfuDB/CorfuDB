@@ -23,6 +23,8 @@ import org.corfudb.runtime.view.Serializer;
 import java.lang.ClassNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -44,6 +46,27 @@ public interface IStream extends AutoCloseable {
      */
     ITimestamp append(Serializable data)
         throws OutOfSpaceException, IOException;
+
+    /**
+     * Append an object to the stream, along with the set of other objects to which
+     * the payload is relevant.  This method is deprecated because it represents a way to
+     * support multi-object operations (in support of txns) that is too tightly coupled
+     * with the stream interface. To wit: what sense does it make for a stream to append
+     * things for more than one stream.
+     *
+     * TODO: FIXME: This will be refactored into a transaction layer
+     * at some point in the future.
+     *
+     * @param data      A serializable object to append to the stream.
+     *
+     * @param streams   A list of streams ids to which the given payload applies.
+     *
+     * @return          A timestamp, which reflects the physical position and the epoch the data was written in.
+     */
+    default ITimestamp append(Serializable payload, Set<UUID> streams)
+            throws OutOfSpaceException, IOException {
+        throw new RuntimeException("multi-stream append not supported by this IStream implementation.");
+    }
 
    /**
      * Read the next entry in the stream as a IStreamEntry. This function

@@ -12,12 +12,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
+import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.smr.IStreamFactory;
+import org.corfudb.runtime.smr.Pair;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -27,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * It extends SimpleRuntime and overloads apply, update_helper and query_helper.
  *
  */
-public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
+public class TXRuntime extends BaseRuntime
 {
 
     static Logger dbglog = LoggerFactory.getLogger(TXRuntime.class);
@@ -44,14 +49,14 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
     // objects actually take advantage of this setting.
     Boolean prohibitMultiVersionReads = false;
 
-    final ThreadLocal<org.corfudb.runtime.smr.TxInt> curtx = new ThreadLocal<org.corfudb.runtime.smr.TxInt>();
+    final ThreadLocal<TxInt> curtx = new ThreadLocal<TxInt>();
 
     //used to communicate decisions from the query_helper thread to waiting endtx calls
     final Map<UUID, Boolean> decisionmap;
 
-    Map<Long, TXEngine> txenginemap = new HashMap<Long, TXEngine>();
+    Map<UUID, TXEngine> txenginemap = new HashMap<UUID, TXEngine>();
 
-    public TXEngine getTXEngine(long streamid)
+    public TXEngine getTXEngine(UUID streamid)
     {
         synchronized(txenginemap)
         {
@@ -76,11 +81,11 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
         }
     }
 
-    public TXRuntime(IStreamFactory fact, long uniquenodeid, String rpchostname, int rpcport) {
+    public TXRuntime(IStreamFactory fact, UUID uniquenodeid, String rpchostname, int rpcport) {
         this(fact, uniquenodeid, rpchostname, rpcport, false);
     }
 
-    public TXRuntime(IStreamFactory fact, long uniquenodeid, String rpchostname, int rpcport, boolean _prohibitMultiVersionReads)
+    public TXRuntime(IStreamFactory fact, UUID uniquenodeid, String rpchostname, int rpcport, boolean _prohibitMultiVersionReads)
     {
         super(fact, uniquenodeid, rpchostname, rpcport);
         decisionmap = new HashMap<>();
@@ -91,7 +96,7 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
     {
         if (curtx.get() != null) //there's already an executing tx
             throw new RuntimeException("tx already executing!"); //should we do something different to support nested txes?
-        curtx.set(new org.corfudb.runtime.smr.TxInt());
+        curtx.set(new TxInt());
     }
 
     public UUID getTxid() {
@@ -127,7 +132,11 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
         if(smre==null) throw new RuntimeException("no engine found for appending tx!");
         //todo: remove the egregious copy
 //        txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_updatestreams().keySet()));
-        txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_allstreams().keySet()));
+        try {
+            txpos = smre.propose(curtx.get(), new HashSet(curtx.get().get_allstreams().keySet()));
+        } catch(Exception e) {
+            throw new RuntimeException(e);
+        }
         dbglog.debug("appended endtx to streams " + curtx.get().get_allstreams().keySet() + " at position {}; now syncing...", txpos);
 
 
@@ -139,11 +148,15 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
         while(it.hasNext())
         {
             //for each stream in the readset, if we're playing it, sync
-            long streamid = it.next().objectid;
+            UUID streamid = it.next().objectid;
             smre = getEngine(streamid);
             if(smre!=null)
             {
-                smre.sync(txpos); //this results in a number of calls to deliver, as each intervening intention is processed
+                try {
+                    smre.sync(txpos); //this results in a number of calls to deliver, as each intervening intention is processed
+                } catch(Exception e) {
+                    throw new RuntimeException(e);
+                }
                 dbglog.debug("synced stream ", streamid);
             }
             else
@@ -186,15 +199,19 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
             //but for the second category, the originating node may only be playing the read streams
             //hence, we put decisions on all streams
             //todo: put decisions on read streams only if required (how do we determine this?)
-            Iterator<Long> it2 = curtx.get().get_allstreams().keySet().iterator();
+            Iterator<UUID> it2 = curtx.get().get_allstreams().keySet().iterator();
             while(it2.hasNext())
             {
-                long streamid = it2.next();
+                UUID streamid = it2.next();
                 SMREngine smre2 = getEngine(streamid);
                 if(smre2!=null)
                 {
 //                    System.out.println("syncing again...");
-                    smre2.sync();
+                    try {
+                        smre2.sync();
+                    } catch(Exception e){
+                        throw new RuntimeException(e);
+                    }
                 }
             }
             if(ret)
@@ -245,8 +262,13 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
             {
                 rpcRemoteRuntime(cob, command);
             }
-            else
-                smre.sync(ITimestamp.getMaxTimestamp(), command);
+            else {
+                try {
+                    smre.sync(ITimestamp.getMaxTimestamp(), command);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
         else
         {
@@ -259,7 +281,11 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
                     //do what here??? apply the command through the apply thread
                     //passing TIMESTAMP_INVALID ensures that this applies the command
                     //through the upcall thread without triggering an actual sync
-                    smre.sync(ITimestamp.getInvalidTimestamp(), command);
+                    try {
+                        smre.sync(ITimestamp.getInvalidTimestamp(), command);
+                    } catch(Exception e) {
+                        throw new RuntimeException(e);
+                    }
                     dbglog.debug("applied cmd, marking read set: " + command);
                     curtx.get().mark_read(cob.getID(), command.getTimestamp(), command.getReadSummary());
                 } else {
@@ -284,13 +310,17 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
 
     public void query_then_update_helper(CorfuDBObject cob, CorfuDBObjectCommand query, CorfuDBObjectCommand update, Serializable key)
     {
-        Set<Long> streams = new HashSet<Long>();
+        Set<UUID> streams = new HashSet<UUID>();
         streams.add(cob.getID());
         if(curtx.get()==null) //not in a transactional context, append immediately to the stream
         {
             SMREngine smre = getEngine(cob.getID());
             if(smre==null) throw new RuntimeException("updates not allowed on remote objects!");
-            smre.propose(update, streams, query, true);
+            try {
+                smre.propose(update, streams, query, true);
+            } catch(Exception e) {
+                throw new RuntimeException(e);
+            }
         }
         else //in a transactional context, buffer for now
         {
@@ -313,7 +343,7 @@ public class TXRuntime extends org.corfudb.runtime.smr.BaseRuntime
     }
 
 
-    public void deliver(Object command, long curstream, ITimestamp timestamp)
+    public void deliver(Object command, UUID curstream, ITimestamp timestamp)
     {
         throw new RuntimeException("this should never get called! SMR commands" +
                 " are handled by individual TXEngines...");
@@ -423,13 +453,17 @@ class TXEngine implements SMRLearner
     }
 
     @Override
-    public void deliver(Object command, long curstream, ITimestamp timestamp)
+    public void deliver(Object command, UUID curstream, ITimestamp timestamp)
     {
         dbglog.debug("[{}] deliver {}", cob.getID(), timestamp);
 
-        if (command instanceof org.corfudb.runtime.smr.TxInt) //is the command a transaction or a linearizable singleton?
+        if (command instanceof TxInt) //is the command a transaction or a linearizable singleton?
         {
-            process_tx_intention(command, curstream, timestamp);
+            try {
+                process_tx_intention(command, curstream, timestamp);
+            } catch(Exception e) {
+                throw new RuntimeException(e);
+            }
         }
         else if(command instanceof TxDec)
         {
@@ -444,10 +478,10 @@ class TXEngine implements SMRLearner
 
     }
 
-    Map<UUID, org.corfudb.runtime.smr.TxInt> pendingtxes = new HashMap();
+    Map<UUID, TxInt> pendingtxes = new HashMap();
 
 
-    public void addPending(ITimestamp timestamp, org.corfudb.runtime.smr.TxInt txint)
+    public void addPending(ITimestamp timestamp, TxInt txint)
     {
         if(!pendingtxes.containsKey(timestamp))
         {
@@ -455,7 +489,7 @@ class TXEngine implements SMRLearner
         }
     }
 
-    public org.corfudb.runtime.smr.TxInt getPending(UUID txid)
+    public TxInt getPending(UUID txid)
     {
         return pendingtxes.get(txid);
     }
@@ -466,7 +500,7 @@ class TXEngine implements SMRLearner
     }
 
     //called by deliver
-    public void process_tx_intention(Object command, long curstream, ITimestamp timestamp)
+    public void process_tx_intention(Object command, UUID curstream, ITimestamp timestamp) throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         dbglog.debug("[" + cob.getID() + "] process_tx_int " + curstream + "." + timestamp);
 
@@ -475,7 +509,7 @@ class TXEngine implements SMRLearner
             txr.ctr_numtxint.incrementAndGet();
         }
 
-        org.corfudb.runtime.smr.TxInt T = (org.corfudb.runtime.smr.TxInt) command;
+        TxInt T = (TxInt) command;
 
         txr.initDecisionState(T.getTxid());
 
@@ -521,10 +555,10 @@ class TXEngine implements SMRLearner
                 //we now need to check if the transaction conflicts with any of the pending transactions
                 //to this object; if so, for now we abort immediately. in the future, we need to maintain
                 //a dependency graph
-                Iterator<org.corfudb.runtime.smr.TxInt> it = pendingtxes.values().iterator();
+                Iterator<TxInt> it = pendingtxes.values().iterator();
                 while (it.hasNext())
                 {
-                    org.corfudb.runtime.smr.TxInt T2 = it.next();
+                    TxInt T2 = it.next();
                     if(T.getTxid().equals(T2.getTxid())) continue;
                     //does T2 write something that T reads?
                     if (T.readsSomethingWrittenBy(T2))
@@ -538,7 +572,7 @@ class TXEngine implements SMRLearner
         }
         TxDec decrec = new TxDec(timestamp, curstream, !partialabort, T.getTxid());
         //todo: remove this egregious copy
-        ITimestamp decT = smre.propose(decrec, new HashSet<Long>(T.get_allstreams().keySet()));
+        ITimestamp decT = smre.propose(decrec, new HashSet<UUID>(T.get_allstreams().keySet()));
         dbglog.debug("appending decision at " + decT + " for txint " + decrec.txid + " at " + decrec.txint_timestamp);
 
         //if stream appends are reliable, we can commit blind writes at this point
@@ -552,7 +586,7 @@ class TXEngine implements SMRLearner
 
 
 
-    public void process_tx_decision(Object command, long curstream, ITimestamp timestamp)
+    public void process_tx_decision(Object command, UUID curstream, ITimestamp timestamp)
     {
         if (txr.trackstats)
         {
@@ -573,7 +607,7 @@ class TXEngine implements SMRLearner
         dbglog.debug("[" + cob.getID() + "] process_tx_dec " + curstream + "." + timestamp + " for txint " + decrec.txid + " at " + curstream + "." + decrec.txint_timestamp);
 
 
-        org.corfudb.runtime.smr.TxInt T = getPending(decrec.txid);
+        TxInt T = getPending(decrec.txid);
         if(T==null) //already been decided and applied by this TXEngine
         {
             return;
@@ -642,7 +676,7 @@ class TXEngine implements SMRLearner
         }
     }
 
-    protected ArrayList<CorfuDBObject> lockWriteSet(TxDec decrec, long curstream) {
+    protected ArrayList<CorfuDBObject> lockWriteSet(TxDec decrec, UUID curstream) {
         if(true) return null;
         ArrayList<CorfuDBObject> lockset = null;
         if (lockWritesetForCommit) {
@@ -678,7 +712,7 @@ class TXEngine implements SMRLearner
         }
     }
 
-    public void process_lin_singleton(Object command, long curstream, ITimestamp timestamp)
+    public void process_lin_singleton(Object command, UUID curstream, ITimestamp timestamp)
     {
         if(txr.trackstats)
         {

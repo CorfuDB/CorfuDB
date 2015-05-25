@@ -1,6 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
 import org.corfudb.runtime.smr.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +26,7 @@ public class CDBLogicalList<E> extends CDBAbstractList<E> {
     CDBLogicalList(
         AbstractRuntime tTR,
         IStreamFactory sf,
-        long toid
+        UUID toid
         )
     {
         super(tTR, sf, toid);

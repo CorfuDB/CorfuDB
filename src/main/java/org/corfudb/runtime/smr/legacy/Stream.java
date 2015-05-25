@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
 import org.corfudb.runtime.stream.ITimestamp;
 
@@ -26,6 +26,7 @@ import java.util.Set;
  * Entries can belong to multiple streams.
  * The Stream object allows appends to arbitrary other streams.
  */
+@Deprecated
 public interface Stream
 {
 
@@ -94,7 +95,7 @@ public interface Stream
  * (e.g., the position of the entry in the underlying stream) can be returned
  * along with the payload.
  */
-
+@Deprecated
 interface StreamEntry extends Serializable
 {
     public ITimestamp getLogpos();

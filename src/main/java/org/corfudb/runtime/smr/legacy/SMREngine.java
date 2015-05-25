@@ -12,12 +12,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
+import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.smr.Pair;
+import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -36,6 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SMREngine
 {
     private static Logger dbglog = LoggerFactory.getLogger(SMREngine.class);
+    public static boolean useplaybackthread = false;
 
     SMRLearner smrlearner;
 
@@ -45,8 +52,8 @@ public class SMREngine
     boolean batch = false;
     //pair of queues that get rotated between the playback thread and the sync threads
 
-    Set<Long> defaultstreamset;
-    Stream curstream;
+    Set<UUID> defaultstreamset;
+    IStream curstream;
 
     //list of pending commands -- when we encounter entries in the stream
     //we check this list to see if the entry was appended by us.
@@ -64,7 +71,7 @@ public class SMREngine
         smrlearner = tlearner;
     }
 
-    long uniquenodeid;
+    UUID uniquenodeid;
 
     static class globalThreadFactory implements ForkJoinPool.ForkJoinWorkerThreadFactory
     {
@@ -90,8 +97,7 @@ public class SMREngine
     static ExecutorService SMREngineThreadPool = new ForkJoinPool(8, new globalThreadFactory(), globalThreadExceptionHandler, true);
 
 
-    public SMREngine(Stream sb, long tuniquenodeid)
-    {
+    public SMREngine(IStream sb, UUID tuniquenodeid) {
         // System.out.println("Creating new SMR engine on stream " + sb.getStreamID() + " with node id " + tuniquenodeid);
         curstream = sb;
         uniquenodeid = tuniquenodeid;
@@ -102,18 +108,20 @@ public class SMREngine
 
         curqueue = new LinkedList<SyncObjectWrapper>();
         //start the playback thread
-        /*
-        new Thread(new Runnable()
-        {
-            public void run()
-            {
-                while(true)
-                {
-                    playback();
+
+        if(useplaybackthread) {
+            new Thread(new Runnable() {
+                public void run() {
+                    while (true) {
+                        try {
+                            playback(curqueue);
+                        } catch(Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
                 }
-            }
-        }).start();
-        */
+            }).start();
+        }
 /*
         CompletableFuture.runAsync(() -> {
                 playback();
@@ -121,7 +129,7 @@ public class SMREngine
 */
     }
 
-    public ITimestamp propose(Serializable update, Set<Long> streams, Object precommand)
+    public ITimestamp propose(Serializable update, Set<UUID> streams, Object precommand) throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         return propose(update, streams, precommand, false);
     }
@@ -138,13 +146,11 @@ public class SMREngine
      *                   with a subsequent write operation.
      * @return
      */
-    public ITimestamp propose(Serializable update, Set<Long> streams, Object precommand, boolean sync)
+    public ITimestamp propose(Serializable update, Set<UUID> streams, Object precommand, boolean sync)
+            throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         org.corfudb.runtime.smr.SMRCommandWrapper cmd = new org.corfudb.runtime.smr.SMRCommandWrapper(update, streams);
-     //   pendinglock.lock();
         pendingcommands.put(cmd.uniqueid.second, new Pair(update, precommand));
-//        System.out.println("putting " + cmd + " as a pending local command");
-     //   pendinglock.unlock();
         ITimestamp pos = curstream.append(cmd, streams);
         if (precommand != null || sync)
         //we play until the append point --- this may be sub-optimal in some cases where we want to append
@@ -154,11 +160,13 @@ public class SMREngine
     }
 
     public ITimestamp propose(Serializable update)
+            throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         return propose(update, defaultstreamset);
     }
 
-    public ITimestamp propose(Serializable update, Set<Long> streams)
+    public ITimestamp propose(Serializable update, Set<UUID> streams)
+            throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         return propose(update, streams, null);
     }
@@ -201,7 +209,11 @@ public class SMREngine
                 final List<SyncObjectWrapper> newqueue = new LinkedList<SyncObjectWrapper>(curqueue);
                 curqueue.clear();
                 cf = CompletableFuture.runAsync(() -> {
-                    playback(newqueue);
+                    try {
+                        playback(newqueue);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
                 }, SMREngineThreadPool);
             }
         }
@@ -212,7 +224,11 @@ public class SMREngine
                 final List<SyncObjectWrapper> newqueue = new LinkedList<SyncObjectWrapper>(curqueue);
                 curqueue.clear();
                 cf = CompletableFuture.runAsync(() -> {
-                    playback(newqueue);
+                    try {
+                        playback(newqueue);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
                 }, SMREngineThreadPool);
                 cf.join();
             }
@@ -232,7 +248,7 @@ public class SMREngine
      * if syncpos == timestamp_max, the command should be applied after
      * syncing to the current tail.
      */
-    public synchronized void sync(ITimestamp syncpos, Object command)
+    public synchronized void sync(ITimestamp syncpos, Object command) throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         final SyncObjectWrapper syncobj = new SyncObjectWrapper(command, (syncpos.equals(ITimestamp.getInvalidTimestamp())));
         curqueue.add(syncobj);
@@ -243,17 +259,18 @@ public class SMREngine
 
 
     public void sync(ITimestamp syncpos)
+            throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         sync(syncpos, null);
     }
 
-    public void sync()
+    public void sync() throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         sync(ITimestamp.getMaxTimestamp(), null);
     }
 
     //runs in a single thread
-    void playback(List<SyncObjectWrapper> procqueue)
+    void playback(List<SyncObjectWrapper> procqueue) throws OutOfSpaceException, IOException, HoleEncounteredException
     {
         /*
         List<SyncObjectWrapper> tqueue;
@@ -300,12 +317,12 @@ public class SMREngine
         if(procqueue.size()==0) return;
 
         //check the current tail of the stream, and then read the stream until that position
-        ITimestamp curtail = curstream.checkTail();
+        ITimestamp curtail = curstream.check();
 
 
         dbglog.debug("picked up sync batch of size {}; syncing until {}", procqueue.size(), curtail);
 
-        org.corfudb.runtime.smr.StreamEntry update = curstream.readNext(curtail);
+        IStreamEntry update = curstream.readEntry(curtail);
         while(update!=null)
         {
 //            System.out.println("SMREngine got message in stream " + curstream.getStreamID() + " with learner " +
@@ -331,14 +348,14 @@ public class SMREngine
                     smrlearner.deliver(localcmds.second, curstream.getStreamID(), ITimestamp.getInvalidTimestamp());
                 }
 //                System.out.println("deliver local command " + localcmds.first);
-                smrlearner.deliver(localcmds.first, curstream.getStreamID(), update.getLogpos());
+                smrlearner.deliver(localcmds.first, curstream.getStreamID(), update.getTimestamp());
             }
             else
             {
 //                System.out.println("deliver non-local command " + cmdw.cmd);
-                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), update.getLogpos());
+                smrlearner.deliver(cmdw.cmd, curstream.getStreamID(), update.getTimestamp());
             }
-            update = curstream.readNext(curtail);
+            update = curstream.readEntry(curtail);
         }
 
 //        dbglog.debug("done with applying sync batch... wake up syncing threads...");
@@ -346,7 +363,7 @@ public class SMREngine
         //wake up all waiting query threads; they will now see a state that incorporates all updates
         //that finished before they started
         //todo -- it's dumb to create a set every time for the trivial case
-        Set<Long> curstreamlist = new HashSet<Long>(); curstreamlist.add(curstream.getStreamID());
+        Set<UUID> curstreamlist = new HashSet<UUID>(); curstreamlist.add(curstream.getStreamID());
         Iterator<SyncObjectWrapper> it = procqueue.iterator();
         while(it.hasNext())
         {
@@ -375,7 +392,7 @@ interface SMRLearner
      * @param curstream
      * @param timestamp
      */
-    void deliver(Object command, long curstream, ITimestamp timestamp);
+    void deliver(Object command, UUID curstream, ITimestamp timestamp);
 }
 
 

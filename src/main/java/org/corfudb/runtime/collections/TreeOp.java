@@ -1,6 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.CorfuDBObjectCommand;
+import org.corfudb.runtime.smr.legacy.CorfuDBObjectCommand;
+
+import java.util.UUID;
 
 class TreeOp<K extends Comparable<K>, V> extends CorfuDBObjectCommand {
 
@@ -35,13 +37,13 @@ class TreeOp<K extends Comparable<K>, V> extends CorfuDBObjectCommand {
     public long m_reqstart;
     public long m_reqcomplete;
     public int m_cmd;
-    public long m_oid;
+    public UUID m_oid;
     public K m_key;
     public V m_value;
     public int cmd() { return m_cmd; }
     public K key() { return m_key; }
     public V value() { return m_value; }
-    public long oid() { return m_oid; }
+    public UUID oid() { return m_oid; }
     public long latency() { if(m_reqstart != 0 && m_reqcomplete != 0) return m_reqcomplete - m_reqstart; return 0; }
     public void start() { m_reqstart = System.currentTimeMillis(); }
     public void complete() { m_reqcomplete = System.currentTimeMillis(); }
@@ -49,7 +51,7 @@ class TreeOp<K extends Comparable<K>, V> extends CorfuDBObjectCommand {
     public
     TreeOp(
         int _cmd,
-        long _oid,
+        UUID _oid,
         K key,
         V value
         )

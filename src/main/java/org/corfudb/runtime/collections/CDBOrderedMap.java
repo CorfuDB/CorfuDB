@@ -1,7 +1,7 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
-import org.corfudb.runtime.smr.CorfuDBObject;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.CorfuDBObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,12 +19,12 @@ public class CDBOrderedMap<K extends Comparable,V> extends CorfuDBObject impleme
 
     boolean optimizereads = false;
 
-    public CDBOrderedMap(AbstractRuntime tTR, long toid)
+    public CDBOrderedMap(AbstractRuntime tTR, UUID toid)
     {
         this(tTR, toid, false);
     }
 
-    public CDBOrderedMap(AbstractRuntime tTR, long toid, boolean remote)
+    public CDBOrderedMap(AbstractRuntime tTR, UUID toid, boolean remote)
     {
         super(tTR, toid, remote);
         backingmap = new TreeMap<K,V>();
@@ -275,8 +275,6 @@ public class CDBOrderedMap<K extends Comparable,V> extends CorfuDBObject impleme
     public V remove(Object o)
     {
         //will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
-        HashSet<Long> H = new HashSet<Long>();
-        H.add(this.getID());
         MapCommand<K,V> precmd = new MapCommand<K,V>(MapCommand.CMD_PREPUT, (K)o);
         TR.query_then_update_helper(this, precmd, new MapCommand<K, V>(MapCommand.CMD_REMOVE, (K) o), o.hashCode());
         return (V)precmd.getReturnValue();
@@ -293,8 +291,6 @@ public class CDBOrderedMap<K extends Comparable,V> extends CorfuDBObject impleme
     public void clear()
     {
         //will throw a classcast exception if o is not of type K, which seems to expected behavior for the Map interface
-        HashSet<Long> H = new HashSet<Long>();
-        H.add(this.getID());
         TR.update_helper(this, new MapCommand<K, V>(MapCommand.CMD_CLEAR));
     }
 

@@ -1,7 +1,7 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
-import org.corfudb.runtime.smr.DirectoryService;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.DirectoryService;
 import org.corfudb.runtime.smr.IStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,10 +15,10 @@ import org.corfudb.runtime.stream.ITimestamp;
 public class CDBLinkedList<E> extends CDBAbstractList<E> {
 
     static Logger dbglog = LoggerFactory.getLogger(CDBLinkedList.class);
-    static protected final HashMap<Long, CDBLinkedList> s_lists = new HashMap<>();
+    static protected final HashMap<UUID, CDBLinkedList> s_lists = new HashMap<>();
 
-    public long m_head;                                 // oid of head node
-    public HashMap<Long, CDBLinkedListNode<E>> m_nodes; // map of all nodes. TODO: prune on delete
+    public UUID m_head;                                 // oid of head node
+    public HashMap<UUID, CDBLinkedListNode<E>> m_nodes; // map of all nodes. TODO: prune on delete
     public IStreamFactory sf;                            // stream factory--simplifies new node creation
 
     /**
@@ -29,7 +29,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
      * @return
      */
     static public CDBLinkedList
-    findList(long loid) {
+    findList(UUID loid) {
         synchronized (s_lists) {
             if (s_lists.containsKey(loid))
                 return s_lists.get(loid);
@@ -63,7 +63,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
      * @param cc
      * @return
      */
-    protected long
+    protected UUID
     applyReadHead(NodeOp<E> cc) {
         rlock();
         try {
@@ -71,7 +71,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
         } finally {
             runlock();
         }
-        return (long) cc.getReturnValue();
+        return (UUID) cc.getReturnValue();
     }
 
     /**
@@ -98,7 +98,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
     CDBLinkedList(
         AbstractRuntime tTR,
         IStreamFactory tsf,
-        long toid
+        UUID toid
         )
     {
         super(tTR, tsf, toid);
@@ -118,7 +118,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
      * @return
      */
     protected CDBLinkedListNode<E>
-    nodeById_nolock(long noid) {
+    nodeById_nolock(UUID noid) {
         assert(lockheld());
         return m_nodes.getOrDefault(noid, null);
     }
@@ -129,7 +129,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
      * @return
      */
     protected CDBLinkedListNode<E>
-    nodeById(long noid) {
+    nodeById(UUID noid) {
         rlock();
         try {
             return m_nodes.getOrDefault(noid, null);
@@ -147,11 +147,11 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
      * return the most recently observed value.
      * @return
      */
-    protected long
+    protected UUID
     readhead() {
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_HEAD, oid, oid);
         if (TR.query_helper(this, null, cmd))
-            return (long) cmd.getReturnValue();
+            return (UUID) cmd.getReturnValue();
         rlock();
         try {
             return m_head;
@@ -168,12 +168,12 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
      * @param node
      * @return
      */
-    protected long
+    protected UUID
     readnext(CDBLinkedListNode<E> node) {
 
         NodeOp<E> cmd = new NodeOp<>(NodeOp.CMD_READ_NEXT, node.oid, node.oid);
         if (TR.query_helper(node, null, cmd))
-            return (long) cmd.getReturnValue();
+            return (UUID) cmd.getReturnValue();
         node.rlock();
         try {
             return node.oidnext;
@@ -213,7 +213,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
     public int size() {
 
         int size = 0;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         while(nodeoid != oidnull) {
             size++;
             nodeoid = readnext(nodeById(nodeoid));
@@ -233,7 +233,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
         int index = 0;
         if(!isTypeE(o)) return -1;
 
-        long oidnode = readhead();
+        UUID oidnode = readhead();
         while(oidnode != oidnull) {
             CDBLinkedListNode<E> node = nodeById(oidnode);
             value = readvalue(node);
@@ -256,7 +256,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
         rlock();
         try {
             int size = 0;
-            long oidnode = m_head;
+            UUID oidnode = m_head;
             while (oidnode != oidnull) {
                 size++;
                 CDBLinkedListNode<E> node = nodeById_nolock(oidnode);
@@ -288,7 +288,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
         int lastIndex = -1;
 
         E value;
-        long oidnode = readhead();
+        UUID oidnode = readhead();
         while(oidnode != oidnull) {
             CDBLinkedListNode<E> node = nodeById(oidnode);
             value = readvalue(node);
@@ -306,7 +306,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
      */
     @Override
     public boolean isEmpty() {
-        long head = readhead();
+        UUID head = readhead();
         return head == oidnull;
     }
 
@@ -344,7 +344,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
     public E get(int index) {
 
         int cindex=0;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         while(nodeoid != oidnull) {
             CDBLinkedListNode<E> node = nodeById(nodeoid);
             if(index == cindex)
@@ -365,7 +365,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
 
         int cindex=0;
         boolean found = false;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         CDBLinkedListNode<E> node = null;
         CDBLinkedListNode<E> prev = null;
 
@@ -384,8 +384,8 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
             return null;
 
         E result = readvalue(node);
-        long oidnext = readnext(node);
-        long oidprev = prev == null ? oidnull : prev.oid;
+        UUID oidnext = readnext(node);
+        UUID oidprev = prev == null ? oidnull : prev.oid;
 
         if(prev == null) {
             // remove at head from (potentially) singleton from list. equivalent:
@@ -449,7 +449,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
 
     /**
      * not implemented
-     * @param op
+     * @param c
      */
     @Override
     public boolean retainAll(Collection<?> c) {
@@ -478,7 +478,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
         NodeOp<E> cmd;
         int cindex=0;
         CDBLinkedListNode<E> node;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
 
         while(nodeoid != oidnull) {
             node = nodeById(nodeoid);
@@ -595,7 +595,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
     readtail() {
 
         int size = 0;
-        long oidnext = readhead();
+        UUID oidnext = readhead();
         if(oidnext == oidnull) return null;
         CDBLinkedListNode<E> node = null;
 
@@ -643,7 +643,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
 
         int cindex=0;
         boolean found = false;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         CDBLinkedListNode<E> node = null;
         CDBLinkedListNode<E> prev = null;
 
@@ -662,8 +662,8 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
             throw new IndexOutOfBoundsException();
 
         CDBLinkedListNode<E> newnode = allocNode(e);
-        long oidnext = readnext(node);
-        long oidprev = prev == null ? oidnull : prev.oid;
+        UUID oidnext = readnext(node);
+        UUID oidprev = prev == null ? oidnull : prev.oid;
 
         if(prev == null) {
             // add at head from (potentially) singleton from list. equivalent:
@@ -716,7 +716,7 @@ public class CDBLinkedList<E> extends CDBAbstractList<E> {
         StringBuilder sb = new StringBuilder();
         sb.append("[");
         boolean first = true;
-        long nodeoid = readhead();
+        UUID nodeoid = readhead();
         while(nodeoid != oidnull) {
             CDBLinkedListNode<E> node = nodeById(nodeoid);
             E value = readvalue(node);

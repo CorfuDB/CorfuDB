@@ -1,10 +1,11 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.AbstractRuntime;
-import org.corfudb.runtime.smr.CorfuDBObject;
-import org.corfudb.runtime.smr.CorfuDBObjectCommand;
+import org.corfudb.runtime.smr.legacy.AbstractRuntime;
+import org.corfudb.runtime.smr.legacy.CorfuDBObject;
+import org.corfudb.runtime.smr.legacy.CorfuDBObjectCommand;
 
-import java.util.HashSet;
+import java.util.UUID;
+
 import org.corfudb.runtime.stream.ITimestamp;
 
 public class CorfuDBCounter extends CorfuDBObject
@@ -14,7 +15,7 @@ public class CorfuDBCounter extends CorfuDBObject
 
     boolean optimizereads = false;
 
-    public CorfuDBCounter(AbstractRuntime tTR, long toid)
+    public CorfuDBCounter(AbstractRuntime tTR, UUID toid)
     {
         super(tTR, toid);
         value = 0;
@@ -42,7 +43,6 @@ public class CorfuDBCounter extends CorfuDBObject
     }
     public void increment()
     {
-        HashSet<Long> H = new HashSet<Long>(); H.add(this.getID());
         TR.update_helper(this, new CounterCommand(CounterCommand.CMD_INC));
     }
     public int read_optimized()

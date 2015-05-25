@@ -1,4 +1,4 @@
-package org.corfudb.runtime.smr;
+package org.corfudb.runtime.smr.legacy;
 
 import java.io.Serializable;
 import java.util.List;
@@ -16,12 +16,12 @@ public class TxInt implements Serializable //todo: custom serialization
     //command, object, key
     public final UUID txid;
     public List<TxIntWriteSetEntry> bufferedupdates;
-    public Map<Long, Integer> updatestreammap;
+    public Map<UUID, Integer> updatestreammap;
 
     //object, version, key
     public Set<TxIntReadSetEntry> readset;
-    public Map<Long, Integer> readstreammap; //maps from a stream id to a number denoting the insertion order of that id
-    public Map<Long, Integer> allstreammap; //todo: custom serialization so this doesnt get written out
+    public Map<UUID, Integer> readstreammap; //maps from a stream id to a number denoting the insertion order of that id
+    public Map<UUID, Integer> allstreammap; //todo: custom serialization so this doesnt get written out
     TxInt()
     {
         txid = UUID.randomUUID();
@@ -31,14 +31,14 @@ public class TxInt implements Serializable //todo: custom serialization
         readstreammap = new HashMap();
         allstreammap = new HashMap();
     }
-    void buffer_update(Serializable bs, long stream, Serializable key)
+    void buffer_update(Serializable bs, UUID stream, Serializable key)
     {
         bufferedupdates.add(new TxIntWriteSetEntry(bs, stream, key));
         updatestreammap.put(stream, updatestreammap.size());
         if(!allstreammap.containsKey(stream))
             allstreammap.put(stream, allstreammap.size());
     }
-    void mark_read(long object, ITimestamp timestamp, Serializable readsummary)
+    void mark_read(UUID object, ITimestamp timestamp, Serializable readsummary)
     {
         readset.add(new TxIntReadSetEntry(object, timestamp, readsummary));
         if(!readstreammap.containsKey(object))
@@ -49,11 +49,11 @@ public class TxInt implements Serializable //todo: custom serialization
         }
 
     }
-    Map<Long, Integer> get_updatestreams()
+    Map<UUID, Integer> get_updatestreams()
     {
         return updatestreammap;
     }
-    Map<Long, Integer> get_readstreams()
+    Map<UUID, Integer> get_readstreams()
     {
         return readstreammap;
     }
@@ -65,12 +65,12 @@ public class TxInt implements Serializable //todo: custom serialization
     {
         return bufferedupdates;
     }
-    Map<Long, Integer> get_allstreams()
+    Map<UUID, Integer> get_allstreams()
     {
         return allstreammap;
     }
 
-    boolean has_read(long object, ITimestamp version, Serializable key)
+    boolean has_read(UUID object, ITimestamp version, Serializable key)
     {
         Iterator<TxIntReadSetEntry> it = get_readset().iterator();
         while(it.hasNext()) {
