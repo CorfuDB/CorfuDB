@@ -83,7 +83,7 @@ public class CorfuDBFactory {
             {
                 throw new Exception("Not a stream implementation type!");
             }
-            Constructor ctor = streamClass.getConstructor(UUID.class, IStreamingSequencer.class, IWriteOnceAddressSpace.class, CorfuDBRuntime.class);
+            Constructor ctor = streamClass.getConstructor(UUID.class, ISequencer.class, IWriteOnceAddressSpace.class, CorfuDBRuntime.class);
             return (IStream) ctor.newInstance(id, sequencer, woas, runtime);
         }
         catch (Exception e)
