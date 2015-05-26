@@ -59,7 +59,7 @@ public abstract class BaseRuntime implements AbstractRuntime, SMRLearner, IRPCSe
         rpcc = new ThriftRPCClient();
         rpcs = new ThriftRPCServer();
         rrmap = new RemoteReadMap(fact.newStream(reservedRemoteReadMapID), uniquenodeid);
-        rpcs.registerHandler(rpcportnum, this);
+        // rpcs.registerHandler(rpcportnum, this);
     }
 
     CorfuDBObject getObject(UUID objectid) {
