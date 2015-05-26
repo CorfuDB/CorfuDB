@@ -22,7 +22,7 @@ import org.corfudb.runtime.view.IWriteOnceAddressSpace;
 import java.util.*;
 
 
-class BasicStreamFactory implements IStreamFactory {
+public class BasicStreamFactory implements IStreamFactory {
 
     IWriteOnceAddressSpace was;
     IStreamingSequencer ss;
