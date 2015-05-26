@@ -17,9 +17,11 @@ package org.corfudb.runtime.entries.legacy;
 
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.*;
+
+import java.io.Serializable;
 import java.util.*;
 
-public class BasicStreamEntry implements IStreamEntry
+public class BasicStreamEntry implements IStreamEntry, Serializable
 {
     private ITimestamp logpos; //this doesn't have to be serialized, but leaving it in for debug purposes
     private Object payload;
