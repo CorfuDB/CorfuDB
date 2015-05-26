@@ -1,12 +1,14 @@
 package org.corfudb.runtime.stream;
 
+import java.io.Serializable;
+
 /**
  * This is a simple timestamp which depends on a single global monotonically
  * increasing counter. Timestamps across streams can be compared.
  *
  * Created by mwei on 4/30/15.
  */
-public class SimpleTimestamp implements ITimestamp {
+public class SimpleTimestamp implements ITimestamp, Serializable {
 
     public long address;
 
