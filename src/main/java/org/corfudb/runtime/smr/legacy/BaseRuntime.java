@@ -59,6 +59,7 @@ public abstract class BaseRuntime implements AbstractRuntime, SMRLearner, IRPCSe
         rpcc = new ThriftRPCClient();
         rpcs = new ThriftRPCServer();
         rrmap = new RemoteReadMap(fact.newStream(reservedRemoteReadMapID), uniquenodeid);
+        dbglog.warn("skipping rpc server handler registration in BaseRuntime");
         // rpcs.registerHandler(rpcportnum, this);
     }
 

@@ -89,14 +89,14 @@ public class BasicStream implements IStream
     public IStreamEntry readEntry(ITimestamp istoppos) throws HoleEncounteredException, TrimmedException, IOException
     {
         //this is a hacky implementation that doesn't take multi-log hopping (epochs, logids) into account
-        Timestamp stoppos = (Timestamp)istoppos;
+        SimpleTimestamp stoppos = (SimpleTimestamp)istoppos;
         IStreamEntry ret = null;
         while(true)
         {
             long readpos;
             biglock.lock();
             try {
-                if (!(curpos < curtail && (stoppos == null || curpos < stoppos.pos)))
+                if (!(curpos < curtail && (stoppos == null || curpos < stoppos.address)))
                     return null;
                 readpos = curpos++;
             } finally {
