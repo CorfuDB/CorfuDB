@@ -9,7 +9,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.UUID;
 
-public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends CorfuDBObject {
+public abstract class CDBAbstractBTree<K extends Comparable<K>, V>
+        extends CorfuDBObject
+        implements IBTree<K,V> {
 
     // true if we want to collect per request latency
     // statistics. Best left out for end-to-end performance
@@ -60,8 +62,6 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V> extends Corfu
     protected abstract boolean completeRequestImpl(CorfuDBObjectCommand op);
     protected abstract String getLatencyStatsImpl(Collection<CorfuDBObjectCommand> ops);
 
-    protected boolean eq(Comparable a, Comparable b) { return a.compareTo(b) == 0; }
-    protected boolean lt(Comparable a, Comparable b) { return a.compareTo(b) < 0; }
     protected void startRequest(CorfuDBObjectCommand op) { if(!s_collectLatencyStats) return; startRequestImpl(op); }
     protected void completeRequest(CorfuDBObjectCommand op) { if(!s_collectLatencyStats) return; if(completeRequestImpl(op)) s_completed.add(op); }
     public String getLatencyStats() { if(!s_collectLatencyStats) return null; return getLatencyStatsImpl(s_completed); }
