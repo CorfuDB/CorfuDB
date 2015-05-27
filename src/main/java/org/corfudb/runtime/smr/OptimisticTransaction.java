@@ -39,6 +39,8 @@ public class OptimisticTransaction implements ITransaction, IStreamEntry, Serial
         this.runtime = runtime;
     }
 
+    public CorfuDBRuntime getRuntime() { return runtime; }
+
     /**
      * Gets the list of of the streams this entry belongs to.
      *

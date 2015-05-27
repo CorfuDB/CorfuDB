@@ -55,7 +55,7 @@ public abstract class CDBAbstractBTree<K extends Comparable<K>, V>
     public abstract int height();
     public abstract V get(K key);
     public abstract V remove(K key);
-    public abstract void put(K key, V value);
+    public abstract V put(K key, V value);
     public abstract boolean update(K key, V value);
     public abstract void clear();
     protected abstract void startRequestImpl(CorfuDBObjectCommand op);

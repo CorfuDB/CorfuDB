@@ -1419,29 +1419,44 @@ public class CDBPhysicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTr
      * @param key
      * @param value
      */
-    public void
+    public V
     put(K key, V value) {
+        V result = null;
+        if(key == null)
+            return result;
         UUID root = readrootoid();
         int height = readheight();
-        int size = readsize();
-        UUID unodeoid = insert(root, key, value, height);
-        writesize(size+1);
-        if(unodeoid != oidnull) {
-            // split required
-            Node t = allocNode(2);
-            UUID rootchild0 = readchild(nodeById(root), 0);
-            UUID uchild0 = readchild(nodeById(unodeoid), 0);
-            Comparable r0key = readkey(entryById(rootchild0));
-            Comparable u0key = readkey(entryById(uchild0));
-            Entry tc0 = allocEntry((K) r0key, null);
-            Entry tc1 = allocEntry((K) u0key, null);
-            writechild(t, 0, tc0.oid);
-            writechild(t, 1, tc1.oid);
-            writenext(tc0, root);
-            writenext(tc1, unodeoid);
-            writeroot(t.oid);
-            writeheight(height+1);
+        Entry entry = searchEntry(root, key, height);
+        if(entry != null) {
+            boolean deleted = readdeleted(entry);
+            if(!deleted) {
+                result = (V) readvalue(entry);
+            } else {
+                writedeleted(entry, false);
+            }
+            writevalue(entry, value);
+        } else {
+            int size = readsize();
+            UUID unodeoid = insert(root, key, value, height);
+            writesize(size + 1);
+            if (unodeoid != oidnull) {
+                // split required
+                Node t = allocNode(2);
+                UUID rootchild0 = readchild(nodeById(root), 0);
+                UUID uchild0 = readchild(nodeById(unodeoid), 0);
+                Comparable r0key = readkey(entryById(rootchild0));
+                Comparable u0key = readkey(entryById(uchild0));
+                Entry tc0 = allocEntry((K) r0key, null);
+                Entry tc1 = allocEntry((K) u0key, null);
+                writechild(t, 0, tc0.oid);
+                writechild(t, 1, tc1.oid);
+                writenext(tc0, root);
+                writenext(tc1, unodeoid);
+                writeroot(t.oid);
+                writeheight(height + 1);
+            }
         }
+        return result;
     }
 
     /**

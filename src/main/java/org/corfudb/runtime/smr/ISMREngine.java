@@ -4,6 +4,8 @@ import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
@@ -108,4 +110,47 @@ public interface ISMREngine<T> {
      * @return              A UUID representing the ID for the underlying stream.
      */
     UUID getStreamID();
+
+    /**
+     * find the appropriate constructor for the underlying object,
+     * given the ctor args supplied in initArgs. This is something every
+     * SMREngine implementation needs to be able to do (first pass implementation
+     * appeared to assume that underlying objects always have a default ctor,
+     * which is untenable.)
+     * @param c -- class of underlying object
+     * @param initArgs -- ctor args for the desired constructor
+     * @param <T> --
+     * @return the constructor matching the given argument list if one exists
+     */
+    default <T> Constructor<T> findConstructor(Class<T> c, Object[] initArgs) {
+        if (initArgs == null)
+            initArgs = new Object[0];
+        for (Constructor con : c.getDeclaredConstructors()) {
+            Class[] types = con.getParameterTypes();
+            if (types.length != initArgs.length)
+                continue;
+            boolean match = true;
+            for (int i = 0; i < types.length; i++) {
+                Class need = types[i], got = initArgs[i].getClass();
+                if (!need.isAssignableFrom(got)) {
+                    if (need.isPrimitive()) {
+                        match = (int.class.equals(need) && Integer.class.equals(got))
+                                || (long.class.equals(need) && Long.class.equals(got))
+                                || (char.class.equals(need) && Character.class.equals(got))
+                                || (short.class.equals(need) && Short.class.equals(got))
+                                || (boolean.class.equals(need) && Boolean.class.equals(got))
+                                || (byte.class.equals(need) && Byte.class.equals(got));
+                    } else {
+                        match = false;
+                    }
+                }
+                if (!match)
+                    break;
+            }
+            if (match)
+                return con;
+        }
+        throw new IllegalArgumentException("Cannot find an appropriate constructor for class " + c + " and arguments " + Arrays.toString(initArgs));
+    }
+
 }

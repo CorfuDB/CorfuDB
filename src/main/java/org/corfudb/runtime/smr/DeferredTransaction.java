@@ -56,6 +56,8 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         this.runtime = runtime;
     }
 
+    public CorfuDBRuntime getRuntime() { return runtime; }
+
     /**
      * Returns an SMR engine for a transactional context.
      *

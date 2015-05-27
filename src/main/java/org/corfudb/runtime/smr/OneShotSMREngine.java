@@ -5,6 +5,7 @@ import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -42,12 +43,15 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
         }
     }
 
-    public OneShotSMREngine(IStream stream, Class<T> type, ITimestamp syncPoint)
+    public OneShotSMREngine(IStream stream, Class<T> type, ITimestamp syncPoint) { this(stream, type, syncPoint, new Object[0]); }
+
+    public OneShotSMREngine(IStream stream, Class<T> type, ITimestamp syncPoint, Object[] ctorArgs)
     {
         try {
             this.stream = stream;
             streamPointer = stream.getCurrentPosition();
-            underlyingObject = type.getConstructor().newInstance();
+            Constructor<T> ctor = findConstructor(type, ctorArgs);
+            underlyingObject = ctor.newInstance();
             this.syncPoint = syncPoint;
         }
         catch (Exception e)

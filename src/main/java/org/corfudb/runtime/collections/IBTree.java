@@ -8,7 +8,7 @@ public interface IBTree<K extends Comparable<K>, V>  {
     int height();
     V get(K key);
     V remove(K key);
-    void put(K key, V value);
+    V put(K key, V value);
     boolean update(K key, V value);
     void clear();
 

@@ -27,11 +27,11 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     }
 
     @SuppressWarnings("unchecked")
-    public LambdaLogicalBTree(IStream stream, Class<? extends ISMREngine> smrClass)
+    public LambdaLogicalBTree(IStream stream, Class<? extends ISMREngine> smrClass, int B)
     {
         try {
             streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, BTree.class);
+            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, BTree.class, new Object[] { new Integer(B) });
         }
         catch (Exception e)
         {
@@ -39,10 +39,10 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
         }
     }
 
-    public LambdaLogicalBTree(IStream stream)
+    public LambdaLogicalBTree(IStream stream, int B)
     {
         streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<BTree>(stream, BTree.class);
+        smr = new SimpleSMREngine<BTree>(stream, BTree.class, new Object[] { new Integer(B) });
     }
 
     /**
@@ -128,9 +128,9 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
      * @param key
      * @param value
      */
-    public void put(K key, V value) {
-        mutatorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
-            map.put(key, value);
+    public V put(K key, V value) {
+        return (V) mutatorAccessorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
+            opts.getReturnResult().complete(map.put(key, value));
         });
     }
 

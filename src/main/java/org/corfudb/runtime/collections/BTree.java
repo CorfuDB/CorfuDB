@@ -90,17 +90,25 @@ public class BTree<K extends Comparable<K>, V> implements IBTree<K,V> {
      * @param value
      */
     @Override
-    public void put(K key, V value) {
-        Node unode = insert(m_root, key, value, m_height);
-        m_size++;
-        if (unode != null) {
-            // split required
-            Node t = new Node(2, B);
-            t.m_vChildren[0] = new Entry(m_root.m_vChildren[0].key, null, m_root);
-            t.m_vChildren[1] = new Entry(unode.m_vChildren[0].key, null, unode);
-            m_root = t;
-            m_height++;
+    public V put(K key, V value) {
+        V result = null;
+        Entry entry = searchEntry(m_root, key, m_height);
+        if (entry != null && !entry.deleted) {
+            result = (V)entry.value;
+            entry.value = value;
+        } else {
+            Node unode = insert(m_root, key, value, m_height);
+            m_size++;
+            if (unode != null) {
+                // split required
+                Node t = new Node(2, B);
+                t.m_vChildren[0] = new Entry(m_root.m_vChildren[0].key, null, m_root);
+                t.m_vChildren[1] = new Entry(unode.m_vChildren[0].key, null, unode);
+                m_root = t;
+                m_height++;
+            }
         }
+        return result;
     }
 
     /**

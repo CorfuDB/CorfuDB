@@ -14,11 +14,11 @@ public class TimeTravelSMREngine<T> extends SimpleSMREngine<T> {
 
     ITimestamp lockTS;
 
-    public TimeTravelSMREngine(IStream stream, Class<T> type)
+    public TimeTravelSMREngine(IStream stream, Class<T> type) { super(stream, type); }
+    public TimeTravelSMREngine(IStream stream, Class<T> type, Object[] initArgs)
     {
-        super(stream, type);
+        super(stream, type, initArgs);
     }
-
 
     /**
      * Synchronize the SMR engine to a given timestamp, or pass null to synchronize

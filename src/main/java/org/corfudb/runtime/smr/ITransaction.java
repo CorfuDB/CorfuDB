@@ -37,6 +37,14 @@ public interface ITransaction {
     void setCorfuDBRuntime(CorfuDBRuntime runtime);
 
     /**
+     * return a pointer to the runtime managing this transaction.
+     * this is needed for transactions on objects which may create
+     * new objects during that transaction.
+     * @return the runtime
+     */
+    CorfuDBRuntime getRuntime();
+
+    /**
      * Set the command to be executed for this transaction.
      * @param transaction   The command(s) to be executed for this transaction.
      */

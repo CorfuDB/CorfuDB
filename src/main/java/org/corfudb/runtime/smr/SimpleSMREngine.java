@@ -8,6 +8,7 @@ import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -43,12 +44,18 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     public SimpleSMREngine(IStream stream, Class<T> type)
     {
+        this(stream, type, new Object[0]);
+    }
+
+    public SimpleSMREngine(IStream stream, Class<T> type, Object[] args)
+    {
         try {
             this.stream = stream;
             this.type = type;
             streamPointer = stream.getCurrentPosition();
             completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
-            underlyingObject = type.getConstructor().newInstance();
+            Constructor<T> ctor = findConstructor(type, args);
+            underlyingObject = ctor.newInstance(args);
         }
         catch (Exception e)
         {
