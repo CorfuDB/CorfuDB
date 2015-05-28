@@ -75,7 +75,7 @@ $CORFUDBBINDIR/furun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd
 
 # generate series of ft_logunit#.yml:
 # ----------------------------
-for (( port=$baseport+2; port < $baseport+2+$cnt; port++ ))
+for (( port=$baseport+3; port < $baseport+3+$cnt; port++ ))
 do
 	role="logunit"
 	unit="logunit.$port"
