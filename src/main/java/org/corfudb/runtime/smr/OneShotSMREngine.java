@@ -1,5 +1,6 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -29,18 +30,18 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
     ITimestamp streamPointer;
     ITimestamp syncPoint;
 
-    class OneShotSMREngineOptions implements ISMREngineOptions
-    {
+    class OneShotSMREngineOptions implements ISMREngineOptions {
         CompletableFuture<Object> returnResult;
 
-        public OneShotSMREngineOptions(CompletableFuture<Object> returnResult)
-        {
+        public OneShotSMREngineOptions(CompletableFuture<Object> returnResult) {
             this.returnResult = returnResult;
         }
-        public CompletableFuture<Object> getReturnResult()
-        {
+
+        public CompletableFuture<Object> getReturnResult() {
             return this.returnResult;
         }
+
+        public CorfuDBRuntime getRuntime() { return stream.getRuntime(); }
     }
 
     public OneShotSMREngine(IStream stream, Class<T> type, ITimestamp syncPoint) { this(stream, type, syncPoint, new Object[0]); }

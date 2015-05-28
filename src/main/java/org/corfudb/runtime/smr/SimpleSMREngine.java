@@ -2,6 +2,7 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.entries.CorfuDBEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -40,6 +41,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         {
             return this.returnResult;
         }
+        public CorfuDBRuntime getRuntime() { return stream.getRuntime(); }
+
     }
 
     public SimpleSMREngine(IStream stream, Class<T> type)

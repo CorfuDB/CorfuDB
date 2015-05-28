@@ -5,6 +5,8 @@ import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.smr.legacy.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -16,24 +18,64 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
     public static final int DEFAULT_B = 4;
     protected static class BTreeRoot {
         UUID m_root;
+        long m_idseed;
         int m_size;
         int m_height;
         int B;
-        HashMap<UUID, Entry> m_entries;
-        HashMap<UUID, Node> m_nodes;
+        transient HashMap<UUID, Entry> m_entries;
+        transient HashMap<UUID, Node> m_nodes;
+        transient ThreadLocal<ICorfuDBInstance> instance;
         public BTreeRoot(UUID root) {
             m_root = root;
             m_size = 0;
             m_height = 0;
             B = DEFAULT_B;
+            m_idseed = 0;
             m_entries = new HashMap();
             m_nodes = new HashMap();
+            instance = new ThreadLocal();
         }
+        public void setInstance(ICorfuDBInstance _instance) { instance.set(_instance); }
+        public ICorfuDBInstance getInstance() { return instance.get(); }
+        public UUID nextStreamID() { return Utils.nextDeterministicUUID(m_root, m_idseed++); }
+        IStream openStream(UUID noid) { return getInstance().openStream(noid); }
         Node nodeById(UUID noid) {
-            return m_nodes.getOrDefault(noid, null);
+            Node n = m_nodes.getOrDefault(noid, null);
+            if(n == null) {
+                n = new Node(openStream(noid));
+                m_nodes.put(noid, n);
+            }
+            return n;
         }
         Entry entryById(UUID noid) {
-            return m_entries.getOrDefault(noid, null);
+            Entry e = m_entries.getOrDefault(noid, null);
+            if(e == null) {
+                e = new Entry(openStream(noid));
+                m_entries.put(noid, e);
+            }
+            return e;
+        }
+
+        /**
+         * allocate a new node.
+         * @return a new node object
+         */
+        private Node
+        allocNode() {
+            Node newnode = new Node(openStream(nextStreamID()));
+            m_nodes.put(newnode.getStreamID(), newnode);
+            return newnode;
+        }
+
+        /**
+         * allocate a new entry
+         * @return a new entry object
+         */
+        private Entry
+        allocEntry() {
+            Entry newentry = new Entry(openStream(nextStreamID()));
+            m_entries.put(newentry.getStreamID(), newentry);
+            return newentry;
         }
     }
 
@@ -44,11 +86,11 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
 
     public static boolean extremeDebug = false;
 
-//    public LambdaPhysicalBTree(LambdaPhysicalBTree<K,V> map, ITransaction tx)
-//    {
-//        this.streamID = map.streamID;
-//        this.tx = tx;
-//    }
+    public LambdaPhysicalBTree(LambdaPhysicalBTree<K,V> map, ITransaction tx)
+    {
+        this.streamID = map.streamID;
+        this.tx = tx;
+    }
 
     @SuppressWarnings("unchecked")
     public LambdaPhysicalBTree(IStream stream, Class<? extends ISMREngine> smrClass)
@@ -133,21 +175,14 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
             System.out.format(strFormat, args);
     }
 
-    private IStream newStream() {
-        UUID newID = UUID.randomUUID();
-        return cdr.getLocalInstance().openStream(newID);
-    }
-
     private static class _Node<K extends Comparable<K>, V> {
         int m_nChildren;
         UUID[] m_vChildren;
         _Node() {
             m_nChildren = 0;
             m_vChildren = new UUID[DEFAULT_B];
-        }
-        _Node(int nChildren, int nArity) {
-            m_nChildren = nChildren;
-            m_vChildren = new UUID[nArity];
+            for(int i=0; i<m_vChildren.length; i++)
+                m_vChildren[i] = CorfuDBObject.oidnull;
         }
     }
 
@@ -162,24 +197,18 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
         }
 
         @SuppressWarnings("unchecked")
-        public Node(IStream stream, Class<? extends ISMREngine> smrClass, int nChildren, int nArity) {
+        public Node(IStream stream, Class<? extends ISMREngine> smrClass) {
             try {
                 streamID = stream.getStreamID();
-                Object[] args = new Object[2];
-                args[0] = new Integer(nChildren);
-                args[1] = new Integer(nArity);
-                smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, _Node.class, args);
+                smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, _Node.class);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         }
 
-        public Node(IStream stream, int nChildren, int nArity) {
+        public Node(IStream stream) {
             streamID = stream.getStreamID();
-            Object[] args = new Object[2];
-            args[0] = new Integer(nChildren);
-            args[1] = new Integer(nArity);
-            smr = new SimpleSMREngine<_Node>(stream, _Node.class, args);
+            smr = new SimpleSMREngine<_Node>(stream, _Node.class);
         }
 
         @Override
@@ -285,18 +314,17 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
 
     }
 
-
-
     private static class _Entry<K extends Comparable<K>, V> {
 
         private Comparable key;
         private V value;
         private UUID oidnext;
         private boolean deleted;
-        public _Entry(K _key, V _value, UUID _next) {
-            key = _key;
-            value = _value;
-            oidnext = _next;
+        public _Entry() {
+            key = null;
+            value = null;
+            oidnext = CorfuDBObject.oidnull;
+            deleted = false;
         }
     }
 
@@ -313,26 +341,18 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
         }
 
         @SuppressWarnings("unchecked")
-        public Entry(IStream stream, Class<? extends ISMREngine> smrClass, K _key, V _value, UUID _next) {
+        public Entry(IStream stream, Class<? extends ISMREngine> smrClass) {
             try {
                 streamID = stream.getStreamID();
-                Object[] args = new Object[3];
-                args[0] = _key;
-                args[1] = _value;
-                args[2] = _next;
-                smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, _Entry.class, args);
+                smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, _Entry.class);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         }
 
-        public Entry(IStream stream, K _key, V _value, UUID _next) {
+        public Entry(IStream stream) {
             streamID = stream.getStreamID();
-            Object[] args = new Object[3];
-            args[0] = _key;
-            args[1] = _value;
-            args[2] = _next;
-            smr = new SimpleSMREngine<_Entry>(stream, _Entry.class, args);
+            smr = new SimpleSMREngine<_Entry>(stream, _Entry.class);
         }
 
         @Override
@@ -480,7 +500,10 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
                 opts.getReturnResult().complete(sb.toString());
             });
         }
+    }
 
+    private static void setCDBInstance(BTreeRoot tree, ISMREngine.ISMREngineOptions opts) {
+        tree.setInstance(opts.getRuntime().getLocalInstance());
     }
 
     /**
@@ -489,6 +512,7 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
      */
     public String printview() {
         return (String) accessorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
+            setCDBInstance(tree, opts);
             opts.getReturnResult().complete(printview(tree, tree.nodeById(tree.m_root), tree.m_height, "") + "\n");
         });
     }
@@ -551,6 +575,7 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
     public String print() {
 
         return (String) accessorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
+            setCDBInstance(tree, opts);
             String result = print(tree, tree.nodeById(tree.m_root), tree.m_height, "") + "\n";
             opts.getReturnResult().complete(result);
         });
@@ -620,6 +645,7 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
      */
     public V get(K key) {
         return (V) accessorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
+            setCDBInstance(tree, opts);
             V result = null;
             if (key != null) {
                 UUID root = readrootoid();
@@ -643,6 +669,7 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
      */
     public V remove(K key) {
         return (V) mutatorAccessorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
+            setCDBInstance(tree, opts);
             V result = null;
             if (key != null) {
                 UUID root = readrootoid();
@@ -670,6 +697,7 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
      */
     public boolean update(K key, V value) {
         return (boolean) mutatorAccessorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
+            setCDBInstance(tree, opts);
             boolean result = false;
             if (key != null) {
                 UUID root = readrootoid();
@@ -694,6 +722,7 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
      */
     public void clear() {
         mutatorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
+            setCDBInstance(tree, opts);
             UUID root = readrootoid();
             writeroot(CorfuDBObject.oidnull);
             writesize(0);
@@ -710,26 +739,32 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
     public V
     put(K key, V value) {
         return (V) mutatorAccessorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
+            setCDBInstance(tree, opts);
             V result = null;
             UUID root = readrootoid();
             int height = readheight();
             int size = readsize();
             Entry e = searchEntry(tree, root, key, height);
             if(e != null) {
-                result = (V)e.readValue();
+                if(!e.readDeleted())
+                    result = (V)e.readValue();
                 e.writeValue(value);
+                e.writeDeleted(false);
             } else {
                 UUID unodeoid = insert(tree, root, key, value, height);
                 writesize(size + 1);
                 if (unodeoid != CorfuDBObject.oidnull) {
                     // split required
-                    Node t = allocNode(2);
+                    Node t = tree.allocNode();
+                    t.writeChildCount(2);
                     UUID rootchild0 = readchild(tree.nodeById(root), 0);
                     UUID uchild0 = readchild(tree.nodeById(unodeoid), 0);
                     Comparable r0key = readkey(tree.entryById(rootchild0));
                     Comparable u0key = readkey(tree.entryById(uchild0));
-                    Entry tc0 = allocEntry((K) r0key, null);
-                    Entry tc1 = allocEntry((K) u0key, null);
+                    Entry tc0 = tree.allocEntry();
+                    tc0.writeKey((K) r0key);
+                    Entry tc1 = tree.allocEntry();
+                    tc1.writeKey((K) u0key);
                     writechild(t, 0, tc0.getStreamID());
                     writechild(t, 1, tc1.getStreamID());
                     writenext(tc0, root);
@@ -843,7 +878,9 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
         int idx = 0;
         Node<K,V> node = tree.nodeById(oidnode);
         int nChildren = readchildcount(node);
-        Entry entry = allocEntry(key, value);
+        Entry entry = tree.allocEntry();
+        entry.writeKey(key);
+        entry.writeValue(value);
 
         if(height == 0) {
             for(idx=0; idx<nChildren; idx++)
@@ -888,45 +925,14 @@ public class LambdaPhysicalBTree<K extends Comparable<K>, V>
         )
     {
         int B = tree.B;
-        Node t = allocNode(B/2);
+        Node t = tree.allocNode();
+        t.writeChildCount(B/2);
         writechildcount(node, B / 2);
         for(int i=0; i<B/2; i++)
             writechild(t, i, readchild(node, B/2+i));
         return t.getStreamID();
     }
 
-    /**
-     * allocate a new node.
-     * @param nChildren
-     * @return
-     */
-    private Node<K, V>
-    allocNode(int nChildren) {
-        return (Node<K, V>) mutatorAccessorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
-            Node<K, V> newnode = new Node<K, V>(newStream(), nChildren, tree.B);
-            tree.m_nodes.put(newnode.getStreamID(), newnode);
-            newnode.writeChildCount(nChildren);
-            for (int i = 0; i < tree.B; i++)
-                newnode.writeChild(i, CorfuDBObject.oidnull);
-            opts.getReturnResult().complete(newnode);
-        });
-    }
-
-    /**
-     * allocate a new entry
-     * @param k
-     * @param v
-     * @return
-     */
-    private Entry<K, V>
-    allocEntry(K k, V v) {
-        return (Entry<K, V>) mutatorAccessorHelper((ISMREngineCommand<BTreeRoot>) (tree, opts) -> {
-            Entry<K, V> newentry = new Entry<K, V>(newStream(), k, v, CorfuDBObject.oidnull);
-            tree.m_entries.put(newentry.getStreamID(), newentry);
-            UUID noid = newentry.getStreamID();
-            opts.getReturnResult().complete(newentry);
-        });
-    }
 
     /**
      * read the root of the tree

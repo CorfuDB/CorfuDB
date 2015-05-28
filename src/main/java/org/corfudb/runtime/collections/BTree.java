@@ -32,6 +32,10 @@ public class BTree<K extends Comparable<K>, V> implements IBTree<K,V> {
     }
 
 
+    public BTree() {
+        this(DEFAULT_B);
+    }
+
     /**
      * ctor
      * @param _B
@@ -93,9 +97,11 @@ public class BTree<K extends Comparable<K>, V> implements IBTree<K,V> {
     public V put(K key, V value) {
         V result = null;
         Entry entry = searchEntry(m_root, key, m_height);
-        if (entry != null && !entry.deleted) {
-            result = (V)entry.value;
+        if (entry != null) {
+            if(!entry.deleted)
+                result = (V)entry.value;
             entry.value = value;
+            entry.deleted = false;
         } else {
             Node unode = insert(m_root, key, value, m_height);
             m_size++;

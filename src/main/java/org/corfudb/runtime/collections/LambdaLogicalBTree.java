@@ -27,11 +27,11 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     }
 
     @SuppressWarnings("unchecked")
-    public LambdaLogicalBTree(IStream stream, Class<? extends ISMREngine> smrClass, int B)
+    public LambdaLogicalBTree(IStream stream, Class<? extends ISMREngine> smrClass)
     {
         try {
             streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, BTree.class, new Object[] { new Integer(B) });
+            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, BTree.class);
         }
         catch (Exception e)
         {
@@ -39,10 +39,10 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
         }
     }
 
-    public LambdaLogicalBTree(IStream stream, int B)
+    public LambdaLogicalBTree(IStream stream)
     {
         streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<BTree>(stream, BTree.class, new Object[] { new Integer(B) });
+        smr = new SimpleSMREngine<BTree>(stream, BTree.class);
     }
 
     /**

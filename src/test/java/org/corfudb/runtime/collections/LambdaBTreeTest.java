@@ -1,10 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.smr.DeferredTransaction;
-import org.corfudb.runtime.smr.ITransactionCommand;
-import org.corfudb.runtime.smr.OpaqueDeferredTransaction;
-import org.corfudb.runtime.smr.TimeTravelSMREngine;
+import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
@@ -18,7 +15,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Created by mwei on 5/1/15.
+ * Created by crossbach on 5/27/15.
  */
 public class LambdaBTreeTest {
 
@@ -38,7 +35,7 @@ public class LambdaBTreeTest {
         instance = cdr.getLocalInstance();
         streamID = UUID.randomUUID();
         s = instance.openStream(streamID);
-        testTree = new LambdaLogicalBTree<String, String>(s, B);
+        testTree = new LambdaLogicalBTree<String, String>(s);
     }
 
     @Test
@@ -59,7 +56,7 @@ public class LambdaBTreeTest {
         testTree.put("key0", "abcd");
         testTree.put("key1", "efgh");
         IStream s2 = cdr.openStream(streamID, SimpleStream.class);
-        LambdaLogicalBTree<String, String> tree2 = new LambdaLogicalBTree<String, String>(s2, B);
+        LambdaLogicalBTree<String, String> tree2 = new LambdaLogicalBTree<String, String>(s2);
         assertThat(tree2.get("key0"))
                 .isEqualTo("abcd");
         assertThat(tree2.get("key1"))
@@ -82,7 +79,7 @@ public class LambdaBTreeTest {
         final LambdaLogicalBTree<String, String> txMap = testTree.getTransactionalContext(tx);
         tx.setTransaction((ITransactionCommand) (opts) -> {
             String result = txMap.get("key0");
-            if (result == "abcd") {
+            if (result.compareTo("abcd") == 0) {
                 txMap.put("key0", "ABCD");
                 return true;
             }
@@ -99,7 +96,7 @@ public class LambdaBTreeTest {
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
         IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
-        LambdaLogicalBTree<String, String> testMap2 = new LambdaLogicalBTree<String, String>(s2, B);
+        LambdaLogicalBTree<String, String> testMap2 = new LambdaLogicalBTree<String, String>(s2);
 
         testTree.put("key0", "abcd");
         testMap2.put("key0", "xxxx");
@@ -127,7 +124,7 @@ public class LambdaBTreeTest {
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
         IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
-        LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>> tmap2 = new LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>>(s2, B);
+        LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>> tmap2 = new LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>>(s2);
         tmap2.put("abcd", testTree);
         testTree.put("key0", "abcd");
         assertThat(tmap2.get("abcd").get("key0"))
@@ -142,7 +139,7 @@ public class LambdaBTreeTest {
         final LambdaLogicalBTree<String, String> txMap = testTree.getTransactionalContext(tx);
         tx.setTransaction((ITransactionCommand) (opts) -> {
             String result = txMap.get("key0");
-            if (result == "abcd") {
+            if (result.compareTo("abcd") == 0) {
                 txMap.put("key0", "xxxx");
                 return true;
             }
@@ -177,8 +174,8 @@ public class LambdaBTreeTest {
         IStream s1 = instance.openStream(UUID.randomUUID());
         LambdaLogicalBTree<Integer, Integer> map = new LambdaLogicalBTree<Integer, Integer>(
                 s1,
-                TimeTravelSMREngine.class,
-                B
+                TimeTravelSMREngine.class
+
         );
 
         map.put(10, 100);
@@ -220,5 +217,32 @@ public class LambdaBTreeTest {
                 .isEqualTo(1234);
         assertThat(map.get(10))
                 .isEqualTo(100);
+    }
+
+    @Test
+    public void NonTimeTravelSMRTest()
+    {
+        IStream s1 = instance.openStream(UUID.randomUUID());
+        LambdaLogicalBTree<Integer, Integer> map = new LambdaLogicalBTree<Integer, Integer>(
+                s1,
+                SimpleSMREngine.class
+        );
+
+        map.put(10, 100);
+        map.put(100, 1000);
+        ITimestamp ts1 = map.getSMREngine().getLastProposal();
+        map.put(100, 1234);
+        ITimestamp ts2 = map.getSMREngine().getLastProposal();
+        map.remove(100);
+        ITimestamp ts3 = map.getSMREngine().getLastProposal();
+        map.put(100, 5678);
+        ITimestamp ts4 = map.getSMREngine().getLastProposal();
+
+        assertThat(map.get(100))
+                .isEqualTo(5678);
+        assertThat(map.get(10))
+                .isEqualTo(100);
+
+
     }
 }

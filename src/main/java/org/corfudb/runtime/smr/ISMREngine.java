@@ -1,5 +1,6 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.ITimestamp;
 
 import java.io.IOException;
@@ -20,6 +21,7 @@ public interface ISMREngine<T> {
     interface ISMREngineOptions
     {
         CompletableFuture<Object> getReturnResult();
+        CorfuDBRuntime getRuntime();
     }
 
     /**
