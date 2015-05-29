@@ -13,8 +13,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class LambdaLogicalBTree<K extends Comparable<K>, V>
-        implements ICorfuDBObject<LambdaLogicalBTree<K,V>>,
-        IBTree<K,V> {
+        extends AbstractLambdaBTree<K, V> {
 
     transient ISMREngine<BTree> smr;
     ITransaction tx;
@@ -185,6 +184,16 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
         return (String) accessorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
             opts.getReturnResult().complete(map.print());
         });
+    }
+
+    /**
+     * Gets a transactional context for this object.
+     * @return              A transactional context to be used during a transaction.
+     */
+    @Override
+    public LambdaLogicalBTree<K,V> getTransactionalContext(ITransaction tx) {
+        tx.registerStream(getSMREngine().getStreamID());
+        return new LambdaLogicalBTree<K, V>(this, tx);
     }
 
 }

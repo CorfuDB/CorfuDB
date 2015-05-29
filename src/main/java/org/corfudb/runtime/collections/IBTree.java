@@ -11,6 +11,7 @@ public interface IBTree<K extends Comparable<K>, V>  {
     V put(K key, V value);
     boolean update(K key, V value);
     void clear();
+    default void init() {}
 
     default boolean eq(Comparable a, Comparable b) { return a.compareTo(b) == 0; }
     default boolean lt(Comparable a, Comparable b) { return a.compareTo(b) < 0; }

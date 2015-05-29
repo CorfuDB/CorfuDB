@@ -6,6 +6,8 @@ import org.corfudb.runtime.entries.CorfuDBEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -22,12 +24,15 @@ import java.util.function.BiConsumer;
  */
 public class SimpleSMREngine<T> implements ISMREngine<T> {
 
+    private final Logger log = LoggerFactory.getLogger(SimpleSMREngine.class);
+
     IStream stream;
     T underlyingObject;
     ITimestamp streamPointer;
     ITimestamp lastProposal;
     Class<T> type;
-    HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
+    HashMap<ITimestamp, CompletableFuture<Object>> uncompletedTable;
+    HashMap<ITimestamp, CompletableFuture<Object>> completedTable;
 
     class SimpleSMREngineOptions implements ISMREngineOptions
     {
@@ -56,7 +61,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             this.stream = stream;
             this.type = type;
             streamPointer = stream.getCurrentPosition();
-            completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
+            completedTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
+            uncompletedTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
             Constructor<T> ctor = findConstructor(type, args);
             underlyingObject = ctor.newInstance(args);
         }
@@ -116,11 +122,22 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     }
                     else {
                         ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
-                        CompletableFuture<Object> completion = completionTable.remove(entry.getTimestamp());
+                        ITimestamp entryTS = entry.getTimestamp();
+                        boolean bStaleCompletion = false;
+                        CompletableFuture<Object> completion = uncompletedTable.getOrDefault(entryTS, null);
+                        if(completion == null) {
+                            completion = completedTable.getOrDefault(entryTS, null);
+                            bStaleCompletion = completion != null;
+                        } else {
+                            uncompletedTable.remove(entryTS);
+                            completedTable.put(entryTS, completion);
+                        }
+                        log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
                         function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
                     }
                 } catch (Exception e) {
-                    //ignore entries we don't know what to do about.
+                    log.error("exception during sync: ", e);
+                    log.warn("CJR: why is it ok to suppress an exception during sync?");
                 }
                 streamPointer = stream.getCurrentPosition();
             }
@@ -151,7 +168,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         }
         try {
             ITimestamp t = stream.append(command);
-            if (completion != null) { completionTable.put(t, completion); }
+            if (completion != null) { uncompletedTable.put(t, completion); }
             lastProposal = t;
             return t;
         }
