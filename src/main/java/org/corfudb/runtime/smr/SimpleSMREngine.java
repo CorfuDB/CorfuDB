@@ -28,7 +28,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     IStream stream;
     T underlyingObject;
-    ITimestamp streamPointer;
+    public ITimestamp streamPointer;
     ITimestamp lastProposal;
     Class<T> type;
     HashMap<ITimestamp, CompletableFuture<Object>> uncompletedTable;

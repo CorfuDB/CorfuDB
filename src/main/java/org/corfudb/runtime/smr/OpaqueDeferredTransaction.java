@@ -25,10 +25,12 @@ public class OpaqueDeferredTransaction extends DeferredTransaction {
         Object clone = Serializer.copy(engine.getObject());
         engine.getStreamID();
         executingEngine = engine;
-        ITransactionCommand command = getTransaction();
-        if (!command.apply(new DeferredTransactionOptions()))
+        try (TransactionalContext tx = new TransactionalContext(this))
         {
-            engine.setObject(clone);
+            ITransactionCommand command = getTransaction();
+            if (!command.apply(new DeferredTransactionOptions())) {
+                engine.setObject(clone);
+            }
         }
     }
 }

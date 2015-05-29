@@ -121,9 +121,10 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     public void executeTransaction(ISMREngine engine) {
         ITransactionCommand command = getTransaction();
         executingEngine = engine;
-        if (!command.apply(new DeferredTransactionOptions()))
-        {
-            throw new RuntimeException("Transaction was aborted but SimpleTX does not support aborted TX!");
+        try (TransactionalContext tx = new TransactionalContext(this)) {
+            if (!command.apply(new DeferredTransactionOptions())) {
+                throw new RuntimeException("Transaction was aborted but SimpleTX does not support aborted TX!");
+            }
         }
     }
 
