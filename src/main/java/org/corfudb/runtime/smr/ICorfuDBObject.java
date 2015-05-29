@@ -1,5 +1,6 @@
 package org.corfudb.runtime.smr;
 
+import com.esotericsoftware.kryo.Kryo;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -73,12 +74,16 @@ public interface ICorfuDBObject<T> extends Serializable {
      * Get the underlying transaction
      * @return  The transaction this object is currently participating in.
      */
-    ITransaction getUnderlyingTransaction();
+    default ITransaction getUnderlyingTransaction()
+    {
+        return TransactionalContext.currentTX.get();
+    }
 
     /**
      * Gets a transactional context for this object.
      * @return              A transactional context to be used during a transaction.
      */
+    @Deprecated
     @SuppressWarnings("unchecked")
     default T getTransactionalContext(ITransaction tx)
     {

@@ -5,6 +5,7 @@ import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
+import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.*;
 import org.junit.Before;
 import org.junit.Test;
@@ -21,7 +22,7 @@ public class CDBSimpleMapTest {
 
     IStream s;
     ICorfuDBInstance instance;
-    CDBSimpleMap<Integer, Integer> testMap;
+    static public CDBSimpleMap<Integer, Integer> testMap;
     UUID streamID;
     CorfuDBRuntime cdr;
 
@@ -74,12 +75,12 @@ public class CDBSimpleMapTest {
     public void DeferredTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
         testMap.put(10, 100);
-        final CDBSimpleMap<Integer,Integer> txMap = testMap.getTransactionalContext(tx);
         tx.setTransaction((ITransactionCommand) (opts) -> {
-            Integer result = txMap.get(10);
+            Integer result = testMapLocal.get(10);
             if (result == 100) {
-                txMap.put(10, 1000);
+                testMapLocal.put(10, 1000);
                 return true;
             }
             return false;
@@ -99,13 +100,12 @@ public class CDBSimpleMapTest {
 
         testMap.put(10, 100);
         testMap2.put(10, 1000);
-        final CDBSimpleMap<Integer,Integer> txMap = testMap.getTransactionalContext(tx);
-        final CDBSimpleMap<Integer,Integer> txMap2 = testMap2.getTransactionalContext(tx);
 
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
         tx.setTransaction((ITransactionCommand) (opts) -> {
-            Integer old1 = txMap.get(10);
-            Integer old2 = txMap2.put(10, old1);
-            txMap.put(10, old2);
+            Integer old1 = testMapLocal.get(10);
+            Integer old2 = testMap2.put(10, old1);
+            testMapLocal.put(10, old2);
             return true;
         });
 
@@ -121,7 +121,6 @@ public class CDBSimpleMapTest {
     @Test
     public void mapOfMapsTest() throws Exception
     {
-        DeferredTransaction tx = new DeferredTransaction(cdr);
         IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
         CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =
                 new CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>>(s2);
@@ -135,28 +134,29 @@ public class CDBSimpleMapTest {
     public void OpaqueDeferredTransactionalTest() throws Exception
     {
         OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr);
+
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
         testMap.put(10, 100);
-        final CDBSimpleMap<Integer, Integer> txMap = testMap.getTransactionalContext(tx);
         tx.setTransaction((ITransactionCommand) (opts) -> {
-            Integer result = txMap.get(10);
+            Integer result = testMapLocal.get(10);
             if (result == 100) {
-                txMap.put(10, 1000);
+                testMapLocal.put(10, 1000);
                 return true;
             }
             return false;
         });
         ITimestamp txStamp = tx.propose();
-        testMap.getSMREngine().sync(txStamp);
-        assertThat(testMap.get(10))
+        testMapLocal.getSMREngine().sync(txStamp);
+        assertThat(testMapLocal.get(10))
                 .isEqualTo(1000);
         OpaqueDeferredTransaction txAbort = new OpaqueDeferredTransaction(cdr);
-        final CDBSimpleMap<Integer, Integer> txMap2 = testMap.getTransactionalContext(tx);
+
         txAbort.setTransaction((ITransactionCommand) (opts) -> {
-            Integer result = txMap2.get(10);
+            Integer result = testMapLocal.get(10);
             assertThat(result)
                     .isEqualTo(1000);
-            txMap2.put(10, 42);
-            result = txMap2.get(10);
+            testMapLocal.put(10, 42);
+            result = testMapLocal.get(10);
             assertThat(result)
                     .isEqualTo(42);
             return false;
