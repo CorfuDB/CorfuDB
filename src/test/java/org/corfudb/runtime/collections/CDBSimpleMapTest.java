@@ -29,7 +29,7 @@ public class CDBSimpleMapTest {
     @Before
     public void generateStream() throws Exception
     {
-        cdr = new CorfuDBRuntime("memory");
+        cdr = CorfuDBRuntime.createRuntime("memory");
         ConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
         instance = cdr.getLocalInstance();

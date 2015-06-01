@@ -23,7 +23,7 @@ public class SimpleLogUnitServerIT  {
     CorfuDBSimpleLogUnitProtocol lu;
     @Before
     public void getCDR() {
-        cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
         IConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();

@@ -20,7 +20,7 @@ public class WriteOnceAddressSpaceTest {
     @Before
     public void getRuntime()
     {
-        cdr = new CorfuDBRuntime("memory");
+        cdr = CorfuDBRuntime.createRuntime("memory");
         ConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
     }

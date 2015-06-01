@@ -31,7 +31,7 @@ public class CorfuDBFactory {
     {
         if (runtime == null)
         {
-            runtime = new CorfuDBRuntime((String) options.get("--master"));
+            runtime = CorfuDBRuntime.getRuntime((String) options.get("--master"));
         }
         return runtime;
     }

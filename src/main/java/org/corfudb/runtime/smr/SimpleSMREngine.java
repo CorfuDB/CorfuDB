@@ -31,8 +31,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     public ITimestamp streamPointer;
     ITimestamp lastProposal;
     Class<T> type;
-    HashMap<ITimestamp, CompletableFuture<Object>> uncompletedTable;
-    HashMap<ITimestamp, CompletableFuture<Object>> completedTable;
+    HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
 
     class SimpleSMREngineOptions implements ISMREngineOptions
     {
@@ -61,8 +60,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             this.stream = stream;
             this.type = type;
             streamPointer = stream.getCurrentPosition();
-            completedTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
-            uncompletedTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
+            completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
             Constructor<T> ctor = findConstructor(type, args);
             underlyingObject = ctor.newInstance(args);
         }
@@ -123,16 +121,9 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     else {
                         ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
                         ITimestamp entryTS = entry.getTimestamp();
-                        boolean bStaleCompletion = false;
-                        CompletableFuture<Object> completion = uncompletedTable.getOrDefault(entryTS, null);
-                        if(completion == null) {
-                            completion = completedTable.getOrDefault(entryTS, null);
-                            bStaleCompletion = completion != null;
-                        } else {
-                            uncompletedTable.remove(entryTS);
-                            completedTable.put(entryTS, completion);
-                        }
-                        log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
+                        CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
+                        completionTable.remove(entryTS);
+                        // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
                         function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
                     }
                 } catch (Exception e) {
@@ -168,7 +159,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         }
         try {
             ITimestamp t = stream.append(command);
-            if (completion != null) { uncompletedTable.put(t, completion); }
+            if (completion != null) { completionTable.put(t, completion); }
             lastProposal = t;
             return t;
         }

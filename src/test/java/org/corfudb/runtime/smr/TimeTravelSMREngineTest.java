@@ -26,7 +26,7 @@ public class TimeTravelSMREngineTest {
     public void createStream()
     {
         MemoryConfigMasterProtocol.inMemoryClear();
-        cdr = new CorfuDBRuntime("memory");
+        cdr = CorfuDBRuntime.createRuntime("memory");
         ConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
         s = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
