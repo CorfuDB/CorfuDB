@@ -136,6 +136,19 @@ public interface ICorfuDBObject<T> extends Serializable {
     }
 
     /**
+     * Handles upcalls, if implemented. When an SMR engine encounters
+     * a upcall, it calls this handler. This default upcall handler
+     * does nothing.
+     * @param o             The object passed to the upcall handler.
+     * @param cf            A completable future to be returned to the
+     *                      accessor.
+     */
+    default void upcallHandler(Object o, CompletableFuture<Object> cf)
+    {
+
+    }
+
+    /**
      * Whether or not the object has been registered for automatic playback.
      * @return              True if the object is being automatically played back,
      *                      False otherwise.
