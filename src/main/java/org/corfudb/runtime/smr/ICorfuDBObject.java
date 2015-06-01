@@ -38,9 +38,7 @@ public interface ICorfuDBObject<T> extends Serializable {
         if (getUnderlyingSMREngine() == null)
         {
             CorfuDBRuntime cdr = CorfuDBRuntime.getRuntime("memory");
-            IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(cdr);
-            IStreamingSequencer seq = new StreamingSequencer(cdr);
-            IStream stream = new SimpleStream(getStreamID(), seq, woas, cdr);
+            IStream stream = cdr.getLocalInstance().openStream(getStreamID());
             SimpleSMREngine e = new SimpleSMREngine(stream, getUnderlyingType());
             e.sync(null);
             setUnderlyingSMREngine(e);

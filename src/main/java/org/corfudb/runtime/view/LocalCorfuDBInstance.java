@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import org.apache.zookeeper.KeeperException;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.SimpleStream;
@@ -123,5 +124,17 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Delete a stream given its identifier using this instance.
+     *
+     * @param id The unique ID of the stream to be deleted.
+     * @return True, if the stream was successfully deleted, or false if there
+     * was an error deleting the stream (does not exist).
+     */
+    @Override
+    public boolean deleteStream(UUID id) {
+        throw new UnsupportedOperationException("Currently unsupported!");
     }
 }

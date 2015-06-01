@@ -91,7 +91,7 @@ public class LambdaBTreeTest {
                 .isEqualTo("ABCD");
     }
 
-    ///@Test
+    //@Test
     public void crossMapSwapTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
@@ -119,16 +119,16 @@ public class LambdaBTreeTest {
                 .isEqualTo("abcd");
     }
 
-    // @Test
+    @Test
     public void mapOfMapsTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
         IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
         LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>> tmap2 = new LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>>(s2);
         tmap2.put("abcd", testTree);
-        testTree.put("key0", "abcd");
+        testTree.put("key0", "abcd2");
         assertThat(tmap2.get("abcd").get("key0"))
-                .isEqualTo("abcd");
+                .isEqualTo("abcd2");
     }
 
     // @Test

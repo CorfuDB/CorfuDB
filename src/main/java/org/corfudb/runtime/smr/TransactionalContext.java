@@ -1,5 +1,9 @@
 package org.corfudb.runtime.smr;
 
+import org.apache.zookeeper.Transaction;
+import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.stream.ITimestamp;
+
 import java.io.Closeable;
 
 /**
@@ -22,6 +26,18 @@ public class TransactionalContext implements AutoCloseable {
     public TransactionalContext(ITransaction transaction)
     {
         currentTX.set(transaction);
+    }
+
+
+    /**
+     * Create a new local transactional context.
+     * @param engine        The engine to redirect updates to.
+     * @param ts            The timestamp this context occurs at.
+     * @param cdr           The CorfuDBRuntime to pass through.
+     */
+    public TransactionalContext(ISMREngine engine, ITimestamp ts, CorfuDBRuntime cdr)
+    {
+        currentTX.set(new LocalTransaction(engine, ts, cdr));
     }
 
     /**

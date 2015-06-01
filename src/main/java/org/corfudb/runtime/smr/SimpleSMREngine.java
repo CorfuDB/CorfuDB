@@ -112,6 +112,11 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             while (ts.compareTo(streamPointer) > 0) {
                 try {
                     IStreamEntry entry = stream.readNextEntry();
+                    if (entry == null)
+                    {
+                        // we've reached the end of this stream.
+                        return;
+                    }
                     if (entry instanceof ITransaction)
                     {
                         ITransaction transaction = (ITransaction) entry;
@@ -119,12 +124,14 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                         transaction.executeTransaction(this);
                     }
                     else {
-                        ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
-                        ITimestamp entryTS = entry.getTimestamp();
-                        CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
-                        completionTable.remove(entryTS);
-                        // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
-                        function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                        try (TransactionalContext tc = new TransactionalContext(this, entry.getTimestamp(), stream.getRuntime())) {
+                            ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
+                            ITimestamp entryTS = entry.getTimestamp();
+                            CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
+                            completionTable.remove(entryTS);
+                            // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
+                            function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                        }
                     }
                 } catch (Exception e) {
                     log.error("exception during sync: ", e);
