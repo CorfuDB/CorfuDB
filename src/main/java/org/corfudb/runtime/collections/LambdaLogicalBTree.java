@@ -82,16 +82,6 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     }
 
     /**
-     * Get the underlying transaction
-     *
-     * @return The transaction this object is currently participating in.
-     */
-    @Override
-    public ITransaction getUnderlyingTransaction() {
-        return tx;
-    }
-
-    /**
      * return the size
      * @return
      */

@@ -71,7 +71,7 @@ public class LambdaBTreeTest {
         assertThat(testTree.get("key1")).isEqualTo("xxxx");
     }
 
-    // @Test
+    @Test
     public void DeferredTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
