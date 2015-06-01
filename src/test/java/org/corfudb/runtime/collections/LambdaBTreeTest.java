@@ -91,7 +91,7 @@ public class LambdaBTreeTest {
                 .isEqualTo("ABCD");
     }
 
-    //@Test
+    @Test
     public void crossMapSwapTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr);
@@ -131,7 +131,7 @@ public class LambdaBTreeTest {
                 .isEqualTo("abcd2");
     }
 
-    // @Test
+    @Test
     public void OpaqueDeferredTransactionalTest() throws Exception
     {
         OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr);
