@@ -4,6 +4,8 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -14,6 +16,8 @@ import java.util.concurrent.CompletableFuture;
  * Created by mwei on 6/1/15.
  */
 public class BufferedSMREngine<T> implements ISMREngine<T> {
+
+    private final Logger log = LoggerFactory.getLogger(SimpleSMREngine.class);
 
     T underlyingObject;
     ITimestamp ts;
@@ -76,11 +80,16 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
                     if (entry instanceof ITransaction) {
                         ITransaction transaction = (ITransaction) entry;
                         transaction.executeTransaction(this);
+                    }
+                    else if (entry.getPayload() instanceof SMRLocalCommandWrapper)
+                    {
+                        //drop, we don't process local commands.
                     } else {
                         ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
                         function.accept(underlyingObject, new BufferedSMREngineOptions(new CompletableFuture<Object>()));
                     }
                 } catch (Exception e) {
+                    log.error("Exception executing buffered command", e);
                     //ignore entries we don't know what to do about.
                 }
                 streamPointer = stream.getCurrentPosition();

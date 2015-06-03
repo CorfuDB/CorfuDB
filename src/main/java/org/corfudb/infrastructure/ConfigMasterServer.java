@@ -227,7 +227,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         currentRemoteView = new RemoteLogView();
         //UUID is going to be random for now, since this configuration is not persistent
         UUID logID =  UUID.randomUUID();
-        log.info("New stream instance id= " + logID.toString());
+        log.info("New log instance id= " + logID.toString());
         currentView.setUUID(logID);
         return this;
     }
@@ -354,6 +354,10 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         }
 
         currentStreamView = new StreamView();
+        //UUID is going to be random for now, since this configuration is not persistent
+        UUID logID =  UUID.randomUUID();
+        currentView.setUUID(logID);
+        log.info("New log instance id= " + logID.toString());
         currentView.resetEpoch(newEpoch);
     }
 

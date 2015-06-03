@@ -161,6 +161,10 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp getNextTimestamp(ITimestamp ts) {
+        if (ITimestamp.isMin(ts))
+        {
+            return new SimpleTimestamp(0);
+        }
         return new SimpleTimestamp(((SimpleTimestamp)ts).address + 1);
     }
 
@@ -172,6 +176,10 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp getPreviousTimestamp(ITimestamp ts) {
+        if (ITimestamp.isMin(ts))
+        {
+            return ITimestamp.getMinTimestamp();
+        }
         return new SimpleTimestamp(((SimpleTimestamp)ts).address - 1);
     }
 
@@ -197,6 +205,10 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp getCurrentPosition() {
+        if (streamPointer.get() == 0)
+        {
+            return ITimestamp.getMinTimestamp();
+        }
         return new SimpleTimestamp(streamPointer.get()-1);
     }
 

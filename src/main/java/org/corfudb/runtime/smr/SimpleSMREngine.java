@@ -66,6 +66,12 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         try {
             this.stream = stream;
             this.type = type;
+            if (!ITimestamp.isMin(stream.getCurrentPosition()))
+            {
+                throw new RuntimeException(
+                        "Attempt to start SMR engine on a stream which is not at the beginning (pos="
+                                + stream.getCurrentPosition() + ")");
+            }
             streamPointer = stream.getCurrentPosition();
             completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
             Constructor<T> ctor = findConstructor(type, args);
