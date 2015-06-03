@@ -4,30 +4,24 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
-import org.corfudb.runtime.stream.SimpleTimestamp;
-import org.corfudb.runtime.view.Serializer;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.UUID;
 
 /**
  * Created by mwei on 6/1/15.
  */
-public class LocalTransaction implements ITransaction {
+public class PassthroughTransaction implements ITransaction{
 
     ISMREngine executingEngine;
     ITimestamp timestamp;
-    ITimestamp res;
     CorfuDBRuntime runtime;
-    HashMap<UUID, BufferedSMREngine> spawnedEngines;
 
-    public LocalTransaction(ISMREngine executingEngine, ITimestamp timestamp, ITimestamp res, CorfuDBRuntime runtime)
+    public PassthroughTransaction(ISMREngine executingEngine, ITimestamp timestamp, CorfuDBRuntime runtime)
     {
         this.executingEngine = executingEngine;
         this.timestamp = timestamp;
-        this.res = res;
         this.runtime = runtime;
-        this.spawnedEngines = new HashMap<UUID, BufferedSMREngine>();
     }
 
     /**
@@ -40,22 +34,16 @@ public class LocalTransaction implements ITransaction {
     @Override
     @SuppressWarnings("unchecked")
     public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
-        if (spawnedEngines.get(streamID) != null)
-        {
-            return spawnedEngines.get(streamID);
-        }
         if (streamID.equals(executingEngine.getStreamID()))
         {
-            Object objClone = Serializer.copy(executingEngine.getObject());
-            BufferedSMREngine e = new BufferedSMREngine(objClone, timestamp, executingEngine.getStreamID(), runtime);
-            spawnedEngines.put(streamID, e);
-            return e;
+            return new PassThroughSMREngine(executingEngine.getObject(), timestamp);
         }
         else
         {
-            BufferedSMREngine e = new BufferedSMREngine(timestamp, executingEngine.getStreamID(), runtime, objClass);
-            spawnedEngines.put(streamID, e);
-            return e;
+            IStream sTemp = runtime.openStream(streamID, SimpleStream.class);
+            ISMREngine engine = new OneShotSMREngine(sTemp, objClass, timestamp);
+            engine.sync(timestamp);
+            return engine;
         }
     }
 
@@ -89,7 +77,7 @@ public class LocalTransaction implements ITransaction {
      */
     @Override
     public CorfuDBRuntime getRuntime() {
-        return runtime;
+        return null;
     }
 
     /**
@@ -131,17 +119,7 @@ public class LocalTransaction implements ITransaction {
      * will abort.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public ITimestamp propose() throws IOException {
-        Map<UUID, List<ISMREngineCommand>> commands = new HashMap<UUID, List<ISMREngineCommand>>();
-        for (UUID i : spawnedEngines.keySet())
-        {
-            BufferedSMREngine e = spawnedEngines.get(i);
-            List<ISMREngineCommand> l = e.commandBuffer;
-            commands.put(i, l);
-        }
-        MultiCommand mc = new MultiCommand(commands);
-        runtime.getLocalInstance().getAddressSpace().write(((SimpleTimestamp)res).address, mc);
-        return res;
+        throw new UnsupportedOperationException("Local transactions can never be proposed to the log");
     }
 }

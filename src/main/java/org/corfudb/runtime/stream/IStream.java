@@ -48,6 +48,32 @@ public interface IStream extends AutoCloseable {
         throws OutOfSpaceException, IOException;
 
     /**
+     * Reserves a given number of timestamps in this stream. This operation may or may not retrieve
+     * valid timestamps. For example, a move operation may occur and these timestamps will not be valid on
+     * the stream.
+     * @param numTokens The number of tokens to allocate.
+     * @return          A set of timestamps representing the tokens to allocate.
+     */
+     default ITimestamp[] reserve(int numTokens)
+        throws IOException
+    {
+        throw new UnsupportedOperationException("not supported by this stream");
+    }
+
+    /**
+     * Write to a specific, previously allocated log position.
+     * @param timestamp The timestamp to write to.
+     * @param data      The data to write to that timestamp.
+     * @throws OutOfSpaceException      If there is no space left to write to that log position.
+     * @throws OverwriteException       If something was written to that log position already.
+     */
+    default void write(ITimestamp timestamp, Serializable data)
+        throws OutOfSpaceException, OverwriteException, IOException
+    {
+        throw new UnsupportedOperationException("not supported by this stream");
+    }
+
+    /**
      * Append an object to the stream, along with the set of other objects to which
      * the payload is relevant.  This method is deprecated because it represents a way to
      * support multi-object operations (in support of txns) that is too tightly coupled

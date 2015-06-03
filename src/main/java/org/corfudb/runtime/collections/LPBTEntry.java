@@ -60,11 +60,6 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
         this.smr = engine;
     }
 
-    @Override
-    public ITransaction getUnderlyingTransaction() {
-        return tx;
-    }
-
     /**
      * read the deleted flag on this entry
      *

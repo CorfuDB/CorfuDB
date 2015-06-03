@@ -56,11 +56,6 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
         this.smr = engine;
     }
 
-    @Override
-    public ITransaction getUnderlyingTransaction() {
-        return tx;
-    }
-
 
     /**
      * read the child count

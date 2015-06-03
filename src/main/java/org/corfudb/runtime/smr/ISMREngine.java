@@ -2,6 +2,7 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -22,6 +23,7 @@ public interface ISMREngine<T> {
     {
         CompletableFuture<Object> getReturnResult();
         CorfuDBRuntime getRuntime();
+        UUID getEngineID();
     }
 
     /**
@@ -89,6 +91,31 @@ public interface ISMREngine<T> {
     }
 
     /**
+     * Propose a local command to the SMR engine. A local command is one which is executed locally
+     * only, but may propose other commands which affect multiple objects.
+     * @param command       A lambda representing the command to be proposed
+     * @param completion    A completion to be fulfilled.
+     * @param readOnly      True, if the command is read only, false otherwise.
+     * @return              A timestamp representing the command proposal time.
+     */
+    default ITimestamp propose(ISMRLocalCommand<T> command, CompletableFuture<Object> completion, boolean readOnly)
+    {
+        throw new UnsupportedOperationException("not yet implemented");
+    }
+
+    /**
+     * Propose a local command to the SMR engine. A local command is one which is executed locally
+     * only, but may propose other commands which affect multiple objects.
+     * @param command       A lambda representing the command to be proposed.
+     * @param completion    A completion to be fulfilled.
+     * @return              A timestamp representing the command proposal time.
+     */
+    default ITimestamp propose(ISMRLocalCommand<T> command, CompletableFuture<Object> completion)
+    {
+        return propose(command, completion, false);
+    }
+
+    /**
      * Checkpoint the current state of the SMR engine.
      * @return              The timestamp the checkpoint was inserted at.
      */
@@ -112,6 +139,14 @@ public interface ISMREngine<T> {
      * @return              A UUID representing the ID for the underlying stream.
      */
     UUID getStreamID();
+
+    /**
+     * Get the CorfuDB instance that supports this SMR engine.
+     * @return              A CorfuDB instance.
+     */
+    default ICorfuDBInstance getInstance() {
+        throw new UnsupportedOperationException("not yet implemented...");
+    }
 
     /**
      * find the appropriate constructor for the underlying object,

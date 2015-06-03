@@ -60,7 +60,7 @@ public interface ICorfuDBObject<T> extends Serializable {
      * Get underlying SMR engine
      * @return  The SMR engine this object was instantiated under.
      */
-    ISMREngine getUnderlyingSMREngine();
+    ISMREngine<T> getUnderlyingSMREngine();
 
     /**
      * Set underlying SMR engine
@@ -131,6 +131,21 @@ public interface ICorfuDBObject<T> extends Serializable {
         ITimestamp proposal = getSMREngine().propose(command, o);
         if (!isAutomaticallyPlayedBack()) {getSMREngine().sync(proposal);}
         return o.join();
+    }
+
+    /**
+     * Called whenever a local command is to be proposed. A local command
+     * is a command which is processed only at the local client, but
+     * may generate results which insert commands into the log.
+     * @param command       The local command to be executed.
+     * @return              True, if the command succeeds. False otherwise.
+     */
+    default Object localCommandHelper(ISMRLocalCommand command)
+    {
+        CompletableFuture<Object> o = new CompletableFuture<Object>();
+        ITimestamp proposal = getSMREngine().propose(command, o);
+        if (!isAutomaticallyPlayedBack()) {getSMREngine().sync(proposal);}
+        return  o.join();
     }
 
     /**

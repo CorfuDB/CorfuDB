@@ -29,6 +29,12 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
             return this.returnResult;
         }
         public CorfuDBRuntime getRuntime() { return null; }
+
+        @Override
+        public UUID getEngineID() {
+            return null;
+        }
+
     }
 
     T underlyingObject;

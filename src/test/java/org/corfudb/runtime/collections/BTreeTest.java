@@ -55,7 +55,7 @@ public class BTreeTest {
     }
 
     //@Test public void treeIsPuttableGettableLogical() { treeIsPuttableGettable(LambdaLogicalBTree.class);}
-    // @Test public void treeIsPuttableGettablePhysical() { treeIsPuttableGettable(LPBTree.class);}
+    //@Test public void treeIsPuttableGettablePhysical() { treeIsPuttableGettable(LPBTree.class);}
 
     public void treeIsPuttableGettable(Class treeclass)
     {

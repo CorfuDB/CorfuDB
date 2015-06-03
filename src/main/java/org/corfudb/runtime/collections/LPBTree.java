@@ -81,12 +81,19 @@ public class LPBTree<K extends Comparable<K>, V>
 
     @Override
     public void init() {
+        /* first, sync forward */
+        getSMREngine().sync(null);
+        /* do we have any state now? If so, we don't need to init. */
+        if (smr.getObject().m_root != CorfuDBObject.oidnull) return;
+        /* otherwise, create a new node... */
+        IStream nodeStream = smr.getInstance().openStream(UUID.randomUUID());
+        /* this node will be the root */
+        LPBTNode<K, V> e = new LPBTNode<K, V>(nodeStream);
+        e.writeChildCount(0);
+        /* now propose the change to the root to the tree container */
+        final UUID rootID = e.getStreamID();
         mutatorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            UUID nodeUUID = Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
-            IStream nodeStream = opts.getRuntime().getLocalInstance().openStream(nodeUUID);
-            LPBTNode<K, V> e = new LPBTNode(nodeStream);
-            e.writeChildCount(0);
-            tree.m_root = e.getStreamID();
+            tree.m_root = rootID;
             tree.m_height = 0;
             tree.m_size = 0;
         });
@@ -128,16 +135,6 @@ public class LPBTree<K extends Comparable<K>, V>
     @SuppressWarnings("unchecked")
     public void setUnderlyingSMREngine(ISMREngine engine) {
         this.smr = engine;
-    }
-
-    /**
-     * Get the underlying transaction
-     *
-     * @return The transaction this object is currently participating in.
-     */
-    @Override
-    public ITransaction getUnderlyingTransaction() {
-        return tx;
     }
 
     /**
@@ -307,6 +304,7 @@ public class LPBTree<K extends Comparable<K>, V>
      * @param key
      * @return
      */
+    @SuppressWarnings("unchecked")
     public V get(K key) {
         return (V) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
             V result = null;
@@ -396,18 +394,19 @@ public class LPBTree<K extends Comparable<K>, V>
      * @param key
      * @param value
      */
+    @SuppressWarnings("unchecked")
     public V
     put(K key, V value) {
-        return (V) mutatorAccessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        return (V) localCommandHelper((ISMRLocalCommand<TreeContainer>) (tree, opts) -> {
             CorfuDBRuntime runtime = opts.getRuntime();
             V result = null;
             UUID root = tree.m_root;
             int height = tree.m_height;
             int size = tree.m_size;
             LPBTEntry e = searchEntry(opts.getRuntime(), root, key, height);
-            if(e != null) {
-                if(!e.readDeleted())
-                    result = (V)e.readValue();
+            if (e != null) {
+                if (!e.readDeleted())
+                    result = (V) e.readValue();
                 e.writeValue(value);
                 e.writeDeleted(false);
             } else {

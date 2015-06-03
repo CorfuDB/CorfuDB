@@ -153,10 +153,8 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         /* The simple transaction just assumes that everything is on the same log,
          * so picking the next valid sequence is acceptable.
          */
-        ISequencer sequencer = new StreamingSequencer(runtime);
-        IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(runtime);
-        Long sequence = sequencer.getNext();
-        woas.write(sequence, this);
+        Long sequence = runtime.getLocalInstance().getSequencer().getNext();
+        runtime.getLocalInstance().getAddressSpace().write(sequence, this);
         return new SimpleTimestamp(sequence);
     }
 

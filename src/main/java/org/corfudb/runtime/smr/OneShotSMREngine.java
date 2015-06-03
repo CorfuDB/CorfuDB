@@ -42,6 +42,11 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
         }
 
         public CorfuDBRuntime getRuntime() { return stream.getRuntime(); }
+
+        @Override
+        public UUID getEngineID() {
+            return stream.getStreamID();
+        }
     }
 
     public OneShotSMREngine(IStream stream, Class<T> type, ITimestamp syncPoint) { this(stream, type, syncPoint, new Object[0]); }

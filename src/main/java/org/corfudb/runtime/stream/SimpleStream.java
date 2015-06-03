@@ -7,6 +7,9 @@ import org.corfudb.runtime.view.*;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.text.SimpleDateFormat;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -57,6 +60,38 @@ public class SimpleStream implements IStream {
         SimpleTimestamp timestamp = new SimpleTimestamp(sequence);
         addressSpace.write(sequence, new SimpleStreamEntry(streamID, data, timestamp));
         return timestamp;
+    }
+
+    /**
+     * Reserves a given number of timestamps in this stream. This operation may or may not retrieve
+     * valid timestamps. For example, a move operation may occur and these timestamps will not be valid on
+     * the stream.
+     *
+     * @param numTokens The number of tokens to allocate.
+     * @return A set of timestamps representing the tokens to allocate.
+     */
+    @Override
+    public ITimestamp[] reserve(int numTokens) throws IOException {
+        long sequence = sequencer.getNext(numTokens);
+        ITimestamp[] s = new ITimestamp[numTokens];
+        for (int i = 0; i < numTokens; i++)
+        {
+            s[i] = new SimpleTimestamp(sequence + i);
+        }
+        return s;
+    }
+
+    /**
+     * Write to a specific, previously allocated log position.
+     *
+     * @param timestamp The timestamp to write to.
+     * @param data      The data to write to that timestamp.
+     * @throws OutOfSpaceException If there is no space left to write to that log position.
+     * @throws OverwriteException  If something was written to that log position already.
+     */
+    @Override
+    public void write(ITimestamp timestamp, Serializable data) throws OutOfSpaceException, OverwriteException, IOException {
+        addressSpace.write(((SimpleTimestamp)timestamp).address, new SimpleStreamEntry(streamID, data, timestamp));
     }
 
 

@@ -1,11 +1,11 @@
 role: org.corfudb.infrastructure.ConfigMasterServer
-port: 8000
+port: 8002
 pagesize: 4096
 epoch: 0
 sequencers:
-  - "cdbss://localhost:8001"
+  - "cdbsts://localhost:8000"
 configmasters:
-  - "cdbcm://localhost:8000"
+  - "cdbcm://localhost:8002"
 layout:
   segments:
     - start: 0
@@ -13,4 +13,4 @@ layout:
       replicas: 1
       groups:
         - nodes:
-          - "cdbslu://localhost:8002"
+          - "cdbslu://localhost:8001"

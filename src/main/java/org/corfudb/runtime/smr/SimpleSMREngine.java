@@ -6,6 +6,7 @@ import org.corfudb.runtime.entries.CorfuDBEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +16,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
@@ -46,6 +48,11 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             return this.returnResult;
         }
         public CorfuDBRuntime getRuntime() { return stream.getRuntime(); }
+
+        @Override
+        public UUID getEngineID() {
+            return stream.getStreamID();
+        }
 
     }
 
@@ -123,18 +130,35 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                         transaction.setCorfuDBRuntime(stream.getRuntime());
                         transaction.executeTransaction(this);
                     }
+                    else if (entry.getPayload() instanceof SMRLocalCommandWrapper)
+                    {
+                        SMRLocalCommandWrapper<T> function = (SMRLocalCommandWrapper<T>) entry.getPayload();
+                        try (TransactionalContext tc =
+                                     new TransactionalContext(this, entry.getTimestamp(), function.destination, stream.getRuntime(), LocalTransaction.class)) {
+                            ITimestamp entryTS = entry.getTimestamp();
+                            CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
+                            completionTable.remove(entryTS);
+                            function.command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                        }
+                    }
                     else {
-                        try (TransactionalContext tc = new TransactionalContext(this, entry.getTimestamp(), stream.getRuntime())) {
+                        try (TransactionalContext tc =
+                                     new TransactionalContext(this, entry.getTimestamp(), stream.getRuntime(), PassthroughTransaction.class)) {
                             ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
                             ITimestamp entryTS = entry.getTimestamp();
                             CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
                             completionTable.remove(entryTS);
+                            if (entry instanceof MultiCommand)
+                            {
+                                completion = new CompletableFuture<>();
+                            }
                             // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
                             function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
                         }
                     }
                 } catch (Exception e) {
                     log.error("exception during sync: ", e);
+                    log.error("playback at pointer = " + stream.getCurrentPosition());
                     log.warn("CJR: why is it ok to suppress an exception during sync?");
                 }
                 streamPointer = stream.getCurrentPosition();
@@ -169,6 +193,37 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             if (completion != null) { completionTable.put(t, completion); }
             lastProposal = t;
             return t;
+        }
+        catch (Exception e)
+        {
+            //well, propose is technically not reliable, so we can just silently drop
+            //any exceptions.
+            return null;
+        }
+    }
+
+    /**
+     * Propose a local command to the SMR engine. A local command is one which is executed locally
+     * only, but may propose other commands which affect multiple objects.
+     *
+     * @param command    A lambda representing the command to be proposed
+     * @param completion A completion to be fulfilled.
+     * @param readOnly   True, if the command is read only, false otherwise.
+     * @return A timestamp representing the command proposal time.
+     */
+    @Override
+    public ITimestamp propose(ISMRLocalCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
+        if (readOnly)
+        {
+            command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+            return streamPointer;
+        }
+        try {
+            ITimestamp[] t = stream.reserve(2);
+            if (completion != null) { completionTable.put(t[0], completion); }
+            stream.write(t[0], new SMRLocalCommandWrapper<>(command, t[1]));
+            lastProposal = t[0];
+            return t[0];
         }
         catch (Exception e)
         {
@@ -219,5 +274,15 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     @Override
     public UUID getStreamID() {
         return stream.getStreamID();
+    }
+
+    /**
+     * Get the CorfuDB instance that supports this SMR engine.
+     *
+     * @return A CorfuDB instance.
+     */
+    @Override
+    public ICorfuDBInstance getInstance() {
+        return stream.getRuntime().getLocalInstance();
     }
 }

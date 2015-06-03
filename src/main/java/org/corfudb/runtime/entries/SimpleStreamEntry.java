@@ -16,12 +16,12 @@ public class SimpleStreamEntry implements IStreamEntry, Serializable{
     public Serializable payload;
     public transient ITimestamp timestamp;
 
-    public SimpleStreamEntry(UUID id, Serializable payload, SimpleTimestamp timestamp)
+    public SimpleStreamEntry(UUID id, Serializable payload, ITimestamp timestamp)
     {
        this(Collections.singletonList(id), payload, timestamp);
     }
 
-    public SimpleStreamEntry(List<UUID> id, Serializable payload, SimpleTimestamp timestamp)
+    public SimpleStreamEntry(List<UUID> id, Serializable payload, ITimestamp timestamp)
     {
         this.id = id;
         this.payload = payload;
