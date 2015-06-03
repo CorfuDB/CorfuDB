@@ -14,10 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 5/22/15.
@@ -185,10 +184,20 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         if (cachedObject != null) return cachedObject;
 
         try {
-            Class<?>[] classes = (Class<?>[]) Arrays.stream(args)
-                                    .map(c -> c.getClass())
-                                    .toArray();
-            ICorfuDBObject returnObject = type.getConstructor(args).newInstance(args);
+            List<Class<?>> classes = Arrays.stream(args)
+                                    .map(Class::getClass)
+                                    .collect(Collectors.toList());
+
+            classes.add(0, IStream.class);
+
+            List<Object> largs = Arrays.stream(args)
+                                .collect(Collectors.toList());
+            largs.add(openStream(id));
+
+            ICorfuDBObject returnObject = type
+                                            .getConstructor(classes.toArray(new Class[classes.size()]))
+                                            .newInstance(largs.toArray(new Object[largs.size()]));
+
             objectMap.put(id, returnObject);
             return returnObject;
         }

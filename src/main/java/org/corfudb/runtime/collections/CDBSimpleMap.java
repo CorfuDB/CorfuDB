@@ -32,10 +32,10 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
         }
     }
 
+    @Deprecated
     public CDBSimpleMap(IStream stream)
     {
-        streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<ConcurrentHashMap>(stream, ConcurrentHashMap.class);
+        this(stream, SimpleSMREngine.class);
     }
 
     /**
