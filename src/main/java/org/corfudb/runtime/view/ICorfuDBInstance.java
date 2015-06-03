@@ -1,7 +1,11 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.runtime.smr.ICorfuDBObject;
 import org.corfudb.runtime.stream.IStream;
+import org.corfudb.runtime.stream.IStreamMetadata;
+import org.corfudb.runtime.stream.SimpleStreamMetadata;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -67,4 +71,21 @@ public interface ICorfuDBInstance {
      *              was an error deleting the stream (does not exist).
      */
     boolean deleteStream(UUID id);
+
+    /**
+     * Retrieves the stream metadata map for this instance.
+     * @return      The stream metadata map for this instance.
+     */
+    Map<UUID, IStreamMetadata> getStreamMetadataMap();
+
+    /**
+     * Retrieves a corfuDB object.
+     * @param id    A unique ID for the object to be retrieved.
+     * @param type  The type of object to instantiate.
+     * @param args  A list of arguments to pass to the constructor.
+     * @return      A CorfuDB object. A cached object may be returned
+     *              if one already exists in the system. A new object
+     *              will be created if one does not already exist.
+     */
+    ICorfuDBObject openObject(UUID id, Class<? extends ICorfuDBObject> type, Class<?>... args);
 }

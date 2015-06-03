@@ -23,6 +23,7 @@ public class SimpleStream implements IStream {
     UUID streamID;
     AtomicLong streamPointer;
     transient CorfuDBRuntime runtime;
+    transient ICorfuDBInstance instance;
 
     /**
      * Open a simple stream. If the simple stream already exists, it is re-opened.
@@ -30,6 +31,7 @@ public class SimpleStream implements IStream {
      * @param sequencer         A streaming sequencer to use
      * @param addressSpace      A write once address space to use
      */
+    @Deprecated
     public SimpleStream(UUID streamID, ISequencer sequencer, IWriteOnceAddressSpace addressSpace, CorfuDBRuntime runtime) {
         this.sequencer = sequencer;
         this.addressSpace = addressSpace;
@@ -38,13 +40,25 @@ public class SimpleStream implements IStream {
         this.runtime = runtime;
     }
 
+    @Deprecated
     public SimpleStream(UUID streamID, CorfuDBRuntime runtime)
     {
-        this.sequencer = new StreamingSequencer(runtime);
-        this.addressSpace = new WriteOnceAddressSpace(runtime);
+        this.sequencer = runtime.getLocalInstance().getStreamingSequencer();
+        this.addressSpace = runtime.getLocalInstance().getAddressSpace();
         this.streamID = streamID;
         this.streamPointer = new AtomicLong();
         this.runtime = runtime;
+    }
+
+    SimpleStream(UUID streamID, ICorfuDBInstance instance, boolean registerStream)
+    {
+        this.instance = instance;
+        this.streamID = streamID;
+        this.streamPointer = new AtomicLong();
+        if (registerStream)
+        {
+
+        }
     }
 
     /**
