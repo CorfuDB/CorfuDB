@@ -35,7 +35,7 @@ import java.util.UUID;
  *  from the head of the stream.
  */
 public interface IStream extends AutoCloseable {
-    
+
     /**
      * Append an object to the stream. This operation may or may not be successful. For example,
      * a move operation may occur, and the append will not be part of the stream.
