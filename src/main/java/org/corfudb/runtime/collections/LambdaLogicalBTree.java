@@ -16,21 +16,14 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
         extends AbstractLambdaBTree<K, V> {
 
     transient ISMREngine<BTree> smr;
-    ITransaction tx;
     UUID streamID;
-
-    public LambdaLogicalBTree(LambdaLogicalBTree<K,V> map, ITransaction tx)
-    {
-        this.streamID = map.streamID;
-        this.tx = tx;
-    }
 
     @SuppressWarnings("unchecked")
     public LambdaLogicalBTree(IStream stream, Class<? extends ISMREngine> smrClass)
     {
         try {
             streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, BTree.class);
+            smr = instantiateSMREngine(stream, smrClass);
         }
         catch (Exception e)
         {
@@ -40,8 +33,7 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
 
     public LambdaLogicalBTree(IStream stream)
     {
-        streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<BTree>(stream, BTree.class);
+        this(stream, SimpleSMREngine.class);
     }
 
     /**
@@ -174,16 +166,6 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
         return (String) accessorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
             opts.getReturnResult().complete(map.print());
         });
-    }
-
-    /**
-     * Gets a transactional context for this object.
-     * @return              A transactional context to be used during a transaction.
-     */
-    @Override
-    public LambdaLogicalBTree<K,V> getTransactionalContext(ITransaction tx) {
-        tx.registerStream(getSMREngine().getStreamID());
-        return new LambdaLogicalBTree<K, V>(this, tx);
     }
 
 }

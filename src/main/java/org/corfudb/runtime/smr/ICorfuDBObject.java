@@ -15,6 +15,7 @@ import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -169,5 +170,19 @@ public interface ICorfuDBObject<T> extends Serializable {
     default boolean isAutomaticallyPlayedBack()
     {
         return false;
+    }
+
+    default ISMREngine instantiateSMREngine(IStream stream, Class<? extends ISMREngine> smrClass, Class<?>... args)
+    {
+        try {
+            Class<?>[] c = smrClass.getConstructors()[0].getParameterTypes();
+
+            return smrClass.getConstructor(IStream.class, Class.class, Class[].class)
+                    .newInstance(stream, getUnderlyingType(), args);
+        }
+        catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 }

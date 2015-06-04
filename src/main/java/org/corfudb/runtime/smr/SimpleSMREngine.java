@@ -14,12 +14,10 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 5/1/15.
@@ -53,15 +51,9 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         public UUID getEngineID() {
             return stream.getStreamID();
         }
-
     }
 
-    public SimpleSMREngine(IStream stream, Class<T> type)
-    {
-        this(stream, type, new Object[0]);
-    }
-
-    public SimpleSMREngine(IStream stream, Class<T> type, Object[] args)
+    public SimpleSMREngine(IStream stream, Class<T> type, Class<?>... args)
     {
         try {
             this.stream = stream;
@@ -74,8 +66,12 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             }
             streamPointer = stream.getCurrentPosition();
             completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
-            Constructor<T> ctor = findConstructor(type, args);
-            underlyingObject = ctor.newInstance(args);
+
+            underlyingObject = type
+                    .getConstructor(Arrays.stream(args)
+                            .map(Class::getClass)
+                            .toArray(Class[]::new))
+                    .newInstance(args);
         }
         catch (Exception e)
         {

@@ -12,7 +12,7 @@ after_success:
 - .travis_scripts/javadocs.sh
 notifications:
   email:
-  - corfudb-dev@googlegroups.com
+    - corfudb-dev@googlegroups.com
   webhooks:
     urls:
         - https://webhooks.gitter.im/e/e26458f01e3586e3c140

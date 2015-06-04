@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -55,13 +56,19 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
     }
 
     @SuppressWarnings("unchecked")
-    public BufferedSMREngine(ITimestamp ts, UUID streamID, CorfuDBRuntime runtime, Class<?> objClass)
+    public BufferedSMREngine(ITimestamp ts, UUID streamID, CorfuDBRuntime runtime, Class<?> objClass, Class<?>... args)
     {
         try {
             this.ts = ts;
             this.streamID = streamID;
             this.runtime = runtime;
-            this.underlyingObject = (T) objClass.newInstance();
+
+            underlyingObject = (T) objClass
+                    .getConstructor(Arrays.stream(args)
+                            .map(Class::getClass)
+                            .toArray(Class[]::new))
+                    .newInstance(args);
+
             this.commandBuffer = new ArrayList<ISMREngineCommand<T>>();
 
             ITimestamp streamPointer;

@@ -14,8 +14,7 @@ public class TimeTravelSMREngine<T> extends SimpleSMREngine<T> {
 
     ITimestamp lockTS;
 
-    public TimeTravelSMREngine(IStream stream, Class<T> type) { super(stream, type); }
-    public TimeTravelSMREngine(IStream stream, Class<T> type, Object[] initArgs)
+    public TimeTravelSMREngine(IStream stream, Class<T> type, Class<?>... initArgs)
     {
         super(stream, type, initArgs);
     }

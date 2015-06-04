@@ -24,7 +24,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     {
         try {
             streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, ConcurrentHashMap.class);
+            smr = instantiateSMREngine(stream, smrClass);
         }
         catch (Exception e)
         {

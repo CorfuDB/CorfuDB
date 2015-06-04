@@ -57,11 +57,6 @@ public class LPBTree<K extends Comparable<K>, V>
         return e;
     }
 
-    public LPBTree(LPBTree<K,V> map, ITransaction tx) {
-        this.streamID = map.streamID;
-        this.tx = tx;
-    }
-
     @SuppressWarnings("unchecked")
     public LPBTree(IStream stream, Class<? extends ISMREngine> smrClass) {
         try {
@@ -869,15 +864,6 @@ public class LPBTree<K extends Comparable<K>, V>
         return node.readChildCount();
     }
 
-    /**
-     * Gets a transactional context for this object.
-     * @return              A transactional context to be used during a transaction.
-     */
-    @Override
-    public LPBTree<K,V> getTransactionalContext(ITransaction tx) {
-        tx.registerStream(getSMREngine().getStreamID());
-        return new LPBTree<K, V>(this, tx);
-    }
 
 }
 
