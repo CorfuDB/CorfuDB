@@ -87,5 +87,5 @@ public interface ICorfuDBInstance {
      *              if one already exists in the system. A new object
      *              will be created if one does not already exist.
      */
-    ICorfuDBObject openObject(UUID id, Class<? extends ICorfuDBObject> type, Class<?>... args);
+    <T extends ICorfuDBObject> T openObject(UUID id, Class<T> type, Class<?>... args);
 }

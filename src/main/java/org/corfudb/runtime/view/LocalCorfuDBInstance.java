@@ -179,24 +179,33 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * will be created if one does not already exist.
      */
     @Override
-    public ICorfuDBObject openObject(UUID id, Class<? extends ICorfuDBObject> type, Class<?>... args) {
-        ICorfuDBObject cachedObject = objectMap.get(id);
-        if (cachedObject != null) return cachedObject;
+    @SuppressWarnings("unchecked")
+    public <T extends ICorfuDBObject> T openObject(UUID id, Class<T> type, Class<?>... args) {
+        T cachedObject = (T) objectMap.getOrDefault(id, null);
+
+        if (cachedObject != null)
+        {
+            if (!(type.isInstance(cachedObject)))
+                throw new RuntimeException("Incorrect type! Requested to open object of type " + type.getClass() +
+                        " but an object of type " + cachedObject.getClass() + " is already there!");
+            return cachedObject;
+        }
+
 
         try {
             List<Class<?>> classes = Arrays.stream(args)
-                                    .map(Class::getClass)
-                                    .collect(Collectors.toList());
+                    .map(Class::getClass)
+                    .collect(Collectors.toList());
 
             classes.add(0, IStream.class);
 
             List<Object> largs = Arrays.stream(args)
-                                .collect(Collectors.toList());
+                    .collect(Collectors.toList());
             largs.add(openStream(id));
 
-            ICorfuDBObject returnObject = type
-                                            .getConstructor(classes.toArray(new Class[classes.size()]))
-                                            .newInstance(largs.toArray(new Object[largs.size()]));
+            T returnObject = type
+                    .getConstructor(classes.toArray(new Class[classes.size()]))
+                    .newInstance(largs.toArray(new Object[largs.size()]));
 
             objectMap.put(id, returnObject);
             return returnObject;
@@ -206,6 +215,4 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
             throw new RuntimeException(e);
         }
     }
-
-
 }
