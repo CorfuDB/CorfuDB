@@ -54,7 +54,7 @@ public class LocalTransaction implements ITransaction {
         }
         else
         {
-            BufferedSMREngine e = new BufferedSMREngine(timestamp, executingEngine.getStreamID(), instance, objClass);
+            BufferedSMREngine e = new BufferedSMREngine(timestamp, streamID, instance, objClass);
             spawnedEngines.put(streamID, e);
             return e;
         }

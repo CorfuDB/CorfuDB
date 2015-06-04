@@ -136,7 +136,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     {
                         SMRLocalCommandWrapper<T> function = (SMRLocalCommandWrapper<T>) entry.getPayload();
                         try (TransactionalContext tc =
-                                     new TransactionalContext(this, entry.getTimestamp(), function.destination, stream.getInstance(), LocalTransaction.class)) {
+                                     new TransactionalContext(this, entry.getTimestamp(), function.destination,
+                                             stream.getInstance(), LocalTransaction.class)) {
                             ITimestamp entryTS = entry.getTimestamp();
                             CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
                             completionTable.remove(entryTS);

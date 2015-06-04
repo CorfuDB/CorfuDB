@@ -54,8 +54,8 @@ public class BTreeTest {
         s = instance.openStream(streamID);
     }
 
-    //@Test public void treeIsPuttableGettableLogical() { treeIsPuttableGettable(LambdaLogicalBTree.class);}
-    //@Test public void treeIsPuttableGettablePhysical() { treeIsPuttableGettable(LPBTree.class);}
+    @Test public void treeIsPuttableGettableLogical() { treeIsPuttableGettable(LambdaLogicalBTree.class);}
+    @Test public void treeIsPuttableGettablePhysical() { treeIsPuttableGettable(LPBTree.class);}
 
     public void treeIsPuttableGettable(Class treeclass)
     {
@@ -68,8 +68,8 @@ public class BTreeTest {
                 .isEqualTo("efgh");
     }
 
-    //@Test public void multipleTreesContainSameDataLogical() throws Exception { multipleTreesContainSameData(LambdaLogicalBTree.class);}
-    // @Test public void multipleTreesContainSameDataPhysical() throws Exception { multipleTreesContainSameData(LPBTree.class); }
+    @Test public void multipleTreesContainSameDataLogical() throws Exception { multipleTreesContainSameData(LambdaLogicalBTree.class);}
+    @Test public void multipleTreesContainSameDataPhysical() throws Exception { multipleTreesContainSameData(LPBTree.class); }
 
     public void multipleTreesContainSameData(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
@@ -82,8 +82,8 @@ public class BTreeTest {
         assertThat(tree2.get("key1"))
                 .isEqualTo("efgh");
     }
-    // @Test public void ensureMutatorAccessorsWorkLogical() throws Exception { ensureMutatorAccessorsWork(LambdaLogicalBTree.class);}
-    //@Test public void ensureMutatorAccessorsWorkPhysical() throws Exception { ensureMutatorAccessorsWork(LPBTree.class);}
+    @Test public void ensureMutatorAccessorsWorkLogical() throws Exception { ensureMutatorAccessorsWork(LambdaLogicalBTree.class);}
+    @Test public void ensureMutatorAccessorsWorkPhysical() throws Exception { ensureMutatorAccessorsWork(LPBTree.class);}
 
     public void ensureMutatorAccessorsWork(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
@@ -92,7 +92,7 @@ public class BTreeTest {
         assertThat(testTree.get("key1")).isEqualTo("xxxx");
     }
 
-    // @Test public void deferredTransactionalTestLogical() throws Exception { deferredTransactionalTest(LambdaLogicalBTree.class);}
+    //@Test public void deferredTransactionalTestLogical() throws Exception { deferredTransactionalTest(LambdaLogicalBTree.class);}
     //@Test public void deferredTransactionalTestPhysical() throws Exception { deferredTransactionalTest(LPBTree.class);}
 
     public void deferredTransactionalTest(Class treeclass) throws Exception {

@@ -260,4 +260,14 @@ public class SimpleStream implements IStream {
         return instance;
     }
 
+    /**
+     * Move the stream pointer to the given position.
+     *
+     * @param pos The position to seek to. The next read will occur AFTER this position.
+     */
+    @Override
+    public void seek(ITimestamp pos) {
+        this.streamPointer.set(((SimpleTimestamp)pos).address);
+    }
+
 }

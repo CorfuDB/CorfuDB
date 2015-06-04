@@ -206,4 +206,12 @@ public interface IStream extends AutoCloseable {
     default ICorfuDBInstance getInstance() {
         throw new UnsupportedOperationException("This stream (legacy?) doesn't support this operation!");
     }
+
+    /**
+     * Move the stream pointer to the given position.
+     * @param pos               The position to seek to. The next read will occur AFTER this position.
+     */
+    default void seek(ITimestamp pos) {
+        throw new UnsupportedOperationException("This stream (legacy?) doesn't support this operation!");
+    }
 }

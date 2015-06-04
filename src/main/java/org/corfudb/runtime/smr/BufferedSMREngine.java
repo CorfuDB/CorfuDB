@@ -1,6 +1,7 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.HoleEncounteredException;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -19,7 +20,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public class BufferedSMREngine<T> implements ISMREngine<T> {
 
-    private final Logger log = LoggerFactory.getLogger(SimpleSMREngine.class);
+    private final Logger log = LoggerFactory.getLogger(BufferedSMREngine.class);
 
     T underlyingObject;
     ITimestamp ts;
@@ -78,8 +79,15 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
             streamPointer = stream.getCurrentPosition();
             //one shot sync
             while (ts.compareTo(streamPointer) > 0) {
+                IStreamEntry entry;
                 try {
-                    IStreamEntry entry = stream.readNextEntry();
+                   entry = stream.readNextEntry();
+                } catch (HoleEncounteredException hee)
+                {
+                    // a hole might exist, but we shouldn't fill.
+                    return;
+                }
+                try {
                     if (entry.getTimestamp().compareTo(ts) == 0) {
                         //don't read the sync point, since that contains
                         //the transaction...
@@ -92,13 +100,16 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
                     }
                     else if (entry.getPayload() instanceof SMRLocalCommandWrapper)
                     {
-                        //drop, we don't process local commands.
+                        //drop, we don't process local commands, and not only that, we must skip past the
+                        //next entry.
+                        SMRLocalCommandWrapper w = (SMRLocalCommandWrapper) entry.getPayload();
+                        stream.seek(stream.getNextTimestamp(w.destination));
                     } else {
                         ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
                         function.accept(underlyingObject, new BufferedSMREngineOptions(new CompletableFuture<Object>()));
                     }
                 } catch (Exception e) {
-                    log.error("Exception executing buffered command", e);
+                    log.error("Exception executing buffered command at " + entry.getTimestamp() + " for stream ID " + stream.getStreamID(), e);
                     //ignore entries we don't know what to do about.
                 }
                 streamPointer = stream.getCurrentPosition();

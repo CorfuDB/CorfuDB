@@ -82,6 +82,8 @@ public class LPBTree<K extends Comparable<K>, V>
         e.writeChildCount(0);
         /* now propose the change to the root to the tree container */
         final UUID rootID = e.getStreamID();
+        log.info("Create root with id " + rootID.toString());
+        log.info("container=" + smr.getStreamID().toString());
         mutatorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
             tree.m_root = rootID;
             tree.m_height = 0;
@@ -528,7 +530,9 @@ public class LPBTree<K extends Comparable<K>, V>
         int idx = 0;
         LPBTNode<K,V> node = getNodeById(opts.getInstance(), oidnode);
         int nChildren = readchildcount(node);
-        UUID eUUID = Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
+        UUID eUUID = UUID.randomUUID();
+        // Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
+        log.info("Open (create) entry with uuid=" + eUUID.toString());
         LPBTEntry entry = opts.getInstance().openObject(eUUID, LPBTEntry.class);
         entry.writeKey(key);
         entry.writeValue(value);
@@ -577,7 +581,8 @@ public class LPBTree<K extends Comparable<K>, V>
         )
     {
         int B = tree.B;
-        UUID tUUID = Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
+        UUID tUUID = UUID.randomUUID();
+                //Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
         LPBTNode t = opts.getInstance().openObject(tUUID, LPBTNode.class);
         t.writeChildCount(B / 2);
         writechildcount(node, B / 2);
