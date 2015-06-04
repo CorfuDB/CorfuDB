@@ -16,9 +16,9 @@ notifications:
   webhooks:
     urls:
         - https://webhooks.gitter.im/e/e26458f01e3586e3c140
-      on_success: always  # options: [always|never|change] default: always
-      on_failure: always  # options: [always|never|change] default: always
-      on_start: true     # default: false
+    on_success: always
+    on_failure: always
+    on_start: true
 env:
   global:
     secure: WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
