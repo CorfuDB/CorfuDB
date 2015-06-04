@@ -74,7 +74,7 @@ public class CDBSimpleMapTest {
     @Test
     public void DeferredTransactionalTest() throws Exception
     {
-        DeferredTransaction tx = new DeferredTransaction(cdr);
+        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
         final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
         testMap.put(10, 100);
         tx.setTransaction((ITransactionCommand) (opts) -> {
@@ -94,7 +94,7 @@ public class CDBSimpleMapTest {
     @Test
     public void crossMapSwapTransactionalTest() throws Exception
     {
-        DeferredTransaction tx = new DeferredTransaction(cdr);
+        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
         IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
         CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
 
@@ -133,7 +133,7 @@ public class CDBSimpleMapTest {
     @Test
     public void OpaqueDeferredTransactionalTest() throws Exception
     {
-        OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr);
+        OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr.getLocalInstance());
 
         final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
         testMap.put(10, 100);
@@ -149,7 +149,7 @@ public class CDBSimpleMapTest {
         testMapLocal.getSMREngine().sync(txStamp);
         assertThat(testMapLocal.get(10))
                 .isEqualTo(1000);
-        OpaqueDeferredTransaction txAbort = new OpaqueDeferredTransaction(cdr);
+        OpaqueDeferredTransaction txAbort = new OpaqueDeferredTransaction(cdr.getLocalInstance());
 
         txAbort.setTransaction((ITransactionCommand) (opts) -> {
             Integer result = testMapLocal.get(10);

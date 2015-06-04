@@ -18,6 +18,7 @@ package org.corfudb.runtime.stream;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.Serializer;
 
 import java.lang.ClassNotFoundException;
@@ -199,8 +200,10 @@ public interface IStream extends AutoCloseable {
     UUID getStreamID();
 
     /**
-     * Get the runtime that this stream belongs to.
-     * @return                  The runtime the stream belongs to.
+     * Get the instance that this stream belongs to.
+     * @return                  The instance the stream belongs to.
      */
-    CorfuDBRuntime getRuntime();
+    default ICorfuDBInstance getInstance() {
+        throw new UnsupportedOperationException("This stream (legacy?) doesn't support this operation!");
+    }
 }

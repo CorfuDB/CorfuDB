@@ -97,7 +97,7 @@ public class BTreeTest {
 
     public void deferredTransactionalTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
-        DeferredTransaction tx = new DeferredTransaction(cdr);
+        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
         testTree.put("key0", "abcd");
         final AbstractLambdaBTree<String, String> txMap = testTree;
         tx.setTransaction((ITransactionCommand) (opts) -> {
@@ -119,7 +119,7 @@ public class BTreeTest {
 
     public void crossMapSwapTransactionalTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
-        DeferredTransaction tx = new DeferredTransaction(cdr);
+        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
         IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
         AbstractLambdaBTree<String, String> testMap2 = createTree(treeclass, s2);
 
@@ -149,7 +149,7 @@ public class BTreeTest {
 
     public void mapOfMapsTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
-        DeferredTransaction tx = new DeferredTransaction(cdr);
+        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
         IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
         AbstractLambdaBTree<String, AbstractLambdaBTree<String, String>> tmap2 = createTree(treeclass, s2);
         tmap2.put("abcd", testTree);
@@ -163,7 +163,7 @@ public class BTreeTest {
 
     public void OpaqueDeferredTransactionalTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
-        OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr);
+        OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr.getLocalInstance());
         testTree.put("key0", "abcd");
         final AbstractLambdaBTree<String, String> txMap = testTree;
         tx.setTransaction((ITransactionCommand) (opts) -> {
@@ -178,7 +178,7 @@ public class BTreeTest {
         testTree.getSMREngine().sync(txStamp);
         assertThat(testTree.get("key0"))
                 .isEqualTo("xxxx");
-        OpaqueDeferredTransaction txAbort = new OpaqueDeferredTransaction(cdr);
+        OpaqueDeferredTransaction txAbort = new OpaqueDeferredTransaction(cdr.getLocalInstance());
         final AbstractLambdaBTree<String, String> txMap2 = testTree;
         txAbort.setTransaction((ITransactionCommand) (opts) -> {
             String result = txMap2.get("key0");

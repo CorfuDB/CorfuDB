@@ -2,6 +2,7 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,10 +37,10 @@ public class TransactionalContext implements AutoCloseable {
      * @param ts            The timestamp this context occurs at.
      * @param cdr           The CorfuDBRuntime to pass through.
      */
-    public TransactionalContext(ISMREngine engine, ITimestamp ts, CorfuDBRuntime cdr, Class<? extends ITransaction> txType)
+    public TransactionalContext(ISMREngine engine, ITimestamp ts, ICorfuDBInstance cdr, Class<? extends ITransaction> txType)
     {
         try {
-            currentTX.set(txType.getConstructor(ISMREngine.class, ITimestamp.class, CorfuDBRuntime.class)
+            currentTX.set(txType.getConstructor(ISMREngine.class, ITimestamp.class, ICorfuDBInstance.class)
                     .newInstance(engine, ts, cdr));
         } catch (Exception e)
         {
@@ -54,10 +55,10 @@ public class TransactionalContext implements AutoCloseable {
      * @param res           The timestamp to put any mutations at.
      * @param cdr           The CorfuDBRuntime to pass through.
      */
-    public TransactionalContext(ISMREngine engine, ITimestamp ts, ITimestamp res, CorfuDBRuntime cdr, Class<? extends ITransaction> txType)
+    public TransactionalContext(ISMREngine engine, ITimestamp ts, ITimestamp res, ICorfuDBInstance cdr, Class<? extends ITransaction> txType)
     {
         try {
-            currentTX.set(txType.getConstructor(ISMREngine.class, ITimestamp.class, ITimestamp.class, CorfuDBRuntime.class)
+            currentTX.set(txType.getConstructor(ISMREngine.class, ITimestamp.class, ITimestamp.class, ICorfuDBInstance.class)
                     .newInstance(engine, ts, res, cdr));
         } catch (Exception e)
         {

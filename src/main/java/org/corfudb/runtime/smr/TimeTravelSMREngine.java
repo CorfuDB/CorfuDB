@@ -72,8 +72,7 @@ public class TimeTravelSMREngine<T> extends SimpleSMREngine<T> {
                             c.reverse(underlyingObject, new SimpleSMREngineOptions(new CompletableFuture<Object>()));
                         }
                         //this operation is non reversible, so unfortunately we have to play from the beginning...
-                        OneShotSMREngine<T> smrOS = new OneShotSMREngine<T>(stream.getRuntime().openStream(stream.getStreamID(),
-                                SimpleStream.class), type, streamPointer);
+                        OneShotSMREngine<T> smrOS = new OneShotSMREngine<T>(stream.getInstance().openStream(stream.getStreamID()), type, streamPointer);
                         smrOS.sync(streamPointer);
                         underlyingObject = smrOS.getObject();
                     } catch (Exception e) {

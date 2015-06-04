@@ -5,6 +5,7 @@ import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.stream.SimpleTimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.Serializer;
 
 import java.io.IOException;
@@ -18,15 +19,15 @@ public class LocalTransaction implements ITransaction {
     ISMREngine executingEngine;
     ITimestamp timestamp;
     ITimestamp res;
-    CorfuDBRuntime runtime;
+    ICorfuDBInstance instance;
     HashMap<UUID, BufferedSMREngine> spawnedEngines;
 
-    public LocalTransaction(ISMREngine executingEngine, ITimestamp timestamp, ITimestamp res, CorfuDBRuntime runtime)
+    public LocalTransaction(ISMREngine executingEngine, ITimestamp timestamp, ITimestamp res, ICorfuDBInstance instance)
     {
         this.executingEngine = executingEngine;
         this.timestamp = timestamp;
         this.res = res;
-        this.runtime = runtime;
+        this.instance = instance;
         this.spawnedEngines = new HashMap<UUID, BufferedSMREngine>();
     }
 
@@ -47,13 +48,13 @@ public class LocalTransaction implements ITransaction {
         if (streamID.equals(executingEngine.getStreamID()))
         {
             Object objClone = Serializer.copy(executingEngine.getObject());
-            BufferedSMREngine e = new BufferedSMREngine(objClone, timestamp, executingEngine.getStreamID(), runtime);
+            BufferedSMREngine e = new BufferedSMREngine(objClone, timestamp, executingEngine.getStreamID(), instance);
             spawnedEngines.put(streamID, e);
             return e;
         }
         else
         {
-            BufferedSMREngine e = new BufferedSMREngine(timestamp, executingEngine.getStreamID(), runtime, objClass);
+            BufferedSMREngine e = new BufferedSMREngine(timestamp, executingEngine.getStreamID(), instance, objClass);
             spawnedEngines.put(streamID, e);
             return e;
         }
@@ -70,14 +71,13 @@ public class LocalTransaction implements ITransaction {
     }
 
     /**
-     * Sets the CorfuDB runtime for this transaction. Used when deserializing
-     * the transaction.
+     * Set the CorfuDB instance for this transaction. Used during deserialization.
      *
-     * @param runtime The runtime to use for this transaction.
+     * @param instance The CorfuDB instance used for this tx.
      */
     @Override
-    public void setCorfuDBRuntime(CorfuDBRuntime runtime) {
-
+    public void setInstance(ICorfuDBInstance instance) {
+        this.instance = instance;
     }
 
     /**
@@ -88,8 +88,8 @@ public class LocalTransaction implements ITransaction {
      * @return the runtime
      */
     @Override
-    public CorfuDBRuntime getRuntime() {
-        return runtime;
+    public ICorfuDBInstance getInstance() {
+        return instance;
     }
 
     /**
@@ -141,7 +141,7 @@ public class LocalTransaction implements ITransaction {
             commands.put(i, l);
         }
         MultiCommand mc = new MultiCommand(commands);
-        runtime.getLocalInstance().getAddressSpace().write(((SimpleTimestamp)res).address, mc);
+        instance.getAddressSpace().write(((SimpleTimestamp)res).address, mc);
         return res;
     }
 }

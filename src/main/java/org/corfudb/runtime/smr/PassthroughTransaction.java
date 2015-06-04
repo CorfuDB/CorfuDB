@@ -4,6 +4,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -15,13 +16,13 @@ public class PassthroughTransaction implements ITransaction{
 
     ISMREngine executingEngine;
     ITimestamp timestamp;
-    CorfuDBRuntime runtime;
+    ICorfuDBInstance instance;
 
-    public PassthroughTransaction(ISMREngine executingEngine, ITimestamp timestamp, CorfuDBRuntime runtime)
+    public PassthroughTransaction(ISMREngine executingEngine, ITimestamp timestamp, ICorfuDBInstance instance)
     {
         this.executingEngine = executingEngine;
         this.timestamp = timestamp;
-        this.runtime = runtime;
+        this.instance = instance;
     }
 
     /**
@@ -40,7 +41,7 @@ public class PassthroughTransaction implements ITransaction{
         }
         else
         {
-            IStream sTemp = runtime.openStream(streamID, SimpleStream.class);
+            IStream sTemp = instance.openStream(streamID);
             ISMREngine engine = new OneShotSMREngine(sTemp, objClass, timestamp);
             engine.sync(timestamp);
             return engine;
@@ -57,28 +58,6 @@ public class PassthroughTransaction implements ITransaction{
 
     }
 
-    /**
-     * Sets the CorfuDB runtime for this transaction. Used when deserializing
-     * the transaction.
-     *
-     * @param runtime The runtime to use for this transaction.
-     */
-    @Override
-    public void setCorfuDBRuntime(CorfuDBRuntime runtime) {
-
-    }
-
-    /**
-     * return a pointer to the runtime managing this transaction.
-     * this is needed for transactions on objects which may create
-     * new objects during that transaction.
-     *
-     * @return the runtime
-     */
-    @Override
-    public CorfuDBRuntime getRuntime() {
-        return null;
-    }
 
     /**
      * Set the command to be executed for this transaction.
@@ -98,6 +77,28 @@ public class PassthroughTransaction implements ITransaction{
     @Override
     public void executeTransaction(ISMREngine engine) {
 
+    }
+
+    /**
+     * Set the CorfuDB instance for this transaction. Used during deserialization.
+     *
+     * @param instance The CorfuDB instance used for this tx.
+     */
+    @Override
+    public void setInstance(ICorfuDBInstance instance) {
+        this.instance = instance;
+    }
+
+    /**
+     * return a pointer to the runtime managing this transaction.
+     * this is needed for transactions on objects which may create
+     * new objects during that transaction.
+     *
+     * @return the runtime
+     */
+    @Override
+    public ICorfuDBInstance getInstance() {
+        return instance;
     }
 
     /**

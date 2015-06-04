@@ -4,6 +4,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +24,8 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
     T underlyingObject;
     ITimestamp ts;
     UUID streamID;
-    CorfuDBRuntime runtime;
+    ICorfuDBInstance instance;
+
     ArrayList<ISMREngineCommand<T>> commandBuffer;
 
     class BufferedSMREngineOptions implements ISMREngineOptions
@@ -38,7 +40,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
         {
             return this.returnResult;
         }
-        public CorfuDBRuntime getRuntime() { return runtime; }
+        public ICorfuDBInstance getInstance() { return instance; }
 
         @Override
         public UUID getEngineID() {
@@ -46,22 +48,22 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
         }
     }
 
-    public BufferedSMREngine(T underlyingObject, ITimestamp ts, UUID streamID, CorfuDBRuntime runtime)
+    public BufferedSMREngine(T underlyingObject, ITimestamp ts, UUID streamID, ICorfuDBInstance instance)
     {
         this.underlyingObject = underlyingObject;
         this.ts = ts;
         this.streamID = streamID;
-        this.runtime = runtime;
+        this.instance = instance;
         this.commandBuffer = new ArrayList<ISMREngineCommand<T>>();
     }
 
     @SuppressWarnings("unchecked")
-    public BufferedSMREngine(ITimestamp ts, UUID streamID, CorfuDBRuntime runtime, Class<?> objClass, Class<?>... args)
+    public BufferedSMREngine(ITimestamp ts, UUID streamID, ICorfuDBInstance instance, Class<?> objClass, Class<?>... args)
     {
         try {
             this.ts = ts;
             this.streamID = streamID;
-            this.runtime = runtime;
+            this.instance = instance;
 
             underlyingObject = (T) objClass
                     .getConstructor(Arrays.stream(args)
@@ -72,7 +74,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
             this.commandBuffer = new ArrayList<ISMREngineCommand<T>>();
 
             ITimestamp streamPointer;
-            IStream stream = runtime.getLocalInstance().openStream(streamID);
+            IStream stream = instance.openStream(streamID);
             streamPointer = stream.getCurrentPosition();
             //one shot sync
             while (ts.compareTo(streamPointer) > 0) {

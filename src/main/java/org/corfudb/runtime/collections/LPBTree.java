@@ -25,33 +25,29 @@ public class LPBTree<K extends Comparable<K>, V>
 
     public static boolean extremeDebug = false;
 
-    private LPBTNode getNodeById(CorfuDBRuntime runtime, UUID noid) {
+    private LPBTNode getNodeById(ICorfuDBInstance instance, UUID noid) {
         if (noid.compareTo(CorfuDBObject.oidnull) == 0)
             return null;
         if(m_nodes == null)
             m_nodes = new HashMap<>();
         LPBTNode n = m_nodes.getOrDefault(noid, null);
         if (n == null) {
-            if(runtime == null)
+            if(instance == null)
                 log.error("WHAT THE FREAKING ERG?");
-            ICorfuDBInstance instance = runtime.getLocalInstance();
-            IStream stream = instance.openStream(noid);
-            n = new LPBTNode(stream);
+            n = instance.openObject(noid, LPBTNode.class);
             m_nodes.put(noid, n);
         }
         return n;
     }
 
-    private LPBTEntry getEntryById(CorfuDBRuntime runtime, UUID noid) {
+    private LPBTEntry getEntryById(ICorfuDBInstance instance, UUID noid) {
         if (noid.compareTo(CorfuDBObject.oidnull) == 0)
             return null;
         if(m_entries == null)
             m_entries = new HashMap();
         LPBTEntry e = m_entries.getOrDefault(noid, null);
         if (e == null) {
-            ICorfuDBInstance instance = runtime.getLocalInstance();
-            IStream stream = instance.openStream(noid);
-            e = new LPBTEntry(stream);
+            e = instance.openObject(noid, LPBTEntry.class);
             m_entries.put(noid, e);
         }
         return e;
@@ -61,7 +57,7 @@ public class LPBTree<K extends Comparable<K>, V>
     public LPBTree(IStream stream, Class<? extends ISMREngine> smrClass) {
         try {
             streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, TreeContainer.class);
+            smr = instantiateSMREngine(stream, smrClass);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -70,8 +66,7 @@ public class LPBTree<K extends Comparable<K>, V>
 
     public LPBTree(IStream stream)
     {
-        streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<TreeContainer>(stream, TreeContainer.class);
+        this(stream, SimpleSMREngine.class);
     }
 
     @Override
@@ -83,7 +78,7 @@ public class LPBTree<K extends Comparable<K>, V>
         /* otherwise, create a new node... */
         IStream nodeStream = smr.getInstance().openStream(UUID.randomUUID());
         /* this node will be the root */
-        LPBTNode<K, V> e = new LPBTNode<K, V>(nodeStream);
+        LPBTNode e = getSMREngine().getInstance().openObject(UUID.randomUUID(), LPBTNode.class);
         e.writeChildCount(0);
         /* now propose the change to the root to the tree container */
         final UUID rootID = e.getStreamID();
@@ -153,9 +148,8 @@ public class LPBTree<K extends Comparable<K>, V>
      */
     public String printview() {
         return (String) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            CorfuDBRuntime runtime = opts.getRuntime();
-            LPBTNode node = getNodeById(runtime, tree.m_root);
-            opts.getReturnResult().complete(printview(opts.getRuntime(), tree, node, tree.m_height, "") + "\n");
+            LPBTNode node = getNodeById(opts.getInstance(), tree.m_root);
+            opts.getReturnResult().complete(printview(opts.getInstance(), tree, node, tree.m_height, "") + "\n");
         });
     }
 
@@ -168,7 +162,7 @@ public class LPBTree<K extends Comparable<K>, V>
      */
     private String
     printview(
-            CorfuDBRuntime runtime,
+            ICorfuDBInstance instance,
             TreeContainer tree,
             LPBTNode<K, V> node,
             int height,
@@ -180,7 +174,7 @@ public class LPBTree<K extends Comparable<K>, V>
         int nChildren = node.readChildCount();
         if(height == 0) {
             for(int i=0; i<nChildren; i++) {
-                LPBTEntry child = getEntryById(runtime, node.getChild(i));
+                LPBTEntry child = getEntryById(instance, node.getChild(i));
                 if(child == null) {
                     sb.append("OIDNULL");
                 } else {
@@ -198,18 +192,18 @@ public class LPBTree<K extends Comparable<K>, V>
                 if(i>0) {
                     sb.append(indent);
                     sb.append("(");
-                    sb.append(getEntryById(runtime, node.getChild(i)).readKey());
+                    sb.append(getEntryById(instance, node.getChild(i)).readKey());
                     sb.append(")\n");
                 }
-                LPBTEntry<K,V> echild = getEntryById(runtime, node.getChild(i));
+                LPBTEntry<K,V> echild = getEntryById(instance, node.getChild(i));
                 if(echild == null) {
                     sb.append("null-child-entry");
                 } else {
-                    LPBTNode next = getNodeById(runtime, echild.readNext());
+                    LPBTNode next = getNodeById(instance, echild.readNext());
                     if (next == null) {
                         sb.append("null-child-next");
                     } else {
-                        sb.append(printview(runtime, tree, next, height - 1, indent + "    "));
+                        sb.append(printview(instance, tree, next, height - 1, indent + "    "));
                     }
                 }
             }
@@ -224,9 +218,8 @@ public class LPBTree<K extends Comparable<K>, V>
     public String print() {
 
         return (String) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            CorfuDBRuntime runtime = opts.getRuntime();
-            LPBTNode node = getNodeById(runtime, tree.m_root);
-            String result = print(runtime, tree, node, tree.m_height, "") + "\n";
+            LPBTNode node = getNodeById(opts.getInstance(), tree.m_root);
+            String result = print(opts.getInstance(), tree, node, tree.m_height, "") + "\n";
             opts.getReturnResult().complete(result);
         });
     }
@@ -240,7 +233,7 @@ public class LPBTree<K extends Comparable<K>, V>
      */
     private String
     print(
-            CorfuDBRuntime runtime,
+            ICorfuDBInstance instance,
             TreeContainer tree,
             LPBTNode<K, V> node,
             int height,
@@ -251,7 +244,7 @@ public class LPBTree<K extends Comparable<K>, V>
         int nChildren = readchildcount(node);
         if(height == 0) {
             for(int i=0; i<nChildren; i++) {
-                LPBTEntry child = getEntryById(runtime, readchild(node, i));
+                LPBTEntry child = getEntryById(instance, readchild(node, i));
                 boolean deleted = readdeleted(child);
                 if(deleted)
                     sb.append("DEL: ");
@@ -269,8 +262,8 @@ public class LPBTree<K extends Comparable<K>, V>
                     sb.append(readkey(readchild(node, i)));
                     sb.append(")\n");
                 }
-                LPBTNode next = getNodeById(runtime, readnext(readchild(node, i)));
-                sb.append(print(runtime, tree, next, height - 1, indent + "    "));
+                LPBTNode next = getNodeById(instance, readnext(readchild(node, i)));
+                sb.append(print(instance, tree, next, height - 1, indent + "    "));
             }
         }
         return sb.toString();
@@ -306,7 +299,7 @@ public class LPBTree<K extends Comparable<K>, V>
             if (key != null) {
                 UUID root = readrootoid();
                 int height = readheight();
-                LPBTEntry entry = searchEntry(opts.getRuntime(), root, key, height);
+                LPBTEntry entry = searchEntry(opts.getInstance(), root, key, height);
                 if (entry != null) {
                     boolean deleted = readdeleted(entry);
                     if (!deleted) {
@@ -329,7 +322,7 @@ public class LPBTree<K extends Comparable<K>, V>
             if (key != null) {
                 UUID root = readrootoid();
                 int height = readheight();
-                LPBTEntry entry = searchEntry(opts.getRuntime(), root, key, height);
+                LPBTEntry entry = searchEntry(opts.getInstance(), root, key, height);
                 if (entry != null) {
                     boolean deleted = readdeleted(entry);
                     if (!deleted) {
@@ -356,7 +349,7 @@ public class LPBTree<K extends Comparable<K>, V>
             if (key != null) {
                 UUID root = readrootoid();
                 int height = readheight();
-                LPBTEntry entry = searchEntry(opts.getRuntime(), root, key, height);
+                LPBTEntry entry = searchEntry(opts.getInstance(), root, key, height);
                 if (entry != null) {
                     boolean deleted = readdeleted(entry);
                     if (!deleted) {
@@ -393,12 +386,11 @@ public class LPBTree<K extends Comparable<K>, V>
     public V
     put(K key, V value) {
         return (V) localCommandHelper((ISMRLocalCommand<TreeContainer>) (tree, opts) -> {
-            CorfuDBRuntime runtime = opts.getRuntime();
             V result = null;
             UUID root = tree.m_root;
             int height = tree.m_height;
             int size = tree.m_size;
-            LPBTEntry e = searchEntry(opts.getRuntime(), root, key, height);
+            LPBTEntry e = searchEntry(opts.getInstance(), root, key, height);
             if (e != null) {
                 if (!e.readDeleted())
                     result = (V) e.readValue();
@@ -410,19 +402,16 @@ public class LPBTree<K extends Comparable<K>, V>
                 if (unodeoid != CorfuDBObject.oidnull) {
                     // split required
                     UUID tUUID = Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
-                    IStream tstream = opts.getRuntime().getLocalInstance().openStream(tUUID);
-                    LPBTNode t = new LPBTNode(tstream);
+                    LPBTNode t = opts.getInstance().openObject(tUUID, LPBTNode.class);
                     t.writeChildCount(2);
-                    UUID rootchild0 = readchild(getNodeById(runtime, root), 0);
-                    UUID uchild0 = readchild(getNodeById(runtime, unodeoid), 0);
-                    Comparable r0key = readkey(getEntryById(runtime, rootchild0));
-                    Comparable u0key = readkey(getEntryById(runtime, uchild0));
+                    UUID rootchild0 = readchild(getNodeById(opts.getInstance(), root), 0);
+                    UUID uchild0 = readchild(getNodeById(opts.getInstance(), unodeoid), 0);
+                    Comparable r0key = readkey(getEntryById(opts.getInstance(), rootchild0));
+                    Comparable u0key = readkey(getEntryById(opts.getInstance(), uchild0));
                     UUID tc0UUID = Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
                     UUID tc1UUID = Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
-                    IStream tc0Stream = opts.getRuntime().getLocalInstance().openStream(tc0UUID);
-                    IStream tc1Stream = opts.getRuntime().getLocalInstance().openStream(tc1UUID);
-                    LPBTEntry tc0 = new LPBTEntry(tc0Stream);
-                    LPBTEntry tc1 = new LPBTEntry(tc1Stream);
+                    LPBTEntry tc0 = opts.getInstance().openObject(tc0UUID, LPBTEntry.class);
+                    LPBTEntry tc1 = opts.getInstance().openObject(tc1UUID, LPBTEntry.class);
                     tc0.writeKey((K) r0key);
                     tc1.writeKey((K) u0key);
                     writechild(t, 0, tc0.getStreamID());
@@ -447,20 +436,20 @@ public class LPBTree<K extends Comparable<K>, V>
      */
     private V
     search(
-        CorfuDBRuntime runtime,
+        ICorfuDBInstance instance,
         UUID oidnode,
         K key,
         int height
         )
     {
-        LPBTNode<K,V> node = getNodeById(runtime, oidnode);
+        LPBTNode<K,V> node = getNodeById(instance, oidnode);
         int nChildren = readchildcount(node);
 
         if(height == 0) {
             // external node
             for(int i=0; i<nChildren; i++) {
                 UUID oidchild = readchild(node, i);
-                LPBTEntry child = getEntryById(runtime, oidchild);
+                LPBTEntry child = getEntryById(instance, oidchild);
                 Comparable ckey = readkey(child);
                 if(eq(key, ckey))
                     return (V) readvalue(child);
@@ -469,7 +458,7 @@ public class LPBTree<K extends Comparable<K>, V>
             // internal node
             for(int i=0; i<nChildren; i++) {
                 if(i+1 == nChildren || lt(key, readkey(readchild(node, i+1)))) {
-                    return search(runtime, readnext(readchild(node, i)), key, height - 1);
+                    return search(instance, readnext(readchild(node, i)), key, height - 1);
                 }
             }
         }
@@ -486,7 +475,7 @@ public class LPBTree<K extends Comparable<K>, V>
      */
     private LPBTEntry
     searchEntry(
-        CorfuDBRuntime runtime,
+        ICorfuDBInstance instance,
         UUID oidnode,
         K key,
         int height
@@ -495,14 +484,14 @@ public class LPBTree<K extends Comparable<K>, V>
         if(oidnode == CorfuDBObject.oidnull)
             return null;
 
-        LPBTNode<K, V> node = getNodeById(runtime, oidnode);
+        LPBTNode<K, V> node = getNodeById(instance, oidnode);
         int nChildren = readchildcount(node);
 
         if (height == 0) {
             // external node
             for (int i = 0; i < nChildren; i++) {
                 UUID oidchild = readchild(node, i);
-                LPBTEntry child = getEntryById(runtime, oidchild);
+                LPBTEntry child = getEntryById(instance, oidchild);
                 Comparable ckey = readkey(child);
                 if (eq(key, ckey))
                     return child;
@@ -511,7 +500,7 @@ public class LPBTree<K extends Comparable<K>, V>
             // internal node
             for (int i = 0; i < nChildren; i++) {
                 if (i + 1 == nChildren || lt(key, readkey(readchild(node, i + 1)))) {
-                    return searchEntry(runtime, readnext(readchild(node, i)), key, height - 1);
+                    return searchEntry(instance, readnext(readchild(node, i)), key, height - 1);
                 }
             }
         }
@@ -537,12 +526,10 @@ public class LPBTree<K extends Comparable<K>, V>
         )
     {
         int idx = 0;
-        CorfuDBRuntime runtime = opts.getRuntime();
-        LPBTNode<K,V> node = getNodeById(runtime, oidnode);
+        LPBTNode<K,V> node = getNodeById(opts.getInstance(), oidnode);
         int nChildren = readchildcount(node);
         UUID eUUID = Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
-        IStream eStream = opts.getRuntime().getLocalInstance().openStream(eUUID);
-        LPBTEntry entry = new LPBTEntry(eStream);
+        LPBTEntry entry = opts.getInstance().openObject(eUUID, LPBTEntry.class);
         entry.writeKey(key);
         entry.writeValue(value);
 
@@ -557,9 +544,9 @@ public class LPBTree<K extends Comparable<K>, V>
                     UUID oidunode = insert(opts, tree, readnext(readchild(node, idx++)), key, value, height-1);
                     if(oidunode == CorfuDBObject.oidnull)
                         return CorfuDBObject.oidnull;
-                    LPBTNode<K, V> unode = getNodeById(runtime, oidunode);
+                    LPBTNode<K, V> unode = getNodeById(opts.getInstance(), oidunode);
                     UUID uchild0 = readchild(unode, 0);
-                    LPBTEntry<K, V> uentry0 = getEntryById(runtime, uchild0);
+                    LPBTEntry<K, V> uentry0 = getEntryById(opts.getInstance(), uchild0);
                     Comparable ukey = readkey(uentry0);
                     writekey(entry, ukey);
                     writenext(entry, oidunode);
@@ -591,8 +578,7 @@ public class LPBTree<K extends Comparable<K>, V>
     {
         int B = tree.B;
         UUID tUUID = Utils.nextDeterministicUUID(getStreamID(), ++tree.m_idseed);
-        IStream tStream = opts.getRuntime().getLocalInstance().openStream(tUUID);
-        LPBTNode t = new LPBTNode(tStream);
+        LPBTNode t = opts.getInstance().openObject(tUUID, LPBTNode.class);
         t.writeChildCount(B / 2);
         writechildcount(node, B / 2);
         for(int i=0; i<B/2; i++)
@@ -613,7 +599,7 @@ public class LPBTree<K extends Comparable<K>, V>
     protected LPBTNode<K, V>
     readroot() {
         return (LPBTNode<K, V>) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            opts.getReturnResult().complete(getNodeById(opts.getRuntime(), tree.m_root));
+            opts.getReturnResult().complete(getNodeById(opts.getInstance(), tree.m_root));
         });
     }
 
@@ -792,7 +778,7 @@ public class LPBTree<K extends Comparable<K>, V>
         )
     {
         return (Comparable) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            LPBTEntry<K, V> entry = getEntryById(opts.getRuntime(), entryoid);
+            LPBTEntry<K, V> entry = getEntryById(opts.getInstance(), entryoid);
             opts.getReturnResult().complete(entry.readKey());
         });
     }
@@ -832,7 +818,7 @@ public class LPBTree<K extends Comparable<K>, V>
             UUID entryoid
         ) {
         return (UUID) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            LPBTEntry<K, V> entry = getEntryById(opts.getRuntime(), entryoid);
+            LPBTEntry<K, V> entry = getEntryById(opts.getInstance(), entryoid);
             opts.getReturnResult().complete(entry.readNext());
         });
     }

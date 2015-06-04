@@ -45,7 +45,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         {
             return this.returnResult;
         }
-        public CorfuDBRuntime getRuntime() { return stream.getRuntime(); }
+        public ICorfuDBInstance getInstance() { return stream.getInstance(); }
 
         @Override
         public UUID getEngineID() {
@@ -129,14 +129,14 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     if (entry instanceof ITransaction)
                     {
                         ITransaction transaction = (ITransaction) entry;
-                        transaction.setCorfuDBRuntime(stream.getRuntime());
+                        transaction.setInstance(stream.getInstance());
                         transaction.executeTransaction(this);
                     }
                     else if (entry.getPayload() instanceof SMRLocalCommandWrapper)
                     {
                         SMRLocalCommandWrapper<T> function = (SMRLocalCommandWrapper<T>) entry.getPayload();
                         try (TransactionalContext tc =
-                                     new TransactionalContext(this, entry.getTimestamp(), function.destination, stream.getRuntime(), LocalTransaction.class)) {
+                                     new TransactionalContext(this, entry.getTimestamp(), function.destination, stream.getInstance(), LocalTransaction.class)) {
                             ITimestamp entryTS = entry.getTimestamp();
                             CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
                             completionTable.remove(entryTS);
@@ -145,7 +145,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     }
                     else {
                         try (TransactionalContext tc =
-                                     new TransactionalContext(this, entry.getTimestamp(), stream.getRuntime(), PassthroughTransaction.class)) {
+                                     new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
                             ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
                             ITimestamp entryTS = entry.getTimestamp();
                             CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
@@ -285,6 +285,6 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
      */
     @Override
     public ICorfuDBInstance getInstance() {
-        return stream.getRuntime().getLocalInstance();
+        return stream.getInstance();
     }
 }

@@ -6,10 +6,7 @@ import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.stream.SimpleTimestamp;
-import org.corfudb.runtime.view.ISequencer;
-import org.corfudb.runtime.view.IWriteOnceAddressSpace;
-import org.corfudb.runtime.view.StreamingSequencer;
-import org.corfudb.runtime.view.WriteOnceAddressSpace;
+import org.corfudb.runtime.view.*;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -35,7 +32,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     ITransactionCommand transaction;
     List<UUID> streamList;
     ITimestamp timestamp;
-    transient CorfuDBRuntime runtime;
+    transient ICorfuDBInstance instance;
     transient ISMREngine executingEngine;
 
     class DeferredTransactionOptions implements ITransactionOptions
@@ -50,13 +47,11 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         }
     }
 
-    public DeferredTransaction(CorfuDBRuntime runtime)
+    public DeferredTransaction(ICorfuDBInstance instance)
     {
         streamList = null;
-        this.runtime = runtime;
+        this.instance = instance;
     }
-
-    public CorfuDBRuntime getRuntime() { return runtime; }
 
     /**
      * Returns an SMR engine for a transactional context.
@@ -74,7 +69,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         }
         else
         {
-            IStream sTemp = runtime.openStream(streamID, SimpleStream.class);
+            IStream sTemp = instance.openStream(streamID);
             ISMREngine engine = new OneShotSMREngine(sTemp, objClass, timestamp);
             engine.sync(timestamp);
             return engine;
@@ -92,14 +87,25 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     }
 
     /**
-     * Sets the CorfuDB runtime for this transaction. Used when deserializing
-     * the transaction.
+     * Set the CorfuDB instance for this transaction. Used during deserialization.
      *
-     * @param runtime The runtime to use for this transaction.
+     * @param instance The CorfuDB instance used for this tx.
      */
     @Override
-    public void setCorfuDBRuntime(CorfuDBRuntime runtime) {
-        this.runtime = runtime;
+    public void setInstance(ICorfuDBInstance instance) {
+        this.instance = instance;
+    }
+
+    /**
+     * return a pointer to the runtime managing this transaction.
+     * this is needed for transactions on objects which may create
+     * new objects during that transaction.
+     *
+     * @return the runtime
+     */
+    @Override
+    public ICorfuDBInstance getInstance() {
+        return instance;
     }
 
     /**
@@ -153,8 +159,8 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         /* The simple transaction just assumes that everything is on the same log,
          * so picking the next valid sequence is acceptable.
          */
-        Long sequence = runtime.getLocalInstance().getSequencer().getNext();
-        runtime.getLocalInstance().getAddressSpace().write(sequence, this);
+        Long sequence = instance.getSequencer().getNext();
+        instance.getAddressSpace().write(sequence, this);
         return new SimpleTimestamp(sequence);
     }
 

@@ -274,16 +274,6 @@ class HopAdapterStream implements IAdapterStream
     }
 
     /**
-     * Get the runtime that this stream belongs to.
-     *
-     * @return The runtime the stream belongs to.
-     */
-    @Override
-    public CorfuDBRuntime getRuntime() {
-        return rt;
-    }
-
-    /**
      * Returns a fresh or cached timestamp, which can serve as a linearization point. This function
      * may return a non-linearizable (invalid) timestamp which may never occur in the ordering
      * due to a move/epoch change.

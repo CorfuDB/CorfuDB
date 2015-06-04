@@ -22,7 +22,7 @@ public interface ISMREngine<T> {
     interface ISMREngineOptions
     {
         CompletableFuture<Object> getReturnResult();
-        CorfuDBRuntime getRuntime();
+        ICorfuDBInstance getInstance();
         UUID getEngineID();
     }
 

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.Serializer;
 
 /**
@@ -8,9 +9,9 @@ import org.corfudb.runtime.view.Serializer;
  */
 public class OpaqueDeferredTransaction extends DeferredTransaction {
 
-    public OpaqueDeferredTransaction(CorfuDBRuntime runtime)
+    public OpaqueDeferredTransaction(ICorfuDBInstance instance)
     {
-        super(runtime);
+        super(instance);
     }
 
     /**

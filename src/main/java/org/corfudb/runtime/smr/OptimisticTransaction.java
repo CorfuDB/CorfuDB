@@ -3,6 +3,7 @@ package org.corfudb.runtime.smr;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -18,7 +19,7 @@ public class OptimisticTransaction implements ITransaction, IStreamEntry, Serial
     ITransactionCommand transaction;
     List<UUID> streamList;
     ITimestamp timestamp;
-    transient CorfuDBRuntime runtime;
+    transient ICorfuDBInstance instance;
     transient ISMREngine executingEngine;
 
     class OptimisticTransactionOptions implements ITransactionOptions
@@ -33,13 +34,11 @@ public class OptimisticTransaction implements ITransaction, IStreamEntry, Serial
         }
     }
 
-    public OptimisticTransaction(CorfuDBRuntime runtime)
+    public OptimisticTransaction(ICorfuDBInstance instance)
     {
         streamList = null;
-        this.runtime = runtime;
+        this.instance = instance;
     }
-
-    public CorfuDBRuntime getRuntime() { return runtime; }
 
     /**
      * Gets the list of of the streams this entry belongs to.
@@ -115,15 +114,27 @@ public class OptimisticTransaction implements ITransaction, IStreamEntry, Serial
     }
 
     /**
-     * Sets the CorfuDB runtime for this transaction. Used when deserializing
-     * the transaction.
+     * Set the CorfuDB instance for this transaction. Used during deserialization.
      *
-     * @param runtime The runtime to use for this transaction.
+     * @param instance The CorfuDB instance used for this tx.
      */
     @Override
-    public void setCorfuDBRuntime(CorfuDBRuntime runtime) {
-
+    public void setInstance(ICorfuDBInstance instance) {
+        this.instance = instance;
     }
+
+    /**
+     * return a pointer to the runtime managing this transaction.
+     * this is needed for transactions on objects which may create
+     * new objects during that transaction.
+     *
+     * @return the runtime
+     */
+    @Override
+    public ICorfuDBInstance getInstance() {
+        return instance;
+    }
+
 
     /**
      * Set the command to be executed for this transaction.

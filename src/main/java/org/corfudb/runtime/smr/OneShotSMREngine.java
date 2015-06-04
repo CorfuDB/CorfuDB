@@ -4,6 +4,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -42,7 +43,7 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
             return this.returnResult;
         }
 
-        public CorfuDBRuntime getRuntime() { return stream.getRuntime(); }
+        public ICorfuDBInstance getInstance() { return stream.getInstance(); }
 
         @Override
         public UUID getEngineID() {
