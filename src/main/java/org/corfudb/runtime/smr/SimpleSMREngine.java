@@ -140,6 +140,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                             ITimestamp entryTS = entry.getTimestamp();
                             CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
                             completionTable.remove(entryTS);
+                            if (completion == null) {completion = new CompletableFuture<>();}
                             function.command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
                         }
                     }
@@ -149,6 +150,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                             ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
                             ITimestamp entryTS = entry.getTimestamp();
                             CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
+                            if (completion == null) {completion = new CompletableFuture<>();}
                             completionTable.remove(entryTS);
                             if (entry instanceof MultiCommand)
                             {

@@ -5,14 +5,11 @@ import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
-import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.*;
 import org.junit.Before;
 import org.junit.Test;
-import sun.java2d.pipe.SpanShapeRenderer;
 
 import java.util.UUID;
-import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.*;
 /**
