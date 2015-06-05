@@ -149,7 +149,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * was an error deleting the stream (does not exist).
      */
     @Override
-    public boolean deleteStream(UUID id) {
+    public boolean deleteStream(UUID id)
+    {
         throw new UnsupportedOperationException("Currently unsupported!");
     }
 

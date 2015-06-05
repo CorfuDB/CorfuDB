@@ -1,9 +1,6 @@
 package org.corfudb.runtime.protocols.logunits;
 
-import org.corfudb.runtime.NetworkException;
-import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.TrimmedException;
-import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -146,7 +143,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
      * @throws NetworkException         If there is a network problem (not thrown by memory implementation).
      */
     @Override
-    public void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException {
+    public void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException {
         if (simFailure)
         {
             throw new NetworkException("Unit in simulated failure mode!", this, address, true);

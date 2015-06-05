@@ -83,7 +83,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
     }
 
     public void write(long address, Serializable s)
-        throws IOException, OverwriteException, TrimmedException
+        throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
     {
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {
@@ -96,7 +96,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
     }
     public void write(long address, byte[] data)
-        throws OverwriteException, TrimmedException
+        throws OverwriteException, TrimmedException, OutOfSpaceException
     {
         while (true)
         {

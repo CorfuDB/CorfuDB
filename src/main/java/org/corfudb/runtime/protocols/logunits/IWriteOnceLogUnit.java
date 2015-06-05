@@ -15,10 +15,7 @@
 
 package org.corfudb.runtime.protocols.logunits;
 
-import org.corfudb.runtime.NetworkException;
-import org.corfudb.runtime.UnwrittenException;
-import org.corfudb.runtime.TrimmedException;
-import org.corfudb.runtime.OverwriteException;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
 /**
@@ -37,7 +34,7 @@ import org.corfudb.runtime.protocols.IServerProtocol;
  */
 
 public interface IWriteOnceLogUnit extends IServerProtocol {
-    void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException;
+    void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
     byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException;
     void trim(long address) throws NetworkException;
 

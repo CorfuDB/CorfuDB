@@ -81,13 +81,13 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
     }
 
     public void write(long address, Serializable s)
-        throws IOException, OverwriteException, TrimmedException
+        throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
     {
         write(address, Serializer.serialize_compressed(s));
     }
 
     public void write(long address, byte[] data)
-        throws OverwriteException, TrimmedException
+        throws OverwriteException, TrimmedException, OutOfSpaceException
     {
         while (true)
         {

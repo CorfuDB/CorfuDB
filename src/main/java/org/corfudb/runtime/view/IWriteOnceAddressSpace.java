@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.view;
 
+import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.TrimmedException;
 import org.corfudb.runtime.UnwrittenException;
@@ -28,10 +29,10 @@ import java.io.Serializable;
 
 public interface IWriteOnceAddressSpace {
     void write(long address, Serializable s)
-    throws IOException, OverwriteException, TrimmedException;
+    throws IOException, OverwriteException, TrimmedException, OutOfSpaceException;
 
     void write(long address, byte[] data)
-    throws OverwriteException, TrimmedException;
+    throws OverwriteException, TrimmedException, OutOfSpaceException;
 
     byte[] read(long address)
     throws UnwrittenException, TrimmedException;

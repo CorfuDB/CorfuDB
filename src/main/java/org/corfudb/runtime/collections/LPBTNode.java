@@ -15,11 +15,6 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
     ITransaction tx;
     UUID streamID;
 
-    public LPBTNode(LPBTNode<K, V> map, ITransaction tx) {
-        this.streamID = map.streamID;
-        this.tx = tx;
-    }
-
     @SuppressWarnings("unchecked")
     public LPBTNode(IStream stream, Class<? extends ISMREngine> smrClass) {
         try {

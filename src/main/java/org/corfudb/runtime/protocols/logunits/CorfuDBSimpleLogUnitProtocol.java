@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.protocols.logunits;
 
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.PooledThriftClient;
 
@@ -38,11 +39,6 @@ import java.nio.ByteBuffer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.corfudb.runtime.NetworkException;
-import org.corfudb.runtime.UnwrittenException;
-import org.corfudb.runtime.TrimmedException;
-import org.corfudb.runtime.OverwriteException;
 
 public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 {
@@ -125,7 +121,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     }
 
     public void write(long address, byte[] data)
-    throws OverwriteException, TrimmedException, NetworkException
+    throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException
     {
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
@@ -149,6 +145,10 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             else if(ec.equals(ErrorCode.ERR_STALEEPOCH))
             {
                 throw new NetworkException("Writing to log unit in wrong epoch", this, address, false);
+            }
+            else if (ec.equals(ErrorCode.ERR_FULL))
+            {
+                throw new OutOfSpaceException("Out of space!", address);
             }
         }
         catch (TException e)
