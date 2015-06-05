@@ -62,7 +62,7 @@ The default configuration files will start a single-node deployment
 of corfuDB. To start this default deployment, run:
 
 ```
-$ bin/furunall.sh --cmd start
+$ bin/crunall.sh --cmd start
 ```
 
 You may have to run the script as superuser (i.e., with `sudo`).
@@ -70,7 +70,7 @@ To stop the deployment, simply call the script with `--cmd stop` as
 an argument. Other options include `--cmd restart` and `--cmd status`. to run a replicated log with `n` copies on a single node, use:
 
 ```
-$ bin/furunall.sh --cmd start --unitcnt n
+$ bin/crunall.sh --cmd start --unitcnt n
 ```
 
 ## Checking if the deployment is working
@@ -94,7 +94,7 @@ one of sequencer, logunit, configmaster.
 
 ## Bringing up a custom CorfuDB deployment
 
-The `furunall.sh` single node deployment brings up all the components of a single corfu log. They are:
+The `crunall.sh` single node deployment brings up all the components of a single corfu log. They are:
 
 *Sequencer* - provides unique sequence numbers to clients. Only one
 sequencer is required per deployment.
@@ -107,11 +107,11 @@ one of these may exist per deployment.
 
 Each corfudb role needs a configuration file that contains its port number and other essential parameters. 
 
-The single-node deployment script `furunall.sh` generates configuration files for all roles under the `/var/tmp` directory. Sample configuration files are provided in the `conf` directory and may be changed manually.
+The single-node deployment script `crunall.sh` generates configuration files for all roles under the `/var/tmp` directory. Sample configuration files are provided in the `conf` directory and may be changed manually.
 
-The `bin/furun.sh` script is used to launch each component. The script takes the following syntax:
+The `bin/crun.sh` script is used to launch each component. The script takes the following syntax:
 
-`bin/furun.sh --unit {sequencer|configmaster|logunit.port> --cmd {start|stop|restart|status} [--configdir <dir>]`
+`bin/crun.sh --unit {sequencer|configmaster|logunit.port> --cmd {start|stop|restart|status} [--configdir <dir>]`
 
 For example, running:
 
@@ -120,12 +120,12 @@ For example, running:
 Will look for a file `/var/tmp/sequencer.yml`, and start the service.
 
 For example, running the simple deployment script
-`bin/furunall.sh start` runs:
+`bin/crunall.sh start` runs:
 
 ```
-$ bin/furun.sh --unit sequencer --cmd start
-$ bin/furun.sh -unit logunit --cmd start
-$ bin/furun.sh --unit configmaster --cmd start
+$ bin/crun.sh --unit sequencer --cmd start
+$ bin/crun.sh -unit logunit --cmd start
+$ bin/crun.sh --unit configmaster --cmd start
 ```
 
 ## Deployment Tools
