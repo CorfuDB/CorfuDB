@@ -65,6 +65,7 @@ public class CorfuDBRuntime implements AutoCloseable {
     private LocalDateTime lastInvalidation;
     private LocalDateTime backOffTime;
     private long backOff = 0;
+    private static final HashMap<String, CorfuDBRuntime> s_rts = new HashMap();
 
     private ICorfuDBInstance localInstance;
 
@@ -95,7 +96,7 @@ public class CorfuDBRuntime implements AutoCloseable {
      *                              a local in memory instance of CorfuDB with a single
      *                              stream unit and sequencer.
      */
-    public CorfuDBRuntime(String configurationString) {
+    private CorfuDBRuntime(String configurationString) {
         this.configurationString = configurationString;
 
         viewLock = new StampedLock();
@@ -111,6 +112,40 @@ public class CorfuDBRuntime implements AutoCloseable {
         }
         startViewManager();
     }
+
+    /**
+     * interface for acquiring singleton runtime.
+     * @param configurationString
+     * @return
+     */
+    public static CorfuDBRuntime getRuntime(String configurationString) {
+        synchronized (s_rts) {
+            CorfuDBRuntime rt = s_rts.getOrDefault(configurationString, null);
+            if(rt == null) {
+                rt = new CorfuDBRuntime(configurationString);
+                s_rts.put(configurationString, rt);
+            }
+            return rt;
+        }
+    }
+
+    /**
+     * API for acquiring a runtime object. Generally, CorfuDBRuntime should
+     * be a singleton, and getRuntime is the way to get a reference to said
+     * singleton. However, there are scenarios (e.g. tests) where forcing the
+     * creation of a fresh runtime object is actually the right thing to do.
+     * TODO: refactor to discourage use of this API by user code.
+     * @param configurationString
+     * @return
+     */
+    public static CorfuDBRuntime createRuntime(String configurationString) {
+        synchronized (s_rts) {
+            CorfuDBRuntime rt = new CorfuDBRuntime(configurationString);
+            s_rts.put(configurationString, rt);
+            return rt;
+        }
+    }
+
 
     /**
      * Starts the view manager thread. The view manager retrieves the view

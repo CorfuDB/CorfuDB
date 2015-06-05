@@ -17,21 +17,14 @@ import java.util.function.Supplier;
 public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map<K,V> {
 
     transient ISMREngine<ConcurrentHashMap> smr;
-    ITransaction tx;
     UUID streamID;
-
-    public CDBSimpleMap(CDBSimpleMap<K,V> map, ITransaction tx)
-    {
-        this.streamID = map.streamID;
-        this.tx = tx;
-    }
 
     @SuppressWarnings("unchecked")
     public CDBSimpleMap(IStream stream, Class<? extends ISMREngine> smrClass)
     {
         try {
             streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, ConcurrentHashMap.class);
+            smr = instantiateSMREngine(stream, smrClass);
         }
         catch (Exception e)
         {
@@ -39,10 +32,10 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
         }
     }
 
+    @Deprecated
     public CDBSimpleMap(IStream stream)
     {
-        streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<ConcurrentHashMap>(stream, ConcurrentHashMap.class);
+        this(stream, SimpleSMREngine.class);
     }
 
     /**
@@ -370,15 +363,5 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     @SuppressWarnings("unchecked")
     public void setUnderlyingSMREngine(ISMREngine engine) {
         this.smr = engine;
-    }
-
-    /**
-     * Get the underlying transaction
-     *
-     * @return The transaction this object is currently participating in.
-     */
-    @Override
-    public ITransaction getUnderlyingTransaction() {
-        return tx;
     }
 }

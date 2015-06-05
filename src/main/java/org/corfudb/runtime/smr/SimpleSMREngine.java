@@ -2,27 +2,33 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.entries.CorfuDBEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 5/1/15.
  */
 public class SimpleSMREngine<T> implements ISMREngine<T> {
 
+    private final Logger log = LoggerFactory.getLogger(SimpleSMREngine.class);
+
     IStream stream;
     T underlyingObject;
-    ITimestamp streamPointer;
+    public ITimestamp streamPointer;
     ITimestamp lastProposal;
     Class<T> type;
     HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
@@ -39,16 +45,33 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         {
             return this.returnResult;
         }
+        public ICorfuDBInstance getInstance() { return stream.getInstance(); }
+
+        @Override
+        public UUID getEngineID() {
+            return stream.getStreamID();
+        }
     }
 
-    public SimpleSMREngine(IStream stream, Class<T> type)
+    public SimpleSMREngine(IStream stream, Class<T> type, Class<?>... args)
     {
         try {
             this.stream = stream;
             this.type = type;
+            if (!ITimestamp.isMin(stream.getCurrentPosition()))
+            {
+                throw new RuntimeException(
+                        "Attempt to start SMR engine on a stream which is not at the beginning (pos="
+                                + stream.getCurrentPosition() + ")");
+            }
             streamPointer = stream.getCurrentPosition();
             completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
-            underlyingObject = type.getConstructor().newInstance();
+
+            underlyingObject = type
+                    .getConstructor(Arrays.stream(args)
+                            .map(Class::getClass)
+                            .toArray(Class[]::new))
+                    .newInstance(args);
         }
         catch (Exception e)
         {
@@ -98,19 +121,50 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             while (ts.compareTo(streamPointer) > 0) {
                 try {
                     IStreamEntry entry = stream.readNextEntry();
+                    if (entry == null)
+                    {
+                        // we've reached the end of this stream.
+                        return;
+                    }
                     if (entry instanceof ITransaction)
                     {
                         ITransaction transaction = (ITransaction) entry;
-                        transaction.setCorfuDBRuntime(stream.getRuntime());
+                        transaction.setInstance(stream.getInstance());
                         transaction.executeTransaction(this);
                     }
+                    else if (entry.getPayload() instanceof SMRLocalCommandWrapper)
+                    {
+                        SMRLocalCommandWrapper<T> function = (SMRLocalCommandWrapper<T>) entry.getPayload();
+                        try (TransactionalContext tc =
+                                     new TransactionalContext(this, entry.getTimestamp(), function.destination,
+                                             stream.getInstance(), LocalTransaction.class)) {
+                            ITimestamp entryTS = entry.getTimestamp();
+                            CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
+                            completionTable.remove(entryTS);
+                            if (completion == null) {completion = new CompletableFuture<>();}
+                            function.command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                        }
+                    }
                     else {
-                        ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
-                        CompletableFuture<Object> completion = completionTable.remove(entry.getTimestamp());
-                        function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                        try (TransactionalContext tc =
+                                     new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
+                            ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
+                            ITimestamp entryTS = entry.getTimestamp();
+                            CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
+                            if (completion == null) {completion = new CompletableFuture<>();}
+                            completionTable.remove(entryTS);
+                            if (entry instanceof MultiCommand)
+                            {
+                                completion = new CompletableFuture<>();
+                            }
+                            // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
+                            function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                        }
                     }
                 } catch (Exception e) {
-                    //ignore entries we don't know what to do about.
+                    log.error("exception during sync: ", e);
+                    log.error("playback at pointer = " + stream.getCurrentPosition());
+                    log.warn("CJR: why is it ok to suppress an exception during sync?");
                 }
                 streamPointer = stream.getCurrentPosition();
             }
@@ -144,6 +198,37 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             if (completion != null) { completionTable.put(t, completion); }
             lastProposal = t;
             return t;
+        }
+        catch (Exception e)
+        {
+            //well, propose is technically not reliable, so we can just silently drop
+            //any exceptions.
+            return null;
+        }
+    }
+
+    /**
+     * Propose a local command to the SMR engine. A local command is one which is executed locally
+     * only, but may propose other commands which affect multiple objects.
+     *
+     * @param command    A lambda representing the command to be proposed
+     * @param completion A completion to be fulfilled.
+     * @param readOnly   True, if the command is read only, false otherwise.
+     * @return A timestamp representing the command proposal time.
+     */
+    @Override
+    public ITimestamp propose(ISMRLocalCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
+        if (readOnly)
+        {
+            command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+            return streamPointer;
+        }
+        try {
+            ITimestamp[] t = stream.reserve(2);
+            if (completion != null) { completionTable.put(t[0], completion); }
+            stream.write(t[0], new SMRLocalCommandWrapper<>(command, t[1]));
+            lastProposal = t[0];
+            return t[0];
         }
         catch (Exception e)
         {
@@ -194,5 +279,15 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     @Override
     public UUID getStreamID() {
         return stream.getStreamID();
+    }
+
+    /**
+     * Get the CorfuDB instance that supports this SMR engine.
+     *
+     * @return A CorfuDB instance.
+     */
+    @Override
+    public ICorfuDBInstance getInstance() {
+        return stream.getInstance();
     }
 }

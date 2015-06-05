@@ -1,6 +1,8 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -27,6 +29,13 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
         {
             return this.returnResult;
         }
+        public ICorfuDBInstance getInstance() { return null; }
+
+        @Override
+        public UUID getEngineID() {
+            return null;
+        }
+
     }
 
     T underlyingObject;

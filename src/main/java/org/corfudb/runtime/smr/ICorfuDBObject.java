@@ -1,5 +1,6 @@
 package org.corfudb.runtime.smr;
 
+import com.esotericsoftware.kryo.Kryo;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -14,6 +15,7 @@ import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
@@ -36,10 +38,8 @@ public interface ICorfuDBObject<T> extends Serializable {
         //We need this until we implement custom serialization
         if (getUnderlyingSMREngine() == null)
         {
-            CorfuDBRuntime cdr = new CorfuDBRuntime("memory");
-            IWriteOnceAddressSpace woas = new WriteOnceAddressSpace(cdr);
-            IStreamingSequencer seq = new StreamingSequencer(cdr);
-            IStream stream = new SimpleStream(getStreamID(), seq, woas, cdr);
+            CorfuDBRuntime cdr = CorfuDBRuntime.getRuntime("memory");
+            IStream stream = cdr.getLocalInstance().openStream(getStreamID());
             SimpleSMREngine e = new SimpleSMREngine(stream, getUnderlyingType());
             e.sync(null);
             setUnderlyingSMREngine(e);
@@ -61,7 +61,7 @@ public interface ICorfuDBObject<T> extends Serializable {
      * Get underlying SMR engine
      * @return  The SMR engine this object was instantiated under.
      */
-    ISMREngine getUnderlyingSMREngine();
+    ISMREngine<T> getUnderlyingSMREngine();
 
     /**
      * Set underlying SMR engine
@@ -73,12 +73,16 @@ public interface ICorfuDBObject<T> extends Serializable {
      * Get the underlying transaction
      * @return  The transaction this object is currently participating in.
      */
-    ITransaction getUnderlyingTransaction();
+    default ITransaction getUnderlyingTransaction()
+    {
+        return TransactionalContext.currentTX.get();
+    }
 
     /**
      * Gets a transactional context for this object.
      * @return              A transactional context to be used during a transaction.
      */
+    @Deprecated
     @SuppressWarnings("unchecked")
     default T getTransactionalContext(ITransaction tx)
     {
@@ -131,6 +135,34 @@ public interface ICorfuDBObject<T> extends Serializable {
     }
 
     /**
+     * Called whenever a local command is to be proposed. A local command
+     * is a command which is processed only at the local client, but
+     * may generate results which insert commands into the log.
+     * @param command       The local command to be executed.
+     * @return              True, if the command succeeds. False otherwise.
+     */
+    default Object localCommandHelper(ISMRLocalCommand command)
+    {
+        CompletableFuture<Object> o = new CompletableFuture<Object>();
+        ITimestamp proposal = getSMREngine().propose(command, o);
+        if (!isAutomaticallyPlayedBack()) {getSMREngine().sync(proposal);}
+        return  o.join();
+    }
+
+    /**
+     * Handles upcalls, if implemented. When an SMR engine encounters
+     * a upcall, it calls this handler. This default upcall handler
+     * does nothing.
+     * @param o             The object passed to the upcall handler.
+     * @param cf            A completable future to be returned to the
+     *                      accessor.
+     */
+    default void upcallHandler(Object o, CompletableFuture<Object> cf)
+    {
+
+    }
+
+    /**
      * Whether or not the object has been registered for automatic playback.
      * @return              True if the object is being automatically played back,
      *                      False otherwise.
@@ -138,5 +170,19 @@ public interface ICorfuDBObject<T> extends Serializable {
     default boolean isAutomaticallyPlayedBack()
     {
         return false;
+    }
+
+    default ISMREngine instantiateSMREngine(IStream stream, Class<? extends ISMREngine> smrClass, Class<?>... args)
+    {
+        try {
+            Class<?>[] c = smrClass.getConstructors()[0].getParameterTypes();
+
+            return smrClass.getConstructor(IStream.class, Class.class, Class[].class)
+                    .newInstance(stream, getUnderlyingType(), args);
+        }
+        catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 }

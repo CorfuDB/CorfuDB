@@ -1,10 +1,14 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -28,26 +32,37 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
     ITimestamp streamPointer;
     ITimestamp syncPoint;
 
-    class OneShotSMREngineOptions implements ISMREngineOptions
-    {
+    class OneShotSMREngineOptions implements ISMREngineOptions {
         CompletableFuture<Object> returnResult;
 
-        public OneShotSMREngineOptions(CompletableFuture<Object> returnResult)
-        {
+        public OneShotSMREngineOptions(CompletableFuture<Object> returnResult) {
             this.returnResult = returnResult;
         }
-        public CompletableFuture<Object> getReturnResult()
-        {
+
+        public CompletableFuture<Object> getReturnResult() {
             return this.returnResult;
+        }
+
+        public ICorfuDBInstance getInstance() { return stream.getInstance(); }
+
+        @Override
+        public UUID getEngineID() {
+            return stream.getStreamID();
         }
     }
 
-    public OneShotSMREngine(IStream stream, Class<T> type, ITimestamp syncPoint)
+    public OneShotSMREngine(IStream stream, Class<T> type, ITimestamp syncPoint, Class<?>... args)
     {
         try {
             this.stream = stream;
             streamPointer = stream.getCurrentPosition();
-            underlyingObject = type.getConstructor().newInstance();
+
+            underlyingObject = type
+                    .getConstructor(Arrays.stream(args)
+                            .map(Class::getClass)
+                            .toArray(Class[]::new))
+                    .newInstance(args);
+
             this.syncPoint = syncPoint;
         }
         catch (Exception e)

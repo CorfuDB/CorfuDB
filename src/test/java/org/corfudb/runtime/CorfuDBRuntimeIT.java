@@ -23,7 +23,7 @@ public class CorfuDBRuntimeIT {
     @Test
     public void isCorfuViewAccessible()
     {
-        CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
         assertThat(cdr.getView())
                 .isNotNull();
@@ -33,7 +33,7 @@ public class CorfuDBRuntimeIT {
     @Test
     public void isCorfuViewUsable() throws Exception
     {
-        CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
 
         cdr.waitForViewReady();
         assertThat(cdr.getView())
@@ -56,7 +56,7 @@ public class CorfuDBRuntimeIT {
     @Test
     public void isCorfuResettable() throws Exception
     {
-        CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
         IConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
@@ -84,7 +84,7 @@ public class CorfuDBRuntimeIT {
 
     @Test
     public void CorfuLogunitFailoverTest() throws Exception {
-        CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
         IConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
@@ -183,7 +183,7 @@ public class CorfuDBRuntimeIT {
 
     @Test
     public void CorfuSequencerFailoverTest() throws Exception {
-        CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
         IConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
@@ -276,7 +276,7 @@ public class CorfuDBRuntimeIT {
 
     @Test
     public void viewFailureDoesNotLoop() throws Exception {
-        CorfuDBRuntime cdr = new CorfuDBRuntime("http://localhost:12700/corfu");
+        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
         IConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();

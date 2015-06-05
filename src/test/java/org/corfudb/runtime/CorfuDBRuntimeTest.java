@@ -24,7 +24,7 @@ public class CorfuDBRuntimeTest {
     @Test
     public void MemoryCorfuDBRuntimeHasComponents() {
         MemoryConfigMasterProtocol.inMemoryClear();
-        CorfuDBRuntime runtime = new CorfuDBRuntime("memory");
+        CorfuDBRuntime runtime = CorfuDBRuntime.createRuntime("memory");
         CorfuDBView view = runtime.getView();
         assertNotNull(view);
         assertThat(view.getConfigMasters().get(0))
@@ -38,7 +38,7 @@ public class CorfuDBRuntimeTest {
     @Test
     public void MemoryCorfuDBViewChangeTest() {
         MemoryConfigMasterProtocol.inMemoryClear();
-        CorfuDBRuntime runtime = new CorfuDBRuntime("memory");
+        CorfuDBRuntime runtime = CorfuDBRuntime.createRuntime("memory");
         CorfuDBView view = runtime.getView();
         assertNotNull(view);
         ConfigurationMaster cm = new ConfigurationMaster(runtime);
@@ -51,7 +51,7 @@ public class CorfuDBRuntimeTest {
     @SuppressWarnings("unchecked")
     public void AllStreamsCanBeCreatedByRuntime(){
         MemoryConfigMasterProtocol.inMemoryClear();
-        CorfuDBRuntime runtime = new CorfuDBRuntime("memory");
+        CorfuDBRuntime runtime = CorfuDBRuntime.createRuntime("memory");
         HashSet<Class<? extends IStream>> streams = new HashSet<Class<? extends IStream>>();
         Reflections reflections = new Reflections("org.corfudb.runtime.stream", new SubTypesScanner(false));
         Set<Class<? extends Object>> allClasses = reflections.getSubTypesOf(Object.class);
@@ -122,7 +122,7 @@ public class CorfuDBRuntimeTest {
         MemoryConfigMasterProtocol.inMemoryClear();
         CorfuDBView view = new CorfuDBView(MemoryView);
         MemoryConfigMasterProtocol.memoryConfigMasters.get(0).setInitialView(view);
-        CorfuDBRuntime runtime = new CorfuDBRuntime("custom");
+        CorfuDBRuntime runtime = CorfuDBRuntime.createRuntime("custom");
 
         /* Write and make sure it is written to both in memory log units */
         Sequencer s = new Sequencer(runtime);

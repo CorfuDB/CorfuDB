@@ -18,6 +18,7 @@ package org.corfudb.runtime.stream;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.Serializer;
 
 import java.lang.ClassNotFoundException;
@@ -46,6 +47,32 @@ public interface IStream extends AutoCloseable {
      */
     ITimestamp append(Serializable data)
         throws OutOfSpaceException, IOException;
+
+    /**
+     * Reserves a given number of timestamps in this stream. This operation may or may not retrieve
+     * valid timestamps. For example, a move operation may occur and these timestamps will not be valid on
+     * the stream.
+     * @param numTokens The number of tokens to allocate.
+     * @return          A set of timestamps representing the tokens to allocate.
+     */
+     default ITimestamp[] reserve(int numTokens)
+        throws IOException
+    {
+        throw new UnsupportedOperationException("not supported by this stream");
+    }
+
+    /**
+     * Write to a specific, previously allocated log position.
+     * @param timestamp The timestamp to write to.
+     * @param data      The data to write to that timestamp.
+     * @throws OutOfSpaceException      If there is no space left to write to that log position.
+     * @throws OverwriteException       If something was written to that log position already.
+     */
+    default void write(ITimestamp timestamp, Serializable data)
+        throws OutOfSpaceException, OverwriteException, IOException
+    {
+        throw new UnsupportedOperationException("not supported by this stream");
+    }
 
     /**
      * Append an object to the stream, along with the set of other objects to which
@@ -173,8 +200,18 @@ public interface IStream extends AutoCloseable {
     UUID getStreamID();
 
     /**
-     * Get the runtime that this stream belongs to.
-     * @return                  The runtime the stream belongs to.
+     * Get the instance that this stream belongs to.
+     * @return                  The instance the stream belongs to.
      */
-    CorfuDBRuntime getRuntime();
+    default ICorfuDBInstance getInstance() {
+        throw new UnsupportedOperationException("This stream (legacy?) doesn't support this operation!");
+    }
+
+    /**
+     * Move the stream pointer to the given position.
+     * @param pos               The position to seek to. The next read will occur AFTER this position.
+     */
+    default void seek(ITimestamp pos) {
+        throw new UnsupportedOperationException("This stream (legacy?) doesn't support this operation!");
+    }
 }

@@ -7,6 +7,9 @@ import org.corfudb.runtime.view.*;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.text.SimpleDateFormat;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -15,11 +18,9 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class SimpleStream implements IStream {
 
-    ISequencer sequencer;
-    IWriteOnceAddressSpace addressSpace;
     UUID streamID;
     AtomicLong streamPointer;
-    transient CorfuDBRuntime runtime;
+    transient ICorfuDBInstance instance;
 
     /**
      * Open a simple stream. If the simple stream already exists, it is re-opened.
@@ -27,21 +28,30 @@ public class SimpleStream implements IStream {
      * @param sequencer         A streaming sequencer to use
      * @param addressSpace      A write once address space to use
      */
+    @Deprecated
     public SimpleStream(UUID streamID, ISequencer sequencer, IWriteOnceAddressSpace addressSpace, CorfuDBRuntime runtime) {
-        this.sequencer = sequencer;
-        this.addressSpace = addressSpace;
         this.streamID = streamID;
         this.streamPointer = new AtomicLong();
-        this.runtime = runtime;
+        this.instance = runtime.getLocalInstance();
     }
 
+    @Deprecated
     public SimpleStream(UUID streamID, CorfuDBRuntime runtime)
     {
-        this.sequencer = new StreamingSequencer(runtime);
-        this.addressSpace = new WriteOnceAddressSpace(runtime);
         this.streamID = streamID;
         this.streamPointer = new AtomicLong();
-        this.runtime = runtime;
+        this.instance = runtime.getLocalInstance();
+    }
+
+    SimpleStream(UUID streamID, ICorfuDBInstance instance, boolean registerStream)
+    {
+        this.instance = instance;
+        this.streamID = streamID;
+        this.streamPointer = new AtomicLong();
+        if (registerStream)
+        {
+
+        }
     }
 
     /**
@@ -53,10 +63,42 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp append(Serializable data) throws OutOfSpaceException, IOException {
-        long sequence = sequencer.getNext();
+        long sequence = instance.getSequencer().getNext();
         SimpleTimestamp timestamp = new SimpleTimestamp(sequence);
-        addressSpace.write(sequence, new SimpleStreamEntry(streamID, data, timestamp));
+        instance.getAddressSpace().write(sequence, new SimpleStreamEntry(streamID, data, timestamp));
         return timestamp;
+    }
+
+    /**
+     * Reserves a given number of timestamps in this stream. This operation may or may not retrieve
+     * valid timestamps. For example, a move operation may occur and these timestamps will not be valid on
+     * the stream.
+     *
+     * @param numTokens The number of tokens to allocate.
+     * @return A set of timestamps representing the tokens to allocate.
+     */
+    @Override
+    public ITimestamp[] reserve(int numTokens) throws IOException {
+        long sequence = instance.getSequencer().getNext(numTokens);
+        ITimestamp[] s = new ITimestamp[numTokens];
+        for (int i = 0; i < numTokens; i++)
+        {
+            s[i] = new SimpleTimestamp(sequence + i);
+        }
+        return s;
+    }
+
+    /**
+     * Write to a specific, previously allocated log position.
+     *
+     * @param timestamp The timestamp to write to.
+     * @param data      The data to write to that timestamp.
+     * @throws OutOfSpaceException If there is no space left to write to that log position.
+     * @throws OverwriteException  If something was written to that log position already.
+     */
+    @Override
+    public void write(ITimestamp timestamp, Serializable data) throws OutOfSpaceException, OverwriteException, IOException {
+        instance.getAddressSpace().write(((SimpleTimestamp) timestamp).address, new SimpleStreamEntry(streamID, data, timestamp));
     }
 
 
@@ -69,12 +111,12 @@ public class SimpleStream implements IStream {
      */
     @Override
     public IStreamEntry readNextEntry() throws HoleEncounteredException, TrimmedException, IOException {
-        long current = sequencer.getCurrent();
+        long current = instance.getSequencer().getCurrent();
         synchronized (this)
         {
             for (long i = streamPointer.get(); i < current; i++) {
                 try {
-                    IStreamEntry sse = (IStreamEntry) addressSpace.readObject(i);
+                    IStreamEntry sse = (IStreamEntry) instance.getAddressSpace().readObject(i);
                     sse.setTimestamp(new SimpleTimestamp(i));
                     streamPointer.set(i+1);
                     if (sse.containsStream(streamID)) {
@@ -102,7 +144,7 @@ public class SimpleStream implements IStream {
     @Override
     public IStreamEntry readEntry(ITimestamp timestamp) throws HoleEncounteredException, TrimmedException, IOException {
         try {
-            IStreamEntry sse = (IStreamEntry) addressSpace.readObject(((SimpleTimestamp)timestamp).address);
+            IStreamEntry sse = (IStreamEntry) instance.getAddressSpace().readObject(((SimpleTimestamp) timestamp).address);
             sse.setTimestamp(new SimpleTimestamp(((SimpleTimestamp)timestamp).address));
             if (sse.containsStream(streamID)) {
                 return sse;
@@ -126,6 +168,10 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp getNextTimestamp(ITimestamp ts) {
+        if (ITimestamp.isMin(ts))
+        {
+            return new SimpleTimestamp(0);
+        }
         return new SimpleTimestamp(((SimpleTimestamp)ts).address + 1);
     }
 
@@ -137,6 +183,10 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp getPreviousTimestamp(ITimestamp ts) {
+        if (ITimestamp.isMin(ts))
+        {
+            return ITimestamp.getMinTimestamp();
+        }
         return new SimpleTimestamp(((SimpleTimestamp)ts).address - 1);
     }
 
@@ -151,7 +201,7 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp check(boolean cached) {
-        return new SimpleTimestamp(sequencer.getCurrent()-1);
+        return new SimpleTimestamp(instance.getSequencer().getCurrent()-1);
     }
 
     /**
@@ -162,6 +212,10 @@ public class SimpleStream implements IStream {
      */
     @Override
     public ITimestamp getCurrentPosition() {
+        if (streamPointer.get() == 0)
+        {
+            return ITimestamp.getMinTimestamp();
+        }
         return new SimpleTimestamp(streamPointer.get()-1);
     }
 
@@ -197,12 +251,23 @@ public class SimpleStream implements IStream {
     }
 
     /**
-     * Get the runtime that this stream belongs to.
+     * Get the instance that this stream belongs to.
      *
-     * @return The runtime the stream belongs to.
+     * @return The instance the stream belongs to.
      */
     @Override
-    public CorfuDBRuntime getRuntime() {
-        return runtime;
+    public ICorfuDBInstance getInstance() {
+        return instance;
     }
+
+    /**
+     * Move the stream pointer to the given position.
+     *
+     * @param pos The position to seek to. The next read will occur AFTER this position.
+     */
+    @Override
+    public void seek(ITimestamp pos) {
+        this.streamPointer.set(((SimpleTimestamp)pos).address);
+    }
+
 }

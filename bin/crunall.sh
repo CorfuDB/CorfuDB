@@ -64,9 +64,24 @@ $CORFUDBBINDIR/cgenconfig.sh --role $role --configfile $seqcfg --baseport $basep
 $CORFUDBBINDIR/crun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd
 #  rm -f $seqcfg
 
+<<<<<<< HEAD:bin/crunall.sh
 # suite of logunits:
 # ................
 for (( port=$baseport+2; port < $baseport+2+$cnt; port++ ))
+=======
+role=master
+unit=configmaster
+mastercfg="$TMPCFGDIR/corfudb.$unit.yml"
+if [ -f $mastercfg ]; then
+	rm -f $mastercfg
+fi
+$CORFUDBBINDIR/fugenconfig.sh --role $role --configfile $mastercfg --baseport $baseport --cnt $cnt
+$CORFUDBBINDIR/furun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd
+
+# generate series of ft_logunit#.yml:
+# ----------------------------
+for (( port=$baseport+3; port < $baseport+3+$cnt; port++ ))
+>>>>>>> 0ffbec727fead4d2863482cf8fd78afea272affd:bin/furunall.sh
 do
 	role="logunit"
 	unit="logunit.$port"

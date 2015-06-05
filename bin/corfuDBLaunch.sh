@@ -4,21 +4,25 @@ CORFUDBBIN="${BASH_SOURCE-$0}"
 CORFUDBBIN="$(dirname "${CORFUDBBIN}")"
 CORFUDBBINDIR="$(cd "${CORFUDBBIN}"; pwd)"
 
-. "$CORFUDBBINDIR"/corfuDBEnv.sh 
 
-usage="[--config <conf-dir>] <role> {start|stop|restart|status}"
-if [ $# -lt 2 ]
-then
-    echo "Usage:" $0 $usage >&2
-    exit
+if [ -e "$CORFUDBBIN/../share/corfudb/bin/corfuDBEnv.sh" ]; then
+    . "$CORFUDBBINDIR"/../share/corfudb/bin/corfuDBEnv.sh
 else
+    . "$CORFUDBBINDIR"/corfuDBEnv.sh
+fi
+
+if [ "x$1" != "x" ]
+then
     echo $1
-    CORFUDBCFG="$CORFUDBCFGDIR/corfudb.$1.yml"
+    CORFUDBCFG="$CORFUDBCFGDIR/$1.yml"
+else
+    echo "Usage: $0 [--config <conf-dir>] <node-name> {start|stop|restart|status}" >&2
+    exit
 fi
 
 if $cygwin
 then
-    CORFUDBCFG=`cygpath -wp "$CORFUDBCFGDIR/corfudb.$1.yml"`
+    CORFUDBCFG=`cygpath -wp "$CORFUDBCFGDIR/$1.yml"`
     KILL=/bin/kill
 else
     KILL=kill
@@ -36,15 +40,12 @@ else
     mkdir -p "$(dirname $CORFUDBPIDFILE)"
 fi
 
-echo "PID to: $CORFUDBPIDFILE" >&2
-
 case $2 in
 start)
-    echo -n "Starting CorfuDB role ${1}..." >&2
+    echo -n "Starting CorfuDB role ${1}..."
     if [ -f "$CORFUDBPIDFILE" ]; then
-	echo "trying to kill previous ..."
         if kill -0 `cat $CORFUDBPIDFILE` > /dev/null 2>&1; then
-            echo ${1} already running as process `cat "$CORFUDBPIDFILE"`.
+            echo $command already running as process `cat "$CORFUDBPIDFILE"`.
             exit 0
         fi
     fi

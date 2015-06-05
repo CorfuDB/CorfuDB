@@ -301,9 +301,10 @@ public class CDBLogicalBTree<K extends Comparable<K>, V> extends CDBAbstractBTre
      * @param key
      * @param value
      */
-    public void put(K key, V value) {
+    public V put(K key, V value) {
         TreeOp cmd = new TreeOp(TreeOp.CMD_PUT, oid, key, value);
         TR.update_helper(this, cmd, oid);
+        return value;
     }
 
     /**

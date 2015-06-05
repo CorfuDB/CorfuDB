@@ -1,5 +1,7 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.runtime.entries.CorfuDBEntry;
+
 import java.util.concurrent.CompletableFuture;
 
 /**

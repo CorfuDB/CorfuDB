@@ -3,6 +3,7 @@ package org.corfudb.runtime.smr;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -30,11 +31,18 @@ public interface ITransaction {
     void registerStream(UUID stream);
 
     /**
-     * Sets the CorfuDB runtime for this transaction. Used when deserializing
-     * the transaction.
-     * @param runtime   The runtime to use for this transaction.
+     * Set the CorfuDB instance for this transaction. Used during deserialization.
+     * @param instance  The CorfuDB instance used for this tx.
      */
-    void setCorfuDBRuntime(CorfuDBRuntime runtime);
+    void setInstance(ICorfuDBInstance instance);
+
+    /**
+     * return a pointer to the runtime managing this transaction.
+     * this is needed for transactions on objects which may create
+     * new objects during that transaction.
+     * @return the runtime
+     */
+    ICorfuDBInstance getInstance();
 
     /**
      * Set the command to be executed for this transaction.

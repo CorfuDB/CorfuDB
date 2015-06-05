@@ -64,7 +64,7 @@ port: $baseport
 pagesize: 4096
 epoch: 0
 sequencers:
-  - "cdbss://localhost:$(( $baseport+1))"
+  - "cdbss://localhost:$(( $baseport+2))"
 configmasters:
   - "cdbcm://localhost:$baseport"
 layout:
@@ -76,7 +76,7 @@ layout:
         - nodes:
 _EOF
 
-for (( port=$baseport+2; port < $baseport+2+$cnt; port++ ))
+for (( port=$baseport+3; port < $baseport+3+$cnt; port++ ))
 do
 cat >> $cfg << _EOF
           - "cdbslu://localhost:$port"
@@ -103,7 +103,7 @@ _EOF
 sequencer)
 cat > $cfg << _EOF
 role: org.corfudb.infrastructure.SimpleSequencerServer
-port: $(( baseport+1 ))
+port: $(( baseport+2 ))
 _EOF
 
 ;;

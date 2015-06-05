@@ -242,7 +242,7 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
             public void run() {
                 st.port = (Integer) config.get("port");
                 st.configmasterURL = (String) config.get("configmaster");
-                st.c = new CorfuDBRuntime(st.configmasterURL);
+                st.c = CorfuDBRuntime.getRuntime(st.configmasterURL);
                 st.c.startViewManager();
                 st.woas = new CachedWriteOnceAddressSpace(st.c);
                 while (true) {

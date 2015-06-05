@@ -30,7 +30,7 @@ public class SimpleStreamTest {
     public void generateStream()
     {
         MemoryConfigMasterProtocol.inMemoryClear();
-        cdr = new CorfuDBRuntime("memory");
+        cdr = CorfuDBRuntime.createRuntime("memory");
         woas = new WriteOnceAddressSpace(cdr);
         ss = new StreamingSequencer(cdr);
         s = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
