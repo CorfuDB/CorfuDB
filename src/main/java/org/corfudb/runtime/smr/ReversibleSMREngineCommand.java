@@ -25,12 +25,12 @@ public class ReversibleSMREngineCommand<T> implements ISMREngineCommand<T>, Seri
      * @param ismrEngineOptions the second input argument
      */
     @Override
-    public void accept(T t, ISMREngine.ISMREngineOptions ismrEngineOptions)
+    public void accept(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
     {
         command.accept(t, ismrEngineOptions);
     }
 
-    public void reverse(T t, ISMREngine.ISMREngineOptions ismrEngineOptions)
+    public void reverse(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
     {
         reverseCommand.accept(t, ismrEngineOptions);
     }

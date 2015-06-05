@@ -19,11 +19,12 @@ import java.util.function.Consumer;
  */
 public interface ISMREngine<T> {
 
-    interface ISMREngineOptions
+    interface ISMREngineOptions<T>
     {
         CompletableFuture<Object> getReturnResult();
         ICorfuDBInstance getInstance();
         UUID getEngineID();
+        void setUnderlyingObject(T object);
     }
 
     /**

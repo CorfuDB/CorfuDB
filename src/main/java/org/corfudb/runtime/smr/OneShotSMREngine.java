@@ -32,7 +32,7 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
     ITimestamp streamPointer;
     ITimestamp syncPoint;
 
-    class OneShotSMREngineOptions implements ISMREngineOptions {
+    class OneShotSMREngineOptions<Y extends T> implements ISMREngineOptions<Y> {
         CompletableFuture<Object> returnResult;
 
         public OneShotSMREngineOptions(CompletableFuture<Object> returnResult) {
@@ -48,6 +48,11 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
         @Override
         public UUID getEngineID() {
             return stream.getStreamID();
+        }
+
+        @Override
+        public void setUnderlyingObject(Y object) {
+            underlyingObject = object;
         }
     }
 

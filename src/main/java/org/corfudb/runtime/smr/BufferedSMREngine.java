@@ -29,7 +29,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
 
     ArrayList<ISMREngineCommand<T>> commandBuffer;
 
-    class BufferedSMREngineOptions implements ISMREngineOptions
+    class BufferedSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
         CompletableFuture<Object> returnResult;
 
@@ -46,6 +46,11 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
         @Override
         public UUID getEngineID() {
             return streamID;
+        }
+
+        @Override
+        public void setUnderlyingObject(Y object) {
+            underlyingObject = object;
         }
     }
 

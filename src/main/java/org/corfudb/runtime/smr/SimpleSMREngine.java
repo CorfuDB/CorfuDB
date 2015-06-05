@@ -33,7 +33,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     Class<T> type;
     HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
 
-    class SimpleSMREngineOptions implements ISMREngineOptions
+    class SimpleSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
         CompletableFuture<Object> returnResult;
 
@@ -50,6 +50,11 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         @Override
         public UUID getEngineID() {
             return stream.getStreamID();
+        }
+
+        @Override
+        public void setUnderlyingObject(Y object) {
+            underlyingObject = object;
         }
     }
 

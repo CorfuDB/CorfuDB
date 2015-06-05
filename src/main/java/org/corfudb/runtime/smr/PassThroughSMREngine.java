@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public class PassThroughSMREngine<T> implements ISMREngine<T> {
 
-    class PassThroughSMREngineOptions implements ISMREngineOptions
+    class PassThroughSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
         CompletableFuture<Object> returnResult;
 
@@ -34,6 +34,11 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
         @Override
         public UUID getEngineID() {
             return null;
+        }
+
+        @Override
+        public void setUnderlyingObject(Y object) {
+            underlyingObject = object;
         }
 
     }

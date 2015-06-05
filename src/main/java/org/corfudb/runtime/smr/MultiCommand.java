@@ -34,7 +34,7 @@ public class MultiCommand<T> implements ISMREngineCommand<T>, IStreamEntry, Seri
      */
     @Override
     @SuppressWarnings("unchecked")
-    public void accept(T t, ISMREngine.ISMREngineOptions ismrEngineOptions)
+    public void accept(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
     {
         if (commandMap.get(ismrEngineOptions.getEngineID()) != null) {
             log.info("playing back " + commandMap.get(ismrEngineOptions.getEngineID()).size() + " commands for stream " + ismrEngineOptions.getEngineID());
