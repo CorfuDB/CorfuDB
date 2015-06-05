@@ -52,29 +52,20 @@ fi
 # ............................
 TMPCFGDIR="/var/tmp"
 
-# generate sequencer.yml:
-# ----------------------------
+# sequencer:
+# ..............
 role=sequencer
 unit=sequencer
 seqcfg="$TMPCFGDIR/corfudb.$role.yml"
 if [ -f $seqcfg ]; then
 	rm -f $seqcfg
 fi
-$CORFUDBBINDIR/fugenconfig.sh --role $role --configfile $seqcfg --baseport $baseport --cnt $cnt
-$CORFUDBBINDIR/furun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd
+$CORFUDBBINDIR/cgenconfig.sh --role $role --configfile $seqcfg --baseport $baseport --cnt $cnt
+$CORFUDBBINDIR/crun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd
 #  rm -f $seqcfg
 
-role=master
-unit=configmaster
-mastercfg="$TMPCFGDIR/corfudb.$unit.yml"
-if [ -f $mastercfg ]; then
-	rm -f $mastercfg
-fi
-$CORFUDBBINDIR/fugenconfig.sh --role $role --configfile $mastercfg --baseport $baseport --cnt $cnt
-$CORFUDBBINDIR/furun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd
-
-# generate series of ft_logunit#.yml:
-# ----------------------------
+# suite of logunits:
+# ................
 for (( port=$baseport+2; port < $baseport+2+$cnt; port++ ))
 do
 	role="logunit"
@@ -83,7 +74,19 @@ do
 	if [ -f $lgcfg ]; then
 		rm -f $lgcfg
 	fi
-	$CORFUDBBINDIR/fugenconfig.sh --role $role --configfile $lgcfg --baseport $baseport --cnt $cnt --port $port
- 	$CORFUDBBINDIR/furun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd 
+	$CORFUDBBINDIR/cgenconfig.sh --role $role --configfile $lgcfg --baseport $baseport --cnt $cnt --port $port
+ 	$CORFUDBBINDIR/crun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd 
 	#  rm -f $lgcfg
 done
+
+# configmaster:
+# ..............
+role=master
+unit=configmaster
+mastercfg="$TMPCFGDIR/corfudb.$unit.yml"
+if [ -f $mastercfg ]; then
+	rm -f $mastercfg
+fi
+$CORFUDBBINDIR/cgenconfig.sh --role $role --configfile $mastercfg --baseport $baseport --cnt $cnt
+$CORFUDBBINDIR/crun.sh --configdir $TMPCFGDIR --unit $unit --cmd $cmd
+
