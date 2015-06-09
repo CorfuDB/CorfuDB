@@ -100,7 +100,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     public void write(long address, byte[] data)
         throws OverwriteException, TrimmedException, OutOfSpaceException
     {
-       log.warn("write, lid= " + getView.get().getUUID() +  " ! " + address);
+       //log.warn("write, lid= " + getView.get().getUUID() +  " ! " + address);
 
         while (true)
         {
