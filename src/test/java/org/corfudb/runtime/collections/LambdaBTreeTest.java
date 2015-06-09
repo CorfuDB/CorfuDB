@@ -8,7 +8,11 @@ import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.ConfigurationMaster;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
+import org.junit.rules.TestWatcher;
+import org.junit.runner.Description;
 
 import java.util.UUID;
 
@@ -26,13 +30,19 @@ public class LambdaBTreeTest {
     CorfuDBRuntime cdr;
     int B = 4;
 
+    @Rule
+    public TestRule watcher = new TestWatcher() {
+        protected void starting(Description description) {
+            System.out.println("Starting test: " + description.getMethodName());
+        }
+    };
+
     @Before
     public void generateStream() throws Exception
     {
         cdr = CorfuDBRuntime.createRuntime("memory");
-        ConfigurationMaster cm = new ConfigurationMaster(cdr);
-        cm.resetAll();
         instance = cdr.getLocalInstance();
+        instance.getConfigurationMaster().resetAll();
         streamID = UUID.randomUUID();
         s = instance.openStream(streamID);
         testTree = new LambdaLogicalBTree<String, String>(s);

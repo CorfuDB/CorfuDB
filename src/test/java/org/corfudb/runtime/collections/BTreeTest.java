@@ -8,7 +8,11 @@ import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.ConfigurationMaster;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
+import org.junit.rules.TestWatcher;
+import org.junit.runner.Description;
 
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
@@ -42,6 +46,12 @@ public class BTreeTest {
     }
 
 
+    @Rule
+    public TestRule watcher = new TestWatcher() {
+        protected void starting(Description description) {
+            System.out.println("Starting test: " + description.getMethodName());
+        }
+    };
 
     @Before
     public void generateStream() throws Exception

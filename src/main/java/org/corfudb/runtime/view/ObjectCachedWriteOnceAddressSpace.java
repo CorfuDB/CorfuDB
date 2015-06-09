@@ -47,7 +47,6 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
 
     public ObjectCachedWriteOnceAddressSpace(CorfuDBRuntime client)
     {
-        log.info("Create cached address space");
         this.client = client;
         this.getView = client::getView;
     }
@@ -101,7 +100,8 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     public void write(long address, byte[] data)
         throws OverwriteException, TrimmedException, OutOfSpaceException
     {
-       // log.warn("write2! " + address);
+       log.warn("write, lid= " + getView.get().getUUID() +  " ! " + address);
+
         while (true)
         {
             try {
