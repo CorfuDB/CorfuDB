@@ -130,7 +130,7 @@ public class LambdaBTreeTest {
         assertThat(tmap2.get("abcd").get("key0"))
                 .isEqualTo("abcd2");
     }
-
+/*
     @Test
     public void OpaqueDeferredTransactionalTest() throws Exception
     {
@@ -167,7 +167,7 @@ public class LambdaBTreeTest {
                 .isNotEqualTo("42")
                 .isEqualTo("xxxx");
     }
-
+*/
     @Test
     public void TimeTravelSMRTest()
     {
