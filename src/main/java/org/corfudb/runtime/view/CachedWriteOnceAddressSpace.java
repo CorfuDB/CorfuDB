@@ -122,7 +122,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         {
             try {
                 byte[] data = null;
-                data = AddressSpaceCache.get(logID, address);
+                data = AddressSpaceCache.get(getView.get().getUUID(), address);
                 if (data != null) {
                     return data;
                 }
@@ -137,7 +137,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 //reads have to come from last unit in chain
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
                 data = wolu.read(mappedAddress);
-                AddressSpaceCache.put(logID, address, data);
+                AddressSpaceCache.put(getView.get().getUUID(), address, data);
                 return data;
             }
             catch (NetworkException e)

@@ -52,7 +52,7 @@ public class CDBSimpleMapTest {
     {
         testMap.put(0, 10);
         testMap.put(10, 100);
-        IStream s2 = cdr.openStream(streamID, SimpleStream.class);
+        IStream s2 = instance.openStream(streamID);
         CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
         assertThat(testMap2.get(0))
                 .isEqualTo(10);
@@ -92,7 +92,7 @@ public class CDBSimpleMapTest {
     public void crossMapSwapTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
-        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        IStream s2 = instance.openStream(UUID.randomUUID());
         CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
 
         testMap.put(10, 100);
@@ -118,7 +118,7 @@ public class CDBSimpleMapTest {
     @Test
     public void mapOfMapsTest() throws Exception
     {
-        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        IStream s2 = instance.openStream(streamID);
         CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =
                 new CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>>(s2);
         testMap2.put(10, testMap);

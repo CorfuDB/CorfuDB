@@ -16,12 +16,10 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
     private static final Logger log = LoggerFactory.getLogger(LPBTEntry.class);
 
     transient ISMREngine<TreeEntry> smr;
-    ITransaction tx;
     UUID streamID;
 
     public LPBTEntry(LPBTEntry<K, V> entry, ITransaction tx) {
         this.streamID = entry.streamID;
-        this.tx = tx;
     }
 
     @SuppressWarnings("unchecked")
@@ -58,6 +56,16 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
     @SuppressWarnings("unchecked")
     public void setUnderlyingSMREngine(ISMREngine engine) {
         this.smr = engine;
+    }
+
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
     }
 
     /**

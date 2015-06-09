@@ -364,4 +364,14 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map
     public void setUnderlyingSMREngine(ISMREngine engine) {
         this.smr = engine;
     }
+
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
+    }
 }

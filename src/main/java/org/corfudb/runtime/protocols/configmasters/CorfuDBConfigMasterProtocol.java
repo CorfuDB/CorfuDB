@@ -35,7 +35,6 @@ import java.net.*;
 import org.corfudb.runtime.gossip.IGossip;
 import org.corfudb.runtime.view.StreamData;
 
-import com.esotericsoftware.kryonet.Client;
 
 public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMaster
 {
@@ -46,7 +45,7 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
     private static final transient Logger log = LoggerFactory.getLogger(CorfuDBConfigMasterProtocol.class);
     private JSONRPC2Session jsonSession;
     private AtomicInteger id;
-    private Client client;
+    //private Client client;
 
 
      public static String getProtocolString()
@@ -89,10 +88,10 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
             JSONRPC2SessionOptions opts = new JSONRPC2SessionOptions();
             opts.setReadTimeout(5000);
             jsonSession.setOptions(opts);
-            client = new Client(8192,8192);
-            IGossip.registerSerializer(client.getKryo());
-            client.start();
-            client.connect(5000, host, port+1, port+1);
+         //   client = new Client(8192,8192);
+        //    IGossip.registerSerializer(client.getKryo());
+       //     client.start();
+        //    client.connect(5000, host, port+1, port+1);
         }
         catch (Exception ex)
         {
@@ -131,10 +130,10 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
 
     }
 
-    public void sendGossip(IGossip gossip)
-    {
-            client.sendTCP(gossip);
-    }
+ //   public void sendGossip(IGossip gossip)
+  //  {
+   //         client.sendTCP(gossip);
+  //  }
 
     public StreamData getStream(UUID streamID)
     {
@@ -253,6 +252,16 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
         } catch(Exception e) {
             return null;
         }
+    }
+
+    /**
+     * Sends gossip to this configuration master. Unreliable.
+     *
+     * @param gossip The gossip object to send to the remote configuration master.
+     */
+    @Override
+    public void sendGossip(IGossip gossip) {
+
     }
 
     @SuppressWarnings("unchecked")

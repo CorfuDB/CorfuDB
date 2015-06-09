@@ -74,6 +74,16 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     }
 
     /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
+    }
+
+    /**
      * return the size
      * @return
      */

@@ -5,6 +5,7 @@ import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.ConfigurationMaster;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -20,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class TimeTravelSMREngineTest {
 
     CorfuDBRuntime cdr;
+    ICorfuDBInstance instance;
     IStream s;
 
     @Before
@@ -29,7 +31,8 @@ public class TimeTravelSMREngineTest {
         cdr = CorfuDBRuntime.createRuntime("memory");
         ConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();
-        s = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        instance = cdr.getLocalInstance();
+        s = instance.openStream(UUID.randomUUID());
     }
 
     @Test

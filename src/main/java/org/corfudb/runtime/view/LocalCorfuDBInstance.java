@@ -40,7 +40,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     public LocalCorfuDBInstance(CorfuDBRuntime cdr)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        this(cdr, ConfigurationMaster.class, StreamingSequencer.class, WriteOnceAddressSpace.class,
+        this(cdr, ConfigurationMaster.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
                 SimpleStream.class);
     }
 
@@ -131,8 +131,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     @Override
     public IStream openStream(UUID id) {
         try {
-            return streamType.getConstructor(UUID.class, CorfuDBRuntime.class)
-                    .newInstance(id, cdr);
+            return streamType.getConstructor(UUID.class, ICorfuDBInstance.class)
+                    .newInstance(id, this);
         }
         catch (InstantiationException | NoSuchMethodException | IllegalAccessException
                 | InvocationTargetException e)

@@ -72,6 +72,16 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     }
 
     /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
+    }
+
+    /**
      * Returns the number of elements in this list.  If this list contains
      * more than <tt>Integer.MAX_VALUE</tt> elements, returns
      * <tt>Integer.MAX_VALUE</tt>.

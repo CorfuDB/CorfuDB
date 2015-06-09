@@ -208,6 +208,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         {
             //well, propose is technically not reliable, so we can just silently drop
             //any exceptions.
+            log.warn("Exception proposing new command!", e);
             return null;
         }
     }

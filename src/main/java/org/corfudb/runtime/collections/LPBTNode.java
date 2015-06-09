@@ -12,7 +12,6 @@ import java.util.UUID;
 public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBTNode<K, V>> {
 
     transient ISMREngine<TreeNode> smr;
-    ITransaction tx;
     UUID streamID;
 
     @SuppressWarnings("unchecked")
@@ -49,6 +48,16 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
     @SuppressWarnings("unchecked")
     public void setUnderlyingSMREngine(ISMREngine engine) {
         this.smr = engine;
+    }
+
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
     }
 
 

@@ -437,6 +437,16 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     }
 
     /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
+    }
+
+    /**
      * Get the underlying transaction
      *
      * @return The transaction this object is currently participating in.

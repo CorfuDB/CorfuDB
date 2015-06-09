@@ -26,6 +26,6 @@ public class SimpleStreamFactory implements IStreamFactory {
     }
 
     public IStream newStream(UUID streamid) {
-        return new SimpleStream(streamid, ss, was, rt);
+        return new SimpleStream(streamid, rt.getLocalInstance());
     }
 }

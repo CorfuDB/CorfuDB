@@ -168,25 +168,6 @@ public class CorfuDBRuntime implements AutoCloseable {
     }
 
     /**
-     * Opens a stream given the type of stream to open.
-     * @param streamID      The UUID of the stream.
-     * @param type          The type of stream to open.
-     * @return              A new stream.
-     */
-    public IStream openStream(UUID streamID, Class<? extends IStream> type)
-    {
-        try {
-            return type.getConstructor(UUID.class, CorfuDBRuntime.class)
-                    .newInstance(streamID, this);
-        }
-        catch (InstantiationException | NoSuchMethodException | IllegalAccessException
-                 | InvocationTargetException e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
      * Retrieves the CorfuDBView from a configuration string. The view manager
      * uses this method to fetch the most recent view.
      */

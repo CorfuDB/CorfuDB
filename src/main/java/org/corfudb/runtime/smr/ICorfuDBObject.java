@@ -70,6 +70,12 @@ public interface ICorfuDBObject<T> extends Serializable {
     void setUnderlyingSMREngine(ISMREngine engine);
 
     /**
+     * Set the stream ID
+     * @param streamID  The stream ID to set.
+     */
+    void setStreamID(UUID streamID);
+
+    /**
      * Get the underlying transaction
      * @return  The transaction this object is currently participating in.
      */

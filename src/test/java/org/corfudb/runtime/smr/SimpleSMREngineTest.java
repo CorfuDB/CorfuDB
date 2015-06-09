@@ -8,6 +8,7 @@ import org.corfudb.runtime.view.*;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.Serializable;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,16 +21,15 @@ import static org.assertj.core.api.Assertions.*;
 public class SimpleSMREngineTest {
 
     SimpleStream s;
-    IWriteOnceAddressSpace woas;
-    IStreamingSequencer ss;
+    ICorfuDBInstance instance;
+
     @Before
     public void generateStream()
     {
         MemoryConfigMasterProtocol.inMemoryClear();
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("memory");
-        woas = new WriteOnceAddressSpace(cdr);
-        ss = new StreamingSequencer(cdr);
-        s = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
+        instance = cdr.getLocalInstance();
+        s = (SimpleStream) instance.openStream(UUID.randomUUID());
     }
 
     @Test
@@ -54,7 +54,7 @@ public class SimpleSMREngineTest {
     {
         SimpleSMREngine<AtomicInteger> smr = new SimpleSMREngine<AtomicInteger>(s, AtomicInteger.class);
         ISMREngineCommand<AtomicInteger> getAndIncrement =
-                (ISMREngineCommand<AtomicInteger>) (a,o) -> {o.getReturnResult().complete(a.getAndIncrement());};
+                (ISMREngineCommand<AtomicInteger> & Serializable) (a,o) -> {o.getReturnResult().complete(a.getAndIncrement());};
         CompletableFuture<Object> previous = new CompletableFuture<Object>();
 
         ITimestamp ts1 = smr.propose(getAndIncrement, previous);

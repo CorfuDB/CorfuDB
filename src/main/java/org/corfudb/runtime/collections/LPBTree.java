@@ -855,7 +855,15 @@ public class LPBTree<K extends Comparable<K>, V>
         return node.readChildCount();
     }
 
-
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
+    }
 }
 
 

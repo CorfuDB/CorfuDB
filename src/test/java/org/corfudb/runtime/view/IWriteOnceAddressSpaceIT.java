@@ -16,5 +16,5 @@ public abstract class IWriteOnceAddressSpaceIT {
     {
         addressSpace = getAddressSpace();
     }
-    
+
 }

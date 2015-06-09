@@ -11,6 +11,6 @@ public class ReservedStream extends SimpleStream {
 
     public ReservedStream(UUID reservedStreamID, ICorfuDBInstance instance)
     {
-        super(reservedStreamID, instance, false);
+        super(reservedStreamID, instance);
     }
 }

@@ -17,13 +17,13 @@ public class MultiCommand<T> implements ISMREngineCommand<T>, IStreamEntry, Seri
 
     private static final Logger log = LoggerFactory.getLogger(MultiCommand.class);
 
-    Map<UUID, List<ISMREngineCommand>> commandMap;
+    Map<UUID, ISMREngineCommand[]> commandMap;
     ITimestamp ts;
 
     @SuppressWarnings("unchecked")
-    public MultiCommand(Map<UUID, List<ISMREngineCommand>> commandMap)
+    public MultiCommand(Map<UUID, ISMREngineCommand[]> commandMap)
     {
-        this.commandMap = (Map<UUID, List<ISMREngineCommand>>) Serializer.copy(commandMap);
+        this.commandMap = commandMap;
     }
 
     /**
@@ -37,7 +37,7 @@ public class MultiCommand<T> implements ISMREngineCommand<T>, IStreamEntry, Seri
     public void accept(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
     {
         if (commandMap.get(ismrEngineOptions.getEngineID()) != null) {
-            log.info("playing back " + commandMap.get(ismrEngineOptions.getEngineID()).size() + " commands for stream " + ismrEngineOptions.getEngineID());
+            log.info("playing back " + commandMap.get(ismrEngineOptions.getEngineID()).length + " commands for stream " + ismrEngineOptions.getEngineID());
         }
         for (ISMREngineCommand c : commandMap.get(ismrEngineOptions.getEngineID()))
              {
@@ -57,7 +57,7 @@ public class MultiCommand<T> implements ISMREngineCommand<T>, IStreamEntry, Seri
      */
     @Override
     public List<UUID> getStreamIds() {
-        return new ArrayList(getStreams());
+        return new ArrayList<UUID>(getStreams());
     }
 
     /**

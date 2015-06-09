@@ -40,28 +40,24 @@ import java.util.UUID;
 public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
     private CorfuDBRuntime client;
-    private UUID logID;
     private CorfuDBView view;
     private Supplier<CorfuDBView> getView;
 
-	private final Logger log = LoggerFactory.getLogger(org.corfudb.runtime.view.CachedWriteOnceAddressSpace.class);
+	private final Logger log = LoggerFactory.getLogger(org.corfudb.runtime.view.ObjectCachedWriteOnceAddressSpace.class);
 
     public ObjectCachedWriteOnceAddressSpace(CorfuDBRuntime client)
     {
+        log.info("Create cached address space");
         this.client = client;
-        this.getView = () ->  {
-            return this.client.getView();
-        };
-        this.logID = getView.get().getUUID();
+        this.getView = client::getView;
     }
 
     public ObjectCachedWriteOnceAddressSpace(CorfuDBRuntime client, UUID logID)
     {
         this.client = client;
-        this.logID = logID;
         this.getView = () -> {
             try {
-            return this.client.getView(this.logID);
+            return this.client.getView(logID);
             }
             catch (RemoteException re)
             {
@@ -77,12 +73,12 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         this.getView = () -> {
             return this.view;
         };
-        this.logID = getView.get().getUUID();
     }
 
     public void write(long address, Serializable s)
         throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
     {
+        log.warn("write! " + address);
         write(address, Serializer.serialize_compressed(s));
 
         /*
@@ -105,6 +101,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     public void write(long address, byte[] data)
         throws OverwriteException, TrimmedException, OutOfSpaceException
     {
+        log.warn("write2! " + address);
         while (true)
         {
             try {
@@ -133,11 +130,12 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
-
+        log.info("Read2 from id=" + getView.get().getUUID());
         while (true)
         {
             try {
                 byte[] data = null;
+
              //   data = AddressSpaceCache.get(logID, address);
 //                if (data != null) {
   //                  stream.debug("ObjCache hit @ {}", address);
@@ -169,13 +167,14 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     public Object readObject(long address)
         throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
     {
-         Object o = AddressSpaceObjectCache.get(logID, address);
+        log.info("Read from id=" + getView.get().getUUID());
+         Object o = AddressSpaceObjectCache.get(getView.get().getUUID(), address);
          if (o != null) {
              return o; }
 
          byte[] data = read(address);
          o = Serializer.deserialize_compressed(data);
-        AddressSpaceObjectCache.put(logID, address ,o);
+        AddressSpaceObjectCache.put(getView.get().getUUID(), address ,o);
         return o;
          /*
          Kryo k = Serializer.kryos.get();

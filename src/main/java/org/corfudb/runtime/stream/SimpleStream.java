@@ -22,36 +22,11 @@ public class SimpleStream implements IStream {
     AtomicLong streamPointer;
     transient ICorfuDBInstance instance;
 
-    /**
-     * Open a simple stream. If the simple stream already exists, it is re-opened.
-     * @param streamID          The id of the stream
-     * @param sequencer         A streaming sequencer to use
-     * @param addressSpace      A write once address space to use
-     */
-    @Deprecated
-    public SimpleStream(UUID streamID, ISequencer sequencer, IWriteOnceAddressSpace addressSpace, CorfuDBRuntime runtime) {
-        this.streamID = streamID;
-        this.streamPointer = new AtomicLong();
-        this.instance = runtime.getLocalInstance();
-    }
-
-    @Deprecated
-    public SimpleStream(UUID streamID, CorfuDBRuntime runtime)
-    {
-        this.streamID = streamID;
-        this.streamPointer = new AtomicLong();
-        this.instance = runtime.getLocalInstance();
-    }
-
-    SimpleStream(UUID streamID, ICorfuDBInstance instance, boolean registerStream)
+    public SimpleStream(UUID streamID, ICorfuDBInstance instance)
     {
         this.instance = instance;
         this.streamID = streamID;
         this.streamPointer = new AtomicLong();
-        if (registerStream)
-        {
-
-        }
     }
 
     /**

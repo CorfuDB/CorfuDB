@@ -75,7 +75,7 @@ public class BTreeTest {
         testTree = createTree(treeclass, s);
         testTree.put("key0", "abcd");
         testTree.put("key1", "efgh");
-        IStream s2 = cdr.openStream(streamID, SimpleStream.class);
+        IStream s2 = instance.openStream(streamID);
         IBTree<String, String> tree2 = createTree(treeclass, s2);
         assertThat(tree2.get("key0"))
                 .isEqualTo("abcd");
@@ -120,7 +120,7 @@ public class BTreeTest {
     public void crossMapSwapTransactionalTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
-        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        IStream s2 = instance.openStream(streamID);
         AbstractLambdaBTree<String, String> testMap2 = createTree(treeclass, s2);
 
         testTree.put("key0", "abcd");
@@ -150,7 +150,7 @@ public class BTreeTest {
     public void mapOfMapsTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
-        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        IStream s2 = instance.openStream(streamID);
         AbstractLambdaBTree<String, AbstractLambdaBTree<String, String>> tmap2 = createTree(treeclass, s2);
         tmap2.put("abcd", testTree);
         testTree.put("key0", "abcd");
