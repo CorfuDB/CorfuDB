@@ -170,21 +170,25 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
         /* just reset everything in memory */
         try {
             this.reset(epoch + 1);
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            log.error("Error during configmaster reset", e);
+        }
         for (MemorySequencerProtocol msp : MemorySequencerProtocol.memorySequencers.values())
         {
             try {
             msp.reset(epoch+1);}
-            catch (Exception e) {}
+            catch (Exception e) {
+                log.error("Error during sequencer reset", e);
+            }
         }
         for (MemoryLogUnitProtocol mlu : MemoryLogUnitProtocol.memoryUnits.values())
         {
             try {
                 mlu.reset(epoch+1);}
-            catch (Exception e) {}
+            catch (Exception e) {
+                log.error("Error during log unit reset", e);
+            }
         }
-        logID = UUID.randomUUID();
-        this.view.setUUID(logID);
         this.epoch++;
     }
 
