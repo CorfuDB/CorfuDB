@@ -78,7 +78,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     public void write(long address, Serializable s)
         throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
     {
-        log.warn("write! " + address);
+        //log.warn("write! " + address);
         write(address, Serializer.serialize_compressed(s));
 
         /*
@@ -101,7 +101,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     public void write(long address, byte[] data)
         throws OverwriteException, TrimmedException, OutOfSpaceException
     {
-        log.warn("write2! " + address);
+       // log.warn("write2! " + address);
         while (true)
         {
             try {
@@ -130,7 +130,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
-        log.info("Read2 from id=" + getView.get().getUUID());
+      //  log.info("Read2 from id=" + getView.get().getUUID());
         while (true)
         {
             try {
@@ -167,7 +167,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     public Object readObject(long address)
         throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
     {
-        log.info("Read from id=" + getView.get().getUUID());
+    //    log.info("Read from id=" + getView.get().getUUID());
          Object o = AddressSpaceObjectCache.get(getView.get().getUUID(), address);
          if (o != null) {
              return o; }
