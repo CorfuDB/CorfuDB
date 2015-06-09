@@ -32,6 +32,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     ITimestamp lastProposal;
     Class<T> type;
     HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
+    HashSet<ITimestamp> localTable;
 
     class SimpleSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
@@ -71,6 +72,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             }
             streamPointer = stream.getCurrentPosition();
             completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
+            localTable = new HashSet<ITimestamp>();
 
             underlyingObject = type
                     .getConstructor(Arrays.stream(args)
@@ -139,15 +141,24 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     }
                     else if (entry.getPayload() instanceof SMRLocalCommandWrapper)
                     {
-                        SMRLocalCommandWrapper<T> function = (SMRLocalCommandWrapper<T>) entry.getPayload();
-                        try (TransactionalContext tc =
-                                     new TransactionalContext(this, entry.getTimestamp(), function.destination,
-                                             stream.getInstance(), LocalTransaction.class)) {
-                            ITimestamp entryTS = entry.getTimestamp();
-                            CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
-                            completionTable.remove(entryTS);
-                            if (completion == null) {completion = new CompletableFuture<>();}
-                            function.command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                        if (localTable.contains(ts)) {
+                            localTable.remove(ts);
+                            SMRLocalCommandWrapper<T> function = (SMRLocalCommandWrapper<T>) entry.getPayload();
+                            try (TransactionalContext tc =
+                                         new TransactionalContext(this, entry.getTimestamp(), function.destination,
+                                                 stream.getInstance(), LocalTransaction.class)) {
+                                ITimestamp entryTS = entry.getTimestamp();
+                                CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
+                                completionTable.remove(entryTS);
+                                if (completion == null) {
+                                    completion = new CompletableFuture<>();
+                                }
+                                function.command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                            }
+                        }
+                        else
+                        {
+                            log.debug("Dropping localTX proposed by other client@{}", ts);
                         }
                     }
                     else {
@@ -167,9 +178,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                         }
                     }
                 } catch (Exception e) {
-                    log.error("exception during sync: ", e);
-                    log.error("playback at pointer = " + stream.getCurrentPosition());
-                    log.warn("CJR: why is it ok to suppress an exception during sync?");
+                    log.error("exception during sync@{}", stream.getCurrentPosition(), e);
                 }
                 streamPointer = stream.getCurrentPosition();
             }
@@ -231,6 +240,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         }
         try {
             ITimestamp[] t = stream.reserve(2);
+            localTable.add(t[0]);
             if (completion != null) { completionTable.put(t[0], completion); }
             stream.write(t[0], new SMRLocalCommandWrapper<>(command, t[1]));
             lastProposal = t[0];
