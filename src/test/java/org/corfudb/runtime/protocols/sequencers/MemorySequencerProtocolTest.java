@@ -10,7 +10,7 @@ import static org.junit.Assert.assertEquals;
  * Created by mwei on 4/30/15.
  */
 public class MemorySequencerProtocolTest {
-/*
+
     @Test
     public void checkIfSequencerIsAlwaysPingable() throws Exception
     {
@@ -55,5 +55,5 @@ public class MemorySequencerProtocolTest {
             assertEquals(msp.sequenceGetCurrent(), 2 + i);
         }
     }
-*/
+
 }

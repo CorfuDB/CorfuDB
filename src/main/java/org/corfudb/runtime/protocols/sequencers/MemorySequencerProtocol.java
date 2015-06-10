@@ -25,7 +25,11 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
     public static ConcurrentHashMap<Integer, MemorySequencerProtocol> memorySequencers =
             new ConcurrentHashMap<Integer, MemorySequencerProtocol>();
     public MemorySequencerProtocol() {
-        this("localhost", 0, new HashMap<String,String>(), 0L);
+        this.host = "test";
+        this.port = 9999;
+        this.options = new HashMap<>();
+        this.epoch = 0L;
+        trimMark = 0L;
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)

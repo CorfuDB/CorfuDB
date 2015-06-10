@@ -31,7 +31,12 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
             new ConcurrentHashMap<Integer, MemoryLogUnitProtocol>();
 
     public MemoryLogUnitProtocol() {
-        this("localhost", 0, new HashMap<String,String>(), 0L);
+        this.host = "test";
+        this.port = 9999;
+        this.options = new HashMap<>();
+        this.epoch = 0L;
+        trimMark = 0L;
+        memoryArray = new NonBlockingHashMapLong<byte[]>();
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
