@@ -168,6 +168,7 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     @Override
     public void resetAll() {
         /* just reset everything in memory */
+        log.info("Request reset of memory configuration");
         try {
             this.reset(epoch + 1);
         } catch (Exception e) {

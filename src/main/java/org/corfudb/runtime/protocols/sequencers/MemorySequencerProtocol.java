@@ -45,6 +45,7 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
         this.options = options;
         this.epoch = epoch;
         sequenceNumber = new AtomicLong();
+        log.info("Creating new memory sequencer on virtual port " + this.port);
         memorySequencers.put(this.port, this);
     }
 
