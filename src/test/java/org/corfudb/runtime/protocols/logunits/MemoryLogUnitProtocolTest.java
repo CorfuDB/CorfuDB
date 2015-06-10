@@ -23,7 +23,7 @@ public class MemoryLogUnitProtocolTest {
         }
         return test;
     }
-
+/*
     @Test
     public void checkIfLogUnitIsAlwaysPingable() throws Exception
     {
@@ -84,4 +84,5 @@ public class MemoryLogUnitProtocolTest {
 
         assertRaises(() -> mlup.read(101), UnwrittenException.class);
     }
+    */
 }
