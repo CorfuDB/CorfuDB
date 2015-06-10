@@ -29,7 +29,7 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
         this.port = 9999;
         this.options = new HashMap<>();
         this.epoch = 0L;
-        trimMark = 0L;
+        sequenceNumber = new AtomicLong();
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
