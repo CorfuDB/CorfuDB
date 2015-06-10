@@ -35,14 +35,6 @@ public class CDBArrayList<T> implements ICorfuDBObject<ArrayList<T>>, List<T>, R
     }
 
     /**
-     * Get the type of the underlying object
-     */
-    @Override
-    public Class<?> getUnderlyingType() {
-        return ArrayList.class;
-    }
-
-    /**
      * Get the UUID of the underlying stream
      */
     @Override

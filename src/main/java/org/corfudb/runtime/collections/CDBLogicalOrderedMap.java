@@ -379,14 +379,6 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     }
 
     /**
-     * Get the type of the underlying object
-     */
-    @Override
-    public Class<?> getUnderlyingType() {
-        return TreeMap.class;
-    }
-
-    /**
      * Get the UUID of the underlying stream
      */
     @Override

@@ -13,6 +13,9 @@ import org.corfudb.runtime.view.WriteOnceAddressSpace;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,7 +53,22 @@ public interface ICorfuDBObject<U> extends Serializable {
     /**
      * Get the type of the underlying object
      */
-    Class<?> getUnderlyingType();
+    default Class<U> getUnderlyingType() {
+        for (Type t : this.getClass().getGenericInterfaces())
+        {
+            if (t instanceof ParameterizedType && ((ParameterizedType)t).getRawType().equals(ICorfuDBObject.class))
+            {
+                ParameterizedType p = (ParameterizedType) t;
+                Type r = p.getActualTypeArguments()[0];
+                if (r instanceof ParameterizedType)
+                {
+                    return (Class<U>) ((ParameterizedType)r).getRawType();
+                }
+                return (Class<U>) r;
+            }
+        }
+        throw new RuntimeException("Couldn't resolve underlying type!");
+    }
 
     /**
      * Get the UUID of the underlying stream

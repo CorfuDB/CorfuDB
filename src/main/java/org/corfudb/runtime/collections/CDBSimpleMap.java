@@ -19,7 +19,6 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
     transient ISMREngine<ConcurrentHashMap<K,V>> smr;
     UUID streamID;
 
-    @SuppressWarnings("unchecked")
     public CDBSimpleMap(IStream stream, Class<? extends ISMREngine> smrClass)
     {
         try {
@@ -30,12 +29,6 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
         {
             throw new RuntimeException(e);
         }
-    }
-
-    @Deprecated
-    public CDBSimpleMap(IStream stream)
-    {
-        this(stream, SimpleSMREngine.class);
     }
 
     /**
@@ -321,14 +314,6 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
         return accessorHelper( (map, opts) -> {
            return map.entrySet();
         });
-    }
-
-    /**
-     * Get the type of the underlying object
-     */
-    @Override
-    public Class<?> getUnderlyingType() {
-        return ConcurrentHashMap.class;
     }
 
     /**

@@ -93,14 +93,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
 
 
     /**
-     * Get the type of the underlying object
-     */
-    @Override
-    public Class<?> getUnderlyingType() {
-        return TreeContainer.class;
-    }
-
-    /**
      * Get the UUID of the underlying stream
      */
     @Override

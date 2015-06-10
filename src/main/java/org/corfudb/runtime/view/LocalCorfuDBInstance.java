@@ -5,6 +5,8 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.smr.ICorfuDBObject;
+import org.corfudb.runtime.smr.ISMREngine;
+import org.corfudb.runtime.smr.SimpleSMREngine;
 import org.corfudb.runtime.smr.legacy.CorfuDBObject;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.IStreamMetadata;
@@ -181,13 +183,15 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      */
     @Override
     @SuppressWarnings("unchecked")
-    public <T extends ICorfuDBObject> T openObject(UUID id, Class<T> type, Class<?>... args) {
+    public <T extends ICorfuDBObject> T openObject(UUID id, OpenObjectArgs<T> oargs, Class<?>... args) {
         T cachedObject = (T) objectMap.getOrDefault(id, null);
 
-        if (cachedObject != null)
+        Class<? extends ISMREngine> smrType = oargs.smrType == null ? SimpleSMREngine.class : oargs.smrType;
+
+        if (cachedObject != null && cachedObject.getUnderlyingSMREngine().getClass().equals(smrType))
         {
-            if (!(type.isInstance(cachedObject)))
-                throw new RuntimeException("Incorrect type! Requested to open object of type " + type.getClass() +
+            if (!(oargs.type.isInstance(cachedObject)))
+                throw new RuntimeException("Incorrect type! Requested to open object of type " + oargs.type.getClass() +
                         " but an object of type " + cachedObject.getClass() + " is already there!");
             return cachedObject;
         }
@@ -199,12 +203,14 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
                     .collect(Collectors.toList());
 
             classes.add(0, IStream.class);
+            classes.add(1, Class.class);
 
             List<Object> largs = Arrays.stream(args)
                     .collect(Collectors.toList());
-            largs.add(openStream(id));
+            largs.add(0, openStream(id));
+            largs.add(1, smrType);
 
-            T returnObject = type
+            T returnObject = oargs.type
                     .getConstructor(classes.toArray(new Class[classes.size()]))
                     .newInstance(largs.toArray(new Object[largs.size()]));
 

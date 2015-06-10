@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.smr.ICorfuDBObject;
+import org.corfudb.runtime.smr.ISMREngine;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.IStreamMetadata;
 import org.corfudb.runtime.stream.SimpleStreamMetadata;
@@ -78,6 +79,23 @@ public interface ICorfuDBInstance {
      */
     Map<UUID, IStreamMetadata> getStreamMetadataMap();
 
+    class OpenObjectArgs<T extends ICorfuDBObject>
+    {
+        public Class<T> type;
+        public Class<? extends ISMREngine> smrType;
+
+        public OpenObjectArgs(Class<T> type)
+        {
+            this.type = type;
+        }
+
+        public OpenObjectArgs(Class<T> type, Class<? extends ISMREngine> smrType)
+        {
+            this.type = type;
+            this.smrType = smrType;
+        }
+    }
+
     /**
      * Retrieves a corfuDB object.
      * @param id    A unique ID for the object to be retrieved.
@@ -87,5 +105,19 @@ public interface ICorfuDBInstance {
      *              if one already exists in the system. A new object
      *              will be created if one does not already exist.
      */
-    <T extends ICorfuDBObject> T openObject(UUID id, Class<T> type, Class<?>... args);
+    default <T extends ICorfuDBObject> T openObject(UUID id, Class<T> type, Class<?>... args)
+    {
+        return openObject(id, new OpenObjectArgs<T>(type), args);
+    }
+
+    /**
+     * Retrieves a corfuDB object.
+     * @param id    A unique ID for the object to be retrieved.
+     * @param type  The type of object to instantiate.
+     * @param args  A list of arguments to pass to the constructor.
+     * @return      A CorfuDB object. A cached object may be returned
+     *              if one already exists in the system. A new object
+     *              will be created if one does not already exist.
+     */
+    <T extends ICorfuDBObject> T openObject(UUID id, OpenObjectArgs<T> oArgs, Class<?>... args);
 }

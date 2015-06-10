@@ -37,14 +37,6 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     }
 
     /**
-     * Get the type of the underlying object
-     */
-    @Override
-    public Class<?> getUnderlyingType() {
-        return BTree.class;
-    }
-
-    /**
      * Get the UUID of the underlying stream
      */
     @Override

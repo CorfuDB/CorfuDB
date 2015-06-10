@@ -37,11 +37,6 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<Tre
     }
 
     @Override
-    public Class<?> getUnderlyingType() {
-        return TreeEntry.class;
-    }
-
-    @Override
     public UUID getStreamID() {
         return streamID;
     }

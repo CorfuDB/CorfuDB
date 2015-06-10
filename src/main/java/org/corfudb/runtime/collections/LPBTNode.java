@@ -30,11 +30,6 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<Tree
     }
 
     @Override
-    public Class<?> getUnderlyingType() {
-        return TreeNode.class;
-    }
-
-    @Override
     public UUID getStreamID() {
         return streamID;
     }
