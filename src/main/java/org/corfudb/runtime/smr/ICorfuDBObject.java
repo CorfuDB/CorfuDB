@@ -21,7 +21,7 @@ import java.util.function.Function;
 /**
  * Created by mwei on 5/1/15.
  */
-public interface ICorfuDBObject<T> extends Serializable {
+public interface ICorfuDBObject<U> extends Serializable {
 
     /**
      * Returns the SMR engine associated with this object.
@@ -61,13 +61,13 @@ public interface ICorfuDBObject<T> extends Serializable {
      * Get underlying SMR engine
      * @return  The SMR engine this object was instantiated under.
      */
-    ISMREngine<T> getUnderlyingSMREngine();
+    ISMREngine<U> getUnderlyingSMREngine();
 
     /**
      * Set underlying SMR engine
      * @param smrEngine The SMR engine to replace.
      */
-    void setUnderlyingSMREngine(ISMREngine engine);
+    void setUnderlyingSMREngine(ISMREngine<U> engine);
 
     /**
      * Set the stream ID
@@ -85,31 +85,13 @@ public interface ICorfuDBObject<T> extends Serializable {
     }
 
     /**
-     * Gets a transactional context for this object.
-     * @return              A transactional context to be used during a transaction.
-     */
-    @Deprecated
-    @SuppressWarnings("unchecked")
-    default T getTransactionalContext(ITransaction tx)
-    {
-        try {
-            tx.registerStream(getSMREngine().getStreamID());
-            return (T) this.getClass().getConstructor(this.getClass(), ITransaction.class)
-                    .newInstance(this, tx);
-        } catch (InvocationTargetException | IllegalAccessException | InstantiationException | NoSuchMethodException e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
      * Must be called whenever the object is accessed, in order to ensure
      * that every write is read.
      */
     @SuppressWarnings("unchecked")
-    default Object accessorHelper(ISMREngineCommand command)
+    default <R> R accessorHelper(ISMREngineCommand<U,R> command)
     {
-        CompletableFuture<Object> o = new CompletableFuture<Object>();
+        CompletableFuture<R> o = new CompletableFuture<R>();
         getSMREngine().sync(getSMREngine().check());
         getSMREngine().propose(command, o, true);
         return o.join();
@@ -121,7 +103,7 @@ public interface ICorfuDBObject<T> extends Serializable {
      * @param command       The command to be executed.
      */
     @SuppressWarnings("unchecked")
-    default void mutatorHelper(ISMREngineCommand command)
+    default <R> void mutatorHelper(ISMREngineCommand<U,R> command)
     {
         getSMREngine().propose(command);
     }
@@ -132,9 +114,9 @@ public interface ICorfuDBObject<T> extends Serializable {
      * @return              The result of the access.
      */
     @SuppressWarnings("unchecked")
-    default Object mutatorAccessorHelper(ISMREngineCommand command)
+    default <R> R mutatorAccessorHelper(ISMREngineCommand<U,R> command)
     {
-        CompletableFuture<Object> o = new CompletableFuture<Object>();
+        CompletableFuture<R> o = new CompletableFuture<R>();
         ITimestamp proposal = getSMREngine().propose(command, o);
         if (!isAutomaticallyPlayedBack()) {getSMREngine().sync(proposal);}
         return o.join();
@@ -147,9 +129,9 @@ public interface ICorfuDBObject<T> extends Serializable {
      * @param command       The local command to be executed.
      * @return              True, if the command succeeds. False otherwise.
      */
-    default Object localCommandHelper(ISMRLocalCommand command)
+    default <R> R localCommandHelper(ISMRLocalCommand<U, R> command)
     {
-        CompletableFuture<Object> o = new CompletableFuture<Object>();
+        CompletableFuture<R> o = new CompletableFuture<R>();
         ITimestamp proposal = getSMREngine().propose(command, o);
         if (!isAutomaticallyPlayedBack()) {getSMREngine().sync(proposal);}
         return  o.join();

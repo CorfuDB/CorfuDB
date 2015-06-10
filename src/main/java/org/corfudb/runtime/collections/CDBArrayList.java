@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Created by mwei on 5/29/15.
  */
-public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>, RandomAccess {
+public class CDBArrayList<T> implements ICorfuDBObject<ArrayList<T>>, List<T>, RandomAccess {
 
     transient ISMREngine<ArrayList<T>> smr;
     UUID streamID;
@@ -56,7 +56,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      * @return The SMR engine this object was instantiated under.
      */
     @Override
-    public ISMREngine getUnderlyingSMREngine() {
+    public ISMREngine<ArrayList<T>> getUnderlyingSMREngine() {
         return smr;
     }
 
@@ -66,8 +66,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      * @param engine
      */
     @Override
-    @SuppressWarnings("unchecked")
-    public void setUnderlyingSMREngine(ISMREngine engine) {
+    public void setUnderlyingSMREngine(ISMREngine<ArrayList<T>> engine) {
         this.smr = engine;
     }
 
@@ -90,9 +89,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      */
     @Override
     public int size() {
-        return (int) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.size());
-        });
+        return accessorHelper((list, opts) -> list.size());
     }
 
     /**
@@ -102,9 +99,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      */
     @Override
     public boolean isEmpty() {
-        return (boolean) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.isEmpty());
-        });
+        return accessorHelper((list, opts) -> list.isEmpty());
     }
 
     /**
@@ -124,9 +119,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      */
     @Override
     public boolean contains(Object o) {
-        return (boolean) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.contains(o));
-        });
+        return accessorHelper((list, opts) -> list.contains(o));
     }
 
     /**
@@ -135,11 +128,8 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      * @return an iterator over the elements in this list in proper sequence
      */
     @Override
-    @SuppressWarnings("unchecked")
     public Iterator<T> iterator() {
-        return (Iterator<T>) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.iterator());
-        });
+        return accessorHelper((list, opts) -> list.iterator());
     }
 
     /**
@@ -160,9 +150,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      */
     @Override
     public Object[] toArray() {
-        return (Object[]) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.toArray());
-        });
+        return accessorHelper((list, opts) -> list.toArray());
     }
 
     /**
@@ -207,9 +195,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public <T1> T1[] toArray(T1[] a) {
-        return (T1[]) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.toArray(a));
-        });
+        return accessorHelper((list, opts) -> list.toArray(a));
     }
 
     /**
@@ -237,9 +223,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public boolean add(T t) {
-        mutatorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            list.add(t);
-        });
+        mutatorHelper((list, opts) -> list.add(t));
         return true;
     }
 
@@ -266,9 +250,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      */
     @Override
     public boolean remove(Object o) {
-        return (boolean) mutatorAccessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.remove(o));
-        });
+        return mutatorAccessorHelper((list, opts) -> list.remove(o));
     }
 
     /**
@@ -292,9 +274,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public boolean containsAll(Collection<?> c) {
-        return (boolean) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.containsAll(c));
-        });
+        return accessorHelper((list, opts) -> list.containsAll(c));
     }
 
     /**
@@ -321,9 +301,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public boolean addAll(Collection<? extends T> c) {
-        return (boolean) mutatorAccessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.addAll(c));
-        });
+        return mutatorAccessorHelper((list, opts) -> list.addAll(c));
     }
 
     /**
@@ -356,9 +334,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public boolean addAll(int index, Collection<? extends T> c) {
-        return (boolean) mutatorAccessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.addAll(index, c));
-        });
+        return mutatorAccessorHelper((list, opts) -> list.addAll(index, c));
     }
 
     /**
@@ -382,9 +358,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public boolean removeAll(Collection<?> c) {
-        return (boolean) mutatorAccessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.removeAll(c));
-        });
+        return mutatorAccessorHelper((list, opts) -> list.removeAll(c));
     }
 
     /**
@@ -410,9 +384,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public boolean retainAll(Collection<?> c) {
-        return (boolean) mutatorAccessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.retainAll(c));
-        });
+        return mutatorAccessorHelper((list, opts) -> list.retainAll(c));
     }
 
     /**
@@ -424,8 +396,9 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      */
     @Override
     public void clear() {
-        mutatorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
+        mutatorHelper((list, opts) -> {
             list.clear();
+            return null;
         });
     }
 
@@ -440,9 +413,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public T get(int index) {
-        return (T) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.get(index));
-        });
+        return accessorHelper((list, opts) -> list.get(index));
     }
 
     /**
@@ -464,11 +435,8 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      *                                       (<tt>index &lt; 0 || index &gt;= size()</tt>)
      */
     @Override
-    @SuppressWarnings("unchecked")
     public T set(int index, T element) {
-        return (T) mutatorAccessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.set(index, element));
-        });
+        return mutatorAccessorHelper((list, opts) -> list.set(index, element));
     }
 
     /**
@@ -491,10 +459,10 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      *                                       (<tt>index &lt; 0 || index &gt; size()</tt>)
      */
     @Override
-    @SuppressWarnings("unchecked")
     public void add(int index, T element) {
-        mutatorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
+        mutatorHelper((list, opts) -> {
             list.add(index, element);
+            return null;
         });
     }
 
@@ -514,9 +482,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public T remove(int index) {
-        return (T) mutatorAccessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            list.remove(index);
-        });
+        return mutatorAccessorHelper((list, opts) -> list.remove(index));
     }
 
     /**
@@ -538,9 +504,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      */
     @Override
     public int indexOf(Object o) {
-        return (int) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.indexOf(o));
-        });
+        return accessorHelper((list, opts) -> list.indexOf(o));
     }
 
     /**
@@ -562,9 +526,7 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      */
     @Override
     public int lastIndexOf(Object o) {
-        return (int) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.lastIndexOf(o));
-        });
+        return accessorHelper((list, opts) -> list.lastIndexOf(o));
     }
 
     /**
@@ -575,11 +537,8 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      * sequence)
      */
     @Override
-    @SuppressWarnings("unchecked")
     public ListIterator<T> listIterator() {
-        return (ListIterator<T>) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.listIterator());
-        });
+        return accessorHelper((list, opts) -> list.listIterator());
     }
 
     /**
@@ -598,11 +557,8 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
      *                                   ({@code index < 0 || index > size()})
      */
     @Override
-    @SuppressWarnings("unchecked")
     public ListIterator<T> listIterator(int index) {
-        return (ListIterator<T>) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.listIterator(index));
-        });
+        return (ListIterator<T>) accessorHelper((list, opts) -> list.listIterator(index));
     }
 
     /**
@@ -642,8 +598,6 @@ public class CDBArrayList<T> implements ICorfuDBObject<CDBArrayList<T>>, List<T>
     @Override
     @SuppressWarnings("unchecked")
     public List<T> subList(int fromIndex, int toIndex) {
-        return (List<T>) accessorHelper((ISMREngineCommand<ArrayList>) (list, opts) -> {
-            opts.getReturnResult().complete(list.subList(fromIndex, toIndex));
-        });
+        return (List<T>) accessorHelper((list, opts) -> list.subList(fromIndex, toIndex));
     }
 }

@@ -39,8 +39,8 @@ public class TimeTravelSMREngineTest {
     public void simpleIntegerSMRTest() throws Exception
     {
         TimeTravelSMREngine<AtomicInteger> smr = new TimeTravelSMREngine<AtomicInteger>(s, AtomicInteger.class);
-        ISMREngineCommand<AtomicInteger> increment = (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndIncrement();
-        ISMREngineCommand<AtomicInteger> decrement = (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndDecrement();
+        ISMREngineCommand<AtomicInteger, Integer> increment = (a,o) -> a.getAndIncrement();
+        ISMREngineCommand<AtomicInteger, Integer> decrement = (a,o) -> a.getAndDecrement();
         ITimestamp ts1 = smr.propose(increment, null);
         smr.sync(ts1);
         assertThat(smr.getObject().get())
@@ -56,13 +56,13 @@ public class TimeTravelSMREngineTest {
     public void timeTravelSMRTest() throws Exception
     {
         TimeTravelSMREngine<AtomicInteger> smr = new TimeTravelSMREngine<AtomicInteger>(s, AtomicInteger.class);
-        ISMREngineCommand<AtomicInteger> increment = new ReversibleSMREngineCommand<AtomicInteger>(
-                                        (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndIncrement(),
-                                        (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndDecrement()
+        ISMREngineCommand<AtomicInteger, Integer> increment = new ReversibleSMREngineCommand<AtomicInteger, Integer>(
+                                        (a,o) -> a.getAndIncrement(),
+                                        (a,o) -> a.getAndDecrement()
         );
-        ISMREngineCommand<AtomicInteger> decrement = new ReversibleSMREngineCommand<AtomicInteger>(
-                (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndDecrement(),
-                (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndIncrement()
+        ISMREngineCommand<AtomicInteger, Integer> decrement = new ReversibleSMREngineCommand<AtomicInteger, Integer>(
+                (a,o) -> a.getAndDecrement(),
+                (a,o) -> a.getAndIncrement()
         );
         ITimestamp ts1 = smr.propose(increment, null);
         smr.sync(ts1);

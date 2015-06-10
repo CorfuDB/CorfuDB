@@ -31,21 +31,11 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     public ITimestamp streamPointer;
     ITimestamp lastProposal;
     Class<T> type;
-    HashMap<ITimestamp, CompletableFuture<Object>> completionTable;
+    HashMap<ITimestamp, CompletableFuture> completionTable;
     HashSet<ITimestamp> localTable;
 
     class SimpleSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
-        CompletableFuture<Object> returnResult;
-
-        public SimpleSMREngineOptions(CompletableFuture<Object> returnResult)
-        {
-            this.returnResult = returnResult;
-        }
-        public CompletableFuture<Object> getReturnResult()
-        {
-            return this.returnResult;
-        }
         public ICorfuDBInstance getInstance() { return stream.getInstance(); }
 
         @Override
@@ -71,7 +61,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                                 + stream.getCurrentPosition() + ")");
             }
             streamPointer = stream.getCurrentPosition();
-            completionTable = new HashMap<ITimestamp, CompletableFuture<Object>>();
+            completionTable = new HashMap<ITimestamp, CompletableFuture>();
             localTable = new HashSet<ITimestamp>();
 
             underlyingObject = type
@@ -116,7 +106,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
      */
     @Override
     @SuppressWarnings("unchecked")
-    public void sync(ITimestamp ts) {
+    public <R> void sync(ITimestamp ts) {
         synchronized (this) {
             if (ts == null) {
                 ts = stream.check();
@@ -143,17 +133,17 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     {
                         if (localTable.contains(ts)) {
                             localTable.remove(ts);
-                            SMRLocalCommandWrapper<T> function = (SMRLocalCommandWrapper<T>) entry.getPayload();
+                            SMRLocalCommandWrapper<T, R> function = (SMRLocalCommandWrapper<T, R>) entry.getPayload();
                             try (TransactionalContext tc =
                                          new TransactionalContext(this, entry.getTimestamp(), function.destination,
                                                  stream.getInstance(), LocalTransaction.class)) {
                                 ITimestamp entryTS = entry.getTimestamp();
                                 CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
                                 completionTable.remove(entryTS);
-                                if (completion == null) {
-                                    completion = new CompletableFuture<>();
+                                R result = function.command.apply(underlyingObject, new SimpleSMREngineOptions());
+                                if (completion != null) {
+                                    completion.complete(result);
                                 }
-                                function.command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
                             }
                         }
                         else
@@ -164,17 +154,19 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     else {
                         try (TransactionalContext tc =
                                      new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
-                            ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
+                            ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
                             ITimestamp entryTS = entry.getTimestamp();
-                            CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
-                            if (completion == null) {completion = new CompletableFuture<>();}
+                            CompletableFuture<R> completion = completionTable.getOrDefault(entryTS, null);
                             completionTable.remove(entryTS);
                             if (entry instanceof MultiCommand)
                             {
                                 completion = new CompletableFuture<>();
                             }
                             // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
-                            function.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+                            R result = (R) function.apply(underlyingObject, new SimpleSMREngineOptions());
+                            if (completion != null) {
+                                completion.complete(result);
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -201,10 +193,14 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
      * @return              The timestamp the command was proposed at.
      */
     @Override
-    public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
+    public <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
         if (readOnly)
         {
-            command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+            R result = command.apply(underlyingObject, new SimpleSMREngineOptions<>());
+            if (completion != null)
+            {
+                completion.complete(result);
+            }
             return streamPointer;
         }
         try {
@@ -232,10 +228,13 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
      * @return A timestamp representing the command proposal time.
      */
     @Override
-    public ITimestamp propose(ISMRLocalCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
-        if (readOnly)
-        {
-            command.accept(underlyingObject, new SimpleSMREngineOptions(completion));
+    public <R> ITimestamp propose(ISMRLocalCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
+        if (readOnly) {
+            R result = command.apply(underlyingObject, new SimpleSMREngineOptions());
+            if (completion != null)
+            {
+                completion.complete(result);
+            }
             return streamPointer;
         }
         try {
@@ -250,6 +249,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         {
             //well, propose is technically not reliable, so we can just silently drop
             //any exceptions.
+            log.warn("Exception in local command propose...", e);
             return null;
         }
     }

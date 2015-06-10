@@ -111,8 +111,8 @@ public class MemorySequencerProtocol implements IStreamSequencer, ISimpleSequenc
      */
     @Override
     public void reset(long epoch) throws NetworkException {
-        log.info("Sequencer reset, epoch@{}", epoch);
-        sequenceNumber.set(0);
+        sequenceNumber = new AtomicLong();
+        log.info("Sequencer reset, epoch@{}, sequence@{}", epoch, sequenceGetCurrent());
     }
 
     @Override

@@ -28,7 +28,7 @@ public class TimeTravelSMREngine<T> extends SimpleSMREngine<T> {
      */
     @Override
     @SuppressWarnings("unchecked")
-    public void sync(ITimestamp ts) {
+    public <R> void sync(ITimestamp ts) {
         if (this.lockTS != null)
         {
             return;
@@ -55,7 +55,7 @@ public class TimeTravelSMREngine<T> extends SimpleSMREngine<T> {
                     streamPointer = stream.getNextTimestamp(streamPointer);
                     try {
                             ISMREngineCommand o = (ISMREngineCommand) stream.readObject(streamPointer);
-                            o.accept(underlyingObject, new SimpleSMREngineOptions(new CompletableFuture<Object>()));
+                            o.apply(underlyingObject, new SimpleSMREngineOptions());
                     } catch (Exception e)
                     {
 
@@ -69,7 +69,7 @@ public class TimeTravelSMREngine<T> extends SimpleSMREngine<T> {
                         Object o = stream.readObject(streamPointer);
                         if (o instanceof ReversibleSMREngineCommand) {
                             ReversibleSMREngineCommand c = (ReversibleSMREngineCommand) o;
-                            c.reverse(underlyingObject, new SimpleSMREngineOptions(new CompletableFuture<Object>()));
+                            c.reverse(underlyingObject, new SimpleSMREngineOptions());
                         }
                         //this operation is non reversible, so unfortunately we have to play from the beginning...
                         OneShotSMREngine<T> smrOS = new OneShotSMREngine<T>(stream.getInstance().openStream(stream.getStreamID()), type, streamPointer);

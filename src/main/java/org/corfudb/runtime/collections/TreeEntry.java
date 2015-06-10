@@ -9,7 +9,7 @@ import java.util.UUID;
  */
 public class TreeEntry<K extends Comparable<K>, V> {
 
-    public Comparable key;
+    public K key;
     public V value;
     public UUID oidnext;
     public boolean deleted;

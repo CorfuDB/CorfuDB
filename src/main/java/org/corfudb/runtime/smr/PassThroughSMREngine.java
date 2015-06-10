@@ -19,16 +19,6 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
 
     class PassThroughSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
-        CompletableFuture<Object> returnResult;
-
-        public PassThroughSMREngineOptions(CompletableFuture<Object> returnResult)
-        {
-            this.returnResult = returnResult;
-        }
-        public CompletableFuture<Object> getReturnResult()
-        {
-            return this.returnResult;
-        }
         public ICorfuDBInstance getInstance() { return null; }
 
         @Override
@@ -81,7 +71,7 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
      *           recent version.
      */
     @Override
-    public void sync(ITimestamp ts) {
+    public <R> void sync(ITimestamp ts) {
         // Always in sync.
     }
 
@@ -109,8 +99,12 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
      * @return A timestamp representing the timestamp that the command was proposed to.
      */
     @Override
-    public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
-        command.accept(underlyingObject, new PassThroughSMREngineOptions(completion));
+    public <R> ITimestamp propose(ISMREngineCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly) {
+        R result = command.apply(underlyingObject, new PassThroughSMREngineOptions<T>());
+        if (completion != null)
+        {
+            completion.complete(result);
+        }
         return ts;
     }
 
