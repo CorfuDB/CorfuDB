@@ -5,18 +5,14 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
-import org.corfudb.runtime.view.IStreamingSequencer;
-import org.corfudb.runtime.view.IWriteOnceAddressSpace;
-import org.corfudb.runtime.view.StreamingSequencer;
-import org.corfudb.runtime.view.WriteOnceAddressSpace;
+import org.corfudb.runtime.view.*;
 
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.Arrays;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -25,6 +21,8 @@ import java.util.function.Function;
  * Created by mwei on 5/1/15.
  */
 public interface ICorfuDBObject<U> extends Serializable {
+
+    Map<ICorfuDBObject, ICorfuDBInstance> instanceMap = Collections.synchronizedMap(new WeakHashMap<>());
 
     /**
      * Returns the SMR engine associated with this object.
@@ -41,8 +39,7 @@ public interface ICorfuDBObject<U> extends Serializable {
         //We need this until we implement custom serialization
         if (getUnderlyingSMREngine() == null)
         {
-            CorfuDBRuntime cdr = CorfuDBRuntime.getRuntime("memory");
-            IStream stream = cdr.getLocalInstance().openStream(getStreamID());
+            IStream stream = getInstance().openStream(getStreamID());
             SimpleSMREngine e = new SimpleSMREngine(stream, getUnderlyingType());
             e.sync(null);
             setUnderlyingSMREngine(e);
@@ -155,17 +152,14 @@ public interface ICorfuDBObject<U> extends Serializable {
         return  o.join();
     }
 
-    /**
-     * Handles upcalls, if implemented. When an SMR engine encounters
-     * a upcall, it calls this handler. This default upcall handler
-     * does nothing.
-     * @param o             The object passed to the upcall handler.
-     * @param cf            A completable future to be returned to the
-     *                      accessor.
-     */
-    default void upcallHandler(Object o, CompletableFuture<Object> cf)
+    default void setInstance(ICorfuDBInstance instance)
     {
+        instanceMap.put(this, instance);
+    }
 
+    default ICorfuDBInstance getInstance()
+    {
+        return instanceMap.get(this);
     }
 
     /**

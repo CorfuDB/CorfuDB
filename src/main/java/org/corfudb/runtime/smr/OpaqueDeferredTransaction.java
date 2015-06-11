@@ -29,9 +29,11 @@ public class OpaqueDeferredTransaction extends DeferredTransaction {
         try (TransactionalContext tx = new TransactionalContext(this))
         {
             ITransactionCommand command = getTransaction();
-            if (!command.apply(new DeferredTransactionOptions())) {
-                engine.setObject(clone);
-            }
+            command.apply(new DeferredTransactionOptions());
+        }
+        catch (TransactionAbortedException e)
+        {
+            engine.setObject(clone);
         }
     }
 }

@@ -136,7 +136,6 @@ public class Serializer
         @Override
         public void write (Kryo kryo, Output output, ICorfuDBObject object) {
             try {
-                log.warn("CDB Serializer: GET class");
                 Class<?> type = object.getClass();
                 kryo.writeObject(output, object.getStreamID());
             } catch (Exception e) {
@@ -147,9 +146,12 @@ public class Serializer
         @Override
         public ICorfuDBObject read (Kryo kryo, Input input, final Class<ICorfuDBObject> type) {
             try {
-                log.warn("CDB deserializer: class is " + type.getName());
                 ICorfuDBObject o = kryo.newInstance(type);
                 o.setStreamID(kryo.readObject(input, UUID.class));
+                if (TransactionalContext.currentTX.get() != null)
+                {
+                    o.setInstance(TransactionalContext.currentTX.get().getInstance());
+                }
                 return o;
             } catch (Exception e) {
                 throw new RuntimeException("Could not deserialize CDBObject", e);

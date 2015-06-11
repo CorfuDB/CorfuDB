@@ -48,7 +48,7 @@ public interface ITransaction {
      * Set the command to be executed for this transaction.
      * @param transaction   The command(s) to be executed for this transaction.
      */
-    void setTransaction(ITransactionCommand transaction);
+    <T> void setTransaction(ITransactionCommand<T> transaction);
 
     /**
      * Execute this command on a specific SMR engine.

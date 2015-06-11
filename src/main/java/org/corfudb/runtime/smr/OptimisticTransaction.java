@@ -27,11 +27,6 @@ public class OptimisticTransaction implements ITransaction, IStreamEntry, Serial
 
         public OptimisticTransactionOptions() {
         }
-
-        @Override
-        public CompletableFuture<Object> getReturnResult() {
-            return null;
-        }
     }
 
     public OptimisticTransaction(ICorfuDBInstance instance)
@@ -142,7 +137,7 @@ public class OptimisticTransaction implements ITransaction, IStreamEntry, Serial
      * @param transaction The command(s) to be executed for this transaction.
      */
     @Override
-    public void setTransaction(ITransactionCommand transaction) {
+    public <T> void setTransaction(ITransactionCommand<T>  transaction) {
 
     }
 

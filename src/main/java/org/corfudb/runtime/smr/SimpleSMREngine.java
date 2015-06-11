@@ -117,7 +117,12 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             }
             while (ts.compareTo(streamPointer) > 0) {
                 try {
-                    IStreamEntry entry = stream.readNextEntry();
+                    IStreamEntry entry;
+                    try (TransactionalContext tc =
+                                 new TransactionalContext(this, ts, stream.getInstance(), PassthroughTransaction.class)) {
+                        //for now, use this to pass the instance context to the deserializer.
+                        entry = stream.readNextEntry();
+                    }
                     if (entry == null)
                     {
                         // we've reached the end of this stream.

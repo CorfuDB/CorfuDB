@@ -9,7 +9,7 @@ import java.util.function.Supplier;
  * Created by mwei on 5/4/15.
  */
 @FunctionalInterface
-public interface ITransactionCommand extends Function<ITransactionOptions, Boolean>, Serializable
+public interface ITransactionCommand<R> extends Function<ITransactionOptions, R>, Serializable
 {
 
 }

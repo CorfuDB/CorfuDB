@@ -4,9 +4,7 @@ import org.apache.zookeeper.KeeperException;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.collections.CDBSimpleMap;
-import org.corfudb.runtime.smr.ICorfuDBObject;
-import org.corfudb.runtime.smr.ISMREngine;
-import org.corfudb.runtime.smr.SimpleSMREngine;
+import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.smr.legacy.CorfuDBObject;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.IStreamMetadata;
@@ -15,8 +13,10 @@ import org.corfudb.runtime.stream.SimpleStreamMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
@@ -214,6 +214,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
                     .getConstructor(classes.toArray(new Class[classes.size()]))
                     .newInstance(largs.toArray(new Object[largs.size()]));
 
+            returnObject.setInstance(this);
+
             objectMap.put(id, returnObject);
             return returnObject;
         }
@@ -222,4 +224,31 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
             throw new RuntimeException(e);
         }
     }
+
+    /**
+     * Executes a transaction against the CorfuDB instance.
+     *
+     * @param type    The type of transaction to execute.
+     * @param command The command to run in the transaction.
+     * @return The value returned in the transaction.
+     */
+    @Override
+    public <T> T executeTransaction(Class<? extends ITransaction> type, ITransactionCommand<T> command) {
+        try {
+            ITransaction tx = type.getConstructor(ICorfuDBInstance.class).newInstance(this);
+            tx.setTransaction(command);
+            CompletableFuture<T> c = new CompletableFuture<>();
+            tx.propose();
+            return c.join();
+        }
+        catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e )
+        {
+            throw new RuntimeException(e);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
 }
