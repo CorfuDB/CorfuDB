@@ -50,12 +50,10 @@ public class SimpleLogUnitServerDiskTest {
 
         // Wait for server thread to finish setting up
         boolean done = false;
-        ArrayList<Integer> tempEpoch = new ArrayList<Integer>();
-        tempEpoch.add(-1);
 
         while (!done) {
             try {
-                slus.write(new UnitServerHdr(tempEpoch, 0), byteList, ExtntMarkType.EX_FILLED);
+                slus.write(new UnitServerHdr(epochlist, 0), byteList, ExtntMarkType.EX_FILLED);
             } catch (NullPointerException e) {
                 continue;
             }
@@ -63,7 +61,7 @@ public class SimpleLogUnitServerDiskTest {
         }
 
         // Write entries in for the tests
-        for (int i = 0; i < 100; i++)
+        for (int i = 1; i < 100; i++)
         {
             byteList.get(0).position(0);
             ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i), byteList, ExtntMarkType.EX_FILLED);
