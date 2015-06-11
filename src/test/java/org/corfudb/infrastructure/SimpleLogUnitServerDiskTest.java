@@ -34,7 +34,7 @@ public class SimpleLogUnitServerDiskTest {
     private static ArrayList<ByteBuffer> byteList = new ArrayList<ByteBuffer>();
 
     @BeforeClass
-    public static void setConfigMap() throws Exception {
+    public static void setupServer() throws Exception {
         HashMap<String, Object> configMap = new HashMap<String, Object>();
         configMap.put("ramdisk", false);
         configMap.put("capacity", 1000);
@@ -47,6 +47,22 @@ public class SimpleLogUnitServerDiskTest {
 
         epochlist.add(0);
         byteList.add(ByteBuffer.wrap(test));
+
+        // Wait for server thread to finish setting up
+        boolean done = false;
+        ArrayList<Integer> tempEpoch = new ArrayList<Integer>();
+        tempEpoch.add(-1);
+
+        while (!done) {
+            try {
+                slus.write(new UnitServerHdr(tempEpoch, 0), byteList, ExtntMarkType.EX_FILLED);
+            } catch (NullPointerException e) {
+                continue;
+            }
+            done = true;
+        }
+
+        // Write entries in for the tests
         for (int i = 0; i < 100; i++)
         {
             byteList.get(0).position(0);
