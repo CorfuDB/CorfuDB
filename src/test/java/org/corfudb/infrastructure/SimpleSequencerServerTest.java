@@ -1,13 +1,26 @@
 package org.corfudb.infrastructure;
 
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
 public class SimpleSequencerServerTest {
 
+    SimpleSequencerServer ss;
+
+    @Before
+    public void setUp() {
+        ss = new SimpleSequencerServer();
+    }
+
+    @Test
+    public void acquireSingleToken() throws Exception {
+        ss.nextpos(1);
+    }
+
     @Test
     public void tokensAlwaysIncrement() throws Exception {
-        SimpleSequencerServer ss = new SimpleSequencerServer();
         assertEquals(ss.nextpos(1), 0);
         assertEquals(ss.nextpos(1), 1);
         for (int i = 1; i < 100; i++)
@@ -18,7 +31,6 @@ public class SimpleSequencerServerTest {
 
     @Test
     public void tokenIncrementsByStride() throws Exception {
-        SimpleSequencerServer ss = new SimpleSequencerServer();
         assertEquals(ss.nextpos(1), 0);
         assertEquals(ss.nextpos(2), 1);
         long last = 3;
@@ -31,7 +43,6 @@ public class SimpleSequencerServerTest {
 
     @Test
     public void tokenReturnCurrent() throws Exception {
-        SimpleSequencerServer ss = new SimpleSequencerServer();
         assertEquals(ss.nextpos(1), 0);
         assertEquals(ss.nextpos(0), 1);
         assertEquals(ss.nextpos(1), 1);
@@ -45,7 +56,6 @@ public class SimpleSequencerServerTest {
 
     @Test
     public void successfullyRecover() throws Exception {
-        SimpleSequencerServer ss = new SimpleSequencerServer();
         for (int i = 0; i < 100; i++)
         {
             assertEquals(ss.nextpos(1), i);
@@ -57,7 +67,6 @@ public class SimpleSequencerServerTest {
 
     @Test
     public void returnsToZeroOnReset() throws Exception {
-        SimpleSequencerServer ss = new SimpleSequencerServer();
         for (int i = 0; i < 100; i++)
         {
             assertEquals(ss.nextpos(1), i);

@@ -75,7 +75,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.4</version>
+            <version>4.5</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -138,11 +138,6 @@
             <groupId>com.thetransactioncompany</groupId>
             <artifactId>jsonrpc2-client</artifactId>
             <version>1.14.4</version>
-        </dependency>
-        <dependency>
-            <groupId>org.zeromq</groupId>
-            <artifactId>jeromq</artifactId>
-            <version>0.3.4</version>
         </dependency>
         <dependency>
             <groupId>com.esotericsoftware</groupId>
@@ -693,6 +688,20 @@
                         <phase>post-integration-test</phase>
                         <goals>
                             <goal>stop-all</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.lazerycode.jmeter</groupId>
+                <artifactId>jmeter-maven-plugin</artifactId>
+                <version>1.10.1</version>
+                <executions>
+                    <execution>
+                        <id>jmeter-tests</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jmeter</goal>
                         </goals>
                     </execution>
                 </executions>

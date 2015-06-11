@@ -110,7 +110,7 @@ public interface ICorfuDBObject<U> extends Serializable {
      */
     default ITransaction getUnderlyingTransaction()
     {
-        return TransactionalContext.currentTX.get();
+        return TransactionalContext.getTX();
     }
 
     /**

@@ -73,7 +73,7 @@ public abstract class IBTreeTest {
         assertThat(testTree.get("key1")).isEqualTo("xxxx");
     }
 
-    @Test
+  //  @Test
     public void deferredTransactionalTest() throws Exception {
         DeferredTransaction tx = new DeferredTransaction(instance);
         testTree.put("key0", "abcd");
@@ -86,7 +86,7 @@ public abstract class IBTreeTest {
             }
             return false;
         });
-     //  ITimestamp txStamp = tx.propose();
+       tx.propose();
       //  testTree.getSMREngine().sync(txStamp);
         assertThat(testTree.get("key0"))
                 .isEqualTo("ABCD");
@@ -94,17 +94,16 @@ public abstract class IBTreeTest {
 
     //@Test public void crossMapSwapTransactionalTestLogical() throws Exception { crossMapSwapTransactionalTest(LambdaLogicalBTree.class);}
     //@Test public void crossMapSwapTransactionalTestPhysical() throws Exception { crossMapSwapTransactionalTest(LPBTree.class);}
-/*
-    public void crossMapSwapTransactionalTest(Class treeclass) throws Exception {
-        testTree = createTree(treeclass, s);
-        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
-        IStream s2 = instance.openStream(streamID);
-        AbstractLambdaBTree<String, String> testMap2 = createTree(treeclass, s2);
+
+   // @Test
+    public void crossMapSwapTransactionalTest() throws Exception {
+        DeferredTransaction tx = new DeferredTransaction(instance);
+        IBTree<String,String> testMap2 = getBtree(instance, UUID.randomUUID());
 
         testTree.put("key0", "abcd");
         testMap2.put("key0", "xxxx");
-        final AbstractLambdaBTree<String, String> txMap = testTree;
-        final AbstractLambdaBTree<String, String> txMap2 = testMap2;
+        final IBTree<String, String> txMap = testTree;
+        final IBTree<String, String> txMap2 = testMap2;
 
         tx.setTransaction((ITransactionCommand) (opts) -> {
             String old1 = txMap.get("key0");
@@ -114,8 +113,6 @@ public abstract class IBTreeTest {
         });
 
         ITimestamp txStamp = tx.propose();
-        testTree.getSMREngine().sync(txStamp);
-        testMap2.getSMREngine().sync(txStamp);
         assertThat(testTree.get("key0"))
                 .isEqualTo("xxxx");
         assertThat(testMap2.get("key0"))

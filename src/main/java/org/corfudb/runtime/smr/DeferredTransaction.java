@@ -61,7 +61,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
         if (streamID.equals(executingEngine.getStreamID()))
         {
-            return new PassThroughSMREngine(executingEngine.getObject(), timestamp);
+            return new PassThroughSMREngine(executingEngine.getObject(), timestamp, instance);
         }
         else
         {
@@ -110,7 +110,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
      * @param transaction The command(s) to be executed for this transaction.
      */
     @Override
-    public <T> void setTransaction(ITransactionCommand<T>  transaction) {
+    public <T> void setTransaction(ITransactionCommand<T> transaction) {
         this.transaction = transaction;
     }
 

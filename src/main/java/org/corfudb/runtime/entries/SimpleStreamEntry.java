@@ -1,10 +1,6 @@
 package org.corfudb.runtime.entries;
 
-import org.corfudb.runtime.smr.ISMREngine;
-import org.corfudb.runtime.smr.ISMREngineCommand;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleTimestamp;
-import sun.java2d.pipe.SpanShapeRenderer;
 
 import java.beans.Transient;
 import java.io.Serializable;

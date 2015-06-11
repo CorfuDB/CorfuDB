@@ -6,6 +6,12 @@ import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.LinkedList;
+import java.util.Stack;
+import java.util.concurrent.LinkedBlockingDeque;
+
 /**
  * This class implements the thread-local transactional context
  * used for determining whether or not an object is part of a transaction.
@@ -19,7 +25,16 @@ public class TransactionalContext implements AutoCloseable {
     /**
      * The currently executing transaction on this thread.
      */
-    public static ThreadLocal<ITransaction> currentTX = ThreadLocal.withInitial(() -> null);
+    public static ThreadLocal<Deque<ITransaction>> currentTX =
+            ThreadLocal.withInitial(ArrayDeque<ITransaction>::new);
+
+    /**
+     * Get the currently executing transaction.
+     * @return  The currently executing transaction.
+     */
+    public static ITransaction getTX() {
+        return currentTX.get().peekFirst();
+    }
 
     /**
      * Create a new transactional context.
@@ -27,7 +42,7 @@ public class TransactionalContext implements AutoCloseable {
      */
     public TransactionalContext(ITransaction transaction)
     {
-        currentTX.set(transaction);
+        currentTX.get().addFirst(transaction);
     }
 
 
@@ -40,7 +55,7 @@ public class TransactionalContext implements AutoCloseable {
     public TransactionalContext(ISMREngine engine, ITimestamp ts, ICorfuDBInstance cdr, Class<? extends ITransaction> txType)
     {
         try {
-            currentTX.set(txType.getConstructor(ISMREngine.class, ITimestamp.class, ICorfuDBInstance.class)
+            currentTX.get().addFirst(txType.getConstructor(ISMREngine.class, ITimestamp.class, ICorfuDBInstance.class)
                     .newInstance(engine, ts, cdr));
         } catch (Exception e)
         {
@@ -58,7 +73,7 @@ public class TransactionalContext implements AutoCloseable {
     public TransactionalContext(ISMREngine engine, ITimestamp ts, ITimestamp res, ICorfuDBInstance cdr, Class<? extends ITransaction> txType)
     {
         try {
-            currentTX.set(txType.getConstructor(ISMREngine.class, ITimestamp.class, ITimestamp.class, ICorfuDBInstance.class)
+            currentTX.get().addFirst(txType.getConstructor(ISMREngine.class, ITimestamp.class, ITimestamp.class, ICorfuDBInstance.class)
                     .newInstance(engine, ts, res, cdr));
         } catch (Exception e)
         {
@@ -67,23 +82,15 @@ public class TransactionalContext implements AutoCloseable {
     }
 
     /**
-     * Get the currently executing transaction.
-     * @return  The currently executing transaction.
-     */
-    public ITransaction getTX() {
-        return currentTX.get();
-    }
-
-    /**
      * Closes this transactional context, releasing the currentTX held by the thread local.
      */
     @Override
     public void close() {
-        if (currentTX.get() instanceof LocalTransaction)
+        if (currentTX.get().peekFirst() instanceof LocalTransaction)
         {
-            log.info("Proposing a locally executed transaction at " + ((LocalTransaction) currentTX.get()).timestamp);
+            log.info("Proposing a locally executed transaction at " + ((LocalTransaction) currentTX.get().peekFirst()).timestamp);
             try {
-                currentTX.get().propose();
+                currentTX.get().peekFirst().propose();
             }
             catch (Exception e)
             {
@@ -91,6 +98,6 @@ public class TransactionalContext implements AutoCloseable {
                 throw new RuntimeException(e);
             }
         }
-        currentTX.set(null);
+        currentTX.get().removeFirst();
     }
 }

@@ -37,7 +37,7 @@ public class PassthroughTransaction implements ITransaction{
     public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
         if (streamID.equals(executingEngine.getStreamID()))
         {
-            return new PassThroughSMREngine(executingEngine.getObject(), timestamp);
+            return new PassThroughSMREngine(executingEngine.getObject(), timestamp, instance);
         }
         else
         {

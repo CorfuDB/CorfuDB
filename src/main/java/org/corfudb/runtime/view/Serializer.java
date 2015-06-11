@@ -148,9 +148,9 @@ public class Serializer
             try {
                 ICorfuDBObject o = kryo.newInstance(type);
                 o.setStreamID(kryo.readObject(input, UUID.class));
-                if (TransactionalContext.currentTX.get() != null)
+                if (TransactionalContext.getTX() != null)
                 {
-                    o.setInstance(TransactionalContext.currentTX.get().getInstance());
+                    o.setInstance(TransactionalContext.getTX().getInstance());
                 }
                 return o;
             } catch (Exception e) {

@@ -19,7 +19,7 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
 
     class PassThroughSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
-        public ICorfuDBInstance getInstance() { return null; }
+        public ICorfuDBInstance getInstance() { return instance; }
 
         @Override
         public UUID getEngineID() {
@@ -35,11 +35,13 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
 
     T underlyingObject;
     ITimestamp ts;
+    ICorfuDBInstance instance;
 
-    public PassThroughSMREngine(T object, ITimestamp ts)
+    public PassThroughSMREngine(T object, ITimestamp ts, ICorfuDBInstance instance)
     {
         underlyingObject = object;
         this.ts = ts;
+        this.instance = instance;
     }
 
     /**
