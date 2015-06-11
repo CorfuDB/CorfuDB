@@ -200,6 +200,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         }
 	}
 
+    // Assumes each ByteBuffer has length <= PAGESIZE.
 	private boolean put(List<ByteBuffer> wbufs) throws IOException {
 
 		if (wbufs.size() > freewater) {
@@ -257,7 +258,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 	public int getLength(long logOffset) {
 		int mi = mapind(logOffset) + intsz;
-		return mapb.getInt(mi);
+		return mapb.getInt(mi) >> 2;
 	}
 
 	public ExtntMarkType getET(long logOffset) {
