@@ -13,36 +13,17 @@ import java.util.*;
  * Created by mwei on 6/1/15.
  */
 
-public class MultiCommand<T> implements ISMREngineCommand<T>, IStreamEntry, Serializable {
+public class MultiCommand<T, R> implements ISMREngineCommand<T, R>, IStreamEntry, Serializable {
 
     private static final Logger log = LoggerFactory.getLogger(MultiCommand.class);
 
-    Map<UUID, List<ISMREngineCommand>> commandMap;
+    Map<UUID, ISMREngineCommand[]> commandMap;
     ITimestamp ts;
 
     @SuppressWarnings("unchecked")
-    public MultiCommand(Map<UUID, List<ISMREngineCommand>> commandMap)
+    public MultiCommand(Map<UUID, ISMREngineCommand[]> commandMap)
     {
-        this.commandMap = (Map<UUID, List<ISMREngineCommand>>) Serializer.copy(commandMap);
-    }
-
-    /**
-     * Performs this operation on the given arguments.
-     *
-     * @param t                 the first input argument
-     * @param ismrEngineOptions the second input argument
-     */
-    @Override
-    @SuppressWarnings("unchecked")
-    public void accept(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
-    {
-        if (commandMap.get(ismrEngineOptions.getEngineID()) != null) {
-            log.info("playing back " + commandMap.get(ismrEngineOptions.getEngineID()).size() + " commands for stream " + ismrEngineOptions.getEngineID());
-        }
-        for (ISMREngineCommand c : commandMap.get(ismrEngineOptions.getEngineID()))
-             {
-                     c.accept(t, ismrEngineOptions);
-             }
+        this.commandMap = commandMap;
     }
 
     public Set<UUID> getStreams()
@@ -57,7 +38,7 @@ public class MultiCommand<T> implements ISMREngineCommand<T>, IStreamEntry, Seri
      */
     @Override
     public List<UUID> getStreamIds() {
-        return new ArrayList(getStreams());
+        return new ArrayList<UUID>(getStreams());
     }
 
     /**
@@ -99,5 +80,25 @@ public class MultiCommand<T> implements ISMREngineCommand<T>, IStreamEntry, Seri
     @Override
     public Object getPayload() {
         return this;
+    }
+
+    /**
+     * Applies this function to the given arguments.
+     *
+     * @param t                  the first function argument
+     * @param tismrEngineOptions the second function argument
+     * @return the function result
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public R apply(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions) {
+        if (commandMap.get(ismrEngineOptions.getEngineID()) != null) {
+            log.info("playing back " + commandMap.get(ismrEngineOptions.getEngineID()).length + " commands for stream " + ismrEngineOptions.getEngineID());
+        }
+        for (ISMREngineCommand c : commandMap.get(ismrEngineOptions.getEngineID()))
+        {
+            c.apply(t, ismrEngineOptions);
+        }
+        return null;
     }
 }

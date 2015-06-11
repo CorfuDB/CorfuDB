@@ -8,6 +8,7 @@ import org.corfudb.runtime.view.*;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.Serializable;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,24 +21,23 @@ import static org.assertj.core.api.Assertions.*;
 public class SimpleSMREngineTest {
 
     SimpleStream s;
-    IWriteOnceAddressSpace woas;
-    IStreamingSequencer ss;
+    ICorfuDBInstance instance;
+
     @Before
     public void generateStream()
     {
         MemoryConfigMasterProtocol.inMemoryClear();
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("memory");
-        woas = new WriteOnceAddressSpace(cdr);
-        ss = new StreamingSequencer(cdr);
-        s = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
+        instance = cdr.getLocalInstance();
+        s = (SimpleStream) instance.openStream(UUID.randomUUID());
     }
 
     @Test
     public void simpleIntegerSMRTest() throws Exception
     {
         SimpleSMREngine<AtomicInteger> smr = new SimpleSMREngine<AtomicInteger>(s, AtomicInteger.class);
-        ISMREngineCommand<AtomicInteger> increment = (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndIncrement();
-        ISMREngineCommand<AtomicInteger> decrement = (ISMREngineCommand<AtomicInteger>) (a,o) -> a.getAndDecrement();
+        ISMREngineCommand<AtomicInteger, Integer> increment = (a,o) -> a.getAndIncrement();
+        ISMREngineCommand<AtomicInteger, Integer> decrement =  (a,o) -> a.getAndDecrement();
         ITimestamp ts1 = smr.propose(increment, null);
         smr.sync(ts1);
         assertThat(smr.getObject().get())
@@ -53,9 +53,8 @@ public class SimpleSMREngineTest {
     public void mutatorAccessorSMRTest() throws Exception
     {
         SimpleSMREngine<AtomicInteger> smr = new SimpleSMREngine<AtomicInteger>(s, AtomicInteger.class);
-        ISMREngineCommand<AtomicInteger> getAndIncrement =
-                (ISMREngineCommand<AtomicInteger>) (a,o) -> {o.getReturnResult().complete(a.getAndIncrement());};
-        CompletableFuture<Object> previous = new CompletableFuture<Object>();
+        ISMREngineCommand<AtomicInteger, Integer> getAndIncrement = (a,o) -> a.getAndIncrement();
+        CompletableFuture<Integer> previous = new CompletableFuture<Integer>();
 
         ITimestamp ts1 = smr.propose(getAndIncrement, previous);
         smr.sync(ts1);
@@ -64,7 +63,7 @@ public class SimpleSMREngineTest {
         assertThat(previous.get())
                 .isEqualTo(0);
 
-        previous = new CompletableFuture<Object>();
+        previous = new CompletableFuture<Integer>();
         ITimestamp ts2 = smr.propose(getAndIncrement, previous);
         smr.sync(ts2);
         assertThat(smr.getObject().get())

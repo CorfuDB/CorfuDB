@@ -133,12 +133,12 @@ public class LocalTransaction implements ITransaction {
     @Override
     @SuppressWarnings("unchecked")
     public ITimestamp propose() throws IOException {
-        Map<UUID, List<ISMREngineCommand>> commands = new HashMap<UUID, List<ISMREngineCommand>>();
+        Map<UUID, ISMREngineCommand[]> commands = new HashMap<UUID, ISMREngineCommand[]>();
         for (UUID i : spawnedEngines.keySet())
         {
             BufferedSMREngine e = spawnedEngines.get(i);
             List<ISMREngineCommand> l = e.commandBuffer;
-            commands.put(i, l);
+            commands.put(i, l.toArray(new ISMREngineCommand[l.size()]));
         }
         MultiCommand mc = new MultiCommand(commands);
         instance.getAddressSpace().write(((SimpleTimestamp)res).address, mc);

@@ -58,10 +58,11 @@ import java.lang.reflect.Modifier;
 import java.lang.IllegalAccessException;
 import java.lang.IllegalArgumentException;
 
+/*
 import com.esotericsoftware.kryonet.Server;
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Connection;
-
+*/
 import org.corfudb.runtime.gossip.StreamEpochGossipEntry;
 import org.corfudb.runtime.gossip.StreamDiscoveryRequestGossip;
 import org.corfudb.runtime.gossip.StreamDiscoveryResponseGossip;
@@ -89,15 +90,16 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     private CorfuDBView currentView;
     private StreamView currentStreamView;
     private Boolean viewActive;
-    private GossipServer gossipServer;
+  //  private GossipServer gossipServer;
     private RemoteLogView currentRemoteView;
     int masterid = new SecureRandom().nextInt();
 
     public ConfigMasterServer() {
     }
 
+    /*
     private class GossipServer {
-        private Server server;
+      //  private Server server;
         private int port;
 
         public GossipServer(final Map<String,Object> config)
@@ -110,7 +112,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
         public void start()
         {
-            server.start();
+         /  server.start();
             log.info("Gossip server bound to TCP/UDP port " + port);
             try {
                 server.bind(port, port);
@@ -119,7 +121,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             {
                 log.debug("Error binding gossip server", ie);
             }
-            server.addListener(new Listener(){
+           server.addListener(new Listener(){
                 public void received (Connection connection, Object object)
                 {
                     if (object instanceof StreamEpochGossipEntry)
@@ -137,11 +139,12 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                             if (!sege.fromMaster)
                             {
                                 /* now we need to advertise this change to all other configuration masters */
-                                sege.fromMaster = true;
-                                sendGossipToAllRemotes(sege);
-                            }
-                        }
-                    }
+                             //   sege.fromMaster = true;
+                //                sendGossipToAllRemotes(sege);
+                          //  }
+                     //   }
+                   // }
+    /*
                     else if (object instanceof StreamDiscoveryRequestGossip)
                     {
                         StreamDiscoveryRequestGossip sdrg = (StreamDiscoveryRequestGossip) object;
@@ -196,6 +199,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         }
 
     }
+*/
 
     private void sendGossipToAllRemotes(IGossip gossip)
     {
@@ -217,8 +221,8 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     public Runnable getInstance(final Map<String,Object> config)
     {
         //use the config for the init view (well, we'll have to deal with reconfigurations...)
-        gossipServer = new GossipServer(config);
-        gossipServer.start();
+       // gossipServer = new GossipServer(config);
+     //  gossipServer.start();
 
         this.config = config;
         viewActive = false;

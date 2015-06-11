@@ -11,8 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
-public class LPBTree<K extends Comparable<K>, V>
-        extends AbstractLambdaBTree<K, V> {
+public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeContainer>, IBTree<K, V> {
 
     private static final Logger log = LoggerFactory.getLogger(LPBTree.class);
 
@@ -84,21 +83,14 @@ public class LPBTree<K extends Comparable<K>, V>
         final UUID rootID = e.getStreamID();
         log.info("Create root with id " + rootID.toString());
         log.info("container=" + smr.getStreamID().toString());
-        mutatorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        mutatorHelper((tree, opts) -> {
             tree.m_root = rootID;
             tree.m_height = 0;
             tree.m_size = 0;
+            return null;
         });
     }
 
-
-    /**
-     * Get the type of the underlying object
-     */
-    @Override
-    public Class<?> getUnderlyingType() {
-        return TreeContainer.class;
-    }
 
     /**
      * Get the UUID of the underlying stream
@@ -114,7 +106,7 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return The SMR engine this object was instantiated under.
      */
     @Override
-    public ISMREngine getUnderlyingSMREngine() {
+    public ISMREngine<TreeContainer> getUnderlyingSMREngine() {
         return smr;
     }
 
@@ -124,8 +116,8 @@ public class LPBTree<K extends Comparable<K>, V>
      * @param engine
      */
     @Override
-    @SuppressWarnings("unchecked")
-    public void setUnderlyingSMREngine(ISMREngine engine) {
+    public void setUnderlyingSMREngine(ISMREngine<TreeContainer> engine)
+    {
         this.smr = engine;
     }
 
@@ -149,9 +141,9 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return
      */
     public String printview() {
-        return (String) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        return accessorHelper((tree, opts) -> {
             LPBTNode node = getNodeById(opts.getInstance(), tree.m_root);
-            opts.getReturnResult().complete(printview(opts.getInstance(), tree, node, tree.m_height, "") + "\n");
+            return printview(opts.getInstance(), tree, node, tree.m_height, "") + "\n";
         });
     }
 
@@ -219,10 +211,9 @@ public class LPBTree<K extends Comparable<K>, V>
      */
     public String print() {
 
-        return (String) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        return accessorHelper((tree, opts) -> {
             LPBTNode node = getNodeById(opts.getInstance(), tree.m_root);
-            String result = print(opts.getInstance(), tree, node, tree.m_height, "") + "\n";
-            opts.getReturnResult().complete(result);
+            return print(opts.getInstance(), tree, node, tree.m_height, "") + "\n";
         });
     }
 
@@ -294,10 +285,8 @@ public class LPBTree<K extends Comparable<K>, V>
      * @param key
      * @return
      */
-    @SuppressWarnings("unchecked")
     public V get(K key) {
-        return (V) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            V result = null;
+        return (V) accessorHelper((tree, opts) -> {
             if (key != null) {
                 UUID root = readrootoid();
                 int height = readheight();
@@ -305,11 +294,11 @@ public class LPBTree<K extends Comparable<K>, V>
                 if (entry != null) {
                     boolean deleted = readdeleted(entry);
                     if (!deleted) {
-                        result = (V) readvalue(entry);
+                        return readvalue(entry);
                     }
                 }
             }
-            opts.getReturnResult().complete(result);
+            return null;
         });
     }
 
@@ -319,7 +308,7 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return
      */
     public V remove(K key) {
-        return (V) mutatorAccessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        return mutatorAccessorHelper((tree, opts) -> {
             V result = null;
             if (key != null) {
                 UUID root = readrootoid();
@@ -334,8 +323,9 @@ public class LPBTree<K extends Comparable<K>, V>
                         writesize(size - 1);
                     }
                 }
-                opts.getReturnResult().complete(result);
+                return result;
             }
+            return null;
         });
     }
 
@@ -346,7 +336,7 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return
      */
     public boolean update(K key, V value) {
-        return (boolean) mutatorAccessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        return  mutatorAccessorHelper((tree, opts) -> {
             boolean result = false;
             if (key != null) {
                 UUID root = readrootoid();
@@ -360,8 +350,10 @@ public class LPBTree<K extends Comparable<K>, V>
                         result = true;
                     }
                 }
-                opts.getReturnResult().complete(result);
+                return result;
             }
+
+            return false;
         });
     }
 
@@ -370,11 +362,12 @@ public class LPBTree<K extends Comparable<K>, V>
      * clear the tree
      */
     public void clear() {
-        mutatorAccessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        mutatorHelper((tree, opts) -> {
             UUID root = readrootoid();
             writeroot(CorfuDBObject.oidnull);
             writesize(0);
             writeheight(0);
+            return null;
         });
     }
 
@@ -387,7 +380,7 @@ public class LPBTree<K extends Comparable<K>, V>
     @SuppressWarnings("unchecked")
     public V
     put(K key, V value) {
-        return (V) localCommandHelper((ISMRLocalCommand<TreeContainer>) (tree, opts) -> {
+        return localCommandHelper((tree, opts) -> {
             V result = null;
             UUID root = tree.m_root;
             int height = tree.m_height;
@@ -424,7 +417,7 @@ public class LPBTree<K extends Comparable<K>, V>
                     writeheight(height + 1);
                 }
             }
-            opts.getReturnResult().complete(result);
+            return result;
         });
     }
 
@@ -601,11 +594,12 @@ public class LPBTree<K extends Comparable<K>, V>
      * return the most recently observed value.
      * @return
      */
+    @SuppressWarnings("unchecked")
     protected LPBTNode<K, V>
     readroot() {
-        return (LPBTNode<K, V>) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            opts.getReturnResult().complete(getNodeById(opts.getInstance(), tree.m_root));
-        });
+        return smr.getInstance().openObject(accessorHelper((tree, opts) -> {
+            return tree.m_root;
+        }), LPBTNode.class);
     }
 
     /**
@@ -613,9 +607,7 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return
      */
     public int readsize() {
-        return (int) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            opts.getReturnResult().complete(tree.m_size);
-        });
+        return accessorHelper((tree, opts) -> tree.m_size);
     }
 
     /**
@@ -623,9 +615,7 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return
      */
     public int readheight() {
-        return (int) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            opts.getReturnResult().complete(tree.m_height);
-        });
+        return accessorHelper((tree, opts) -> tree.m_height);
     }
 
     /**
@@ -633,9 +623,11 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return
      */
     public void writesize(int size) {
-        mutatorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            tree.m_size = size;
-        });
+        mutatorHelper((tree, opts) ->
+            {
+                tree.m_size = size;
+                return null;
+            });
     }
 
     /**
@@ -643,8 +635,9 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return
      */
     public void writeheight(int height) {
-        mutatorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        mutatorHelper((tree, opts) -> {
             tree.m_height = height;
+            return null;
         });
     }
 
@@ -653,14 +646,13 @@ public class LPBTree<K extends Comparable<K>, V>
      * @return
      */
     public UUID readrootoid() {
-        return (UUID) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
-            opts.getReturnResult().complete(tree.m_root);
-        });
+        return accessorHelper((tree, opts) -> tree.m_root);
     }
 
     public void writeroot(UUID _oid) {
-        mutatorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        mutatorHelper((tree, opts) -> {
             tree.m_root = _oid;
+            return null;
         });
     }
 
@@ -782,9 +774,9 @@ public class LPBTree<K extends Comparable<K>, V>
         UUID entryoid
         )
     {
-        return (Comparable) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        return accessorHelper((tree, opts) -> {
             LPBTEntry<K, V> entry = getEntryById(opts.getInstance(), entryoid);
-            opts.getReturnResult().complete(entry.readKey());
+            return entry.readKey();
         });
     }
 
@@ -822,9 +814,9 @@ public class LPBTree<K extends Comparable<K>, V>
     readnext(
             UUID entryoid
         ) {
-        return (UUID) accessorHelper((ISMREngineCommand<TreeContainer>) (tree, opts) -> {
+        return accessorHelper((tree, opts) -> {
             LPBTEntry<K, V> entry = getEntryById(opts.getInstance(), entryoid);
-            opts.getReturnResult().complete(entry.readNext());
+            return entry.readNext();
         });
     }
 
@@ -855,7 +847,15 @@ public class LPBTree<K extends Comparable<K>, V>
         return node.readChildCount();
     }
 
-
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
+    }
 }
 
 

@@ -6,13 +6,13 @@ import java.util.function.BiConsumer;
 /**
  * Created by mwei on 5/6/15.
  */
-public class ReversibleSMREngineCommand<T> implements ISMREngineCommand<T>, Serializable
+public class ReversibleSMREngineCommand<T ,R> implements ISMREngineCommand<T, R>, Serializable
 {
 
-    ISMREngineCommand<T> command;
-    ISMREngineCommand<T> reverseCommand;
+    ISMREngineCommand<T,R> command;
+    ISMREngineCommand<T,R> reverseCommand;
 
-    public ReversibleSMREngineCommand(ISMREngineCommand<T> command, ISMREngineCommand<T> reverseCommand)
+    public ReversibleSMREngineCommand(ISMREngineCommand<T,R> command, ISMREngineCommand<T,R> reverseCommand)
     {
         this.command = command;
         this.reverseCommand = reverseCommand;
@@ -25,13 +25,13 @@ public class ReversibleSMREngineCommand<T> implements ISMREngineCommand<T>, Seri
      * @param ismrEngineOptions the second input argument
      */
     @Override
-    public void accept(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
+    public R apply(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
     {
-        command.accept(t, ismrEngineOptions);
+        return command.apply(t, ismrEngineOptions);
     }
 
-    public void reverse(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
+    public R reverse(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions)
     {
-        reverseCommand.accept(t, ismrEngineOptions);
+        return reverseCommand.apply(t, ismrEngineOptions);
     }
 }

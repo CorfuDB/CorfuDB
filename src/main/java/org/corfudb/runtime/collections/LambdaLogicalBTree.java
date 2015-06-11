@@ -13,9 +13,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class LambdaLogicalBTree<K extends Comparable<K>, V>
-        extends AbstractLambdaBTree<K, V> {
+        implements ICorfuDBObject<BTree<K,V>>, IBTree<K,V> {
 
-    transient ISMREngine<BTree> smr;
+    transient ISMREngine<BTree<K,V>> smr;
     UUID streamID;
 
     @SuppressWarnings("unchecked")
@@ -37,14 +37,6 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     }
 
     /**
-     * Get the type of the underlying object
-     */
-    @Override
-    public Class<?> getUnderlyingType() {
-        return BTree.class;
-    }
-
-    /**
      * Get the UUID of the underlying stream
      */
     @Override
@@ -58,7 +50,7 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
      * @return The SMR engine this object was instantiated under.
      */
     @Override
-    public ISMREngine getUnderlyingSMREngine() {
+    public ISMREngine<BTree<K,V>> getUnderlyingSMREngine() {
         return smr;
     }
 
@@ -74,13 +66,21 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     }
 
     /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
+    }
+
+    /**
      * return the size
      * @return
      */
     public int size() {
-        return (int) accessorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
-            opts.getReturnResult().complete(map.size());
-        });
+        return accessorHelper((map, opts) -> map.size());
     }
 
     /**
@@ -88,9 +88,7 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
      * @return
      */
     public int height() {
-        return (int) accessorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
-            opts.getReturnResult().complete(map.height());
-        });
+        return accessorHelper((map, opts) -> map.height());
     }
 
     /**
@@ -99,9 +97,7 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
      * @return
      */
     public V get(K key) {
-        return (V) accessorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
-            opts.getReturnResult().complete(map.get(key));
-        });
+        return accessorHelper((map, opts) -> map.get(key));
     }
 
     /**
@@ -110,9 +106,7 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
      * @param value
      */
     public V put(K key, V value) {
-        return (V) mutatorAccessorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
-            opts.getReturnResult().complete(map.put(key, value));
-        });
+        return mutatorAccessorHelper((map, opts) -> map.put(key, value));
     }
 
     /**
@@ -123,11 +117,7 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
      */
     @Override
     public V remove(K key) {
-        return (V) mutatorAccessorHelper(
-                (ISMREngineCommand<BTree>) (map, opts) -> {
-                    opts.getReturnResult().complete(map.remove(key));
-                }
-        );
+        return mutatorAccessorHelper((map, opts) -> map.remove(key));
     }
 
     /**
@@ -136,19 +126,16 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
      * @param value
      */
     public boolean update(K key, V value) {
-        return (boolean) mutatorAccessorHelper(
-                (ISMREngineCommand<BTree>) (map, opts) -> {
-                    opts.getReturnResult().complete(map.update(key, value));
-                }
-        );
+        return mutatorAccessorHelper((map, opts) -> map.update(key, value));
     }
 
     /**
      * clear the tree
      */
     public void clear() {
-        mutatorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
+        mutatorHelper((map, opts) -> {
             map.clear();
+            return null;
         });
     }
 
@@ -163,9 +150,7 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
      * @return
      */
     public String print() {
-        return (String) accessorHelper((ISMREngineCommand<BTree>) (map, opts) -> {
-            opts.getReturnResult().complete(map.print());
-        });
+        return accessorHelper((map, opts) -> map.print());
     }
 
 }

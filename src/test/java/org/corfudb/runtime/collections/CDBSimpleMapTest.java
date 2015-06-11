@@ -32,7 +32,7 @@ public class CDBSimpleMapTest {
         instance = cdr.getLocalInstance();
         streamID = UUID.randomUUID();
         s = instance.openStream(streamID);
-        testMap = new CDBSimpleMap<Integer, Integer>(s);
+        testMap = instance.openObject(streamID, CDBSimpleMap.class);
     }
 
     @Test
@@ -52,8 +52,7 @@ public class CDBSimpleMapTest {
     {
         testMap.put(0, 10);
         testMap.put(10, 100);
-        IStream s2 = cdr.openStream(streamID, SimpleStream.class);
-        CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
+        CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(streamID, CDBSimpleMap.class);
         assertThat(testMap2.get(0))
                 .isEqualTo(10);
         assertThat(testMap2.get(10))
@@ -92,8 +91,7 @@ public class CDBSimpleMapTest {
     public void crossMapSwapTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
-        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
-        CDBSimpleMap<Integer,Integer> testMap2 = new CDBSimpleMap<Integer,Integer>(s2);
+        CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
 
         testMap.put(10, 100);
         testMap2.put(10, 1000);
@@ -118,9 +116,8 @@ public class CDBSimpleMapTest {
     @Test
     public void mapOfMapsTest() throws Exception
     {
-        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
         CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =
-                new CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>>(s2);
+                instance.openObject(streamID, CDBSimpleMap.class);
         testMap2.put(10, testMap);
         testMap.put(100, 1000);
         assertThat(testMap2.get(10).get(100))
@@ -169,10 +166,10 @@ public class CDBSimpleMapTest {
     public void TimeTravelSMRTest()
     {
         IStream s1 = instance.openStream(UUID.randomUUID());
-        CDBSimpleMap<Integer, Integer> map = new CDBSimpleMap<Integer,Integer>(
-                s1,
-                TimeTravelSMREngine.class
-        );
+        CDBSimpleMap<Integer, Integer> map = instance.openObject(streamID, new ICorfuDBInstance.OpenObjectArgs<CDBSimpleMap>(
+                    CDBSimpleMap.class,
+                    TimeTravelSMREngine.class
+        ));
 
         map.put(10, 100);
         map.put(100, 1000);

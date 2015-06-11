@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * crossbach 5/21/15
  * borrowed map method implementations from Michael's CDBSimpleMap
  */
-public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObject<CDBSimpleMap<K,V>>, Map<K,V>
+public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObject<TreeMap<K,V>>, Map<K,V>
 {
     transient ISMREngine<TreeMap> smr;
     ITransaction tx;
@@ -57,7 +57,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      * @return a set with the specified number of entries
      */
     public Set<K> getKeyRange(K start, int records) {
-        return (Set<K>) accessorHelper((ISMREngineCommand<TreeMap<K, V>>) (map, opts) -> {
+        return accessorHelper((map, opts) -> {
             Set<K> result = new HashSet<K>();
             if (records != 0) {
                 int count = 0;
@@ -74,7 +74,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
                     count++;
                 } while (count < records && current != null);
             }
-            opts.getReturnResult().complete(result);
+            return result;
         });
     }
 
@@ -86,7 +86,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      * @return a map with the specified number of entries
      */
     public SortedMap<K, V> getRange(K start, int records) {
-        return (SortedMap<K,V>) accessorHelper((ISMREngineCommand<TreeMap<K, V>>) (map, opts) -> {
+        return accessorHelper((map, opts) -> {
             SortedMap<K,V> result = new TreeMap<K, V>();
             if(records != 0) {
                 int count = 0;
@@ -105,7 +105,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
                     } while (count < records && current != null);
                 }
             }
-            opts.getReturnResult().complete(result);
+            return result;
         });
     }
 
@@ -118,9 +118,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      */
     @Override
     public int size() {
-        return (int) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.size());
-        });
+        return accessorHelper((map, opts) -> map.size());
     }
 
     /**
@@ -130,9 +128,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      */
     @Override
     public boolean isEmpty() {
-        return (boolean) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.isEmpty());
-        });
+        return accessorHelper((map, opts) -> map.isEmpty());
     }
 
     /**
@@ -154,9 +150,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      */
     @Override
     public boolean containsKey(Object key) {
-        return (boolean) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.containsKey(key));
-        });
+        return accessorHelper((map, opts) -> map.containsKey(key));
     }
 
     /**
@@ -179,9 +173,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      */
     @Override
     public boolean containsValue(Object value) {
-        return (boolean) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.containsValue(value));
-        });
+        return accessorHelper((map, opts) -> map.containsValue(value));
     }
 
     /**
@@ -210,11 +202,8 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @SuppressWarnings("unchecked")
     public V get(Object key) {
-        return (V) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.get(key));
-        });
+        return accessorHelper((map, opts) -> map.get(key));
     }
 
     /**
@@ -244,11 +233,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     @Override
     @SuppressWarnings("unchecked")
     public V put(K key, V value) {
-        return (V) mutatorAccessorHelper(
-                (ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-                    opts.getReturnResult().complete(map.put(key, value));
-                }
-        );
+        return mutatorAccessorHelper( (map, opts) -> map.put(key, value));
     }
 
     /**
@@ -282,11 +267,8 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @SuppressWarnings("unchecked")
     public V remove(Object key) {
-        return (V) mutatorAccessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.remove(key));
-        });
+        return mutatorAccessorHelper((map, opts) -> map.remove(key));
     }
 
     /**
@@ -311,9 +293,11 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     @Override
     @SuppressWarnings("unchecked")
     public void putAll(Map<? extends K, ? extends V> m) {
-        mutatorHelper((ISMREngineCommand<ConcurrentHashMap>) (map,opts) -> {
-            map.putAll(m);
-        });
+        mutatorHelper((map,opts) -> {
+                    map.putAll(m);
+                    return null;
+                }
+        );
     }
 
     /**
@@ -325,8 +309,9 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      */
     @Override
     public void clear() {
-        mutatorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
+        mutatorHelper((map, opts) -> {
             map.clear();
+            return null;
         });
     }
 
@@ -348,9 +333,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     @Override
     @SuppressWarnings("unchecked")
     public Set<K> keySet() {
-        return (Set<K>) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.keySet());
-        });
+        return accessorHelper((map, opts) -> map.keySet());
     }
 
     /**
@@ -371,9 +354,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     @Override
     @SuppressWarnings("unchecked")
     public Collection<V> values() {
-        return (Collection<V>) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.values());
-        });
+        return (Collection<V>) accessorHelper((map, opts) -> map.values());
     }
 
     /**
@@ -394,17 +375,7 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
      */
     @Override
     public Set<Entry<K, V>> entrySet() {
-        return (Set<Entry<K,V>>) accessorHelper((ISMREngineCommand<ConcurrentHashMap>) (map, opts) -> {
-            opts.getReturnResult().complete(map.entrySet());
-        });
-    }
-
-    /**
-     * Get the type of the underlying object
-     */
-    @Override
-    public Class<?> getUnderlyingType() {
-        return TreeMap.class;
+        return accessorHelper((map, opts) -> map.entrySet());
     }
 
     /**
@@ -434,6 +405,16 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     @SuppressWarnings("unchecked")
     public void setUnderlyingSMREngine(ISMREngine engine) {
         this.smr = engine;
+    }
+
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
     }
 
     /**

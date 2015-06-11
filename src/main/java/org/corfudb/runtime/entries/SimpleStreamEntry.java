@@ -1,7 +1,10 @@
 package org.corfudb.runtime.entries;
 
+import org.corfudb.runtime.smr.ISMREngine;
+import org.corfudb.runtime.smr.ISMREngineCommand;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleTimestamp;
+import sun.java2d.pipe.SpanShapeRenderer;
 
 import java.beans.Transient;
 import java.io.Serializable;
@@ -12,22 +15,21 @@ import java.util.*;
  */
 public class SimpleStreamEntry implements IStreamEntry, Serializable{
 
-    public List<UUID> id;
+    public UUID id;
     public Serializable payload;
     public transient ITimestamp timestamp;
 
     public SimpleStreamEntry(UUID id, Serializable payload, ITimestamp timestamp)
-    {
-       this(Collections.singletonList(id), payload, timestamp);
-    }
-
-    public SimpleStreamEntry(List<UUID> id, Serializable payload, ITimestamp timestamp)
     {
         this.id = id;
         this.payload = payload;
         this.timestamp = timestamp;
     }
 
+    /* Public constructor for deserialization */
+    public SimpleStreamEntry() {
+
+    }
     /**
      * Gets the list of of the streams this entry belongs to.
      *
@@ -35,7 +37,7 @@ public class SimpleStreamEntry implements IStreamEntry, Serializable{
      */
     @Override
     public List<UUID> getStreamIds() {
-        return id;
+        return Collections.singletonList(id);
     }
 
     /**
@@ -46,7 +48,7 @@ public class SimpleStreamEntry implements IStreamEntry, Serializable{
      */
     @Override
     public boolean containsStream(UUID stream) {
-        return id.contains(stream);
+        return id.equals(stream);
     }
 
     /**

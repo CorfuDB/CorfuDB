@@ -21,7 +21,6 @@ public interface ISMREngine<T> {
 
     interface ISMREngineOptions<T>
     {
-        CompletableFuture<Object> getReturnResult();
         ICorfuDBInstance getInstance();
         UUID getEngineID();
         void setUnderlyingObject(T object);
@@ -45,7 +44,7 @@ public interface ISMREngine<T> {
      * @param ts        The timestamp to synchronize to, or null, to synchronize to the most
      *                  recent version.
      */
-    void sync(ITimestamp ts);
+    <R> void sync(ITimestamp ts);
 
     /**
      * Propose a new command to the SMR engine.
@@ -60,7 +59,7 @@ public interface ISMREngine<T> {
      *
      * @return              A timestamp representing the timestamp that the command was proposed to.
      */
-    ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly);
+     <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly);
 
     /**
      * Propose a new command to the SMR engine.
@@ -73,7 +72,7 @@ public interface ISMREngine<T> {
      *
      * @return              A timestamp representing the timestamp that the command was proposed to.
      */
-    default ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion)
+    default <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion)
     {
         return propose(command, completion, false);
     }
@@ -86,7 +85,7 @@ public interface ISMREngine<T> {
      *                      The second argument of the lambda contains some TX that the engine
      * @return              A timestamp representing the timestamp the command was proposed to.
      */
-    default ITimestamp propose(ISMREngineCommand<T> command)
+    default <R> ITimestamp propose(ISMREngineCommand<T, R> command)
     {
         return propose(command, null, false);
     }
@@ -99,7 +98,7 @@ public interface ISMREngine<T> {
      * @param readOnly      True, if the command is read only, false otherwise.
      * @return              A timestamp representing the command proposal time.
      */
-    default ITimestamp propose(ISMRLocalCommand<T> command, CompletableFuture<Object> completion, boolean readOnly)
+    default <R> ITimestamp propose(ISMRLocalCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly)
     {
         throw new UnsupportedOperationException("not yet implemented");
     }
@@ -111,7 +110,7 @@ public interface ISMREngine<T> {
      * @param completion    A completion to be fulfilled.
      * @return              A timestamp representing the command proposal time.
      */
-    default ITimestamp propose(ISMRLocalCommand<T> command, CompletableFuture<Object> completion)
+    default <R> ITimestamp propose(ISMRLocalCommand<T,R> command, CompletableFuture<R> completion)
     {
         return propose(command, completion, false);
     }

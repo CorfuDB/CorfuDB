@@ -31,6 +31,7 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     private CorfuDBView view;
     private CorfuDBView initialView;
     private IReconfigurationPolicy reconfigPolicy;
+    private UUID logID;
 
     public static ConcurrentHashMap<Integer, MemoryConfigMasterProtocol> memoryConfigMasters =
             new ConcurrentHashMap<Integer, MemoryConfigMasterProtocol>();
@@ -67,6 +68,8 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     public void setInitialView(CorfuDBView view)
     {
         this.view = view;
+        logID = UUID.randomUUID();
+        this.view.setUUID(logID);
         this.initialView = view;
     }
 
@@ -165,22 +168,28 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     @Override
     public void resetAll() {
         /* just reset everything in memory */
+        log.info("Request reset of memory configuration");
         try {
             this.reset(epoch + 1);
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            log.error("Error during configmaster reset", e);
+        }
         for (MemorySequencerProtocol msp : MemorySequencerProtocol.memorySequencers.values())
         {
             try {
             msp.reset(epoch+1);}
-            catch (Exception e) {}
+            catch (Exception e) {
+                log.error("Error during sequencer reset", e);
+            }
         }
         for (MemoryLogUnitProtocol mlu : MemoryLogUnitProtocol.memoryUnits.values())
         {
             try {
                 mlu.reset(epoch+1);}
-            catch (Exception e) {}
+            catch (Exception e) {
+                log.error("Error during log unit reset", e);
+            }
         }
-
         this.epoch++;
     }
 
@@ -285,6 +294,8 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     @Override
     public void reset(long epoch) throws NetworkException {
         this.view = this.initialView;
+        logID = UUID.randomUUID();
+        this.view.setUUID(logID);
         this.initialView.setEpoch(epoch);
     }
 }

@@ -11,17 +11,15 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Created by crossbach on 5/29/15.
  */
-public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPBTEntry<K, V>> {
+public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<TreeEntry<K,V>> {
 
     private static final Logger log = LoggerFactory.getLogger(LPBTEntry.class);
 
-    transient ISMREngine<TreeEntry> smr;
-    ITransaction tx;
+    transient ISMREngine<TreeEntry<K,V>> smr;
     UUID streamID;
 
     public LPBTEntry(LPBTEntry<K, V> entry, ITransaction tx) {
         this.streamID = entry.streamID;
-        this.tx = tx;
     }
 
     @SuppressWarnings("unchecked")
@@ -35,13 +33,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
     }
 
     public LPBTEntry(IStream stream) {
-        streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<TreeEntry>(stream, TreeEntry.class);
-    }
-
-    @Override
-    public Class<?> getUnderlyingType() {
-        return TreeEntry.class;
+        this(stream, SimpleSMREngine.class);
     }
 
     @Override
@@ -50,7 +42,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
     }
 
     @Override
-    public ISMREngine getUnderlyingSMREngine() {
+    public ISMREngine<TreeEntry<K,V>> getUnderlyingSMREngine() {
         return smr;
     }
 
@@ -61,14 +53,22 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
     }
 
     /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
+    }
+
+    /**
      * read the deleted flag on this entry
      *
      * @return
      */
     public Boolean readDeleted() {
-        return (Boolean) accessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
-            opts.getReturnResult().complete(entry.deleted);
-        });
+        return accessorHelper((entry, opts) -> entry.deleted);
     }
 
     /**
@@ -78,9 +78,9 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
      * @return
      */
     public Boolean writeDeleted(boolean b) {
-        return (Boolean) mutatorAccessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
+        return mutatorAccessorHelper((entry, opts) -> {
             entry.deleted = b;
-            opts.getReturnResult().complete(b);
+            return b;
         });
     }
 
@@ -90,9 +90,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
      * @return
      */
     public K readKey() {
-        return (K) accessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
-            opts.getReturnResult().complete(entry.key);
-        });
+        return accessorHelper((entry, opts) -> entry.key);
     }
 
     /**
@@ -102,11 +100,9 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
      * @return
      */
     public K writeKey(K k) {
-        return (K) mutatorAccessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
+        return mutatorAccessorHelper((entry, opts) -> {
             entry.key = k;
-            CompletableFuture cf = opts.getReturnResult();
-            log.warn("writeKey(" + k + "), cf=" + cf);
-            cf.complete(k);
+            return k;
         });
     }
 
@@ -116,9 +112,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
      * @return
      */
     public V readValue() {
-        return (V) accessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
-            opts.getReturnResult().complete(entry.value);
-        });
+        return accessorHelper((entry, opts) -> entry.value);
     }
 
     /**
@@ -128,9 +122,9 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
      * @return
      */
     public V writeValue(V v) {
-        return (V) mutatorAccessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
+        return mutatorAccessorHelper((entry, opts) -> {
             entry.value = v;
-            opts.getReturnResult().complete(v);
+            return v;
         });
     }
 
@@ -140,9 +134,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
      * @return
      */
     public UUID readNext() {
-        return (UUID) accessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
-            opts.getReturnResult().complete(entry.oidnext);
-        });
+        return accessorHelper((entry, opts) -> entry.oidnext);
     }
 
     /**
@@ -152,9 +144,9 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
      * @return
      */
     public UUID writeNext(UUID _next) {
-        return (UUID) mutatorAccessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
+        return (UUID) mutatorAccessorHelper((entry, opts) -> {
             entry.oidnext = _next;
-            opts.getReturnResult().complete(_next);
+            return _next;
         });
     }
 
@@ -165,7 +157,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
      */
     @Override
     public String toString() {
-        return (String) accessorHelper((ISMREngineCommand<TreeEntry>) (entry, opts) -> {
+        return accessorHelper((entry, opts) -> {
             StringBuilder sb = new StringBuilder();
             if (entry.deleted)
                 sb.append("DEL: ");
@@ -178,7 +170,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<LPB
             sb.append(", n=");
             sb.append(entry.oidnext);
             sb.append("]");
-            opts.getReturnResult().complete(sb.toString());
+            return sb.toString();
         });
     }
 }

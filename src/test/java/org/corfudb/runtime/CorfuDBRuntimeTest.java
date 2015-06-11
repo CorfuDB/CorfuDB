@@ -47,6 +47,7 @@ public class CorfuDBRuntimeTest {
         assertNotNull(view);
     }
 
+    /*
     @Test
     @SuppressWarnings("unchecked")
     public void AllStreamsCanBeCreatedByRuntime(){
@@ -81,7 +82,7 @@ public class CorfuDBRuntimeTest {
             }
         });
     }
-
+    */
     @Test
     public void MemoryCorfuDBFailoverTest()
     throws Exception

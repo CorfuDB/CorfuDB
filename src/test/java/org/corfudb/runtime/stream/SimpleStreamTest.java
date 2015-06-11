@@ -22,18 +22,16 @@ import java.util.UUID;
 public class SimpleStreamTest {
 
     SimpleStream s;
-    IWriteOnceAddressSpace woas;
-    IStreamingSequencer ss;
     CorfuDBRuntime cdr;
+    ICorfuDBInstance instance;
 
     @Before
     public void generateStream()
     {
         MemoryConfigMasterProtocol.inMemoryClear();
         cdr = CorfuDBRuntime.createRuntime("memory");
-        woas = new WriteOnceAddressSpace(cdr);
-        ss = new StreamingSequencer(cdr);
-        s = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
+        instance = cdr.getLocalInstance();
+        s = (SimpleStream) instance.openStream(UUID.randomUUID());
     }
 
     @Test
@@ -54,7 +52,7 @@ public class SimpleStreamTest {
     public void streamHasCorrectUUID() throws Exception
     {
         UUID uuid = UUID.randomUUID();
-        SimpleStream s2 = new SimpleStream(uuid, ss, woas, cdr);
+        SimpleStream s2 = (SimpleStream) instance.openStream(uuid);
         assertEquals(uuid, s2.getStreamID());
     }
 
@@ -74,8 +72,8 @@ public class SimpleStreamTest {
     @Test
     public void multipleWritesAndReadsFromDifferentStreams() throws Exception
     {
-        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
-        SimpleStream s3 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
+        SimpleStream s2 = (SimpleStream) instance.openStream(UUID.randomUUID());
+        SimpleStream s3 = (SimpleStream) instance.openStream(UUID.randomUUID());
 
         s.append("hello world 0");
         assertNull(s2.readNextObject());
@@ -95,7 +93,7 @@ public class SimpleStreamTest {
     public void holesResultInException() throws Exception
     {
         s.append("hello world 0");
-        ss.getNext(s.getStreamID(), 1);
+        instance.getStreamingSequencer().getNext(s.getStreamID(), 1);
         s.append("hello world 1");
         assertEquals(s.readNextObject(), "hello world 0");
         assertRaises(s::readNextObject, HoleEncounteredException.class);
@@ -104,7 +102,7 @@ public class SimpleStreamTest {
     @Test
     public void entriesAreOrdered() throws Exception
     {
-        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
+        SimpleStream s2 = (SimpleStream)  instance.openStream(UUID.randomUUID());
         ITimestamp t1 = s.append("hello world 0");
         ITimestamp t2 = s2.append("hello world 1");
         ITimestamp t3 = s.append("hello world 2");
@@ -156,8 +154,8 @@ public class SimpleStreamTest {
     @Test
     public void entriesAreLinearizable() throws Exception
     {
-        SimpleStream s2 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
-        SimpleStream s3 = new SimpleStream(UUID.randomUUID(), ss, woas, cdr);
+        SimpleStream s2 = (SimpleStream)  instance.openStream(UUID.randomUUID());
+        SimpleStream s3 = (SimpleStream)  instance.openStream(UUID.randomUUID());
         ITimestamp t1 = s.append("hello world 0");
         ITimestamp t2 = s2.append("hello world 1");
         ITimestamp t3 = s.append("hello world 2");

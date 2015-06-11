@@ -9,10 +9,9 @@ import java.util.UUID;
 /**
  * Created by crossbach on 5/29/15.
  */
-public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBTNode<K, V>> {
+public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<TreeNode> {
 
     transient ISMREngine<TreeNode> smr;
-    ITransaction tx;
     UUID streamID;
 
     @SuppressWarnings("unchecked")
@@ -31,24 +30,28 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
     }
 
     @Override
-    public Class<?> getUnderlyingType() {
-        return TreeNode.class;
-    }
-
-    @Override
     public UUID getStreamID() {
         return streamID;
     }
 
     @Override
-    public ISMREngine getUnderlyingSMREngine() {
+    public ISMREngine<TreeNode> getUnderlyingSMREngine() {
         return smr;
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public void setUnderlyingSMREngine(ISMREngine engine) {
+    public void setUnderlyingSMREngine(ISMREngine<TreeNode> engine) {
         this.smr = engine;
+    }
+
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    @Override
+    public void setStreamID(UUID streamID) {
+        this.streamID = streamID;
     }
 
 
@@ -59,9 +62,7 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
      */
     public int
     readChildCount() {
-        return (int) accessorHelper((ISMREngineCommand<TreeNode>) (node, opts) -> {
-            opts.getReturnResult().complete(node.m_nChildren);
-        });
+        return accessorHelper((node, opts) -> node.m_nChildren);
     }
 
     /**
@@ -71,9 +72,7 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
      */
     public void
     writeChildCount(int n) {
-        mutatorHelper((ISMREngineCommand<TreeNode>) (node, opts) -> {
-            node.m_nChildren = n;
-        });
+        mutatorHelper((node, opts) -> node.m_nChildren = n);
     }
 
     /**
@@ -83,11 +82,11 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
      * @return
      */
     protected UUID getChild(int index) {
-        return (UUID) accessorHelper((ISMREngineCommand<TreeNode>) (node, opts) -> {
+        return accessorHelper((node, opts) -> {
             UUID result = CorfuDBObject.oidnull;
             if (index >= 0 && index < node.m_nChildren)
                 result = node.m_vChildren[index];
-            opts.getReturnResult().complete(result);
+            return result;
         });
     }
 
@@ -110,9 +109,10 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
      */
     public void
     writeChild(int n, UUID _oid) {
-        mutatorHelper((ISMREngineCommand<TreeNode>) (node, opts) -> {
+        mutatorHelper((node, opts) -> {
             if (n >= 0 && n < node.m_vChildren.length)
                 node.m_vChildren[n] = _oid;
+            return null;
         });
     }
 
@@ -123,7 +123,7 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
      */
     @Override
     public String toString() {
-        return (String) accessorHelper((ISMREngineCommand<TreeNode>) (node, opts) -> {
+        return (String) accessorHelper((node, opts) -> {
             StringBuilder sb = new StringBuilder();
             sb.append("N");
             sb.append(streamID);
@@ -142,7 +142,7 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<LPBT
                 if (last) sb.append("]");
                 first = false;
             }
-            opts.getReturnResult().complete(sb.toString());
+            return sb.toString();
         });
     }
 

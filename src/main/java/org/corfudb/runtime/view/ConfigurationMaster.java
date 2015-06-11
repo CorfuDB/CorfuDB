@@ -4,6 +4,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
+import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,10 +33,11 @@ public class ConfigurationMaster implements IConfigurationMaster {
                 IServerProtocol firstEntry = masters.get(0);
                 IConfigMaster master = (IConfigMaster) firstEntry;
                 master.resetAll();
-                log.info("successful resetAll()");
+                log.info("successful resetAll(), current log sequence@{}",
+                        ((ISimpleSequencer) cdr.getView().getSequencers().get(0)).sequenceGetCurrent());
                 return;
             } catch (Exception e) {
-                log.debug("Exception in resetAll: " + e.getMessage() + ", retrying...");
+                log.warn("Exception in resetAll: " + e.getMessage() + ", retrying...");
             }
         }
     }

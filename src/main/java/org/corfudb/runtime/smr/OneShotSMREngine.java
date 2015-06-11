@@ -33,15 +33,6 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
     ITimestamp syncPoint;
 
     class OneShotSMREngineOptions<Y extends T> implements ISMREngineOptions<Y> {
-        CompletableFuture<Object> returnResult;
-
-        public OneShotSMREngineOptions(CompletableFuture<Object> returnResult) {
-            this.returnResult = returnResult;
-        }
-
-        public CompletableFuture<Object> getReturnResult() {
-            return this.returnResult;
-        }
 
         public ICorfuDBInstance getInstance() { return stream.getInstance(); }
 
@@ -105,7 +96,7 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
      */
     @Override
     @SuppressWarnings("unchecked")
-    public void sync(ITimestamp ts) {
+    public <R> void sync(ITimestamp ts) {
         synchronized (this) {
             ts = syncPoint;
             while (ts.compareTo(streamPointer) > 0) {
@@ -124,8 +115,8 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
                         transaction.executeTransaction(this);
                     }
                     else {
-                        ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
-                        function.accept(underlyingObject, new OneShotSMREngineOptions(new CompletableFuture<Object>()));
+                        ISMREngineCommand<T,R> function = (ISMREngineCommand<T,R>) entry.getPayload();
+                        function.apply(underlyingObject, new OneShotSMREngineOptions());
                     }
                 } catch (Exception e) {
                     //ignore entries we don't know what to do about.
@@ -147,8 +138,12 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
      * @return A timestamp representing the timestamp that the command was proposed to.
      */
     @Override
-    public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
-            command.accept(underlyingObject, new OneShotSMREngineOptions(completion));
+    public <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
+            R result = command.apply(underlyingObject, new OneShotSMREngineOptions<T>());
+            if (completion != null)
+            {
+                completion.complete(result);
+            }
             return streamPointer;
     }
 

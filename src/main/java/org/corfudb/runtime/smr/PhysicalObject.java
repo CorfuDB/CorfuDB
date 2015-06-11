@@ -5,7 +5,7 @@ import org.corfudb.runtime.stream.ITimestamp;
 /**
  * Created by mwei on 6/5/15.
  */
-public class PhysicalObject<T> implements ISMRCheckpoint<T>, ISMREngineCommand<T> {
+public class PhysicalObject<T> implements ISMRCheckpoint<T>, ISMREngineCommand<T, T> {
 
     T physicalObject;
 
@@ -42,7 +42,8 @@ public class PhysicalObject<T> implements ISMRCheckpoint<T>, ISMREngineCommand<T
      * @param ismrEngineOptions the second input argument
      */
     @Override
-    public void accept(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions) {
+    public T apply(T t, ISMREngine.ISMREngineOptions<T> ismrEngineOptions) {
         ismrEngineOptions.setUnderlyingObject(physicalObject);
+        return physicalObject;
     }
 }

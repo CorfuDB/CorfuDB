@@ -4,11 +4,13 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleStream;
-import org.corfudb.runtime.view.ConfigurationMaster;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
+import org.junit.rules.TestWatcher;
+import org.junit.runner.Description;
 
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
@@ -17,49 +19,34 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Created by crossbach on 5/27/15.
+ * Created by mwei on 6/9/15.
  */
-public class BTreeTest {
+public abstract class IBTreeTest {
 
-    IStream s;
+    IBTree<String, String> testTree;
+    UUID thisTree;
     ICorfuDBInstance instance;
-    AbstractLambdaBTree<String, String> testTree;
-    UUID streamID;
-    CorfuDBRuntime cdr;
-    int B = 4;
 
-    public AbstractLambdaBTree createTree(Class cls, IStream s) { return createTree(cls, new Object[] { s }); }
-    public AbstractLambdaBTree createTree(Class cls, IStream s, Class smrc) { return createTree(cls, new Object[] { s, smrc }); }
-    public AbstractLambdaBTree createTree(Class cls, Object[] args) {
-        Constructor ctor = findConstructor(cls, args);
-        try {
-            AbstractLambdaBTree tree = (AbstractLambdaBTree) ctor.newInstance(args);
-            tree.init();
-            return tree;
-        } catch(Exception e) {
-            throw new RuntimeException(e);
+    @Rule
+    public TestRule watcher = new TestWatcher() {
+        protected void starting(Description description) {
+            System.out.println("Starting test: " + description.getMethodName());
         }
-    }
+    };
 
-
+    protected abstract IBTree<String, String> getBtree(ICorfuDBInstance instance, UUID stream);
 
     @Before
-    public void generateStream() throws Exception
+    public void setupBtree()
     {
-        cdr = CorfuDBRuntime.createRuntime("memory");
-        ConfigurationMaster cm = new ConfigurationMaster(cdr);
-        cm.resetAll();
-        instance = cdr.getLocalInstance();
-        streamID = UUID.randomUUID();
-        s = instance.openStream(streamID);
+        instance = CorfuDBRuntime.createRuntime("memory").getLocalInstance();
+        thisTree = UUID.randomUUID();
+        testTree = getBtree(instance, thisTree);
     }
 
-    @Test public void treeIsPuttableGettableLogical() { treeIsPuttableGettable(LambdaLogicalBTree.class);}
-    @Test public void treeIsPuttableGettablePhysical() { treeIsPuttableGettable(LPBTree.class);}
-
-    public void treeIsPuttableGettable(Class treeclass)
+    @Test
+    public void treeIsPuttableGettable()
     {
-        testTree = createTree(treeclass, s);
         testTree.put("key0", "abcd");
         testTree.put("key1", "efgh");
         assertThat(testTree.get("key0"))
@@ -68,38 +55,29 @@ public class BTreeTest {
                 .isEqualTo("efgh");
     }
 
-    @Test public void multipleTreesContainSameDataLogical() throws Exception { multipleTreesContainSameData(LambdaLogicalBTree.class);}
-    @Test public void multipleTreesContainSameDataPhysical() throws Exception { multipleTreesContainSameData(LPBTree.class); }
-
-    public void multipleTreesContainSameData(Class treeclass) throws Exception {
-        testTree = createTree(treeclass, s);
+    @Test
+    public void multipleTreesContainSameData() throws Exception {
         testTree.put("key0", "abcd");
         testTree.put("key1", "efgh");
-        IStream s2 = cdr.openStream(streamID, SimpleStream.class);
-        IBTree<String, String> tree2 = createTree(treeclass, s2);
+        IBTree<String, String> tree2 = getBtree(instance, thisTree);
         assertThat(tree2.get("key0"))
                 .isEqualTo("abcd");
         assertThat(tree2.get("key1"))
                 .isEqualTo("efgh");
     }
-    @Test public void ensureMutatorAccessorsWorkLogical() throws Exception { ensureMutatorAccessorsWork(LambdaLogicalBTree.class);}
-    @Test public void ensureMutatorAccessorsWorkPhysical() throws Exception { ensureMutatorAccessorsWork(LPBTree.class);}
 
-    public void ensureMutatorAccessorsWork(Class treeclass) throws Exception {
-        testTree = createTree(treeclass, s);
+    @Test
+    public void ensureMutatorAccessorsWork() throws Exception {
         testTree.put("key0", "abcd");
         testTree.put("key1", "xxxx");
         assertThat(testTree.get("key1")).isEqualTo("xxxx");
     }
 
-    //@Test public void deferredTransactionalTestLogical() throws Exception { deferredTransactionalTest(LambdaLogicalBTree.class);}
-    //@Test public void deferredTransactionalTestPhysical() throws Exception { deferredTransactionalTest(LPBTree.class);}
-
-    public void deferredTransactionalTest(Class treeclass) throws Exception {
-        testTree = createTree(treeclass, s);
-        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
+    @Test
+    public void deferredTransactionalTest() throws Exception {
+        DeferredTransaction tx = new DeferredTransaction(instance);
         testTree.put("key0", "abcd");
-        final AbstractLambdaBTree<String, String> txMap = testTree;
+        final IBTree<String, String> txMap = testTree;
         tx.setTransaction((ITransactionCommand) (opts) -> {
             String result = txMap.get("key0");
             if (result.compareTo("abcd") == 0) {
@@ -108,19 +86,19 @@ public class BTreeTest {
             }
             return false;
         });
-        ITimestamp txStamp = tx.propose();
-        testTree.getSMREngine().sync(txStamp);
+     //  ITimestamp txStamp = tx.propose();
+      //  testTree.getSMREngine().sync(txStamp);
         assertThat(testTree.get("key0"))
                 .isEqualTo("ABCD");
     }
 
     //@Test public void crossMapSwapTransactionalTestLogical() throws Exception { crossMapSwapTransactionalTest(LambdaLogicalBTree.class);}
     //@Test public void crossMapSwapTransactionalTestPhysical() throws Exception { crossMapSwapTransactionalTest(LPBTree.class);}
-
+/*
     public void crossMapSwapTransactionalTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
-        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        IStream s2 = instance.openStream(streamID);
         AbstractLambdaBTree<String, String> testMap2 = createTree(treeclass, s2);
 
         testTree.put("key0", "abcd");
@@ -146,11 +124,11 @@ public class BTreeTest {
 
     // @Test public void mapOfMapsTestLogical() throws Exception { mapOfMapsTest(LambdaLogicalBTree.class);}
     // @Test public void mapOfMapsTestPhysical() throws Exception { mapOfMapsTest(LPBTree.class);}
-
+/*
     public void mapOfMapsTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
-        IStream s2 = cdr.openStream(UUID.randomUUID(), SimpleStream.class);
+        IStream s2 = instance.openStream(streamID);
         AbstractLambdaBTree<String, AbstractLambdaBTree<String, String>> tmap2 = createTree(treeclass, s2);
         tmap2.put("abcd", testTree);
         testTree.put("key0", "abcd");
@@ -160,7 +138,7 @@ public class BTreeTest {
 
     // @Test public void OpaqueDeferredTransactionalTestLogical() throws Exception { OpaqueDeferredTransactionalTest(LambdaLogicalBTree.class);}
     // @Test public void OpaqueDeferredTransactionalTestPhysical() throws Exception { OpaqueDeferredTransactionalTest(LPBTree.class);}
-
+/*
     public void OpaqueDeferredTransactionalTest(Class treeclass) throws Exception {
         testTree = createTree(treeclass, s);
         OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr.getLocalInstance());
@@ -199,7 +177,7 @@ public class BTreeTest {
 
     // @Test public void TimeTravelSMRTestLogical() { TimeTravelSMRTest(LambdaLogicalBTree.class); }
     // @Test public void TimeTravelSMRTestPhysical() { TimeTravelSMRTest(LPBTree.class); }
-
+/*
     public void TimeTravelSMRTest(Class treeclass) {
         testTree = createTree(treeclass, s);
         IStream s1 = instance.openStream(UUID.randomUUID());
@@ -252,7 +230,7 @@ public class BTreeTest {
 
     // @Test public void NonTimeTravelSMRTestLogical() { NonTimeTravelSMRTest(LambdaLogicalBTree.class);}
     // @Test public void NonTimeTravelSMRTestPhysical() { NonTimeTravelSMRTest(LPBTree.class);}
-
+/*
     public void NonTimeTravelSMRTest(Class treeclass) {
         testTree = createTree(treeclass, s);
         IStream s1 = instance.openStream(UUID.randomUUID());
@@ -278,7 +256,7 @@ public class BTreeTest {
                 .isEqualTo(100);
 
     }
-
+*/
 
 
     /**

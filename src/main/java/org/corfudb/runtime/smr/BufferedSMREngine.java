@@ -27,20 +27,10 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
     UUID streamID;
     ICorfuDBInstance instance;
 
-    ArrayList<ISMREngineCommand<T>> commandBuffer;
+    ArrayList<ISMREngineCommand> commandBuffer;
 
     class BufferedSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
-        CompletableFuture<Object> returnResult;
-
-        public BufferedSMREngineOptions(CompletableFuture<Object> returnResult)
-        {
-            this.returnResult = returnResult;
-        }
-        public CompletableFuture<Object> getReturnResult()
-        {
-            return this.returnResult;
-        }
         public ICorfuDBInstance getInstance() { return instance; }
 
         @Override
@@ -60,11 +50,11 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
         this.ts = ts;
         this.streamID = streamID;
         this.instance = instance;
-        this.commandBuffer = new ArrayList<ISMREngineCommand<T>>();
+        this.commandBuffer = new ArrayList<ISMREngineCommand>();
     }
 
     @SuppressWarnings("unchecked")
-    public BufferedSMREngine(ITimestamp ts, UUID streamID, ICorfuDBInstance instance, Class<?> objClass, Class<?>... args)
+    public <R> BufferedSMREngine(ITimestamp ts, UUID streamID, ICorfuDBInstance instance, Class<?> objClass, Class<?>... args)
     {
         try {
             this.ts = ts;
@@ -77,7 +67,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
                             .toArray(Class[]::new))
                     .newInstance(args);
 
-            this.commandBuffer = new ArrayList<ISMREngineCommand<T>>();
+            this.commandBuffer = new ArrayList<ISMREngineCommand>();
 
             ITimestamp streamPointer;
             IStream stream = instance.openStream(streamID);
@@ -110,8 +100,8 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
                         SMRLocalCommandWrapper w = (SMRLocalCommandWrapper) entry.getPayload();
                         stream.seek(stream.getNextTimestamp(w.destination));
                     } else {
-                        ISMREngineCommand<T> function = (ISMREngineCommand<T>) entry.getPayload();
-                        function.accept(underlyingObject, new BufferedSMREngineOptions(new CompletableFuture<Object>()));
+                        ISMREngineCommand<T,R> function = (ISMREngineCommand<T,R>) entry.getPayload();
+                        function.apply(underlyingObject, new BufferedSMREngineOptions());
                     }
                 } catch (Exception e) {
                     log.error("Exception executing buffered command at " + entry.getTimestamp() + " for stream ID " + stream.getStreamID(), e);
@@ -171,13 +161,17 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
      * @return A timestamp representing the timestamp that the command was proposed to.
      */
     @Override
-    public ITimestamp propose(ISMREngineCommand<T> command, CompletableFuture<Object> completion, boolean readOnly) {
+    public <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
         if (!readOnly)
         {
             //buffer the command.
             commandBuffer.add(command);
         }
-        command.accept(underlyingObject, new BufferedSMREngineOptions(completion));
+        R result = command.apply(underlyingObject, new BufferedSMREngineOptions<T>());
+        if (completion != null)
+        {
+            completion.complete(result);
+        }
         return ts;
     }
 
