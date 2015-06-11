@@ -7,12 +7,14 @@ import org.corfudb.infrastructure.thrift.ErrorCode;
 import org.corfudb.infrastructure.thrift.ExtntMarkType;
 import org.corfudb.infrastructure.thrift.ExtntWrap;
 import org.corfudb.infrastructure.thrift.UnitServerHdr;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 
-public class SimpleLogUnitServerTest {
+public class SimpleLogUnitServerMemoryTest {
 
     private static byte[] getTestPayload(int size)
     {
@@ -80,7 +82,8 @@ public class SimpleLogUnitServerTest {
         }
 
         ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 42));
-        byte[] data = new byte[ew.getCtnt().get(0).remaining()];
+        byte[] data = new byte[ew.getCtnt().get(0).limit()];
+        ew.getCtnt().get(0).position(0);
         ew.getCtnt().get(0).get(data);
         assertArrayEquals(data, test);
     }
