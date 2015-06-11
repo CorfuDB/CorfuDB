@@ -50,16 +50,12 @@ public class SimpleLogUnitServerDiskTest {
 
         // Wait for server thread to finish setting up
         boolean done = false;
-        boolean error = false;
 
         while (!done) {
             try {
                 slus.write(new UnitServerHdr(epochlist, 0), byteList, ExtntMarkType.EX_FILLED);
-            } catch (NullPointerException e) {
-                error = true;
-            }
-            if (error) continue;
-            done = true;
+                done = true;
+            } catch (NullPointerException e) {}
         }
 
         // Write entries in for the tests
