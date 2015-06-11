@@ -11,24 +11,6 @@ import java.util.UUID;
  */
 public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<TreeNode> {
 
-    UUID streamID;
-
-    @Override
-    public UUID getStreamID() {
-        return streamID;
-    }
-
-    /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
-     */
-    @Override
-    public void setStreamID(UUID streamID) {
-        this.streamID = streamID;
-    }
-
-
     /**
      * read the child count
      *
@@ -100,7 +82,7 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<Tree
         return (String) accessorHelper((node, opts) -> {
             StringBuilder sb = new StringBuilder();
             sb.append("N");
-            sb.append(streamID);
+            sb.append(getStreamID());
             boolean first = true;
             for (int i = 0; i < node.m_nChildren; i++) {
                 boolean last = i == node.m_nChildren - 1;

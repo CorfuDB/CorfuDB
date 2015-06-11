@@ -14,27 +14,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class LambdaLogicalBTree<K extends Comparable<K>, V>
         implements ICorfuDBObject<BTree<K,V>>, IBTree<K,V> {
-
-    UUID streamID;
-
-    /**
-     * Get the UUID of the underlying stream
-     */
-    @Override
-    public UUID getStreamID() {
-        return streamID;
-    }
-
-    /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
-     */
-    @Override
-    public void setStreamID(UUID streamID) {
-        this.streamID = streamID;
-    }
-
     /**
      * return the size
      * @return

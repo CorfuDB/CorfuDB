@@ -160,7 +160,7 @@ public class Serializer
 
         public ICorfuDBObject copy (Kryo kryo, ICorfuDBObject original) {
             try {
-                return (ICorfuDBObject) original.getClass().getConstructor(UUID.class, ISMREngine.class)
+                return  original.getClass().getConstructor(UUID.class, ISMREngine.class)
                         .newInstance(original.getStreamID(), null);
             }
             catch (Exception e)

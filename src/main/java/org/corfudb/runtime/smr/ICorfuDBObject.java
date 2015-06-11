@@ -24,12 +24,13 @@ public interface ICorfuDBObject<U> extends Serializable {
 
     Map<ICorfuDBObject, ICorfuDBInstance> instanceMap = Collections.synchronizedMap(new WeakHashMap<>());
     Map<ICorfuDBObject, ISMREngine> engineMap = Collections.synchronizedMap(new WeakHashMap<>());
+    Map<ICorfuDBObject, UUID> uuidMap = Collections.synchronizedMap(new WeakHashMap<>());
 
     /**
      * Returns the SMR engine associated with this object.
      */
     @SuppressWarnings("unchecked")
-    default ISMREngine getSMREngine()
+    default ISMREngine<U> getSMREngine()
     {
         ITransaction tx = getUnderlyingTransaction();
         if (tx != null)
@@ -68,10 +69,22 @@ public interface ICorfuDBObject<U> extends Serializable {
         throw new RuntimeException("Couldn't resolve underlying type!");
     }
 
+
     /**
      * Get the UUID of the underlying stream
      */
-    UUID getStreamID();
+    default UUID getStreamID() {
+        return uuidMap.get(this);
+    }
+
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    default void setStreamID(UUID streamID) {
+        uuidMap.put(this, streamID);
+    }
 
     /**
      * Get underlying SMR engine
@@ -90,12 +103,6 @@ public interface ICorfuDBObject<U> extends Serializable {
     default void setUnderlyingSMREngine(ISMREngine<U> engine) {
         engineMap.put(this, engine);
     }
-
-    /**
-     * Set the stream ID
-     * @param streamID  The stream ID to set.
-     */
-    void setStreamID(UUID streamID);
 
     /**
      * Get the underlying transaction

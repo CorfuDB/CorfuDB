@@ -18,9 +18,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
     public static final int DEFAULT_B = 4;
     public transient HashMap<UUID, LPBTEntry> m_entries;
     public transient HashMap<UUID, LPBTNode> m_nodes;
-    transient ISMREngine<TreeContainer> smr;
-    ITransaction tx;
-    UUID streamID;
 
     public static boolean extremeDebug = false;
 
@@ -57,31 +54,22 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
         /* first, sync forward */
         getSMREngine().sync(null);
         /* do we have any state now? If so, we don't need to init. */
-        if (smr.getObject().m_root != CorfuDBObject.oidnull) return;
+        if (getSMREngine().getObject().m_root != CorfuDBObject.oidnull) return;
         /* otherwise, create a new node... */
-        IStream nodeStream = smr.getInstance().openStream(UUID.randomUUID());
+        IStream nodeStream = getSMREngine().getInstance().openStream(UUID.randomUUID());
         /* this node will be the root */
         LPBTNode e = getSMREngine().getInstance().openObject(UUID.randomUUID(), LPBTNode.class);
         e.writeChildCount(0);
         /* now propose the change to the root to the tree container */
         final UUID rootID = e.getStreamID();
         log.info("Create root with id " + rootID.toString());
-        log.info("container=" + smr.getStreamID().toString());
+        log.info("container=" + getSMREngine().getStreamID().toString());
         mutatorHelper((tree, opts) -> {
             tree.m_root = rootID;
             tree.m_height = 0;
             tree.m_size = 0;
             return null;
         });
-    }
-
-
-    /**
-     * Get the UUID of the underlying stream
-     */
-    @Override
-    public UUID getStreamID() {
-        return streamID;
     }
 
     /**
@@ -560,7 +548,7 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
     @SuppressWarnings("unchecked")
     protected LPBTNode<K, V>
     readroot() {
-        return smr.getInstance().openObject(accessorHelper((tree, opts) -> {
+        return getSMREngine().getInstance().openObject(accessorHelper((tree, opts) -> {
             return tree.m_root;
         }), LPBTNode.class);
     }
@@ -808,16 +796,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
         LPBTNode<K,V> node
         ) {
         return node.readChildCount();
-    }
-
-    /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
-     */
-    @Override
-    public void setStreamID(UUID streamID) {
-        this.streamID = streamID;
     }
 }
 

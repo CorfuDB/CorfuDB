@@ -1,22 +1,15 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.smr.*;
-import org.corfudb.runtime.stream.IStream;
-
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 /**
  * Created by mwei on 5/1/15.
  */
 public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>, Map<K,V> {
-
-    UUID streamID;
 
     /**
      * Returns the number of key-value mappings in this map.  If the
@@ -301,23 +294,5 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
         return accessorHelper( (map, opts) -> {
            return map.entrySet();
         });
-    }
-
-    /**
-     * Get the UUID of the underlying stream
-     */
-    @Override
-    public UUID getStreamID() {
-        return streamID;
-    }
-
-    /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
-     */
-    @Override
-    public void setStreamID(UUID streamID) {
-        this.streamID = streamID;
     }
 }

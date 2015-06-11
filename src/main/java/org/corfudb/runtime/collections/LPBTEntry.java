@@ -15,24 +15,6 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<Tre
 
     private static final Logger log = LoggerFactory.getLogger(LPBTEntry.class);
 
-    UUID streamID;
-
-
-    @Override
-    public UUID getStreamID() {
-        return streamID;
-    }
-
-    /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
-     */
-    @Override
-    public void setStreamID(UUID streamID) {
-        this.streamID = streamID;
-    }
-
     /**
      * read the deleted flag on this entry
      *
@@ -133,7 +115,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<Tre
             if (entry.deleted)
                 sb.append("DEL: ");
             sb.append("E");
-            sb.append(streamID);
+            sb.append(getStreamID());
             sb.append(":[k=");
             sb.append(entry.key);
             sb.append(", v=");
