@@ -41,10 +41,6 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         public DeferredTransactionOptions() {
         }
 
-        @Override
-        public CompletableFuture<Object> getReturnResult() {
-            return null;
-        }
     }
 
     public DeferredTransaction(ICorfuDBInstance instance)
@@ -114,7 +110,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
      * @param transaction The command(s) to be executed for this transaction.
      */
     @Override
-    public void setTransaction(ITransactionCommand transaction) {
+    public <T> void setTransaction(ITransactionCommand<T>  transaction) {
         this.transaction = transaction;
     }
 
@@ -128,9 +124,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         ITransactionCommand command = getTransaction();
         executingEngine = engine;
         try (TransactionalContext tx = new TransactionalContext(this)) {
-            if (!command.apply(new DeferredTransactionOptions())) {
-                throw new RuntimeException("Transaction was aborted but SimpleTX does not support aborted TX!");
-            }
+            command.apply(new DeferredTransactionOptions());
         }
     }
 

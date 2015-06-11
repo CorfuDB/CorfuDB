@@ -117,7 +117,7 @@ public class CDBSimpleMapTest {
     public void mapOfMapsTest() throws Exception
     {
         CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =
-                instance.openObject(streamID, CDBSimpleMap.class);
+                instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
         testMap2.put(10, testMap);
         testMap.put(100, 1000);
         assertThat(testMap2.get(10).get(100))
@@ -145,7 +145,7 @@ public class CDBSimpleMapTest {
                 .isEqualTo(1000);
         OpaqueDeferredTransaction txAbort = new OpaqueDeferredTransaction(cdr.getLocalInstance());
 
-        txAbort.setTransaction((ITransactionCommand) (opts) -> {
+        txAbort.setTransaction((ITransactionOptions opts) -> {
             Integer result = testMapLocal.get(10);
             assertThat(result)
                     .isEqualTo(1000);
@@ -153,7 +153,8 @@ public class CDBSimpleMapTest {
             result = testMapLocal.get(10);
             assertThat(result)
                     .isEqualTo(42);
-            return false;
+            opts.abort();
+            return null;
         });
         ITimestamp abortStamp = txAbort.propose();
         testMap.getSMREngine().sync(abortStamp);

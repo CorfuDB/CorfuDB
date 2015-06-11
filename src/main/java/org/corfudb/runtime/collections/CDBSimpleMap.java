@@ -1,35 +1,15 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.smr.*;
-import org.corfudb.runtime.stream.IStream;
-
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 /**
  * Created by mwei on 5/1/15.
  */
 public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>, Map<K,V> {
-
-    transient ISMREngine<ConcurrentHashMap<K,V>> smr;
-    UUID streamID;
-
-    public CDBSimpleMap(IStream stream, Class<? extends ISMREngine> smrClass)
-    {
-        try {
-            streamID = stream.getStreamID();
-            smr = instantiateSMREngine(stream, smrClass);
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
 
     /**
      * Returns the number of key-value mappings in this map.  If the
@@ -314,43 +294,5 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
         return accessorHelper( (map, opts) -> {
            return map.entrySet();
         });
-    }
-
-    /**
-     * Get the UUID of the underlying stream
-     */
-    @Override
-    public UUID getStreamID() {
-        return streamID;
-    }
-
-    /**
-     * Get underlying SMR engine
-     *
-     * @return The SMR engine this object was instantiated under.
-     */
-    @Override
-    public ISMREngine<ConcurrentHashMap<K,V>> getUnderlyingSMREngine() {
-        return smr;
-    }
-
-    /**
-     * Set underlying SMR engine
-     *
-     * @param engine
-     */
-    @Override
-    public void setUnderlyingSMREngine(ISMREngine<ConcurrentHashMap<K,V>> engine) {
-        this.smr = engine;
-    }
-
-    /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
-     */
-    @Override
-    public void setStreamID(UUID streamID) {
-        this.streamID = streamID;
     }
 }

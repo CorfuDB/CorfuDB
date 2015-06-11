@@ -2,6 +2,8 @@ package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.smr.ICorfuDBObject;
 import org.corfudb.runtime.smr.ISMREngine;
+import org.corfudb.runtime.smr.ITransaction;
+import org.corfudb.runtime.smr.ITransactionCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.IStreamMetadata;
 import org.corfudb.runtime.stream.SimpleStreamMetadata;
@@ -120,4 +122,13 @@ public interface ICorfuDBInstance {
      *              will be created if one does not already exist.
      */
     <T extends ICorfuDBObject> T openObject(UUID id, OpenObjectArgs<T> oArgs, Class<?>... args);
+
+    /**
+     * Executes a transaction against the CorfuDB instance.
+     * @param type      The type of transaction to execute.
+     * @param command   The command to run in the transaction.
+     * @param <T>       The return type of the transaction.
+     * @return          The value returned in the transaction.
+     */
+    <T> T executeTransaction (Class<? extends ITransaction> type, ITransactionCommand<T> command);
 }

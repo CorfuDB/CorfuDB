@@ -15,53 +15,6 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<Tre
 
     private static final Logger log = LoggerFactory.getLogger(LPBTEntry.class);
 
-    transient ISMREngine<TreeEntry<K,V>> smr;
-    UUID streamID;
-
-    public LPBTEntry(LPBTEntry<K, V> entry, ITransaction tx) {
-        this.streamID = entry.streamID;
-    }
-
-    @SuppressWarnings("unchecked")
-    public LPBTEntry(IStream stream, Class<? extends ISMREngine> smrClass) {
-        try {
-            streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, TreeEntry.class);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public LPBTEntry(IStream stream) {
-        this(stream, SimpleSMREngine.class);
-    }
-
-    @Override
-    public UUID getStreamID() {
-        return streamID;
-    }
-
-    @Override
-    public ISMREngine<TreeEntry<K,V>> getUnderlyingSMREngine() {
-        return smr;
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public void setUnderlyingSMREngine(ISMREngine engine) {
-        this.smr = engine;
-    }
-
-    /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
-     */
-    @Override
-    public void setStreamID(UUID streamID) {
-        this.streamID = streamID;
-    }
-
     /**
      * read the deleted flag on this entry
      *
@@ -162,7 +115,7 @@ public class LPBTEntry<K extends Comparable<K>, V> implements ICorfuDBObject<Tre
             if (entry.deleted)
                 sb.append("DEL: ");
             sb.append("E");
-            sb.append(streamID);
+            sb.append(getStreamID());
             sb.append(":[k=");
             sb.append(entry.key);
             sb.append(", v=");

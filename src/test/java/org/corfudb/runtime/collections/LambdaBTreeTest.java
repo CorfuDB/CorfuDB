@@ -38,14 +38,14 @@ public class LambdaBTreeTest {
     };
 
     @Before
+    @SuppressWarnings("unchecked")
     public void generateStream() throws Exception
     {
         cdr = CorfuDBRuntime.createRuntime("memory");
         instance = cdr.getLocalInstance();
         instance.getConfigurationMaster().resetAll();
         streamID = UUID.randomUUID();
-        s = instance.openStream(streamID);
-        testTree = new LambdaLogicalBTree<String, String>(s);
+        testTree = instance.openObject(streamID, LambdaLogicalBTree.class);
     }
 
     @Test
@@ -65,8 +65,7 @@ public class LambdaBTreeTest {
     {
         testTree.put("key0", "abcd");
         testTree.put("key1", "efgh");
-        IStream s2 = instance.openStream(streamID);
-        LambdaLogicalBTree<String, String> tree2 = new LambdaLogicalBTree<String, String>(s2);
+        LambdaLogicalBTree<String, String> tree2 = instance.openObject(streamID, LambdaLogicalBTree.class);
         assertThat(tree2.get("key0"))
                 .isEqualTo("abcd");
         assertThat(tree2.get("key1"))
@@ -106,7 +105,8 @@ public class LambdaBTreeTest {
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
         IStream s2 = instance.openStream(UUID.randomUUID());
-        LambdaLogicalBTree<String, String> testMap2 = new LambdaLogicalBTree<String, String>(s2);
+        LambdaLogicalBTree<String, String> testMap2 =
+                instance.openObject(UUID.randomUUID(), LambdaLogicalBTree.class);
 
         testTree.put("key0", "abcd");
         testMap2.put("key0", "xxxx");
@@ -133,8 +133,8 @@ public class LambdaBTreeTest {
     public void mapOfMapsTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
-        IStream s2 = instance.openStream(UUID.randomUUID());
-        LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>> tmap2 = new LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>>(s2);
+        LambdaLogicalBTree<String, LambdaLogicalBTree<String, String>> tmap2 =
+                instance.openObject(UUID.randomUUID(), LambdaLogicalBTree.class);
         tmap2.put("abcd", testTree);
         testTree.put("key0", "abcd2");
         assertThat(tmap2.get("abcd").get("key0"))
@@ -181,12 +181,8 @@ public class LambdaBTreeTest {
     @Test
     public void TimeTravelSMRTest()
     {
-        IStream s1 = instance.openStream(UUID.randomUUID());
-        LambdaLogicalBTree<Integer, Integer> map = new LambdaLogicalBTree<Integer, Integer>(
-                s1,
-                TimeTravelSMREngine.class
-
-        );
+        LambdaLogicalBTree<Integer, Integer> map = instance.openObject(UUID.randomUUID(),
+                new ICorfuDBInstance.OpenObjectArgs<LambdaLogicalBTree>(LambdaLogicalBTree.class, TimeTravelSMREngine.class));
 
         map.put(10, 100);
         map.put(100, 1000);
@@ -232,11 +228,9 @@ public class LambdaBTreeTest {
     @Test
     public void NonTimeTravelSMRTest()
     {
-        IStream s1 = instance.openStream(UUID.randomUUID());
-        LambdaLogicalBTree<Integer, Integer> map = new LambdaLogicalBTree<Integer, Integer>(
-                s1,
-                SimpleSMREngine.class
-        );
+        LambdaLogicalBTree<Integer, Integer> map = instance.openObject(UUID.randomUUID(),
+                new ICorfuDBInstance.OpenObjectArgs<LambdaLogicalBTree>(LambdaLogicalBTree.class, SimpleSMREngine.class));
+
 
         map.put(10, 100);
         map.put(100, 1000);

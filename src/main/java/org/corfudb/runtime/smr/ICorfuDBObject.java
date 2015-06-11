@@ -5,18 +5,14 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
-import org.corfudb.runtime.view.IStreamingSequencer;
-import org.corfudb.runtime.view.IWriteOnceAddressSpace;
-import org.corfudb.runtime.view.StreamingSequencer;
-import org.corfudb.runtime.view.WriteOnceAddressSpace;
+import org.corfudb.runtime.view.*;
 
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.Arrays;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -26,11 +22,15 @@ import java.util.function.Function;
  */
 public interface ICorfuDBObject<U> extends Serializable {
 
+    Map<ICorfuDBObject, ICorfuDBInstance> instanceMap = Collections.synchronizedMap(new WeakHashMap<>());
+    Map<ICorfuDBObject, ISMREngine> engineMap = Collections.synchronizedMap(new WeakHashMap<>());
+    Map<ICorfuDBObject, UUID> uuidMap = Collections.synchronizedMap(new WeakHashMap<>());
+
     /**
      * Returns the SMR engine associated with this object.
      */
     @SuppressWarnings("unchecked")
-    default ISMREngine getSMREngine()
+    default ISMREngine<U> getSMREngine()
     {
         ITransaction tx = getUnderlyingTransaction();
         if (tx != null)
@@ -41,8 +41,7 @@ public interface ICorfuDBObject<U> extends Serializable {
         //We need this until we implement custom serialization
         if (getUnderlyingSMREngine() == null)
         {
-            CorfuDBRuntime cdr = CorfuDBRuntime.getRuntime("memory");
-            IStream stream = cdr.getLocalInstance().openStream(getStreamID());
+            IStream stream = getInstance().openStream(getStreamID());
             SimpleSMREngine e = new SimpleSMREngine(stream, getUnderlyingType());
             e.sync(null);
             setUnderlyingSMREngine(e);
@@ -70,28 +69,40 @@ public interface ICorfuDBObject<U> extends Serializable {
         throw new RuntimeException("Couldn't resolve underlying type!");
     }
 
+
     /**
      * Get the UUID of the underlying stream
      */
-    UUID getStreamID();
+    default UUID getStreamID() {
+        return uuidMap.get(this);
+    }
+
+    /**
+     * Set the stream ID
+     *
+     * @param streamID The stream ID to set.
+     */
+    default void setStreamID(UUID streamID) {
+        uuidMap.put(this, streamID);
+    }
 
     /**
      * Get underlying SMR engine
      * @return  The SMR engine this object was instantiated under.
      */
-    ISMREngine<U> getUnderlyingSMREngine();
+    @SuppressWarnings("unchecked")
+    default ISMREngine<U> getUnderlyingSMREngine() {
+        return (ISMREngine<U>) engineMap.get(this);
+    }
 
     /**
      * Set underlying SMR engine
      * @param smrEngine The SMR engine to replace.
      */
-    void setUnderlyingSMREngine(ISMREngine<U> engine);
-
-    /**
-     * Set the stream ID
-     * @param streamID  The stream ID to set.
-     */
-    void setStreamID(UUID streamID);
+    @SuppressWarnings("unchecked")
+    default void setUnderlyingSMREngine(ISMREngine<U> engine) {
+        engineMap.put(this, engine);
+    }
 
     /**
      * Get the underlying transaction
@@ -155,17 +166,14 @@ public interface ICorfuDBObject<U> extends Serializable {
         return  o.join();
     }
 
-    /**
-     * Handles upcalls, if implemented. When an SMR engine encounters
-     * a upcall, it calls this handler. This default upcall handler
-     * does nothing.
-     * @param o             The object passed to the upcall handler.
-     * @param cf            A completable future to be returned to the
-     *                      accessor.
-     */
-    default void upcallHandler(Object o, CompletableFuture<Object> cf)
+    default void setInstance(ICorfuDBInstance instance)
     {
+        instanceMap.put(this, instance);
+    }
 
+    default ICorfuDBInstance getInstance()
+    {
+        return instanceMap.get(this);
     }
 
     /**
@@ -176,19 +184,5 @@ public interface ICorfuDBObject<U> extends Serializable {
     default boolean isAutomaticallyPlayedBack()
     {
         return false;
-    }
-
-    default ISMREngine instantiateSMREngine(IStream stream, Class<? extends ISMREngine> smrClass, Class<?>... args)
-    {
-        try {
-            Class<?>[] c = smrClass.getConstructors()[0].getParameterTypes();
-
-            return smrClass.getConstructor(IStream.class, Class.class, Class[].class)
-                    .newInstance(stream, getUnderlyingType(), args);
-        }
-        catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e)
-        {
-            throw new RuntimeException(e);
-        }
     }
 }
