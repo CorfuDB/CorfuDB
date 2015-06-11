@@ -185,18 +185,4 @@ public interface ICorfuDBObject<U> extends Serializable {
     {
         return false;
     }
-
-    default ISMREngine instantiateSMREngine(IStream stream, Class<? extends ISMREngine> smrClass, Class<?>... args)
-    {
-        try {
-            Class<?>[] c = smrClass.getConstructors()[0].getParameterTypes();
-
-            return smrClass.getConstructor(IStream.class, Class.class, Class[].class)
-                    .newInstance(stream, getUnderlyingType(), args);
-        }
-        catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
 }
