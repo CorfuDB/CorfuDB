@@ -13,26 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CDBArrayList<T> implements ICorfuDBObject<ArrayList<T>>, List<T>, RandomAccess {
 
-    transient ISMREngine<ArrayList<T>> smr;
     UUID streamID;
-
-    @SuppressWarnings("unchecked")
-    public CDBArrayList(IStream stream, Class<? extends ISMREngine> smrClass)
-    {
-        try {
-            streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, ConcurrentHashMap.class);
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public CDBArrayList(IStream stream)
-    {
-        this(stream, SimpleSMREngine.class);
-    }
 
     /**
      * Get the UUID of the underlying stream
@@ -40,26 +21,6 @@ public class CDBArrayList<T> implements ICorfuDBObject<ArrayList<T>>, List<T>, R
     @Override
     public UUID getStreamID() {
         return streamID;
-    }
-
-    /**
-     * Get underlying SMR engine
-     *
-     * @return The SMR engine this object was instantiated under.
-     */
-    @Override
-    public ISMREngine<ArrayList<T>> getUnderlyingSMREngine() {
-        return smr;
-    }
-
-    /**
-     * Set underlying SMR engine
-     *
-     * @param engine
-     */
-    @Override
-    public void setUnderlyingSMREngine(ISMREngine<ArrayList<T>> engine) {
-        this.smr = engine;
     }
 
     /**

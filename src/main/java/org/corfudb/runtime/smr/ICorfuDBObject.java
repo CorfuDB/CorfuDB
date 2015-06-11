@@ -23,6 +23,7 @@ import java.util.function.Function;
 public interface ICorfuDBObject<U> extends Serializable {
 
     Map<ICorfuDBObject, ICorfuDBInstance> instanceMap = Collections.synchronizedMap(new WeakHashMap<>());
+    Map<ICorfuDBObject, ISMREngine> engineMap = Collections.synchronizedMap(new WeakHashMap<>());
 
     /**
      * Returns the SMR engine associated with this object.
@@ -76,13 +77,19 @@ public interface ICorfuDBObject<U> extends Serializable {
      * Get underlying SMR engine
      * @return  The SMR engine this object was instantiated under.
      */
-    ISMREngine<U> getUnderlyingSMREngine();
+    @SuppressWarnings("unchecked")
+    default ISMREngine<U> getUnderlyingSMREngine() {
+        return (ISMREngine<U>) engineMap.get(this);
+    }
 
     /**
      * Set underlying SMR engine
      * @param smrEngine The SMR engine to replace.
      */
-    void setUnderlyingSMREngine(ISMREngine<U> engine);
+    @SuppressWarnings("unchecked")
+    default void setUnderlyingSMREngine(ISMREngine<U> engine) {
+        engineMap.put(this, engine);
+    }
 
     /**
      * Set the stream ID

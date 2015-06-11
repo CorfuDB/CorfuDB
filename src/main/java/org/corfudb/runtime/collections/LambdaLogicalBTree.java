@@ -15,26 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class LambdaLogicalBTree<K extends Comparable<K>, V>
         implements ICorfuDBObject<BTree<K,V>>, IBTree<K,V> {
 
-    transient ISMREngine<BTree<K,V>> smr;
     UUID streamID;
-
-    @SuppressWarnings("unchecked")
-    public LambdaLogicalBTree(IStream stream, Class<? extends ISMREngine> smrClass)
-    {
-        try {
-            streamID = stream.getStreamID();
-            smr = instantiateSMREngine(stream, smrClass);
-        }
-        catch (Exception e)
-        {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public LambdaLogicalBTree(IStream stream)
-    {
-        this(stream, SimpleSMREngine.class);
-    }
 
     /**
      * Get the UUID of the underlying stream
@@ -42,27 +23,6 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     @Override
     public UUID getStreamID() {
         return streamID;
-    }
-
-    /**
-     * Get underlying SMR engine
-     *
-     * @return The SMR engine this object was instantiated under.
-     */
-    @Override
-    public ISMREngine<BTree<K,V>> getUnderlyingSMREngine() {
-        return smr;
-    }
-
-    /**
-     * Set underlying SMR engine
-     *
-     * @param engine
-     */
-    @Override
-    @SuppressWarnings("unchecked")
-    public void setUnderlyingSMREngine(ISMREngine engine) {
-        this.smr = engine;
     }
 
     /**

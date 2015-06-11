@@ -198,6 +198,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
 
 
         try {
+            /*
             List<Class<?>> classes = Arrays.stream(args)
                     .map(Class::getClass)
                     .collect(Collectors.toList());
@@ -213,13 +214,17 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
             T returnObject = oargs.type
                     .getConstructor(classes.toArray(new Class[classes.size()]))
                     .newInstance(largs.toArray(new Object[largs.size()]));
-
+            */
+            T returnObject = oargs.type.newInstance();
+            returnObject.setUnderlyingSMREngine(smrType.getConstructor(IStream.class, Class.class, Class[].class)
+                    .newInstance(openStream(id), returnObject.getUnderlyingType(), args));
+            returnObject.setStreamID(id);
             returnObject.setInstance(this);
 
             objectMap.put(id, returnObject);
             return returnObject;
         }
-        catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e )
+        catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e)
         {
             throw new RuntimeException(e);
         }

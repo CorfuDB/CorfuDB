@@ -11,43 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObject<TreeMap<K,V>>, Map<K,V>
 {
-    transient ISMREngine<TreeMap> smr;
-    ITransaction tx;
     UUID streamID;
-
-    /**
-     * ctor
-     * @param map
-     * @param tx
-     */
-    public CDBLogicalOrderedMap(CDBLogicalOrderedMap<K,V> map, ITransaction tx) {
-        this.streamID = map.streamID;
-        this.tx = tx;
-    }
-
-    /**
-     * ctor
-     * @param stream
-     * @param smrClass
-     */
-    @SuppressWarnings("unchecked")
-    public CDBLogicalOrderedMap(IStream stream, Class<? extends ISMREngine> smrClass) {
-        try {
-            streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, TreeMap.class);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     * ctor
-     * @param stream
-     */
-    public CDBLogicalOrderedMap(IStream stream) {
-        streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<TreeMap>(stream, TreeMap.class);
-    }
 
     /**
      * get the key range containing <tt>records</tt> keys starting
@@ -387,27 +351,6 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     }
 
     /**
-     * Get underlying SMR engine
-     *
-     * @return The SMR engine this object was instantiated under.
-     */
-    @Override
-    public ISMREngine getUnderlyingSMREngine() {
-        return smr;
-    }
-
-    /**
-     * Set underlying SMR engine
-     *
-     * @param engine
-     */
-    @Override
-    @SuppressWarnings("unchecked")
-    public void setUnderlyingSMREngine(ISMREngine engine) {
-        this.smr = engine;
-    }
-
-    /**
      * Set the stream ID
      *
      * @param streamID The stream ID to set.
@@ -415,16 +358,6 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     @Override
     public void setStreamID(UUID streamID) {
         this.streamID = streamID;
-    }
-
-    /**
-     * Get the underlying transaction
-     *
-     * @return The transaction this object is currently participating in.
-     */
-    @Override
-    public ITransaction getUnderlyingTransaction() {
-        return tx;
     }
 }
 

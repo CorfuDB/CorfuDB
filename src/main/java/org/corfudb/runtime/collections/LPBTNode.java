@@ -11,37 +11,11 @@ import java.util.UUID;
  */
 public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<TreeNode> {
 
-    transient ISMREngine<TreeNode> smr;
     UUID streamID;
-
-    @SuppressWarnings("unchecked")
-    public LPBTNode(IStream stream, Class<? extends ISMREngine> smrClass) {
-        try {
-            streamID = stream.getStreamID();
-            smr = smrClass.getConstructor(IStream.class, Class.class).newInstance(stream, TreeNode.class);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public LPBTNode(IStream stream) {
-        streamID = stream.getStreamID();
-        smr = new SimpleSMREngine<TreeNode>(stream, TreeNode.class);
-    }
 
     @Override
     public UUID getStreamID() {
         return streamID;
-    }
-
-    @Override
-    public ISMREngine<TreeNode> getUnderlyingSMREngine() {
-        return smr;
-    }
-
-    @Override
-    public void setUnderlyingSMREngine(ISMREngine<TreeNode> engine) {
-        this.smr = engine;
     }
 
     /**

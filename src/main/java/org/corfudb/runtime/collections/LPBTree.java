@@ -52,22 +52,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
         return e;
     }
 
-    @SuppressWarnings("unchecked")
-    public LPBTree(IStream stream, Class<? extends ISMREngine> smrClass) {
-        try {
-            streamID = stream.getStreamID();
-            smr = instantiateSMREngine(stream, smrClass);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-
-    public LPBTree(IStream stream)
-    {
-        this(stream, SimpleSMREngine.class);
-    }
-
     @Override
     public void init() {
         /* first, sync forward */
@@ -98,27 +82,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
     @Override
     public UUID getStreamID() {
         return streamID;
-    }
-
-    /**
-     * Get underlying SMR engine
-     *
-     * @return The SMR engine this object was instantiated under.
-     */
-    @Override
-    public ISMREngine<TreeContainer> getUnderlyingSMREngine() {
-        return smr;
-    }
-
-    /**
-     * Set underlying SMR engine
-     *
-     * @param engine
-     */
-    @Override
-    public void setUnderlyingSMREngine(ISMREngine<TreeContainer> engine)
-    {
-        this.smr = engine;
     }
 
     /**
