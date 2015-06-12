@@ -78,8 +78,10 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
     {
         //log.warn("write! " + address);
-        write(address, Serializer.serialize_compressed(s));
+        write(address, Serializer.serialize(s));
 
+        //A successful write means we can just put it in the cache.
+        AddressSpaceObjectCache.put(getView.get().getUUID(), address, s);
         /*
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {
@@ -173,7 +175,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
              return o; }
 
          byte[] data = read(address);
-         o = Serializer.deserialize_compressed(data);
+         o = Serializer.deserialize(data);
         AddressSpaceObjectCache.put(getView.get().getUUID(), address ,o);
         return o;
          /*

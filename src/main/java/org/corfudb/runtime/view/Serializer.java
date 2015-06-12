@@ -10,6 +10,7 @@ import com.esotericsoftware.kryo.util.MapReferenceResolver;
 import com.esotericsoftware.kryo.util.ObjectMap;
 import org.corfudb.runtime.entries.*;
 import org.corfudb.runtime.smr.*;
+import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.stream.Timestamp;
 
 import java.io.ByteArrayOutputStream;
@@ -107,7 +108,7 @@ public class Serializer
                 Object object = kryo.readObject(input, serializedLambda);
                 return (Serializable) readResolve.invoke(object);
             } catch (Exception e) {
-                throw new RuntimeException("Could not serialize lambda", e);
+                throw new RuntimeException("Could not deserialize lambda", e);
             }
         }
 
@@ -126,6 +127,7 @@ public class Serializer
             }
         }
     }
+
 
     static class CorfuDBObjectSerializer extends com.esotericsoftware.kryo.Serializer<ICorfuDBObject> {
 
@@ -176,13 +178,8 @@ public class Serializer
     {
         k.setInstantiatorStrategy(new StdInstantiatorStrategy());
         k.addDefaultSerializer(ICorfuDBObject.class, new CorfuDBObjectSerializer());
-        k.register(OldBundleEntry.class);
-        k.register(CorfuDBStreamEntry.class);
-        k.register(CorfuDBStreamHoleEntry.class);
-        k.register(CorfuDBStreamMoveEntry.class);
-        k.register(CorfuDBStreamStartEntry.class);
         k.register(SimpleStreamEntry.class);
-        k.register(Timestamp.class);
+        k.register(SimpleTimestamp.class);
         k.register(HashMap.class);
         k.register(UUID.class, new UUIDSerializer());
         k.register(AtomicLong.class);
