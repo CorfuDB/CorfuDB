@@ -21,19 +21,18 @@ import org.corfudb.runtime.view.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.client.HttpClient;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.methods.HttpGet;
 
 import javax.json.JsonReader;
 import javax.json.Json;
 
 import java.io.IOException;
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 
 import java.lang.reflect.InvocationTargetException;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -220,14 +219,15 @@ public class CorfuDBRuntime implements AutoCloseable {
             MemoryConfigMasterProtocol.memoryConfigMasters.get(0).setInitialView(newView);
             return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
         }
-        HttpClient httpClient = HttpClients.createDefault();
-        HttpResponse response = httpClient.execute(new HttpGet(configString));
-        if (response.getStatusLine().getStatusCode() != 200) {
-            log.warn("Failed to get view from configuration string", response.getStatusLine());
-            throw new IOException("Couldn't get view from configuration string");
-        }
-        try (JsonReader jr = Json.createReader(new BufferedReader(new InputStreamReader(response.getEntity().getContent())))) {
-            return new org.corfudb.runtime.view.CorfuDBView(jr.readObject());
+
+        URL url = new URL(configString);
+        HttpURLConnection huc = (HttpURLConnection) url.openConnection();
+        huc.setRequestProperty("Content-Type", "application/json");
+        huc.connect();
+        try (InputStream is = (InputStream) huc.getContent()) {
+            try (JsonReader jr = Json.createReader(new BufferedReader(new InputStreamReader(is)))) {
+                return new org.corfudb.runtime.view.CorfuDBView(jr.readObject());
+            }
         }
     }
 

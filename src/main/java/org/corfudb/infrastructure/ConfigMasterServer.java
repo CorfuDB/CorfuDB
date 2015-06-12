@@ -849,6 +849,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                 log.debug("PUT request");
                 response = "deny";
             }
+                t.getResponseHeaders().add("content-type", "application/json");
                 t.sendResponseHeaders(200, response.length());
                 OutputStream os = t.getResponseBody();
                 os.write(response.getBytes());
