@@ -215,4 +215,16 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
     public UUID getStreamID() {
         return streamID;
     }
+
+    /**
+     * Execute a read only command against this engine.
+     *
+     * @param command The command to execute. It must be read only.
+     * @return The return value.
+     */
+    @Override
+    public <R> R read(ISMREngineCommand<T, R> command) {
+        return command.apply(underlyingObject, new BufferedSMREngineOptions<>());
+    }
+
 }

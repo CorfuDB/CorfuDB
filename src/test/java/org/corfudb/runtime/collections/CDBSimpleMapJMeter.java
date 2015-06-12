@@ -26,7 +26,6 @@ public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
 
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
-    static AtomicLong al = new AtomicLong();
 
     @Override
     public SampleResult runTest(JavaSamplerContext javaSamplerContext) {

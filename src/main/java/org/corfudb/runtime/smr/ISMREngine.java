@@ -47,6 +47,17 @@ public interface ISMREngine<T> {
     <R> void sync(ITimestamp ts);
 
     /**
+     * Execute a read only command against this engine.
+     * @param command   The command to execute. It must be read only.
+     * @param <R>       The return type of the command.
+     * @return          The return value.
+     */
+    default <R> R read(ISMREngineCommand <T,R> command)
+    {
+        throw new UnsupportedOperationException("Read only commands NOT supported");
+    }
+
+    /**
      * Propose a new command to the SMR engine.
      * @param command       A lambda (BiConsumer) representing the command to be proposed.
      *                      The first argument of the lambda is the object the engine is acting on.

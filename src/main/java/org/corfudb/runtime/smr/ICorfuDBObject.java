@@ -120,10 +120,9 @@ public interface ICorfuDBObject<U> extends Serializable {
     @SuppressWarnings("unchecked")
     default <R> R accessorHelper(ISMREngineCommand<U,R> command)
     {
-        CompletableFuture<R> o = new CompletableFuture<R>();
-        getSMREngine().sync(getSMREngine().check());
-        getSMREngine().propose(command, o, true);
-        return o.join();
+        ISMREngine<U> e = getSMREngine();
+        e.sync(null);
+        return getSMREngine().read(command);
     }
 
     /**
@@ -132,7 +131,7 @@ public interface ICorfuDBObject<U> extends Serializable {
      * @param command       The command to be executed.
      */
     @SuppressWarnings("unchecked")
-    default <R> void mutatorHelper(ISMREngineCommand<U,R> command)
+    default void mutatorHelper(IConsumerOnlySMREngineCommand<U> command)
     {
         getSMREngine().propose(command);
     }
@@ -146,7 +145,8 @@ public interface ICorfuDBObject<U> extends Serializable {
     default <R> R mutatorAccessorHelper(ISMREngineCommand<U,R> command)
     {
         CompletableFuture<R> o = new CompletableFuture<R>();
-        ITimestamp proposal = getSMREngine().propose(command, o);
+        ISMREngine<U> e = getSMREngine();
+        ITimestamp proposal = e.propose(command, o);
         if (!isAutomaticallyPlayedBack()) {getSMREngine().sync(proposal);}
         return o.join();
     }

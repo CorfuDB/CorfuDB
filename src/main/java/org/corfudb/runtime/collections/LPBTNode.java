@@ -68,7 +68,6 @@ public class LPBTNode<K extends Comparable<K>, V> implements ICorfuDBObject<Tree
         mutatorHelper((node, opts) -> {
             if (n >= 0 && n < node.m_vChildren.length)
                 node.m_vChildren[n] = _oid;
-            return null;
         });
     }
 

@@ -139,4 +139,15 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
     public UUID getStreamID() {
         return null;
     }
+
+    /**
+     * Execute a read only command against this engine.
+     *
+     * @param command The command to execute. It must be read only.
+     * @return The return value.
+     */
+    @Override
+    public <R> R read(ISMREngineCommand<T, R> command) {
+        return command.apply(underlyingObject, new PassThroughSMREngineOptions<>());
+    }
 }

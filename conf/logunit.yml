@@ -19,7 +19,8 @@
 role: org.corfudb.infrastructure.SimpleLogUnitServer
 port: 8001
 capacity: 10000
-ramdisk: true
+ramdisk: false
 pagesize: 4096
 trim: 0
+drive: /tmp/corfudblog
 master: http://localhost:8002/corfu

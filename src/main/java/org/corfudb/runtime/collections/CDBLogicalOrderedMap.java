@@ -257,7 +257,6 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     public void putAll(Map<? extends K, ? extends V> m) {
         mutatorHelper((map,opts) -> {
                     map.putAll(m);
-                    return null;
                 }
         );
     }
@@ -273,7 +272,6 @@ public class CDBLogicalOrderedMap<K extends Comparable,V> implements ICorfuDBObj
     public void clear() {
         mutatorHelper((map, opts) -> {
             map.clear();
-            return null;
         });
     }
 

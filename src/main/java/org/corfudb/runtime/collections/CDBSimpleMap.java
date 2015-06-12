@@ -210,7 +210,6 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
     public void putAll(Map<? extends K, ? extends V> m) {
         mutatorHelper((map,opts) -> {
             map.putAll(m);
-            return null;
         });
     }
 
@@ -225,7 +224,6 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
     public void clear() {
         mutatorHelper((map, opts) -> {
             map.clear();
-            return null;
         });
     }
 

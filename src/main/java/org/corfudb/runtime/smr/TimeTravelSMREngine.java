@@ -84,6 +84,17 @@ public class TimeTravelSMREngine<T> extends SimpleSMREngine<T> {
         }
     }
 
+    /**
+     * Execute a read only command against this engine.
+     *
+     * @param command The command to execute. It must be read only.
+     * @return The return value.
+     */
+    @Override
+    public <R> R read(ISMREngineCommand<T, R> command) {
+        return command.apply(underlyingObject, new SimpleSMREngineOptions<>());
+    }
+
     public void unlock(ITimestamp ts)
     {
         this.lockTS = null;

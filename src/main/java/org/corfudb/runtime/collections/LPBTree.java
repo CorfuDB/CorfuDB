@@ -68,7 +68,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
             tree.m_root = rootID;
             tree.m_height = 0;
             tree.m_size = 0;
-            return null;
         });
     }
 
@@ -318,7 +317,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
             writeroot(CorfuDBObject.oidnull);
             writesize(0);
             writeheight(0);
-            return null;
         });
     }
 
@@ -577,7 +575,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
         mutatorHelper((tree, opts) ->
             {
                 tree.m_size = size;
-                return null;
             });
     }
 
@@ -588,7 +585,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
     public void writeheight(int height) {
         mutatorHelper((tree, opts) -> {
             tree.m_height = height;
-            return null;
         });
     }
 
@@ -603,7 +599,6 @@ public class LPBTree<K extends Comparable<K>, V> implements ICorfuDBObject<TreeC
     public void writeroot(UUID _oid) {
         mutatorHelper((tree, opts) -> {
             tree.m_root = _oid;
-            return null;
         });
     }
 

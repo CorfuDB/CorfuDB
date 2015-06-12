@@ -351,7 +351,6 @@ public class CDBArrayList<T> implements ICorfuDBObject<ArrayList<T>>, List<T>, R
     public void clear() {
         mutatorHelper((list, opts) -> {
             list.clear();
-            return null;
         });
     }
 
@@ -415,7 +414,6 @@ public class CDBArrayList<T> implements ICorfuDBObject<ArrayList<T>>, List<T>, R
     public void add(int index, T element) {
         mutatorHelper((list, opts) -> {
             list.add(index, element);
-            return null;
         });
     }
 

@@ -183,6 +183,17 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     }
 
     /**
+     * Execute a read only command against this engine.
+     *
+     * @param command The command to execute. It must be read only.
+     * @return The return value.
+     */
+    @Override
+    public <R> R read(ISMREngineCommand<T, R> command) {
+        return command.apply(underlyingObject, new SimpleSMREngineOptions<>());
+    }
+
+    /**
      * Propose a new command to the SMR engine.
      *
      * @param command       A lambda (BiConsumer) representing the command to be proposed.

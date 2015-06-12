@@ -74,7 +74,6 @@ public class LambdaLogicalBTree<K extends Comparable<K>, V>
     public void clear() {
         mutatorHelper((map, opts) -> {
             map.clear();
-            return null;
         });
     }
 
