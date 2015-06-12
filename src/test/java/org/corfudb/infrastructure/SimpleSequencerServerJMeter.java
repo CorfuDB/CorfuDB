@@ -12,6 +12,7 @@ import org.corfudb.runtime.view.ISequencer;
  */
 public class SimpleSequencerServerJMeter extends AbstractJavaSamplerClient {
 
+    CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
     ISequencer sequencer;
 
@@ -28,9 +29,16 @@ public class SimpleSequencerServerJMeter extends AbstractJavaSamplerClient {
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-        instance =
-                CorfuDBRuntime.getRuntime("http://localhost:12700/corfu").getLocalInstance();
+        runtime = CorfuDBRuntime.getRuntime("http://localhost:12700/corfu");
+        instance = runtime.getLocalInstance();
         sequencer = instance.getSequencer();
         super.setupTest(context);
     }
+
+    @Override
+    public void teardownTest(JavaSamplerContext context) {
+        runtime.close();
+        super.teardownTest(context);
+    }
+
 }
