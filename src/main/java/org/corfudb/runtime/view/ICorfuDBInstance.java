@@ -85,6 +85,7 @@ public interface ICorfuDBInstance {
     {
         public Class<T> type;
         public Class<? extends ISMREngine> smrType;
+        public boolean createNew = false;
 
         public OpenObjectArgs(Class<T> type)
         {
@@ -95,6 +96,13 @@ public interface ICorfuDBInstance {
         {
             this.type = type;
             this.smrType = smrType;
+        }
+
+        public OpenObjectArgs(Class<T> type, Class<? extends ISMREngine> smrType, boolean createNew)
+        {
+            this.type = type;
+            this.smrType = smrType;
+            this.createNew = createNew;
         }
     }
 
