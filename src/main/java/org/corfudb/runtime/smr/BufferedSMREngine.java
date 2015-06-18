@@ -28,6 +28,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
     ICorfuDBInstance instance;
 
     ArrayList<ISMREngineCommand> commandBuffer;
+    boolean hasRead = false; // TODO: Extend function signatures to provide enough info to set this reliably.
 
     class BufferedSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
@@ -83,6 +84,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
                     return;
                 }
                 try {
+                    if (entry == null) return;
                     if (entry.getTimestamp().compareTo(ts) == 0) {
                         //don't read the sync point, since that contains
                         //the transaction...
@@ -168,8 +170,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
             commandBuffer.add(command);
         }
         R result = command.apply(underlyingObject, new BufferedSMREngineOptions<T>());
-        if (completion != null)
-        {
+        if (completion != null) {
             completion.complete(result);
         }
         return ts;
@@ -227,4 +228,11 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
         return command.apply(underlyingObject, new BufferedSMREngineOptions<>());
     }
 
+    public ArrayList<ISMREngineCommand> getCommandBuffer() {
+        return commandBuffer;
+    }
+
+    public boolean getReadOnly() {
+        return hasRead;
+    }
 }

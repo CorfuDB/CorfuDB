@@ -61,7 +61,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
         if (streamID.equals(executingEngine.getStreamID()))
         {
-            return new PassThroughSMREngine(executingEngine.getObject(), timestamp, instance);
+            return new PassThroughSMREngine(executingEngine.getObject(), timestamp, instance, streamID);
         }
         else
         {

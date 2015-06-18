@@ -322,4 +322,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     public ICorfuDBInstance getInstance() {
         return stream.getInstance();
     }
+
+    @Override
+    public ITimestamp getStreamPointer() { return streamPointer; }
 }

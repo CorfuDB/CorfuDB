@@ -159,4 +159,6 @@ public interface ISMREngine<T> {
         throw new UnsupportedOperationException("not yet implemented...");
     }
 
+    default ITimestamp getStreamPointer() { throw new UnsupportedOperationException("not yet implemented"); }
+
 }

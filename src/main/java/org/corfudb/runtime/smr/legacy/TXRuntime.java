@@ -580,6 +580,7 @@ class TXEngine implements SMRLearner
         //at this point, the transaction hasn't committed; we need to wait until we encounter
         //partial decisions (including the one we just inserted) to appear in the stream
         //so we stick this into a dependency graph of blocking transactions for now
+        // TODO: (taia)You should only be adding committed transactions?? Aborted txns will not affect read sets.
         addPending(timestamp, T);
 
     }

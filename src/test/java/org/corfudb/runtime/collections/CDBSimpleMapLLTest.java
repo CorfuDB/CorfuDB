@@ -1,0 +1,122 @@
+package org.corfudb.runtime.collections;
+
+import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.smr.*;
+import org.corfudb.runtime.stream.IStream;
+import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.stream.SimpleTimestamp;
+import org.corfudb.runtime.view.ConfigurationMaster;
+import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.Serializable;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Testing the LLTransaction
+ *
+ * Created by taia on 6/14/15.
+ */
+public class CDBSimpleMapLLTest {
+
+    IStream s;
+    ICorfuDBInstance instance;
+    static public CDBSimpleMap<Integer, Integer> testMap;
+    UUID streamID;
+    CorfuDBRuntime cdr;
+
+    @Before
+    public void generateStream() throws Exception
+    {
+        cdr = CorfuDBRuntime.createRuntime("memory");
+        ConfigurationMaster cm = new ConfigurationMaster(cdr);
+        cm.resetAll();
+        instance = cdr.getLocalInstance();
+        streamID = UUID.randomUUID();
+        s = instance.openStream(streamID);
+        //testMap = instance.openObject(streamID, testMap.getUnderlyingType());
+        testMap = instance.openObject(streamID, CDBSimpleMap.class);
+    }
+
+    @Test
+    public void LLTransactionalTest() throws Exception
+    {
+        LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
+        testMap.put(10, 100);
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            Integer result = testMapLocal.get(10);
+            if (result == 100) {
+                testMapLocal.put(10, 1000);
+                return true;
+            }
+            return false;
+        });
+        ITimestamp txStamp = tx.propose();
+        testMap.getSMREngine().sync(txStamp);
+        assertThat(testMap.get(10))
+                .isEqualTo(1000);
+    }
+
+    @Test
+    public void twoMapLLTransactionalTest() throws Exception
+    {
+        LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
+        CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
+
+        testMap.put(10, 100);
+        testMap2.put(10, 1000);
+
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            Integer old1 = testMapLocal.get(10);
+            Integer old2 = testMap2.put(10, old1);
+            testMapLocal.put(10, old2);
+            return true;
+        });
+
+        ITimestamp txStamp = tx.propose();
+        testMap.getSMREngine().sync(txStamp);
+        testMap2.getSMREngine().sync(txStamp);
+        assertThat(testMap.get(10))
+                .isEqualTo(1000);
+        assertThat(testMap2.get(10))
+                .isEqualTo(100);
+    }
+
+    // Intervening command should abort the transaction.
+    @Test
+    public void LLAbortTest() throws Exception
+    {
+        LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
+        CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
+
+        testMap.put(10, 100);
+        testMap2.put(10, 1000);
+
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            Integer old1 = testMapLocal.get(10);
+            Integer old2 = testMap2.put(10, old1);
+            testMapLocal.put(10, old2);
+            return true;
+        });
+        // Artifically wedge another entry in between, where we will insert a write that invalidates txn's readset.
+        // This breaks all kinds of abstraction..
+        ITimestamp ts = new SimpleTimestamp(instance.getSequencer().getNext());
+
+        ITimestamp txStamp = tx.propose();
+        s.write(ts, (ISMREngineCommand) ((map, opts) -> {return ((Map)map).put(10, 200);}));
+
+        testMap.getSMREngine().sync(txStamp);
+        testMap2.getSMREngine().sync(txStamp);
+        assertThat(testMap.get(10))
+                .isEqualTo(200);
+        assertThat(testMap2.get(10))
+                .isEqualTo(1000);
+    }
+}
