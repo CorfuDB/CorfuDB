@@ -4,12 +4,10 @@ import org.apache.zookeeper.KeeperException;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.collections.CDBSimpleMap;
+import org.corfudb.runtime.entries.MetadataEntry;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.smr.legacy.CorfuDBObject;
-import org.corfudb.runtime.stream.IStream;
-import org.corfudb.runtime.stream.IStreamMetadata;
-import org.corfudb.runtime.stream.SimpleStream;
-import org.corfudb.runtime.stream.SimpleStreamMetadata;
+import org.corfudb.runtime.stream.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +32,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private CorfuDBRuntime cdr;
     private CDBSimpleMap<UUID, IStreamMetadata> streamMap;
     private ConcurrentMap<UUID, ICorfuDBObject> objectMap;
+    private HashMap<Long, MetadataEntry> metadataMap;
 
     // Classes to instantiate.
     private Class<? extends IStream> streamType;
@@ -60,6 +59,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
         this.cdr = cdr;
+        this.metadataMap = new HashMap<Long, MetadataEntry>();
     }
 
     /**
@@ -256,4 +256,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         }
     }
 
+    @Override
+    public HashMap<Long, MetadataEntry> getMetadataMap() {
+        return metadataMap;
+    }
 }

@@ -1,13 +1,16 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.runtime.entries.MetadataEntry;
 import org.corfudb.runtime.smr.ICorfuDBObject;
 import org.corfudb.runtime.smr.ISMREngine;
 import org.corfudb.runtime.smr.ITransaction;
 import org.corfudb.runtime.smr.ITransactionCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.IStreamMetadata;
+import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStreamMetadata;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -139,4 +142,8 @@ public interface ICorfuDBInstance {
      * @return          The value returned in the transaction.
      */
     <T> T executeTransaction (Class<? extends ITransaction> type, ITransactionCommand<T> command);
+
+    default HashMap<Long, MetadataEntry> getMetadataMap() {
+        throw new UnsupportedOperationException("This instance hasn't implemented a metadata map yet!");
+    }
 }

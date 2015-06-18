@@ -6,6 +6,7 @@ import java.util.HashMap;
  * Created by taia on 6/17/15.
  */
 public class MetadataEntry {
+    // TODO: Unfortunately, there is no type-checking on values in this map. Maybe rethink how to add type-checking?
     private HashMap<String, Object> map;
 
     // Some common fields
