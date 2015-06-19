@@ -188,13 +188,15 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
 
         Class<? extends ISMREngine> smrType = oargs.smrType == null ? SimpleSMREngine.class : oargs.smrType;
 
-        if (!oargs.createNew && cachedObject != null && cachedObject.getUnderlyingSMREngine().getClass().equals(smrType))
-        {
-            // TODO: Figure out why this type-check fails in getEngine of LLTransaction.java
-            //if (!(oargs.type.isInstance(cachedObject)))
-            //    throw new RuntimeException("Incorrect type! Requested to open object of type " + oargs.type.getClass() +
-            //            " but an object of type " + cachedObject.getClass() + " is already there!");
+        if (!oargs.typeCheck && cachedObject != null)
             return cachedObject;
+        else {
+            if (!oargs.createNew && cachedObject != null && cachedObject.getUnderlyingSMREngine().getClass().equals(smrType)) {
+                if (!(oargs.type.isInstance(cachedObject)))
+                    throw new RuntimeException("Incorrect type! Requested to open object of type " + oargs.type +
+                            " but an object of type " + cachedObject.getClass() + " is already there!");
+                return cachedObject;
+            }
         }
 
 

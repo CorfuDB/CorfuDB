@@ -89,6 +89,9 @@ public interface ICorfuDBInstance {
         public Class<T> type;
         public Class<? extends ISMREngine> smrType;
         public boolean createNew = false;
+        public boolean typeCheck = true;
+
+        public OpenObjectArgs(boolean typeCheck) { this.typeCheck = typeCheck; }
 
         public OpenObjectArgs(Class<T> type)
         {
@@ -121,6 +124,16 @@ public interface ICorfuDBInstance {
     default <T extends ICorfuDBObject> T openObject(UUID id, Class<T> type, Class<?>... args)
     {
         return openObject(id, new OpenObjectArgs<T>(type), args);
+    }
+
+    /**
+     * Retrieves the cached corfuDB object without requiring type knowledge.
+     * @param id    A unique ID for the object to be retrieved.
+     * @return      Returns a cached object, if it exists. Otherwise null.
+     */
+    default <T extends ICorfuDBObject> T openObject(UUID id)
+    {
+        return openObject(id, new OpenObjectArgs<T>(false));
     }
 
     /**

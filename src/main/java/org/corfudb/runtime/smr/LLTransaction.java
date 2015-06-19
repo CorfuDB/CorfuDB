@@ -32,7 +32,7 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
 
     // Non-transient variables are actually part of the LLTransaction stream entry, used by SMREngines that encounter
     // the LLTxn to determine whether to commit the optimistically executed transaction.
-    ITimestamp timestamp; // this is set when the underlying stream calls readNextEntry
+    ITimestamp timestamp; // set when the underlying stream calls readNextEntry
     Set<TxIntReadSetEntry> readset;
     MultiCommand bufferedCommands;
 
@@ -61,7 +61,7 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
         if (ret == null) {
             // We have to increment the result returned by check() by one, because of the semantics of BufferedSMRE.
             ITimestamp linPoint = instance.openStream(streamID).getNextTimestamp(
-                    instance.openObject(streamID, (Class<? extends ICorfuDBObject>) objClass).getUnderlyingSMREngine().getStreamPointer());
+                    instance.openObject(streamID).getUnderlyingSMREngine().getStreamPointer());
             BufferedSMREngine engine = new BufferedSMREngine(linPoint, streamID, instance, objClass);
             bufferedSMRMap.put(streamID, engine);
             return engine;
@@ -114,6 +114,9 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
      */
     @Override
     public void executeTransaction(ISMREngine engine) {
+        // TODO: The correctness of LLTxns is conditional on the first SMREngine that consumes the txn to write its
+        // TODO: decision to the metadatamap. Either persist the metadatamap so the metadata is always up-to-date, or
+        // TODO: or implement TxDecs.
         boolean abort = false;
         // First check if a decision has been made in metadataMap
         MetadataEntry entry = instance.getMetadataMap().get(((SimpleTimestamp) timestamp).address);
@@ -125,8 +128,7 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
                 while (readEntries.hasNext() && !abort) {
                     TxIntReadSetEntry readSetEntry = readEntries.next();
                     // Get the current version of the object in the readset
-                    ITimestamp version = instance.openObject(readSetEntry.objectid,
-                            (Class<? extends ICorfuDBObject>) engine.getObject().getClass()).getUnderlyingSMREngine().getStreamPointer();
+                    ITimestamp version = instance.openObject(readSetEntry.objectid).getUnderlyingSMREngine().getStreamPointer();
                     if (version.compareTo(readSetEntry.readtimestamp) > 0)
                         abort = true;
 
@@ -178,8 +180,7 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
         try (TransactionalContext tx = new TransactionalContext(this)) {
             command.apply(new LLTransactionOptions());
         }
-        // After this command is executed in all the Buffered engines, we should be able to get a list of streams that
-        // are touched by this transaction.
+        // After this command is executed in all the Buffered engines, get a list of streams that are touched
         Iterator<UUID> streamIterator = bufferedSMRMap.keySet().iterator();
 
         HashMap<UUID, ISMREngineCommand[]> multicommandMap = new HashMap<UUID, ISMREngineCommand[]>();
@@ -192,7 +193,8 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
 
             if (!engine.getWriteOnly()) {
                 // decrement the timestamp by one, because we incremented it before sending to the BufferedEngine.
-                readset.add(new TxIntReadSetEntry(stream, instance.openStream(stream).getPreviousTimestamp(engine.ts), null));
+                readset.add(new TxIntReadSetEntry(stream,
+                        instance.openStream(stream).getPreviousTimestamp(engine.ts), null));
             }
         }
         bufferedCommands = new MultiCommand(multicommandMap);
@@ -200,7 +202,6 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
         // Now we are ready to write the LLTxn to the log
         Long sequence = instance.getSequencer().getNext();
         instance.getAddressSpace().write(sequence, this);
-
         return new SimpleTimestamp(sequence);
     }
 
