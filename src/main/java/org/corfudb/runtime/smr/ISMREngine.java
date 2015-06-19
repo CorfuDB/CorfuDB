@@ -102,7 +102,7 @@ public interface ISMREngine<T> {
     }
 
     default <R> ITimestamp propose(ISMREngineCommand<T, R> command, boolean writeOnly) {
-        throw new UnsupportedOperationException("propose with writeOnly tag not yet implemented");
+        return propose(command);
     }
 
     /**
