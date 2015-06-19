@@ -163,6 +163,10 @@ public interface ISMREngine<T> {
         throw new UnsupportedOperationException("not yet implemented...");
     }
 
+    /**
+     * Get the timestamp of the entry the state machine most recently applied.
+     * @return              The timestamp of the most recently synced entry.
+     */
     default ITimestamp getStreamPointer() { throw new UnsupportedOperationException("not yet implemented"); }
 
 }

@@ -116,8 +116,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                 }
             }
             while (ts.compareTo(streamPointer) > 0) {
+                IStreamEntry entry = null;
                 try {
-                    IStreamEntry entry;
                     try (TransactionalContext tc =
                                  new TransactionalContext(this, ts, stream.getInstance(), PassthroughTransaction.class)) {
                         //for now, use this to pass the instance context to the deserializer.
@@ -177,7 +177,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                 } catch (Exception e) {
                     log.error("exception during sync@{}", stream.getCurrentPosition(), e);
                 }
-                streamPointer = stream.getCurrentPosition();
+                if (entry != null)
+                    streamPointer = entry.getTimestamp();
             }
         }
     }

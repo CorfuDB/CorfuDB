@@ -127,7 +127,9 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
                 Iterator<TxIntReadSetEntry> readEntries = readset.iterator();
                 while (readEntries.hasNext() && !abort) {
                     TxIntReadSetEntry readSetEntry = readEntries.next();
-                    // Get the current version of the object in the readset
+                    // Get the version of the object in the readset, at the timestamp of thie LLTxn
+                    instance.openObject(readSetEntry.objectid).getUnderlyingSMREngine()
+                            .sync(instance.openStream(readSetEntry.objectid).getPreviousTimestamp(timestamp));
                     ITimestamp version = instance.openObject(readSetEntry.objectid).getUnderlyingSMREngine().getStreamPointer();
                     if (version.compareTo(readSetEntry.readtimestamp) > 0)
                         abort = true;

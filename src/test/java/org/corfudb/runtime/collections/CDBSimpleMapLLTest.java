@@ -38,7 +38,6 @@ public class CDBSimpleMapLLTest {
         instance = cdr.getLocalInstance();
         streamID = UUID.randomUUID();
         s = instance.openStream(streamID);
-        //testMap = instance.openObject(streamID, testMap.getUnderlyingType());
         testMap = instance.openObject(streamID, CDBSimpleMap.class);
     }
 
@@ -134,5 +133,24 @@ public class CDBSimpleMapLLTest {
 
         ITimestamp txStamp = tx.propose();
         assertThat(tx.getReadSet().size()).isEqualTo(0);
+        assertThat(testMap.size()).isEqualTo(0);
+    }
+
+    @Test
+    public void readSetOneTest() throws Exception {
+        LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
+
+        testMap.put(10, 100);
+        CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            testMapLocal.clear();
+            testMap2.put(10,1000);
+            return null;
+        });
+
+        ITimestamp txStamp = tx.propose();
+        assertThat(tx.getReadSet().size()).isEqualTo(1);
+        assertThat(testMap2.get(10)).isEqualTo(1000);
     }
 }
