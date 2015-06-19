@@ -133,7 +133,7 @@ public interface ICorfuDBObject<U> extends Serializable {
     @SuppressWarnings("unchecked")
     default void mutatorHelper(IConsumerOnlySMREngineCommand<U> command)
     {
-        getSMREngine().propose(command);
+        getSMREngine().propose(command, true);
     }
 
     /**

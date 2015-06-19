@@ -28,7 +28,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
     ICorfuDBInstance instance;
 
     ArrayList<ISMREngineCommand> commandBuffer;
-    boolean hasRead = false; // TODO: Extend function signatures to provide enough info to set this reliably.
+    boolean writeOnly;
 
     class BufferedSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
@@ -52,6 +52,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
         this.streamID = streamID;
         this.instance = instance;
         this.commandBuffer = new ArrayList<ISMREngineCommand>();
+        this.writeOnly = true;
     }
 
     @SuppressWarnings("unchecked")
@@ -61,6 +62,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
             this.ts = ts;
             this.streamID = streamID;
             this.instance = instance;
+            this.writeOnly = true;
 
             underlyingObject = (T) objClass
                     .getConstructor(Arrays.stream(args)
@@ -164,6 +166,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
      */
     @Override
     public <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
+        writeOnly = false;
         if (!readOnly)
         {
             //buffer the command.
@@ -228,11 +231,18 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
         return command.apply(underlyingObject, new BufferedSMREngineOptions<>());
     }
 
+    @Override
+    public <R> ITimestamp propose(ISMREngineCommand<T, R> command, boolean writeOnly) {
+        commandBuffer.add(command);
+        command.apply(underlyingObject, new BufferedSMREngineOptions<T>());
+        return ts;
+    }
+
     public ArrayList<ISMREngineCommand> getCommandBuffer() {
         return commandBuffer;
     }
 
-    public boolean getReadOnly() {
-        return hasRead;
+    public boolean getWriteOnly() {
+        return writeOnly;
     }
 }

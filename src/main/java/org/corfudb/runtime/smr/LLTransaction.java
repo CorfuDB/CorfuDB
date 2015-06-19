@@ -62,8 +62,6 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
             // We have to increment the result returned by check() by one, because of the semantics of BufferedSMRE.
             ITimestamp linPoint = instance.openStream(streamID).getNextTimestamp(
                     instance.openObject(streamID, (Class<? extends ICorfuDBObject>) objClass).getUnderlyingSMREngine().getStreamPointer());
-            //ITimestamp linPoint = instance.openStream(streamID).getNextTimestamp(instance.openStream(streamID).check(false));
-            log.info("linpoint: {}, object: {}", linPoint, streamID);
             BufferedSMREngine engine = new BufferedSMREngine(linPoint, streamID, instance, objClass);
             bufferedSMRMap.put(streamID, engine);
             return engine;
@@ -129,7 +127,6 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
                     // Get the current version of the object in the readset
                     ITimestamp version = instance.openObject(readSetEntry.objectid,
                             (Class<? extends ICorfuDBObject>) engine.getObject().getClass()).getUnderlyingSMREngine().getStreamPointer();
-                    log.info("read readSetEntry ts: {}, curstream: {}", readSetEntry.readtimestamp, version);
                     if (version.compareTo(readSetEntry.readtimestamp) > 0)
                         abort = true;
 
@@ -150,7 +147,6 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
             }
         }
 
-        log.info("abort decision?: {}", abort);
         if (abort)
             return;
         // Committing transaction == apply the multicommands
@@ -193,11 +189,11 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
             BufferedSMREngine engine = bufferedSMRMap.get(stream);
             multicommandMap.put(stream,
                     (ISMREngineCommand[]) engine.getCommandBuffer().toArray(new ISMREngineCommand[1]));
-            //TODO: Need more hints to determine if something is only the readset... for now, everything is in readset.
-            //if (engine.getReadOnly()) {
-            // decrement the timestamp by one, because we incremented it before sending to the BufferedEngine.
+
+            if (!engine.getWriteOnly()) {
+                // decrement the timestamp by one, because we incremented it before sending to the BufferedEngine.
                 readset.add(new TxIntReadSetEntry(stream, instance.openStream(stream).getPreviousTimestamp(engine.ts), null));
-            //}
+            }
         }
         bufferedCommands = new MultiCommand(multicommandMap);
 
@@ -248,5 +244,10 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
     @Override
     public Object getPayload() {
         throw new UnsupportedOperationException("Haven't implemented getPayload");
+    }
+
+    // For testing purposes
+    public Set<TxIntReadSetEntry> getReadSet() {
+        return readset;
     }
 }

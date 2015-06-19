@@ -101,6 +101,10 @@ public interface ISMREngine<T> {
         return propose(command, null, false);
     }
 
+    default <R> ITimestamp propose(ISMREngineCommand<T, R> command, boolean writeOnly) {
+        throw new UnsupportedOperationException("propose with writeOnly tag not yet implemented");
+    }
+
     /**
      * Propose a local command to the SMR engine. A local command is one which is executed locally
      * only, but may propose other commands which affect multiple objects.

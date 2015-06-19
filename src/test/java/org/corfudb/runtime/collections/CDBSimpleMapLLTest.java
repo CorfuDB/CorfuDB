@@ -119,4 +119,20 @@ public class CDBSimpleMapLLTest {
         assertThat(testMap2.get(10))
                 .isEqualTo(1000);
     }
+
+    @Test
+    public void readSetTest() throws Exception {
+        // Make sure we accurately determine what should go in the readset and what should not
+        LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
+
+        testMap.put(10, 100);
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            testMapLocal.clear();
+            return null;
+        });
+
+        ITimestamp txStamp = tx.propose();
+        assertThat(tx.getReadSet().size()).isEqualTo(0);
+    }
 }
