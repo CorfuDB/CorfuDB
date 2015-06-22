@@ -155,8 +155,4 @@ public interface ICorfuDBInstance {
      * @return          The value returned in the transaction.
      */
     <T> T executeTransaction (Class<? extends ITransaction> type, ITransactionCommand<T> command);
-
-    default HashMap<Long, MetadataEntry> getMetadataMap() {
-        throw new UnsupportedOperationException("This instance hasn't implemented a metadata map yet!");
-    }
 }

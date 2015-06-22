@@ -32,7 +32,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private CorfuDBRuntime cdr;
     private CDBSimpleMap<UUID, IStreamMetadata> streamMap;
     private ConcurrentMap<UUID, ICorfuDBObject> objectMap;
-    private HashMap<Long, MetadataEntry> metadataMap;
 
     // Classes to instantiate.
     private Class<? extends IStream> streamType;
@@ -59,7 +58,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
         this.cdr = cdr;
-        this.metadataMap = new HashMap<Long, MetadataEntry>();
     }
 
     /**
@@ -257,10 +255,5 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         {
             throw new RuntimeException(e);
         }
-    }
-
-    @Override
-    public HashMap<Long, MetadataEntry> getMetadataMap() {
-        return metadataMap;
     }
 }

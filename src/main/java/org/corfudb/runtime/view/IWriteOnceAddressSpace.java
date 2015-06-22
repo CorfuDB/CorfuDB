@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.view;
 
+import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.TrimmedException;
@@ -40,5 +41,16 @@ public interface IWriteOnceAddressSpace {
     Object readObject(long address)
     throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException;
 
+    default ExtntInfo readmeta(long address) throws UnwrittenException, TrimmedException {
+        throw new UnsupportedOperationException("This address space doesn't support metadata");
+    }
+
+    default void setmetaNext(long address, long nextOffset) throws UnwrittenException, TrimmedException {
+        throw new UnsupportedOperationException("This address space doesn't support metadata");
+    }
+
+    default void setmetaTxDec(long address, boolean dec) throws UnwrittenException, TrimmedException {
+        throw new UnsupportedOperationException("This address space doesn't support metadata");
+    }
 }
 

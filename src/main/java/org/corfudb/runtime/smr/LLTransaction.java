@@ -1,5 +1,6 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.entries.MetadataEntry;
@@ -119,8 +120,13 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
         // TODO: or implement TxDecs.
         boolean abort = false;
         // First check if a decision has been made in metadataMap
-        MetadataEntry entry = instance.getMetadataMap().get(((SimpleTimestamp) timestamp).address);
-        if (entry == null || entry.getMetadata(MetadataEntry.DECISION) == null) {
+        ExtntInfo entry = null;
+        try {
+            entry = instance.getAddressSpace().readmeta(((SimpleTimestamp) timestamp).address);
+        } catch (Exception e) {
+            log.info("Exception in reading metadata: {}", e);
+        }
+        if (entry == null || !entry.isSetTxDec()) {
             // Now we need to check all the BufferedTxns to see if we are allowed to commit them. Should reimplement
             // the legacy process_tx_intention code.
             if (readset != null) {
@@ -137,17 +143,15 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
                     //TODO: check for other concurrently running transactions.
                 }
             }
-            // Write the result to metadatamap
-            if (entry == null) {
-                MetadataEntry newEntry = new MetadataEntry();
-                newEntry.writeMetadata(MetadataEntry.DECISION, !abort);
-                instance.getMetadataMap().put(((SimpleTimestamp) timestamp).address, newEntry);
-            } else {
-                entry.writeMetadata(MetadataEntry.DECISION, !abort);
+            // Write the result back to logging units
+            try {
+                instance.getAddressSpace().setmetaTxDec(((SimpleTimestamp) timestamp).address, !abort);
+            } catch (Exception e) {
+                log.info("Error trying to write back metadata: {}", e);
             }
         } else {
-            if (entry.getMetadata(MetadataEntry.DECISION) != null) {
-                abort = !((boolean) entry.getMetadata(MetadataEntry.DECISION)); // true == commit
+            if (entry.isSetTxDec()) {
+                abort = !entry.isTxDec(); // true == commit
             }
         }
 

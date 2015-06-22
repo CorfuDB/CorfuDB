@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import org.corfudb.infrastructure.thrift.ErrorCode;
 import org.corfudb.infrastructure.thrift.ExtntMarkType;
@@ -109,4 +110,40 @@ public class SimpleLogUnitServerMemoryTest {
         assertEquals(ew.getErr(), ErrorCode.ERR_UNWRITTEN);
     }
 
+    @Test
+    public void basicMetadataTest() throws Exception {
+        byte[] test = getTestPayload(4096);
+        ArrayList<Integer> epochlist = new ArrayList<Integer>();
+        epochlist.add(0);
+        ArrayList<ByteBuffer> byteList = new ArrayList<ByteBuffer>();
+        byteList.add(ByteBuffer.wrap(test));
+
+        // Make sure no metadata in empty spot
+        SimpleLogUnitServer slus = new SimpleLogUnitServer();
+        slus.reset();
+        ErrorCode ec = slus.setmetaNext(new UnitServerHdr(epochlist, 1), 1234L);
+        assertEquals(ec, ErrorCode.ERR_UNWRITTEN);
+
+        ExtntWrap ew = slus.readmeta(new UnitServerHdr(epochlist, 1));
+        assertEquals(ew.getErr(), ErrorCode.ERR_UNWRITTEN);
+
+        // Now there shuld be metadata
+        ec = slus.write(new UnitServerHdr(epochlist, 1), byteList, ExtntMarkType.EX_FILLED);
+        assertEquals(ec, ErrorCode.OK);
+        ec = slus.setmetaNext(new UnitServerHdr(epochlist, 1), 1234L);
+        assertEquals(ec, ErrorCode.OK);
+
+        ew = slus.readmeta(new UnitServerHdr(epochlist, 1));
+        assertEquals(ew.getErr(), ErrorCode.OK);
+        assertEquals(ew.getInf().getNextOff(), 1234L);
+        assertTrue(!ew.getInf().isTxDec());
+
+        // Test TxDec
+        ec = slus.setmetaTxDec(new UnitServerHdr(epochlist, 1), true);
+        assertEquals(ec, ErrorCode.OK);
+        ew = slus.readmeta(new UnitServerHdr(epochlist, 1));
+        assertEquals(ew.getErr(), ErrorCode.OK);
+        assertEquals(ew.getInf().getNextOff(), 1234L);
+        assertTrue(ew.getInf().isTxDec());
+    }
 }

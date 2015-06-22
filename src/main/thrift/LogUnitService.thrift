@@ -13,6 +13,10 @@ service SimpleLogUnitService {
 	void sync(),
 	
 	Common.ExtntWrap readmeta(1:Common.UnitServerHdr hdr),
+	
+	Common.ErrorCode setmetaNext(1:Common.UnitServerHdr hdr, i64 nextOffset),
+	
+	Common.ErrorCode setmetaTxDec(1:Common.UnitServerHdr hdr, bool dec),
 
 	i64 querytrim(),
 	

@@ -15,16 +15,10 @@
 
 package org.corfudb.runtime.protocols.logunits;
 
+import org.corfudb.infrastructure.thrift.*;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.PooledThriftClient;
-
-import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
-import org.corfudb.infrastructure.thrift.UnitServerHdr;
-
-import org.corfudb.infrastructure.thrift.ExtntWrap;
-import org.corfudb.infrastructure.thrift.ExtntMarkType;
-import org.corfudb.infrastructure.thrift.ErrorCode;
 
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.protocol.TMultiplexedProtocol;
@@ -201,6 +195,110 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             }
         }
         return data;
+    }
+
+    @Override
+    public ExtntInfo readmeta(long address) throws TrimmedException, NetworkException
+    {
+        ExtntInfo ret = null;
+        SimpleLogUnitService.Client client = thriftPool.getResource();
+        boolean success = false;
+        boolean broken = false;
+        try {
+            ArrayList<Integer> epochlist = new ArrayList<Integer>();
+            epochlist.add(epoch.intValue());
+            ExtntWrap wrap = client.readmeta(new UnitServerHdr(epochlist, address));
+            if (wrap.err.equals(ErrorCode.ERR_UNWRITTEN))
+            {
+                return null;
+            }
+            else if (wrap.err.equals(ErrorCode.ERR_TRIMMED))
+            {
+                throw new TrimmedException("Trim error", address);
+            }
+
+            ret = wrap.getInf();
+            success = true;
+            thriftPool.returnResourceObject(client);
+        }
+        catch (TException e)
+        {
+            broken = true;
+            thriftPool.returnBrokenResource(client);
+            throw new NetworkException("Error connecting to endpoint: " + e.getMessage(), this);
+        }
+        finally {
+            if (!success && !broken){
+                thriftPool.returnResourceObject(client);
+            }
+        }
+        return ret;
+    }
+
+    @Override
+    public void setmetaNext(long address, long nextOffset) throws TrimmedException, NetworkException {
+        SimpleLogUnitService.Client client = thriftPool.getResource();
+        boolean success = false;
+        boolean broken = false;
+        try {
+            ArrayList<Integer> epochlist = new ArrayList<Integer>();
+            epochlist.add(epoch.intValue());
+            ErrorCode ec = client.setmetaNext(new UnitServerHdr(epochlist, address), nextOffset);
+            thriftPool.returnResourceObject(client);
+            success = true;
+            if (ec.equals(ErrorCode.ERR_TRIMMED)) {
+                throw new TrimmedException("Trim error", address);
+            }
+            else if(ec.equals(ErrorCode.ERR_STALEEPOCH))
+            {
+                throw new NetworkException("Writing to log unit in wrong epoch", this, address, false);
+            }
+        }
+        catch (TException e)
+        {
+            broken = true;
+            thriftPool.returnBrokenResource(client);
+            throw new NetworkException("Error writing to log unit: " + e.getMessage(), this, address, true);
+        }
+        finally {
+            if (!success && !broken)
+            {
+                thriftPool.returnResourceObject(client);
+            }
+        }
+    }
+
+    @Override
+    public void setmetaTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
+        SimpleLogUnitService.Client client = thriftPool.getResource();
+        boolean success = false;
+        boolean broken = false;
+        try {
+            ArrayList<Integer> epochlist = new ArrayList<Integer>();
+            epochlist.add(epoch.intValue());
+            ErrorCode ec = client.setmetaTxDec(new UnitServerHdr(epochlist, address), dec);
+            thriftPool.returnResourceObject(client);
+            success = true;
+            if (ec.equals(ErrorCode.ERR_TRIMMED)) {
+                throw new TrimmedException("Trim error", address);
+            }
+            else if(ec.equals(ErrorCode.ERR_STALEEPOCH))
+            {
+                throw new NetworkException("Writing to log unit in wrong epoch", this, address, false);
+            }
+        }
+        catch (TException e)
+        {
+            broken = true;
+            thriftPool.returnBrokenResource(client);
+            throw new NetworkException("Error writing to log unit: " + e.getMessage(), this, address, true);
+        }
+        finally {
+            if (!success && !broken)
+            {
+                thriftPool.returnResourceObject(client);
+            }
+        }
     }
 
     public void trim(long address)

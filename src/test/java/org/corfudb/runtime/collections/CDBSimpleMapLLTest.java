@@ -64,6 +64,7 @@ public class CDBSimpleMapLLTest {
     @Test
     public void twoMapLLTransactionalTest() throws Exception
     {
+        System.out.println("WOAS class: " + instance.getAddressSpace().getClass());
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
         CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
 

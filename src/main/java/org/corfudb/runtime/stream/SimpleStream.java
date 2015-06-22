@@ -19,14 +19,12 @@ public class SimpleStream implements IStream {
     UUID streamID;
     AtomicLong streamPointer;
     transient ICorfuDBInstance instance;
-    transient long lastEntry; // Used to fill in Metadata next ptr.
 
     public SimpleStream(UUID streamID, ICorfuDBInstance instance)
     {
         this.instance = instance;
         this.streamID = streamID;
         this.streamPointer = new AtomicLong();
-        this.lastEntry = -1L;
     }
 
     /**
@@ -86,17 +84,6 @@ public class SimpleStream implements IStream {
      */
     @Override
     public IStreamEntry readNextEntry() throws HoleEncounteredException, TrimmedException, IOException {
-        // Corner / init case. If lastEntry is -1, do brute force to find head of stream
-        if (lastEntry != -1) {
-            MetadataEntry entry = instance.getMetadataMap().get(streamPointer.get());
-            if (entry != null) {
-                ITimestamp next = (ITimestamp) entry.getMetadata(MetadataEntry.NEXT);
-                if (next != null) {
-                    streamPointer.set(((SimpleTimestamp)next).address);
-                    return readEntry(next);
-                }
-            }
-        }
         long current = instance.getSequencer().getCurrent();
         long oldPointer = streamPointer.get();
         synchronized (this) {
@@ -106,14 +93,6 @@ public class SimpleStream implements IStream {
                     sse.setTimestamp(new SimpleTimestamp(i));
                     streamPointer.set(i+1);
                     if (sse.containsStream(streamID)) {
-                        // We know the next pointer wasn't set the last time we saw it, that's why we had to look for
-                        // it sequentially, so we set it now.
-                        MetadataEntry entry = instance.getMetadataMap().get(oldPointer);
-                        if (entry == null) {
-                            MetadataEntry newEntry = new MetadataEntry();
-                            newEntry.writeMetadata(MetadataEntry.NEXT, new SimpleTimestamp(i));
-                            instance.getMetadataMap().put(oldPointer, newEntry);
-                        }
                         return sse;
                     }
                 } catch (ClassNotFoundException | ClassCastException e) {

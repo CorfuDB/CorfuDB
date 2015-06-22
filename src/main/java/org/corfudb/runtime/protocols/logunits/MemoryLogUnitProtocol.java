@@ -1,16 +1,21 @@
 package org.corfudb.runtime.protocols.logunits;
 
+import org.apache.thrift.TException;
+import org.cliffc.high_scale_lib.NonBlockingHashMapLong;
+import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
+import org.corfudb.infrastructure.thrift.UnitServerHdr;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-
-import org.cliffc.high_scale_lib.NonBlockingHashMapLong;
 
 /**
  * Created by mwei on 4/30/15.
@@ -26,6 +31,9 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     private boolean simFailure = false;
 
     private ConcurrentMap<Long, byte[]> memoryArray;
+    private ConcurrentMap<Long, ExtntInfo> metadataMap;
+
+
 
     public static ConcurrentHashMap<Integer, MemoryLogUnitProtocol> memoryUnits =
             new ConcurrentHashMap<Integer, MemoryLogUnitProtocol>();
@@ -37,6 +45,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         this.epoch = 0L;
         trimMark = 0L;
         memoryArray = new NonBlockingHashMapLong<byte[]>();
+        metadataMap = new NonBlockingHashMapLong<ExtntInfo>();
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
@@ -57,6 +66,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         this.epoch = epoch;
         trimMark = 0L;
         memoryArray = new NonBlockingHashMapLong<byte[]>();
+        metadataMap = new NonBlockingHashMapLong<ExtntInfo>();
         memoryUnits.put(this.port, this);
     }
 
@@ -187,6 +197,34 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
             throw new UnwrittenException("No data present at this address", address);
         }
         return data;
+    }
+
+    @Override
+    public ExtntInfo readmeta(long address) throws TrimmedException, NetworkException
+    {
+        // TODO: Throw any exceptions?
+        log.info("metadataMap is null? {}", metadataMap == null);
+        return metadataMap.get(address);
+    }
+
+    @Override
+    public void setmetaNext(long address, long nextOffset) throws TrimmedException, NetworkException {
+        ExtntInfo extnt = metadataMap.get(address);
+        if (extnt == null) {
+            metadataMap.put(address, new ExtntInfo().setNextOff(nextOffset));
+            return;
+        }
+        extnt.setNextOff(nextOffset);
+    }
+
+    @Override
+    public void setmetaTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
+        ExtntInfo extnt = metadataMap.get(address);
+        if (extnt == null) {
+            metadataMap.put(address, new ExtntInfo().setTxDec(dec));
+            return;
+        }
+        extnt.setTxDec(dec);
     }
 
     /**
