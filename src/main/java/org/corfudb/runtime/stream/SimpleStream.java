@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Created by mwei on 4/30/15.
  */
 public class SimpleStream implements IStream {
+    // Silly commit.. build fails on Travis but not locally.
 
     UUID streamID;
     AtomicLong streamPointer;
