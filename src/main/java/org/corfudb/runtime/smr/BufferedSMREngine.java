@@ -90,7 +90,6 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
                     if (entry.getTimestamp().compareTo(ts) == 0) {
                         //don't read the sync point, since that contains
                         //the transaction...
-                        streamPointer = stream.getCurrentPosition();
                         return;
                     }
                     if (entry instanceof ITransaction) {

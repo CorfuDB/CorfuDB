@@ -1,17 +1,10 @@
 package org.corfudb.runtime.protocols.logunits;
 
-import org.apache.thrift.TException;
 import org.cliffc.high_scale_lib.NonBlockingHashMapLong;
-import org.corfudb.infrastructure.thrift.ErrorCode;
 import org.corfudb.infrastructure.thrift.ExtntInfo;
-import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
-import org.corfudb.infrastructure.thrift.UnitServerHdr;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,7 +15,6 @@ import java.util.concurrent.ConcurrentMap;
  */
 public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit {
 
-    private Logger log = LoggerFactory.getLogger(MemoryLogUnitProtocol.class);
     private Map<String,String> options;
     private String host;
     private Integer port;
@@ -134,6 +126,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     @Override
     public void reset(long epoch) throws NetworkException {
         memoryArray = new NonBlockingHashMapLong<byte[]>();
+        metadataMap = new NonBlockingHashMapLong<ExtntInfo>();
         this.trimMark = 0L;
         this.epoch = epoch;
     }
@@ -203,7 +196,6 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     public ExtntInfo readmeta(long address) throws TrimmedException, NetworkException
     {
         // TODO: Throw any exceptions?
-        log.info("metadataMap is null? {}", metadataMap == null);
         return metadataMap.get(address);
     }
 

@@ -134,9 +134,12 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
                 while (readEntries.hasNext() && !abort) {
                     TxIntReadSetEntry readSetEntry = readEntries.next();
                     // Get the version of the object in the readset, at the timestamp of thie LLTxn
-                    instance.openObject(readSetEntry.objectid).getUnderlyingSMREngine()
-                            .sync(instance.openStream(readSetEntry.objectid).getPreviousTimestamp(timestamp));
-                    ITimestamp version = instance.openObject(readSetEntry.objectid).getUnderlyingSMREngine().getStreamPointer();
+                    OneShotSMREngine newObjEngine = new OneShotSMREngine(
+                            instance.openStream(readSetEntry.objectid), instance.openObject(readSetEntry.objectid).getUnderlyingType(), timestamp);
+                    newObjEngine.sync(timestamp);
+                    ITimestamp version = newObjEngine.getStreamPointer();
+
+                    log.info("version: {}, readtimestamp: {}, synced up to: {}", version, readSetEntry.readtimestamp, timestamp);
                     if (version.compareTo(readSetEntry.readtimestamp) > 0)
                         abort = true;
 
@@ -198,9 +201,7 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
                     (ISMREngineCommand[]) engine.getCommandBuffer().toArray(new ISMREngineCommand[1]));
 
             if (!engine.getWriteOnly()) {
-                // decrement the timestamp by one, because we incremented it before sending to the BufferedEngine.
-                readset.add(new TxIntReadSetEntry(stream,
-                        instance.openStream(stream).getPreviousTimestamp(engine.ts), null));
+                readset.add(new TxIntReadSetEntry(stream, engine.ts, null));
             }
         }
         bufferedCommands = new MultiCommand(multicommandMap);

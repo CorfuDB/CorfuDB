@@ -134,6 +134,7 @@ public class CDBSimpleMapLLTest {
 
         ITimestamp txStamp = tx.propose();
         assertThat(tx.getReadSet().size()).isEqualTo(0);
+        testMap.getSMREngine().sync(txStamp);
         assertThat(testMap.size()).isEqualTo(0);
     }
 
@@ -152,6 +153,8 @@ public class CDBSimpleMapLLTest {
 
         ITimestamp txStamp = tx.propose();
         assertThat(tx.getReadSet().size()).isEqualTo(1);
+        testMap.getSMREngine().sync(txStamp);
+        testMap2.getSMREngine().sync(txStamp);
         assertThat(testMap2.get(10)).isEqualTo(1000);
     }
 }

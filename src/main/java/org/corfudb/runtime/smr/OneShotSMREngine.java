@@ -106,7 +106,6 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
                     {
                         //don't read the sync point, since that contains
                         //the transaction...
-                        streamPointer = stream.getCurrentPosition();
                         return;
                     }
                     if (entry instanceof ITransaction)
@@ -199,6 +198,11 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
     @Override
     public <R> R read(ISMREngineCommand<T, R> command) {
         return command.apply(underlyingObject, new OneShotSMREngineOptions<>());
+    }
+
+    @Override
+    public ITimestamp getStreamPointer() {
+        return streamPointer;
     }
 
 }
