@@ -115,9 +115,6 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
      */
     @Override
     public void executeTransaction(ISMREngine engine) {
-        // TODO: The correctness of LLTxns is conditional on the first SMREngine that consumes the txn to write its
-        // TODO: decision to the metadatamap. Either persist the metadatamap so the metadata is always up-to-date, or
-        // TODO: or implement TxDecs.
         boolean abort = false;
         // First check if a decision has been made in metadataMap
         ExtntInfo entry = null;
@@ -133,7 +130,7 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
                 Iterator<TxIntReadSetEntry> readEntries = readset.iterator();
                 while (readEntries.hasNext() && !abort) {
                     TxIntReadSetEntry readSetEntry = readEntries.next();
-                    // Get the version of the object in the readset, at the timestamp of thie LLTxn
+                    // Get the version of the object in the readset, at the timestamp of this LLTxn
                     OneShotSMREngine newObjEngine = new OneShotSMREngine(
                             instance.openStream(readSetEntry.objectid), instance.openObject(readSetEntry.objectid).getUnderlyingType(), timestamp);
                     newObjEngine.sync(timestamp);
@@ -142,8 +139,6 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
                     log.info("version: {}, readtimestamp: {}, synced up to: {}", version, readSetEntry.readtimestamp, timestamp);
                     if (version.compareTo(readSetEntry.readtimestamp) > 0)
                         abort = true;
-
-                    //TODO: check for other concurrently running transactions.
                 }
             }
             // Write the result back to logging units
