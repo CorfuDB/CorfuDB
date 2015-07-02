@@ -18,9 +18,14 @@ enum ExtntMarkType {	EX_EMPTY, EX_FILLED, EX_TRIMMED, EX_SKIP }
 struct ExtntInfo {
 	1: i64 metaFirstOff,
 	2: i32 metaLength,
-	3: ExtntMarkType flag=ExtntMarkType.EX_FILLED,
-	4: i64 nextOff,
-	5: bool txDec,
+	3: ExtntMarkType flag=ExtntMarkType.EX_FILLED
+}
+typedef string UUID
+
+struct Hints {
+	1: ErrorCode err,
+	2: map<UUID, i64> nextMap,
+	3: bool txDec
 }
 
 typedef binary LogPayload
@@ -29,8 +34,8 @@ typedef list<i32> Epoch
 struct ExtntWrap {
 	1: ErrorCode err,
 	2: ExtntInfo inf,
-	3: list<LogPayload> ctnt,
-	}
+	3: list<LogPayload> ctnt
+}
 
 struct UnitServerHdr {
     1: Epoch epoch,

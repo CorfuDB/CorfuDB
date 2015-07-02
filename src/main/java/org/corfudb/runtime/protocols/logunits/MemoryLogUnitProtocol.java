@@ -2,6 +2,7 @@ package org.corfudb.runtime.protocols.logunits;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMapLong;
 import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
@@ -23,7 +24,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     private boolean simFailure = false;
 
     private ConcurrentMap<Long, byte[]> memoryArray;
-    private ConcurrentMap<Long, ExtntInfo> metadataMap;
+    private ConcurrentMap<Long, Hints> metadataMap;
 
 
 
@@ -37,7 +38,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         this.epoch = 0L;
         trimMark = 0L;
         memoryArray = new NonBlockingHashMapLong<byte[]>();
-        metadataMap = new NonBlockingHashMapLong<ExtntInfo>();
+        metadataMap = new NonBlockingHashMapLong<Hints>();
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
@@ -58,7 +59,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         this.epoch = epoch;
         trimMark = 0L;
         memoryArray = new NonBlockingHashMapLong<byte[]>();
-        metadataMap = new NonBlockingHashMapLong<ExtntInfo>();
+        metadataMap = new NonBlockingHashMapLong<Hints>();
         memoryUnits.put(this.port, this);
     }
 
@@ -126,7 +127,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     @Override
     public void reset(long epoch) throws NetworkException {
         memoryArray = new NonBlockingHashMapLong<byte[]>();
-        metadataMap = new NonBlockingHashMapLong<ExtntInfo>();
+        metadataMap = new NonBlockingHashMapLong<Hints>();
         this.trimMark = 0L;
         this.epoch = epoch;
     }
@@ -193,30 +194,33 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     }
 
     @Override
-    public ExtntInfo readmeta(long address) throws TrimmedException, NetworkException
+    public Hints readHints(long address) throws TrimmedException, NetworkException
     {
         // TODO: Throw any exceptions?
         return metadataMap.get(address);
     }
 
     @Override
-    public void setmetaNext(long address, long nextOffset) throws TrimmedException, NetworkException {
-        ExtntInfo extnt = metadataMap.get(address);
-        if (extnt == null) {
-            metadataMap.put(address, new ExtntInfo().setNextOff(nextOffset));
-            return;
+    public void setHintsNext(long address, String stream, long nextOffset) throws TrimmedException, NetworkException {
+        Hints hint = metadataMap.get(address);
+        if (hint == null) {
+            metadataMap.put(address, new Hints());
+            hint = metadataMap.get(address);
         }
-        extnt.setNextOff(nextOffset);
+        if (hint.getNextMap() == null) {
+            hint.setNextMap(new HashMap<String, Long>());
+        }
+        hint.getNextMap().put(stream, nextOffset);
     }
 
     @Override
-    public void setmetaTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
-        ExtntInfo extnt = metadataMap.get(address);
-        if (extnt == null) {
-            metadataMap.put(address, new ExtntInfo().setTxDec(dec));
-            return;
+    public void setHintsTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
+        Hints hint = metadataMap.get(address);
+        if (hint == null) {
+            metadataMap.put(address, new Hints());
+            hint = metadataMap.get(address);
         }
-        extnt.setTxDec(dec);
+        hint.setTxDec(dec);
     }
 
     /**

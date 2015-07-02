@@ -9,7 +9,11 @@ import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.view.ConfigurationMaster;
 import org.corfudb.runtime.view.IConfigurationMaster;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
+import org.junit.rules.TestWatcher;
+import org.junit.runner.Description;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,6 +25,15 @@ public class SimpleLogUnitServerIT  {
 
     CorfuDBRuntime cdr;
     CorfuDBSimpleLogUnitProtocol lu;
+
+    @Rule
+    public TestRule watcher = new TestWatcher() {
+        protected void starting(Description description) {
+            System.out.println("Starting test: " + description.getMethodName());
+        }
+    };
+
+
     @Before
     public void getCDR() {
         cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");

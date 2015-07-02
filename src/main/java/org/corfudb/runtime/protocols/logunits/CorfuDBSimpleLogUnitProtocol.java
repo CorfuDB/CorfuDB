@@ -198,26 +198,25 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     }
 
     @Override
-    public ExtntInfo readmeta(long address) throws TrimmedException, NetworkException
+    public Hints readHints(long address) throws TrimmedException, NetworkException
     {
-        ExtntInfo ret = null;
+        Hints hint = null;
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
         boolean broken = false;
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ExtntWrap wrap = client.readmeta(new UnitServerHdr(epochlist, address));
-            if (wrap.err.equals(ErrorCode.ERR_UNWRITTEN))
+            hint = client.readHints(new UnitServerHdr(epochlist, address));
+            if (hint.err.equals(ErrorCode.ERR_UNWRITTEN))
             {
-                return null;
+                throw new TrimmedException("Unwritten hints", address);
             }
-            else if (wrap.err.equals(ErrorCode.ERR_TRIMMED))
+            else if (hint.err.equals(ErrorCode.ERR_TRIMMED))
             {
                 throw new TrimmedException("Trim error", address);
             }
 
-            ret = wrap.getInf();
             success = true;
             thriftPool.returnResourceObject(client);
         }
@@ -232,18 +231,18 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
                 thriftPool.returnResourceObject(client);
             }
         }
-        return ret;
+        return hint;
     }
 
     @Override
-    public void setmetaNext(long address, long nextOffset) throws TrimmedException, NetworkException {
+    public void setHintsNext(long address, String stream, long nextOffset) throws TrimmedException, NetworkException {
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
         boolean broken = false;
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ErrorCode ec = client.setmetaNext(new UnitServerHdr(epochlist, address), nextOffset);
+            ErrorCode ec = client.setHintsNext(new UnitServerHdr(epochlist, address), stream, nextOffset);
             thriftPool.returnResourceObject(client);
             success = true;
             if (ec.equals(ErrorCode.ERR_TRIMMED)) {
@@ -252,6 +251,8 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             else if(ec.equals(ErrorCode.ERR_STALEEPOCH))
             {
                 throw new NetworkException("Writing to log unit in wrong epoch", this, address, false);
+            } else if (ec.equals(ErrorCode.ERR_OVERWRITE)) {
+                throw new TrimmedException("Overwrote next pointer", address);
             }
         }
         catch (TException e)
@@ -269,14 +270,14 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     }
 
     @Override
-    public void setmetaTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
+    public void setHintsTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
         boolean broken = false;
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ErrorCode ec = client.setmetaTxDec(new UnitServerHdr(epochlist, address), dec);
+            ErrorCode ec = client.setHintsTxDec(new UnitServerHdr(epochlist, address), dec);
             thriftPool.returnResourceObject(client);
             success = true;
             if (ec.equals(ErrorCode.ERR_TRIMMED)) {

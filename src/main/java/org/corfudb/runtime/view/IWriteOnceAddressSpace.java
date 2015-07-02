@@ -16,6 +16,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.TrimmedException;
@@ -41,16 +42,16 @@ public interface IWriteOnceAddressSpace {
     Object readObject(long address)
     throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException;
 
-    default ExtntInfo readmeta(long address) throws UnwrittenException, TrimmedException {
-        throw new UnsupportedOperationException("This address space doesn't support metadata");
+    default Hints readHints(long address) throws UnwrittenException, TrimmedException {
+        throw new UnsupportedOperationException("This address space doesn't support hints");
     }
 
-    default void setmetaNext(long address, long nextOffset) throws UnwrittenException, TrimmedException {
-        throw new UnsupportedOperationException("This address space doesn't support metadata");
+    default void setHintsNext(long address, String stream, long nextOffset) throws UnwrittenException, TrimmedException {
+        throw new UnsupportedOperationException("This address space doesn't support hints");
     }
 
-    default void setmetaTxDec(long address, boolean dec) throws UnwrittenException, TrimmedException {
-        throw new UnsupportedOperationException("This address space doesn't support metadata");
+    default void setHintsTxDec(long address, boolean dec) throws UnwrittenException, TrimmedException {
+        throw new UnsupportedOperationException("This address space doesn't support hints");
     }
 }
 

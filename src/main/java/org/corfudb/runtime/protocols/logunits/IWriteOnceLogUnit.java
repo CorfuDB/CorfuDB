@@ -16,6 +16,7 @@
 package org.corfudb.runtime.protocols.logunits;
 
 import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
@@ -50,23 +51,16 @@ public interface IWriteOnceLogUnit extends IServerProtocol {
         throw new UnsupportedOperationException("Log unit doesn't support querying latest address!");
     }
 
-    /**
-     * Gets the metadata at the address in the logical data log. Some units may not support this operation and
-     * will throw an UnsupportedOperationException
-     * @return                      The byte[] that represents an ExtntWrap of the metadata. Null if no metadata.
-     * @throws TrimmedException     If the address has been trimmed in the data log.
-     * @throws NetworkException     If the log unit could not be contacted.
-     */
-    default ExtntInfo readmeta(long address) throws TrimmedException, NetworkException {
-        throw new UnsupportedOperationException("Log unit doesn't support metadata queries");
+    default Hints readHints(long address) throws TrimmedException, NetworkException {
+        throw new UnsupportedOperationException("Log unit doesn't support hints queries");
     }
 
-    default void setmetaNext(long address, long nextOffset) throws TrimmedException, NetworkException {
-        throw new UnsupportedOperationException("Log unit doesn't support metadata updates");
+    default void setHintsNext(long address, String stream, long nextOffset) throws TrimmedException, NetworkException {
+        throw new UnsupportedOperationException("Log unit doesn't support hints updates");
     }
 
-    default void setmetaTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
-        throw new UnsupportedOperationException("Log unit doesn't support metadata updates");
+    default void setHintsTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
+        throw new UnsupportedOperationException("Log unit doesn't support hints updates");
     }
 }
 

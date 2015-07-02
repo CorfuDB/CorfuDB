@@ -25,20 +25,12 @@ import java.nio.channels.FileChannel;
 import java.util.*;
 
 import org.apache.thrift.TMultiplexedProcessor;
+import org.corfudb.infrastructure.thrift.*;
 import org.slf4j.*;
 import org.apache.thrift.TException;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
-
-import org.corfudb.infrastructure.thrift.SimpleLogUnitService;
-import org.corfudb.infrastructure.thrift.SimpleLogUnitConfigService;
-import org.corfudb.infrastructure.thrift.SimpleLogUnitWrap;
-import org.corfudb.infrastructure.thrift.UnitServerHdr;
-import org.corfudb.infrastructure.thrift.ExtntInfo;
-import org.corfudb.infrastructure.thrift.ExtntWrap;
-import org.corfudb.infrastructure.thrift.ExtntMarkType;
-import org.corfudb.infrastructure.thrift.ErrorCode;
 
 public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDBServer {
 	private Logger log = LoggerFactory.getLogger(SimpleLogUnitServer.class);
@@ -69,9 +61,11 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	private ByteBuffer[] inmemoryStore; // use in rammode
 	private byte map[] = null;
 	private ByteBuffer mapb = null;
-	private static final int longsz = Long.SIZE / Byte.SIZE;
+	//private static final int longsz = Long.SIZE / Byte.SIZE;
 	private static final int intsz = Integer.SIZE / Byte.SIZE;
-	private static final int entsz = 2 * intsz + longsz;
+	private static final int entsz = 2 * intsz;
+
+    private HashMap<Long, Hints> hintMap = new HashMap();
 
 	public void initLogStore(int sz) {
         if (RAMMODE) {
@@ -157,15 +151,13 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     }
 
     // Should basically mirror the ExtntInfo struct
-	class Metadata {
+	class mapInfo {
 
 		int physOffset;
 		int length;
-        boolean txDec; // Stored in the 3rd least sig bit of (length << 3)
 		ExtntMarkType et;
-        long nextLogical;
 
-		public Metadata(long logOffset) {
+		public mapInfo(long logOffset) {
 
 			int mi = mapind(logOffset);
 			mapb.position(mi);
@@ -173,9 +165,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 			length = mapb.getInt();
 			et = ExtntMarkType.findByValue(length & 0x3);
-            txDec = ((length & 0x4) != 0);
-            length >>= 3;
-            nextLogical = mapb.getLong();
+            length >>= 2;
 		}
 	}
 
@@ -258,13 +248,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 	public int getLength(long logOffset) {
 		int mi = mapind(logOffset) + intsz;
-		return mapb.getInt(mi) >> 3;
+		return mapb.getInt(mi) >> 2;
 	}
-
-    public long getNext(long logOffset) {
-        int mi = mapind(logOffset) + 2*intsz;
-        return mapb.getLong(mi);
-    }
 
 	public ExtntMarkType getET(long logOffset) {
 		int mi = mapind(logOffset) + intsz;
@@ -277,7 +262,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 		int mi = mapind(logOffset);
 		mapb.position(mi);
 		mapb.putInt(physOffset);
-		length <<= 3;
+		length <<= 2;
         length |= et.getValue();
 		mapb.putInt(length);
         if (!RAMMODE) {
@@ -286,27 +271,6 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             DriveChannel.write(toArray(logOffset, 1));
         }
 	}
-
-    public void setExtntInfoNext(long logOffset, long next) {
-        int mi = mapind(logOffset);
-        mapb.position(mi + 2*intsz);
-        mapb.putLong(next);
-        // TODO: Persist to disk?
-    }
-
-    public void setExtntInfoTxDec(long logOffset, boolean dec) {
-        int mi = mapind(logOffset);
-        mapb.position(mi + intsz);
-        int length = mapb.getInt();
-        if (dec) {
-            mapb.position(mi + intsz);
-            mapb.putInt(length | 0x4);
-        } else {
-            mapb.position(mi + intsz);
-            mapb.putInt(length);
-        }
-        // TODO: Persist to disk?
-    }
 
 	public void trimLogStore(long toOffset) throws IOException {
 		long lasttrim = gcmark, lastcontig = lasttrim;
@@ -324,7 +288,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         // entries above gcmark which were freed are marked internally with EX_TRIMMMED, but gcmark remains below them
         //
 		while (lasttrim < toOffset) {
-            Metadata minf = new Metadata(lasttrim);
+            mapInfo minf = new mapInfo(lasttrim);
             if (minf.et == ExtntMarkType.EX_FILLED && minf.physOffset == lowwater) {
                 log.info("trim {} sz={}", lasttrim, minf.length);
                 // TODO in RAMMODE, do we need to free up blocks?
@@ -334,7 +298,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
                 // go back now to lastcontig mark
                 while (lastcontig < lasttrim) {
-                    minf = new Metadata(lasttrim);
+                    minf = new mapInfo(lasttrim);
                     if (minf.et == ExtntMarkType.EX_FILLED && minf.physOffset == lowwater) {
                         log.info("trim {} sz={}", lasttrim, minf.length);
                         // TODO in RAMMODE, do we need to free up blocks?
@@ -406,8 +370,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 			wr.setCtnt(new ArrayList<ByteBuffer>());
 		} else {
         */
-			Metadata minf = new Metadata(logOffset);
-			wr.setInf(new ExtntInfo(logOffset, minf.length, minf.et, -1, false));
+			mapInfo minf = new mapInfo(logOffset);
+			wr.setInf(new ExtntInfo(logOffset, minf.length, minf.et));
 			log.debug("read phys {}->{}, {}", minf.physOffset, minf.length, minf.et);
 			if (minf.et == ExtntMarkType.EX_FILLED) {
 				wr.setErr(ErrorCode.OK);
@@ -434,12 +398,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 			inf.setFlag(ExtntMarkType.EX_EMPTY);
             return ErrorCode.ERR_UNWRITTEN;
 		} else {*/
-        Metadata minf = new Metadata(logOffset);
+        mapInfo minf = new mapInfo(logOffset);
         inf.setFlag(minf.et);
         inf.setMetaFirstOff(logOffset);
         inf.setMetaLength(minf.length);
-        inf.setNextOff(minf.nextLogical);
-        inf.setTxDec(minf.txDec);
         switch (minf.et) {
             case EX_FILLED: return ErrorCode.OK;
             case EX_TRIMMED: return ErrorCode.ERR_TRIMMED;
@@ -536,7 +498,6 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	 */
 	@Override
 	synchronized public ErrorCode write(UnitServerHdr hdr, List<ByteBuffer> ctnt, ExtntMarkType et) throws org.apache.thrift.TException {
-
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
@@ -577,7 +538,11 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	}
 
     private ExtntWrap genWrap(ErrorCode err) {
-        return  new ExtntWrap(err, new ExtntInfo(), new ArrayList<ByteBuffer>());
+        return new ExtntWrap(err, new ExtntInfo(), new ArrayList<ByteBuffer>());
+    }
+
+    private Hints genHint(ErrorCode err) {
+        return new Hints(err, new HashMap<String, Long>(), false);
     }
 
 	/* (non-Javadoc)
@@ -626,11 +591,34 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	}
 
     @Override
-    synchronized public ErrorCode setmetaNext(UnitServerHdr hdr, long nextOffset) throws org.apache.thrift.TException {
-        if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return ErrorCode.ERR_STALEEPOCH;
-        log.debug("setmetaNext({})", hdr.off);
+    synchronized public Hints readHints(UnitServerHdr hdr) {
+        if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return genHint(ErrorCode.ERR_STALEEPOCH);
+        log.debug("setHintsNext({})", hdr.off);
 
-        Metadata minf = new Metadata(hdr.off);
+        mapInfo minf = new mapInfo(hdr.off);
+        switch (minf.et) {
+            case EX_FILLED: break;
+            case EX_TRIMMED: return genHint(ErrorCode.ERR_TRIMMED);
+            case EX_EMPTY: return genHint(ErrorCode.ERR_UNWRITTEN);
+            case EX_SKIP: return genHint(ErrorCode.ERR_UNWRITTEN);
+            default: log.error("internal error in getExtntInfoLogStore"); return genHint(ErrorCode.ERR_BADPARAM);
+        }
+
+        Hints hint = hintMap.get(hdr.off);
+        if (hint == null) {
+            return genHint(ErrorCode.OK);
+        }
+        Hints ret = hint.deepCopy();
+        ret.setErr(ErrorCode.OK);
+        return ret;
+    }
+
+    @Override
+    synchronized public ErrorCode setHintsNext(UnitServerHdr hdr, String stream, long nextOffset) throws org.apache.thrift.TException {
+        if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return ErrorCode.ERR_STALEEPOCH;
+        log.debug("setHintsNext({})", hdr.off);
+
+        mapInfo minf = new mapInfo(hdr.off);
         switch (minf.et) {
             case EX_FILLED: break;
             case EX_TRIMMED: return ErrorCode.ERR_TRIMMED;
@@ -639,16 +627,31 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             default: log.error("internal error in getExtntInfoLogStore"); return ErrorCode.ERR_BADPARAM;
         }
 
-        setExtntInfoNext(hdr.off, nextOffset);
+        Hints curHints = hintMap.get(hdr.off);
+        if (curHints == null) {
+            curHints = new Hints();
+            hintMap.put(hdr.off, curHints);
+        }
+        if (!curHints.isSetNextMap() || curHints.getNextMap() == null) {
+            HashMap<String, Long> newNext = new HashMap<String, Long>();
+            newNext.put(stream, nextOffset);
+            curHints.setNextMap(newNext);
+        }
+        else {
+            Long oldNext = curHints.getNextMap().put(stream, nextOffset);
+            if (oldNext != nextOffset)
+                return ErrorCode.ERR_OVERWRITE;
+        }
+        // TODO: persist to disk?
         return ErrorCode.OK;
     }
 
     @Override
-    synchronized public ErrorCode setmetaTxDec(UnitServerHdr hdr, boolean dec) throws org.apache.thrift.TException {
+    synchronized public ErrorCode setHintsTxDec(UnitServerHdr hdr, boolean dec) throws org.apache.thrift.TException {
         if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return ErrorCode.ERR_STALEEPOCH;
-        log.debug("setmetaTxDec({})", hdr.off);
+        log.debug("setHintsTxDec({})", hdr.off);
 
-        Metadata minf = new Metadata(hdr.off);
+        mapInfo minf = new mapInfo(hdr.off);
         switch (minf.et) {
             case EX_FILLED: break;
             case EX_TRIMMED: return ErrorCode.ERR_TRIMMED;
@@ -657,7 +660,13 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             default: log.error("internal error in getExtntInfoLogStore"); return ErrorCode.ERR_BADPARAM;
         }
 
-        setExtntInfoTxDec(hdr.off, dec);
+        Hints curHints = hintMap.get(hdr.off);
+        if (curHints == null) {
+            curHints = new Hints();
+            hintMap.put(hdr.off, curHints);
+        }
+        curHints.setTxDec(dec);
+        // TODO: persist to disk?
         return ErrorCode.OK;
     }
 

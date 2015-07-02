@@ -16,6 +16,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.IServerProtocol;
@@ -209,7 +210,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     }
 
     @Override
-    public ExtntInfo readmeta(long address)
+    public Hints readHints(long address)
             throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
@@ -223,7 +224,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 long mappedAddress = address/logInfo.second;
                 //reads have to come from last unit in chain
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                return wolu.readmeta(mappedAddress);
+                return wolu.readHints(mappedAddress);
             }
             catch (NetworkException e)
             {
@@ -234,7 +235,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     }
 
     @Override
-    public void setmetaNext(long address, long nextOffset)
+    public void setHintsNext(long address, String stream, long nextOffset)
             throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
@@ -248,7 +249,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 long mappedAddress = address/logInfo.second;
                 // TODO: right now, only the last node in a chain of replication contains the in-memory metadata!!!
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                wolu.setmetaNext(mappedAddress, nextOffset);
+                wolu.setHintsNext(mappedAddress, stream, nextOffset);
                 return;
             }
             catch (NetworkException e)
@@ -260,7 +261,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     }
 
     @Override
-    public void setmetaTxDec(long address, boolean dec)
+    public void setHintsTxDec(long address, boolean dec)
             throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
@@ -274,7 +275,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 long mappedAddress = address/logInfo.second;
                 // TODO: right now, only the last node in a chain of replication contains the in-memory metadata!!!
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                wolu.setmetaTxDec(mappedAddress, dec);
+                wolu.setHintsTxDec(mappedAddress, dec);
                 return;
             }
             catch (NetworkException e)

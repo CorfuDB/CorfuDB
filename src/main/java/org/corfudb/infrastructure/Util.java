@@ -86,7 +86,7 @@ public class Util {
      * @throws IOException
      */
     public static int ExtntInfoSSize() throws IOException {
-    	return ByteBuffer.wrap(ExtntInfoSerialize(new ExtntInfo(0, 0, ExtntMarkType.EX_FILLED, 0, false))).capacity();
+        return ByteBuffer.wrap(ExtntInfoSerialize(new ExtntInfo(0, 0, ExtntMarkType.EX_FILLED))).capacity();
     }
 
 	public static byte[] ObjectSerialize(Object obj) throws IOException {

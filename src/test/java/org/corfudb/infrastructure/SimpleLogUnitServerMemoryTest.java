@@ -1,19 +1,13 @@
 package org.corfudb.infrastructure;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-import org.corfudb.infrastructure.thrift.ErrorCode;
-import org.corfudb.infrastructure.thrift.ExtntMarkType;
-import org.corfudb.infrastructure.thrift.ExtntWrap;
-import org.corfudb.infrastructure.thrift.UnitServerHdr;
-import org.junit.Before;
+import org.corfudb.infrastructure.thrift.*;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.UUID;
+
+import static org.junit.Assert.*;
 
 public class SimpleLogUnitServerMemoryTest {
 
@@ -121,29 +115,30 @@ public class SimpleLogUnitServerMemoryTest {
         // Make sure no metadata in empty spot
         SimpleLogUnitServer slus = new SimpleLogUnitServer();
         slus.reset();
-        ErrorCode ec = slus.setmetaNext(new UnitServerHdr(epochlist, 1), 1234L);
+        UUID junkID = UUID.randomUUID();
+        ErrorCode ec = slus.setHintsNext(new UnitServerHdr(epochlist, 1), junkID.toString(), 1234L);
         assertEquals(ec, ErrorCode.ERR_UNWRITTEN);
 
-        ExtntWrap ew = slus.readmeta(new UnitServerHdr(epochlist, 1));
-        assertEquals(ew.getErr(), ErrorCode.ERR_UNWRITTEN);
+        Hints hint = slus.readHints(new UnitServerHdr(epochlist, 1));
+        assertEquals(hint.getErr(), ErrorCode.ERR_UNWRITTEN);
 
         // Now there shuld be metadata
         ec = slus.write(new UnitServerHdr(epochlist, 1), byteList, ExtntMarkType.EX_FILLED);
         assertEquals(ec, ErrorCode.OK);
-        ec = slus.setmetaNext(new UnitServerHdr(epochlist, 1), 1234L);
+        ec = slus.setHintsNext(new UnitServerHdr(epochlist, 1), junkID.toString(), 1234L);
         assertEquals(ec, ErrorCode.OK);
 
-        ew = slus.readmeta(new UnitServerHdr(epochlist, 1));
-        assertEquals(ew.getErr(), ErrorCode.OK);
-        assertEquals(ew.getInf().getNextOff(), 1234L);
-        assertTrue(!ew.getInf().isTxDec());
+        hint = slus.readHints(new UnitServerHdr(epochlist, 1));
+        assertEquals(hint.getErr(), ErrorCode.OK);
+        assertEquals(hint.getNextMap().get(junkID.toString()).longValue(), 1234L);
+        assertTrue(!hint.isTxDec());
 
         // Test TxDec
-        ec = slus.setmetaTxDec(new UnitServerHdr(epochlist, 1), true);
+        ec = slus.setHintsTxDec(new UnitServerHdr(epochlist, 1), true);
         assertEquals(ec, ErrorCode.OK);
-        ew = slus.readmeta(new UnitServerHdr(epochlist, 1));
-        assertEquals(ew.getErr(), ErrorCode.OK);
-        assertEquals(ew.getInf().getNextOff(), 1234L);
-        assertTrue(ew.getInf().isTxDec());
+        hint = slus.readHints(new UnitServerHdr(epochlist, 1));
+        assertEquals(hint.getErr(), ErrorCode.OK);
+        assertEquals(hint.getNextMap().get(junkID.toString()).longValue(), 1234L);
+        assertTrue(hint.isTxDec());
     }
 }

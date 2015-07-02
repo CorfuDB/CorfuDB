@@ -1,10 +1,14 @@
 package org.corfudb.runtime.stream;
 
+import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.entries.MetadataEntry;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
 import org.corfudb.runtime.view.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -15,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Created by mwei on 4/30/15.
  */
 public class SimpleStream implements IStream {
-    // Silly commit.. build fails on Travis but not locally.
+    private Logger log = LoggerFactory.getLogger(SimpleStream.class);
 
     UUID streamID;
     AtomicLong streamPointer;
@@ -86,22 +90,51 @@ public class SimpleStream implements IStream {
     @Override
     public IStreamEntry readNextEntry() throws HoleEncounteredException, TrimmedException, IOException {
         long current = instance.getSequencer().getCurrent();
-        long oldPointer = streamPointer.get();
-        synchronized (this) {
-            for (long i = streamPointer.get(); i < current; i++) {
-                try {
-                    IStreamEntry sse = (IStreamEntry) instance.getAddressSpace().readObject(i);
-                    sse.setTimestamp(new SimpleTimestamp(i));
-                    streamPointer.set(i+1);
-                    if (sse.containsStream(streamID)) {
-                        return sse;
+        long oldPointer = streamPointer.get()-1;
+        // TODO: Need to make sure streamPointer is pointing to something in the stream?
+        Hints hint = null;
+        if (oldPointer != -1) {
+            try {
+                hint = instance.getAddressSpace().readHints(oldPointer);
+            } catch (UnwrittenException ue) {
+                //hole, should fill.
+                throw new HoleEncounteredException(ue.address);
+            }
+        }
+        if (hint == null || !hint.isSetNextMap() || (hint.getNextMap().get(streamID.toString()) == null)) {
+            synchronized (this) {
+                for (long i = streamPointer.get(); i < current; i++) {
+                    try {
+                        IStreamEntry sse = (IStreamEntry) instance.getAddressSpace().readObject(i);
+                        sse.setTimestamp(new SimpleTimestamp(i));
+                        streamPointer.set(i + 1);
+                        if (sse.containsStream(streamID)) {
+                            instance.getAddressSpace().setHintsNext(oldPointer, streamID.toString(), i);
+                            log.info("just set next of {} to {}, stream: {}", oldPointer, i, streamID);
+                            return sse;
+                        }
+                    } catch (ClassNotFoundException | ClassCastException e) {
+                        //ignore, not a entry we understand.
+                    } catch (UnwrittenException ue) {
+                        //hole, should fill.
+                        throw new HoleEncounteredException(ue.address);
                     }
-                } catch (ClassNotFoundException | ClassCastException e) {
-                    //ignore, not a entry we understand.
-                } catch (UnwrittenException ue) {
-                    //hole, should fill.
-                    throw new HoleEncounteredException(ue.address);
                 }
+            }
+        } else {
+            try {
+                IStreamEntry sse = (IStreamEntry) instance.getAddressSpace().readObject(hint.getNextMap().get(streamID.toString()));
+                sse.setTimestamp(new SimpleTimestamp(hint.getNextMap().get(streamID.toString())));
+                streamPointer.set(hint.getNextMap().get(streamID.toString())+1);
+                if (!sse.containsStream(streamID)) {
+                    throw new RuntimeException("Inconsistent metadata");
+                }
+                return sse;
+            } catch (ClassNotFoundException | ClassCastException e) {
+                //ignore, not a entry we understand.
+            } catch (UnwrittenException ue) {
+                //hole, should fill.
+                throw new HoleEncounteredException(ue.address);
             }
         }
         return null;

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.infrastructure.thrift.ExtntInfo;
+import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.entries.MetadataEntry;
@@ -117,13 +118,13 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
     public void executeTransaction(ISMREngine engine) {
         boolean abort = false;
         // First check if a decision has been made in metadataMap
-        ExtntInfo entry = null;
+        Hints hint = null;
         try {
-            entry = instance.getAddressSpace().readmeta(((SimpleTimestamp) timestamp).address);
+            hint = instance.getAddressSpace().readHints(((SimpleTimestamp) timestamp).address);
         } catch (Exception e) {
             log.info("Exception in reading metadata: {}", e);
         }
-        if (entry == null || !entry.isSetTxDec()) {
+        if (hint == null || !hint.isSetTxDec()) {
             // Now we need to check all the BufferedTxns to see if we are allowed to commit them. Should reimplement
             // the legacy process_tx_intention code.
             if (readset != null) {
@@ -143,13 +144,13 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
             }
             // Write the result back to logging units
             try {
-                instance.getAddressSpace().setmetaTxDec(((SimpleTimestamp) timestamp).address, !abort);
+                instance.getAddressSpace().setHintsTxDec(((SimpleTimestamp) timestamp).address, !abort);
             } catch (Exception e) {
                 log.info("Error trying to write back metadata: {}", e);
             }
         } else {
-            if (entry.isSetTxDec()) {
-                abort = !entry.isTxDec(); // true == commit
+            if (hint.isSetTxDec()) {
+                abort = !hint.isTxDec(); // true == commit
             }
         }
 
