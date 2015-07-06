@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
@@ -28,6 +29,12 @@ public class CDBSimpleMapLLTest {
     static public CDBSimpleMap<Integer, Integer> testMap;
     UUID streamID;
     CorfuDBRuntime cdr;
+
+    public void checkTxDec(long address, boolean expected) throws Exception {
+        Hints hint = instance.getAddressSpace().readHints(address);
+        assert(hint.isSetTxDec());
+        assertThat(hint.isTxDec()).isEqualTo(expected);
+    }
 
     @Before
     public void generateStream() throws Exception
@@ -64,7 +71,6 @@ public class CDBSimpleMapLLTest {
     @Test
     public void twoMapLLTransactionalTest() throws Exception
     {
-        System.out.println("WOAS class: " + instance.getAddressSpace().getClass());
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
         CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
 
@@ -86,6 +92,9 @@ public class CDBSimpleMapLLTest {
                 .isEqualTo(1000);
         assertThat(testMap2.get(10))
                 .isEqualTo(100);
+
+        // Make sure TxDec is now set
+        checkTxDec(((SimpleTimestamp) txStamp).address, true);
     }
 
     // Intervening command should abort the transaction.
@@ -118,6 +127,9 @@ public class CDBSimpleMapLLTest {
                 .isEqualTo(200);
         assertThat(testMap2.get(10))
                 .isEqualTo(1000);
+
+        // Make sure TxDec is now set
+        checkTxDec(((SimpleTimestamp) txStamp).address, false);
     }
 
     @Test
@@ -136,6 +148,9 @@ public class CDBSimpleMapLLTest {
         assertThat(tx.getReadSet().size()).isEqualTo(0);
         testMap.getSMREngine().sync(txStamp);
         assertThat(testMap.size()).isEqualTo(0);
+
+        // Make sure TxDec is now set
+        checkTxDec(((SimpleTimestamp) txStamp).address, true);
     }
 
     @Test
@@ -156,5 +171,9 @@ public class CDBSimpleMapLLTest {
         testMap.getSMREngine().sync(txStamp);
         testMap2.getSMREngine().sync(txStamp);
         assertThat(testMap2.get(10)).isEqualTo(1000);
+
+
+        // Make sure TxDec is now set
+        checkTxDec(((SimpleTimestamp) txStamp).address, true);
     }
 }

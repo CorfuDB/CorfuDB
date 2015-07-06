@@ -256,9 +256,4 @@ public class BPlusTree<K extends Comparable, V> {
         printNode(root, 0);
         log.info("-------------------\n");
     }
-
-    public void writeToFile(FileChannel channel) {
-
-    }
-
 }
