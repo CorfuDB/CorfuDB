@@ -97,6 +97,83 @@ public class CDBSimpleMapLLTest {
         checkTxDec(((SimpleTimestamp) txStamp).address, true);
     }
 
+    @Test
+    public void backToBackLLTransactionalTest() throws Exception
+    {
+        LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
+        LLTransaction tx2 = new LLTransaction(cdr.getLocalInstance());
+        CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
+
+        testMap.put(10, 100);
+        testMap2.put(10, 1000);
+
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            Integer old1 = testMapLocal.get(10);
+            Integer old2 = testMap2.put(10, old1);
+            testMapLocal.put(10, old2);
+            return true;
+        });
+        ITimestamp txStamp = tx.propose();
+        testMap.getSMREngine().sync(txStamp);
+        testMap2.getSMREngine().sync(txStamp);
+
+        tx2.setTransaction((ITransactionCommand) (opts) -> {
+            Integer old1 = testMapLocal.get(10);
+            Integer old2 = testMap2.put(10, old1);
+            testMapLocal.put(10, old2);
+            return true;
+        });
+        ITimestamp txStamp2 = tx2.propose();
+
+        assertThat(testMap.get(10))
+                .isEqualTo(100);
+        assertThat(testMap2.get(10))
+                .isEqualTo(1000);
+
+        // Make sure TxDec is now set
+        checkTxDec(((SimpleTimestamp) txStamp).address, true);
+        checkTxDec(((SimpleTimestamp) txStamp2).address, true);
+    }
+
+    @Test
+    public void abortLLTransactionalTest() throws Exception
+    {
+        LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
+        LLTransaction tx2 = new LLTransaction(cdr.getLocalInstance());
+        CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
+
+        testMap.put(10, 100);
+        testMap2.put(10, 1000);
+
+        final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            Integer old1 = testMapLocal.get(10);
+            Integer old2 = testMap2.put(10, old1);
+            testMapLocal.put(10, old2);
+            return true;
+        });
+        tx2.setTransaction((ITransactionCommand) (opts) -> {
+            Integer old1 = testMapLocal.get(10);
+            Integer old2 = testMap2.put(10, old1);
+            testMapLocal.put(10, old2);
+            return true;
+        });
+        ITimestamp txStamp = tx.propose();
+        ITimestamp txStamp2 = tx2.propose();
+        testMap.getSMREngine().sync(txStamp2);
+        testMap2.getSMREngine().sync(txStamp2);
+
+        assertThat(testMap.get(10))
+                .isEqualTo(1000);
+        assertThat(testMap2.get(10))
+                .isEqualTo(100);
+
+        // Make sure TxDec is now set
+        checkTxDec(((SimpleTimestamp) txStamp).address, true);
+        checkTxDec(((SimpleTimestamp) txStamp2).address, false);
+    }
+
     // Intervening command should abort the transaction.
     @Test
     public void LLAbortTest() throws Exception

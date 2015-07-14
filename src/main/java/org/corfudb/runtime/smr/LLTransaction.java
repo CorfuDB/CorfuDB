@@ -1,17 +1,13 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.infrastructure.thrift.Hints;
-import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.entries.IStreamEntry;
-import org.corfudb.runtime.entries.MetadataEntry;
 import org.corfudb.runtime.smr.legacy.TxIntReadSetEntry;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.awt.image.BufImgSurfaceData;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -220,7 +216,7 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
      */
     @Override
     public boolean containsStream(UUID stream) {
-        return bufferedSMRMap.containsKey(stream);
+        return bufferedCommands.containsStream(stream);
     }
 
     /**

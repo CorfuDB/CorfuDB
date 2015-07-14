@@ -1,16 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.smr.*;
-import org.corfudb.runtime.smr.legacy.AbstractRuntime;
-import org.corfudb.runtime.smr.legacy.CorfuDBObjectCommand;
-import org.corfudb.runtime.stream.IStream;
-import org.corfudb.runtime.stream.ITimestamp;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import org.corfudb.runtime.smr.ICorfuDBObject;
 
 public class LambdaLogicalBTree<K extends Comparable<K>, V>
         implements ICorfuDBObject<BTree<K,V>>, IBTree<K,V> {

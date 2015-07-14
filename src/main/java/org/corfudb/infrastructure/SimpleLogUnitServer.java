@@ -639,7 +639,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         }
         else {
             Long oldNext = curHints.getNextMap().put(stream, nextOffset);
-            if (oldNext != nextOffset)
+            if (oldNext != null && oldNext.longValue() != nextOffset)
                 return ErrorCode.ERR_OVERWRITE;
         }
         // TODO: persist to disk?
@@ -711,6 +711,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             initLogStore(UNITCAPACITY);
             writegcmark();
             highWatermark = -1L;
+            hintMap = new HashMap<>();
         }
         }
         catch (Exception e)
