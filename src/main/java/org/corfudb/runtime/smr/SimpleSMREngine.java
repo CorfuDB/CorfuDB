@@ -128,6 +128,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                         // we've reached the end of this stream.
                         return;
                     }
+                    // Add this, because now that we have next pointers, the pointer may jump beyond ts
+                    if (entry.getTimestamp().compareTo(ts) > 0) return;
                     if (entry instanceof ITransaction)
                     {
                         ITransaction transaction = (ITransaction) entry;

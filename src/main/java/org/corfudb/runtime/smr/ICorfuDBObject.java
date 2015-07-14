@@ -147,7 +147,7 @@ public interface ICorfuDBObject<U> extends Serializable {
         CompletableFuture<R> o = new CompletableFuture<R>();
         ISMREngine<U> e = getSMREngine();
         ITimestamp proposal = e.propose(command, o);
-        if (!isAutomaticallyPlayedBack()) {getSMREngine().sync(proposal);}
+        if (!isAutomaticallyPlayedBack()) {e.sync(proposal);}
         return o.join();
     }
 

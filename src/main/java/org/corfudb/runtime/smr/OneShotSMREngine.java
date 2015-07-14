@@ -102,6 +102,7 @@ public class OneShotSMREngine<T> implements ISMREngine<T> {
             while (ts.compareTo(streamPointer) > 0) {
                 try {
                     IStreamEntry entry = stream.readNextEntry();
+                    if (entry.getTimestamp().compareTo(ts) > 0) return;
                     if (entry.getTimestamp().compareTo(ts) == 0)
                     {
                         //don't read the sync point, since that contains
