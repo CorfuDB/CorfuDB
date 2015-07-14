@@ -247,9 +247,10 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 List<IServerProtocol> chain = logInfo.first;
 
                 long mappedAddress = address/logInfo.second;
-                // TODO: right now, only the last node in a chain of replication contains the in-memory metadata!!!
-                IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                wolu.setHintsNext(mappedAddress, stream, nextOffset);
+                for (IServerProtocol unit : chain)
+                {
+                    ((IWriteOnceLogUnit)unit).setHintsNext(mappedAddress, stream, nextOffset);
+                }
                 return;
             }
             catch (NetworkException e)

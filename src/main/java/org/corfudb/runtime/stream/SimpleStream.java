@@ -109,8 +109,10 @@ public class SimpleStream implements IStream {
                         sse.setTimestamp(new SimpleTimestamp(i));
                         streamPointer.set(i + 1);
                         if (sse.containsStream(streamID)) {
-                            instance.getAddressSpace().setHintsNext(oldPointer, streamID.toString(), i);
-                            log.info("just set next of {} to {}, stream: {}", oldPointer, i, streamID);
+                            if (oldPointer != -1) {
+                                instance.getAddressSpace().setHintsNext(oldPointer, streamID.toString(), i);
+                                log.info("just set next of {} to {}, stream: {}", oldPointer, i, streamID);
+                            }
                             return sse;
                         }
                     } catch (ClassNotFoundException | ClassCastException e) {

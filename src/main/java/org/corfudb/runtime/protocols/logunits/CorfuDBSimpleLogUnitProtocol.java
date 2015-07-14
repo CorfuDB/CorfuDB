@@ -250,7 +250,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             }
             else if(ec.equals(ErrorCode.ERR_STALEEPOCH))
             {
-                throw new NetworkException("Writing to log unit in wrong epoch", this, address, false);
+                throw new NetworkException("setHintsNext to log unit in wrong epoch", this, address, false);
             } else if (ec.equals(ErrorCode.ERR_OVERWRITE)) {
                 throw new TrimmedException("Overwrote next pointer", address);
             }
