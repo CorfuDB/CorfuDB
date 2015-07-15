@@ -38,11 +38,26 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
     @Override
     public SampleResult runTest(JavaSamplerContext javaSamplerContext) {
         // Read each of the txns, one at a time; each thread must process/execute every entry.
-        CDBSimpleMap<Integer, Integer> localMap = instance.openObject(uuid, CDBSimpleMap.class);
         SampleResult result = new SampleResult();
         result.setSuccessful(true);
         result.sampleStart();
-        localMap.getSMREngine().sync(null);
+        Random r = new Random();
+        int key = r.nextInt(1000);
+        DeferredTransaction tx = new DeferredTransaction(instance);
+        final CDBSimpleMap<Integer, Integer> txMap = map;
+        tx.setTransaction((ITransactionCommand) (opts) -> {
+            if (txMap.get(key) == null) {
+                txMap.put(key, key);
+                return false;
+            }
+            return true;
+        });
+        try {
+            ITimestamp ts = tx.propose();
+        } catch (Exception e) {
+            System.exit(1);
+        }
+        map.getSMREngine().sync(null);
         result.sampleEnd();
         return result;
     }
@@ -64,10 +79,10 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
         uuid = UUID.randomUUID();
 
         map = instance.openObject(uuid, CDBSimpleMap.class);
-
+/*
         // Insert deferred txns, just to get a throughput estimate.
         Random r = new Random();
-        for (int i = 0; i < NUMTXNS; i++) {
+        for (int i = 0; i < Integer.parseInt(context.getParameter("LoopController.loops")); i++) {
             int key = r.nextInt(1000);
             DeferredTransaction tx = new DeferredTransaction(instance);
             final CDBSimpleMap<Integer, Integer> txMap = map;
@@ -84,7 +99,7 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
                 System.exit(1);
             }
         }
-
+*/
         super.setupTest(context);
     }
 
