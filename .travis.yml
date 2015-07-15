@@ -13,6 +13,7 @@ after_success:
 cache:
   directories:
   - $HOME/thrift
+  - $HOME/.m2
 notifications:
   email:
     - corfudb-dev@googlegroups.com
