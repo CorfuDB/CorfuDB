@@ -33,7 +33,7 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
 
-    final int NUMTXNS = 1;
+    final int NUMTXNS = 1000;
 
     @Override
     public SampleResult runTest(JavaSamplerContext javaSamplerContext) {
@@ -72,7 +72,10 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
             DeferredTransaction tx = new DeferredTransaction(instance);
             final CDBSimpleMap<Integer, Integer> txMap = map;
             tx.setTransaction((ITransactionCommand) (opts) -> {
-                txMap.put(key, key);
+                if (txMap.get(key) == null) {
+                    txMap.put(key, key);
+                    return false;
+                }
                 return true;
             });
             try {

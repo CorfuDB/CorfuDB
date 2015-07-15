@@ -33,6 +33,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     Class<T> type;
     HashMap<ITimestamp, CompletableFuture> completionTable;
     HashSet<ITimestamp> localTable;
+    Map<UUID, ISMREngine> cachedEngines = Collections.synchronizedMap(new WeakHashMap<>());
 
     class SimpleSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
@@ -328,4 +329,12 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     @Override
     public ITimestamp getStreamPointer() { return streamPointer; }
+
+    public Map<UUID, ISMREngine> getCachedEngines() {
+        return cachedEngines;
+    }
+
+    public void addCachedEngine(UUID stream, ISMREngine engine) {
+        cachedEngines.put(stream, engine);
+    }
 }

@@ -10,9 +10,7 @@ import org.corfudb.runtime.view.*;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -65,9 +63,17 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         }
         else
         {
-            IStream sTemp = instance.openStream(streamID);
-            ISMREngine engine = new OneShotSMREngine(sTemp, objClass, timestamp);
-            engine.sync(timestamp);
+            ISMREngine engine = null;
+            // TODO: Do we even need to consider other engines??
+            if (executingEngine instanceof SimpleSMREngine) {
+                engine = (ISMREngine) ((SimpleSMREngine) executingEngine).getCachedEngines().get(streamID);
+                if (engine == null) {
+                    IStream sTemp = instance.openStream(streamID);
+                    engine = new CachedSMREngine(sTemp, objClass, timestamp);
+                    engine.sync(timestamp);
+                    ((SimpleSMREngine) executingEngine).addCachedEngine(streamID, engine);
+                }
+            }
             return engine;
         }
     }
