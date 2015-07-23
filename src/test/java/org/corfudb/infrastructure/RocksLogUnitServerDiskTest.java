@@ -1,20 +1,22 @@
 package org.corfudb.infrastructure;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-
 import org.corfudb.infrastructure.thrift.ErrorCode;
 import org.corfudb.infrastructure.thrift.ExtntMarkType;
 import org.corfudb.infrastructure.thrift.ExtntWrap;
 import org.corfudb.infrastructure.thrift.UnitServerHdr;
-import org.junit.*;
+import org.junit.After;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-public class SimpleLogUnitServerDiskTest {
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+
+public class RocksLogUnitServerDiskTest {
 
     private static byte[] getTestPayload(int size)
     {
@@ -24,14 +26,22 @@ public class SimpleLogUnitServerDiskTest {
             test[i] = (byte)(i % 255);
         }
         return test;
-    }    private static SimpleLogUnitServer slus = new SimpleLogUnitServer();
+    }    private static RocksLogUnitServer slus = new RocksLogUnitServer();
 
     private static String TESTFILE = "testFile";
     private static int PAGESIZE = 4096;
 
-    private static byte[] test = getTestPayload(PAGESIZE);
+    private static ByteBuffer test = ByteBuffer.wrap(getTestPayload(PAGESIZE));
     private static ArrayList<Integer> epochlist = new ArrayList<Integer>();
-    private static ArrayList<ByteBuffer> byteList = new ArrayList<ByteBuffer>();
+
+    private void deleteFile(File file) {
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            for (File f : children)
+                deleteFile(f);
+        }
+        file.delete();
+    }
 
     @BeforeClass
     public static void setupServer() throws Exception {
@@ -46,14 +56,13 @@ public class SimpleLogUnitServerDiskTest {
         t.start();
 
         epochlist.add(0);
-        byteList.add(ByteBuffer.wrap(test));
 
         // Wait for server thread to finish setting up
         boolean done = false;
 
         while (!done) {
             try {
-                slus.write(new UnitServerHdr(epochlist, 0, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+                slus.write(new UnitServerHdr(epochlist, 0, "A"), test, ExtntMarkType.EX_FILLED);
                 done = true;
             } catch (NullPointerException e) {}
         }
@@ -61,8 +70,8 @@ public class SimpleLogUnitServerDiskTest {
         // Write entries in for the tests
         for (int i = 1; i < 100; i++)
         {
-            byteList.get(0).position(0);
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+            test.position(0);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, "A"), test, ExtntMarkType.EX_FILLED);
             assertEquals(ec, ErrorCode.OK);
         }
     }
@@ -70,13 +79,13 @@ public class SimpleLogUnitServerDiskTest {
     @After
     public void tearDown() {
         File file = new File(TESTFILE);
-        file.delete();
+        deleteFile(file);
     }
 
     @Test
     public void checkIfLogUnitIsWriteOnce() throws Exception
     {
-        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, "A"), test, ExtntMarkType.EX_FILLED);
         assertEquals(ErrorCode.ERR_OVERWRITE, ec);
     }
 
@@ -84,17 +93,17 @@ public class SimpleLogUnitServerDiskTest {
     @Test
     public void checkIfLogIsReadable() throws Exception
     {
-        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 1, "fake stream"));
+        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 1, "A"));
         byte[] data = new byte[ew.getCtnt().get(0).limit()];
         ew.getCtnt().get(0).position(0);
         ew.getCtnt().get(0).get(data);
-        assertArrayEquals(test, data);
+        assertArrayEquals(test.array(), data);
     }
 
     @Test
     public void checkIfEmptyAddressesAreUnwritten() throws Exception
     {
-        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, "fake stream"));
+        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, "A"));
         assertEquals(ew.getErr(), ErrorCode.ERR_UNWRITTEN);
     }
 }

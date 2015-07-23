@@ -119,6 +119,11 @@
             <type>jar</type>
             <scope>compile</scope>
         </dependency>
+	<dependency>
+	    <groupId>org.rocksdb</groupId>
+	    <artifactId>rocksdbjni</artifactId>
+	    <version>3.6.2</version>
+	</dependency>
         <dependency>
             <groupId>io.dropwizard.metrics</groupId>
             <artifactId>metrics-core</artifactId>
@@ -625,7 +630,7 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>configmaster-process</id>
+                        <id>configmaster-process-1</id>
                         <phase>pre-integration-test</phase>
                         <goals>
                             <goal>start</goal>
@@ -643,6 +648,27 @@
                             </arguments>
                             <processLogFile>${project.build.directory}/it_configmaster_1.log</processLogFile>
                             <healthcheckUrl>http://localhost:12700/corfu</healthcheckUrl>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>configmaster-process-2</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                        <configuration>
+                            <name>configmaster-2</name>
+                            <waitForInterrupt>false</waitForInterrupt>
+                            <waitAfterLaunch>5</waitAfterLaunch>
+                            <arguments>
+                                <argument>java</argument>
+                                <argument>-cp</argument>
+                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
+                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
+                                <argument>${basedir}/conf/it_configmaster_2.yml</argument>
+                            </arguments>
+                            <processLogFile>${project.build.directory}/it_configmaster_2.log</processLogFile>
+                            <healthcheckUrl>http://localhost:12701/corfu</healthcheckUrl>
                         </configuration>
                     </execution>
                     <execution>
@@ -683,6 +709,26 @@
                                 <argument>${basedir}/conf/it_logunit_2.yml</argument>
                             </arguments>
                             <processLogFile>${project.build.directory}/it_logunit_2.log</processLogFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>rockslogunit-process</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                        <configuration>
+                            <name>rockslogunit</name>
+                            <waitForInterrupt>false</waitForInterrupt>
+                            <waitAfterLaunch>5</waitAfterLaunch>
+                            <arguments>
+                                <argument>java</argument>
+                                <argument>-cp</argument>
+                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
+                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
+                                <argument>${basedir}/conf/rockslogunit.yml</argument>
+                            </arguments>
+                            <processLogFile>${project.build.directory}/rockslogunit.log</processLogFile>
                         </configuration>
                     </execution>
                     <execution>
@@ -747,7 +793,28 @@
                             <goal>jmeter</goal>
                         </goals>
                         <configuration>
-                            <skipTests>${skipTests}</skipTests>
+			<testFilesIncluded>
+			<jMeterTestFile>rockslogunit.jmx</jMeterTestFile>
+			<jMeterTestFile>logunit.jmx</jMeterTestFile>
+			</testFilesIncluded>
+                         <!--   <skipTests>${skipTests}</skipTests> -->
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default</id>
+                        <phase>post-integration-test</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+			    <tasks>
+				<delete dir="${project.build.directory}/testFile"/>
+			    </tasks>
                         </configuration>
                     </execution>
                 </executions>
