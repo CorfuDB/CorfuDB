@@ -744,83 +744,78 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     private class ControlRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
 
-            String response = null;
+            try {
+                String response = null;
 
-            if (t.getRequestMethod().startsWith("POST")) {
-                log.debug("POST request:" + t.getRequestURI());
-                String apiCall = null;
-                JsonObject params = null;
-                JsonNumber id = null;
-                try (InputStreamReader isr  = new InputStreamReader(t.getRequestBody(), "utf-8"))
-                {
-                    try (BufferedReader br = new BufferedReader(isr))
-                    {
-                        try (JsonReader jr = Json.createReader(br))
-                        {
-                            JsonObject jo  = jr.readObject();
-                            log.debug("request is " + jo.toString());
-                            apiCall = jo.getString("method");
-                            params = jo.getJsonObject("params");
-                            id = jo.getJsonNumber("id");
-                        }
-                        catch (Exception e)
-                        {
-                            log.error("error", e);
+                if (t.getRequestMethod().startsWith("POST")) {
+                    log.debug("POST request:" + t.getRequestURI());
+                    String apiCall = null;
+                    JsonObject params = null;
+                    JsonNumber id = null;
+                    try (InputStreamReader isr = new InputStreamReader(t.getRequestBody(), "utf-8")) {
+                        try (BufferedReader br = new BufferedReader(isr)) {
+                            try (JsonReader jr = Json.createReader(br)) {
+                                JsonObject jo = jr.readObject();
+                                log.debug("request is " + jo.toString());
+                                apiCall = jo.getString("method");
+                                params = jo.getJsonObject("params");
+                                id = jo.getJsonNumber("id");
+                            } catch (Exception e) {
+                                log.error("error", e);
+                            }
                         }
                     }
+                    Object result = JsonValue.FALSE;
+                    JsonObjectBuilder job = Json.createObjectBuilder();
+                    switch (apiCall) {
+                        case "ping":
+                            job.add("result", "pong");
+                            break;
+                        case "reset":
+                            reset();
+                            job.add("result", JsonValue.TRUE);
+                            break;
+                        case "addstream":
+                            job.add("result", addStream(params));
+                            break;
+                        case "getstream":
+                            job.add("result", getStream(params));
+                            break;
+                        case "getalllogs":
+                            job.add("result", getAllLogs(params));
+                            break;
+                        case "addlog":
+                            job.add("result", addLog(params));
+                            break;
+                        case "getlog":
+                            job.add("result", getLog(params));
+                            break;
+                        case "loginfo":
+                            job.add("result", logInfo(params));
+                            break;
+                        case "streaminfo":
+                            job.add("result", streamInfo(params));
+                            break;
+                        case "streaminspector":
+                            job.add("result", streamInspector(params));
+                            break;
+                        case "newview":
+                            job.add("result", newView(params));
+                            break;
+                        case "reconfig":
+                            job.add("reconfig", reconfig(params));
+                            break;
+                    }
+                    JsonObject res = job.add("calledmethod", apiCall)
+                            .add("jsonrpc", "2.0")
+                            .add("id", id)
+                            .build();
+                    response = res.toString();
+                    log.info("Response is " + response);
+                } else {
+                    log.debug("PUT request");
+                    response = "deny";
                 }
-                Object result = JsonValue.FALSE;
-                JsonObjectBuilder job = Json.createObjectBuilder();
-                switch(apiCall)
-                {
-                    case "ping":
-                        job.add("result", "pong");
-                        break;
-                    case "reset":
-                        reset();
-                        job.add("result", JsonValue.TRUE);
-                        break;
-                    case "addstream":
-                        job.add("result", addStream(params));
-                        break;
-                    case "getstream":
-                        job.add("result", getStream(params));
-                        break;
-                    case "getalllogs":
-                        job.add("result", getAllLogs(params));
-                        break;
-                    case "addlog":
-                        job.add("result", addLog(params));
-                        break;
-                    case "getlog":
-                        job.add("result", getLog(params));
-                        break;
-                    case "loginfo":
-                        job.add("result", logInfo(params));
-                        break;
-                    case "streaminfo":
-                        job.add("result", streamInfo(params));
-                        break;
-                    case "streaminspector":
-                        job.add("result", streamInspector(params));
-                        break;
-                    case "newview":
-                        job.add("result", newView(params));
-                        break;
-                    case "reconfig":
-                        job.add("reconfig", reconfig(params));
-                        break;
-                }
-                JsonObject res =    job.add("calledmethod", apiCall)
-                                    .add("jsonrpc", "2.0")
-                                    .add("id", id)
-                                    .build();
-                response = res.toString();
-                log.debug("Response is " + response);
-            } else {
-                log.debug("PUT request");
-                response = "deny";
-            }
                 Headers h = t.getResponseHeaders();
                 h.set("Content-Type", "application/json");
                 t.sendResponseHeaders(200, response.length());
@@ -828,6 +823,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
                 os.write(response.getBytes());
                 os.close();
 
+            } catch (Exception e) {
+                log.warn("Exception handling control request", e);
+            }
         }
     }
 

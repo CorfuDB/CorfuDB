@@ -185,4 +185,38 @@ public interface ICorfuDBObject<U> extends Serializable {
     {
         return false;
     }
+
+    /**
+     * Manually generate a checkpoint and insert it into the log.
+     * @return              The timestamp the checkpoint was generated and proposed.
+     */
+    default ITimestamp generateCheckpoint() {
+        try {
+            return getSMREngine().checkpoint();
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Error generating checkpoint.", e);
+        }
+    }
+
+    /**
+     * Triggered before an object is mutated.
+     * @param timestamp     The timestamp of the state change triggering the handler.
+     * @param object        The state of the object before the mutation.
+     */
+    default void preMutationHandler(ITimestamp timestamp, U object)
+    {
+
+    }
+
+    /**
+     * Triggered after an object is mutated.
+     * @param timestamp     The timestamp of the object after triggering the handler
+     * @param object        The state of the object after the mutation.
+     */
+    default void postMutationHandler(ITimestamp timestamp, U object)
+    {
+
+    }
 }
