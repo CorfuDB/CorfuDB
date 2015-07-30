@@ -793,11 +793,7 @@
                             <goal>jmeter</goal>
                         </goals>
                         <configuration>
-			<testFilesIncluded>
-			<jMeterTestFile>rockslogunit.jmx</jMeterTestFile>
-			<jMeterTestFile>logunit.jmx</jMeterTestFile>
-			</testFilesIncluded>
-                         <!--   <skipTests>${skipTests}</skipTests> -->
+                            <skipTests>${skipTests}</skipTests>
                         </configuration>
                     </execution>
                 </executions>
