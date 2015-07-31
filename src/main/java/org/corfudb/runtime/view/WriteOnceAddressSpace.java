@@ -22,8 +22,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 import org.corfudb.runtime.smr.Pair;
 import org.slf4j.Logger;
@@ -39,7 +38,6 @@ import java.io.IOException;
 
 import java.util.function.Supplier;
 
-import java.util.UUID;
 /**
  * This view implements a simple write once address space
  *
@@ -116,9 +114,12 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 List<IServerProtocol> chain = logInfo.first;
                 //writes have to go to chain in order
                 long mappedAddress = address/logInfo.second;
+                Set<String> streams = null;
+                if (logID != null)
+                    streams = Collections.singleton(logID.toString());
                 for (IServerProtocol unit : chain)
                 {
-                    ((IWriteOnceLogUnit)unit).write(mappedAddress,data);
+                    ((IWriteOnceLogUnit)unit).write(mappedAddress, streams, data);
                 }
                 return;
             }
@@ -154,7 +155,9 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 long mappedAddress = address/logInfo.second;
                 //reads have to come from last unit in chain
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                return wolu.read(mappedAddress);
+                if (logID != null)
+                    return wolu.read(mappedAddress, logID.toString());
+                return wolu.read(mappedAddress, null);
             }
             catch (NetworkException e)
             {

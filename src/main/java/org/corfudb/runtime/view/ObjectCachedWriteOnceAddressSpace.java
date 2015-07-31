@@ -22,6 +22,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 
+import java.util.Collections;
 import java.util.List;
 
 import org.corfudb.runtime.smr.Pair;
@@ -31,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.io.IOException;
 
+import java.util.Set;
 import java.util.function.Supplier;
 
 import java.util.UUID;
@@ -127,7 +129,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 long mappedAddress = address/mod;
                 for (IServerProtocol unit : chain)
                 {
-                    ((IWriteOnceLogUnit)unit).write(mappedAddress,data);
+                    ((IWriteOnceLogUnit)unit).write(mappedAddress, Collections.singleton(getView.get().getUUID().toString()), data);
                     return;
                 }
             }
@@ -164,7 +166,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 List<IServerProtocol> chain = segments.getGroups().get(groupnum);
                 //reads have to come from last unit in chain
                 IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                data = wolu.read(mappedAddress);
+                data = wolu.read(mappedAddress, getView.get().getUUID().toString());
             //    stream.debug("Objcache MISS @ {}", address);
              //   AddressSpaceCache.put(logID, address, data);
                 return data;

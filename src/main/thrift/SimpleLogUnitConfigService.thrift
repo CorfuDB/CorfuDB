@@ -10,6 +10,8 @@ struct SimpleLogUnitWrap {
 	5: i64 ckmark,
 	6: list<Common.LogPayload> ctnt,
 	7: Common.LogPayload bmap,
+	8: map<i64, Common.Hints> hintmap,
+        9: i32 unitcapacity,
 	}
 
 service SimpleLogUnitConfigService {

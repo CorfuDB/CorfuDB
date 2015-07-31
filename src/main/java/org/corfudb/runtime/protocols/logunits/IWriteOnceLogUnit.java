@@ -20,6 +20,9 @@ import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
+import java.util.Set;
+import java.util.UUID;
+
 /**
  * This interface represents the simplest type of stream unit.
  * Write once stream units provide these simple features:
@@ -36,8 +39,8 @@ import org.corfudb.runtime.protocols.IServerProtocol;
  */
 
 public interface IWriteOnceLogUnit extends IServerProtocol {
-    void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
-    byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException;
+    void write(long address, Set<String> streams, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
+    byte[] read(long address, String stream) throws UnwrittenException, TrimmedException, NetworkException;
     void trim(long address) throws NetworkException;
 
     /**

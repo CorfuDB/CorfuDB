@@ -5,6 +5,7 @@ import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.UUID;
 
 import static org.junit.Assert.*;
@@ -33,7 +34,7 @@ public class SimpleLogUnitServerMemoryTest {
             epochlist.add(0);
             ArrayList<ByteBuffer> byteList = new ArrayList<ByteBuffer>();
             byteList.add(ByteBuffer.wrap(test));
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
             assertEquals(ec, ErrorCode.OK);
         }
     }
@@ -51,11 +52,11 @@ public class SimpleLogUnitServerMemoryTest {
         slus.reset();
         for (int i = 0; i < 100; i++)
         {
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
             assertEquals(ec, ErrorCode.OK);
         }
 
-        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
         assertEquals(ec, ErrorCode.ERR_OVERWRITE);
     }
 
@@ -72,11 +73,11 @@ public class SimpleLogUnitServerMemoryTest {
         slus.reset();
         for (int i = 0; i < 100; i++)
         {
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
             assertEquals(ec, ErrorCode.OK);
         }
 
-        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 42, "fake stream"));
+        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 42, Collections.singleton("fake stream")));
         byte[] data = new byte[ew.getCtnt().get(0).limit()];
         ew.getCtnt().get(0).position(0);
         ew.getCtnt().get(0).get(data);
@@ -96,11 +97,11 @@ public class SimpleLogUnitServerMemoryTest {
         slus.reset();
         for (int i = 0; i < 100; i++)
         {
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
             assertEquals(ec, ErrorCode.OK);
         }
 
-        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, "fake stream"));
+        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, Collections.singleton("fake stream")));
         assertEquals(ew.getErr(), ErrorCode.ERR_UNWRITTEN);
     }
 
@@ -116,27 +117,27 @@ public class SimpleLogUnitServerMemoryTest {
         SimpleLogUnitServer slus = new SimpleLogUnitServer();
         slus.reset();
         UUID junkID = UUID.randomUUID();
-        ErrorCode ec = slus.setHintsNext(new UnitServerHdr(epochlist, 1, "fake stream"), junkID.toString(), 1234L);
+        ErrorCode ec = slus.setHintsNext(new UnitServerHdr(epochlist, 1, Collections.singleton("fake stream")), junkID.toString(), 1234L);
         assertEquals(ec, ErrorCode.ERR_UNWRITTEN);
 
-        Hints hint = slus.readHints(new UnitServerHdr(epochlist, 1, "fake stream"));
+        Hints hint = slus.readHints(new UnitServerHdr(epochlist, 1, Collections.singleton("fake stream")));
         assertEquals(hint.getErr(), ErrorCode.ERR_UNWRITTEN);
 
         // Now there shuld be metadata
-        ec = slus.write(new UnitServerHdr(epochlist, 1, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+        ec = slus.write(new UnitServerHdr(epochlist, 1, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
         assertEquals(ec, ErrorCode.OK);
-        ec = slus.setHintsNext(new UnitServerHdr(epochlist, 1, "fake stream"), junkID.toString(), 1234L);
+        ec = slus.setHintsNext(new UnitServerHdr(epochlist, 1, Collections.singleton("fake stream")), junkID.toString(), 1234L);
         assertEquals(ec, ErrorCode.OK);
 
-        hint = slus.readHints(new UnitServerHdr(epochlist, 1, "fake stream"));
+        hint = slus.readHints(new UnitServerHdr(epochlist, 1, Collections.singleton("fake stream")));
         assertEquals(hint.getErr(), ErrorCode.OK);
         assertEquals(hint.getNextMap().get(junkID.toString()).longValue(), 1234L);
         assertTrue(!hint.isTxDec());
 
         // Test TxDec
-        ec = slus.setHintsTxDec(new UnitServerHdr(epochlist, 1, "fake stream"), true);
+        ec = slus.setHintsTxDec(new UnitServerHdr(epochlist, 1, Collections.singleton("fake stream")), true);
         assertEquals(ec, ErrorCode.OK);
-        hint = slus.readHints(new UnitServerHdr(epochlist, 1, "fake stream"));
+        hint = slus.readHints(new UnitServerHdr(epochlist, 1, Collections.singleton("fake stream")));
         assertEquals(hint.getErr(), ErrorCode.OK);
         assertEquals(hint.getNextMap().get(junkID.toString()).longValue(), 1234L);
         assertTrue(hint.isTxDec());

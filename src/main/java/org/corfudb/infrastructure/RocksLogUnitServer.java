@@ -23,9 +23,10 @@ import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.corfudb.infrastructure.thrift.*;
-import org.rocksdb.Options;
-import org.rocksdb.RocksDB;
-import org.rocksdb.RocksDBException;
+import org.corfudb.runtime.protocols.IServerProtocol;
+import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
+import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.rocksdb.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,9 +34,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBServer {
-	private Logger log = LoggerFactory.getLogger(RocksLogUnitServer.class);
+    private Logger log = LoggerFactory.getLogger(RocksLogUnitServer.class);
 
     List<Integer> masterIncarnation = null;
     protected int UNITCAPACITY = 100000; // capacity in PAGESIZE units, i.e. UNITCAPACITY*PAGESIZE bytes
@@ -50,39 +52,76 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
     protected int PAGESIZE;
 
 
-	private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
+    private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
 
-	private Object DriveLck = new Object();
+    private Object DriveLck = new Object();
 
     private long gcmark = 0; // pages up to 'gcmark' have been evicted; note, we must have gcmark <= CM.trimmark
-	private int lowwater = 0, highwater = 0, freewater = -1;
+    private int lowwater = 0, highwater = 0, freewater = -1;
 
     long highWatermark = -1L;
 
     private HashMap<Long, Hints> hintMap = new HashMap();
     private RocksDB db = null;
+    private AtomicBoolean ready = new AtomicBoolean(); // for testing
 
-	public void initLogStore(int sz) {
+    public boolean isReady() {
+        return ready.get();
+    }
+
+    public void initLogStore(int sz) {
         if (RAMMODE) {
             //TODO: RocksDB in ram-mode?
         }
-		UNITCAPACITY = freewater = sz;
+        UNITCAPACITY = freewater = sz;
         masterIncarnation = new ArrayList<Integer>();
         masterIncarnation.add(0);
-	}
+    }
 
-	public void initLogStore(byte[] initmap, int sz) throws Exception {
-		if (RAMMODE) {
+    public void initLogStore(byte[] initmap, int sz) throws Exception {
+        if (RAMMODE) {
             //TODO: RocksDB in ram-mode?
         }
-		UNITCAPACITY = freewater = sz;
+        UNITCAPACITY = freewater = sz;
         masterIncarnation = new ArrayList<Integer>();
         masterIncarnation.add(0);
-        RocksDB.loadLibrary();
-	}
+    }
 
     public RocksLogUnitServer() {
         //default constructor
+    }
+
+    //TODO: Make this accept an object from an interface, such as IWriteOnceLogUnit?
+    private boolean rebuildFrom(CorfuDBSimpleLogUnitProtocol nodeToFetch) {
+        SimpleLogUnitWrap data = nodeToFetch.fetchRebuild();
+
+        if (data == null || !data.isSetErr() || !data.getErr().equals(ErrorCode.OK)) {
+            log.error("couldn't get rebuild data from node: {}", nodeToFetch.getFullString());
+            log.error("data: {}", data);
+            return false;
+        }
+
+        SimpleLogUnitServer temp = new SimpleLogUnitServer();
+        try {
+            temp.initLogStore(data.getBmap(), data.getUnitcapacity());
+        } catch (Exception ex) {
+            log.error("couldn't rebuild log store from bitmap: {}", ex);
+            return false;
+        }
+
+        long startAddress = data.getLowwater();
+        if (!data.isSetCtnt())
+            return true;
+        for (ByteBuffer bb : data.getCtnt()) {
+            //TODO: FIX THE FAKE STREAM!! once simple log unit server gets streams
+            try {
+                put(startAddress, data.getHintmap().get(startAddress).getNextMap().keySet(), bb, temp.getET(startAddress));
+            } catch (IOException e) {
+                log.error("Trying to rebuild node, got exception: {}", e);
+            }
+            startAddress++;
+        }
+        return true;
     }
 
     public void simulateFailure(boolean fail, long length)
@@ -129,6 +168,11 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         {
             lut.RECOVERY = (Boolean) config.get("recovery");
         }
+        if (config.containsKey("rebuild")) {
+            lut.REBUILD = true;
+            lut.rebuildnode = (String) config.get("rebuild");
+        }
+
 
         return new Runnable() {
             @Override
@@ -157,27 +201,32 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
     }
 
     // Assumes each ByteBuffer has length <= PAGESIZE.
-	private ErrorCode put(long address, String stream, ByteBuffer buf, ExtntMarkType et) throws IOException {
-        byte[] key = getKey(address, stream);
+    private ErrorCode put(long address, Set<String> streams, ByteBuffer buf, ExtntMarkType et) throws IOException {
+        // TODO: If streams is null, add to EVERY stream??
+        if (streams == null)
+            return ErrorCode.ERR_BADPARAM;
+        for (String stream : streams) {
+            byte[] key = getKey(address, stream);
 
-        ByteArrayOutputStream bs = new ByteArrayOutputStream();
-        bs.write(buf.array());
-        bs.write(et.getValue());
-        try {
-            byte[] value = db.get(key);
-            if (value == null)
-                db.put(key, bs.toByteArray());
-            else
-                return ErrorCode.ERR_OVERWRITE;
-        } catch (RocksDBException e) {
-            throw new IOException(e.getMessage());
+            ByteArrayOutputStream bs = new ByteArrayOutputStream();
+            bs.write(buf.array());
+            bs.write(et.getValue());
+            try {
+                byte[] value = db.get(key);
+                if (value == null)
+                    db.put(key, bs.toByteArray());
+                else
+                    return ErrorCode.ERR_OVERWRITE;
+            } catch (RocksDBException e) {
+                throw new IOException(e.getMessage());
+            }
         }
         return ErrorCode.OK;
-	}
+    }
 
-	public void trimLogStore(long toOffset) throws IOException {
+    public void trimLogStore(long toOffset) throws IOException {
         throw new UnsupportedOperationException("trimLogStore not implemented in Rocks-backed server!!");
-	}
+    }
 
     public ExtntWrap get(long logOffset, String stream) throws IOException {
         ExtntWrap wr = new ExtntWrap();
@@ -186,7 +235,6 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         byte[] value = null;
         try {
             value = db.get(key);
-
         } catch (RocksDBException e) {
             throw new IOException(e.getMessage());
         }
@@ -205,6 +253,7 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
             ArrayList<ByteBuffer> content = new ArrayList<ByteBuffer>();
             content.add(ByteBuffer.wrap(returnValue));
             wr.setCtnt(content);
+            wr.setErr(ErrorCode.OK);
         }
         return wr;
     }
@@ -217,34 +266,34 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
     private void recover() throws Exception {
         throw new UnsupportedOperationException("Haven't implemented recover in Rocks-backed server");
     }
-/*
-    private void rebuildfromnode() throws Exception {
-        Endpoint cn = Endpoint.genEndpoint(rebuildnode);
-        TTransport buildsock = new TSocket(cn.getHostname(), cn.getPort());
-        buildsock.open();
-        TProtocol prot = new TBinaryProtocol(buildsock);
-        TMultiplexedProtocol mprot = new TMultiplexedProtocol(prot, "CONFIG");
+    /*
+        private void rebuildfromnode() throws Exception {
+            Endpoint cn = Endpoint.genEndpoint(rebuildnode);
+            TTransport buildsock = new TSocket(cn.getHostname(), cn.getPort());
+            buildsock.open();
+            TProtocol prot = new TBinaryProtocol(buildsock);
+            TMultiplexedProtocol mprot = new TMultiplexedProtocol(prot, "CONFIG");
 
-        SimpleLogUnitConfigService.Client cl = new SimpleLogUnitConfigService.Client(mprot);
-        stream.info("established connection with rebuild-node {}", rebuildnode);
-        SimpleLogUnitWrap wr = null;
-        try {
-            wr = cl.rebuild();
-            stream.info("obtained mirror lowwater={} highwater={} trimmark={} ctnt-length={}",
-                    wr.getLowwater(), wr.getHighwater(), wr.getTrimmark(), wr.getCtntSize());
-            initLogStore(wr.getBmap(), UNITCAPACITY);
-            lowwater = highwater = wr.getLowwater();
-            gcmark = wr.getTrimmark();
-            ckmark = (int)wr.getCkmark();
-            put(wr.getCtnt());
-            if (highwater != wr.getHighwater())
-                stream.error("rebuildfromnode lowwater={} highwater={} received ({},{})",
-                        lowwater, highwater,
-                        wr.getLowwater(), wr.getHighwater());
-        } catch (TException e) {
-            e.printStackTrace();
-        }
-    }*/
+            SimpleLogUnitConfigService.Client cl = new SimpleLogUnitConfigService.Client(mprot);
+            stream.info("established connection with rebuild-node {}", rebuildnode);
+            SimpleLogUnitWrap wr = null;
+            try {
+                wr = cl.rebuild();
+                stream.info("obtained mirror lowwater={} highwater={} trimmark={} ctnt-length={}",
+                        wr.getLowwater(), wr.getHighwater(), wr.getTrimmark(), wr.getCtntSize());
+                initLogStore(wr.getBmap(), UNITCAPACITY);
+                lowwater = highwater = wr.getLowwater();
+                gcmark = wr.getTrimmark();
+                ckmark = (int)wr.getCkmark();
+                put(wr.getCtnt());
+                if (highwater != wr.getHighwater())
+                    stream.error("rebuildfromnode lowwater={} highwater={} received ({},{})",
+                            lowwater, highwater,
+                            wr.getLowwater(), wr.getHighwater());
+            } catch (TException e) {
+                e.printStackTrace();
+            }
+        }*/
     @Override
     public boolean ping() throws TException {
         if (simFailure)
@@ -272,8 +321,8 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
 	 * this means that we first check if all the pages to be written are free, and that the incoming entry contains content for each page.
 	 * in the event of some error in the middle, we reset any values we already set.
 	 */
-	@Override
-	synchronized public ErrorCode write(UnitServerHdr hdr, ByteBuffer ctnt, ExtntMarkType et) throws TException {
+    @Override
+    synchronized public ErrorCode write(UnitServerHdr hdr, ByteBuffer ctnt, ExtntMarkType et) throws TException {
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
@@ -284,7 +333,7 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
             return ErrorCode.ERR_STALEEPOCH;
         }
 
-		log.debug("write({} size={} marktype={})", hdr.off, ctnt.capacity(), et);
+        log.debug("write({} size={} marktype={})", hdr.off, ctnt.capacity(), et);
         try {
             ErrorCode ec = put(hdr.off, hdr.streamID, ctnt, et);
             highWatermark = Long.max(highWatermark, hdr.off);
@@ -295,23 +344,23 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         }
     }
 
-	/**
-	 * mark an extent 'skipped'
-	 * @param hdr epoch and offset of the extent
-	 * @return OK if succeeds in marking the extent for 'skip'
-	 * 		ERROR_TRIMMED if the extent-range has already been trimmed
-	 * 		ERROR_OVERWRITE if the extent is occupied (could be a good thing)
-	 * 		ERROR_FULL if the extent spills over the capacity of the stream
-	 * @throws TException
-	 */
-	@Override
-	synchronized public ErrorCode fix(UnitServerHdr hdr) throws TException {
+    /**
+     * mark an extent 'skipped'
+     * @param hdr epoch and offset of the extent
+     * @return OK if succeeds in marking the extent for 'skip'
+     * 		ERROR_TRIMMED if the extent-range has already been trimmed
+     * 		ERROR_OVERWRITE if the extent is occupied (could be a good thing)
+     * 		ERROR_FULL if the extent spills over the capacity of the stream
+     * @throws TException
+     */
+    @Override
+    synchronized public ErrorCode fix(UnitServerHdr hdr) throws TException {
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
         }
-		return write(hdr, ByteBuffer.allocate(0), ExtntMarkType.EX_SKIP);
-	}
+        return write(hdr, ByteBuffer.allocate(0), ExtntMarkType.EX_SKIP);
+    }
 
     private ExtntWrap genWrap(ErrorCode err) {
         return new ExtntWrap(err, new ExtntInfo(), new ArrayList<ByteBuffer>());
@@ -321,59 +370,58 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         return new Hints(err, new HashMap<String, Long>(), false);
     }
 
-	/* (non-Javadoc)
-	 * @see CorfuUnitServer.Iface#read(org.corfudb.CorfuHeader, ExtntInfo)
-	 *
-	 * this method performs actual reading of a range of pages.
-	 * it fails if any page within range has not been written.
-	 * it returns OK_SKIP if it finds any page within range which has been junk-filled (i.e., the entire range becomes junked).
-	 *
-	 * the method also reads-ahead the subsequent meta-info entry if hdr.readnext is set.
-	 * if the next meta info record is not available, it returns the current meta-info structure
-	 *
-	 *  @param a CorfuHeader describing the range to read
-	 */
-	@Override
-	synchronized public ExtntWrap read(UnitServerHdr hdr) throws TException {
+    /* (non-Javadoc)
+     * @see CorfuUnitServer.Iface#read(org.corfudb.CorfuHeader, ExtntInfo)
+     *
+     * this method performs actual reading of a range of pages.
+     * it fails if any page within range has not been written.
+     * it returns OK_SKIP if it finds any page within range which has been junk-filled (i.e., the entire range becomes junked).
+     *
+     * the method also reads-ahead the subsequent meta-info entry if hdr.readnext is set.
+     * if the next meta info record is not available, it returns the current meta-info structure
+     *
+     *  @param a CorfuHeader describing the range to read
+     */
+    @Override
+    synchronized public ExtntWrap read(UnitServerHdr hdr) throws TException {
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
         }
         if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return genWrap(ErrorCode.ERR_STALEEPOCH);
-		log.debug("read({})", hdr.off);
         try {
-            return get(hdr.off, hdr.streamID);
+            return get(hdr.off, hdr.streamID.iterator().next());
         } catch (IOException e) {
             e.printStackTrace();
             return genWrap(ErrorCode.ERR_IO);
         }
     }
 
-	/**
-	 * wait until any previously written stream entries have been forced to persistent store
-	 */
+    /**
+     * wait until any previously written stream entries have been forced to persistent store
+     */
     @Override
-	synchronized public void sync() throws TException {
+    synchronized public void sync() throws TException {
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
         }
-    	synchronized(DriveLck) { try { DriveLck.wait(); } catch (Exception e) {
-    		log.error("forcing sync to persistent store failed, quitting");
-    		System.exit(1);
-    	}}
+        synchronized(DriveLck) { try { DriveLck.wait(); } catch (Exception e) {
+            log.error("forcing sync to persistent store failed, quitting");
+            System.exit(1);
+        }}
     }
 
-	@Override
-	synchronized public long querytrim() {
+    @Override
+    synchronized public long querytrim() {
         //return CM.getTrimmark();
         //TODO figure out trim story
         return 0;
-        }
+    }
 
     @Override
     synchronized public long highestAddress()
-    throws TException {
+            throws TException {
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
@@ -384,14 +432,14 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
     synchronized public void reset() {
         log.debug("Reset requested, resetting state");
         try {
-        if (RAMMODE)
-        {
-            //TODO: Ram-mode in RocksDB?
-            initLogStore(UNITCAPACITY);
-            writegcmark();
-            highWatermark = -1L;
-            hintMap = new HashMap<>();
-        }
+            if (RAMMODE)
+            {
+                //TODO: Ram-mode in RocksDB?
+                initLogStore(UNITCAPACITY);
+                writegcmark();
+                highWatermark = -1L;
+                hintMap = new HashMap<>();
+            }
         }
         catch (Exception e)
         {
@@ -399,10 +447,10 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         }
     }
 
-	@Override
-	synchronized public long queryck() {	return ckmark; }
+    @Override
+    synchronized public long queryck() {	return ckmark; }
 
-	ErrorCode trim(long toOffset) {
+    ErrorCode trim(long toOffset) {
         try {
             trimLogStore(toOffset);
         } catch (IOException e) {
@@ -410,34 +458,34 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
             return ErrorCode.ERR_IO;
         }
         if (!RAMMODE) {
-	    	try {
-	    	   	log.debug("forcing bitmap and gcmark to disk");
-	    	   	synchronized(DriveLck) {
-	    	   		try { DriveLck.wait(); } catch (InterruptedException e) {
-		        		log.error("forcing sync to persistent store failed, quitting");
-		        		System.exit(1);
-	    	   		}
-	        	}
-	    	    writegcmark();
-			} catch (IOException e) {
-				log.error("writing gcmark failed");
-				e.printStackTrace();
-				return ErrorCode.ERR_IO;
-			}
-    	}
-    	return ErrorCode.OK;
-	}
+            try {
+                log.debug("forcing bitmap and gcmark to disk");
+                synchronized(DriveLck) {
+                    try { DriveLck.wait(); } catch (InterruptedException e) {
+                        log.error("forcing sync to persistent store failed, quitting");
+                        System.exit(1);
+                    }
+                }
+                writegcmark();
+            } catch (IOException e) {
+                log.error("writing gcmark failed");
+                e.printStackTrace();
+                return ErrorCode.ERR_IO;
+            }
+        }
+        return ErrorCode.OK;
+    }
 
-	@Override
+    @Override
     synchronized public void ckpoint(UnitServerHdr hdr) throws TException {
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
         }
         // if (hdr.getEpoch() < epoch) return ErrorCode.ERR_STALEEPOCH;
-		log.info("mark latest checkpoint offset={}", hdr.off);
-		if (hdr.off > ckmark) ckmark = (int) (hdr.off % UNITCAPACITY);
-	}
+        log.info("mark latest checkpoint offset={}", hdr.off);
+        if (hdr.off > ckmark) ckmark = (int) (hdr.off % UNITCAPACITY);
+    }
 
     //////////////////////////////////////////////////////////////////////////////
 
@@ -452,10 +500,16 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
             RocksDB.loadLibrary();
 
             Options options = new Options().setCreateIfMissing(true);
+            /*options.setAllowMmapReads(true);
+            // For easy prefix-lookups.
+            options.setMemTableConfig(new HashSkipListMemTableConfig());
+            options.setTableFormatConfig(new PlainTableConfig());
+            options.useFixedLengthPrefixExtractor(16); // Prefix length in bytes */
             try {
                 db = RocksDB.open(options, DRIVENAME);
             } catch (RocksDBException e) {
                 e.printStackTrace();
+                log.warn("couldn't open rocksdb, exception: {}", e);
                 System.exit(1); // not much to do without storage...
             }
         } else {
@@ -465,13 +519,27 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         if (RECOVERY) {
             recover();
         } else if (REBUILD) {
-            log.warn("REBUILD TEMPORARILY DISABLED");
-            //TODO reimplement rebuild
-            //rebuildfromnode();
+            CorfuDBSimpleLogUnitProtocol protocol = null;
+            try
+            {
+                // Fix epoch later; but if we set it to -1, this guarantees that any write will trigger a view change,
+                // which we want
+                //TODO: Fix how CorfuDBSimpleLogUnitProtocol is essentially hardcoded?
+                protocol = (CorfuDBSimpleLogUnitProtocol) IServerProtocol.protocolFactory(CorfuDBSimpleLogUnitProtocol.class, rebuildnode, -1);
+            }
+            catch (Exception ex){
+                log.error("Error invoking protocol for protocol: ", ex);
+                log.error("Cannot rebuild node");
+                System.exit(1);
+            }
+
+            if (!rebuildFrom(protocol))
+                System.exit(1);
         } else {
             initLogStore(UNITCAPACITY);
             //writegcmark();
         }
+        ready.set(true);
 
         TServer server;
         TServerSocket serverTransport;

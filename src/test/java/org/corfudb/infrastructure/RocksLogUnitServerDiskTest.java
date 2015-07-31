@@ -11,6 +11,7 @@ import org.junit.Test;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -26,7 +27,8 @@ public class RocksLogUnitServerDiskTest {
             test[i] = (byte)(i % 255);
         }
         return test;
-    }    private static RocksLogUnitServer slus = new RocksLogUnitServer();
+    }
+    private static RocksLogUnitServer slus = new RocksLogUnitServer();
 
     private static String TESTFILE = "testFile";
     private static int PAGESIZE = 4096;
@@ -62,7 +64,7 @@ public class RocksLogUnitServerDiskTest {
 
         while (!done) {
             try {
-                slus.write(new UnitServerHdr(epochlist, 0, "A"), test, ExtntMarkType.EX_FILLED);
+                slus.write(new UnitServerHdr(epochlist, 0, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED);
                 done = true;
             } catch (NullPointerException e) {}
         }
@@ -71,7 +73,7 @@ public class RocksLogUnitServerDiskTest {
         for (int i = 1; i < 100; i++)
         {
             test.position(0);
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, "A"), test, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED);
             assertEquals(ec, ErrorCode.OK);
         }
     }
@@ -85,7 +87,7 @@ public class RocksLogUnitServerDiskTest {
     @Test
     public void checkIfLogUnitIsWriteOnce() throws Exception
     {
-        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, "A"), test, ExtntMarkType.EX_FILLED);
+        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED);
         assertEquals(ErrorCode.ERR_OVERWRITE, ec);
     }
 
@@ -93,7 +95,7 @@ public class RocksLogUnitServerDiskTest {
     @Test
     public void checkIfLogIsReadable() throws Exception
     {
-        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 1, "A"));
+        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 1, Collections.singleton("AAAAAAAAAAAAAAAA")));
         byte[] data = new byte[ew.getCtnt().get(0).limit()];
         ew.getCtnt().get(0).position(0);
         ew.getCtnt().get(0).get(data);
@@ -103,7 +105,7 @@ public class RocksLogUnitServerDiskTest {
     @Test
     public void checkIfEmptyAddressesAreUnwritten() throws Exception
     {
-        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, "A"));
+        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, Collections.singleton("AAAAAAAAAAAAAAAA")));
         assertEquals(ew.getErr(), ErrorCode.ERR_UNWRITTEN);
     }
 }

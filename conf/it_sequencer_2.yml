@@ -10,5 +10,5 @@
 
 role: org.corfudb.infrastructure.StreamingSequencerServer
 port: 12601
-configmaster: http://localhost:12700/corfu
+configmaster: http://localhost:12702/corfu
 

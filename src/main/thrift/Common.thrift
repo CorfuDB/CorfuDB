@@ -40,7 +40,7 @@ struct ExtntWrap {
 struct UnitServerHdr {
     1: Epoch epoch,
     2: i64 off,
-    3: UUID streamID,
+    3: set<UUID> streamID,
 }
 	
 

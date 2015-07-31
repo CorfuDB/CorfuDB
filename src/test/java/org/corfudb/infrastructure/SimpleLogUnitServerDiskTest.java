@@ -12,6 +12,7 @@ import org.junit.*;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 
 public class SimpleLogUnitServerDiskTest {
@@ -53,7 +54,7 @@ public class SimpleLogUnitServerDiskTest {
 
         while (!done) {
             try {
-                slus.write(new UnitServerHdr(epochlist, 0, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+                slus.write(new UnitServerHdr(epochlist, 0, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
                 done = true;
             } catch (NullPointerException e) {}
         }
@@ -62,7 +63,7 @@ public class SimpleLogUnitServerDiskTest {
         for (int i = 1; i < 100; i++)
         {
             byteList.get(0).position(0);
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
             assertEquals(ec, ErrorCode.OK);
         }
     }
@@ -76,7 +77,7 @@ public class SimpleLogUnitServerDiskTest {
     @Test
     public void checkIfLogUnitIsWriteOnce() throws Exception
     {
-        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, "fake stream"), byteList, ExtntMarkType.EX_FILLED);
+        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
         assertEquals(ErrorCode.ERR_OVERWRITE, ec);
     }
 
@@ -84,7 +85,7 @@ public class SimpleLogUnitServerDiskTest {
     @Test
     public void checkIfLogIsReadable() throws Exception
     {
-        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 1, "fake stream"));
+        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 1, Collections.singleton("fake stream")));
         byte[] data = new byte[ew.getCtnt().get(0).limit()];
         ew.getCtnt().get(0).position(0);
         ew.getCtnt().get(0).get(data);
@@ -94,7 +95,7 @@ public class SimpleLogUnitServerDiskTest {
     @Test
     public void checkIfEmptyAddressesAreUnwritten() throws Exception
     {
-        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, "fake stream"));
+        ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, Collections.singleton("fake stream")));
         assertEquals(ew.getErr(), ErrorCode.ERR_UNWRITTEN);
     }
 }

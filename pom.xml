@@ -597,6 +597,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
+		<configuration>
+		    <workingDirectory>${project.build.directory}</workingDirectory>
+		</configuration>
                 <version>2.18.1</version>
                 <executions>
                     <execution>
@@ -672,6 +675,27 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>configmaster-process-3</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                        <configuration>
+                            <name>configmaster-3</name>
+                            <waitForInterrupt>false</waitForInterrupt>
+                            <waitAfterLaunch>5</waitAfterLaunch>
+                            <arguments>
+                                <argument>java</argument>
+                                <argument>-cp</argument>
+                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
+                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
+                                <argument>${basedir}/conf/it_configmaster_3.yml</argument>
+                            </arguments>
+                            <processLogFile>${project.build.directory}/it_configmaster_3.log</processLogFile>
+                            <healthcheckUrl>http://localhost:12702/corfu</healthcheckUrl>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>logunit-process</id>
                         <phase>pre-integration-test</phase>
                         <goals>
@@ -709,6 +733,26 @@
                                 <argument>${basedir}/conf/it_logunit_2.yml</argument>
                             </arguments>
                             <processLogFile>${project.build.directory}/it_logunit_2.log</processLogFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>logunit3-process</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                        <configuration>
+                            <name>logunit-3</name>
+                            <waitForInterrupt>false</waitForInterrupt>
+                            <waitAfterLaunch>5</waitAfterLaunch>
+                            <arguments>
+                                <argument>java</argument>
+                                <argument>-cp</argument>
+                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
+                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
+                                <argument>${basedir}/conf/it_logunit_3.yml</argument>
+                            </arguments>
+                            <processLogFile>${project.build.directory}/it_logunit_3.log</processLogFile>
                         </configuration>
                     </execution>
                     <execution>
@@ -782,6 +826,24 @@
                 </executions>
             </plugin>
             <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default</id>
+                        <phase>post-integration-test</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+			    <tasks>
+				<delete dir="${project.build.directory}/testFile"/>
+				<delete dir="${project.build.directory}/rocksTestFile"/>
+			    </tasks>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>com.lazerycode.jmeter</groupId>
                 <artifactId>jmeter-maven-plugin</artifactId>
                 <version>1.10.1</version>
@@ -794,23 +856,6 @@
                         </goals>
                         <configuration>
                             <skipTests>${skipTests}</skipTests>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>default</id>
-                        <phase>post-integration-test</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-			    <tasks>
-				<delete dir="${project.build.directory}/testFile"/>
-			    </tasks>
                         </configuration>
                     </execution>
                 </executions>

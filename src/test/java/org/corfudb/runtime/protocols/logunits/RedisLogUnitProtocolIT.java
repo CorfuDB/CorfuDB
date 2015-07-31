@@ -39,7 +39,7 @@ public class RedisLogUnitProtocolIT {
         mlup.reset(0);
         for (int i = 0; i < 100; i++)
         {
-            mlup.write(i, test);
+            mlup.write(i, null, test);
         }
     }
 
@@ -51,10 +51,10 @@ public class RedisLogUnitProtocolIT {
         mlup.reset(0);
         for (int i = 0; i < 100; i++)
         {
-            mlup.write(i, test);
+            mlup.write(i, null, test);
         }
 
-        assertRaises(() -> mlup.write(42, test), OverwriteException.class);
+        assertRaises(() -> mlup.write(42, null, test), OverwriteException.class);
     }
 
     @Test
@@ -65,10 +65,10 @@ public class RedisLogUnitProtocolIT {
         mlup.reset(0);
         for (int i = 0; i < 100; i++)
         {
-            mlup.write(i, test);
+            mlup.write(i, null, test);
         }
 
-        byte[] data = mlup.read(42);
+        byte[] data = mlup.read(42, "fake stream");
         assertArrayEquals(data, test);
     }
 
@@ -80,9 +80,9 @@ public class RedisLogUnitProtocolIT {
         mlup.reset(0);
         for (int i = 0; i < 100; i++)
         {
-            mlup.write(i, test);
+            mlup.write(i, null, test);
         }
 
-        assertRaises(() -> mlup.read(101), UnwrittenException.class);
+        assertRaises(() -> mlup.read(101, "fake stream"), UnwrittenException.class);
     }
 }
