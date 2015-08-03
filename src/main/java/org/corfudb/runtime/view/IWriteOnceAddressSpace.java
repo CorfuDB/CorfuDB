@@ -21,6 +21,7 @@ import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.TrimmedException;
 import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.smr.MultiCommand;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -51,6 +52,10 @@ public interface IWriteOnceAddressSpace {
     }
 
     default void setHintsTxDec(long address, boolean dec) throws UnwrittenException, TrimmedException {
+        throw new UnsupportedOperationException("This address space doesn't support hints");
+    }
+
+    default void setHintsFlatTxn(long address, MultiCommand flattedTxn) throws UnwrittenException, TrimmedException, IOException {
         throw new UnsupportedOperationException("This address space doesn't support hints");
     }
 }

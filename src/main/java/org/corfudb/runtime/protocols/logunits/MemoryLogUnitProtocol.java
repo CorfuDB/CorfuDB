@@ -224,6 +224,17 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         hint.setTxDec(dec);
     }
 
+    @Override
+    public void setHintsFlatTxn(long address, Set<String> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
+        //TODO: Use streams to hint which streams this DeferredTxn belongs to
+        Hints hint = metadataMap.get(address);
+        if (hint == null) {
+            metadataMap.put(address, new Hints());
+            hint = metadataMap.get(address);
+        }
+        hint.setFlatTxn(flatTxn);
+    }
+
     /**
      * Trim the logunit.
      * @param address               The address, exclusive, to prefix-trim to.

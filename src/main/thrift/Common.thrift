@@ -21,11 +21,13 @@ struct ExtntInfo {
 	3: ExtntMarkType flag=ExtntMarkType.EX_FILLED
 }
 typedef string UUID
+typedef binary MultiCommand
 
 struct Hints {
 	1: ErrorCode err,
 	2: map<UUID, i64> nextMap,
-	3: bool txDec
+	3: bool txDec,
+	4: MultiCommand flatTxn,
 }
 
 typedef binary LogPayload

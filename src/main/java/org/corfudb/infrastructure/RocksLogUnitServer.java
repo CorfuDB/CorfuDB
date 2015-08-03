@@ -367,7 +367,7 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
     }
 
     private Hints genHint(ErrorCode err) {
-        return new Hints(err, new HashMap<String, Long>(), false);
+        return new Hints(err, new HashMap<String, Long>(), false, null);
     }
 
     /* (non-Javadoc)

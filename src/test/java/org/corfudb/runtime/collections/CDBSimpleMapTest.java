@@ -5,6 +5,7 @@ import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
+import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.*;
 import org.junit.Before;
 import org.junit.Test;
@@ -83,6 +84,7 @@ public class CDBSimpleMapTest {
         });
         ITimestamp txStamp = tx.propose();
         testMap.getSMREngine().sync(txStamp);
+        assert(instance.getAddressSpace().readHints(((SimpleTimestamp)txStamp).address).isSetFlatTxn());
         assertThat(testMap.get(10))
                 .isEqualTo(1000);
     }
@@ -106,6 +108,8 @@ public class CDBSimpleMapTest {
 
         ITimestamp txStamp = tx.propose();
         testMap.getSMREngine().sync(txStamp);
+        // Make sure that the hint has been committed
+        assert(instance.getAddressSpace().readHints(((SimpleTimestamp) txStamp).address).isSetFlatTxn());
         testMap2.getSMREngine().sync(txStamp);
         assertThat(testMap.get(10))
                 .isEqualTo(1000);

@@ -5,6 +5,7 @@ import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -13,9 +14,11 @@ import java.util.concurrent.CompletableFuture;
  * It passes through SMR operations directly to the underlying object,
  * bypassing the log.
  *
+ * Also buffers commands, for collecting commands to write into the hint section of Logging Units.
+ *
  * Created by mwei on 5/5/15.
  */
-public class PassThroughSMREngine<T> implements ISMREngine<T> {
+public class PassThroughSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> {
 
     class PassThroughSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
@@ -37,6 +40,7 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
     ITimestamp ts;
     ICorfuDBInstance instance;
     UUID streamID;
+    ArrayList<ISMREngineCommand> commandBuffer;
 
     public PassThroughSMREngine(T object, ITimestamp ts, ICorfuDBInstance instance, UUID streamID)
     {
@@ -44,6 +48,7 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
         this.ts = ts;
         this.instance = instance;
         this.streamID = streamID;
+        this.commandBuffer = new ArrayList<ISMREngineCommand>();
     }
 
     /**
@@ -109,6 +114,7 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
         {
             completion.complete(result);
         }
+        commandBuffer.add(command);
         return ts;
     }
 
@@ -151,5 +157,10 @@ public class PassThroughSMREngine<T> implements ISMREngine<T> {
     @Override
     public <R> R read(ISMREngineCommand<T, R> command) {
         return command.apply(underlyingObject, new PassThroughSMREngineOptions<>());
+    }
+
+    @Override
+    public ArrayList<ISMREngineCommand> getCommandBuffer() {
+        return commandBuffer;
     }
 }

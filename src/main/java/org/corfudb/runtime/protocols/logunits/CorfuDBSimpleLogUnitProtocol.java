@@ -340,6 +340,39 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
         }
     }
 
+    @Override
+    public void setHintsFlatTxn(long address, Set<String> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
+        SimpleLogUnitService.Client client = thriftPool.getResource();
+        boolean success = false;
+        boolean broken = false;
+        try {
+            ArrayList<Integer> epochlist = new ArrayList<Integer>();
+            epochlist.add(epoch.intValue());
+            ErrorCode ec = client.setHintsFlatTxn(new UnitServerHdr(epochlist, address, streams), ByteBuffer.wrap(flatTxn));
+            thriftPool.returnResourceObject(client);
+            success = true;
+            if (ec.equals(ErrorCode.ERR_TRIMMED)) {
+                throw new TrimmedException("Trim error", address);
+            }
+            else if(ec.equals(ErrorCode.ERR_STALEEPOCH))
+            {
+                throw new NetworkException("Writing to log unit in wrong epoch", this, address, false);
+            }
+        }
+        catch (TException e)
+        {
+            broken = true;
+            thriftPool.returnBrokenResource(client);
+            throw new NetworkException("Error writing to log unit: " + e.getMessage(), this, address, true);
+        }
+        finally {
+            if (!success && !broken)
+            {
+                thriftPool.returnResourceObject(client);
+            }
+        }
+    }
+
     public void trim(long address)
     throws NetworkException
     {

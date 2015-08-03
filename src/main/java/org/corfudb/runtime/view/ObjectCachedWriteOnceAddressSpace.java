@@ -22,20 +22,16 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 
-import java.util.Collections;
-import java.util.List;
+import java.io.*;
+import java.util.*;
 
+import org.corfudb.runtime.smr.MultiCommand;
 import org.corfudb.runtime.smr.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Serializable;
-import java.io.IOException;
-
-import java.util.Set;
 import java.util.function.Supplier;
 
-import java.util.UUID;
 /**
  * This view implements a cached write once address space
  *
@@ -285,6 +281,44 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
             {
                 log.warn("Unable to read, requesting new view.", e);
                 client.invalidateViewAndWait(e);
+            }
+        }
+    }
+
+    @Override
+    public void setHintsFlatTxn(long address, MultiCommand flatTxn) throws UnwrittenException, TrimmedException, IOException {
+        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
+        {
+            try (ObjectOutput out = new ObjectOutputStream(bs))
+            {
+                out.writeObject(flatTxn);
+
+                while (true)
+                {
+                    try {
+                        Pair<List<IServerProtocol>, Integer> logInfo = getChain(address);
+                        List<IServerProtocol> chain = logInfo.first;
+
+                        long mappedAddress = address/logInfo.second;
+                        // TODO: right now, only the last node in a chain of replication contains the in-memory metadata!!!
+                        IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
+                        // Convert the stream set to a String set
+                        Set<String> streams = new HashSet<String>();
+                        if (flatTxn.getStreams() != null) {
+                            Iterator<UUID> it = flatTxn.getStreams().iterator();
+                            while (it.hasNext()) {
+                                streams.add(it.next().toString());
+                            }
+                        }
+                        wolu.setHintsFlatTxn(mappedAddress, streams, bs.toByteArray());
+                        return;
+                    }
+                    catch (NetworkException e)
+                    {
+                        log.warn("Unable to read, requesting new view.", e);
+                        client.invalidateViewAndWait(e);
+                    }
+                }
             }
         }
     }

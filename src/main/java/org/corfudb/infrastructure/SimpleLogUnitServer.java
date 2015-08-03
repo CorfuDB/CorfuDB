@@ -560,7 +560,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     }
 
     private Hints genHint(ErrorCode err) {
-        return new Hints(err, new HashMap<String, Long>(), false);
+        return new Hints(err, new HashMap<String, Long>(), false, null);
     }
 
 	/* (non-Javadoc)
@@ -685,6 +685,41 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             hintMap.put(hdr.off, curHints);
         }
         curHints.setTxDec(dec);
+        // TODO: persist to disk?
+        return ErrorCode.OK;
+    }
+
+    @Override
+    synchronized public ErrorCode setHintsFlatTxn(UnitServerHdr hdr, ByteBuffer flatTxn) throws org.apache.thrift.TException {
+        if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return ErrorCode.ERR_STALEEPOCH;
+        log.info("setHintsFlatTxn({})", hdr.off);
+
+        mapInfo minf = new mapInfo(hdr.off);
+        switch (minf.et) {
+            case EX_FILLED: break;
+            case EX_TRIMMED: return ErrorCode.ERR_TRIMMED;
+            case EX_EMPTY: return ErrorCode.ERR_UNWRITTEN;
+            case EX_SKIP: return ErrorCode.ERR_UNWRITTEN;
+            default: log.error("internal error in getExtntInfoLogStore"); return ErrorCode.ERR_BADPARAM;
+        }
+
+        Hints curHints = hintMap.get(hdr.off);
+        if (curHints == null) {
+            curHints = new Hints();
+            hintMap.put(hdr.off, curHints);
+        }
+        curHints.setFlatTxn(flatTxn);
+
+        log.info("streams in this flattxn: {}", hdr.streamID);
+        if (hdr.streamID == null)
+            return ErrorCode.OK;
+        if (!curHints.isSetNextMap() || curHints.getNextMap() == null) {
+            HashMap<String, Long> newNext = new HashMap<String, Long>();
+            for (String stream : hdr.streamID) {
+                newNext.put(stream, -1L);
+            }
+            curHints.setNextMap(newNext);
+        }
         // TODO: persist to disk?
         return ErrorCode.OK;
     }

@@ -20,6 +20,7 @@ import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -63,6 +64,10 @@ public interface IWriteOnceLogUnit extends IServerProtocol {
     }
 
     default void setHintsTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
+        throw new UnsupportedOperationException("Log unit doesn't support hints updates");
+    }
+
+    default void setHintsFlatTxn(long address, Set<String> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
         throw new UnsupportedOperationException("Log unit doesn't support hints updates");
     }
 }
