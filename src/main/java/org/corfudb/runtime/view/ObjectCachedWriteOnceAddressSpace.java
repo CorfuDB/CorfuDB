@@ -126,8 +126,8 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
                 for (IServerProtocol unit : chain)
                 {
                     ((IWriteOnceLogUnit)unit).write(mappedAddress, Collections.singleton(getView.get().getUUID().toString()), data);
-                    return;
                 }
+                return;
             }
             catch (NetworkException e)
             {
