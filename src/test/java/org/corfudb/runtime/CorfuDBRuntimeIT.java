@@ -110,6 +110,7 @@ public class CorfuDBRuntimeIT {
         HashMap<String, Object> layout = new HashMap<String, Object>();
         LinkedList<HashMap<String, Object>> segments = new LinkedList<HashMap<String, Object>>();
         HashMap<String, Object> segment = new HashMap<String, Object>();
+        segment.put("replication", "cdbcr");
         segment.put("start", 0L);
         segment.put("sealed", 0L);
         LinkedList<HashMap<String, Object>> groups = new LinkedList<HashMap<String, Object>>();
@@ -210,6 +211,7 @@ public class CorfuDBRuntimeIT {
         HashMap<String, Object> layout = new HashMap<String, Object>();
         LinkedList<HashMap<String, Object>> segments = new LinkedList<HashMap<String, Object>>();
         HashMap<String, Object> segment = new HashMap<String, Object>();
+        segment.put("replication", "cdbcr");
         segment.put("start", 0L);
         segment.put("sealed", 0L);
         LinkedList<HashMap<String, Object>> groups = new LinkedList<HashMap<String, Object>>();

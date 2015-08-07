@@ -23,6 +23,7 @@ import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import java.util.Collections;
 import java.util.List;
 
+import org.corfudb.runtime.protocols.replications.IReplicationProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,16 +97,9 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
             try {
                 //TODO: handle multiple segments
                 CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                int mod = segments.getGroups().size();
-                int groupnum =(int) (address % mod);
-                List<IServerProtocol> chain = segments.getGroups().get(groupnum);
-                //writes have to go to chain in order
-                long mappedAddress = address/mod;
-                for (IServerProtocol unit : chain)
-                {
-                    ((IWriteOnceLogUnit)unit).write(mappedAddress, Collections.singleton(logID.toString()), data);
-                    return;
-                }
+                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+                replicationProtocol.write(address, Collections.singleton(getView.get().getUUID().toString()), data);
+                return;
             }
             catch (NetworkException e)
             {
@@ -130,15 +124,10 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 }
 
                 //TODO: handle multiple segments
-                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                int mod = segments.getGroups().size();
-                int groupnum =(int) (address % mod);
-                long mappedAddress = address/mod;
 
-                List<IServerProtocol> chain = segments.getGroups().get(groupnum);
-                //reads have to come from last unit in chain
-                IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                data = wolu.read(mappedAddress, logID.toString());
+                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+                data = replicationProtocol.read(address, getView.get().getUUID().toString());
                 AddressSpaceCache.put(getView.get().getUUID(), address, data);
                 return data;
             }

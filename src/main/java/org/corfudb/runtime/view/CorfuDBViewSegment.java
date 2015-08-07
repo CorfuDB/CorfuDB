@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.view;
 
+import org.corfudb.runtime.protocols.replications.IReplicationProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,19 +33,25 @@ import java.util.List;
 public class CorfuDBViewSegment {
     private static final Logger log = LoggerFactory.getLogger(CorfuDBViewSegment.class);
 
-    private List<List<IServerProtocol>> groups;
+    private IReplicationProtocol replicationProtocol;
     private long start;
     private long sealed;
 
-    public CorfuDBViewSegment(long start, long sealed, List<List<IServerProtocol>> groups) {
-        this.groups = groups;
+    public CorfuDBViewSegment(long start, long sealed, IReplicationProtocol replicationProtocol) {
+        this.replicationProtocol = replicationProtocol;
         this.sealed = sealed;
         this.start = start;
     }
 
-    public List<List<IServerProtocol>> getGroups() {
-        return groups;
+    public IReplicationProtocol getReplicationProtocol() {
+        return replicationProtocol;
     }
+
+    //TODO: Want to replace getGroups with this function, but need to figure out the semantics of getGroups first.
+    public List<IServerProtocol> getLoggingUnits() { return replicationProtocol.getLoggingUnits(); }
+
+    public List<List<IServerProtocol>> getGroups() {
+        return replicationProtocol.getGroups(); }
 
     public long getStart() {
         return start;

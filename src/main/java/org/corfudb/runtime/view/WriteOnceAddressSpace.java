@@ -19,6 +19,7 @@ import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.protocols.replications.IReplicationProtocol;
 import org.corfudb.runtime.smr.MultiCommand;
 import org.corfudb.runtime.smr.Pair;
 import org.corfudb.util.*;
@@ -74,14 +75,6 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         };
     }
 
-    private Pair<List<IServerProtocol>, Integer> getChain(long address) {
-        //TODO: handle multiple segments
-        CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-        int mod = segments.getGroups().size();
-        int groupnum =(int) (address % mod);
-        return new Pair(segments.getGroups().get(groupnum), mod);
-    }
-
     public void write(long address, Serializable s)
         throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
     {
@@ -101,17 +94,14 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         while (true)
         {
             try {
-                Pair<List<IServerProtocol>, Integer> logInfo = getChain(address);
-                List<IServerProtocol> chain = logInfo.first;
-                //writes have to go to chain in order
-                long mappedAddress = address/logInfo.second;
+                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+
                 Set<String> streams = null;
                 if (logID != null)
                     streams = Collections.singleton(logID.toString());
-                for (IServerProtocol unit : chain)
-                {
-                    ((IWriteOnceLogUnit)unit).write(mappedAddress, streams, data);
-                }
+
+                replicationProtocol.write(address, streams, data);
                 return;
             }
             catch (NetworkException e)
@@ -140,15 +130,12 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         while (true)
         {
             try {
-                Pair<List<IServerProtocol>, Integer> logInfo = getChain(address);
-                List<IServerProtocol> chain = logInfo.first;
-                //writes have to go to chain in order
-                long mappedAddress = address/logInfo.second;
-                //reads have to come from last unit in chain
-                IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
+                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+
                 if (logID != null)
-                    return wolu.read(mappedAddress, logID.toString());
-                return wolu.read(mappedAddress, null);
+                    return replicationProtocol.read(address, logID.toString());
+                return replicationProtocol.read(address, null);
             }
             catch (NetworkException e)
             {
@@ -180,13 +167,10 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         while (true)
         {
             try {
-                Pair<List<IServerProtocol>, Integer> logInfo = getChain(address);
-                List<IServerProtocol> chain = logInfo.first;
-                //writes have to go to chain in order
-                long mappedAddress = address/logInfo.second;
-                //reads have to come from last unit in chain
-                IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                return wolu.readHints(mappedAddress);
+                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+
+                return replicationProtocol.readHints(address);
             }
             catch (NetworkException e)
             {
@@ -205,13 +189,9 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         while (true)
         {
             try {
-                Pair<List<IServerProtocol>, Integer> logInfo = getChain(address);
-                List<IServerProtocol> chain = logInfo.first;
-
-                long mappedAddress = address/logInfo.second;
-                // TODO: right now, only the last node in a chain of replication contains the in-memory metadata!!!
-                IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                wolu.setHintsNext(mappedAddress, stream, nextOffset);
+                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+                replicationProtocol.setHintsNext(address, stream, nextOffset);
                 return;
             }
             catch (NetworkException e)
@@ -231,13 +211,9 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         while (true)
         {
             try {
-                Pair<List<IServerProtocol>, Integer> logInfo = getChain(address);
-                List<IServerProtocol> chain = logInfo.first;
-
-                long mappedAddress = address/logInfo.second;
-                // TODO: right now, only the last node in a chain of replication contains the in-memory metadata!!!
-                IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                wolu.setHintsTxDec(mappedAddress, dec);
+                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+                replicationProtocol.setHintsTxDec(address, dec);
                 return;
             }
             catch (NetworkException e)
@@ -259,21 +235,9 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
                 while (true)
                 {
                     try {
-                        Pair<List<IServerProtocol>, Integer> logInfo = getChain(address);
-                        List<IServerProtocol> chain = logInfo.first;
-
-                        long mappedAddress = address/logInfo.second;
-                        // TODO: right now, only the last node in a chain of replication contains the in-memory metadata!!!
-                        IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-                        // Convert the stream set to a String set
-                        Set<String> streams = new HashSet<String>();
-                        if (flatTxn.getStreams() != null) {
-                            Iterator<UUID> it = flatTxn.getStreams().iterator();
-                            while (it.hasNext()) {
-                                streams.add(it.next().toString());
-                            }
-                        }
-                        wolu.setHintsFlatTxn(mappedAddress, streams, bs.toByteArray());
+                        CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+                        IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+                        replicationProtocol.setHintsFlatTxn(address, flatTxn);
                         return;
                     }
                     catch (NetworkException e)

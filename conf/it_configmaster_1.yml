@@ -20,7 +20,8 @@ configmasters:
     - "cdbcm://localhost:12700"
 layout:
     segments:
-        - start: 0
+        - replication: "cdbcr"
+          start: 0
           sealed: -1
           groups:
               - nodes:
