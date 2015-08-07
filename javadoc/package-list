@@ -9,6 +9,7 @@ org.corfudb.runtime.gossip
 org.corfudb.runtime.protocols
 org.corfudb.runtime.protocols.configmasters
 org.corfudb.runtime.protocols.logunits
+org.corfudb.runtime.protocols.replications
 org.corfudb.runtime.protocols.sequencers
 org.corfudb.runtime.smr
 org.corfudb.runtime.smr.legacy
