@@ -1,7 +1,9 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.HoleEncounteredException;
 import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.entries.CorfuDBEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
@@ -16,6 +18,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
@@ -31,7 +34,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     public ITimestamp streamPointer;
     ITimestamp lastProposal;
     Class<T> type;
-    HashMap<ITimestamp, CompletableFuture> completionTable;
+    ConcurrentHashMap<ITimestamp, CompletableFuture> completionTable;
     HashSet<ITimestamp> localTable;
     Map<UUID, ISMREngine> cachedEngines = Collections.synchronizedMap(new WeakHashMap<>());
 
@@ -62,7 +65,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                                 + stream.getCurrentPosition() + ")");
             }
             streamPointer = stream.getCurrentPosition();
-            completionTable = new HashMap<ITimestamp, CompletableFuture>();
+            completionTable = new ConcurrentHashMap<ITimestamp, CompletableFuture>();
             localTable = new HashSet<ITimestamp>();
 
             underlyingObject = type
@@ -165,6 +168,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                             ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
                             ITimestamp entryTS = entry.getTimestamp();
                             CompletableFuture<R> completion = completionTable.getOrDefault(entryTS, null);
+                            if (completion == null) { log.info("Completion @ {} is null", entryTS); }
                             completionTable.remove(entryTS);
                             if (entry instanceof MultiCommand)
                             {
@@ -177,7 +181,12 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                             }
                         }
                     }
-                } catch (Exception e) {
+                }
+                catch (HoleEncounteredException hle)
+                {
+                    log.warn("hole encountered, retrying sync to {} @ {}", stream.getCurrentPosition(), ts);
+                }
+                catch (Exception e) {
                     log.error("exception during sync@{}", stream.getCurrentPosition(), e);
                 }
                 if (entry != null)
@@ -224,15 +233,21 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             return streamPointer;
         }
         try {
-            ITimestamp t = stream.append(command);
+            //ITimestamp t = stream.append(command);
+            //if (completion != null) { completionTable.put(t, completion); }
+            ITimestamp t = stream.reserve(1)[0];
             if (completion != null) { completionTable.put(t, completion); }
-            lastProposal = t;
+            stream.write(t, command);
+            lastProposal = t; //TODO: fix thread safety?
             return t;
+        }
+        catch (OverwriteException oe)
+        {
+            log.warn("Warning, propose resulted in overwrite @ {}, reproposing.", oe.address);
+            return propose(command, completion, readOnly);
         }
         catch (Exception e)
         {
-            //well, propose is technically not reliable, so we can just silently drop
-            //any exceptions.
             log.warn("Exception proposing new command!", e);
             return null;
         }

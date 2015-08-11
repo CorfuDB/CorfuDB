@@ -6,6 +6,8 @@ import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ObjectInputStream;
 import java.io.Serializable;
@@ -21,6 +23,8 @@ import java.util.function.Function;
  * Created by mwei on 5/1/15.
  */
 public interface ICorfuDBObject<U> extends Serializable {
+
+    public static final Logger log = LoggerFactory.getLogger(ICorfuDBObject.class);
 
     Map<ICorfuDBObject, ICorfuDBInstance> instanceMap = Collections.synchronizedMap(new WeakHashMap<>());
     Map<ICorfuDBObject, ISMREngine> engineMap = Collections.synchronizedMap(new WeakHashMap<>());
@@ -148,6 +152,14 @@ public interface ICorfuDBObject<U> extends Serializable {
         ISMREngine<U> e = getSMREngine();
         ITimestamp proposal = e.propose(command, o);
         if (!isAutomaticallyPlayedBack()) {e.sync(proposal);}
+        if (proposal.compareTo(getSMREngine().getStreamPointer()) > 0)
+        {
+            log.error("mutator helper sync exited with pointer @ {} but proposal was @ {}", getSMREngine().getStreamPointer(), proposal);
+        }
+        if (!o.isDone())
+        {
+            log.error("Calling join on a completable future that hasn't completed! @ {} we are sync'd to {}", proposal, getSMREngine().getStreamPointer());
+        }
         return o.join();
     }
 

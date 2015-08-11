@@ -796,8 +796,9 @@
 			<testFilesIncluded>
 			<jMeterTestFile>rockslogunit.jmx</jMeterTestFile>
 			<jMeterTestFile>logunit.jmx</jMeterTestFile>
+            <jMeterTestFile>streamingsequencer.jmx</jMeterTestFile>
 			</testFilesIncluded>
-                         <!--   <skipTests>${skipTests}</skipTests> -->
+                           <skipTests>${skipTests}</skipTests>
                         </configuration>
                     </execution>
                 </executions>
