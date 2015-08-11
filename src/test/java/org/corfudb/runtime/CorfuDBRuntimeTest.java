@@ -105,6 +105,7 @@ public class CorfuDBRuntimeTest {
         HashMap<String,Object> layout = new HashMap<String,Object>();
         LinkedList<HashMap<String,Object>> segments = new LinkedList<HashMap<String,Object>>();
         HashMap<String,Object> segment = new HashMap<String,Object>();
+        segment.put("replication", "cdbcr");
         segment.put("start", 0L);
         segment.put("sealed", 0L);
         LinkedList<HashMap<String,Object>> groups = new LinkedList<HashMap<String,Object>>();
@@ -130,9 +131,9 @@ public class CorfuDBRuntimeTest {
         WriteOnceAddressSpace woas = new WriteOnceAddressSpace(runtime);
         woas.write(s.getNext(), "Hello World".getBytes());
 
-        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(0))
+        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(0, "fake stream"))
                 .isEqualTo("Hello World".getBytes());
-        assertThat(MemoryLogUnitProtocol.memoryUnits.get(1).read(0))
+        assertThat(MemoryLogUnitProtocol.memoryUnits.get(1).read(0, "fake stream"))
                 .isEqualTo("Hello World".getBytes());
 
         /* cause a unit to fail */
@@ -140,7 +141,7 @@ public class CorfuDBRuntimeTest {
         woas.write(s.getNext(), "Hello World 2".getBytes());
 
         /* make sure that it is written to unit 0 */
-        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(1))
+        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(1, "fake stream"))
                 .isEqualTo("Hello World 2".getBytes());
 
         /* make sure that reads work */

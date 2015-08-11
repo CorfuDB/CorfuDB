@@ -8,6 +8,7 @@ import org.corfudb.runtime.protocols.IServerProtocol;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -152,7 +153,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
      * @throws NetworkException         If there is a network problem (not thrown by memory implementation).
      */
     @Override
-    public void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException {
+    public void write(long address, Set<String> streams, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException {
         if (simFailure)
         {
             throw new NetworkException("Unit in simulated failure mode!", this, address, true);
@@ -176,7 +177,7 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
      * @throws NetworkException     If there is a network problem (not thrown by memory implementation).
      */
     @Override
-    public byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException {
+    public byte[] read(long address, String stream) throws UnwrittenException, TrimmedException, NetworkException {
         if (simFailure)
         {
             throw new NetworkException("Unit in simulated failure mode!", this, address, false);
@@ -221,6 +222,17 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
             hint = metadataMap.get(address);
         }
         hint.setTxDec(dec);
+    }
+
+    @Override
+    public void setHintsFlatTxn(long address, Set<String> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
+        //TODO: Use streams to hint which streams this DeferredTxn belongs to
+        Hints hint = metadataMap.get(address);
+        if (hint == null) {
+            metadataMap.put(address, new Hints());
+            hint = metadataMap.get(address);
+        }
+        hint.setFlatTxn(flatTxn);
     }
 
     /**

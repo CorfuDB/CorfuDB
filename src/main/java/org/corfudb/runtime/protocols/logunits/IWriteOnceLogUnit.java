@@ -20,6 +20,10 @@ import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
 /**
  * This interface represents the simplest type of stream unit.
  * Write once stream units provide these simple features:
@@ -36,8 +40,8 @@ import org.corfudb.runtime.protocols.IServerProtocol;
  */
 
 public interface IWriteOnceLogUnit extends IServerProtocol {
-    void write(long address, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
-    byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException;
+    void write(long address, Set<String> streams, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
+    byte[] read(long address, String stream) throws UnwrittenException, TrimmedException, NetworkException;
     void trim(long address) throws NetworkException;
 
     /**
@@ -60,6 +64,10 @@ public interface IWriteOnceLogUnit extends IServerProtocol {
     }
 
     default void setHintsTxDec(long address, boolean dec) throws TrimmedException, NetworkException {
+        throw new UnsupportedOperationException("Log unit doesn't support hints updates");
+    }
+
+    default void setHintsFlatTxn(long address, Set<String> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
         throw new UnsupportedOperationException("Log unit doesn't support hints updates");
     }
 }

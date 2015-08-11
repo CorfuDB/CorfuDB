@@ -203,6 +203,7 @@ public class CorfuDBRuntime implements AutoCloseable {
             HashMap<String,Object> layout = new HashMap<String,Object>();
             LinkedList<HashMap<String,Object>> segments = new LinkedList<HashMap<String,Object>>();
             HashMap<String,Object> segment = new HashMap<String,Object>();
+            segment.put("replication", "cdbcr");
             segment.put("start", 0L);
             segment.put("sealed", 0L);
             LinkedList<HashMap<String,Object>> groups = new LinkedList<HashMap<String,Object>>();
@@ -410,7 +411,7 @@ public class CorfuDBRuntime implements AutoCloseable {
                             }
                             catch (IOException ie)
                             {
-                                log.warn("Error retrieving view: " + ie.getMessage());
+                                log.warn("Error retrieving view at " + configurationString + ": " + ie.getMessage());
                                 if (currentView != null) {currentView.invalidate();}
                             }
                             finally {

@@ -18,7 +18,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Created by mwei on 6/1/15.
  */
-public class BufferedSMREngine<T> implements ISMREngine<T> {
+public class BufferedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> {
 
     private final Logger log = LoggerFactory.getLogger(BufferedSMREngine.class);
 
@@ -237,6 +237,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T> {
         return ts;
     }
 
+    @Override
     public ArrayList<ISMREngineCommand> getCommandBuffer() {
         return commandBuffer;
     }

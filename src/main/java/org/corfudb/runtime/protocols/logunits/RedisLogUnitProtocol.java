@@ -24,10 +24,7 @@ import redis.clients.jedis.BinaryJedis;
 import redis.clients.jedis.Transaction;
 import redis.clients.jedis.Response;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -111,7 +108,7 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     }
 
     @SuppressWarnings("unchecked")
-    public void write(long address, byte[] data)
+    public void write(long address, Set<String> streams, byte[] data)
     throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException
     {
         try (BinaryJedis jedis = pool.getResource())
@@ -136,7 +133,7 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         }
     }
 
-    public byte[] read(long address) throws UnwrittenException, TrimmedException, NetworkException
+    public byte[] read(long address, String stream) throws UnwrittenException, TrimmedException, NetworkException
     {
         try (BinaryJedis jedis = pool.getResource())
         {

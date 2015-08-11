@@ -1,17 +1,19 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.stream.SimpleTimestamp;
-import org.corfudb.runtime.view.*;
+import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * A deferred transaction gets resolved at runtime:
@@ -26,12 +28,18 @@ import java.util.concurrent.CompletableFuture;
  * Created by mwei on 5/3/15.
  */
 public class DeferredTransaction implements ITransaction, IStreamEntry, Serializable {
+    private Logger log = LoggerFactory.getLogger(DeferredTransaction.class);
 
     ITransactionCommand transaction;
     List<UUID> streamList;
     ITimestamp timestamp;
     transient ICorfuDBInstance instance;
     transient ISMREngine executingEngine;
+
+    // This is used to collect the Hint info
+    transient MultiCommand flattenedCommands;
+    transient HashMap<UUID, IBufferedSMREngine> bufferedSMRMap;
+    transient ArrayList<IBufferedSMREngine> passThroughEngines;
 
     class DeferredTransactionOptions implements ITransactionOptions
     {
@@ -45,6 +53,8 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     {
         streamList = null;
         this.instance = instance;
+        bufferedSMRMap = new HashMap<UUID, IBufferedSMREngine>();
+        passThroughEngines = new ArrayList<IBufferedSMREngine>();
     }
 
     /**
@@ -59,20 +69,23 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
         if (streamID.equals(executingEngine.getStreamID()))
         {
-            return new PassThroughSMREngine(executingEngine.getObject(), timestamp, instance, streamID);
+            PassThroughSMREngine engine = new PassThroughSMREngine(executingEngine.getObject(), timestamp, instance, streamID);
+            passThroughEngines.add(engine);
+            return engine;
         }
         else
         {
-            ISMREngine engine = null;
+            IBufferedSMREngine engine = bufferedSMRMap.get(streamID);
             // TODO: Do we even need to consider other engines??
-            if (executingEngine instanceof SimpleSMREngine) {
-                engine = (ISMREngine) ((SimpleSMREngine) executingEngine).getCachedEngines().get(streamID);
+            if (engine == null && executingEngine instanceof SimpleSMREngine) {
+                engine = (IBufferedSMREngine) ((SimpleSMREngine) executingEngine).getCachedEngines().get(streamID);
                 if (engine == null) {
                     IStream sTemp = instance.openStream(streamID);
                     engine = new CachedSMREngine(sTemp, objClass, timestamp);
                     engine.sync(timestamp);
                     ((SimpleSMREngine) executingEngine).addCachedEngine(streamID, engine);
                 }
+                bufferedSMRMap.put(streamID, engine);
             }
             return engine;
         }
@@ -127,10 +140,57 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
      */
     @Override
     public void executeTransaction(ISMREngine engine) {
-        ITransactionCommand command = getTransaction();
-        executingEngine = engine;
-        try (TransactionalContext tx = new TransactionalContext(this)) {
-            command.apply(new DeferredTransactionOptions());
+        Hints hint = null;
+        try {
+            hint = instance.getAddressSpace().readHints(((SimpleTimestamp) timestamp).address);
+        } catch (Exception e) {
+            log.error("Exception in reading metadata: {}", e);
+        }
+
+        if (hint == null || !hint.isSetFlatTxn()) {
+            ITransactionCommand command = getTransaction();
+            executingEngine = engine;
+            try (TransactionalContext tx = new TransactionalContext(this)) {
+                command.apply(new DeferredTransactionOptions());
+            }
+            // Collect the commands and write to Hints section.
+            HashMap<UUID, ISMREngineCommand[]> multicommandMap = new HashMap<UUID, ISMREngineCommand[]>();
+
+            Iterator<UUID> streamIterator = bufferedSMRMap.keySet().iterator();
+            while (streamIterator.hasNext()) {
+                UUID stream = streamIterator.next();
+                IBufferedSMREngine eng = bufferedSMRMap.get(stream);
+                multicommandMap.put(stream,
+                        (ISMREngineCommand[]) eng.getCommandBuffer().toArray(new ISMREngineCommand[1]));
+            }
+
+            Iterator<IBufferedSMREngine> passThroughIterator = passThroughEngines.iterator();
+            ArrayList<ISMREngineCommand> thisStreamCommands = new ArrayList<>();
+            while (passThroughIterator.hasNext()) {
+                IBufferedSMREngine eng = passThroughIterator.next();
+                thisStreamCommands.addAll(eng.getCommandBuffer());
+            }
+            multicommandMap.put(executingEngine.getStreamID(), thisStreamCommands.toArray(new ISMREngineCommand[1]));
+
+            flattenedCommands = new MultiCommand(multicommandMap);
+            try {
+                instance.getAddressSpace().setHintsFlatTxn(((SimpleTimestamp) timestamp).address, flattenedCommands);
+            } catch (Exception e) {
+                log.error("Exception trying to write DeferredTxn flat transaction {}", e);
+            }
+        } else {
+            MultiCommand mc = null;
+            try {
+                ByteArrayInputStream bais = new ByteArrayInputStream(hint.getFlatTxn());
+                ObjectInputStream ois = new ObjectInputStream(bais);
+                mc = (MultiCommand) ois.readObject();
+            } catch (Exception e) {
+                log.error("Got exception while deserializing flattened Txn: {}", e);
+            }
+            // Apply the multicommands
+            PassThroughSMREngine applyEngine =
+                    new PassThroughSMREngine(engine.getObject(), engine.check(), instance, engine.getStreamID());
+            applyEngine.propose(mc, null, false);
         }
     }
 

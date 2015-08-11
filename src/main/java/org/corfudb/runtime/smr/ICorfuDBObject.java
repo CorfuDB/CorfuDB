@@ -152,14 +152,6 @@ public interface ICorfuDBObject<U> extends Serializable {
         ISMREngine<U> e = getSMREngine();
         ITimestamp proposal = e.propose(command, o);
         if (!isAutomaticallyPlayedBack()) {e.sync(proposal);}
-        if (proposal.compareTo(getSMREngine().getStreamPointer()) > 0)
-        {
-            log.error("mutator helper sync exited with pointer @ {} but proposal was @ {}", getSMREngine().getStreamPointer(), proposal);
-        }
-        if (!o.isDone())
-        {
-            log.error("Calling join on a completable future that hasn't completed! @ {} we are sync'd to {}", proposal, getSMREngine().getStreamPointer());
-        }
         return o.join();
     }
 

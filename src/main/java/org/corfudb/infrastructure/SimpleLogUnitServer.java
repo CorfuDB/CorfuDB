@@ -17,6 +17,7 @@
 // implement a cyclic stream store: logically infinite stream sequence mapped onto a UNICAPACITY array of fixed-entrys
 package org.corfudb.infrastructure;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -334,7 +335,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 	}
 
-	public ErrorCode appendExtntLogStore(long logOffset, List<ByteBuffer> wbufs, ExtntMarkType et)
+	public ErrorCode appendExtntLogStore(long logOffset, Set<String> streams, List<ByteBuffer> wbufs, ExtntMarkType et)
         throws IOException {
         //TODO: figure out trim story..
 		//if (logOffset < CM.getTrimmark())             return ErrorCode.ERR_OVERWRITE;
@@ -355,6 +356,23 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 			return ErrorCode.ERR_FULL;
 		}
 		setExtntInfo(logOffset, physOffset, wbufs.size(), et);
+        if (streams == null)
+            return ErrorCode.OK;
+        Hints curHints = hintMap.get(logOffset);
+        if (curHints == null) {
+            curHints = new Hints();
+            hintMap.put(logOffset, curHints);
+        }
+        if (!curHints.isSetNextMap() || curHints.getNextMap() == null) {
+            HashMap<String, Long> newNext = new HashMap<String, Long>();
+            for (String stream : streams) {
+                newNext.put(stream, -1L);
+            }
+            curHints.setNextMap(newNext);
+        }
+        else {
+            throw new RuntimeException("extnt at address " + logOffset + " already had nextMap associated in its hint?");
+        }
 		return ErrorCode.OK;
 	}
 
@@ -450,11 +468,11 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         TMultiplexedProtocol mprot = new TMultiplexedProtocol(prot, "CONFIG");
 
         SimpleLogUnitConfigService.Client cl = new SimpleLogUnitConfigService.Client(mprot);
-        stream.info("established connection with rebuild-node {}", rebuildnode);
+        log.info("established connection with rebuild-node {}", rebuildnode);
         SimpleLogUnitWrap wr = null;
         try {
             wr = cl.rebuild();
-            stream.info("obtained mirror lowwater={} highwater={} trimmark={} ctnt-length={}",
+            log.info("obtained mirror lowwater={} highwater={} trimmark={} ctnt-length={}",
                     wr.getLowwater(), wr.getHighwater(), wr.getTrimmark(), wr.getCtntSize());
             initLogStore(wr.getBmap(), UNITCAPACITY);
             lowwater = highwater = wr.getLowwater();
@@ -462,7 +480,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             ckmark = (int)wr.getCkmark();
             put(wr.getCtnt());
             if (highwater != wr.getHighwater())
-                stream.error("rebuildfromnode lowwater={} highwater={} received ({},{})",
+                log.error("rebuildfromnode lowwater={} highwater={} received ({},{})",
                         lowwater, highwater,
                         wr.getLowwater(), wr.getHighwater());
         } catch (TException e) {
@@ -510,7 +528,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 		log.debug("write({} size={} marktype={})", hdr.off, ctnt.size(), et);
         try {
-            ErrorCode ec = appendExtntLogStore(hdr.off, ctnt, et);
+            ErrorCode ec = appendExtntLogStore(hdr.off, hdr.streamID, ctnt, et);
             highWatermark = Long.max(highWatermark, hdr.off);
             return ec;
         } catch (IOException e) {
@@ -542,7 +560,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     }
 
     private Hints genHint(ErrorCode err) {
-        return new Hints(err, new HashMap<String, Long>(), false);
+        return new Hints(err, new HashMap<String, Long>(), false, null);
     }
 
 	/* (non-Javadoc)
@@ -559,6 +577,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	 */
 	@Override
 	synchronized public ExtntWrap read(UnitServerHdr hdr) throws org.apache.thrift.TException {
+        //TODO: The stream for reads is currently ignored. Fix?
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
@@ -639,7 +658,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         }
         else {
             Long oldNext = curHints.getNextMap().put(stream, nextOffset);
-            if (oldNext != null && oldNext.longValue() != nextOffset)
+            if (oldNext != null && oldNext.longValue() != nextOffset && oldNext.longValue() != -1)
                 return ErrorCode.ERR_OVERWRITE;
         }
         // TODO: persist to disk?
@@ -666,6 +685,41 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             hintMap.put(hdr.off, curHints);
         }
         curHints.setTxDec(dec);
+        // TODO: persist to disk?
+        return ErrorCode.OK;
+    }
+
+    @Override
+    synchronized public ErrorCode setHintsFlatTxn(UnitServerHdr hdr, ByteBuffer flatTxn) throws org.apache.thrift.TException {
+        if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return ErrorCode.ERR_STALEEPOCH;
+        log.info("setHintsFlatTxn({})", hdr.off);
+
+        mapInfo minf = new mapInfo(hdr.off);
+        switch (minf.et) {
+            case EX_FILLED: break;
+            case EX_TRIMMED: return ErrorCode.ERR_TRIMMED;
+            case EX_EMPTY: return ErrorCode.ERR_UNWRITTEN;
+            case EX_SKIP: return ErrorCode.ERR_UNWRITTEN;
+            default: log.error("internal error in getExtntInfoLogStore"); return ErrorCode.ERR_BADPARAM;
+        }
+
+        Hints curHints = hintMap.get(hdr.off);
+        if (curHints == null) {
+            curHints = new Hints();
+            hintMap.put(hdr.off, curHints);
+        }
+        curHints.setFlatTxn(flatTxn);
+
+        log.info("streams in this flattxn: {}", hdr.streamID);
+        if (hdr.streamID == null)
+            return ErrorCode.OK;
+        if (!curHints.isSetNextMap() || curHints.getNextMap() == null) {
+            HashMap<String, Long> newNext = new HashMap<String, Long>();
+            for (String stream : hdr.streamID) {
+                newNext.put(stream, -1L);
+            }
+            curHints.setNextMap(newNext);
+        }
         // TODO: persist to disk?
         return ErrorCode.OK;
     }
@@ -819,9 +873,12 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
                     lowwater, highwater,
                     gcmark, ckmark,
                     null,
-                    mapb);
-            log.info("respond to rebuild request. lowwater={}, highwater={}, trimmark={}",
-                    lowwater, highwater, gcmark);
+                    mapb,
+                    hintMap,
+                    UNITCAPACITY);
+
+            log.info("respond to rebuild request. lowwater={}, highwater={}, trimmark={}, hintmap={}",
+                    lowwater, highwater, gcmark, hintMap);
 
             try {
                 wr.setCtnt(mirror());

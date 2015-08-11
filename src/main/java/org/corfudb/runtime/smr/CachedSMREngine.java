@@ -6,6 +6,7 @@ import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -16,19 +17,21 @@ import java.util.concurrent.CompletableFuture;
  * caching of SMR engines that are created during DeferredTxns.
  *
  * Write commands are reflected immediately on the object (for TX support)
- * and not written to the log.
+ * and not written to the log. They are also buffered, so that the commands can be collected and inserted into the
+ * hint section of the Logging Units.
  *
  * So you should NEVER, EVER, use this engine unless you are IMPLEMENTING
  * TRANSACTIONS.
  *
  * Created by amytai on 7/15/15.
  */
-public class CachedSMREngine<T> implements ISMREngine<T> {
+public class CachedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> {
 
     IStream stream;
     T underlyingObject;
     ITimestamp streamPointer;
     ITimestamp syncPoint;
+    ArrayList<ISMREngineCommand> commandBuffer;
 
     class CachedSMREngineOptions<Y extends T> implements ISMREngineOptions<Y> {
 
@@ -58,6 +61,7 @@ public class CachedSMREngine<T> implements ISMREngine<T> {
                     .newInstance(args);
 
             this.syncPoint = syncPoint;
+            this.commandBuffer = new ArrayList<ISMREngineCommand>();
         }
         catch (Exception e)
         {
@@ -142,6 +146,7 @@ public class CachedSMREngine<T> implements ISMREngine<T> {
             {
                 completion.complete(result);
             }
+            commandBuffer.add(command);
             return streamPointer;
     }
 
@@ -204,4 +209,8 @@ public class CachedSMREngine<T> implements ISMREngine<T> {
         return streamPointer;
     }
 
+    @Override
+    public ArrayList<ISMREngineCommand> getCommandBuffer() {
+        return commandBuffer;
+    }
 }

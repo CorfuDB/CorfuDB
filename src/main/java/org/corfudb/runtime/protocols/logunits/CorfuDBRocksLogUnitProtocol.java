@@ -28,7 +28,9 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 
 public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 {
@@ -110,7 +112,7 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
         }
     }
 
-    public void write(long address, byte[] data)
+    public void write(long address, Set<String> streams, byte[] data)
     throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException
     {
         RocksLogUnitService.Client client = thriftPool.getResource();
@@ -119,7 +121,7 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ErrorCode ec = client.write(new UnitServerHdr(epochlist, address, "fake stream"), ByteBuffer.wrap(data), ExtntMarkType.EX_FILLED);
+            ErrorCode ec = client.write(new UnitServerHdr(epochlist, address, streams), ByteBuffer.wrap(data), ExtntMarkType.EX_FILLED);
             thriftPool.returnResourceObject(client);
             success = true;
             if (ec.equals(ErrorCode.ERR_OVERWRITE))
@@ -153,7 +155,8 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
         }
     }
 
-    public byte[] read(long address)
+    // stream is a required parameter for a Rocks server!
+    public byte[] read(long address, String stream)
     throws UnwrittenException, TrimmedException, NetworkException
     {
         byte[] data = null;
@@ -163,7 +166,7 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ExtntWrap wrap = client.read(new UnitServerHdr(epochlist, address, "fake stream"));
+            ExtntWrap wrap = client.read(new UnitServerHdr(epochlist, address, Collections.singleton(stream)));
             if (wrap.err.equals(ErrorCode.ERR_UNWRITTEN))
             {
                 throw new UnwrittenException("Unwritten error", address);

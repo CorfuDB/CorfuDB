@@ -110,6 +110,7 @@ public class CorfuDBRuntimeIT {
         HashMap<String, Object> layout = new HashMap<String, Object>();
         LinkedList<HashMap<String, Object>> segments = new LinkedList<HashMap<String, Object>>();
         HashMap<String, Object> segment = new HashMap<String, Object>();
+        segment.put("replication", "cdbcr");
         segment.put("start", 0L);
         segment.put("sealed", 0L);
         LinkedList<HashMap<String, Object>> groups = new LinkedList<HashMap<String, Object>>();
@@ -144,9 +145,9 @@ public class CorfuDBRuntimeIT {
         IWriteOnceLogUnit LU1 = ((IWriteOnceLogUnit) cdr.getView().getSegments().get(0).getGroups().get(0).get(0));
         IWriteOnceLogUnit LU2 = ((IWriteOnceLogUnit) cdr.getView().getSegments().get(0).getGroups().get(0).get(1));
 
-        assertThat(LU1.read(0))
+        assertThat(LU1.read(0, "fake stream"))
                 .isEqualTo("hello world".getBytes());
-        assertThat(LU2.read(0))
+        assertThat(LU2.read(0, "fake stream"))
                 .isEqualTo("hello world".getBytes());
 
         /* Fail LU2 */
@@ -165,7 +166,7 @@ public class CorfuDBRuntimeIT {
         /* try writing from the wrong epoch to LU1 */
         seq = s.getNext();
         ((CorfuDBSimpleLogUnitProtocol)LU1).epoch = cdr.getView().getEpoch()-1;
-        assertRaises(() -> LU1.write(2, "hello world 3".getBytes()), NetworkException.class);
+        assertRaises(() -> LU1.write(2, null, "hello world 3".getBytes()), NetworkException.class);
         ((CorfuDBSimpleLogUnitProtocol)LU1).epoch = cdr.getView().getEpoch();
 
         /* Un-fail LU2 */
@@ -210,6 +211,7 @@ public class CorfuDBRuntimeIT {
         HashMap<String, Object> layout = new HashMap<String, Object>();
         LinkedList<HashMap<String, Object>> segments = new LinkedList<HashMap<String, Object>>();
         HashMap<String, Object> segment = new HashMap<String, Object>();
+        segment.put("replication", "cdbcr");
         segment.put("start", 0L);
         segment.put("sealed", 0L);
         LinkedList<HashMap<String, Object>> groups = new LinkedList<HashMap<String, Object>>();

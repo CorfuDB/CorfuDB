@@ -15,6 +15,8 @@ import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
 
+import java.util.Collections;
+
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,8 +58,8 @@ public class SimpleLogUnitServerIT  {
     @Test
     public void canReadWrite1KB() throws Exception {
         byte[] t = getTestPayload(1024);
-        lu.write(0, t);
-        byte[] o = lu.read(0);
+        lu.write(0, Collections.singleton("fake stream"), t);
+        byte[] o = lu.read(0, "fake stream");
 
         assertThat(t)
                 .isEqualTo(o);
@@ -66,8 +68,8 @@ public class SimpleLogUnitServerIT  {
     @Test
     public void canReadWrite10KB() throws Exception {
         byte[] t = getTestPayload(10240);
-        lu.write(0, t);
-        byte[] o = lu.read(0);
+        lu.write(0, Collections.singleton("fake stream"), t);
+        byte[] o = lu.read(0, "fake stream");
 
         assertThat(t)
                 .isEqualTo(o);
@@ -76,8 +78,8 @@ public class SimpleLogUnitServerIT  {
     @Test
     public void canReadWrite100KB() throws Exception {
         byte[] t = getTestPayload(102400);
-        lu.write(0, t);
-        byte[] o = lu.read(0);
+        lu.write(0, Collections.singleton("fake stream"), t);
+        byte[] o = lu.read(0, "fake stream");
 
         assertThat(t)
                 .isEqualTo(o);
@@ -87,8 +89,8 @@ public class SimpleLogUnitServerIT  {
     @Test
     public void canReadWrite1MB() throws Exception {
         byte[] t = getTestPayload(1048576);
-        lu.write(0, t);
-        byte[] o = lu.read(0);
+        lu.write(0, Collections.singleton("fake stream"), t);
+        byte[] o = lu.read(0, "fake stream");
 
         assertThat(t)
                 .isEqualTo(o);
@@ -97,20 +99,20 @@ public class SimpleLogUnitServerIT  {
     @Test
     public void overwriteCausesException() throws Exception {
         byte[] t = getTestPayload(1024);
-        lu.write(0, t);
-        assertRaises(() -> lu.write(0,t), OverwriteException.class);
+        lu.write(0, Collections.singleton("fake stream"), t);
+        assertRaises(() -> lu.write(0, Collections.singleton("fake stream"), t), OverwriteException.class);
     }
 
     @Test
     public void trimmableSpace() throws Exception {
         byte[] t = getTestPayload(1024);
-        lu.write(0, t);
+        lu.write(0, Collections.singleton("fake stream"), t);
         lu.trim(0);
 
         //trimmed address either cause a trimmed exception
         //or are equal to the old value.
         try {
-            byte[] o = lu.read(0);
+            byte[] o = lu.read(0, "fake stream");
             assertThat(o)
                     .isEqualTo(t);
         }
@@ -119,7 +121,7 @@ public class SimpleLogUnitServerIT  {
 
         }
         //trimmed addresses must cause an overwrite exception
-        assertRaises(() -> lu.write(0,t), OverwriteException.class);
+        assertRaises(() -> lu.write(0, Collections.singleton("fake stream"), t), OverwriteException.class);
     }
 
     @Test
@@ -129,12 +131,12 @@ public class SimpleLogUnitServerIT  {
         assertThat(lu.highestAddress())
                 .isEqualTo(-1);
 
-        lu.write(0, t);
+        lu.write(0, Collections.singleton("fake stream"), t);
 
         assertThat(lu.highestAddress())
                 .isEqualTo(0);
 
-        lu.write(100, t);
+        lu.write(100, Collections.singleton("fake stream"), t);
 
         assertThat(lu.highestAddress())
                 .isEqualTo(100);
