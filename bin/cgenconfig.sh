@@ -69,7 +69,8 @@ configmasters:
   - "cdbcm://localhost:$baseport"
 layout:
   segments:
-    - start: 0
+    - replication: "cdbcr"
+      start: 0
       sealed: -1
       replicas: $cnt
       groups:
