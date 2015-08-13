@@ -18,6 +18,7 @@ package org.corfudb.runtime;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.*;
+import org.corfudb.util.GitRepositoryState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -110,6 +111,14 @@ public class CorfuDBRuntime implements AutoCloseable {
             log.error("Exception creating local instance", e);
         }
         startViewManager();
+    }
+
+    /**
+     * Get the version of this client binding.
+     * @return  A string describing the version of this client binding.
+     */
+    public String getVersion() {
+        return GitRepositoryState.getRepositoryState().describe;
     }
 
     /**
