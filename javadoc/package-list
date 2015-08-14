@@ -12,6 +12,7 @@ org.corfudb.runtime.protocols.logunits
 org.corfudb.runtime.protocols.replications
 org.corfudb.runtime.protocols.sequencers
 org.corfudb.runtime.smr
+org.corfudb.runtime.smr.HoleFillingPolicy
 org.corfudb.runtime.smr.legacy
 org.corfudb.runtime.stream
 org.corfudb.runtime.stream.legacy
