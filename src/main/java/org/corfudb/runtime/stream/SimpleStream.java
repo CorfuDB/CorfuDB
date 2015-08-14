@@ -3,6 +3,7 @@ package org.corfudb.runtime.stream;
 import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
+import org.corfudb.runtime.entries.CorfuDBStreamHoleEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.entries.MetadataEntry;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -98,7 +100,7 @@ public class SimpleStream implements IStream {
                 hint = instance.getAddressSpace().readHints(oldPointer);
             } catch (UnwrittenException ue) {
                 //hole, should fill.
-                throw new HoleEncounteredException(ue.address);
+                throw new HoleEncounteredException(new SimpleTimestamp((ue.address)));
             }
         }
         if (hint == null || !hint.isSetNextMap() || (hint.getNextMap().get(streamID.toString()) == null)) {
@@ -119,7 +121,7 @@ public class SimpleStream implements IStream {
                         //ignore, not a entry we understand.
                     } catch (UnwrittenException ue) {
                         //hole, should fill.
-                        throw new HoleEncounteredException(ue.address);
+                        throw new HoleEncounteredException(new SimpleTimestamp(ue.address));
                     }
                 }
             }
@@ -136,7 +138,7 @@ public class SimpleStream implements IStream {
                 //ignore, not a entry we understand.
             } catch (UnwrittenException ue) {
                 //hole, should fill.
-                throw new HoleEncounteredException(ue.address);
+                throw new HoleEncounteredException(new SimpleTimestamp(ue.address));
             }
         }
         return null;
@@ -157,14 +159,14 @@ public class SimpleStream implements IStream {
                 return sse;
             }
         } catch (ClassNotFoundException | ClassCastException e) {
-            throw new HoleEncounteredException(((SimpleTimestamp)timestamp).address);
+            throw new HoleEncounteredException(timestamp);
         }
         catch (UnwrittenException ue)
         {
             //hole, should fill.
-            throw new HoleEncounteredException(ue.address);
+            throw new HoleEncounteredException(timestamp);
         }
-        throw new HoleEncounteredException(((SimpleTimestamp)timestamp).address);
+        throw new HoleEncounteredException(timestamp);
     }
 
     /**
@@ -195,6 +197,24 @@ public class SimpleStream implements IStream {
             return ITimestamp.getMinTimestamp();
         }
         return new SimpleTimestamp(((SimpleTimestamp)ts).address - 1);
+    }
+
+    /**
+     * Attempts to fill a hole at the given timestamp.
+     *
+     * @param ts A timestamp to fill a hole at.
+     * @return True, if the hole was successfully filled, false otherwise.
+     */
+    @Override
+    public boolean fillHole(ITimestamp ts) {
+        try {
+            instance.getAddressSpace().write(((SimpleTimestamp) ts).address, new CorfuDBStreamHoleEntry(new HashMap()));
+            return true;
+        }
+        catch (IOException ie)
+        {
+            return false;
+        }
     }
 
     /**

@@ -1,11 +1,15 @@
 package org.corfudb.runtime.smr;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.HoleEncounteredException;
 import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.entries.CorfuDBEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.smr.HoleFillingPolicy.IHoleFillingPolicy;
+import org.corfudb.runtime.smr.HoleFillingPolicy.TimeoutHoleFillPolicy;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
@@ -37,6 +41,10 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     ConcurrentHashMap<ITimestamp, CompletableFuture> completionTable;
     HashSet<ITimestamp> localTable;
     Map<UUID, IBufferedSMREngine> cachedEngines = Collections.synchronizedMap(new WeakHashMap<>());
+
+    @Setter
+    @Getter
+    transient IHoleFillingPolicy holePolicy = new TimeoutHoleFillPolicy();
 
     class SimpleSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
     {
@@ -168,7 +176,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                             ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
                             ITimestamp entryTS = entry.getTimestamp();
                             CompletableFuture<R> completion = completionTable.getOrDefault(entryTS, null);
-                            if (completion == null) { log.info("Completion @ {} is null", entryTS); }
+                            if (completion == null) { log.debug("Completion @ {} is null", entryTS); }
                             completionTable.remove(entryTS);
                             if (entry instanceof MultiCommand)
                             {
@@ -184,7 +192,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                 }
                 catch (HoleEncounteredException hle)
                 {
-                    log.warn("hole encountered, retrying sync to {} @ {}", stream.getCurrentPosition(), ts);
+                    log.debug("hole encountered, applying policy during sync to {} @ {}", stream.getCurrentPosition(), ts);
+                    holePolicy.apply(hle, stream);
                 }
                 catch (Exception e) {
                     log.error("exception during sync@{}", stream.getCurrentPosition(), e);

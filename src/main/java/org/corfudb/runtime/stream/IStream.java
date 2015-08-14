@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime.stream;
 
+import org.apache.zookeeper.KeeperException;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
@@ -161,6 +162,17 @@ public interface IStream extends AutoCloseable {
      */
     default ITimestamp check() {
         return check(false);
+    }
+
+    /**
+     * Attempts to fill a hole at the given timestamp.
+     * @param ts    A timestamp to fill a hole at.
+     *
+     * @return      True, if the hole was successfully filled, false otherwise.
+     */
+    default boolean fillHole(ITimestamp ts)
+    {
+        throw new UnsupportedOperationException("not yet implemented");
     }
 
     /**
