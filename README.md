@@ -89,7 +89,7 @@ http://localhost:8002/corfu.
 
 ## Where is my output?
 
-At some point, you may run into problems or error, and you might want to look at output from CorfuDB. You will find various logs under /var/log/corfudb.<rolename>.log , where <rolename>
+At some point, you may run into problems or error, and you might want to look at output from CorfuDB. You will find various logs under /var/log/corfudb.<rolename>.log , where <rolename> is
 one of sequencer, logunit, configmaster.
 
 ## Bringing up a custom CorfuDB deployment
