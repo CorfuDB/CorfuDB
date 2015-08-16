@@ -80,20 +80,23 @@ public class HelloCorfu implements Runnable {
         /* check health of Configuration Master by trying to retrieve view
          */
 
-        System.out.println("Trying simple connection with Corfu components: config-master, sequencer, and logging units (will timeout in 5 secs)...");
+        long timeout = 10000;
+        System.out.println("Trying simple connection with Corfu components: config-master, sequencer, and logging units (will timeout in " + timeout/1000 + " secs)...");
 
         Thread b = new Thread(new Runnable() {
             @Override
             public void run() {
                 System.out.println("trying to connect to config-master...");
                 view = cdr.getView();
+
+                System.out.println("trying to ping all view components...: " + view.isViewAccessible() );
                 synchronized (this) { notify();}
             } } );
         b.start();
 
         synchronized (b) {
             try {
-                b.wait(5000);
+                b.wait(timeout);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -102,30 +105,6 @@ public class HelloCorfu implements Runnable {
             System.out.println("cannot retrieve configuration from ConfigMaster. Try checking with browser whether the master URL is correct: " + masterString);
             System.exit(1);
         }
-
-        b = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                System.out.println("trying to connect to sequencer...");
-                pos = instance.getSequencer().getCurrent();
-                System.out.println("pos=" + pos);
-                synchronized (this) { notify();}
-            } } );
-        b.start();
-
-        synchronized (b) {
-            try {
-                b.wait(5000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        if (pos < 0) {
-            System.out.println("cannot connect with sequencer");
-            System.exit(1);
-        }
-
-
 
         System.out.println("HelloCorfu test finished successfully");
         synchronized (this) { notify(); }
