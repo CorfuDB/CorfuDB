@@ -17,4 +17,5 @@ org.corfudb.runtime.smr.legacy
 org.corfudb.runtime.stream
 org.corfudb.runtime.stream.legacy
 org.corfudb.runtime.view
+org.corfudb.tests
 org.corfudb.util
