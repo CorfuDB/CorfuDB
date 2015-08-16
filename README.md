@@ -75,21 +75,18 @@ $ bin/crunall.sh --cmd start --unitcnt n
 
 ## Checking if the deployment is working
 
-You will probably want to test if your deployment is working. The
-`bin/corfuDBTest.sh` script provides an easy way to access built-in
-tests and examples. A very simple test is called CorfuHello.
-To call it, run:
+You will probably want to test if your deployment is working. The class org.corfudb.tests.HelloCorfu performs a few basic "health tests", such connecting with the config-master and retrieving the configuration from it; connecting with the sequencer and retrieving the current tail of the log; and connecting with each one of the logging-units.
 
+To run is manually, either invoke within your Java IDE, or use:
 ```
-$ bin/corfuDBTest.sh CorfuHello <master-address>
+$ java -classpath <shaded-jar> org.corfudb.tests.HelloCorfu <master-URL> 
 ```
-
-Where `<master-address>` is the full address of the master, for example,
-http://localhost:8002/corfu.
+Where `<shaded-jar>` is the target shaded jar file, for example, target/corfudb-0.1-SNAPSHOT-shaded.jar , and `<master-URL>` is the full address of the master, for example,
+http://localhost:8000/corfu.
 
 ## Where is my output?
 
-At some point, you may run into problems or error, and you might want to look at output from CorfuDB. You will find various logs under /var/log/corfudb.<rolename>.log , where <rolename>
+At some point, you may run into problems or error, and you might want to look at output from CorfuDB. You will find various logs under /var/log/corfudb.<rolename>.log , where <rolename> is
 one of sequencer, logunit, configmaster.
 
 ## Bringing up a custom CorfuDB deployment
