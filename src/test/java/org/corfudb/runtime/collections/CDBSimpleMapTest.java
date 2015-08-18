@@ -231,7 +231,7 @@ public class CDBSimpleMapTest {
     public static class ConcurrentGets {
 
         UUID streamID;
-        Integer keys = 50;
+        Integer keys = 5000;
 
         public ConcurrentGets() {
             streamID = UUID.randomUUID();
@@ -259,6 +259,26 @@ public class CDBSimpleMapTest {
             {
                 assertThat(dspMap2.get(i))
                         .isEqualTo(i.toString());
+            }
+        }
+
+        @Test
+        public void GetLooperSameKey1() {
+            CDBSimpleMap<Integer, String> dspMap3 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < keys; i++)
+            {
+                assertThat(dspMap3.get(10))
+                        .isEqualTo("10");
+            }
+            log.info("finished");
+        }
+        @Test
+        public void GetLooperSameKey2() {
+            CDBSimpleMap<Integer, String> dspMap4 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < keys; i++)
+            {
+                assertThat(dspMap4.get(10))
+                        .isEqualTo("10");
             }
 
         }
