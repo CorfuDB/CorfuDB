@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
@@ -19,6 +20,7 @@ import static org.assertj.core.api.Assertions.*;
 /**
  * Created by mwei on 5/1/15.
  */
+@Slf4j
 public class CDBSimpleMapTest {
 
     IStream s;
@@ -229,11 +231,12 @@ public class CDBSimpleMapTest {
     public static class ConcurrentGets {
 
         UUID streamID;
+        Integer keys = 50;
 
         public ConcurrentGets() {
             streamID = UUID.randomUUID();
             CDBSimpleMap<Integer, String> dspMapInit = instance.openObject(streamID, CDBSimpleMap.class);
-            for (Integer i = 0; i < 50; i++)
+            for (Integer i = 0; i < keys; i++)
             {
                 dspMapInit.put(i, i.toString());
             }
@@ -242,7 +245,7 @@ public class CDBSimpleMapTest {
         @Test
         public void GetLooper0() {
             CDBSimpleMap<Integer, String> dspMap1 = instance.openObject(streamID, CDBSimpleMap.class);
-            for (Integer i = 0; i < 50; i++)
+            for (Integer i = 0; i < keys; i++)
             {
                 assertThat(dspMap1.get(i))
                     .isEqualTo(i.toString());
@@ -252,11 +255,12 @@ public class CDBSimpleMapTest {
         @Test
         public void GetLooper1() {
             CDBSimpleMap<Integer, String> dspMap2 = instance.openObject(streamID, CDBSimpleMap.class);
-            for (Integer i = 50; i > -1; i--)
+            for (Integer i = keys-1; i > -1; i--)
             {
                 assertThat(dspMap2.get(i))
                         .isEqualTo(i.toString());
             }
+
         }
     }
 }
