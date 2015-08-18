@@ -18,7 +18,8 @@ sequencers:
     - "redisseq://localhost:6379,key=corfudb_seq"
 layout:
     segments:
-        - start: 0
+        - replication: "cdbcr"
+          start: 0
           sealed: -1
           groups:
               - nodes:
