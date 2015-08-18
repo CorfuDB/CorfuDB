@@ -270,8 +270,8 @@ public class CDBSimpleMapTest {
                 assertThat(dspMap3.get(10))
                         .isEqualTo("10");
             }
-            log.info("finished");
         }
+
         @Test
         public void GetLooperSameKey2() {
             CDBSimpleMap<Integer, String> dspMap4 = instance.openObject(streamID, CDBSimpleMap.class);
@@ -279,6 +279,16 @@ public class CDBSimpleMapTest {
             {
                 assertThat(dspMap4.get(10))
                         .isEqualTo("10");
+            }
+        }
+
+        @Test
+        public void GetLooperDifferentKey() {
+            CDBSimpleMap<Integer, String> dspMap5 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < keys; i++)
+            {
+                assertThat(dspMap5.get(30))
+                        .isEqualTo("30");
             }
 
         }
