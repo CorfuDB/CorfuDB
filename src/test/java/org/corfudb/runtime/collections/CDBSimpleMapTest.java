@@ -242,18 +242,20 @@ public class CDBSimpleMapTest {
         @Test
         public void GetLooper0() {
             CDBSimpleMap<Integer, String> dspMap1 = instance.openObject(streamID, CDBSimpleMap.class);
-            for (int i = 0; i < 50; i++)
+            for (Integer i = 0; i < 50; i++)
             {
-                dspMap1.get(i);
+                assertThat(dspMap1.get(i))
+                    .isEqualTo(i.toString());
             }
         }
 
         @Test
         public void GetLooper1() {
             CDBSimpleMap<Integer, String> dspMap2 = instance.openObject(streamID, CDBSimpleMap.class);
-            for (int i = 50; i > -1; i--)
+            for (Integer i = 50; i > -1; i--)
             {
-                dspMap2.get(i);
+                assertThat(dspMap2.get(i))
+                        .isEqualTo(i.toString());
             }
         }
     }
