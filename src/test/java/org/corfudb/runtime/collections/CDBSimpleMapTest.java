@@ -9,7 +9,10 @@ import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.*;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.ParallelComputer;
+import org.junit.runner.JUnitCore;
 
+import java.util.ArrayList;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
@@ -19,7 +22,7 @@ import static org.assertj.core.api.Assertions.*;
 public class CDBSimpleMapTest {
 
     IStream s;
-    ICorfuDBInstance instance;
+    static ICorfuDBInstance instance;
     static public CDBSimpleMap<Integer, Integer> testMap;
     UUID streamID;
     CorfuDBRuntime cdr;
@@ -215,5 +218,43 @@ public class CDBSimpleMapTest {
                 .isEqualTo(1234);
         assertThat(map.get(10))
                 .isEqualTo(100);
+    }
+
+    @Test
+    public void doConcurrentGets() {
+        instance.getConfigurationMaster().resetAll();
+        JUnitCore.runClasses(ParallelComputer.methods(), ConcurrentGets.class);
+    }
+
+    public static class ConcurrentGets {
+
+        UUID streamID;
+
+        public ConcurrentGets() {
+            streamID = UUID.randomUUID();
+            CDBSimpleMap<Integer, String> dspMapInit = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < 50; i++)
+            {
+                dspMapInit.put(i, i.toString());
+            }
+        }
+
+        @Test
+        public void GetLooper0() {
+            CDBSimpleMap<Integer, String> dspMap1 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (int i = 0; i < 50; i++)
+            {
+                dspMap1.get(i);
+            }
+        }
+
+        @Test
+        public void GetLooper1() {
+            CDBSimpleMap<Integer, String> dspMap2 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (int i = 50; i > -1; i--)
+            {
+                dspMap2.get(i);
+            }
+        }
     }
 }

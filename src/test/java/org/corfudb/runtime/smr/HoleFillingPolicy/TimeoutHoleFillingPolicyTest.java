@@ -1,16 +1,23 @@
 package org.corfudb.runtime.smr.HoleFillingPolicy;
 
+import com.codahale.metrics.ConsoleReporter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.runtime.view.Serializer;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.Serializable;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.assertj.core.api.Assertions.assertThat;
