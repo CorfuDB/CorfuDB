@@ -1,4 +1,4 @@
-# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfudb-logo-3x3.png "CorfuDB")
+# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")
 
 [![Join the chat at https://gitter.im/CorfuDB/CorfuDB](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/CorfuDB/CorfuDB?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
@@ -9,8 +9,7 @@ CorfuDB is a consistency platform designed around the abstraction
 of a shared log. CorfuDB objects are in-memory, highly available
 data structures providing linearizable read/write operations and
 strictly serializable transactions. CorfuDB is based on
-peer-reviewed research published at [SOSP](#references),
-[TOCS](#references), and [NSDI](#references).
+peer-reviewed research, see [References](https://github.com/CorfuDB/CorfuDB/wiki/White-papers). 
 
 CorfuDB consists of two layers: a logging layer
 which implements a distributed, fault-tolerant shared log; and a
@@ -159,19 +158,4 @@ Q: *I get a bunch of errors that look like*
 
 A: Make sure your version of Thrift matches the version of Thrift in the pom.xml file (currently 0.9.2)
 
-## References
-
-Tango: Distributed Data Structures over a Shared Log.
-*Mahesh Balakrishnan, Dahlia Malkhi, Ted Wobber, Ming Wu, Vijayan Prabhakaran,
-Michael Wei, John D. Davis, Sriram Rao, Tao Zou, Aviad Zuck.*
-SOSP 2013: The 24th ACM Symposium on Operating Systems Principles.
-
-CORFU: A Distributed Shared Log
-*Mahesh Balakrishnan, Dahlia Malkhi, Vijayan Prabhakaran, Ted Wobber,
-Michael Wei, and John Davis.*
-ACM Transactions on Computer Systems (TOCS). December 2013.
-
-CORFU: A Shared Log Design for Flash Clusters.
-*Mahesh Balakrishnan, Dahlia Malkhi, Vijayan Prabhakaran, Ted Wobber,
-Michael Wei, and John Davis.*
-9th USENIX Symposium on Networked Systems Design and Implementation (NSDI '12).
+## [References](https://github.com/CorfuDB/CorfuDB/wiki/White-papers).
