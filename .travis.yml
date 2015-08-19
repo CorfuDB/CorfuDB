@@ -10,6 +10,7 @@ install:
 after_success:
 - mvn jacoco:report coveralls:report
 - .travis_scripts/javadocs.sh
+- .travis_scripts/mvnrepo.sh
 cache:
   directories:
   - $HOME/thrift
