@@ -11,7 +11,7 @@ if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
     git clone --quiet --branch=mvn-repo https://${GH_TOKEN}@github.com/CorfuDB/CorfuDB mvn-repo > /dev/null
 
     cd mvn-repo
-    cp -Rf $HOME/mvn-repo-current .
+    cp -Rf $HOME/mvn-repo-current/* .
     git add -f .
     git commit -m "Updated maven repository from travis build $TRAVIS_BUILD_NUMBER"
     git push -fq origin mvn-repo > /dev/null
