@@ -254,26 +254,15 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
 
     @Override
     public void setHintsFlatTxn(long address, MultiCommand flatTxn) throws UnwrittenException, TrimmedException, IOException {
-        try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
-        {
-            try (ObjectOutput out = new ObjectOutputStream(bs))
-            {
-                out.writeObject(flatTxn);
-
-                while (true)
-                {
-                    try {
-                        CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                        IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-                        replicationProtocol.setHintsFlatTxn(address, flatTxn);
-                        return;
-                    }
-                    catch (NetworkException e)
-                    {
-                        log.warn("Unable to read, requesting new view.", e);
-                        client.invalidateViewAndWait(e);
-                    }
-                }
+        while (true) {
+            try {
+                CorfuDBViewSegment segments = getView.get().getSegments().get(0);
+                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+                replicationProtocol.setHintsFlatTxn(address, flatTxn);
+                return;
+            } catch (NetworkException e) {
+                log.warn("Unable to read, requesting new view.", e);
+                client.invalidateViewAndWait(e);
             }
         }
     }

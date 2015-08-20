@@ -708,6 +708,9 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             curHints = new Hints();
             hintMap.put(hdr.off, curHints);
         }
+        if (curHints.isSetFlatTxn())
+            return ErrorCode.OK;
+
         curHints.setFlatTxn(flatTxn);
 
         log.info("streams in this flattxn: {}", hdr.streamID);

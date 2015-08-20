@@ -144,7 +144,6 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
             try (ObjectOutput out = new ObjectOutputStream(bs)) {
                 out.writeObject(flattedTxn);
 
-
                 wolu.setHintsFlatTxn(mappedAddress, streams, bs.toByteArray());
             }
         }
