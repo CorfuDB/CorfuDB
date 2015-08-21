@@ -8,7 +8,8 @@ configmasters:
   - "cdbcm://localhost:8002"
 layout:
   segments:
-    - start: 0
+    - replication: "cdbcr"
+      start: 0
       sealed: -1
       replicas: 1
       groups:

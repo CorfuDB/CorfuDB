@@ -22,7 +22,8 @@ remotelogs:
     - "cdbcm://localhost:8006"
 layout:
     segments:
-        - start: 0
+        - replication: "cdbcr"
+          start: 0
           sealed: -1
           groups:
               - nodes:

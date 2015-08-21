@@ -1,11 +1,10 @@
-package org.corfudb.tests;
+package org.corfudb.samples;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.util.CorfuDBFactory;
 
-import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,7 +16,6 @@ public class HelloCorfu implements Runnable {
             "HelloCorfu <master>\n\n";
 
     CorfuDBView view = null;
-    long pos = -1;
     String masterString;
     CorfuDBRuntime cdr;
 
@@ -40,7 +38,6 @@ public class HelloCorfu implements Runnable {
 
     public void run() {
         /*  This example uses docopt to parse command line arguments.
-         *  For more information on how to use docopt, see http://docopt.org
          */
         Map<String, Object> opts = new HashMap<String, Object>() {{
             put("--master", masterString);

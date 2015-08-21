@@ -95,6 +95,10 @@ public class CorfuDBView {
 
             Map<String, Object> segmentMap = null;
             String replication = jo.getJsonString("replication").getString();
+            if (replication == null) {
+                // The default replication protocol is Chain Replication
+                replication = "cdbcr";
+            }
             if (!availableReplicationProtocols.keySet().contains(replication))
             {
                 log.warn("Unsupported replication protocol: " + replication);
@@ -111,7 +115,7 @@ public class CorfuDBView {
                 }
             }
 
-            segmentMap.put("replication", jo.getString("replication"));
+            segmentMap.put("replication", replication);
             segmentMap.put("start", jo.getJsonNumber("start").longValue());
             segmentMap.put("sealed", jo.getJsonNumber("sealed").longValue());
             lSegments.add(segmentMap);

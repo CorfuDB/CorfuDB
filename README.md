@@ -1,4 +1,4 @@
-# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu-logo-3x3.png "Corfu")
+# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")
 
 [![Join the chat at https://gitter.im/CorfuDB/CorfuDB](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/CorfuDB/CorfuDB?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
@@ -74,11 +74,11 @@ $ bin/crunall.sh --cmd start --unitcnt n
 
 ## Checking if the deployment is working
 
-You will probably want to test if your deployment is working. The class org.corfudb.tests.HelloCorfu performs a few basic "health tests", such connecting with the config-master and retrieving the configuration from it; connecting with the sequencer and retrieving the current tail of the log; and connecting with each one of the logging-units.
+You will probably want to test if your deployment is working. The class org.corfudb.samples.HelloCorfu performs a few basic "health tests", such connecting with the config-master and retrieving the configuration from it; connecting with the sequencer and retrieving the current tail of the log; and connecting with each one of the logging-units.
 
 To run is manually, either invoke within your Java IDE, or use:
 ```
-$ java -classpath <shaded-jar> org.corfudb.tests.HelloCorfu <master-URL> 
+$ java -classpath <shaded-jar> org.corfudb.samples.HelloCorfu <master-URL>
 ```
 Where `<shaded-jar>` is the target shaded jar file, for example, target/corfudb-0.1-SNAPSHOT-shaded.jar , and `<master-URL>` is the full address of the master, for example,
 http://localhost:8000/corfu.

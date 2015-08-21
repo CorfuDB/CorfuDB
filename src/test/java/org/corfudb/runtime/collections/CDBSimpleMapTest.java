@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
@@ -9,17 +10,21 @@ import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.*;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.ParallelComputer;
+import org.junit.runner.JUnitCore;
 
+import java.util.ArrayList;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 /**
  * Created by mwei on 5/1/15.
  */
+@Slf4j
 public class CDBSimpleMapTest {
 
     IStream s;
-    ICorfuDBInstance instance;
+    static ICorfuDBInstance instance;
     static public CDBSimpleMap<Integer, Integer> testMap;
     UUID streamID;
     CorfuDBRuntime cdr;
@@ -215,5 +220,77 @@ public class CDBSimpleMapTest {
                 .isEqualTo(1234);
         assertThat(map.get(10))
                 .isEqualTo(100);
+    }
+
+    @Test
+    public void doConcurrentGets() {
+        instance.getConfigurationMaster().resetAll();
+        JUnitCore.runClasses(ParallelComputer.methods(), ConcurrentGets.class);
+    }
+
+    public static class ConcurrentGets {
+
+        UUID streamID;
+        Integer keys = 5000;
+
+        public ConcurrentGets() {
+            streamID = UUID.randomUUID();
+            CDBSimpleMap<Integer, String> dspMapInit = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < keys; i++)
+            {
+                dspMapInit.put(i, i.toString());
+            }
+        }
+
+        @Test
+        public void GetLooper0() {
+            CDBSimpleMap<Integer, String> dspMap1 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < keys; i++)
+            {
+                assertThat(dspMap1.get(i))
+                    .isEqualTo(i.toString());
+            }
+        }
+
+        @Test
+        public void GetLooper1() {
+            CDBSimpleMap<Integer, String> dspMap2 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = keys-1; i > -1; i--)
+            {
+                assertThat(dspMap2.get(i))
+                        .isEqualTo(i.toString());
+            }
+        }
+
+        @Test
+        public void GetLooperSameKey1() {
+            CDBSimpleMap<Integer, String> dspMap3 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < keys; i++)
+            {
+                assertThat(dspMap3.get(10))
+                        .isEqualTo("10");
+            }
+        }
+
+        @Test
+        public void GetLooperSameKey2() {
+            CDBSimpleMap<Integer, String> dspMap4 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < keys; i++)
+            {
+                assertThat(dspMap4.get(10))
+                        .isEqualTo("10");
+            }
+        }
+
+        @Test
+        public void GetLooperDifferentKey() {
+            CDBSimpleMap<Integer, String> dspMap5 = instance.openObject(streamID, CDBSimpleMap.class);
+            for (Integer i = 0; i < keys; i++)
+            {
+                assertThat(dspMap5.get(30))
+                        .isEqualTo("30");
+            }
+
+        }
     }
 }
