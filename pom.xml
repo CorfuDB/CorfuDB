@@ -144,13 +144,11 @@
             <artifactId>kryo</artifactId>
             <version>3.0.1</version>
         </dependency>
-        <!--
         <dependency>
             <groupId>com.esotericsoftware</groupId>
             <artifactId>kryonet</artifactId>
             <version>2.22.0-RC1</version>
         </dependency>
-        -->
         <dependency>
             <groupId>com.googlecode.concurrentlinkedhashmap</groupId>
             <artifactId>concurrentlinkedhashmap-lru</artifactId>
@@ -315,9 +313,9 @@
             </plugin>
             <!-- Add a license to all files using mvn license:format -->
             <plugin>
-                <groupId>com.mycila.maven-license-plugin</groupId>
-                <artifactId>maven-license-plugin</artifactId>
-                <version>1.8</version>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>2.10</version>
                 <configuration>
                     <header>LICENSE.txt</header>
                     <strictCheck>true</strictCheck>
