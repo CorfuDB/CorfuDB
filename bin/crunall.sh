@@ -4,6 +4,11 @@ CORFUDBBIN="${BASH_SOURCE-$0}"
 CORFUDBBIN="$(dirname "${CORFUDBBIN}")"
 CORFUDBBINDIR="$(cd "${CORFUDBBIN}"; pwd)"
 
+# use corfuDBEnv to populate variables: 
+# CORFUDBCFGDIR : the directory to find template config files
+# CORFUDBCFG    : a file name containing the main config-file template (.yml file)
+# CLASSPATH
+# a few others ...
 . "$CORFUDBBINDIR"/corfuDBEnv.sh
 
 usage="--cmd {start|stop|restart|status} [--config <conf-dir>] [--baseport <port>] [--unitcnt <cnt>]"
