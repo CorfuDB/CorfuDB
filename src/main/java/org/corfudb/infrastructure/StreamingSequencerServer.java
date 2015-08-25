@@ -48,10 +48,7 @@ import java.util.concurrent.Executors;
 public class StreamingSequencerServer implements StreamingSequencerService.Iface, ICorfuDBServer {
 
     private int port = 0;
-    private String configmasterURL = "";
     private Logger log = LoggerFactory.getLogger(StreamingSequencerServer.class);
-    private CorfuDBRuntime c;
-    private IWriteOnceAddressSpace woas;
     private boolean simFailure = false;
     private ExecutorService tp = Executors.newCachedThreadPool();
     class StreamData {
@@ -93,9 +90,9 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
                 final long oldPos = s.position;
                 CompletableFuture<Void> cf = CompletableFuture.runAsync(() -> {
                 try {
-                    CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos, -1, -1);
-                    log.debug("Writing move entry from " + oldPos + " to " + newPos + " for stream " + streamID);
-                    woas.write(oldPos, cdsme);
+                    //CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos, -1, -1);
+                    //log.debug("Writing move entry from " + oldPos + " to " + newPos + " for stream " + streamID);
+                   // woas.write(oldPos, cdsme);
                     lastPos.accumulateAndGet(oldPos, (cur, given) -> { return Math.max(cur,given);} );
 
                     log.debug("Finished writing move entry.");
@@ -241,10 +238,10 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
             @Override
             public void run() {
                 st.port = (Integer) config.get("port");
-                st.configmasterURL = (String) config.get("configmaster");
-                st.c = CorfuDBRuntime.getRuntime(st.configmasterURL);
-                st.c.startViewManager();
-                st.woas = new CachedWriteOnceAddressSpace(st.c);
+                //st.configmasterURL = (String) config.get("configmaster");
+                //st.c = CorfuDBRuntime.getRuntime(st.configmasterURL);
+                //st.c.startViewManager();
+                //st.woas = new CachedWriteOnceAddressSpace(st.c);
                 while (true) {
                     st.serverloop();
                 }
