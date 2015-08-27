@@ -26,6 +26,8 @@ import java.nio.channels.FileChannel;
 import java.util.*;
 
 import org.apache.thrift.TMultiplexedProcessor;
+import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.transport.TFastFramedTransport;
 import org.corfudb.infrastructure.thrift.*;
 import org.slf4j.*;
 import org.apache.thrift.TException;
@@ -968,8 +970,12 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             TMultiplexedProcessor mprocessor = new TMultiplexedProcessor();
             mprocessor.registerProcessor("SUNIT", new SimpleLogUnitService.Processor<SimpleLogUnitServer>(this));
             mprocessor.registerProcessor("CONFIG", new SimpleLogUnitConfigService.Processor<LogUnitConfigServiceImpl>(cnfg));
-
-            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(mprocessor));
+            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport)
+                    .processor(mprocessor)
+                    .protocolFactory(TCompactProtocol::new)
+                    .inputTransportFactory(new TFastFramedTransport.Factory())
+                    .outputTransportFactory(new TFastFramedTransport.Factory())
+            );
             System.out.println("Starting Corfu storage unit server on multiplexed port " + PORT);
 
             server.serve();

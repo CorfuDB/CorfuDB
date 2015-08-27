@@ -21,6 +21,7 @@ import java.io.Serializable;
 import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
@@ -407,6 +408,27 @@ public class Serializer
         }
     }
 
+    /** Deserialize a byte buffer.
+     *
+     * @param data      The array to be deserialized.
+     *
+     * @return          The deserialized object.
+     */
+    public static Object deserialize(ByteBuffer data)
+            throws IOException, ClassNotFoundException
+    {
+        Object o;
+        Kryo k = kryos.get();
+        try (ByteBufferInputStream bis = new ByteBufferInputStream(data))
+        {
+            try (UnsafeInput i = new UnsafeInput(bis, 16384))
+            {
+                o = k.readClassAndObject(i);
+                return o;
+            }
+        }
+    }
+
     /** Serialize a object.
      *
      * @param o      The object to be serialized.
@@ -424,6 +446,27 @@ public class Serializer
                 k.writeClassAndObject(output, o);
                 output.flush();
                 return baos.toByteArray();
+            }
+        }
+    }
+
+    /** Serialize a object.
+     *
+     * @param o      The object to be serialized.
+     *
+     * @return       The serialized object byte array.
+     */
+    public static ByteBuffer serializeBuffer (Object o)
+            throws IOException
+    {
+        Kryo k = kryos.get();
+        try (ByteBufferOutputStream baos = new ByteBufferOutputStream())
+        {
+            try (UnsafeOutput output = new UnsafeOutput(baos, 16384))
+            {
+                k.writeClassAndObject(output, o);
+                output.flush();
+                return baos.getByteBuffer();
             }
         }
     }

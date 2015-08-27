@@ -50,6 +50,12 @@ public interface ICorfuDBInstance {
     IWriteOnceAddressSpace getAddressSpace();
 
     /**
+     * Gets a stream address space for this instance.
+     * @return A stream address space for this instance.
+     */
+    IStreamAddressSpace getStreamAddressSpace();
+
+    /**
      * Gets a unique identifier for this instance.
      * @return  A unique identifier for this instance.
      */

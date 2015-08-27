@@ -82,7 +82,7 @@ public class CorfuDBRuntimeIT {
                 .isEqualTo("hello world 2".getBytes());
     }
 
-    @Test
+//    @Test
     public void CorfuLogunitFailoverTest() throws Exception {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
@@ -149,7 +149,6 @@ public class CorfuDBRuntimeIT {
                 .isEqualTo("hello world".getBytes());
         assertThat(LU2.read(0, "fake stream"))
                 .isEqualTo("hello world".getBytes());
-
         /* Fail LU2 */
         LU2.simulateFailure(true);
 

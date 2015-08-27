@@ -15,6 +15,10 @@
 
 package org.corfudb.runtime.protocols;
 
+import lombok.Data;
+import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.transport.TFastFramedTransport;
+import org.apache.thrift.transport.TFramedTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +31,8 @@ import org.apache.thrift.TServiceClient;
 import org.apache.commons.pool.impl.GenericObjectPool;
 import org.apache.commons.pool.impl.GenericObjectPool.Config;
 import org.apache.commons.pool.BasePoolableObjectFactory;
+
+import java.io.Closeable;
 
 /**
  * This class implements a pooled Thrift client which other protocols may use.
@@ -80,12 +86,31 @@ public class PooledThriftClient<T extends TServiceClient> implements AutoCloseab
         }
     }
 
+    @FunctionalInterface
     public static interface ClientFactory<T> {
         T make(TProtocol protocol);
     }
 
+    @FunctionalInterface
     public static interface ProtocolFactory<T> {
         TProtocol make();
+    }
+
+    @Data
+    public class TPooledClient<X extends T> implements AutoCloseable
+    {
+        final X client;
+        final PooledThriftClient<T> pool;
+
+        @Override
+        public void close() {
+            pool.returnResourceObject(client);
+        }
+    }
+
+    public TPooledClient<T> getCloseableResource()
+    {
+        return new TPooledClient<>(getResource(), this);
     }
 
     @SuppressWarnings("rawtypes")
@@ -100,14 +125,14 @@ public class PooledThriftClient<T extends TServiceClient> implements AutoCloseab
             }
 
             public TProtocol make() {
-                TTransport transport = new TSocket(host,port);
+                TTransport transport = new TFastFramedTransport(new TSocket(host,port));
                 try {
                 transport.open();
                 } catch (Exception e)
                 {
                     throw new RuntimeException("Could not generate protocol", e);
                 }
-                return new TBinaryProtocol(transport);
+                return new TCompactProtocol(transport);
             }
     }
 

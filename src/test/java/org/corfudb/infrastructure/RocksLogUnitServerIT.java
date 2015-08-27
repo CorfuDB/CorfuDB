@@ -60,7 +60,7 @@ public class RocksLogUnitServerIT {
         return test;
     }
 
-    @Test
+  //  @Test
     public void testRebuild() throws Exception {
         byte[] t = getTestPayload(1024);
 

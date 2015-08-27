@@ -238,6 +238,11 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>1.3.1</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -775,6 +780,26 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>newlogunit-process</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
+                        <configuration>
+                            <name>newlogunit-1</name>
+                            <waitForInterrupt>false</waitForInterrupt>
+                            <waitAfterLaunch>5</waitAfterLaunch>
+                            <arguments>
+                                <argument>java</argument>
+                                <argument>-cp</argument>
+                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
+                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
+                                <argument>${basedir}/conf/it_new_logunit.yml</argument>
+                            </arguments>
+                            <processLogFile>${project.build.directory}/it_new_logunit.log</processLogFile>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>rockslogunit-process</id>
                         <phase>pre-integration-test</phase>
                         <goals>
@@ -855,9 +880,7 @@
                         </goals>
                         <configuration>
 			<testFilesIncluded>
-			<jMeterTestFile>rockslogunit.jmx</jMeterTestFile>
-			<jMeterTestFile>logunit.jmx</jMeterTestFile>
-            <jMeterTestFile>streamingsequencer.jmx</jMeterTestFile>
+			<jMeterTestFile>newlogunit.jmx</jMeterTestFile>
 			</testFilesIncluded>
                            <skipTests>${skipTests}</skipTests>
 			    <tasks>

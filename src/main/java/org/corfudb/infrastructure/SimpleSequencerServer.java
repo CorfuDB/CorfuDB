@@ -20,8 +20,10 @@ import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
+import org.apache.thrift.transport.TFastFramedTransport;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
@@ -124,7 +126,12 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
             serverTransport = new TServerSocket(port);
             processor =
                     new SimpleSequencerService.Processor<SimpleSequencerServer>(this);
-            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
+            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport)
+                    .processor(processor)
+                    .protocolFactory(TCompactProtocol::new)
+                    .inputTransportFactory(new TFastFramedTransport.Factory())
+                    .outputTransportFactory(new TFastFramedTransport.Factory())
+            );
             log.info("Simple sequencer starting on port " + port);
             server.serve();
         } catch (TTransportException e) {

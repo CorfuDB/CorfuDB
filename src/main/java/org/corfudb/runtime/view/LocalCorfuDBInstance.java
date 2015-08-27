@@ -29,6 +29,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private IConfigurationMaster configMaster;
     private IStreamingSequencer streamingSequencer;
     private IWriteOnceAddressSpace addressSpace;
+    private IStreamAddressSpace streamAddressSpace;
+
     private CorfuDBRuntime cdr;
     private CDBSimpleMap<UUID, IStreamMetadata> streamMap;
     private ConcurrentMap<UUID, ICorfuDBObject> objectMap;
@@ -54,7 +56,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         configMaster = cm.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
         streamingSequencer = ss.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
         addressSpace = as.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
-
+        streamAddressSpace = new StreamAddressSpace(this);
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
         this.cdr = cdr;
@@ -98,6 +100,16 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     @Override
     public IWriteOnceAddressSpace getAddressSpace() {
         return addressSpace;
+    }
+
+    /**
+     * Gets a stream address space for this instance.
+     *
+     * @return A stream address space for this instance.
+     */
+    @Override
+    public IStreamAddressSpace getStreamAddressSpace() {
+        return streamAddressSpace;
     }
 
     /**

@@ -20,8 +20,10 @@ import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.thrift.TException;
+import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
+import org.apache.thrift.transport.TFastFramedTransport;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
@@ -259,7 +261,12 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
             serverTransport = new TServerSocket(port);
             processor =
                     new StreamingSequencerService.Processor<StreamingSequencerServer>(this);
-            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(processor));
+            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport)
+                    .processor(processor)
+                    .protocolFactory(TCompactProtocol::new)
+                    .inputTransportFactory(new TFastFramedTransport.Factory())
+                    .outputTransportFactory(new TFastFramedTransport.Factory())
+            );
             log.info("Streaming sequencer starting on port " + port);
             server.serve();
         } catch (TTransportException e) {

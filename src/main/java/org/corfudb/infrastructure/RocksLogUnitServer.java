@@ -19,8 +19,10 @@ package org.corfudb.infrastructure;
 
 import org.apache.thrift.TException;
 import org.apache.thrift.TMultiplexedProcessor;
+import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
+import org.apache.thrift.transport.TFastFramedTransport;
 import org.apache.thrift.transport.TServerSocket;
 import org.corfudb.infrastructure.thrift.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
@@ -555,7 +557,11 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
             //TODO: Figure out what the Config service is for a RocksDB indexed server?
             //mprocessor.registerProcessor("CONFIG", new SimpleLogUnitConfigService.Processor<LogUnitConfigServiceImpl>(cnfg));
 
-            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(mprocessor));
+            server = new TThreadPoolServer(new TThreadPoolServer.Args(serverTransport).processor(mprocessor)
+                    .protocolFactory(TCompactProtocol::new)
+                    .inputTransportFactory(new TFastFramedTransport.Factory())
+                    .outputTransportFactory(new TFastFramedTransport.Factory())
+            );
             System.out.println("Starting Corfu storage unit server on multiplexed port " + PORT);
 
             server.serve();

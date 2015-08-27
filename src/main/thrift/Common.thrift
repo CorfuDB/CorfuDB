@@ -20,12 +20,17 @@ struct ExtntInfo {
 	2: i32 metaLength,
 	3: ExtntMarkType flag=ExtntMarkType.EX_FILLED
 }
-typedef string UUID
+
+struct UUID {
+	1: i64 msb,
+	2: i64 lsb
+}
+
 typedef binary MultiCommand
 
 struct Hints {
 	1: ErrorCode err,
-	2: map<UUID, i64> nextMap,
+	2: map<string, i64> nextMap,
 	3: bool txDec,
 	4: MultiCommand flatTxn,
 }
@@ -42,7 +47,7 @@ struct ExtntWrap {
 struct UnitServerHdr {
     1: Epoch epoch,
     2: i64 off,
-    3: set<UUID> streamID,
+    3: set<string> streamID,
 }
 	
 
