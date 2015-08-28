@@ -151,6 +151,28 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
     }
 
     /**
+     * Associates the specified value with the specified key in this map
+     * (optional operation).   (A map
+     * <tt>m</tt> is said to contain a mapping for a key <tt>k</tt> if and only
+     * if {@link #containsKey(Object) m.containsKey(k)} would return
+     * <tt>true</tt>.)
+     *
+     * @param key   key with which the specified value is to be associated
+     * @param value value to be associated with the specified key
+     * @throws UnsupportedOperationException if the <tt>put</tt> operation
+     *                                       is not supported by this map
+     * @throws ClassCastException            if the class of the specified key or value
+     *                                       prevents it from being stored in this map
+     * @throws NullPointerException          if the specified key or value is null
+     *                                       and this map does not permit null keys or values
+     * @throws IllegalArgumentException      if some property of the specified key
+     *                                       or value prevents it from being stored in this map
+     */
+    public void fastPut(K key, V value) {
+        mutatorHelper((map, opts) -> map.put(key,value));
+    }
+
+    /**
      * Removes the mapping for a key from this map if it is present
      * (optional operation).   More formally, if this map contains a mapping
      * from key <tt>k</tt> to value <tt>v</tt> such that
