@@ -8,10 +8,15 @@ import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.stream.SimpleTimestamp;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,7 +36,7 @@ public interface IStreamAddressSpace {
      */
     @Data
     @Slf4j
-    class StreamAddressSpaceEntry<T>
+    class StreamAddressSpaceEntry<T> implements IStreamEntry
     {
         /**
          * The set of streams that this entry belongs to.
@@ -78,6 +83,47 @@ public interface IStreamAddressSpace {
                 log.error("Error deserializing payload at index " + getGlobalIndex(), e);
             }
             return null;
+        }
+
+        /**
+         * Gets the list of of the streams this entry belongs to.
+         *
+         * @return The list of streams this entry belongs to.
+         */
+        @Override
+        public List<UUID> getStreamIds() {
+            return new ArrayList<UUID>(streams);
+        }
+
+        /**
+         * Returns whether this entry belongs to a given stream ID.
+         *
+         * @param stream The stream ID to check
+         * @return True, if this entry belongs to that stream, false otherwise.
+         */
+        @Override
+        public boolean containsStream(UUID stream) {
+            return streams.contains(stream);
+        }
+
+        /**
+         * Gets the timestamp of the stream this entry belongs to.
+         *
+         * @return The timestamp of the stream this entry belongs to.
+         */
+        @Override
+        public ITimestamp getTimestamp() {
+            return new SimpleTimestamp(globalIndex);
+        }
+
+        /**
+         * Set the timestamp.
+         *
+         * @param ts
+         */
+        @Override
+        public void setTimestamp(ITimestamp ts) {
+            throw new UnsupportedOperationException();
         }
     }
 

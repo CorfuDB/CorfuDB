@@ -2,17 +2,17 @@ package org.corfudb.runtime.stream;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.HoleEncounteredException;
-import org.corfudb.runtime.OutOfSpaceException;
-import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.runtime.view.IStreamAddressSpace;
+import org.corfudb.runtime.view.StreamAddressSpace;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * It relies on several components:
  * A stream address space (where the address space keeps track of streams)
  * * Consequently, this requires new logging units which track streams.
- * A new streaming sequencer.
+ * A new streaming sequencer, with backpointer support.
  * Created by mwei on 8/28/15.
  */
 
@@ -28,8 +28,15 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequiredArgsConstructor
 public class NewStream implements IStream {
 
+    /** The ID of this stream. */
     final UUID streamID;
+    /** The position of this stream, in the global log index */
     final transient AtomicLong streamPointer = new AtomicLong();
+    /** A cache of pointers (contiguous) for this stream */
+    final transient ConcurrentLinkedQueue<Long> nextPointers = new ConcurrentLinkedQueue<Long>();
+    /** A reference to the instance. Upon deserialization, this needs to be restored.
+     *  TODO: maybe this needs to be retrieved from TLS.
+     */
     final transient ICorfuDBInstance instance;
 
     /**
@@ -60,6 +67,57 @@ public class NewStream implements IStream {
      */
     @Override
     public IStreamEntry readNextEntry() throws HoleEncounteredException, TrimmedException, IOException {
+        /* We have several options here:
+            1) If we have pointers to the next entry in our cache, we need to use them.
+            2) Get information from the streaming sequencer. Here we can use backpointers
+                if we are relatively close to the end of the stream.
+            3) Otherwise, read from the beginning of the global index, using next pointers
+                if we can find them...
+         */
+
+        // Here, we read using our cache.
+        Long nextPointer = nextPointers.poll();
+        if (nextPointer != null)
+        {
+            // Increment the stream pointer. The pointer may have been updated by another
+            // thread which is ahead of us, so we use the max.
+            streamPointer.getAndUpdate(i -> Math.max(i, nextPointer));
+
+            // We assume that next pointers are correct. If for some reason they are not,
+            // we're going to have issues. Fetch the next item . If the item was trimmed,
+            // we need to return that error to the client, which needs to figure out where
+            // the next non-trimmed section is.
+            IStreamAddressSpace.StreamAddressSpaceEntry e = instance.getStreamAddressSpace().read(nextPointer);
+
+            // Check to make sure that our stream belongs to this entry. If not, this
+            // is a serious problem.
+            if (!e.containsStream(streamID))
+            {
+                log.error("Retrieved entry " + nextPointer + " from pointer cache but it did not belong to this stream!");
+                throw new RuntimeException("Incorrect stream entry for "+ streamID + " at " + nextPointer);
+            }
+            return e;
+        }
+
+        // Nothing was in the cache so we ask the streaming sequencer.
+        // TODO: fix streaming sequencer implementation.
+        long currentPointer = instance.getStreamingSequencer().getCurrent(streamID);
+        long nextRead;
+        // The streaming sequencer wasn't able to give us any information, and we have
+        // no next pointers. scan ahead...
+        do {
+            nextRead = streamPointer.getAndIncrement();
+            IStreamAddressSpace.StreamAddressSpaceEntry e = instance.getStreamAddressSpace().read(nextRead);
+            if (e.containsStream(streamID))
+            {
+                return e;
+            }
+            // TODO: If the read doesn't belong to our stream, we should be able to tell
+            // other streams this is an entry for them?...
+
+        } while (nextRead < currentPointer);
+
+        // There were no stream entries belonging to us left in the log to retrieve.
         return null;
     }
 
@@ -71,7 +129,14 @@ public class NewStream implements IStream {
      */
     @Override
     public IStreamEntry readEntry(ITimestamp timestamp) throws HoleEncounteredException, TrimmedException, IOException {
-        return null;
+        long address = ((SimpleTimestamp) timestamp).address;
+        StreamAddressSpace.StreamAddressSpaceEntry e = instance.getStreamAddressSpace().read(address);
+        // make sure that this entry was a part of THIS stream.
+        if (!e.containsStream(streamID))
+        {
+            throw new NonStreamEntryException("Requested entry but it was not part of this stream!", address);
+        }
+        return e;
     }
 
     /**
