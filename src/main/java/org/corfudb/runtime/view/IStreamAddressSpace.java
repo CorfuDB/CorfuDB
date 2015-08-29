@@ -10,6 +10,7 @@ import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.TrimmedException;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Set;
 import java.util.UUID;
@@ -91,6 +92,13 @@ public interface IStreamAddressSpace {
      */
     void write(long offset, Set<UUID> streams, ByteBuffer payload)
         throws OverwriteException, TrimmedException, OutOfSpaceException;
+
+
+    default void writeObject(long offset, Set<UUID> streams, Serializable object)
+            throws OverwriteException, TrimmedException, OutOfSpaceException, IOException
+    {
+        write(offset, streams, Serializer.serializeBuffer(object));
+    }
 
     /**
      * Read from the stream address space.
