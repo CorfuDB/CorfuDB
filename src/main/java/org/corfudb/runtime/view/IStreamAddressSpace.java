@@ -51,7 +51,7 @@ public interface IStreamAddressSpace {
         /**
          * The payload for this stream entry.
          */
-        final ByteBuffer payload;
+        final ByteBuffer rawPayload;
 
         /**
          * The global index (address) for this entry.
@@ -62,7 +62,7 @@ public interface IStreamAddressSpace {
          * The deserialized version of the payload.
          */
         @Getter(lazy=true)
-        private final T deserializedEntry = deserializePayload();
+        private final T payload = deserializePayload();
 
 
         /**
@@ -74,8 +74,8 @@ public interface IStreamAddressSpace {
         private T deserializePayload()
         {
             try {
-                ByteBuffer deserializeBuffer = payload.duplicate();
-                payload.clear();
+                ByteBuffer deserializeBuffer = rawPayload.duplicate();
+                rawPayload.clear();
                 return (T) Serializer.deserialize(deserializeBuffer);
             }
             catch (Exception e)
@@ -143,7 +143,8 @@ public interface IStreamAddressSpace {
     default void writeObject(long offset, Set<UUID> streams, Serializable object)
             throws OverwriteException, TrimmedException, OutOfSpaceException, IOException
     {
-        write(offset, streams, Serializer.serializeBuffer(object));
+        ByteBuffer o = ByteBuffer.wrap(Serializer.serialize(object));
+        write(offset, streams, o);
     }
 
     /**

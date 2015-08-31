@@ -47,7 +47,7 @@ public class StreamAddressSpaceIT {
         IStreamAddressSpace.StreamAddressSpaceEntry entry = s.read(0);
         assertThat(entry.getGlobalIndex())
                 .isEqualTo(0);
-        assertThat(entry.getDeserializedEntry())
+        assertThat(entry.getPayload())
                 .isEqualTo(test);
         assertThat(entry.getStreams().contains(id))
                 .isEqualTo(true);
