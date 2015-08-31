@@ -121,22 +121,24 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ErrorCode ec = client.write(new UnitServerHdr(epochlist, address, streams), ByteBuffer.wrap(data), ExtntMarkType.EX_FILLED);
+            WriteResult wr = client.write(new UnitServerHdr(epochlist, address, streams), ByteBuffer.wrap(data), ExtntMarkType.EX_FILLED);
             thriftPool.returnResourceObject(client);
             success = true;
-            if (ec.equals(ErrorCode.ERR_OVERWRITE))
+            if (wr.getCode().equals(ErrorCode.ERR_OVERWRITE))
             {
-                throw new OverwriteException("Overwrite error", address);
+                if (!wr.isSetData() || wr.getData() == null)
+                    throw new OverwriteException("Overwrite error", address, null);
+                throw new OverwriteException("Overwrite error", address, ByteBuffer.wrap(wr.getData()));
             }
-            else if (ec.equals(ErrorCode.ERR_TRIMMED))
+            else if (wr.getCode().equals(ErrorCode.ERR_TRIMMED))
             {
                 throw new TrimmedException("Trim error", address);
             }
-            else if(ec.equals(ErrorCode.ERR_STALEEPOCH))
+            else if(wr.getCode().equals(ErrorCode.ERR_STALEEPOCH))
             {
                 throw new NetworkException("Writing to log unit in wrong epoch", this, address, false);
             }
-            else if (ec.equals(ErrorCode.ERR_FULL))
+            else if (wr.getCode().equals(ErrorCode.ERR_FULL))
             {
                 throw new OutOfSpaceException("Out of space!", address);
             }

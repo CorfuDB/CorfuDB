@@ -43,7 +43,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
     private CorfuDBView view;
     private Supplier<CorfuDBView> getView;
 
-	private final Logger log = LoggerFactory.getLogger(WriteOnceAddressSpace.class);
+    private final Logger log = LoggerFactory.getLogger(WriteOnceAddressSpace.class);
 
     public WriteOnceAddressSpace(CorfuDBRuntime client)
     {
@@ -57,7 +57,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         this.logID = logID;
         this.getView = () -> {
             try {
-            return this.client.getView(this.logID);
+                return this.client.getView(this.logID);
             }
             catch (RemoteException re)
             {
@@ -76,7 +76,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
     }
 
     public void write(long address, Serializable s)
-        throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
+            throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
     {
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {
@@ -89,21 +89,21 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
     }
     public void write(long address, byte[] data)
-        throws OverwriteException, TrimmedException, OutOfSpaceException
+            throws OverwriteException, TrimmedException, OutOfSpaceException
     {
-        while (true)
+       /* while (true)
         {
-            try {
-                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+            try {*/
+        CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+        IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
 
-                Set<String> streams = null;
-                if (logID != null)
-                    streams = Collections.singleton(logID.toString());
+        Set<String> streams = null;
+        if (logID != null)
+            streams = Collections.singleton(logID.toString());
 
-                replicationProtocol.write(address, streams, data);
-                return;
-            }
+        replicationProtocol.write(client, address, streams, data);
+        return;
+           /* }
             catch (NetworkException e)
             {
                 log.warn("Unable to write, requesting new view.", e);
@@ -119,34 +119,23 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
                     log.warn("View refreshed, but write was not successful: retrying.", ex);
                 }
             }
-        }
+        }*/
     }
 
     public byte[] read(long address)
-        throws UnwrittenException, TrimmedException
+            throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
+        CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+        IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
 
-        while (true)
-        {
-            try {
-                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-
-                if (logID != null)
-                    return replicationProtocol.read(address, logID.toString());
-                return replicationProtocol.read(address, null);
-            }
-            catch (NetworkException e)
-            {
-                log.warn("Unable to read, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-            }
-        }
+        if (logID != null)
+            return replicationProtocol.read(client, address, logID.toString());
+        return replicationProtocol.read(client, address, null);
     }
 
     public Object readObject(long address)
-    throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
+            throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
     {
         byte[] payload = read(address);
         try (ByteArrayInputStream bis = new ByteArrayInputStream(payload))
@@ -163,20 +152,16 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
             throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
+        try {
+            CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+            IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
 
-        while (true)
+            return replicationProtocol.readHints(address);
+        }
+        catch (NetworkException e)
         {
-            try {
-                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-
-                return replicationProtocol.readHints(address);
-            }
-            catch (NetworkException e)
-            {
-                log.warn("Unable to read, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-            }
+            log.warn("Unable to set hint, you might want to reconfig LUs? {}", e);
+            return null;
         }
     }
 
@@ -185,20 +170,16 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
             throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
-
-        while (true)
+        try {
+            CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+            IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+            replicationProtocol.setHintsNext(address, stream, nextOffset);
+            return;
+        }
+        catch (NetworkException e)
         {
-            try {
-                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-                replicationProtocol.setHintsNext(address, stream, nextOffset);
-                return;
-            }
-            catch (NetworkException e)
-            {
-                log.warn("Unable to read, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-            }
+            log.warn("Unable to set hint, you might want to reconfig LUs? {}", e);
+            return;
         }
     }
 
@@ -207,20 +188,16 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
             throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
-
-        while (true)
+        try {
+            CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+            IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+            replicationProtocol.setHintsTxDec(address, dec);
+            return;
+        }
+        catch (NetworkException e)
         {
-            try {
-                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-                replicationProtocol.setHintsTxDec(address, dec);
-                return;
-            }
-            catch (NetworkException e)
-            {
-                log.warn("Unable to read, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-            }
+            log.warn("Unable to set hint, you might want to reconfig LUs? {}", e);
+            return;
         }
     }
 
@@ -232,19 +209,16 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
             {
                 out.writeObject(flatTxn);
 
-                while (true)
+                try {
+                    CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+                    IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+                    replicationProtocol.setHintsFlatTxn(address, flatTxn);
+                    return;
+                }
+                catch (NetworkException e)
                 {
-                    try {
-                        CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                        IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-                        replicationProtocol.setHintsFlatTxn(address, flatTxn);
-                        return;
-                    }
-                    catch (NetworkException e)
-                    {
-                        log.warn("Unable to read, requesting new view.", e);
-                        client.invalidateViewAndWait(e);
-                    }
+                    log.warn("Unable to set hint, you might want to reconfig LUs? {}", e);
+                    return;
                 }
             }
         }

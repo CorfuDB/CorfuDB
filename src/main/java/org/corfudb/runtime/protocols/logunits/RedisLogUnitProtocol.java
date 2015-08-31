@@ -124,7 +124,8 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
            Long responses = (Long) jedis.eval(script.getBytes(), keys, args);
            if (responses == 1)
            {
-                throw new OverwriteException("Key already exists!", address);
+                // TODO: fix the null??
+                throw new OverwriteException("Key already exists!", address, null);
            }
            if (responses ==2)
            {

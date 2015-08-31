@@ -5,6 +5,8 @@ import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.smr.MultiCommand;
+import org.corfudb.runtime.view.CorfuDBView;
+import org.corfudb.runtime.view.CorfuDBViewSegment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,6 +18,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.regex.Matcher;
 
@@ -62,31 +65,71 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
     }
 
     @Override
-    public void write(long address, Set<String> streams, byte[] data)
-            throws OverwriteException, TrimmedException, OutOfSpaceException, NetworkException {
-        int mod = groups.size();
-        int groupnum =(int) (address % mod);
-        List<IServerProtocol> chain = groups.get(groupnum);
-        //writes have to go to chain in order
-        long mappedAddress = address/mod;
-        for (IServerProtocol unit : chain)
+    public void write(CorfuDBRuntime client, long address, Set<String> streams, byte[] data)
+            throws OverwriteException, TrimmedException, OutOfSpaceException {
+        // TODO: Handle multiple segments?
+        IReplicationProtocol reconfiguredRP = null;
+        while (true)
         {
-            ((IWriteOnceLogUnit)unit).write(mappedAddress, streams, data);
+            try {
+                if (reconfiguredRP != null) {
+                    reconfiguredRP.write(client, address, streams, data);
+                    return;
+                }
+                int mod = groups.size();
+                int groupnum =(int) (address % mod);
+                List<IServerProtocol> chain = groups.get(groupnum);
+                //writes have to go to chain in order
+                long mappedAddress = address/mod;
+                for (IServerProtocol unit : chain)
+                {
+                    try {
+                        ((IWriteOnceLogUnit)unit).write(mappedAddress, streams, data);
+                    } catch (OverwriteException e) {
+                        // If the payload of the exception is a different value, then it is a true overwrite,
+                        // pass up to WOAS. Otherwise, just keep executing the protocol
+                        if (!e.payload.equals(ByteBuffer.wrap(data))) {
+                            throw e;
+                        }
+                    }
+                }
+                return;
+            }
+            catch (NetworkException e)
+            {
+                log.warn("Unable to write, requesting new view.", e);
+                client.invalidateViewAndWait(e);
+                reconfiguredRP = client.getView().getSegments().get(0).getReplicationProtocol();
+            }
         }
-        return;
 
     }
 
     @Override
-    public byte[] read(long address, String stream) throws UnwrittenException, TrimmedException, NetworkException {
-        int mod = groups.size();
-        int groupnum =(int) (address % mod);
-        long mappedAddress = address/mod;
+    public byte[] read(CorfuDBRuntime client, long address, String stream) throws UnwrittenException, TrimmedException {
+        // TODO: Handle multiple segments?
+        IReplicationProtocol reconfiguredRP = null;
+        while (true)
+        {
+            try {
+                if (reconfiguredRP != null) {
+                    return reconfiguredRP.read(client, address, stream);
+                }
+                int mod = groups.size();
+                int groupnum =(int) (address % mod);
+                long mappedAddress = address/mod;
 
-        List<IServerProtocol> chain = groups.get(groupnum);
-        //reads have to come from last unit in chain
-        IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
-        return wolu.read(mappedAddress, stream);
+                List<IServerProtocol> chain = groups.get(groupnum);
+                //reads have to come from last unit in chain
+                IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
+                return wolu.read(mappedAddress, stream);          }
+            catch (NetworkException e)
+            {
+                log.warn("Unable to read, requesting new view.", e);
+                client.invalidateViewAndWait(e);
+                reconfiguredRP = client.getView().getSegments().get(0).getReplicationProtocol();
+            }
+        }
     }
 
     @Override
@@ -156,8 +199,8 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
 
     @SuppressWarnings("unchecked")
     private static List<List<IServerProtocol>> populateGroupsFromList(List<Map<String,Object>> list,
-                                        Map<String,Class<? extends IServerProtocol>> availableLogUnitProtocols,
-                                        long epoch) {
+                                                                      Map<String,Class<? extends IServerProtocol>> availableLogUnitProtocols,
+                                                                      long epoch) {
         ArrayList<List<IServerProtocol>> groups = new ArrayList<List<IServerProtocol>>();
         for (Map<String,Object> map : list)
         {

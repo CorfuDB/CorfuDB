@@ -517,7 +517,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 	 * in the event of some error in the middle, we reset any values we already set.
 	 */
 	@Override
-	synchronized public ErrorCode write(UnitServerHdr hdr, List<ByteBuffer> ctnt, ExtntMarkType et) throws org.apache.thrift.TException {
+	synchronized public WriteResult write(UnitServerHdr hdr, List<ByteBuffer> ctnt, ExtntMarkType et) throws org.apache.thrift.TException {
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
@@ -525,17 +525,22 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) {
             log.info("write request has stale incarnation={} cur incarnation={}",
                     hdr.getEpoch(), masterIncarnation);
-            return ErrorCode.ERR_STALEEPOCH;
+            return new WriteResult().setCode(ErrorCode.ERR_STALEEPOCH);
         }
 
 		log.debug("write({} size={} marktype={})", hdr.off, ctnt.size(), et);
         try {
             ErrorCode ec = appendExtntLogStore(hdr.off, hdr.streamID, ctnt, et);
             highWatermark = Long.max(highWatermark, hdr.off);
-            return ec;
+            WriteResult ret = new WriteResult().setCode(ec);
+            if (ec == ErrorCode.ERR_OVERWRITE) {
+                mapInfo minf = new mapInfo(hdr.getOff());
+                return ret.setData(get(minf.physOffset, minf.length).get(0));
+            }
+            return ret;
         } catch (IOException e) {
             e.printStackTrace();
-            return ErrorCode.ERR_IO;
+            return new WriteResult().setCode(ErrorCode.ERR_IO);
         }
     }
 
@@ -554,7 +559,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         {
             throw new TException("Simulated failure mode!");
         }
-		return write(hdr, new ArrayList<ByteBuffer>(), ExtntMarkType.EX_SKIP);
+		return write(hdr, new ArrayList<ByteBuffer>(), ExtntMarkType.EX_SKIP).getCode();
 	}
 
     private ExtntWrap genWrap(ErrorCode err) {

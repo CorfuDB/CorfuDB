@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -162,9 +163,10 @@ public class MemoryLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         {
             throw new TrimmedException("Address is trimmed", address);
         }
-        if (memoryArray.putIfAbsent(address, payload) != null)
+        byte[] prev = memoryArray.putIfAbsent(address, payload);
+        if (prev != null)
         {
-            throw new OverwriteException("Address already written to", address);
+            throw new OverwriteException("Address already written to", address, ByteBuffer.wrap(prev));
         }
     }
 

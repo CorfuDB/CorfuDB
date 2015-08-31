@@ -15,6 +15,7 @@
 
 package org.corfudb.runtime;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 /**
  * This exception is thrown whenever a write is attempted on a page
@@ -24,10 +25,12 @@ import java.io.IOException;
 public class OverwriteException extends IOException
 {
     public long address;
-    public OverwriteException(String desc, long address)
+    public ByteBuffer payload;
+    public OverwriteException(String desc, long address, ByteBuffer payload)
     {
         super(desc + "[address=" + address + "]");
         this.address = address;
+        this.payload = payload;
     }
 }
 

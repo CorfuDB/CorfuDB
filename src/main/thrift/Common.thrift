@@ -49,5 +49,10 @@ struct UnitServerHdr {
     2: i64 off,
     3: set<string> streamID,
 }
+
+struct WriteResult {
+    1: ErrorCode code,
+    2: binary data
+}
 	
 

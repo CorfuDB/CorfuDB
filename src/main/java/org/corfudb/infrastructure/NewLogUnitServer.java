@@ -181,10 +181,10 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
 
         if (newVal != dataBuffer)
         {
-            resultHandler.onComplete(ErrorCode.ERR_OVERWRITE);
+            resultHandler.onComplete(new WriteResult().setCode(ErrorCode.ERR_OVERWRITE).setData(newVal));
             return;
         }
-        resultHandler.onComplete(ErrorCode.OK);
+        resultHandler.onComplete(new WriteResult().setCode(ErrorCode.OK));
     }
 
     @Override

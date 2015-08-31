@@ -145,10 +145,12 @@ public class CorfuNewLogUnitProtocol implements IServerProtocol, INewWriteOnceLo
                     streams.stream()
                             .map(s -> new org.corfudb.infrastructure.thrift.UUID(s.getMostSignificantBits(), s.getLeastSignificantBits()))
                             .collect(Collectors.toSet());
-            ErrorCode ec = t.getClient().write(epoch, address, thriftUUIDS, payload);
-            if (ec == ErrorCode.ERR_OVERWRITE)
+            WriteResult wr = t.getClient().write(epoch, address, thriftUUIDS, payload);
+            if (wr.getCode() == ErrorCode.ERR_OVERWRITE)
             {
-                throw new OverwriteException("Address was written to!", address);
+                if (!wr.isSetData() || wr.getData() == null)
+                    throw new OverwriteException("Address was written to!", address, null);
+                throw new OverwriteException("Address was written to!", address, ByteBuffer.wrap(wr.getData()));
             }
         }
         catch (TException e)

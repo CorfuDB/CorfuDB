@@ -63,7 +63,7 @@ public class SimpleLogUnitServerDiskTest {
         for (int i = 1; i < 100; i++)
         {
             byteList.get(0).position(0);
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED).getCode();
             assertEquals(ec, ErrorCode.OK);
         }
     }
@@ -77,7 +77,7 @@ public class SimpleLogUnitServerDiskTest {
     @Test
     public void checkIfLogUnitIsWriteOnce() throws Exception
     {
-        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED);
+        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, Collections.singleton("fake stream")), byteList, ExtntMarkType.EX_FILLED).getCode();
         assertEquals(ErrorCode.ERR_OVERWRITE, ec);
     }
 

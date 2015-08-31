@@ -4,6 +4,7 @@ import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.smr.MultiCommand;
+import org.corfudb.runtime.view.CorfuDBView;
 
 import javax.json.JsonObject;
 import java.io.IOException;
@@ -49,13 +50,13 @@ public interface IReplicationProtocol {
         throw new UnsupportedOperationException("This replication protocol hasn't provided getGroups");
     }
 
-    default void write(long address, Set<String> streams, byte[] data)
-            throws OverwriteException, TrimmedException, OutOfSpaceException, NetworkException {
+    default void write(CorfuDBRuntime client, long address, Set<String> streams, byte[] data)
+            throws OverwriteException, TrimmedException, OutOfSpaceException {
         throw new UnsupportedOperationException("This replication protocol write hasn't been implemented");
     }
 
-    default byte[] read(long address, String stream)
-            throws UnwrittenException, TrimmedException, NetworkException {
+    default byte[] read(CorfuDBRuntime client, long address, String stream)
+            throws UnwrittenException, TrimmedException {
         throw new UnsupportedOperationException("This replication protocol read hasn't been implemented");
     }
 

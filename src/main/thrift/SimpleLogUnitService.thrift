@@ -4,7 +4,7 @@ include "Common.thrift"
 
 service SimpleLogUnitService {
 
-	Common.ErrorCode write(1:Common.UnitServerHdr hdr, 2:list<Common.LogPayload> ctnt, 3:Common.ExtntMarkType et),
+	Common.WriteResult write(1:Common.UnitServerHdr hdr, 2:list<Common.LogPayload> ctnt, 3:Common.ExtntMarkType et),
 	
 	Common.ErrorCode fix(1:Common.UnitServerHdr hdr),
 

@@ -21,7 +21,7 @@ struct ReadResult
 
 service NewLogUnitService {
 
-	Common.ErrorCode write(1:i64 epoch, 2:i64 offset, 3: set<Common.UUID> stream, 4:binary payload),
+	Common.WriteResult write(1:i64 epoch, 2:i64 offset, 3: set<Common.UUID> stream, 4:binary payload),
 	ReadResult read(1:i64 epoch, 2:i64 offset),
 	Common.ErrorCode trim(1:i64 epoch, 2: Common.UUID stream, 3:i64 prefix),
 

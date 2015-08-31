@@ -47,7 +47,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
     private CorfuDBView view;
     private Supplier<CorfuDBView> getView;
 
-	private final Logger log = LoggerFactory.getLogger(CachedWriteOnceAddressSpace.class);
+    private final Logger log = LoggerFactory.getLogger(CachedWriteOnceAddressSpace.class);
 
     public CachedWriteOnceAddressSpace(CorfuDBRuntime client)
     {
@@ -64,7 +64,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         this.logID = logID;
         this.getView = () -> {
             try {
-            return this.client.getView(this.logID);
+                return this.client.getView(this.logID);
             }
             catch (RemoteException re)
             {
@@ -84,66 +84,47 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
     }
 
     public void write(long address, Serializable s)
-        throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
+            throws IOException, OverwriteException, TrimmedException, OutOfSpaceException
     {
         write(address, Serializer.serialize_compressed(s));
     }
 
     public void write(long address, byte[] data)
-        throws OverwriteException, TrimmedException, OutOfSpaceException
+            throws OverwriteException, TrimmedException, OutOfSpaceException
     {
-        while (true)
-        {
-            try {
-                //TODO: handle multiple segments
-                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-                replicationProtocol.write(address, Collections.singleton(getView.get().getUUID().toString()), data);
-                return;
-            }
-            catch (NetworkException e)
-            {
-                log.warn("Unable to write, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-            }
-        }
+        //TODO: handle multiple segments
+        CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+        IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+        replicationProtocol.write(client, address, Collections.singleton(getView.get().getUUID().toString()), data);
+        return;
+
     }
 
     public byte[] read(long address)
-        throws UnwrittenException, TrimmedException
+            throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
 
-        while (true)
-        {
-            try {
-                byte[] data = null;
-                data = AddressSpaceCache.get(getView.get().getUUID(), address);
-                if (data != null) {
-                    return data;
-                }
-
-                //TODO: handle multiple segments
-
-                CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
-                IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-                data = replicationProtocol.read(address, getView.get().getUUID().toString());
-                AddressSpaceCache.put(getView.get().getUUID(), address, data);
-                return data;
-            }
-            catch (NetworkException e)
-            {
-                log.warn("Unable to read, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-            }
+        byte[] data = null;
+        data = AddressSpaceCache.get(getView.get().getUUID(), address);
+        if (data != null) {
+            return data;
         }
+
+        //TODO: handle multiple segments
+
+        CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
+        IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
+        data = replicationProtocol.read(client, address, getView.get().getUUID().toString());
+        AddressSpaceCache.put(getView.get().getUUID(), address, data);
+        return data;
     }
 
     public Object readObject(long address)
-        throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
+            throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
     {
-         byte[] data = read(address);
-         return Serializer.deserialize_compressed(data);
+        byte[] data = read(address);
+        return Serializer.deserialize_compressed(data);
     }
 }
 

@@ -203,10 +203,10 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
     }
 
     // Assumes each ByteBuffer has length <= PAGESIZE.
-    private ErrorCode put(long address, Set<String> streams, ByteBuffer buf, ExtntMarkType et) throws IOException {
+    private WriteResult put(long address, Set<String> streams, ByteBuffer buf, ExtntMarkType et) throws IOException {
         // TODO: If streams is null, add to EVERY stream??
         if (streams == null)
-            return ErrorCode.ERR_BADPARAM;
+            return new WriteResult().setCode(ErrorCode.ERR_BADPARAM);
         for (String stream : streams) {
             byte[] key = getKey(address, stream);
 
@@ -218,12 +218,12 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
                 if (value == null)
                     db.put(key, bs.toByteArray());
                 else
-                    return ErrorCode.ERR_OVERWRITE;
+                    return new WriteResult().setCode(ErrorCode.ERR_OVERWRITE).setData(ByteBuffer.wrap(value));
             } catch (RocksDBException e) {
                 throw new IOException(e.getMessage());
             }
         }
-        return ErrorCode.OK;
+        return new WriteResult().setCode(ErrorCode.OK);
     }
 
     public void trimLogStore(long toOffset) throws IOException {
@@ -324,7 +324,7 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
 	 * in the event of some error in the middle, we reset any values we already set.
 	 */
     @Override
-    synchronized public ErrorCode write(UnitServerHdr hdr, ByteBuffer ctnt, ExtntMarkType et) throws TException {
+    synchronized public WriteResult write(UnitServerHdr hdr, ByteBuffer ctnt, ExtntMarkType et) throws TException {
         if (simFailure)
         {
             throw new TException("Simulated failure mode!");
@@ -332,17 +332,17 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) {
             log.info("write request has stale incarnation={} cur incarnation={}",
                     hdr.getEpoch(), masterIncarnation);
-            return ErrorCode.ERR_STALEEPOCH;
+            return new WriteResult().setCode(ErrorCode.ERR_STALEEPOCH);
         }
 
         log.debug("write({} size={} marktype={})", hdr.off, ctnt.capacity(), et);
         try {
-            ErrorCode ec = put(hdr.off, hdr.streamID, ctnt, et);
+            WriteResult wr = put(hdr.off, hdr.streamID, ctnt, et);
             highWatermark = Long.max(highWatermark, hdr.off);
-            return ec;
+            return wr;
         } catch (IOException e) {
             e.printStackTrace();
-            return ErrorCode.ERR_IO;
+            return new WriteResult().setCode(ErrorCode.ERR_IO);
         }
     }
 
@@ -361,7 +361,7 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         {
             throw new TException("Simulated failure mode!");
         }
-        return write(hdr, ByteBuffer.allocate(0), ExtntMarkType.EX_SKIP);
+        return write(hdr, ByteBuffer.allocate(0), ExtntMarkType.EX_SKIP).getCode();
     }
 
     private ExtntWrap genWrap(ErrorCode err) {

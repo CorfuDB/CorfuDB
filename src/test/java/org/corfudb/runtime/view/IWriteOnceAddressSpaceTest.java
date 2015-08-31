@@ -34,8 +34,9 @@ public abstract class IWriteOnceAddressSpaceTest {
     public void AddressSpaceIsWriteOnce() throws Exception
     {
         String testString = "hello world";
+        String testString2 = "hello world2";
         addressSpace.write(0, testString);
-        assertRaises(() -> addressSpace.write(0, testString), OverwriteException.class);
+        assertRaises(() -> addressSpace.write(0, testString2), OverwriteException.class);
     }
 
     @Test

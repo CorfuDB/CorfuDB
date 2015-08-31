@@ -64,7 +64,7 @@ public class RocksLogUnitServerDiskTest {
 
         while (!done) {
             try {
-                slus.write(new UnitServerHdr(epochlist, 0, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED);
+                slus.write(new UnitServerHdr(epochlist, 0, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED).getCode();
                 done = true;
             } catch (NullPointerException e) {}
         }
@@ -73,7 +73,7 @@ public class RocksLogUnitServerDiskTest {
         for (int i = 1; i < 100; i++)
         {
             test.position(0);
-            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED);
+            ErrorCode ec = slus.write(new UnitServerHdr(epochlist, i, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED).getCode();
             assertEquals(ec, ErrorCode.OK);
         }
     }
@@ -87,7 +87,7 @@ public class RocksLogUnitServerDiskTest {
     @Test
     public void checkIfLogUnitIsWriteOnce() throws Exception
     {
-        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED);
+        ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED).getCode();
         assertEquals(ErrorCode.ERR_OVERWRITE, ec);
     }
 
