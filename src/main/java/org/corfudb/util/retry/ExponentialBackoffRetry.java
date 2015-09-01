@@ -1,8 +1,6 @@
 package org.corfudb.util.retry;
 
-import lombok.Builder;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
@@ -15,7 +13,7 @@ import java.util.Map;
  * Created by mwei on 9/1/15.
  */
 @Slf4j
-public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception> implements IRetry<E,F,G,H> {
+public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> implements IRetry<E,F,G,H,O> {
 
     @Getter
     long retryCounter = 0;
@@ -24,7 +22,7 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G
     LocalDateTime backoffTime = null;
 
     @Getter
-    final IRetryable runFunction;
+    final IRetryable<E,F,G,H,O> runFunction;
 
     @Getter
     final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();

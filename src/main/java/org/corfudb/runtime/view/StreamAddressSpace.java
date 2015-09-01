@@ -54,33 +54,29 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                     //TODO: fold Amy's replication protocol into this..., for now we only support chain replication.
                     //In addition, we currently only support the new-style logging units. Any old style logging units
                     //in the system will cause this class to fail.
-                    while (true) {
-                        try {
-                            //First, we determine which chain to use.
-                            int chainNum = (int) (index % instance.getView().getSegments().get(0).getGroups().size());
+                    return IRetry.build(ExponentialBackoffRetry.class, () -> {
+                        //First, we determine which chain to use.
+                        int chainNum = (int) (index % instance.getView().getSegments().get(0).getGroups().size());
 
-                            //Next, we perform the read. Currently we read from the last unit in the chain, but once we
-                            //have a mechanism that allows us to determine the tail, we can spread those reads
-                            //across the chain.
-                            List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
-                            int unitNum = chain.size();
-                            INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
-                            INewWriteOnceLogUnit.WriteOnceLogUnitRead result = lu.read(index);
+                        //Next, we perform the read. Currently we read from the last unit in the chain, but once we
+                        //have a mechanism that allows us to determine the tail, we can spread those reads
+                        //across the chain.
+                        List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
+                        int unitNum = chain.size();
+                        INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
+                        INewWriteOnceLogUnit.WriteOnceLogUnitRead result = lu.read(index);
 
-                            if (result.getResult() != ReadCode.READ_EMPTY) {
-                                return new StreamAddressSpaceEntry<>(result.getStreams(), result.getData(), index);
-                            }
-
-                            return null;
-                        } catch (NetworkException e) {
-                            //Request a reconfiguration and retry.
-                            log.error("Error performing read, requesting reconfiguration and retry...");
-                            instance.getConfigurationMaster().requestReconfiguration(e);
-                            try {Thread.sleep(500);}
-                            catch (InterruptedException ie) {//don't do anything if interrupted.
-                            }
+                        if (result.getResult() != ReadCode.READ_EMPTY) {
+                            return new StreamAddressSpaceEntry<>(result.getStreams(), result.getData(), index);
                         }
-                    }
+                        return null;
+                    })
+                    .onException(NetworkException.class, e -> {
+                        log.error("Error performing read, requesting reconfiguration and retry...");
+                        instance.getConfigurationMaster().requestReconfiguration(e);
+                        return true;
+                    })
+                    .run();
                 });
     }
 
