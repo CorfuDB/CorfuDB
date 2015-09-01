@@ -19,3 +19,4 @@ org.corfudb.runtime.stream.legacy
 org.corfudb.runtime.view
 org.corfudb.samples
 org.corfudb.util
+org.corfudb.util.retry
