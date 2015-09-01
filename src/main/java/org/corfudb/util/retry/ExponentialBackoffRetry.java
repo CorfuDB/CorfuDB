@@ -1,15 +1,16 @@
 package org.corfudb.util.retry;
 
-import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.Map;
 
-/**
+/** This class implements a basic exponential backoff retry.
+ *
  * Created by mwei on 9/1/15.
  */
 @Slf4j
@@ -24,6 +25,9 @@ public class ExponentialBackoffRetry implements IRetry {
 
     @Getter
     final IRetryable runFunction;
+
+    @Getter
+    final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
 
     boolean exponentialRetry() {
         if (backoffTime == null)

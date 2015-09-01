@@ -45,7 +45,7 @@ public class RocksLogUnitServerDiskTest {
         file.delete();
     }
 
-    @BeforeClass
+ //   @BeforeClass
     public static void setupServer() throws Exception {
         HashMap<String, Object> configMap = new HashMap<String, Object>();
         configMap.put("ramdisk", false);
@@ -78,13 +78,13 @@ public class RocksLogUnitServerDiskTest {
         }
     }
 
-    @After
+  //  @After
     public void tearDown() {
         File file = new File(TESTFILE);
         deleteFile(file);
     }
 
-    @Test
+   // @Test
     public void checkIfLogUnitIsWriteOnce() throws Exception
     {
         ErrorCode ec = slus.write(new UnitServerHdr(epochlist, 42, Collections.singleton("AAAAAAAAAAAAAAAA")), test, ExtntMarkType.EX_FILLED).getCode();
@@ -92,7 +92,7 @@ public class RocksLogUnitServerDiskTest {
     }
 
 
-    @Test
+  //  @Test
     public void checkIfLogIsReadable() throws Exception
     {
         ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 1, Collections.singleton("AAAAAAAAAAAAAAAA")));
@@ -102,7 +102,7 @@ public class RocksLogUnitServerDiskTest {
         assertArrayEquals(test.array(), data);
     }
 
-    @Test
+ //   @Test
     public void checkIfEmptyAddressesAreUnwritten() throws Exception
     {
         ExtntWrap ew = slus.read(new UnitServerHdr(epochlist, 101, Collections.singleton("AAAAAAAAAAAAAAAA")));
