@@ -1,5 +1,7 @@
 package org.corfudb.util.retry;
 
+import lombok.SneakyThrows;
+
 import java.util.Map;
 
 /**
@@ -9,25 +11,80 @@ import java.util.Map;
  *
  * Created by mwei on 9/1/15.
  */
-public interface IRetry {
+public interface IRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception> {
 
     /** Run the retry. This function may never return. */
+    @SuppressWarnings("unchecked")
     default void run()
+    throws E, F, G, H
     {
         boolean retry = true;
         while (retry) {
             try {
                 retry = !getRunFunction().retryFunction();
-            } catch (Exception e) {
-                if (getHandlerMap().containsKey(e.getClass()))
+            }
+            catch (Exception ex) {
+                if (getHandlerMap().containsKey(ex.getClass()))
                 {
-                    retry = getHandlerMap().get(e.getClass()).HandleException(e);
+                    retry = ((ExceptionHandler<Exception, E, F, G ,H>)getHandlerMap().get(ex.getClass())).HandleException(ex) && handleException(ex);
                 }
                 else {
-                    retry = handleException(e);
+                    retry = handleException(ex);
                 }
             }
         }
+    }
+
+    /* The following are builders which are basically a hack to support varidic exceptions... */
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    static IRetry<RuntimeException, RuntimeException, RuntimeException, RuntimeException> build(Class<? extends IRetry> retryType, IRetryable runFunction)
+    {
+        return (IRetry<RuntimeException, RuntimeException, RuntimeException, RuntimeException>) retryType.getConstructor(IRetryable.class).newInstance(runFunction);
+    }
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    static <T extends Exception> IRetry<T, RuntimeException, RuntimeException, RuntimeException>
+    build(Class<? extends IRetry> retryType, Class<? extends T> firstExceptionType, IRetryable runFunction)
+    {
+        return (IRetry<T, RuntimeException, RuntimeException, RuntimeException>) retryType.getConstructor(IRetryable.class).newInstance(runFunction)
+                                                                                    .passException(firstExceptionType);
+    }
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    static <T extends Exception, U extends Exception> IRetry<T, U, RuntimeException, RuntimeException>
+    build(Class<? extends IRetry> retryType, Class<? extends T> firstExceptionType, Class<? extends U> secondExceptionType, IRetryable runFunction)
+    {
+        return (IRetry<T,U, RuntimeException, RuntimeException>) retryType.getConstructor(IRetryable.class).newInstance(runFunction)
+                .passException(firstExceptionType)
+                .passException(secondExceptionType);
+    }
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    static <T extends Exception, U extends Exception, V extends Exception> IRetry<T, U, V, RuntimeException>
+    build(Class<? extends IRetry> retryType, Class<? extends T> firstExceptionType, Class<? extends U> secondExceptionType, Class<? extends V> thirdExceptionType, IRetryable runFunction)
+    {
+        return (IRetry<T,U, V, RuntimeException>) retryType.getConstructor(IRetryable.class).newInstance(runFunction)
+                .passException(firstExceptionType)
+                .passException(secondExceptionType)
+                .passException(thirdExceptionType);
+    }
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    static <T extends Exception, U extends Exception, V extends Exception, W extends Exception>
+    IRetry<T, U, V, W> build4(Class<? extends IRetry> retryType, Class<? extends T> firstExceptionType, Class<? extends U> secondExceptionType,
+                              Class<? extends V> thirdExceptionType,  Class<? extends W> fourthExceptionType,  IRetryable runFunction)
+    {
+        return (IRetry<T,U, V, W>) retryType.getConstructor(IRetryable.class).newInstance(runFunction)
+                .passException(firstExceptionType)
+                .passException(secondExceptionType)
+                .passException(thirdExceptionType)
+                .passException(fourthExceptionType);
     }
 
     /** Get the function that needs to be retried. */
@@ -44,8 +101,8 @@ public interface IRetry {
      * a parameter and should return true if the retry logic should continue, false otherwise.
      */
     @FunctionalInterface
-    interface ExceptionHandler {
-        boolean HandleException(Exception e);
+    interface ExceptionHandler<T extends Exception, U extends Exception, V extends Exception, W extends Exception, X extends Exception> {
+        boolean HandleException(T e) throws U, V, W, X;
     }
 
     /**
@@ -56,6 +113,18 @@ public interface IRetry {
     Map<Class<? extends Exception>, ExceptionHandler> getHandlerMap();
 
     /**
+     * Pass an exception by throwing it to the main body.
+     * @param exceptionType     The exception to pass to the main body.
+     * @param <T>               The type of exceptions to pass.
+     * @return                  An IRetry, to support a fluent API interface.
+     */
+    default <T extends Exception> IRetry<E,F,G,H> passException(Class<T> exceptionType)
+    {
+        getHandlerMap().put(exceptionType, e -> {throw e;});
+        return this;
+    }
+
+    /**
      * Register an exception handler when an exception occurs.
      * Note that only one exception handler can be registered per exception type.
      * @param exceptionType     The type of exception to handle.
@@ -63,9 +132,10 @@ public interface IRetry {
      *                          if the retry logic should continue, or false if the logic should abort.
      * @return                  An IRetry, to support a fluent API interface.
      */
-    default IRetry onException(Class<? extends Exception> exceptionType, ExceptionHandler handler)
+    @SuppressWarnings("unchecked")
+    default <T extends Exception> IRetry<E,F,G,H> onException(Class<T> exceptionType, ExceptionHandler<T, E,F,G,H> handler)
     {
-        getHandlerMap().put(exceptionType, handler);
+        getHandlerMap().put(exceptionType, (ExceptionHandler) handler);
         return this;
     }
 }

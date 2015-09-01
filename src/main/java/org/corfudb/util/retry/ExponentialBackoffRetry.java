@@ -1,5 +1,6 @@
 package org.corfudb.util.retry;
 
+import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,8 +15,7 @@ import java.util.Map;
  * Created by mwei on 9/1/15.
  */
 @Slf4j
-@RequiredArgsConstructor(staticName="build")
-public class ExponentialBackoffRetry implements IRetry {
+public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception> implements IRetry<E,F,G,H> {
 
     @Getter
     long retryCounter = 0;
@@ -28,6 +28,11 @@ public class ExponentialBackoffRetry implements IRetry {
 
     @Getter
     final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
+
+    public ExponentialBackoffRetry(IRetryable runFunction)
+    {
+        this.runFunction = runFunction;
+    }
 
     boolean exponentialRetry() {
         if (backoffTime == null)

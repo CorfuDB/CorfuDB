@@ -13,7 +13,10 @@ import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.TrimmedException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
+import org.corfudb.util.retry.IRetry;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
@@ -93,31 +96,26 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      */
     @Override
     public void write(long offset, Set<UUID> streams, ByteBuffer payload) throws OverwriteException, TrimmedException, OutOfSpaceException {
-        while (true) {
-            try {
-                //First, we determine which chain to use.
-                int chainNum = (int) (offset % instance.getView().getSegments().get(0).getGroups().size());
+        IRetry.build(ExponentialBackoffRetry.class, OverwriteException.class, TrimmedException.class, OutOfSpaceException.class, () -> {
+            //First, we determine which chain to use.
+            int chainNum = (int) (offset % instance.getView().getSegments().get(0).getGroups().size());
 
-                //Next, we perform the write. We must write to every replica in the chain, in sequence.
-                List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
-                for (IServerProtocol p : chain)
-                {
-                    INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit)p;
-                    lu.write(offset, streams, payload);
-                }
-
-                //finally, put this entry in the cache so we don't need to go over the network.
-                cache.put(offset,  new StreamAddressSpaceEntry<>(streams, payload, offset));
-                return;
-            } catch (NetworkException e) {
-                //Request a reconfiguration and retry.
-                log.error("Error performing read, requesting reconfiguration and retry...");
-                instance.getConfigurationMaster().requestReconfiguration(e);
-                try {Thread.sleep(500);}
-                catch (InterruptedException ie) {//don't do anything if interrupted.
-                }
+            //Next, we perform the write. We must write to every replica in the chain, in sequence.
+            List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
+            for (IServerProtocol p : chain) {
+                INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) p;
+                lu.write(offset, streams, payload);
             }
-        }
+
+            //finally, put this entry in the cache so we don't need to go over the network.
+            cache.put(offset, new StreamAddressSpaceEntry<>(streams, payload, offset));
+            return true;
+        }).onException(NetworkException.class, e -> {
+            log.error("Error performing read, requesting reconfiguration and retry...");
+            instance.getConfigurationMaster().requestReconfiguration(e);
+            return true;
+        })
+            .run();
     }
 
     /**
