@@ -18,8 +18,8 @@ import java.util.Map;
 @Slf4j
 public class CorfuInfrastructureBuilder {
 
-    List<Runnable> serverList;
-    List<Thread> runningServers;
+    List<ICorfuDBServer> serverList;
+    List<ICorfuDBServer> runningServers;
 
     Map<String, Object> configMap;
     Map<String, Object> layoutMap;
@@ -30,8 +30,8 @@ public class CorfuInfrastructureBuilder {
     @SuppressWarnings("unchecked")
     public CorfuInfrastructureBuilder()
     {
-        serverList = new LinkedList<Runnable>();
-        runningServers = new LinkedList<Thread>();
+        serverList = new LinkedList<ICorfuDBServer>();
+        runningServers = new LinkedList<ICorfuDBServer>();
         configMap = new HashMap<String, Object>();
 
         configMap.put("sequencers", new LinkedList<String>());
@@ -113,25 +113,23 @@ public class CorfuInfrastructureBuilder {
     public CorfuInfrastructureBuilder start(int configMasterPort)
     {
         configMap.put("port", configMasterPort);
+        ((LinkedList<String>)configMap.get("configmasters")).add("cdbcm://localhost:" + configMasterPort);
         log.info("Starting dynamically created infrastructure...");
         serverList.forEach(r -> {
-            Thread t = new Thread(r);
-            runningServers.add(t);
-            t.start();
+            r.start();
+            runningServers.add(r);
         });
         ConfigMasterServer cms = new ConfigMasterServer();
-        Runnable r = cms.getInstance(configMap);
-        Thread t = new Thread(r);
-        runningServers.add(t);
+        ICorfuDBServer r = cms.getInstance(configMap);
         this.configMasterPort = configMasterPort;
         /* wait for all threads to start*/
         runningServers.forEach( th -> {
-            if (!th.isAlive())
+            if (!th.getThread().isAlive())
             {
                 try {
                     Thread.sleep(1000); //don't want to hang, so just sleep 1s hope it'll come alive..
                 } catch (InterruptedException ie) {}
-                if (!th.isAlive())
+                if (!th.getThread().isAlive())
                 {
                     log.warn("Waited for 1s, but thread is still not alive!");
                 }
@@ -139,7 +137,8 @@ public class CorfuInfrastructureBuilder {
         });
         //again, wait for everything to settle...
         //TODO:: loop until everything is pingable...
-        t.start();
+        r.start();
+        runningServers.add(r);
         Thread.sleep(1000);
         log.info("Dynamically created infrastruacture built and started...");
        return this;
@@ -166,8 +165,9 @@ public class CorfuInfrastructureBuilder {
      * Shutdown servers and wait. This uses that Thread::stop method that everyone is disgusted by...
      */
     @SuppressWarnings("deprecation")
-    public void shutdownAndWait() {
+    public void shutdownAndWait()
+    {
         log.info("Shutting down dynamically created infrastructure...");
-        runningServers.forEach(Thread::stop);
+        runningServers.forEach(ICorfuDBServer::close);
     }
 }

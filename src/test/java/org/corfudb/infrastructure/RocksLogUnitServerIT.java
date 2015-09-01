@@ -6,6 +6,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
 import org.corfudb.runtime.view.ConfigurationMaster;
 import org.corfudb.runtime.view.IConfigurationMaster;
+import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -15,6 +16,7 @@ import org.junit.runner.Description;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertNotNull;
@@ -30,6 +32,22 @@ public class RocksLogUnitServerIT {
     CorfuDBSimpleLogUnitProtocol lu;
     private static RocksLogUnitServer ru = new RocksLogUnitServer();
 
+    static Map<String, Object> luConfigMap = new HashMap<String,Object>() {
+        {
+            put("capacity", 200000);
+            put("ramdisk", true);
+            put("pagesize", 4096);
+            put("trim", 0);
+        }
+    };
+
+    CorfuInfrastructureBuilder infrastructure =
+            CorfuInfrastructureBuilder.getBuilder()
+                    .addSequencer(9001, StreamingSequencerServer.class, "cdbsts", null)
+                    .addLoggingUnit(9000, 0, RocksLogUnitServer.class, "cdbslu", luConfigMap)
+                    .start(9002);
+
+
     private static String TESTFILE = "rocksTestFile";
     private static int PAGESIZE = 4096;
     private static int NUMPAGES = 100;
@@ -43,7 +61,7 @@ public class RocksLogUnitServerIT {
 
     @Before
     public void getCDR() {
-        cdr = CorfuDBRuntime.createRuntime("http://localhost:12702/corfu");
+        cdr = CorfuDBRuntime.createRuntime(infrastructure.getConfigString());
         cdr.waitForViewReady();
         IConfigurationMaster cm = new ConfigurationMaster(cdr);
         cm.resetAll();

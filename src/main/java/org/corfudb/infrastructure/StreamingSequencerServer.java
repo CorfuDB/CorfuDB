@@ -19,6 +19,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
 
+import lombok.Getter;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.server.TServer;
@@ -52,90 +53,33 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
     private int port = 0;
     private Logger log = LoggerFactory.getLogger(StreamingSequencerServer.class);
     private boolean simFailure = false;
-    private ExecutorService tp = Executors.newCachedThreadPool();
-    class StreamData {
 
-        public StreamData(UUID streamID) {
-            this.streamID = streamID;
-            this.lastPos = new AtomicLong();
-        }
+    @Getter
+    Thread thread;
+    TServer server;
+    boolean running;
 
-        AtomicLong internalPos = null;
-        AtomicLong lastPos = null;
-        Long max = 0L;
-        UUID streamID;
-        int allocation = 10;
-
-        synchronized void setAllocationSize(int size)
+    /**
+     * When an object implementing interface <code>Runnable</code> is used
+     * to create a thread, starting the thread causes the object's
+     * <code>run</code> method to be called in that separately executing
+     * thread.
+     * <p>
+     * The general contract of the method <code>run</code> is that it may
+     * take any action whatsoever.
+     *
+     * @see Thread#run()
+     */
+    @Override
+    public void run() {
+        running = true;
+        while (running)
         {
-            if (size < 2) { size = 2; }
-            this.allocation = size;
-        }
-
-        synchronized void allocate()
-        {
-            if (internalPos == null)
-            {
-                Long newPos = pos.getAndAdd(allocation);
-                internalPos = new AtomicLong(newPos);
-                max = newPos + allocation - 1;
-                log.debug("Stream  " + streamID + "allocation start at " + newPos + " to " + max);
-            }
-        }
-
-        synchronized StreamSequence reallocate(StreamSequence s, int range)
-        {
-            if (s.position >= max)
-            {
-                Long newPos = pos.getAndAdd(allocation);
-                internalPos = new AtomicLong(newPos);
-                final long oldPos = s.position;
-                CompletableFuture<Void> cf = CompletableFuture.runAsync(() -> {
-                try {
-                    //CorfuDBStreamMoveEntry cdsme = new CorfuDBStreamMoveEntry(streamID, null, null, newPos, -1, -1);
-                    //log.debug("Writing move entry from " + oldPos + " to " + newPos + " for stream " + streamID);
-                   // woas.write(oldPos, cdsme);
-                    lastPos.accumulateAndGet(oldPos, (cur, given) -> { return Math.max(cur,given);} );
-
-                    log.debug("Finished writing move entry.");
-                } catch (Exception ie)
-                {
-                    log.warn("Error placing move entry: ", ie);
-                }
-                }, tp);
-                max = newPos + allocation - 1;
-                s.position = internalPos.getAndAdd(range);
-                s.totalTokens = Math.min(range, (int)(max-s.position));
-                lastPos.accumulateAndGet(s.position, (cur, given) -> { return Math.max(cur,given);} );
-                log.debug("Reallocation for " + streamID + " new range " + s.position + " - " + max);
-            }
-            else
-            {
-                s.position = internalPos.getAndAdd(range);
-                lastPos.accumulateAndGet(s.position, (cur, given) -> { return Math.max(cur,given);} );
-                s.totalTokens = Math.min(range, (int)(max-s.position));
-            }
-
-            return s;
-        }
-
-        StreamSequence getToken(int range)
-        {
-            StreamSequence s = new StreamSequence();
-            if (range == 0) {s.position = lastPos.get(); return s;}
-            if (internalPos == null) { allocate(); }
-            s.position = internalPos.getAndAdd(range);
-            s.totalTokens = Math.min(range, (int)(max-s.position));
-            if (s.position >= max)
-            {
-                return reallocate(s, range);
-            }
-            lastPos.accumulateAndGet(s.position, (cur, given) -> { return Math.max(cur,given);} );
-            return s;
+            serverloop();
         }
     }
+
 	AtomicLong pos = new AtomicLong(0);
-    Map<String, StreamData> streamMap = new ConcurrentHashMap<String, StreamData>();
 
     @Override
     public StreamSequence nextstreampos(String streamID, int range) throws TException {
@@ -143,16 +87,10 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
         {
             throw new TException("Simulated failure mode!");
         }
-        StreamData sd = streamMap.get(streamID);
-        if (sd == null)
-        {
-            log.debug("Registering new stream " + streamID);
-            StreamData sd_temp = new StreamData(UUID.fromString(streamID));
-            sd = streamMap.putIfAbsent(streamID, sd_temp);
-            if (sd == null) { sd = sd_temp; }
-            sd.allocate();
-        }
-        return sd.getToken(range);
+        StreamSequence ss = new StreamSequence();
+        ss.setPosition(nextpos(range));
+        ss.setTotalTokens(1);
+        return ss;
     }
 
     @Override
@@ -183,22 +121,12 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
         {
             throw new TException("Simulated failure mode!");
         }
-        StreamData sd = streamMap.get(streamID);
-        if (sd == null)
-        {
-            log.debug("Registering new stream " + streamID);
-            StreamData sd_temp = new StreamData(UUID.fromString(streamID));
-            sd = streamMap.putIfAbsent(streamID, sd_temp);
-            if (sd == null) { sd = sd_temp; }
-        }
-        log.debug("Setting " + streamID + " allocation size to " + size);
-        sd.setAllocationSize(size);
+        throw new TException("deprecated");
     }
 
     @Override
     public void reset() throws TException {
         log.info("Reset requested, resetting maps and counters...");
-        streamMap = new ConcurrentHashMap<String, StreamData>();
         pos = new AtomicLong(0);
         simFailure = false;
     }
@@ -232,28 +160,28 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
         return true;
     }
 
-    public Runnable getInstance(final Map<String,Object> config)
+    public ICorfuDBServer getInstance(final Map<String,Object> config)
     {
         final StreamingSequencerServer st = this;
-        return new Runnable()
-        {
-            @Override
-            public void run() {
-                st.port = (Integer) config.get("port");
-                //st.configmasterURL = (String) config.get("configmaster");
-                //st.c = CorfuDBRuntime.getRuntime(st.configmasterURL);
-                //st.c.startViewManager();
-                //st.woas = new CachedWriteOnceAddressSpace(st.c);
-                while (true) {
-                    st.serverloop();
-                }
-            }
-        };
+        st.port = (Integer) config.get("port");
+        thread = new Thread(this);
+        return this;
     }
 
-	public void serverloop() {
+    @Override
+    public void close() {
+        running = false;
+        server.stop();
+        thread.interrupt();
+        try {
+            this.getThread().join(5000);
+        } catch(InterruptedException ie)
+        {
 
-        TServer server;
+        }
+    }
+
+    public void serverloop() {
         TServerSocket serverTransport;
         StreamingSequencerService.Processor<StreamingSequencerServer> processor;
         log.debug("Streaming sequencer entering service loop.");

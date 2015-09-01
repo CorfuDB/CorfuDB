@@ -31,6 +31,48 @@ import java.util.Set;
 @NoArgsConstructor
 public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.AsyncIface {
 
+    TServer server;
+    Boolean running;
+    @Getter
+    Thread thread;
+
+    /**
+     * When an object implementing interface <code>Runnable</code> is used
+     * to create a thread, starting the thread causes the object's
+     * <code>run</code> method to be called in that separately executing
+     * thread.
+     * <p>
+     * The general contract of the method <code>run</code> is that it may
+     * take any action whatsoever.
+     *
+     * @see Thread#run()
+     */
+    @Override
+    public void run() {
+        running = true;
+        while (running) {
+            TNonblockingServerTransport serverTransport;
+            NewLogUnitService.AsyncProcessor<NewLogUnitServer> processor;
+            log.debug("New log unit entering service loop.");
+            try {
+                serverTransport = new TNonblockingServerSocket(port);
+                processor =
+                        new NewLogUnitService.AsyncProcessor<NewLogUnitServer>(this);
+                server = new TThreadedSelectorServer(new TThreadedSelectorServer.Args(serverTransport)
+                        .processor(processor)
+                        .protocolFactory(TCompactProtocol::new)
+                        .inputTransportFactory(new TFastFramedTransport.Factory())
+                        .outputTransportFactory(new TFastFramedTransport.Factory())
+                );
+                log.info("New log unit starting on port " + port);
+                server.serve();
+            } catch (TTransportException e) {
+                log.warn("New log unit encountered exception, restarting.", e);
+            }
+        }
+        log.info("New log unit server shutting down.");
+    }
+
     @Data
     public class NewLogUnitHints {
             HintType type;
@@ -70,11 +112,19 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
      * @return                  A runnable representing the main thread of this log unit.
      */
     @Override
-    public Runnable getInstance(Map<String, Object> configuration) {
-        return () -> {
-            parseConfiguration(configuration);
-            serverLoop();
-        };
+    public ICorfuDBServer getInstance(Map<String, Object> configuration) {
+        parseConfiguration(configuration);
+        thread = new Thread(this);
+        return this;
+    }
+
+    @Override
+    public void close() {
+        if (server != null)
+        {
+            running = false;
+            server.stop();
+        }
     }
 
     /**
@@ -99,32 +149,6 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
         hintCache = Caffeine.newBuilder()
                 .weakKeys()
                 .build();
-    }
-
-    /**
-     * The main server loop. Mainly creates a Thrift server and schedules
-     * periodic garbage collection.
-     */
-    public void serverLoop() {
-        TServer server;
-        TNonblockingServerTransport serverTransport;
-        NewLogUnitService.AsyncProcessor<NewLogUnitServer> processor;
-        log.debug("New log unit entering service loop.");
-        try {
-            serverTransport = new TNonblockingServerSocket(port);
-            processor =
-                    new NewLogUnitService.AsyncProcessor<NewLogUnitServer>(this);
-            server = new TThreadedSelectorServer(new TThreadedSelectorServer.Args(serverTransport)
-                    .processor(processor)
-                    .protocolFactory(TCompactProtocol::new)
-                    .inputTransportFactory(new TFastFramedTransport.Factory())
-                    .outputTransportFactory(new TFastFramedTransport.Factory())
-            );
-            log.info("New log unit starting on port " + port);
-            server.serve();
-        } catch (TTransportException e) {
-            log.warn("New log unit encountered exception, restarting.", e);
-        }
     }
 
     /**

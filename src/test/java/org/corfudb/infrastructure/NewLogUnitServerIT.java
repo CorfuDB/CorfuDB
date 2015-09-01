@@ -6,6 +6,8 @@ import org.corfudb.infrastructure.thrift.ErrorCode;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.protocols.logunits.CorfuNewLogUnitProtocol;
 import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
+import org.corfudb.util.CorfuInfrastructureBuilder;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -29,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class NewLogUnitServerIT {
 
     CorfuNewLogUnitProtocol nlup;
+    CorfuInfrastructureBuilder infrastructure;
 
     @Rule
     public TestRule watcher = new TestWatcher() {
@@ -41,7 +44,19 @@ public class NewLogUnitServerIT {
     public void setup()
     throws Exception
     {
-        nlup = new CorfuNewLogUnitProtocol("localhost", 12908, Collections.emptyMap(), 0L);
+        infrastructure =
+                CorfuInfrastructureBuilder.getBuilder()
+                        .addSequencer(9873, StreamingSequencerServer.class, "cdbss", null)
+                        .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
+                        .start(7775);
+        nlup = new CorfuNewLogUnitProtocol("localhost", 7777, Collections.emptyMap(), 0L);
+    }
+
+    @After
+    public void tearDown()
+    throws Exception
+    {
+        infrastructure.shutdownAndWait();
     }
 
     private static byte[] getTestPayload(int size)

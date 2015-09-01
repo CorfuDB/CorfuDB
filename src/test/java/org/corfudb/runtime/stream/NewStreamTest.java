@@ -27,7 +27,7 @@ public class NewStreamTest {
     {
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()
-                        .addSequencer(7776, StreamingSequencerServer.class, "cdbss", null)
+                        .addSequencer(7776, StreamingSequencerServer.class, "cdbsts", null)
                         .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
                         .start(7775);
 

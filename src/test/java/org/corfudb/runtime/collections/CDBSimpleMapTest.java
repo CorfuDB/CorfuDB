@@ -8,6 +8,7 @@ import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.*;
+import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.ParallelComputer;

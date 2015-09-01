@@ -17,6 +17,11 @@ package org.corfudb.infrastructure;
 
 import java.util.Map;
 
-public interface ICorfuDBServer {
-    Runnable getInstance(Map<String, Object> configuration);
+public interface ICorfuDBServer extends Runnable, AutoCloseable {
+    ICorfuDBServer getInstance(Map<String, Object> configuration);
+    Thread getThread();
+    default void start() {
+        getThread().start();
+    }
+    void close();
 }

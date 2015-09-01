@@ -19,6 +19,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
 
+import lombok.Getter;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.server.TServer;
@@ -38,7 +39,10 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
 
     private int port = 0;
     private Logger log = LoggerFactory.getLogger(SimpleSequencerServer.class);
-
+    @Getter
+    Thread thread;
+    boolean running;
+    TServer server;
 	AtomicLong pos = new AtomicLong(0);
     boolean simFailure;
 
@@ -78,19 +82,18 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
         return true;
     }
 
-    public Runnable getInstance(final Map<String,Object> config)
+    public ICorfuDBServer getInstance(final Map<String,Object> config)
     {
         final SimpleSequencerServer st = this;
-        return new Runnable()
-        {
-            @Override
-            public void run() {
-                st.port = (Integer) config.get("port");
-                while (true) {
-                    st.serverloop();
-                }
-            }
-        };
+        st.port = (Integer) config.get("port");
+        thread = new Thread(this);
+        return this;
+    }
+
+    @Override
+    public void close() {
+        running = false;
+        server.stop();
     }
 
     @Override
@@ -117,8 +120,6 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
     }
 
 	public void serverloop() {
-
-        TServer server;
         TServerSocket serverTransport;
         SimpleSequencerService.Processor<SimpleSequencerServer> processor;
         log.debug("Simple sequencer entering service loop.");
@@ -138,4 +139,24 @@ public class SimpleSequencerServer implements SimpleSequencerService.Iface, ICor
             log.warn("SimpleSequencer encountered exception, restarting.", e);
         }
 	}
+
+    /**
+     * When an object implementing interface <code>Runnable</code> is used
+     * to create a thread, starting the thread causes the object's
+     * <code>run</code> method to be called in that separately executing
+     * thread.
+     * <p>
+     * The general contract of the method <code>run</code> is that it may
+     * take any action whatsoever.
+     *
+     * @see Thread#run()
+     */
+    @Override
+    public void run() {
+        running = true;
+        while (running)
+        {
+            this.serverloop();
+        }
+    }
 }

@@ -17,6 +17,7 @@
 // implement object homes.
 package org.corfudb.infrastructure;
 
+import lombok.Getter;
 import org.apache.thrift.TException;
 import org.apache.thrift.TMultiplexedProcessor;
 import org.apache.thrift.protocol.TCompactProtocol;
@@ -28,6 +29,7 @@ import org.corfudb.infrastructure.thrift.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.smr.ICorfuDBObject;
 import org.rocksdb.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +54,10 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
     protected String rebuildnode = null;
 
     protected int PAGESIZE;
-
+    @Getter
+    private Thread thread;
+    boolean running;
+    TServer server;
 
     private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
 
@@ -148,7 +153,8 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         }
     }
 
-    public Runnable getInstance (final Map<String,Object> config)
+    @Override
+    public ICorfuDBServer getInstance (final Map<String,Object> config)
     {
         final RocksLogUnitServer lut = this;
 
@@ -176,18 +182,14 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         }
 
 
-        return new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    lut.serverloop();
-                }
-                catch (Exception e)
-                {
-                    e.printStackTrace();
-                }
-            }
-        };
+        thread = new Thread(this);
+        return this;
+    }
+
+    @Override
+    public void close() {
+        running = false;
+        server.stop();
     }
 
     private byte[] getKey(long address, String stream) throws IOException {
@@ -543,7 +545,6 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         }
         ready.set(true);
 
-        TServer server;
         TServerSocket serverTransport;
         System.out.println("run..");
 
@@ -570,4 +571,26 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         }
     }
 
+    /**
+     * When an object implementing interface <code>Runnable</code> is used
+     * to create a thread, starting the thread causes the object's
+     * <code>run</code> method to be called in that separately executing
+     * thread.
+     * <p>
+     * The general contract of the method <code>run</code> is that it may
+     * take any action whatsoever.
+     *
+     * @see Thread#run()
+     */
+    @Override
+    public void run() {
+        running = true;
+        while (running) {
+            try {
+                this.serverloop();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
 }

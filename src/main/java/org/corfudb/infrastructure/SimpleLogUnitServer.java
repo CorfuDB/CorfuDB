@@ -25,6 +25,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.*;
 
+import lombok.Getter;
 import org.apache.thrift.TMultiplexedProcessor;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.transport.TFastFramedTransport;
@@ -49,7 +50,10 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     protected String rebuildnode = null;
 
     protected int PAGESIZE;
-
+    @Getter
+    Thread thread;
+    boolean running;
+    TServer server;
 
 	private int ckmark = 0; // start offset of latest checkpoint. TODO: persist!!
 
@@ -116,41 +120,58 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         }
     }
 
-    public Runnable getInstance (final Map<String,Object> config)
+    public ICorfuDBServer getInstance (final Map<String,Object> config)
     {
-        final SimpleLogUnitServer lut = this;
-
         //These are required and will throw an exception if not defined.
-        lut.RAMMODE = (Boolean) config.get("ramdisk");
-        lut.UNITCAPACITY = (Integer) config.get("capacity");
-        lut.PORT = (Integer) config.get("port");
-        lut.PAGESIZE = (Integer) config.get("pagesize");
-        lut.gcmark = (Integer) config.get("trim");
+        this.RAMMODE = (Boolean) config.get("ramdisk");
+        this.UNITCAPACITY = (Integer) config.get("capacity");
+        this.PORT = (Integer) config.get("port");
+        this.PAGESIZE = (Integer) config.get("pagesize");
+        this.gcmark = (Integer) config.get("trim");
 
         masterIncarnation = new ArrayList<Integer>();
         masterIncarnation.add(0);
         //These are not required and will be only populated if given
         if (config.containsKey("drive"))
         {
-            lut.DRIVENAME = (String) config.get("drive");
+            this.DRIVENAME = (String) config.get("drive");
         }
         if (config.containsKey("recovery"))
         {
-            lut.RECOVERY = (Boolean) config.get("recovery");
+            this.RECOVERY = (Boolean) config.get("recovery");
         }
 
-        return new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    lut.serverloop();
-                }
-                catch (Exception e)
-                {
-                    e.printStackTrace();
-                }
+        thread = new Thread(this);
+        return this;
+    }
+
+    @Override
+    public void close() {
+        running = false;
+        server.stop();
+    }
+
+    /**
+     * When an object implementing interface <code>Runnable</code> is used
+     * to create a thread, starting the thread causes the object's
+     * <code>run</code> method to be called in that separately executing
+     * thread.
+     * <p>
+     * The general contract of the method <code>run</code> is that it may
+     * take any action whatsoever.
+     *
+     * @see Thread#run()
+     */
+    @Override
+    public void run() {
+        running = true;
+        while (running) {
+            try {
+                this.serverloop();
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        };
+        }
     }
 
     // Should basically mirror the ExtntInfo struct
@@ -963,9 +984,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             writegcmark();
         }
 
-        TServer server;
         TServerSocket serverTransport;
-        System.out.println("run..");
 
         try {
             serverTransport = new TServerSocket(PORT);
@@ -981,7 +1000,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
                     .inputTransportFactory(new TFastFramedTransport.Factory())
                     .outputTransportFactory(new TFastFramedTransport.Factory())
             );
-            System.out.println("Starting Corfu storage unit server on multiplexed port " + PORT);
+            log.info("Starting Corfu storage unit server on multiplexed port " + PORT);
 
             server.serve();
         } catch (Exception e) {

@@ -7,6 +7,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.logunits.CorfuNewLogUnitProtocol;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
+import org.corfudb.util.CorfuInfrastructureBuilder;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -25,6 +26,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class NewLogUnitServerJMeter extends AbstractJavaSamplerClient {
 
     CorfuNewLogUnitProtocol p;
+    CorfuInfrastructureBuilder infrastructure;
 
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
@@ -50,8 +52,13 @@ public class NewLogUnitServerJMeter extends AbstractJavaSamplerClient {
     @Override
     public void setupTest(JavaSamplerContext context)
     {
+        infrastructure =
+                CorfuInfrastructureBuilder.getBuilder()
+                        .addSequencer(7776, StreamingSequencerServer.class, "cdbss", null)
+                        .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
+                        .start(7775);
 
-        p = new CorfuNewLogUnitProtocol("localhost", 12908, new HashMap<String,String>(), 0L);
+        p = new CorfuNewLogUnitProtocol("localhost", 7777, new HashMap<String,String>(), 0L);
 
         l.lock();
         if (!reset)
@@ -67,6 +74,7 @@ public class NewLogUnitServerJMeter extends AbstractJavaSamplerClient {
 
     @Override
     public void teardownTest(JavaSamplerContext context) {
+        infrastructure.shutdownAndWait();
         super.teardownTest(context);
     }
 }

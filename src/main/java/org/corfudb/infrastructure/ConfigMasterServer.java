@@ -14,6 +14,7 @@
  */
 package org.corfudb.infrastructure;
 
+import lombok.Getter;
 import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
 import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
 import org.corfudb.runtime.NetworkException;
@@ -83,13 +84,18 @@ import org.corfudb.runtime.view.Serializer;
 
 import java.util.concurrent.CompletableFuture;
 
-public class ConfigMasterServer implements Runnable, ICorfuDBServer {
+public class ConfigMasterServer implements ICorfuDBServer {
 
     private Logger log = LoggerFactory.getLogger(ConfigMasterServer.class);
     private Map<String,Object> config;
     private CorfuDBView currentView;
     private StreamView currentStreamView;
     private Boolean viewActive;
+    private Boolean running;
+    @Getter
+    private Thread thread;
+    private HttpServer server;
+
   //  private GossipServer gossipServer;
     private RemoteLogView currentRemoteView;
     int masterid = new SecureRandom().nextInt();
@@ -218,7 +224,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     }
 
     @SuppressWarnings("unchecked")
-    public Runnable getInstance(final Map<String,Object> config)
+    public ICorfuDBServer getInstance(final Map<String,Object> config)
     {
         //use the config for the init view (well, we'll have to deal with reconfigurations...)
        // gossipServer = new GossipServer(config);
@@ -233,7 +239,18 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
         UUID logID =  UUID.randomUUID();
         log.info("New log instance id= " + logID.toString());
         currentView.setUUID(logID);
+        thread = new Thread(this);
         return this;
+    }
+
+    @Override
+    public void close() {
+        if (server != null)
+        {
+            running = false;
+            server.stop(0);
+            this.getThread().interrupt();
+        }
     }
 
     public void loadRemoteLogs()
@@ -273,7 +290,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
 
     public void checkViewThread() {
         log.info("Starting view check thread");
-        while(true)
+        while(running)
         {
             try {
                 boolean success = currentView.isViewAccessible();
@@ -311,8 +328,9 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
     public void run()
     {
         try {
+            running = true;
             log.info("Starting HTTP Service on port " + config.get("port"));
-            HttpServer server = HttpServer.create(new InetSocketAddress((Integer)config.get("port")), 0);
+            server = HttpServer.create(new InetSocketAddress((Integer)config.get("port")), 0);
             server.createContext("/corfu", new RequestHandler());
             server.createContext("/control", new ControlRequestHandler());
             server.createContext("/", new StaticRequestHandler());
@@ -321,8 +339,7 @@ public class ConfigMasterServer implements Runnable, ICorfuDBServer {
             loadRemoteLogs();
             checkViewThread();
         } catch(IOException ie) {
-            log.error(MarkerFactory.getMarker("FATAL"), "Couldn't start HTTP Service!" , ie);
-            System.exit(1);
+            log.error(MarkerFactory.getMarker("FATAL"), "Couldn't start HTTP Service!", ie);
         }
     }
 

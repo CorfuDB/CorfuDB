@@ -7,6 +7,7 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.IStreamingSequencer;
+import org.corfudb.util.CorfuInfrastructureBuilder;
 
 import java.util.UUID;
 import java.util.concurrent.locks.Lock;
@@ -20,6 +21,7 @@ public class StreamingSequencerServerJMeter extends AbstractJavaSamplerClient {
     CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
     IStreamingSequencer sequencer;
+    CorfuInfrastructureBuilder infrastructure;
 
     UUID streamID;
 
@@ -39,7 +41,12 @@ public class StreamingSequencerServerJMeter extends AbstractJavaSamplerClient {
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-        runtime = CorfuDBRuntime.getRuntime("http://localhost:12700/corfu");
+        infrastructure =
+                CorfuInfrastructureBuilder.getBuilder()
+                        .addSequencer(7776, StreamingSequencerServer.class, "cdbss", null)
+                        .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
+                        .start(7775);
+        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
         instance = runtime.getLocalInstance();
         sequencer = instance.getStreamingSequencer();
 
