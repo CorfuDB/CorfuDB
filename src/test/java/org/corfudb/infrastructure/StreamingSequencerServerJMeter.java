@@ -5,7 +5,6 @@ import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.IStreamingSequencer;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 
@@ -21,10 +20,10 @@ public class StreamingSequencerServerJMeter extends AbstractJavaSamplerClient {
     CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
     IStreamingSequencer sequencer;
-    CorfuInfrastructureBuilder infrastructure;
 
     UUID streamID;
 
+    static CorfuInfrastructureBuilder infrastructure;
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
 
@@ -41,23 +40,22 @@ public class StreamingSequencerServerJMeter extends AbstractJavaSamplerClient {
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-        infrastructure =
-                CorfuInfrastructureBuilder.getBuilder()
-                        .addSequencer(7776, StreamingSequencerServer.class, "cdbss", null)
-                        .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
-                        .start(7775);
-        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
-        instance = runtime.getLocalInstance();
-        sequencer = instance.getStreamingSequencer();
-
-
         l.lock();
         if (!reset)
         {
-            instance.getConfigurationMaster().resetAll();
+            infrastructure =
+                    CorfuInfrastructureBuilder.getBuilder()
+                            .addSequencer(7776, StreamingSequencerServer.class, "cdbss", null)
+                            .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
+                            .start(7775);
+            //instance.getConfigurationMaster().resetAll();
             reset = true;
         }
         l.unlock();
+
+        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
+        instance = runtime.getLocalInstance();
+        sequencer = instance.getStreamingSequencer();
 
         streamID = UUID.randomUUID();
         super.setupTest(context);
@@ -66,6 +64,12 @@ public class StreamingSequencerServerJMeter extends AbstractJavaSamplerClient {
     @Override
     public void teardownTest(JavaSamplerContext context) {
         runtime.close();
+        l.lock();
+        if (reset) {
+            infrastructure.shutdownAndWait();
+            reset = false;
+        }
+        l.unlock();
         super.teardownTest(context);
     }
 

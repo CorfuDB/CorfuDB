@@ -19,10 +19,10 @@ import java.util.concurrent.locks.ReentrantLock;
 public class SimpleSequencerServerJMeter extends AbstractJavaSamplerClient {
 
     CorfuDBRuntime runtime;
-    CorfuInfrastructureBuilder infrastructure;
     ICorfuDBInstance instance;
     ISequencer sequencer;
 
+    static CorfuInfrastructureBuilder infrastructure;
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
 
@@ -48,30 +48,33 @@ public class SimpleSequencerServerJMeter extends AbstractJavaSamplerClient {
             }
         };
 
-       CorfuInfrastructureBuilder infrastructure =
-                CorfuInfrastructureBuilder.getBuilder()
-                        .addSequencer(9001, StreamingSequencerServer.class, "cdbsts", null)
-                        .addLoggingUnit(9000, 0, SimpleLogUnitServer.class, "cdbslu", luConfigMap)
-                        .start(9002);
+        l.lock();
+        if (!reset)
+        {
+            infrastructure =
+                    CorfuInfrastructureBuilder.getBuilder()
+                            .addSequencer(9001, SimpleSequencerServer.class, "cdbss", null)
+                            .start(9002);
+            reset = true;
+        }
+        l.unlock();
 
         runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
         instance = runtime.getLocalInstance();
         sequencer = instance.getSequencer();
 
-        l.lock();
-        if (!reset)
-        {
-            instance.getConfigurationMaster().resetAll();
-            reset = true;
-        }
-        l.unlock();
         super.setupTest(context);
     }
 
     @Override
     public void teardownTest(JavaSamplerContext context) {
         runtime.close();
-        infrastructure.shutdownAndWait();
+        l.lock();
+        if (reset) {
+            infrastructure.shutdownAndWait();
+            reset = false;
+        }
+        l.unlock();
         super.teardownTest(context);
     }
 

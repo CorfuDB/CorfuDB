@@ -5,9 +5,11 @@ import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
+import org.corfudb.util.CorfuInfrastructureBuilder;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -21,6 +23,7 @@ public class SimpleLogUnitServerJMeter extends AbstractJavaSamplerClient {
     ICorfuDBInstance instance;
     IWriteOnceAddressSpace w;
 
+    static CorfuInfrastructureBuilder infrastructure;
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
     static AtomicLong al = new AtomicLong();
@@ -44,23 +47,41 @@ public class SimpleLogUnitServerJMeter extends AbstractJavaSamplerClient {
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-        runtime = CorfuDBRuntime.getRuntime("http://localhost:12700/corfu");
-        instance = runtime.getLocalInstance();
-        w = instance.getAddressSpace();
+        Map<String, Object> luConfigMap = new HashMap<String,Object>() {
+            {
+                put("capacity", 200000);
+                put("ramdisk", true);
+                put("pagesize", 4096);
+                put("trim", 0);
+            }
+        };
 
         l.lock();
         if (!reset)
         {
-            instance.getConfigurationMaster().resetAll();
+            infrastructure = CorfuInfrastructureBuilder.getBuilder()
+                    .addLoggingUnit(9000, 0, SimpleLogUnitServer.class, "cdbslu", luConfigMap)
+                    .start(9002);
+
             reset = true;
         }
         l.unlock();
+
+        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
+        instance = runtime.getLocalInstance();
+        w = instance.getAddressSpace();
         super.setupTest(context);
     }
 
     @Override
     public void teardownTest(JavaSamplerContext context) {
         runtime.close();
+        l.lock();
+        if (reset) {
+            infrastructure.shutdownAndWait();
+            reset = false;
+        }
+        l.unlock();
         super.teardownTest(context);
     }
 }

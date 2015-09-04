@@ -1,19 +1,19 @@
 package org.corfudb.runtime.collections;
 
-import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.jmeter.protocol.java.sampler.AbstractJavaSamplerClient;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
+import org.corfudb.infrastructure.SimpleLogUnitServer;
+import org.corfudb.infrastructure.SimpleSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.DeferredTransaction;
-import org.corfudb.runtime.smr.ISMREngine;
 import org.corfudb.runtime.smr.ITransactionCommand;
-import org.corfudb.runtime.smr.SimpleSMREngine;
-import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.util.CorfuInfrastructureBuilder;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.locks.Lock;
@@ -30,6 +30,7 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
     CDBSimpleMap<Integer, Integer> map;
     UUID uuid;
 
+    static CorfuInfrastructureBuilder infrastructure;
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
 
@@ -65,17 +66,31 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
     @Override
     @SuppressWarnings("unchecked")
     public void setupTest(JavaSamplerContext context) {
-        runtime = CorfuDBRuntime.getRuntime("http://localhost:12700/corfu");
-        instance = runtime.getLocalInstance();
+
+        Map<String, Object> luConfigMap = new HashMap<String,Object>() {
+            {
+                put("capacity", 200000);
+                put("ramdisk", true);
+                put("pagesize", 4096);
+                put("trim", 0);
+            }
+        };
 
         l.lock();
         if (!reset)
         {
-            instance.getConfigurationMaster().resetAll();
+            infrastructure = CorfuInfrastructureBuilder.getBuilder()
+                    .addSequencer(9001, SimpleSequencerServer.class, "cdbss", null)
+                    .addLoggingUnit(9000, 0, SimpleLogUnitServer.class, "cdbslu", luConfigMap)
+                    .start(9002);
+
             reset = true;
+            uuid = UUID.randomUUID();
         }
         l.unlock();
 
+        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
+        instance = runtime.getLocalInstance();
         uuid = UUID.randomUUID();
 
         map = instance.openObject(uuid, CDBSimpleMap.class);
@@ -106,6 +121,12 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
     @Override
     public void teardownTest(JavaSamplerContext context) {
         runtime.close();
+        l.lock();
+        if (reset) {
+            infrastructure.shutdownAndWait();
+            reset = false;
+        }
+        l.unlock();
         super.teardownTest(context);
     }
 }

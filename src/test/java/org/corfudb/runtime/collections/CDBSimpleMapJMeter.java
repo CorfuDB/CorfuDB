@@ -4,20 +4,17 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.jmeter.protocol.java.sampler.AbstractJavaSamplerClient;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
-import org.corfudb.infrastructure.NewLogUnitServer;
 import org.corfudb.infrastructure.SimpleLogUnitServer;
-import org.corfudb.infrastructure.StreamingSequencerServer;
+import org.corfudb.infrastructure.SimpleSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.SimpleSMREngine;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.runtime.view.IWriteOnceAddressSpace;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -28,10 +25,9 @@ public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
     CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
     CDBSimpleMap<String, String> map;
-    CorfuInfrastructureBuilder infrastructure;
 
+    static CorfuInfrastructureBuilder infrastructure;
     static UUID uuid;
-
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
 
@@ -84,9 +80,9 @@ public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
         if (!reset)
         {
            infrastructure = CorfuInfrastructureBuilder.getBuilder()
-                    .addSequencer(9001, StreamingSequencerServer.class, "cdbsts", null)
+                    .addSequencer(9001, SimpleSequencerServer.class, "cdbss", null)
                     .addLoggingUnit(9000, 0, SimpleLogUnitServer.class, "cdbslu", luConfigMap)
-                    .start(9002);;
+                    .start(9002);
 
             reset = true;
             uuid = UUID.randomUUID();
@@ -114,9 +110,6 @@ public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
             reset = false;
         }
         l.unlock();
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException ie) {}
         super.teardownTest(context);
     }
 }
