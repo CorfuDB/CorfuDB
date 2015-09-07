@@ -1,7 +1,8 @@
 package org.corfudb.util.retry;
 
 import lombok.SneakyThrows;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
@@ -26,10 +27,10 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
             catch (Exception ex) {
                 if (getHandlerMap().containsKey(ex.getClass()))
                 {
-                    retry = ((ExceptionHandler<Exception, E, F, G ,H>)getHandlerMap().get(ex.getClass())).HandleException(ex) && handleException(ex);
+                    retry = ((ExceptionHandler<Exception, E, F, G ,H>)getHandlerMap().get(ex.getClass())).HandleException(ex) && handleException(ex, false);
                 }
                 else {
-                    retry = handleException(ex);
+                    retry = handleException(ex, true);
                 }
             }
         }
@@ -141,11 +142,12 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
     /** Get the function that needs to be retried. */
     IRetryable<E, F, G, H, O> getRunFunction();
 
-    /** Handle an exception which has occurred and that has not been registered.
-     * @param e     The exception that has occurred.
-     * @return      True, to continue retrying, or False, to stop running the function.
+    /** Handle an exception which has occurred.
+     * @param e             The exception that has occurred.
+     * @param unhandled     If the exception is unhandled.
+     * @return              True, to continue retrying, or False, to stop running the function.
      */
-    boolean handleException(Exception e);
+    boolean handleException(Exception e, boolean unhandled);
 
     /**
      * This is a functional interface for handling exceptions. It gets the exception to handle as
@@ -189,4 +191,10 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
         getHandlerMap().put(exceptionType, (ExceptionHandler) handler);
         return this;
     }
+
+    /** Apply the retry logic.
+     *
+     * @return True, if we should continue retrying, false otherwise.
+     */
+    boolean retryLogic();
 }

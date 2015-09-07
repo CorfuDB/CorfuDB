@@ -40,8 +40,8 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     private Map<String,String> options;
     public Long epoch;
 
-    private final transient PooledThriftClient<SimpleLogUnitService.Client> thriftPool;
-    private final transient PooledThriftClient<SimpleLogUnitConfigService.Client> configPool;
+    private final transient PooledThriftClient<SimpleLogUnitService.Client, SimpleLogUnitService.AsyncClient> thriftPool;
+    private final transient PooledThriftClient<SimpleLogUnitConfigService.Client, SimpleLogUnitConfigService.AsyncClient> configPool;
     private final transient Logger log = LoggerFactory.getLogger(CorfuDBSimpleLogUnitProtocol.class);
 
     public static String getProtocolString()
@@ -78,7 +78,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
 
         try
         {
-            thriftPool = new PooledThriftClient<SimpleLogUnitService.Client>(
+            thriftPool = new PooledThriftClient(
                     new PooledThriftClient.ClientFactory<SimpleLogUnitService.Client>() {
                         @Override
                         public SimpleLogUnitService.Client make(TProtocol protocol)
@@ -86,6 +86,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
                             return new SimpleLogUnitService.Client(new TMultiplexedProtocol(protocol, "SUNIT"));
                         }
                     },
+                    SimpleLogUnitService.AsyncClient::new,
                     new Config(),
                     host,
                     port
@@ -98,7 +99,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
         }
         try
         {
-            configPool = new PooledThriftClient<SimpleLogUnitConfigService.Client>(
+            configPool = new PooledThriftClient<>(
                     new PooledThriftClient.ClientFactory<SimpleLogUnitConfigService.Client>() {
                         @Override
                         public SimpleLogUnitConfigService.Client make(TProtocol protocol)
@@ -106,6 +107,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
                             return new SimpleLogUnitConfigService.Client(new TMultiplexedProtocol(protocol, "CONFIG"));
                         }
                     },
+                    SimpleLogUnitConfigService.AsyncClient::new,
                     new Config(),
                     host,
                     port

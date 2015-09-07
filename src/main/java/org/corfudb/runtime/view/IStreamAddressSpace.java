@@ -31,6 +31,13 @@ import java.util.UUID;
  */
 public interface IStreamAddressSpace {
 
+    enum StreamAddressEntryCode {
+        DATA,
+        HOLE,
+        EMPTY,
+        TRIMMED
+    };
+
     /**
      * This class represents an entry in a stream address space.
      */
@@ -59,10 +66,17 @@ public interface IStreamAddressSpace {
         final Long globalIndex;
 
         /**
+         * The code for the entry.
+         */
+        final StreamAddressEntryCode code;
+
+        /**
          * The deserialized version of the payload.
          */
         @Getter(lazy=true)
         private final T payload = deserializePayload();
+
+
 
 
         /**
@@ -103,7 +117,7 @@ public interface IStreamAddressSpace {
          */
         @Override
         public boolean containsStream(UUID stream) {
-            return streams.contains(stream);
+            return streams == null || streams.contains(stream);
         }
 
         /**
@@ -139,6 +153,12 @@ public interface IStreamAddressSpace {
     void write(long offset, Set<UUID> streams, ByteBuffer payload)
         throws OverwriteException, TrimmedException, OutOfSpaceException;
 
+    /**
+     * Fill an address in the address space with a hole entry. This method is unreliable (not guaranteed to send a request
+     * to any log unit) and asynchronous.
+     * @param offset    The offset (global index) to fill.
+     */
+    void fillHole(long offset);
 
     default void writeObject(long offset, Set<UUID> streams, Serializable object)
             throws OverwriteException, TrimmedException, OutOfSpaceException, IOException

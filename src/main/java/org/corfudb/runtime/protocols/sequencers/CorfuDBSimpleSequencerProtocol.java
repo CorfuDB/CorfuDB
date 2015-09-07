@@ -35,7 +35,7 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
     private Integer port;
     private Map<String,String> options;
 
-    private final PooledThriftClient<SimpleSequencerService.Client> thriftPool;
+    private final PooledThriftClient<SimpleSequencerService.Client, SimpleSequencerService.AsyncClient> thriftPool;
     private Logger log = LoggerFactory.getLogger(CorfuDBSimpleSequencerProtocol.class);
 
 
@@ -72,7 +72,7 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
 
         try
         {
-            thriftPool = new PooledThriftClient<SimpleSequencerService.Client>(
+            thriftPool = new PooledThriftClient<>(
                     new PooledThriftClient.ClientFactory<SimpleSequencerService.Client>() {
                         @Override
                         public SimpleSequencerService.Client make(TProtocol protocol)
@@ -80,6 +80,7 @@ public class CorfuDBSimpleSequencerProtocol implements IServerProtocol, ISimpleS
                             return new SimpleSequencerService.Client(protocol);
                         }
                     },
+                    SimpleSequencerService.AsyncClient::new,
                     new Config(),
                     host,
                     port

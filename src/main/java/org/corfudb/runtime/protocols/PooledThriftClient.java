@@ -16,16 +16,19 @@
 package org.corfudb.runtime.protocols;
 
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.thrift.async.TAsyncClient;
+import org.apache.thrift.async.TAsyncClientManager;
 import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.transport.TFastFramedTransport;
-import org.apache.thrift.transport.TFramedTransport;
+import org.apache.thrift.protocol.TProtocolFactory;
+import org.apache.thrift.transport.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.TSocket;
-import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.TServiceClient;
 
 import org.apache.commons.pool.impl.GenericObjectPool;
@@ -40,21 +43,53 @@ import java.io.Closeable;
  *
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
-public class PooledThriftClient<T extends TServiceClient> implements AutoCloseable
+@Slf4j
+public class PooledThriftClient<T extends TServiceClient, U extends TAsyncClient> implements AutoCloseable
 {
-    private final static Logger log = LoggerFactory.getLogger(PooledThriftClient.class);
-
     private final GenericObjectPool<T> pool;
+    private final GenericObjectPool<U> asyncPool;
 
-    public PooledThriftClient(ClientFactory<T> factory, Config config, String host, int port)
+    public PooledThriftClient(ClientFactory<T> factory, AsyncClientFactory<U> asyncFactory, Config config, String host, int port)
     {
-        this(factory, new BinaryOverSocketProtocolFactory(host, port), config);
+        this(factory, asyncFactory, new BinaryOverSocketProtocolFactory(host, port), config, host, port);
     }
 
     @SuppressWarnings("rawtypes")
-    public PooledThriftClient(ClientFactory<T> factory, ProtocolFactory pfactory, Config config)
+    @SneakyThrows
+    public PooledThriftClient(ClientFactory<T> factory,
+                              AsyncClientFactory<U> asyncFactory,
+                              ProtocolFactory pfactory,
+                              Config config,
+                              String host,
+                              int port)
     {
-        this.pool = new GenericObjectPool<T>(new ThriftClientFactory(factory, pfactory), config);
+        this.pool = new GenericObjectPool<>(new ThriftClientFactory(factory, pfactory), config);
+        this.asyncPool = new GenericObjectPool<>
+                (new AsyncThriftClientFactory(asyncFactory,
+                        new TCompactProtocol.Factory(),
+                        new TAsyncClientManager(),
+                        new TNonblockingSocket(host, port)
+                        ),
+                        config);
+    }
+
+    @SuppressWarnings("rawtypes")
+    @RequiredArgsConstructor
+    class AsyncThriftClientFactory extends BasePoolableObjectFactory<U> {
+        private final AsyncClientFactory<U> clientFactory;
+        private final TProtocolFactory protocolFactory;
+        private final TAsyncClientManager manager;
+        private final TNonblockingSocket transport;
+
+
+        @Override
+        public U makeObject() throws Exception {
+            return clientFactory.make(protocolFactory, manager, transport);
+        }
+
+        @Override
+        public void destroyObject(U obj) throws Exception {
+        }
     }
 
     @SuppressWarnings("rawtypes")
@@ -87,30 +122,37 @@ public class PooledThriftClient<T extends TServiceClient> implements AutoCloseab
     }
 
     @FunctionalInterface
-    public static interface ClientFactory<T> {
+    public interface ClientFactory<T> {
         T make(TProtocol protocol);
     }
 
     @FunctionalInterface
-    public static interface ProtocolFactory<T> {
+    public interface AsyncClientFactory<U> {
+        U make(TProtocolFactory protocol, TAsyncClientManager manager, TNonblockingTransport transport);
+    }
+
+    @FunctionalInterface
+    public interface ProtocolFactory<T> {
         TProtocol make();
     }
 
     @Data
-    public class TPooledClient<X extends T> implements AutoCloseable
+    public class TPooledClient<X extends T, Y extends U> implements AutoCloseable
     {
         final X client;
-        final PooledThriftClient<T> pool;
+        final Y asyncClient;
+        final PooledThriftClient<T, U> pool;
 
         @Override
         public void close() {
             pool.returnResourceObject(client);
+            pool.returnAsyncResourceObject(asyncClient);
         }
     }
 
-    public TPooledClient<T> getCloseableResource()
+    public TPooledClient<T,U> getCloseableResource()
     {
-        return new TPooledClient<>(getResource(), this);
+        return new TPooledClient<>(getResource(), getAsyncResource(), this);
     }
 
     @SuppressWarnings("rawtypes")
@@ -146,10 +188,31 @@ public class PooledThriftClient<T extends TServiceClient> implements AutoCloseab
         }
     }
 
+    public U getAsyncResource() {
+        try {
+            return asyncPool.borrowObject();
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Could not get resource", e);
+        }
+    }
+
     public void returnResourceObject(T resource)
     {
         try {
         pool.returnObject(resource);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Could not return resource object", e);
+        }
+    }
+
+    public void returnAsyncResourceObject(U resource)
+    {
+        try {
+            asyncPool.returnObject(resource);
         }
         catch (Exception e)
         {

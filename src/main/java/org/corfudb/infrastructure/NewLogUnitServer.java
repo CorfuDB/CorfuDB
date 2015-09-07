@@ -182,13 +182,14 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
         validate(epoch);
 
         ByteBuffer dataBuffer;
-        // The size of the metadata is equal to the number of stream UUIDs plus a 16bit int.
-        int metadataSize = (stream.size() * 16) + 2;
-
+        // The size of the metadata is equal to the number of stream UUIDs plus 2 16bit int.
+        int metadataSize = (stream.size() * 16) + 4;
+        short dataType = 0;
         // in-memory mode just uses a bytebuffer which is not memory mapped.
         dataBuffer = ByteBuffer.allocateDirect(payload.remaining() + metadataSize);
 
         //dump the metadata in the buffer.
+        dataBuffer.putShort((short) ReadCode.READ_DATA.getValue());
         dataBuffer.putShort((short)stream.size());
         for (UUID streamid : stream)
         {
@@ -215,35 +216,48 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
     @SuppressWarnings("unchecked")
     public void read(long epoch, long offset, AsyncMethodCallback resultHandler) throws TException {
         validate(epoch);
-
         //fetch the address from the cache.
-        ByteBuffer data = dataCache.getIfPresent(offset).duplicate();
+        ByteBuffer data = dataCache.getIfPresent(offset);
         if (data == null)
         {
             resultHandler.onComplete(new ReadResult(ReadCode.READ_EMPTY, Collections.emptySet(), ByteBuffer.allocate(0), Collections.emptySet()));
         }
         else
         {
+            data = data.duplicate();
             //rewind the buffer
             data.clear();
             //decode the metadata
-            short numStreams = data.getShort();
+            short dataType = data.getShort();
             Set<UUID> cset = new HashSet();
-            for (short i = 0; i < numStreams; i++)
-            {
-                UUID streamId = new UUID();
-                streamId.setMsb(data.getLong());
-                streamId.setLsb(data.getLong());
-                cset.add(streamId);
+            if (dataType == (short)ReadCode.READ_DATA.getValue()) {
+                short numStreams = data.getShort();
+                for (short i = 0; i < numStreams; i++) {
+                    UUID streamId = new UUID();
+                    streamId.setMsb(data.getLong());
+                    streamId.setLsb(data.getLong());
+                    cset.add(streamId);
+                }
+                resultHandler.onComplete(new ReadResult(ReadCode.findByValue(dataType), cset, data.slice(), Collections.emptySet()));
             }
             //write the buffer
-            resultHandler.onComplete(new ReadResult(ReadCode.READ_OK, cset, data.slice(), Collections.emptySet()));
+            resultHandler.onComplete(new ReadResult(ReadCode.findByValue(dataType), cset, null, Collections.emptySet()));
         }
     }
 
     @Override
     public void trim(long epoch, UUID stream, long prefix, AsyncMethodCallback resultHandler) throws TException {
         validate(epoch);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void fillHole(long offset, AsyncMethodCallback resultHandler) throws TException {
+        //put the buffer in the cache, if in memory (if it's not in-memory, we can rely on the cache retrieval).
+        ByteBuffer newVal = ByteBuffer.allocateDirect(2);
+        newVal.putShort((short) ReadCode.READ_FILLEDHOLE.getValue());
+        dataCache.get(offset, (address) -> newVal);
+        resultHandler.onComplete(null);
     }
 
     @Override

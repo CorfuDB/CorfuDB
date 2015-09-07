@@ -39,7 +39,7 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
     private Map<String,String> options;
     public Long epoch;
 
-    private final transient PooledThriftClient<RocksLogUnitService.Client> thriftPool;
+    private final transient PooledThriftClient<RocksLogUnitService.Client, RocksLogUnitService.AsyncClient> thriftPool;
     private final transient Logger log = LoggerFactory.getLogger(CorfuDBRocksLogUnitProtocol.class);
 
     public static String getProtocolString()
@@ -76,14 +76,15 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
 
         try
         {
-            thriftPool = new PooledThriftClient<RocksLogUnitService.Client>(
-                    new PooledThriftClient.ClientFactory<RocksLogUnitService.Client>() {
+            thriftPool = new PooledThriftClient<>(
+                    new PooledThriftClient.ClientFactory() {
                         @Override
                         public RocksLogUnitService.Client make(TProtocol protocol)
                         {
                             return new RocksLogUnitService.Client(new TMultiplexedProtocol(protocol, "SUNIT"));
                         }
                     },
+                    RocksLogUnitService.AsyncClient::new,
                     new Config(),
                     host,
                     port

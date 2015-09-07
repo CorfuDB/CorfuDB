@@ -37,7 +37,7 @@ public class CorfuDBStreamingSequencerProtocol implements IServerProtocol, ISimp
     private Integer port;
     private Map<String,String> options;
 
-    private final PooledThriftClient<StreamingSequencerService.Client> thriftPool;
+    private final PooledThriftClient<StreamingSequencerService.Client, StreamingSequencerService.AsyncClient> thriftPool;
     private Logger log = LoggerFactory.getLogger(CorfuDBStreamingSequencerProtocol.class);
 
 
@@ -74,7 +74,7 @@ public class CorfuDBStreamingSequencerProtocol implements IServerProtocol, ISimp
 
         try
         {
-            thriftPool = new PooledThriftClient<StreamingSequencerService.Client>(
+            thriftPool = new PooledThriftClient<StreamingSequencerService.Client, StreamingSequencerService.AsyncClient>(
                     new PooledThriftClient.ClientFactory<StreamingSequencerService.Client>() {
                         @Override
                         public StreamingSequencerService.Client make(TProtocol protocol)
@@ -82,6 +82,7 @@ public class CorfuDBStreamingSequencerProtocol implements IServerProtocol, ISimp
                             return new StreamingSequencerService.Client(protocol);
                         }
                     },
+                    StreamingSequencerService.AsyncClient::new,
                     new Config(),
                     host,
                     port

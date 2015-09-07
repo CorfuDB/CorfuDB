@@ -1,12 +1,19 @@
 package org.corfudb.runtime.stream;
 
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.smr.HoleFillingPolicy.IHoleFillingPolicy;
+import org.corfudb.runtime.smr.HoleFillingPolicy.TimeoutHoleFillPolicy;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.IStreamAddressSpace;
 import org.corfudb.runtime.view.StreamAddressSpace;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
+import org.corfudb.util.retry.IRetry;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -29,11 +36,20 @@ import java.util.concurrent.atomic.AtomicLong;
 public class NewStream implements IStream {
 
     /** The ID of this stream. */
+    @Getter
     final UUID streamID;
+
     /** The position of this stream, in the global log index */
     final transient AtomicLong streamPointer = new AtomicLong();
+
     /** A cache of pointers (contiguous) for this stream */
     final transient ConcurrentLinkedQueue<Long> nextPointers = new ConcurrentLinkedQueue<Long>();
+
+    /** The hole filling policy to apply on this stream */
+    @Getter
+    @Setter
+    transient IHoleFillingPolicy holeFillingPolicy = new TimeoutHoleFillPolicy();
+
     /** A reference to the instance. Upon deserialization, this needs to be restored.
      *  TODO: maybe this needs to be retrieved from TLS.
      */
@@ -48,15 +64,28 @@ public class NewStream implements IStream {
      */
     @Override
     public ITimestamp append(Serializable data) throws OutOfSpaceException, IOException {
-        while (true) {
+        return IRetry.build(ExponentialBackoffRetry.class, OutOfSpaceException.class, () -> {
             long nextToken = instance.getStreamingSequencer().getNext(streamID);
-            try {
-                instance.getStreamAddressSpace().writeObject(nextToken, Collections.singleton(streamID), data);
-                return new SimpleTimestamp(nextToken);
-            } catch (OverwriteException oe) {
-                log.debug("Tried to write to " + nextToken + " but overwrite occured, retrying...");
-            }
-        }
+            instance.getStreamAddressSpace().writeObject(nextToken, Collections.singleton(streamID), data);
+            return new SimpleTimestamp(nextToken);
+        }).onException(OverwriteException.class, e -> {
+            log.debug("Tried to write to " + e.address + " but overwrite occured, retrying...");
+            return true;
+        })
+        .run();
+    }
+
+    /**
+     * Reserves a given number of timestamps in this stream. This operation may or may not retrieve
+     * valid timestamps. For example, a move operation may occur and these timestamps will not be valid on
+     * the stream.
+     *
+     * @param numTokens The number of tokens to allocate.
+     * @return A set of timestamps representing the tokens to allocate.
+     */
+    @Override
+    public ITimestamp[] reserve(int numTokens) throws IOException {
+        return new ITimestamp[] {new SimpleTimestamp(instance.getStreamingSequencer().getNext(streamID))};
     }
 
     /**
@@ -105,17 +134,29 @@ public class NewStream implements IStream {
         long nextRead;
         // The streaming sequencer wasn't able to give us any information, and we have
         // no next pointers. scan ahead...
-        do {
-            nextRead = streamPointer.getAndIncrement();
-            IStreamAddressSpace.StreamAddressSpaceEntry e = instance.getStreamAddressSpace().read(nextRead);
-            if (e.containsStream(streamID))
+        while ((nextRead = streamPointer.getAndIncrement()) < currentPointer)
+        {
+            final long thisRead = nextRead;
+            IStreamAddressSpace.StreamAddressSpaceEntry e = IRetry.build(ExponentialBackoffRetry.class, () -> {
+                IStreamAddressSpace.StreamAddressSpaceEntry r = instance.getStreamAddressSpace().read(thisRead);
+                if (r.getCode() == IStreamAddressSpace.StreamAddressEntryCode.EMPTY) {
+                    throw new HoleEncounteredException(new SimpleTimestamp(thisRead));
+                }
+                return r;
+            }).onException(HoleEncounteredException.class, ex -> {
+                log.info("Hole encountered at address={}, applying hole filling policy.", ex.getAddress());
+                holeFillingPolicy.apply(ex, this);
+                return true;
+            }).run();
+
+            if (e.containsStream(streamID) && e.getCode() != IStreamAddressSpace.StreamAddressEntryCode.HOLE)
             {
                 return e;
             }
             // TODO: If the read doesn't belong to our stream, we should be able to tell
             // other streams this is an entry for them?...
 
-        } while (nextRead < currentPointer);
+        }
 
         // There were no stream entries belonging to us left in the log to retrieve.
         return null;
@@ -159,6 +200,18 @@ public class NewStream implements IStream {
     @Override
     public ITimestamp getPreviousTimestamp(ITimestamp ts) {
         return null;
+    }
+
+    /**
+     * Attempts to fill a hole at the given timestamp.
+     *
+     * @param ts A timestamp to fill a hole at.
+     * @return True, if the hole was successfully filled, false otherwise.
+     */
+    @Override
+    public boolean fillHole(ITimestamp ts) {
+        instance.getStreamAddressSpace().fillHole(toPhysicalTimestamp(ts));
+        return true;
     }
 
     /**
@@ -206,13 +259,12 @@ public class NewStream implements IStream {
 
     }
 
-    /**
-     * Get the ID of the stream.
-     *
-     * @return The ID of the stream.
-     */
-    @Override
-    public UUID getStreamID() {
-        return streamID;
+    protected long toPhysicalTimestamp(ITimestamp timestamp)
+    {
+        if (timestamp instanceof SimpleTimestamp)
+        {
+            return ((SimpleTimestamp) timestamp).address;
+        }
+        throw new RuntimeException("Unknown timestamp type " + timestamp.getClass() + " given!");
     }
 }

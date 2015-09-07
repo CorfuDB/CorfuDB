@@ -62,21 +62,29 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                         //have a mechanism that allows us to determine the tail, we can spread those reads
                         //across the chain.
                         List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
-                        int unitNum = chain.size();
+                        int unitNum = chain.size() - 1;
                         INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
-                        INewWriteOnceLogUnit.WriteOnceLogUnitRead result = lu.read(index);
+                        INewWriteOnceLogUnit.WriteOnceLogUnitRead result = lu.read(index / instance.getView().getSegments().get(0).getGroups().size());
 
-                        if (result.getResult() != ReadCode.READ_EMPTY) {
-                            return new StreamAddressSpaceEntry<>(result.getStreams(), result.getData(), index);
+                        if (result.getResult() == ReadCode.READ_EMPTY) {
+                            return new StreamAddressSpaceEntry<>(null, null, index, StreamAddressEntryCode.EMPTY);
                         }
-                        return null;
+                        else if (result.getResult() == ReadCode.READ_FILLEDHOLE)
+                        {
+                            return new StreamAddressSpaceEntry<>(null, null, index, StreamAddressEntryCode.HOLE);
+                        }
+                        else if (result.getResult() == ReadCode.READ_DATA) {
+                            return new StreamAddressSpaceEntry<>(result.getStreams(), result.getData(), index, StreamAddressEntryCode.DATA);
+                        }
+
+                        return new StreamAddressSpaceEntry<>(null, null, index, entryCodeFromReadCode(result.getResult()));
                     })
-                    .onException(NetworkException.class, e -> {
-                        log.error("Error performing read, requesting reconfiguration and retry...");
-                        instance.getConfigurationMaster().requestReconfiguration(e);
-                        return true;
-                    })
-                    .run();
+                            .onException(NetworkException.class, e -> {
+                                log.error("Error performing read, requesting reconfiguration and retry...");
+                                instance.getConfigurationMaster().requestReconfiguration(e);
+                                return true;
+                            })
+                            .run();
                 });
     }
 
@@ -104,7 +112,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
             }
 
             //finally, put this entry in the cache so we don't need to go over the network.
-            cache.put(offset, new StreamAddressSpaceEntry<>(streams, payload, offset));
+            cache.put(offset, new StreamAddressSpaceEntry<>(streams, payload, offset, StreamAddressEntryCode.DATA));
             return true;
         }).onException(NetworkException.class, e -> {
             log.error("Error performing read, requesting reconfiguration and retry...");
@@ -112,6 +120,24 @@ public class StreamAddressSpace implements IStreamAddressSpace {
             return true;
         })
             .run();
+    }
+
+    /**
+     * Fill an address in the address space with a hole entry. This method is unreliable (not guaranteed to send a request
+     * to any log unit) and asynchronous.
+     *
+     * @param offset The offset (global index) to fill.
+     */
+    @Override
+    public void fillHole(long offset) {
+        int chainNum = (int) (offset % instance.getView().getSegments().get(0).getGroups().size());
+
+        //Next, we perform the write. We must write to every replica in the chain, in sequence.
+        List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
+        for (IServerProtocol p : chain) {
+            INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) p;
+            lu.fillHole(offset);
+        }
     }
 
     /**
@@ -123,6 +149,24 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      */
     @Override
     public StreamAddressSpaceEntry read(long offset) throws TrimmedException {
-        return cache.get(offset);
+        StreamAddressSpaceEntry entry = cache.get(offset);
+        if (entry.getCode() == StreamAddressEntryCode.EMPTY) { cache.invalidate(offset); }
+        return entry;
+    }
+
+    StreamAddressEntryCode entryCodeFromReadCode(ReadCode code)
+    {
+        switch(code)
+        {
+            case READ_DATA:
+                return StreamAddressEntryCode.DATA;
+            case READ_EMPTY:
+                return StreamAddressEntryCode.EMPTY;
+            case READ_FILLEDHOLE:
+                return StreamAddressEntryCode.HOLE;
+            case READ_TRIMMED:
+                return StreamAddressEntryCode.TRIMMED;
+        }
+        return null;
     }
 }

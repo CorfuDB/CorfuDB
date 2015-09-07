@@ -15,21 +15,16 @@
 
 package org.corfudb.runtime.protocols.logunits;
 
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.apache.commons.pool.impl.GenericObjectPool.Config;
 import org.apache.thrift.TException;
-import org.apache.thrift.protocol.TMultiplexedProtocol;
-import org.apache.thrift.protocol.TProtocol;
-import org.corfudb.infrastructure.NewLogUnitServer;
 import org.corfudb.infrastructure.thrift.*;
 import org.corfudb.runtime.*;
-import org.corfudb.runtime.protocols.AsyncPooledThriftClient;
-import org.corfudb.runtime.protocols.Connection;
 import org.corfudb.runtime.protocols.IServerProtocol;
+import org.corfudb.runtime.protocols.NullCallback;
 import org.corfudb.runtime.protocols.PooledThriftClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -44,7 +39,7 @@ public class CorfuNewLogUnitProtocol implements IServerProtocol, INewWriteOnceLo
     private Map<String,String> options;
     public Long epoch;
 
-    private final transient PooledThriftClient<NewLogUnitService.Client> thriftPool;
+    private final transient PooledThriftClient<NewLogUnitService.Client, NewLogUnitService.AsyncClient> thriftPool;
 
     public static String getProtocolString()
     {
@@ -126,7 +121,11 @@ public class CorfuNewLogUnitProtocol implements IServerProtocol, INewWriteOnceLo
 
         try
         {
-            thriftPool = new PooledThriftClient<>(NewLogUnitService.Client::new, new Config(), host, port);
+            thriftPool = new PooledThriftClient<>(NewLogUnitService.Client::new,
+                    NewLogUnitService.AsyncClient::new,
+                    new Config(),
+                    host,
+                    port);
         }
         catch (Exception ex)
         {
@@ -168,19 +167,30 @@ public class CorfuNewLogUnitProtocol implements IServerProtocol, INewWriteOnceLo
             Set<UUID> streams = r.getStream() == null ? Collections.emptySet() : r.getStream().stream()
                                 .map(s -> new UUID(s.getMsb(), s.getLsb()))
                                 .collect(Collectors.toSet());
-            log.info("read length" + r.data.remaining());
             return new WriteOnceLogUnitRead(r.getCode(), streams, r.data, r.getHints());
         }
         catch (TException e)
         {
             log.warn("Error writing to log unit!", e);
-            throw new NetworkException("Couldn't write to logging unit", this, address, true);
+            throw new NetworkException("Couldn't read from logging unit", this, address, true);
         }
     }
 
     @Override
     public void trim(long address) throws NetworkException {
 
+    }
+
+    @Override
+    public void fillHole(long address) {
+        try (val t = thriftPool.getCloseableResource())
+        {
+            t.getAsyncClient().fillHole(address, new NullCallback());
+        }
+        catch (Exception e)
+        {
+            log.info("exception", e);
+        }
     }
 }
 

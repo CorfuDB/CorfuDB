@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.corfudb.infrastructure.thrift.ErrorCode;
+import org.corfudb.infrastructure.thrift.ReadCode;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.protocols.logunits.CorfuNewLogUnitProtocol;
 import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
@@ -110,5 +111,30 @@ public class NewLogUnitServerIT {
         val read = nlup.read(0);
         assertThat(read.getStreams().contains(id))
                 .isEqualTo(true);
+    }
+
+    @Test
+    public void holesAreReportedAsHoles()
+            throws Exception
+    {
+        nlup.reset(0);
+        // Hole filling is async/unreliable, so we wait a reasonable amount of time
+        nlup.fillHole(0);
+        Thread.sleep(200);
+        assertThat(nlup.read(0).getResult())
+                .isEqualTo(ReadCode.READ_FILLEDHOLE);
+    }
+
+    @Test
+    public void holesCannotBeOverwritten()
+        throws Exception
+    {
+        nlup.reset(0);
+        nlup.fillHole(0);
+        Thread.sleep(200);
+        byte[] testPayload = getTestPayload(1024);
+        assertRaises(() -> nlup.write(0, Collections.emptySet(), ByteBuffer.wrap(testPayload)), OverwriteException.class);
+        assertThat(nlup.read(0).getResult())
+                .isEqualTo(ReadCode.READ_FILLEDHOLE);
     }
 }

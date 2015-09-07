@@ -64,8 +64,20 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G
      * @return True, to continue retrying, or False, to stop running the function.
      */
     @Override
-    public boolean handleException(Exception e) {
-        log.warn("Exception occurred during running of retry, backoff=" + retryCounter, e);
+    public boolean handleException(Exception e, boolean unhandled) {
+        if (unhandled) {
+            log.warn("Exception occurred during running of retry, backoff=" + retryCounter, e);
+        }
+        return exponentialRetry();
+    }
+
+    /**
+     * Apply the retry logic.
+     *
+     * @return True, if we should continue retrying, false otherwise.
+     */
+    @Override
+    public boolean retryLogic() {
         return exponentialRetry();
     }
 
