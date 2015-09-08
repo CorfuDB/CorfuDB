@@ -85,7 +85,7 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
      * @return The current port that this instance is being serviced on.
      */
     @Getter
-    short port;
+    Integer port;
 
     /**
      * The current epoch of this log unit.
@@ -138,7 +138,7 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
             log.error("Required key port is missing from configuration!");
             throw new RuntimeException("Invalid configuration provided!");
         }
-        port = ((Integer)configuration.get("port")).shortValue();
+        port = ((Integer)configuration.get("port"));
 
         // Currently, only an in-memory configuration is supported.
         dataCache = Caffeine.newBuilder()

@@ -820,7 +820,7 @@ public class ConfigMasterServer implements ICorfuDBServer {
                             job.add("result", newView(params));
                             break;
                         case "reconfig":
-                            job.add("reconfig", reconfig(params));
+                            reconfig(params);
                             break;
                     }
                     JsonObject res = job.add("calledmethod", apiCall)

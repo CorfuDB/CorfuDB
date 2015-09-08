@@ -339,6 +339,16 @@ public class CorfuDBView {
     }
 
     /**
+     * Revalidate this view. This allows this view to be used by
+     * clients accessing the view through CorfuDBRuntime.
+     */
+    public void revalidate()
+    {
+        isInvalid = false;
+    }
+
+
+    /**
      * Check if the view is valid.
      *
      * @return True if the view is valid, false otherwise.

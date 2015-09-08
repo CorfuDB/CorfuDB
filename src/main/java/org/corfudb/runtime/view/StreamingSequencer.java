@@ -24,6 +24,8 @@ import org.corfudb.runtime.RemoteException;
 
 import java.util.UUID;
 
+import org.corfudb.util.retry.ExponentialBackoffRetry;
+import org.corfudb.util.retry.IRetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,10 +80,8 @@ public class StreamingSequencer implements IStreamingSequencer {
     @Override
     public long getNext(UUID streamID, int numTokens)
     {
-        while (true)
-        {
-            try {
-                IServerProtocol sequencer= getView.get().getSequencers().get(0);
+        return IRetry.build(ExponentialBackoffRetry.class, () -> {
+            IServerProtocol sequencer= getView.get().getSequencers().get(0);
                 if (streamID == null)
                 {
                     //when the stream ID is null, get a global sequence #
@@ -96,12 +96,11 @@ public class StreamingSequencer implements IStreamingSequencer {
                     return ((ISimpleSequencer)sequencer).sequenceGetNext(numTokens);
                 }
             }
-            catch (NetworkException e)
-            {
+        ).onException(NetworkException.class, e -> {
                 log.warn("Unable to get next sequence, requesting new view.", e);
                 client.invalidateViewAndWait(e);
-            }
-        }
+                return true;
+            }).run();
     }
 
 

@@ -97,7 +97,7 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
         else
         {
             log.warn("Request reconfiguration for protocol we don't know how to reconfigure", e.protocol);
-            return oldView;
+            return (CorfuDBView) Serializer.copyShallow(oldView);
         }
     }
 }

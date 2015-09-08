@@ -162,9 +162,8 @@ public class CorfuInfrastructureBuilder {
         return "http://localhost:" + configMasterPort + "/corfu";
     }
     /**
-     * Shutdown servers and wait. This uses that Thread::stop method that everyone is disgusted by...
+     * Shutdown servers and wait. 
      */
-    @SuppressWarnings("deprecation")
     public void shutdownAndWait()
     {
         log.info("Shutting down dynamically created infrastructure...");

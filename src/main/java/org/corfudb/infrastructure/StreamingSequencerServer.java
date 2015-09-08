@@ -15,6 +15,7 @@
 
 package org.corfudb.infrastructure;
 
+import java.lang.reflect.Field;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
@@ -57,6 +58,8 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
     @Getter
     Thread thread;
     TServer server;
+    TServerSocket serverTransport;
+
     boolean running;
 
     /**
@@ -172,17 +175,19 @@ public class StreamingSequencerServer implements StreamingSequencerService.Iface
     public void close() {
         running = false;
         server.stop();
-        thread.interrupt();
-        try {
-            this.getThread().join(5000);
-        } catch(InterruptedException ie)
+        if (serverTransport != null)
         {
-
+            serverTransport.close();
         }
+        try {
+            Field executor = server.getClass().getDeclaredField("executorService_");
+            executor.setAccessible(true);
+            ExecutorService s = (ExecutorService) executor.get(server);
+            s.shutdownNow();
+        } catch (Exception e) {}
     }
 
     public void serverloop() {
-        TServerSocket serverTransport;
         StreamingSequencerService.Processor<StreamingSequencerServer> processor;
         log.debug("Streaming sequencer entering service loop.");
         try {

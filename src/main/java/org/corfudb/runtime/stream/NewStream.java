@@ -66,6 +66,7 @@ public class NewStream implements IStream {
     public ITimestamp append(Serializable data) throws OutOfSpaceException, IOException {
         return IRetry.build(ExponentialBackoffRetry.class, OutOfSpaceException.class, () -> {
             long nextToken = instance.getStreamingSequencer().getNext(streamID);
+            log.info("Current pointer={}", nextToken);
             instance.getStreamAddressSpace().writeObject(nextToken, Collections.singleton(streamID), data);
             return new SimpleTimestamp(nextToken);
         }).onException(OverwriteException.class, e -> {

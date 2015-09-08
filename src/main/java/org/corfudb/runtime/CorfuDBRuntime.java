@@ -414,6 +414,7 @@ public class CorfuDBRuntime implements AutoCloseable {
                                 else
                                 {
                                     log.info("New view epoch " + newView.getEpoch() + " is the same as previous...");
+                                    currentView.revalidate();
                                     viewUpdatePending.lock = false;
                                     viewUpdatePending.notifyAll();
                                 }
