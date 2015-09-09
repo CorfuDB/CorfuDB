@@ -62,7 +62,8 @@ public interface INewWriteOnceLogUnit extends IServerProtocol {
 
     void write(long address, Set<UUID> streams, ByteBuffer payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
     WriteOnceLogUnitRead read(long address) throws NetworkException;
-    void trim(long address) throws NetworkException;
+    void trim(UUID stream, long address) throws NetworkException;
     void fillHole(long address);
+    void forceGC();
 }
 

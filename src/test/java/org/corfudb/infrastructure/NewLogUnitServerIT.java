@@ -4,10 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.corfudb.infrastructure.thrift.ErrorCode;
 import org.corfudb.infrastructure.thrift.ReadCode;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.protocols.logunits.CorfuNewLogUnitProtocol;
 import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 import org.corfudb.util.CorfuInfrastructureBuilder;
+import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -45,12 +47,13 @@ public class NewLogUnitServerIT {
     public void setup()
     throws Exception
     {
+        int port = RandomOpenPort.getOpenPort();
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()
                         .addSequencer(9873, StreamingSequencerServer.class, "cdbss", null)
-                        .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
+                        .addLoggingUnit(port, 0, NewLogUnitServer.class, "cnlu", null)
                         .start(7775);
-        nlup = new CorfuNewLogUnitProtocol("localhost", 7777, Collections.emptyMap(), 0L);
+        nlup = new CorfuNewLogUnitProtocol("localhost", port, Collections.emptyMap(), 0L);
     }
 
     @After
@@ -136,5 +139,34 @@ public class NewLogUnitServerIT {
         assertRaises(() -> nlup.write(0, Collections.emptySet(), ByteBuffer.wrap(testPayload)), OverwriteException.class);
         assertThat(nlup.read(0).getResult())
                 .isEqualTo(ReadCode.READ_FILLEDHOLE);
+    }
+
+    @Test
+    public void trimmedSpaceIsTrimmed()
+        throws Exception
+    {
+        nlup.reset(0);
+        UUID r = UUID.randomUUID();
+        ByteBuffer d = ByteBuffer.wrap(new byte[1024]);
+        nlup.write(0, Collections.singleton(r), d);
+        Thread.sleep(100);
+        nlup.trim(r, 0);
+        nlup.forceGC();
+        Thread.sleep(100);
+        assertThat(nlup.read(0).getResult())
+                .isEqualTo(ReadCode.READ_TRIMMED);
+    }
+
+    @Test
+    public void wrongEpochCausesException()
+        throws Exception
+    {
+        nlup.reset(0);
+        nlup.setEpoch(99);
+        UUID r = UUID.randomUUID();
+        ByteBuffer d = ByteBuffer.wrap(new byte[1024]);
+        assertRaises(() -> {
+            nlup.write(0, Collections.singleton(r), d);
+        }, NetworkException.class);
     }
 }

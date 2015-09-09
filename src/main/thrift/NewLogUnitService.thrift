@@ -23,8 +23,9 @@ service NewLogUnitService {
 
 	Common.WriteResult write(1:i64 epoch, 2:i64 offset, 3: set<Common.UUID> stream, 4:binary payload),
 	ReadResult read(1:i64 epoch, 2:i64 offset),
-	Common.ErrorCode trim(1:i64 epoch, 2: Common.UUID stream, 3:i64 prefix),
+	oneway void trim(1:i64 epoch, 2: Common.UUID stream, 3:i64 prefix),
     oneway void fillHole(1:i64 offset),
+    oneway void forceGC(),
     bool ping(),
     void reset()
 }

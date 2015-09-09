@@ -1,5 +1,7 @@
 package org.corfudb.util;
 
+import lombok.NonNull;
+
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -131,5 +133,26 @@ public class Utils
         return simpleUUIDHash(uuid, seed);
     }
 
+    /** Converts a thrift UUID (represented as 2 64 bit integers) to a standard java.util.UUID
+     *
+     * @param thriftUUID    The thrift UUID to convert
+     * @return              The java.util.UUID representation of the UUID.
+     */
+    public static UUID fromThriftUUID(@NonNull org.corfudb.infrastructure.thrift.UUID thriftUUID)
+    {
+        return new UUID(thriftUUID.getMsb(), thriftUUID.getLsb());
+    }
+
+    /** Converts a java.util.UUID to a thrift ID (represented by 2 64 bit integers).
+     *
+     * @param javaUUID      The Java UUID to convert
+     * @return              The thrift representation of the UUID.
+     */
+    public static org.corfudb.infrastructure.thrift.UUID toThriftUUID(@NonNull UUID javaUUID){
+        org.corfudb.infrastructure.thrift.UUID thriftUUID = new org.corfudb.infrastructure.thrift.UUID();
+        thriftUUID.setMsb(javaUUID.getMostSignificantBits());
+        thriftUUID.setLsb(javaUUID.getLeastSignificantBits());
+        return thriftUUID;
+    }
 
 }

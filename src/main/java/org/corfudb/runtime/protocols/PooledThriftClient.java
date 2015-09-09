@@ -19,6 +19,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.thrift.async.AsyncMethodCallback;
 import org.apache.thrift.async.TAsyncClient;
 import org.apache.thrift.async.TAsyncClientManager;
 import org.apache.thrift.protocol.TCompactProtocol;
@@ -36,6 +37,7 @@ import org.apache.commons.pool.impl.GenericObjectPool.Config;
 import org.apache.commons.pool.BasePoolableObjectFactory;
 
 import java.io.Closeable;
+import java.util.function.Consumer;
 
 /**
  * This class implements a pooled Thrift client which other protocols may use.
@@ -68,7 +70,7 @@ public class PooledThriftClient<T extends TServiceClient, U extends TAsyncClient
                 (new AsyncThriftClientFactory(asyncFactory,
                         new TCompactProtocol.Factory(),
                         new TAsyncClientManager(),
-                        new TNonblockingSocket(host, port)
+                        host, port
                         ),
                         config);
     }
@@ -79,12 +81,13 @@ public class PooledThriftClient<T extends TServiceClient, U extends TAsyncClient
         private final AsyncClientFactory<U> clientFactory;
         private final TProtocolFactory protocolFactory;
         private final TAsyncClientManager manager;
-        private final TNonblockingSocket transport;
+        private final String host;
+        private final int port;
 
 
         @Override
         public U makeObject() throws Exception {
-            return clientFactory.make(protocolFactory, manager, transport);
+            return clientFactory.make(protocolFactory, manager, new TNonblockingSocket(host, port));
         }
 
         @Override
@@ -148,6 +151,54 @@ public class PooledThriftClient<T extends TServiceClient, U extends TAsyncClient
             pool.returnResourceObject(client);
             pool.returnAsyncResourceObject(asyncClient);
         }
+    }
+
+    @Data
+    public class pooledCompletion<N> implements AsyncMethodCallback<N>
+    {
+
+        final TPooledAsyncClient client;
+        final Consumer<N> callback;
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public void onComplete(N t) {
+            client.getPool().returnAsyncResourceObject(client.getAsyncClient());
+            callback.accept(t);
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public void onError(Exception e) {
+            log.warn("Async method encountered exception!", e);
+            client.getPool().returnAsyncResourceObject(client.getAsyncClient());
+        }
+    }
+
+    @Data
+    public class TPooledAsyncClient<X extends T, Y extends U> implements AutoCloseable
+    {
+        final Y asyncClient;
+        final PooledThriftClient<T, U> pool;
+
+        public pooledCompletion getCallback()
+        {
+            return new pooledCompletion(this, (t) -> {});
+        }
+
+        public <Z> pooledCompletion<Z> getCallback(Consumer<Z> completionFunc)
+        {
+            return new pooledCompletion<>(this, completionFunc);
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    public TPooledAsyncClient<T,U> getCloseableAsyncResource()
+    {
+        return new TPooledAsyncClient<>(getAsyncResource(), this);
     }
 
     public TPooledClient<T,U> getCloseableResource()

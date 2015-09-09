@@ -66,10 +66,9 @@ public class NewStream implements IStream {
     public ITimestamp append(Serializable data) throws OutOfSpaceException, IOException {
         return IRetry.build(ExponentialBackoffRetry.class, OutOfSpaceException.class, () -> {
             long nextToken = instance.getStreamingSequencer().getNext(streamID);
-            log.info("Current pointer={}", nextToken);
             instance.getStreamAddressSpace().writeObject(nextToken, Collections.singleton(streamID), data);
             return new SimpleTimestamp(nextToken);
-        }).onException(OverwriteException.class, e -> {
+        }).onException(OverwriteException.class, (e,r) -> {
             log.debug("Tried to write to " + e.address + " but overwrite occured, retrying...");
             return true;
         })
@@ -87,6 +86,19 @@ public class NewStream implements IStream {
     @Override
     public ITimestamp[] reserve(int numTokens) throws IOException {
         return new ITimestamp[] {new SimpleTimestamp(instance.getStreamingSequencer().getNext(streamID))};
+    }
+
+    /**
+     * Write to a specific, previously allocated log position.
+     *
+     * @param timestamp The timestamp to write to.
+     * @param data      The data to write to that timestamp.
+     * @throws OutOfSpaceException If there is no space left to write to that log position.
+     * @throws OverwriteException  If something was written to that log position already.
+     */
+    @Override
+    public void write(ITimestamp timestamp, Serializable data) throws OutOfSpaceException, OverwriteException, IOException {
+        instance.getStreamAddressSpace().writeObject(toPhysicalTimestamp(timestamp), Collections.singleton(streamID), data);
     }
 
     /**
@@ -237,7 +249,11 @@ public class NewStream implements IStream {
      */
     @Override
     public ITimestamp getCurrentPosition() {
-        return null;
+        if (streamPointer.get() == 0)
+        {
+            return ITimestamp.getMinTimestamp();
+        }
+        return new SimpleTimestamp(streamPointer.get()-1);
     }
 
     /**

@@ -25,6 +25,7 @@ import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.NullCallback;
 import org.corfudb.runtime.protocols.PooledThriftClient;
+import org.corfudb.util.Utils;
 
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -85,7 +86,8 @@ public class CorfuNewLogUnitProtocol implements IServerProtocol, INewWriteOnceLo
      */
     @Override
     public void setEpoch(long epoch) {
-
+        log.info("Epoch set to {}", epoch);
+        this.epoch = epoch;
     }
 
     /**
@@ -176,16 +178,42 @@ public class CorfuNewLogUnitProtocol implements IServerProtocol, INewWriteOnceLo
         }
     }
 
+    /** Trims the given stream, freeing up all entries up to and including the address given.
+     *
+     * @param stream                The stream to trim.
+     * @param address               The address to trim.
+     * @throws NetworkException     If there was an exception sending the trim request (which shouldn't happen
+     *                              since this is a oneway communication.
+     */
     @Override
-    public void trim(long address) throws NetworkException {
-
+    public void trim(UUID stream, long address) throws NetworkException {
+        try (val t = thriftPool.getCloseableAsyncResource())
+        {
+            t.getAsyncClient().trim(epoch, Utils.toThriftUUID(stream), address, t.getCallback());
+        }
+        catch (Exception e)
+        {
+            log.info("exception", e);
+        }
     }
 
     @Override
     public void fillHole(long address) {
-        try (val t = thriftPool.getCloseableResource())
+        try (val t = thriftPool.getCloseableAsyncResource())
         {
-            t.getAsyncClient().fillHole(address, new NullCallback());
+            t.getAsyncClient().fillHole(address, t.getCallback());
+        }
+        catch (Exception e)
+        {
+            log.info("exception", e);
+        }
+    }
+
+    @Override
+    public void forceGC() {
+        try (val t = thriftPool.getCloseableAsyncResource())
+        {
+            t.getAsyncClient().forceGC(t.getCallback());
         }
         catch (Exception e)
         {

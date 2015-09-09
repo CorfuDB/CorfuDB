@@ -13,7 +13,7 @@ import java.util.Map;
  * Created by mwei on 9/1/15.
  */
 @Slf4j
-public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> implements IRetry<E,F,G,H,O> {
+public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O, A extends IRetry> implements IRetry<E,F,G,H,O,ExponentialBackoffRetry> {
 
     @Getter
     long retryCounter = 0;
