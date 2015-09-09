@@ -152,7 +152,7 @@ public class NewLogUnitServerIT {
         Thread.sleep(100);
         nlup.trim(r, 0);
         nlup.forceGC();
-        Thread.sleep(100);
+        Thread.sleep(1000);
         assertThat(nlup.read(0).getResult())
                 .isEqualTo(ReadCode.READ_TRIMMED);
     }
