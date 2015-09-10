@@ -95,7 +95,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         //TODO: handle multiple segments
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        replicationProtocol.write(client, address, Collections.singleton(getView.get().getUUID().toString()), data);
+        replicationProtocol.write(client, address, Collections.singleton(getView.get().getUUID()), data);
         return;
 
     }
@@ -115,7 +115,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        data = replicationProtocol.read(client, address, getView.get().getUUID().toString());
+        data = replicationProtocol.read(client, address, getView.get().getUUID());
         AddressSpaceCache.put(getView.get().getUUID(), address, data);
         return data;
     }

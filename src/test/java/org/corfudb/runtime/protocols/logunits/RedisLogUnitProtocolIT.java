@@ -4,7 +4,7 @@ import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.UnwrittenException;
 import org.junit.Test;
 
-import java.util.HashMap;
+import java.util.UUID;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.junit.Assert.assertArrayEquals;
@@ -14,6 +14,8 @@ import static org.junit.Assert.assertTrue;
  * Created by mwei on 5/14/15.
  */
 public class RedisLogUnitProtocolIT {
+    private static UUID uuid = UUID.randomUUID();
+
     private static byte[] getTestPayload(int size)
     {
         byte[] test = new byte[size];
@@ -68,7 +70,7 @@ public class RedisLogUnitProtocolIT {
             mlup.write(i, null, test);
         }
 
-        byte[] data = mlup.read(42, "fake stream");
+        byte[] data = mlup.read(42, uuid);
         assertArrayEquals(data, test);
     }
 
@@ -83,6 +85,6 @@ public class RedisLogUnitProtocolIT {
             mlup.write(i, null, test);
         }
 
-        assertRaises(() -> mlup.read(101, "fake stream"), UnwrittenException.class);
+        assertRaises(() -> mlup.read(101, uuid), UnwrittenException.class);
     }
 }

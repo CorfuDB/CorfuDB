@@ -28,8 +28,7 @@ import org.apache.thrift.transport.TServerSocket;
 import org.corfudb.infrastructure.thrift.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
-import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
-import org.corfudb.runtime.smr.ICorfuDBObject;
+import org.corfudb.util.Utils;
 import org.rocksdb.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +37,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBServer {
@@ -192,25 +192,22 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         server.stop();
     }
 
-    private byte[] getKey(long address, String stream) throws IOException {
-        ByteArrayOutputStream bs = new ByteArrayOutputStream();
-        ByteBuffer br = ByteBuffer.allocate(Long.BYTES);
+    private byte[] getKey(long address, UUID stream) throws IOException {
+        ByteBuffer br = ByteBuffer.allocate(Long.BYTES*3);
+        br.putLong(stream.getLeastSignificantBits());
+        br.putLong(stream.getMostSignificantBits());
         br.putLong(address);
 
-        bs.write(stream.getBytes());
-        bs.write(br.array());
-
-        return bs.toByteArray();
-
+        return br.array();
     }
 
     // Assumes each ByteBuffer has length <= PAGESIZE.
-    private WriteResult put(long address, Set<String> streams, ByteBuffer buf, ExtntMarkType et) throws IOException {
+    private WriteResult put(long address, Set<org.corfudb.infrastructure.thrift.UUID> streams, ByteBuffer buf, ExtntMarkType et) throws IOException {
         // TODO: If streams is null, add to EVERY stream??
         if (streams == null)
             return new WriteResult().setCode(ErrorCode.ERR_BADPARAM);
-        for (String stream : streams) {
-            byte[] key = getKey(address, stream);
+        for (org.corfudb.infrastructure.thrift.UUID stream : streams) {
+            byte[] key = getKey(address, Utils.fromThriftUUID(stream));
 
             ByteArrayOutputStream bs = new ByteArrayOutputStream();
             bs.write(buf.array());
@@ -232,10 +229,10 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
         throw new UnsupportedOperationException("trimLogStore not implemented in Rocks-backed server!!");
     }
 
-    public ExtntWrap get(long logOffset, String stream) throws IOException {
+    public ExtntWrap get(long logOffset, org.corfudb.infrastructure.thrift.UUID stream) throws IOException {
         ExtntWrap wr = new ExtntWrap();
         //TODO : figure out trim story
-        byte[] key = getKey(logOffset, stream);
+        byte[] key = getKey(logOffset, Utils.fromThriftUUID(stream));
         byte[] value = null;
         try {
             value = db.get(key);
@@ -337,7 +334,7 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
             return new WriteResult().setCode(ErrorCode.ERR_STALEEPOCH);
         }
 
-        log.debug("write({} size={} marktype={})", hdr.off, ctnt.capacity(), et);
+        log.debug("write({} size={} marktype={})", hdr, ctnt.capacity(), et);
         try {
             WriteResult wr = put(hdr.off, hdr.streamID, ctnt, et);
             highWatermark = Long.max(highWatermark, hdr.off);
@@ -371,7 +368,7 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
     }
 
     private Hints genHint(ErrorCode err) {
-        return new Hints(err, new HashMap<String, Long>(), false, null);
+        return new Hints(err, new HashMap<org.corfudb.infrastructure.thrift.UUID, Long>(), false, null);
     }
 
     /* (non-Javadoc)
@@ -393,6 +390,7 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
             throw new TException("Simulated failure mode!");
         }
         if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return genWrap(ErrorCode.ERR_STALEEPOCH);
+        log.debug("read({})", hdr);
         try {
             return get(hdr.off, hdr.streamID.iterator().next());
         } catch (IOException e) {
@@ -498,17 +496,17 @@ public class RocksLogUnitServer implements RocksLogUnitService.Iface, ICorfuDBSe
 
     public void serverloop() throws Exception {
 
-        log.warn("@C@ CorfuLoggingUnit starting");
+        log.warn("@C@ RocksDBLoggingUnit starting");
 
         if (!RAMMODE) {
             RocksDB.loadLibrary();
 
             Options options = new Options().setCreateIfMissing(true);
-            /*options.setAllowMmapReads(true);
+            options.setAllowMmapReads(true);
             // For easy prefix-lookups.
             options.setMemTableConfig(new HashSkipListMemTableConfig());
             options.setTableFormatConfig(new PlainTableConfig());
-            options.useFixedLengthPrefixExtractor(16); // Prefix length in bytes */
+            options.useFixedLengthPrefixExtractor(16); // Prefix length in bytes
             try {
                 db = RocksDB.open(options, DRIVENAME);
             } catch (RocksDBException e) {

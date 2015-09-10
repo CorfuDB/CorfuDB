@@ -8,11 +8,15 @@ import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.UnwrittenException;
 import org.junit.Test;
 
+import java.util.UUID;
+
 
 /**
  * Created by mwei on 4/30/15.
  */
 public class MemoryLogUnitProtocolTest {
+
+    private static UUID uuid = UUID.randomUUID();
 
     private static byte[] getTestPayload(int size)
     {
@@ -67,7 +71,7 @@ public class MemoryLogUnitProtocolTest {
             mlup.write(i, null, test);
         }
 
-        byte[] data = mlup.read(42, "fake stream");
+        byte[] data = mlup.read(42, uuid);
         assertArrayEquals(data, test);
     }
 
@@ -82,7 +86,6 @@ public class MemoryLogUnitProtocolTest {
             mlup.write(i, null, test);
         }
 
-        assertRaises(() -> mlup.read(101, "fake stream"), UnwrittenException.class);
+        assertRaises(() -> mlup.read(101, uuid), UnwrittenException.class);
     }
-
 }

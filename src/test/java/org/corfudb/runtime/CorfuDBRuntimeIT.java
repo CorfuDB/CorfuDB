@@ -1,13 +1,10 @@
 package org.corfudb.runtime;
 
-import org.corfudb.infrastructure.RocksLogUnitServer;
 import org.corfudb.infrastructure.SimpleLogUnitServer;
 import org.corfudb.infrastructure.StreamingSequencerServer;
-import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
-import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.junit.Test;
@@ -26,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class CorfuDBRuntimeIT {
 
+    static UUID uuid = UUID.randomUUID();
     static Map<String, Object> luConfigMap = new HashMap<String,Object>() {
         {
             put("capacity", 200000);
@@ -166,9 +164,9 @@ public class CorfuDBRuntimeIT {
         IWriteOnceLogUnit LU1 = ((IWriteOnceLogUnit) cdr.getView().getSegments().get(0).getGroups().get(0).get(0));
         IWriteOnceLogUnit LU2 = ((IWriteOnceLogUnit) cdr.getView().getSegments().get(0).getGroups().get(0).get(1));
 
-        assertThat(LU1.read(0, "fake stream"))
+        assertThat(LU1.read(0, uuid))
                 .isEqualTo("hello world".getBytes());
-        assertThat(LU2.read(0, "fake stream"))
+        assertThat(LU2.read(0, uuid))
                 .isEqualTo("hello world".getBytes());
         /* Fail LU2 */
         LU2.simulateFailure(true);

@@ -108,7 +108,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         //TODO: handle multiple segments
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        replicationProtocol.write(client, address, Collections.singleton(getView.get().getUUID().toString()), data);
+        replicationProtocol.write(client, address, Collections.singleton(getView.get().getUUID()), data);
         return;
     }
 
@@ -127,7 +127,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         //TODO: handle multiple segments
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        return replicationProtocol.read(client, address, getView.get().getUUID().toString());
+        return replicationProtocol.read(client, address, getView.get().getUUID());
 
         //    stream.debug("Objcache MISS @ {}", address);
         //   AddressSpaceCache.put(logID, address, data);
@@ -185,7 +185,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
     }
 
     @Override
-    public void setHintsNext(long address, String stream, long nextOffset)
+    public void setHintsNext(long address, UUID stream, long nextOffset)
             throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.

@@ -17,24 +17,24 @@
 // implement a cyclic stream store: logically infinite stream sequence mapped onto a UNICAPACITY array of fixed-entrys
 package org.corfudb.infrastructure;
 
-import java.io.ByteArrayOutputStream;
+import lombok.Getter;
+import org.apache.thrift.TException;
+import org.apache.thrift.TMultiplexedProcessor;
+import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.server.TServer;
+import org.apache.thrift.server.TThreadPoolServer;
+import org.apache.thrift.transport.TFastFramedTransport;
+import org.apache.thrift.transport.TServerSocket;
+import org.corfudb.infrastructure.thrift.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.*;
-
-import lombok.Getter;
-import org.apache.thrift.TMultiplexedProcessor;
-import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.transport.TFastFramedTransport;
-import org.corfudb.infrastructure.thrift.*;
-import org.slf4j.*;
-import org.apache.thrift.TException;
-import org.apache.thrift.server.TServer;
-import org.apache.thrift.server.TThreadPoolServer;
-import org.apache.thrift.transport.TServerSocket;
 
 public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDBServer {
 	private Logger log = LoggerFactory.getLogger(SimpleLogUnitServer.class);
@@ -176,10 +176,11 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
     // Should basically mirror the ExtntInfo struct
 	class mapInfo {
-
+        // The max length is actually (size_int >> 3), because we keep 3 bits at the end of length
 		int physOffset;
 		int length;
 		ExtntMarkType et;
+        boolean commit;
 
 		public mapInfo(long logOffset) {
 
@@ -189,7 +190,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 			length = mapb.getInt();
 			et = ExtntMarkType.findByValue(length & 0x3);
-            length >>= 2;
+            commit = !((length & 0x4) == 0);
+            length >>= 3;
 		}
 	}
 
@@ -272,7 +274,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 	public int getLength(long logOffset) {
 		int mi = mapind(logOffset) + intsz;
-		return mapb.getInt(mi) >> 2;
+		return mapb.getInt(mi) >> 3;
 	}
 
 	public ExtntMarkType getET(long logOffset) {
@@ -286,7 +288,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 		int mi = mapind(logOffset);
 		mapb.position(mi);
 		mapb.putInt(physOffset);
-		length <<= 2;
+		length <<= 3;
         length |= et.getValue();
 		mapb.putInt(length);
         if (!RAMMODE) {
@@ -295,6 +297,17 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             DriveChannel.write(toArray(logOffset, 1));
         }
 	}
+
+    public void setExtntCommit(long logOffset, boolean commit) {
+        int mi = mapind(logOffset) + intsz;
+        mapb.position(mi);
+        int length = mapb.getInt();
+        if (commit) {
+            length = length | 0x4;
+        }
+        mapb.position(mi);
+        mapb.putInt(length);
+    }
 
 	public void trimLogStore(long toOffset) throws IOException {
 		long lasttrim = gcmark, lastcontig = lasttrim;
@@ -358,7 +371,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
 
 	}
 
-	public ErrorCode appendExtntLogStore(long logOffset, Set<String> streams, List<ByteBuffer> wbufs, ExtntMarkType et)
+	public ErrorCode appendExtntLogStore(long logOffset, Set<org.corfudb.infrastructure.thrift.UUID> streams, List<ByteBuffer> wbufs, ExtntMarkType et)
         throws IOException {
         //TODO: figure out trim story..
 		//if (logOffset < CM.getTrimmark())             return ErrorCode.ERR_OVERWRITE;
@@ -387,8 +400,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             hintMap.put(logOffset, curHints);
         }
         if (!curHints.isSetNextMap() || curHints.getNextMap() == null) {
-            HashMap<String, Long> newNext = new HashMap<String, Long>();
-            for (String stream : streams) {
+            HashMap<org.corfudb.infrastructure.thrift.UUID, Long> newNext = new HashMap<org.corfudb.infrastructure.thrift.UUID, Long>();
+            for (org.corfudb.infrastructure.thrift.UUID stream : streams) {
                 newNext.put(stream, -1L);
             }
             curHints.setNextMap(newNext);
@@ -588,7 +601,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     }
 
     private Hints genHint(ErrorCode err) {
-        return new Hints(err, new HashMap<String, Long>(), false, null);
+        return new Hints(err, new HashMap<org.corfudb.infrastructure.thrift.UUID, Long>(), false, null);
     }
 
 	/* (non-Javadoc)
@@ -661,7 +674,7 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
     }
 
     @Override
-    synchronized public ErrorCode setHintsNext(UnitServerHdr hdr, String stream, long nextOffset) throws org.apache.thrift.TException {
+    synchronized public ErrorCode setHintsNext(UnitServerHdr hdr, long nextOffset) throws org.apache.thrift.TException {
         if (Util.compareIncarnations(hdr.getEpoch(), masterIncarnation) < 0) return ErrorCode.ERR_STALEEPOCH;
         log.debug("setHintsNext({})", hdr.off);
 
@@ -680,12 +693,12 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
             hintMap.put(hdr.off, curHints);
         }
         if (!curHints.isSetNextMap() || curHints.getNextMap() == null) {
-            HashMap<String, Long> newNext = new HashMap<String, Long>();
-            newNext.put(stream, nextOffset);
+            HashMap<org.corfudb.infrastructure.thrift.UUID, Long> newNext = new HashMap<org.corfudb.infrastructure.thrift.UUID, Long>();
+            newNext.put(hdr.getStreamIDIterator().next(), nextOffset);
             curHints.setNextMap(newNext);
         }
         else {
-            Long oldNext = curHints.getNextMap().put(stream, nextOffset);
+            Long oldNext = curHints.getNextMap().put(hdr.getStreamIDIterator().next(), nextOffset);
             if (oldNext != null && oldNext.longValue() != nextOffset && oldNext.longValue() != -1)
                 return ErrorCode.ERR_OVERWRITE;
         }
@@ -745,8 +758,8 @@ public class SimpleLogUnitServer implements SimpleLogUnitService.Iface, ICorfuDB
         if (hdr.streamID == null)
             return ErrorCode.OK;
         if (!curHints.isSetNextMap() || curHints.getNextMap() == null) {
-            HashMap<String, Long> newNext = new HashMap<String, Long>();
-            for (String stream : hdr.streamID) {
+            HashMap<org.corfudb.infrastructure.thrift.UUID, Long> newNext = new HashMap<org.corfudb.infrastructure.thrift.UUID, Long>();
+            for (org.corfudb.infrastructure.thrift.UUID stream : hdr.streamID) {
                 newNext.put(stream, -1L);
             }
             curHints.setNextMap(newNext);

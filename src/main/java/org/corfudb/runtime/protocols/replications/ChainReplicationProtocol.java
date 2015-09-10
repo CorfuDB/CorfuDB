@@ -65,7 +65,7 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
     }
 
     @Override
-    public void write(CorfuDBRuntime client, long address, Set<String> streams, byte[] data)
+    public void write(CorfuDBRuntime client, long address, Set<UUID> streams, byte[] data)
             throws OverwriteException, TrimmedException, OutOfSpaceException {
         // TODO: Handle multiple segments?
         IReplicationProtocol reconfiguredRP = null;
@@ -106,7 +106,7 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
     }
 
     @Override
-    public byte[] read(CorfuDBRuntime client, long address, String stream) throws UnwrittenException, TrimmedException {
+    public byte[] read(CorfuDBRuntime client, long address, UUID stream) throws UnwrittenException, TrimmedException {
         // TODO: Handle multiple segments?
         IReplicationProtocol reconfiguredRP = null;
         while (true)
@@ -144,7 +144,8 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
         return wolu.readHints(mappedAddress);
     }
 
-    public void setHintsNext(long address, String stream, long nextOffset) throws UnwrittenException, TrimmedException, NetworkException {
+    @Override
+    public void setHintsNext(long address, UUID stream, long nextOffset) throws UnwrittenException, TrimmedException, NetworkException {
         // Hints are not chain-replicated; they live at the tails of the chains, where the regular reads go.
         int mod = groups.size();
         int groupnum =(int) (address % mod);
@@ -155,6 +156,7 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
         wolu.setHintsNext(mappedAddress, stream, nextOffset);
     }
 
+    @Override
     public void setHintsTxDec(long address, boolean dec) throws UnwrittenException, TrimmedException, NetworkException {
         // Hints are not chain-replicated; they live at the tails of the chains, where the regular reads go.
         int mod = groups.size();
@@ -166,20 +168,12 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
         wolu.setHintsTxDec(mappedAddress, dec);
     }
 
+    @Override
     public void setHintsFlatTxn(long address, MultiCommand flattedTxn) throws UnwrittenException, TrimmedException, IOException, NetworkException {
         // Hints are not chain-replicated; they live at the tails of the chains, where the regular reads go.
         int mod = groups.size();
         int groupnum =(int) (address % mod);
         long mappedAddress = address/mod;
-
-        // Convert the stream set to a String set
-        Set<String> streams = new HashSet<String>();
-        if (flattedTxn.getStreams() != null) {
-            Iterator<UUID> it = flattedTxn.getStreams().iterator();
-            while (it.hasNext()) {
-                streams.add(it.next().toString());
-            }
-        }
 
         List<IServerProtocol> chain = groups.get(groupnum);
         IWriteOnceLogUnit wolu = (IWriteOnceLogUnit) chain.get(chain.size() - 1);
@@ -187,7 +181,7 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
             try (ObjectOutput out = new ObjectOutputStream(bs)) {
                 out.writeObject(flattedTxn);
 
-                wolu.setHintsFlatTxn(mappedAddress, streams, bs.toByteArray());
+                wolu.setHintsFlatTxn(mappedAddress, flattedTxn.getStreams(), bs.toByteArray());
             }
         }
     }

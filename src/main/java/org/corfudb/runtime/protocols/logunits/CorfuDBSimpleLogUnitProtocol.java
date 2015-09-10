@@ -29,7 +29,9 @@ import org.apache.commons.pool.impl.GenericObjectPool.Config;
 import java.util.*;
 
 import java.nio.ByteBuffer;
+import java.util.UUID;
 
+import org.corfudb.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -151,7 +153,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
         }
     }
 
-    public void write(long address, Set<String> streams, byte[] data)
+    public void write(long address, Set<UUID> streams, byte[] data)
     throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException
     {
         SimpleLogUnitService.Client client = thriftPool.getResource();
@@ -162,7 +164,12 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
             epochlist.add(epoch.intValue());
             ArrayList<ByteBuffer> byteList = new ArrayList<ByteBuffer>();
             byteList.add(ByteBuffer.wrap(data));
-            WriteResult wr = client.write(new UnitServerHdr(epochlist, address, streams), byteList, ExtntMarkType.EX_FILLED);
+            Set<org.corfudb.infrastructure.thrift.UUID> thriftStreams = new HashSet<org.corfudb.infrastructure.thrift.UUID>();
+            for (UUID stream : streams) {
+                thriftStreams.add(Utils.toThriftUUID(stream));
+            }
+
+            WriteResult wr = client.write(new UnitServerHdr(epochlist, address, thriftStreams), byteList, ExtntMarkType.EX_FILLED);
             thriftPool.returnResourceObject(client);
             success = true;
             if (wr.getCode().equals(ErrorCode.ERR_OVERWRITE))
@@ -198,7 +205,7 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
         }
     }
 
-    public byte[] read(long address, String stream)
+    public byte[] read(long address, UUID stream)
     throws UnwrittenException, TrimmedException, NetworkException
     {
         byte[] data = null;
@@ -208,9 +215,9 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            Set<String> streams = null;
+            Set<org.corfudb.infrastructure.thrift.UUID> streams = null;
             if (stream != null)
-                streams = Collections.singleton(stream);
+                streams = Collections.singleton(Utils.toThriftUUID(stream));
             ExtntWrap wrap = client.read(new UnitServerHdr(epochlist, address, streams));
             if (wrap.err.equals(ErrorCode.ERR_UNWRITTEN))
             {
@@ -277,14 +284,14 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     }
 
     @Override
-    public void setHintsNext(long address, String stream, long nextOffset) throws TrimmedException, NetworkException {
+    public void setHintsNext(long address, UUID stream, long nextOffset) throws TrimmedException, NetworkException {
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
         boolean broken = false;
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ErrorCode ec = client.setHintsNext(new UnitServerHdr(epochlist, address, null), stream, nextOffset);
+            ErrorCode ec = client.setHintsNext(new UnitServerHdr(epochlist, address, Collections.singleton(Utils.toThriftUUID(stream))), nextOffset);
             thriftPool.returnResourceObject(client);
             success = true;
             if (ec.equals(ErrorCode.ERR_TRIMMED)) {
@@ -345,14 +352,19 @@ public class CorfuDBSimpleLogUnitProtocol implements IServerProtocol, IWriteOnce
     }
 
     @Override
-    public void setHintsFlatTxn(long address, Set<String> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
+    public void setHintsFlatTxn(long address, Set<UUID> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
         SimpleLogUnitService.Client client = thriftPool.getResource();
         boolean success = false;
         boolean broken = false;
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ErrorCode ec = client.setHintsFlatTxn(new UnitServerHdr(epochlist, address, streams), ByteBuffer.wrap(flatTxn));
+            Set<org.corfudb.infrastructure.thrift.UUID> thriftStreams = new HashSet<org.corfudb.infrastructure.thrift.UUID>();
+            for (UUID stream : streams) {
+                thriftStreams.add(Utils.toThriftUUID(stream));
+            }
+
+            ErrorCode ec = client.setHintsFlatTxn(new UnitServerHdr(epochlist, address, thriftStreams), ByteBuffer.wrap(flatTxn));
             thriftPool.returnResourceObject(client);
             success = true;
             if (ec.equals(ErrorCode.ERR_TRIMMED)) {
