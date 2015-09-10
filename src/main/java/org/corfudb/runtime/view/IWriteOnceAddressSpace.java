@@ -24,6 +24,7 @@ import org.corfudb.runtime.smr.MultiCommand;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.UUID;
 
 /**
  * This interface represents a view on write-once address spaces.
@@ -46,7 +47,7 @@ public interface IWriteOnceAddressSpace {
         throw new UnsupportedOperationException("This address space doesn't support hints");
     }
 
-    default void setHintsNext(long address, String stream, long nextOffset) throws UnwrittenException, TrimmedException {
+    default void setHintsNext(long address, UUID stream, long nextOffset) throws UnwrittenException, TrimmedException {
         throw new UnsupportedOperationException("This address space doesn't support hints");
     }
 

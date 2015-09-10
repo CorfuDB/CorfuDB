@@ -108,7 +108,7 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
     }
 
     @SuppressWarnings("unchecked")
-    public void write(long address, Set<String> streams, byte[] data)
+    public void write(long address, Set<UUID> streams, byte[] data)
     throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException
     {
         try (BinaryJedis jedis = pool.getResource())
@@ -134,7 +134,7 @@ public class RedisLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
         }
     }
 
-    public byte[] read(long address, String stream) throws UnwrittenException, TrimmedException, NetworkException
+    public byte[] read(long address, UUID stream) throws UnwrittenException, TrimmedException, NetworkException
     {
         try (BinaryJedis jedis = pool.getResource())
         {

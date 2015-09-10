@@ -21,6 +21,8 @@ import java.util.*;
  * Created by mwei on 4/30/15.
  */
 public class CorfuDBRuntimeTest {
+    private static UUID uuid = UUID.randomUUID();
+
     @Test
     public void MemoryCorfuDBRuntimeHasComponents() {
         MemoryConfigMasterProtocol.inMemoryClear();
@@ -131,9 +133,9 @@ public class CorfuDBRuntimeTest {
         WriteOnceAddressSpace woas = new WriteOnceAddressSpace(runtime);
         woas.write(s.getNext(), "Hello World".getBytes());
 
-        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(0, "fake stream"))
+        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(0, uuid))
                 .isEqualTo("Hello World".getBytes());
-        assertThat(MemoryLogUnitProtocol.memoryUnits.get(1).read(0, "fake stream"))
+        assertThat(MemoryLogUnitProtocol.memoryUnits.get(1).read(0, uuid))
                 .isEqualTo("Hello World".getBytes());
 
         /* cause a unit to fail */
@@ -141,7 +143,7 @@ public class CorfuDBRuntimeTest {
         woas.write(s.getNext(), "Hello World 2".getBytes());
 
         /* make sure that it is written to unit 0 */
-        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(1, "fake stream"))
+        assertThat(MemoryLogUnitProtocol.memoryUnits.get(0).read(1, uuid))
                 .isEqualTo("Hello World 2".getBytes());
 
         /* make sure that reads work */
