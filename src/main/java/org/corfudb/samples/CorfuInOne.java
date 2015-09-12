@@ -30,6 +30,7 @@ public class CorfuInOne {
         CorfuInfrastructureBuilder cbuilder = new CorfuInfrastructureBuilder().
                 addLoggingUnit(7002, 0, SimpleLogUnitServer.class, "cdbslu", luConfigMap).
                 addSequencer(7001, StreamingSequencerServer.class, "cdbsts", null).
+                setReplication("cdbqr").
                 start(7000) ;
 
         CorfuDBRuntime cdr = CorfuDBRuntime.getRuntime("http://localhost:7000/corfu");

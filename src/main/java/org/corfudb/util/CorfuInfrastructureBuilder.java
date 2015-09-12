@@ -4,6 +4,8 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ConfigMasterServer;
 import org.corfudb.infrastructure.ICorfuDBServer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
@@ -17,6 +19,8 @@ import java.util.Map;
 
 @Slf4j
 public class CorfuInfrastructureBuilder {
+    private static final Logger log = LoggerFactory.getLogger(CorfuInfrastructureBuilder.class);
+
 
     List<ICorfuDBServer> serverList;
     List<ICorfuDBServer> runningServers;
@@ -54,6 +58,21 @@ public class CorfuInfrastructureBuilder {
 
         configMap.put("layout", layoutMap);
 
+    }
+
+    /**
+     * set replication protocol
+     */
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    public CorfuInfrastructureBuilder setReplication(String replicationType) {
+        if (segmentMap.get(0).containsKey("replication"))
+            segmentMap.get(0).replace("replication", replicationType);
+        else {
+            log.info("no replication parameter in infrastructureBuilder");
+            segmentMap.get(0).put("replication", replicationType);
+        }
+        return this;
     }
 
     /**
