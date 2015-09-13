@@ -18,6 +18,7 @@ import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.regex.Matcher;
 
 /**
@@ -26,10 +27,15 @@ import java.util.regex.Matcher;
 public class QuorumReplicationProtocol implements IReplicationProtocol {
     private static final Logger log = LoggerFactory.getLogger(QuorumReplicationProtocol.class);
     private List<List<IServerProtocol>> groups = null;
+    private ExecutorService executorService = Executors.newCachedThreadPool();
+    private ExecutorCompletionService service = new ExecutorCompletionService<Long>(executorService);
+
+
 
     public QuorumReplicationProtocol(List<List<IServerProtocol>> groups) {
         log.info("new quorum protocol constructor");
         this.groups = groups;
+
     }
 
     public static String getProtocolString()
@@ -62,7 +68,6 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
                                                     Long epoch) {
 
         log.info("new quorum protocol static init");
-
         return new QuorumReplicationProtocol(populateGroupsFromList((List<Map<String,Object>>) fields.get("groups"), availableLogUnitProtocols, epoch));
     }
 
@@ -70,40 +75,44 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
     public void write(CorfuDBRuntime client, long address, Set<String> streams, byte[] data)
             throws OverwriteException, TrimmedException, OutOfSpaceException {
         // TODO: Handle multiple segments?
-        IReplicationProtocol reconfiguredRP = null;
+        int ncompleted = 0;
+        int nfailed = 0;
 
         while (true)
         {
-            try {
-                if (reconfiguredRP != null) {
-                    reconfiguredRP.write(client, address, streams, data);
-                    return;
-                }
-                int mod = groups.size();
-                int groupnum =(int) (address % mod);
-                List<IServerProtocol> chain = groups.get(groupnum);
-                //writes have to go to chain in order
-                long mappedAddress = address/mod;
-                for (IServerProtocol unit : chain)
-                {
-                    try {
-                        ((IWriteOnceLogUnit)unit).write(mappedAddress, streams, data);
-                    } catch (OverwriteException e) {
-                        // If the payload of the exception is a different value, then it is a true overwrite,
-                        // pass up to WOAS. Otherwise, just keep executing the protocol
-                        if (!e.payload.equals(ByteBuffer.wrap(data))) {
-                            throw e;
-                        }
-                    }
-                }
-                return;
-            }
-            catch (NetworkException e)
+            int mod = groups.size();
+            int groupnum =(int) (address % mod);
+            List<IServerProtocol> chain = groups.get(groupnum);
+            //writes have to go to chain in order
+            long mappedAddress = address/mod;
+            for (IServerProtocol unit : chain)
             {
-                log.warn("Unable to write, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-                reconfiguredRP = client.getView().getSegments().get(0).getReplicationProtocol();
+                service.submit(() -> {
+                    ((IWriteOnceLogUnit) unit).write(mappedAddress, streams, data);
+                    return address;
+                } );
             }
+
+            while (ncompleted <= mod/2 &&
+                    ncompleted + nfailed < mod) {
+                try {
+                    Future f = service.take();
+                    if (f.get().equals(address) )
+                        ncompleted++;  // otherwise, it is a completion of another write, sigh
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (ExecutionException e) {
+                    // TODO reconfigure?
+                    nfailed++;
+                    e.printStackTrace();
+                }
+            }
+
+            if (ncompleted <= mod/2) {
+                // TODO throw write-fail exception of some sort, otherwise, our thread pool will get filled with pending requests!
+            }
+            // executorService.shutdownNow();
+            return;
         }
 
     }
