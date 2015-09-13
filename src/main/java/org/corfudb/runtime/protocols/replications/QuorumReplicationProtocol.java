@@ -83,6 +83,7 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
             int mod = groups.size();
             int groupnum =(int) (address % mod);
             List<IServerProtocol> chain = groups.get(groupnum);
+            int sz = chain.size();
             //writes have to go to chain in order
             long mappedAddress = address/mod;
             for (IServerProtocol unit : chain)
@@ -93,12 +94,15 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
                 } );
             }
 
-            while (ncompleted <= mod/2 &&
-                    ncompleted + nfailed < mod) {
+            while (ncompleted <= sz/2 &&
+                    ncompleted + nfailed < sz) {
                 try {
-                    Future f = service.take();
-                    if (f.get().equals(address) )
-                        ncompleted++;  // otherwise, it is a completion of another write, sigh
+                    Future<Long> f = service.take();
+                    Long completedAddr = f.get();
+                    if (completedAddr.equals(address) )
+                        ncompleted++;
+                    else // otherwise, it is a completion of another write, sigh
+                        log.info("write({}) intercepted completion at address {}", address, completedAddr);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 } catch (ExecutionException e) {
@@ -108,7 +112,8 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
                 }
             }
 
-            if (ncompleted <= mod/2) {
+            if (ncompleted <= sz/2) {
+                log.warn("QR write({}) does not have enough responses", address);
                 // TODO throw write-fail exception of some sort, otherwise, our thread pool will get filled with pending requests!
             }
             // executorService.shutdownNow();
