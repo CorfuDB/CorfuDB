@@ -1,5 +1,6 @@
 package org.corfudb.runtime.protocols.replications;
 
+import com.google.common.util.concurrent.FutureFallback;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
@@ -19,6 +20,7 @@ import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.BooleanSupplier;
 import java.util.regex.Matcher;
 
 /**
@@ -28,7 +30,6 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
     private static final Logger log = LoggerFactory.getLogger(QuorumReplicationProtocol.class);
     private List<List<IServerProtocol>> groups = null;
     private ExecutorService executorService = Executors.newCachedThreadPool();
-    private ExecutorCompletionService service = new ExecutorCompletionService<Long>(executorService);
 
 
 
@@ -75,8 +76,6 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
     public void write(CorfuDBRuntime client, long address, Set<String> streams, byte[] data)
             throws OverwriteException, TrimmedException, OutOfSpaceException {
         // TODO: Handle multiple segments?
-        int ncompleted = 0;
-        int nfailed = 0;
 
         while (true)
         {
@@ -84,39 +83,41 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
             int groupnum =(int) (address % mod);
             List<IServerProtocol> chain = groups.get(groupnum);
             int sz = chain.size();
-            //writes have to go to chain in order
+            CountDownLatch ltch = new CountDownLatch(sz/2+1);
             long mappedAddress = address/mod;
+            Future<Boolean>[] f = new Future[sz]; int j = 0;
             for (IServerProtocol unit : chain)
             {
-                service.submit(() -> {
-                    ((IWriteOnceLogUnit) unit).write(mappedAddress, streams, data);
-                    return address;
-                } );
+                f[j++] = executorService.submit(new Callable() {
+                       @Override
+                       public Boolean call() throws Exception {
+                           try {
+                               ((IWriteOnceLogUnit) unit).write(mappedAddress, streams, data);
+                               ltch.countDown();
+                           } catch (OverwriteException|TrimmedException|OutOfSpaceException e) {
+                               ltch.countDown();
+                               throw e;
+                           } catch (NetworkException e) {
+                               e.printStackTrace();
+                           }
+                           return true;
+                       }
+                   }
+                );
             }
 
-            while (ncompleted <= sz/2 &&
-                    ncompleted + nfailed < sz) {
-                try {
-                    Future<Long> f = service.take();
-                    Long completedAddr = f.get();
-                    if (completedAddr.equals(address) )
-                        ncompleted++;
-                    else // otherwise, it is a completion of another write, sigh
-                        log.info("write({}) intercepted completion at address {}", address, completedAddr);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                } catch (ExecutionException e) {
-                    // TODO reconfigure?
-                    nfailed++;
-                    e.printStackTrace();
+            try {
+                ltch.await();
+                for (Future ff: f) {
+                    if (ff.isDone()) ff.get();
                 }
+            } catch (InterruptedException e) {
+                // TODO this is a real error?
+                e.printStackTrace();
+            } catch (ExecutionException e) {
+                e.printStackTrace();
             }
 
-            if (ncompleted <= sz/2) {
-                log.warn("QR write({}) does not have enough responses", address);
-                // TODO throw write-fail exception of some sort, otherwise, our thread pool will get filled with pending requests!
-            }
-            // executorService.shutdownNow();
             return;
         }
 
