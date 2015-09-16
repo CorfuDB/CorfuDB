@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * A replication protocol determines how writes are replicated across the configuration. We abstract away the protocol
@@ -50,12 +51,12 @@ public interface IReplicationProtocol {
         throw new UnsupportedOperationException("This replication protocol hasn't provided getGroups");
     }
 
-    default void write(CorfuDBRuntime client, long address, Set<String> streams, byte[] data)
+    default void write(CorfuDBRuntime client, long address, Set<UUID> streams, byte[] data)
             throws OverwriteException, TrimmedException, OutOfSpaceException {
         throw new UnsupportedOperationException("This replication protocol write hasn't been implemented");
     }
 
-    default byte[] read(CorfuDBRuntime client, long address, String stream)
+    default byte[] read(CorfuDBRuntime client, long address, UUID stream)
             throws UnwrittenException, TrimmedException {
         throw new UnsupportedOperationException("This replication protocol read hasn't been implemented");
     }
@@ -64,7 +65,7 @@ public interface IReplicationProtocol {
         throw new UnsupportedOperationException("This replication protocol readHints hasn't been implemented");
     }
 
-    default void setHintsNext(long address, String stream, long nextOffset) throws UnwrittenException, TrimmedException, NetworkException {
+    default void setHintsNext(long address, UUID stream, long nextOffset) throws UnwrittenException, TrimmedException, NetworkException {
         throw new UnsupportedOperationException("This address space doesn't support hints");
     }
 

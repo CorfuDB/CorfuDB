@@ -7,9 +7,9 @@ import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
 import org.corfudb.runtime.view.ConfigurationMaster;
 import org.corfudb.runtime.view.IConfigurationMaster;
 import org.corfudb.util.CorfuInfrastructureBuilder;
+import org.corfudb.util.Utils;
 import org.junit.Before;
 import org.junit.Rule;
-import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
@@ -17,6 +17,7 @@ import org.junit.runner.Description;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertNotNull;
@@ -31,6 +32,7 @@ public class RocksLogUnitServerIT {
     CorfuDBRuntime cdr;
     CorfuDBSimpleLogUnitProtocol lu;
     private static RocksLogUnitServer ru = new RocksLogUnitServer();
+    private static UUID uuid = UUID.randomUUID();
 
     static Map<String, Object> luConfigMap = new HashMap<String,Object>() {
         {
@@ -83,7 +85,7 @@ public class RocksLogUnitServerIT {
         byte[] t = getTestPayload(1024);
 
         for (int i = 0; i < NUMPAGES; i++) {
-            lu.write(i, Collections.singleton("fake stream"), t);
+            lu.write(i, Collections.singleton(uuid), t);
         }
 
         HashMap<String, Object> configMap = new HashMap<String, Object>();
@@ -101,11 +103,11 @@ public class RocksLogUnitServerIT {
         while (!ru.isReady()) ;
 
         for (int i = 0; i < NUMPAGES; i++) {
-            ExtntWrap ew = ru.get(0, "fake stream");
+            ExtntWrap ew = ru.get(0, Utils.toThriftUUID(uuid));
             assertNotNull(ew);
             assertThat(ew.getErr()).isEqualTo(ErrorCode.OK);
             assert(ew.isSetCtnt());
-            byte[] o = ru.get(0, "fake stream").getCtnt().get(0).array();
+            byte[] o = ru.get(0, Utils.toThriftUUID(uuid)).getCtnt().get(0).array();
             assertThat(t).isEqualTo(o);
         }
     }

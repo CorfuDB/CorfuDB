@@ -40,8 +40,8 @@ import java.util.UUID;
  */
 
 public interface IWriteOnceLogUnit extends IServerProtocol {
-    void write(long address, Set<String> streams, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
-    byte[] read(long address, String stream) throws UnwrittenException, TrimmedException, NetworkException;
+    void write(long address, Set<UUID> streams, byte[] payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
+    byte[] read(long address, UUID stream) throws UnwrittenException, TrimmedException, NetworkException;
     void trim(long address) throws NetworkException;
 
     /**
@@ -59,7 +59,7 @@ public interface IWriteOnceLogUnit extends IServerProtocol {
         throw new UnsupportedOperationException("Log unit doesn't support hints queries");
     }
 
-    default void setHintsNext(long address, String stream, long nextOffset) throws TrimmedException, NetworkException {
+    default void setHintsNext(long address, UUID stream, long nextOffset) throws TrimmedException, NetworkException {
         throw new UnsupportedOperationException("Log unit doesn't support hints updates");
     }
 
@@ -67,7 +67,7 @@ public interface IWriteOnceLogUnit extends IServerProtocol {
         throw new UnsupportedOperationException("Log unit doesn't support hints updates");
     }
 
-    default void setHintsFlatTxn(long address, Set<String> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
+    default void setHintsFlatTxn(long address, Set<UUID> streams, byte[] flatTxn) throws TrimmedException, NetworkException {
         throw new UnsupportedOperationException("Log unit doesn't support hints updates");
     }
 }

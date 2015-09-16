@@ -23,14 +23,13 @@ import org.corfudb.infrastructure.thrift.*;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.PooledThriftClient;
+import org.corfudb.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.UUID;
 
 public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceLogUnit
 {
@@ -113,7 +112,7 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
         }
     }
 
-    public void write(long address, Set<String> streams, byte[] data)
+    public void write(long address, Set<UUID> streams, byte[] data)
     throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException
     {
         RocksLogUnitService.Client client = thriftPool.getResource();
@@ -122,7 +121,12 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            WriteResult wr = client.write(new UnitServerHdr(epochlist, address, streams), ByteBuffer.wrap(data), ExtntMarkType.EX_FILLED);
+            Set<org.corfudb.infrastructure.thrift.UUID> thriftStreams = new HashSet<org.corfudb.infrastructure.thrift.UUID>();
+            for (UUID stream : streams) {
+                thriftStreams.add(Utils.toThriftUUID(stream));
+            }
+
+            WriteResult wr = client.write(new UnitServerHdr(epochlist, address, thriftStreams), ByteBuffer.wrap(data), ExtntMarkType.EX_FILLED);
             thriftPool.returnResourceObject(client);
             success = true;
             if (wr.getCode().equals(ErrorCode.ERR_OVERWRITE))
@@ -159,7 +163,7 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
     }
 
     // stream is a required parameter for a Rocks server!
-    public byte[] read(long address, String stream)
+    public byte[] read(long address, UUID stream)
     throws UnwrittenException, TrimmedException, NetworkException
     {
         byte[] data = null;
@@ -169,7 +173,7 @@ public class CorfuDBRocksLogUnitProtocol implements IServerProtocol, IWriteOnceL
         try {
             ArrayList<Integer> epochlist = new ArrayList<Integer>();
             epochlist.add(epoch.intValue());
-            ExtntWrap wrap = client.read(new UnitServerHdr(epochlist, address, Collections.singleton(stream)));
+            ExtntWrap wrap = client.read(new UnitServerHdr(epochlist, address, Collections.singleton(Utils.toThriftUUID(stream))));
             if (wrap.err.equals(ErrorCode.ERR_UNWRITTEN))
             {
                 throw new UnwrittenException("Unwritten error", address);

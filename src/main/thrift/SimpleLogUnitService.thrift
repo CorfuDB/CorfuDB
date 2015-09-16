@@ -16,13 +16,12 @@ service SimpleLogUnitService {
 	
 	Common.Hints readHints(1:Common.UnitServerHdr hdr),
 
-
-	Common.ErrorCode setHintsNext(1:Common.UnitServerHdr hdr, 2:string stream, 3:i64 nextOffset),
+	Common.ErrorCode setHintsNext(1:Common.UnitServerHdr hdr, 2:i64 nextOffset),
 	
 	Common.ErrorCode setHintsTxDec(1:Common.UnitServerHdr hdr, 2:bool dec),
 	
 	Common.ErrorCode setHintsFlatTxn(1:Common.UnitServerHdr hdr, 2:binary flatTxn),
-
+	
 	i64 querytrim(),
 	
 	i64 queryck(),

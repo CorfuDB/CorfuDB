@@ -49,6 +49,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
     {
         this.client = client;
         this.getView = this.client::getView;
+        this.logID = getView.get().getUUID();
     }
 
     public WriteOnceAddressSpace(CorfuDBRuntime client, UUID logID)
@@ -97,9 +98,9 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
 
-        Set<String> streams = null;
+        Set<UUID> streams = null;
         if (logID != null)
-            streams = Collections.singleton(logID.toString());
+            streams = Collections.singleton(logID);
 
         replicationProtocol.write(client, address, streams, data);
         return;
@@ -130,7 +131,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
 
         if (logID != null)
-            return replicationProtocol.read(client, address, logID.toString());
+            return replicationProtocol.read(client, address, logID);
         return replicationProtocol.read(client, address, null);
     }
 
@@ -166,7 +167,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
     }
 
     @Override
-    public void setHintsNext(long address, String stream, long nextOffset)
+    public void setHintsNext(long address, UUID stream, long nextOffset)
             throws UnwrittenException, TrimmedException
     {
         //TODO: cache the layout so we don't have to determine it on every write.
