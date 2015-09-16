@@ -72,7 +72,9 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
         return new QuorumReplicationProtocol(populateGroupsFromList((List<Map<String,Object>>) fields.get("groups"), availableLogUnitProtocols, epoch));
     }
 
-    public void quorumConnect(List<IServerProtocol> chain, long mappedAddress, Set<String> streams, byte[] data) {
+    public void quorumWrite(List<IServerProtocol> chain, long mappedAddress, Set<String> streams, byte[] data)
+            throws OverwriteException, NetworkException, TrimmedException, OutOfSpaceException {
+
         int sz = chain.size();
         AtomicInteger nsucceed = new AtomicInteger(0);
         AtomicInteger nfail = new AtomicInteger(0);
@@ -80,10 +82,6 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
         Future[] chainFutures = new Future[sz]; int j = 0;
 
         for (IServerProtocol unit : chain) {
-//            chainFutures[j++] = executorService.submit(() -> {
-//                if (true) throw new IOException();
-//                return null;
-//            });
             chainFutures[j++] = executorService.submit(() -> {
                 try {
                     ((IWriteOnceLogUnit) unit).write(mappedAddress, streams, data);
@@ -120,19 +118,34 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
                 return null;
             });
 
-            try {
-                synchronized (quorumLock) {
-                    while (nsucceed.get() <= sz / 2 && !(nfail.get() >= sz / 2))
+            // we wait for either nsucceed to be a qwuorum, or nfail to block a quorum
+            //
+            synchronized (quorumLock) {
+                while (nsucceed.get() <= sz / 2 && !(nfail.get() >= sz / 2))
+                    try {
                         quorumLock.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+            }
+
+            // we go over all completed futures, and try to figure out what happened and how to react to it
+            //
+            for (Future f : chainFutures) {
+                if (f.isDone()) {
+                    try {
+                        f.get();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    } catch (ExecutionException e) {
+                        if (e.getCause() instanceof TrimmedException)
+                            throw new TrimmedException("trimmed", mappedAddress);
+                        else if (e.getCause() instanceof OverwriteException && nfail.get() >= sz/2)
+                            throw new OverwriteException("overwrite", mappedAddress, null);
+                        else if (nfail.get() >= sz/2)
+                            throw new NetworkException("problem with quorum write", null, mappedAddress, true);
+                    }
                 }
-                for (Future f : chainFutures) {
-                    if (f.isDone()) f.get();
-                }
-            } catch (InterruptedException e) {
-                // TODO this is a real error?
-                e.printStackTrace();
-            } catch (ExecutionException e) {
-                e.printStackTrace();
             }
         }
 
@@ -150,7 +163,13 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
             List<IServerProtocol> chain = groups.get(groupnum);
             long mappedAddress = address/mod;
 
-            quorumConnect(chain, mappedAddress, streams, data);
+            try {
+                quorumWrite(chain, mappedAddress, streams, data);
+            } catch (NetworkException e) {
+                // TODO view change?
+                // TODO the following is a temporary kludge
+                throw new OutOfSpaceException("this is actually a quorum exception, not handled yet", mappedAddress);
+            }
 
             return;
         }
