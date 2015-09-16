@@ -26,7 +26,6 @@ import org.corfudb.util.retry.IntervalAndSentinelRetry;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 
-import java.lang.ref.SoftReference;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,7 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @NoArgsConstructor
-public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.AsyncIface {
+public class NettyLogUnitServer implements ICorfuDBServer, NewLogUnitService.AsyncIface {
 
     TServer server;
     AtomicBoolean running;
@@ -60,12 +59,12 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
         running.set(true);
         while (running.get()) {
             TNonblockingServerTransport serverTransport;
-            NewLogUnitService.AsyncProcessor<NewLogUnitServer> processor;
+            NewLogUnitService.AsyncProcessor<NettyLogUnitServer> processor;
             log.debug("New log unit entering service loop.");
             try {
                 serverTransport = new TNonblockingServerSocket(port);
                 processor =
-                        new NewLogUnitService.AsyncProcessor<NewLogUnitServer>(this);
+                        new NewLogUnitService.AsyncProcessor<NettyLogUnitServer>(this);
                 server = new TThreadedSelectorServer(new TThreadedSelectorServer.Args(serverTransport)
                         .processor(processor)
                         .protocolFactory(TCompactProtocol::new)

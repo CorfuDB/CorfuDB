@@ -54,7 +54,7 @@ public class NewLogUnitServerJMeter extends AbstractJavaSamplerClient {
         //    infrastructure =
         //            CorfuInfrastructureBuilder.getBuilder()
         //                    .addSequencer(7776, StreamingSequencerServer.class, "cdbsts", null)
-        //                    .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
+        //                    .addLoggingUnit(7777, 0, NettyLogUnitServer.class, "cnlu", null)
          //                   .start(7775);
             try {
                 p.reset(0);

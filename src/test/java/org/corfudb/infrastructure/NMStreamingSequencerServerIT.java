@@ -1,15 +1,8 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.collect.ImmutableMap;
-import com.mongodb.MongoException;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerMsg;
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.sequencers.NettyStreamingSequencerProtocol;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
@@ -20,13 +13,9 @@ import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
 
-import java.time.Duration;
 import java.util.Collections;
-import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static io.netty.buffer.Unpooled.directBuffer;
 

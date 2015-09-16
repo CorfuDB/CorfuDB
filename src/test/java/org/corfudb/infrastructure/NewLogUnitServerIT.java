@@ -2,24 +2,18 @@ package org.corfudb.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.corfudb.infrastructure.thrift.ErrorCode;
 import org.corfudb.infrastructure.thrift.ReadCode;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.protocols.logunits.CorfuNewLogUnitProtocol;
-import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Rule;
-import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.UUID;
@@ -52,7 +46,7 @@ public class NewLogUnitServerIT {
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()
                         .addSequencer(9873, StreamingSequencerServer.class, "cdbss", null)
-                        .addLoggingUnit(port, 0, NewLogUnitServer.class, "cnlu", null)
+                        .addLoggingUnit(port, 0, NettyLogUnitServer.class, "cnlu", null)
                         .start(7775);
         nlup = new CorfuNewLogUnitProtocol("localhost", port, Collections.emptyMap(), 0L);
     }

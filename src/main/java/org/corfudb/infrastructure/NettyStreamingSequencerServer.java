@@ -11,7 +11,9 @@ import io.netty.handler.logging.LoggingHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenResponseMsg;
 import org.corfudb.util.SizeBufferPool;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
@@ -57,6 +59,11 @@ public class NettyStreamingSequencerServer implements ICorfuDBServer {
      */
     AtomicLong globalIndex;
 
+    /**
+     * The current epoch.
+     */
+    Long epoch;
+
     EventLoopGroup bossGroup;
     EventLoopGroup workerGroup;
     SizeBufferPool pool;
@@ -87,6 +94,7 @@ public class NettyStreamingSequencerServer implements ICorfuDBServer {
         pool = new SizeBufferPool(64);
         globalIndex = new AtomicLong(0);
         lastIssuedMap = new ConcurrentHashMap<>();
+        epoch = 0L;
     }
 
     /** Process an incoming message
@@ -94,31 +102,35 @@ public class NettyStreamingSequencerServer implements ICorfuDBServer {
      * @param msg   The message to process.
      * @param r     Where to send the response.
      */
-    private ByteBuf processMessage(NettyStreamingServerMsg msg)
+    private ByteBuf processMessage(NettyCorfuMsg msg)
     {
         switch (msg.getMsgType())
         {
             case TOKEN_REQ: {
-                NettyStreamingServerMsg.NettyStreamingServerTokenRequest req = (NettyStreamingServerMsg.NettyStreamingServerTokenRequest) msg;
+                NettyStreamingServerTokenRequestMsg req = (NettyStreamingServerTokenRequestMsg) msg;
                 long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
                 for (UUID id : req.getStreamIDs()) {
                     lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue : Math.max(thisIssue, v));
                 }
-                NettyStreamingServerMsg.NettyStreamingServerTokenResponse resp = new NettyStreamingServerMsg.NettyStreamingServerTokenResponse(
-                        msg.getClientID(),
-                        msg.getRequestID(),
-                        thisIssue
-                );
+                NettyStreamingServerTokenResponseMsg resp = new NettyStreamingServerTokenResponseMsg(thisIssue);
+                resp.copyBaseFields(msg);
                 val p = pool.getSizedBuffer();
                 resp.serialize(p.getBuffer());
                 return p.writeSize();
             }
             case PING: {
-                NettyStreamingServerMsg resp = new NettyStreamingServerMsg(msg.getClientID(), msg.getRequestID(),
-                        NettyStreamingServerMsg.NMStreamingServerMsgType.PONG);
+                NettyCorfuMsg resp = new NettyCorfuMsg(msg.getClientID(), msg.getRequestID(),
+                        epoch, NettyCorfuMsg.NettyCorfuMsgType.PONG);
                 val p = pool.getSizedBuffer();
                 resp.serialize(p.getBuffer());
                 return p.writeSize();
+            }
+            case RESET: {
+                log.info("Request requested by client ", msg.getClientID());
+                pool = new SizeBufferPool(64);
+                globalIndex = new AtomicLong(0);
+                lastIssuedMap = new ConcurrentHashMap<>();
+                return null;
             }
             default:
                 log.warn("Unknown message type {} passed to handler!", msg.getMsgType());
@@ -130,7 +142,8 @@ public class NettyStreamingSequencerServer implements ICorfuDBServer {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             try {
-                ctx.writeAndFlush(processMessage(NettyStreamingServerMsg.deserialize((ByteBuf) msg)));
+                ByteBuf process = processMessage(NettyCorfuMsg.deserialize((ByteBuf) msg));
+                if (process != null) {ctx.writeAndFlush(process);}
             }
             catch (Exception e)
             {
@@ -163,6 +176,7 @@ public class NettyStreamingSequencerServer implements ICorfuDBServer {
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .option(ChannelOption.SO_BACKLOG, 100)
+                    .option(ChannelOption.TCP_NODELAY, true)
                     .handler(new LoggingHandler(LogLevel.INFO))
                     .childHandler(new ChannelInitializer<io.netty.channel.socket.SocketChannel>() {
                         @Override

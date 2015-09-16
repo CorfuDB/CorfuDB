@@ -46,7 +46,7 @@ public class StreamingSequencerServerJMeter extends AbstractJavaSamplerClient {
             infrastructure =
                     CorfuInfrastructureBuilder.getBuilder()
                             .addSequencer(7776, StreamingSequencerServer.class, "cdbss", null)
-                            .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
+                            .addLoggingUnit(7777, 0, NettyLogUnitServer.class, "cnlu", null)
                             .start(7775);
             //instance.getConfigurationMaster().resetAll();
             reset = true;

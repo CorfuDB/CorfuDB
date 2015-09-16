@@ -1,7 +1,7 @@
 package org.corfudb.runtime.stream;
 
 import lombok.SneakyThrows;
-import org.corfudb.infrastructure.NewLogUnitServer;
+import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.StreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.ICorfuDBInstance;
@@ -9,9 +9,7 @@ import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Test;
 
-import java.util.Random;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +30,7 @@ public class NewStreamTest {
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()
                         .addSequencer(RandomOpenPort.getOpenPort(), StreamingSequencerServer.class, "cdbsts", null)
-                        .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NewLogUnitServer.class, "cnlu", null)
+                        .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "cnlu", null)
                         .start(RandomOpenPort.getOpenPort());
 
         runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());

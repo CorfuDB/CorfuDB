@@ -11,9 +11,12 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenResponseMsg;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
+import org.corfudb.runtime.protocols.NettyRPCChannelInboundHandlerAdapter;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.SizeBufferPool;
 
@@ -101,102 +104,40 @@ public class NettyStreamingSequencerProtocol implements IServerProtocol, INewStr
         return handler.getToken(streams, numTokens);
     }
 
-    class NettyStreamingSequencerHandler extends ChannelInboundHandlerAdapter {
-
-        private volatile Channel channel;
-        private volatile UUID clientID;
-        private volatile AtomicLong requestID;
-        private ConcurrentHashMap<Long, CompletableFuture<?>> rpcMap;
-
+    class NettyStreamingSequencerHandler extends NettyRPCChannelInboundHandlerAdapter {
 
         //region Handler Interface
+
+        @Override
+        public void handleMessage(NettyCorfuMsg message)
+        {
+            switch (message.getMsgType())
+            {
+                case PONG:
+                    completeRequest(message.getRequestID(), true);
+                    break;
+                case TOKEN_RES:
+                    completeRequest(message.getRequestID(), ((NettyStreamingServerTokenResponseMsg)message).getToken());
+                    break;
+            }
+        }
+
         public CompletableFuture<Long> getToken(Set<UUID> streamIDs, long numTokens) {
-            final long thisRequest = requestID.getAndIncrement();
-            NettyStreamingServerMsg.NettyStreamingServerTokenRequest r =
-                    new NettyStreamingServerMsg.NettyStreamingServerTokenRequest
-                            (clientID, thisRequest , streamIDs, numTokens);
-            final CompletableFuture<Long> cf = new CompletableFuture<>();
-            rpcMap.put(thisRequest, cf);
-            val p = pool.getSizedBuffer();
-            r.serialize(p.getBuffer());
-            channel.writeAndFlush(p.writeSize());
-            final CompletableFuture<Long> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(5));
-            cfTimeout.exceptionally( e -> {
-                rpcMap.remove(thisRequest);
-                return null;
-            });
-            return cfTimeout;
+            NettyStreamingServerTokenRequestMsg r =
+                    new NettyStreamingServerTokenRequestMsg
+                            (streamIDs, numTokens);
+            return sendMessageAndGetCompletable(pool, epoch, r);
         }
 
         public CompletableFuture<Boolean> ping() {
-            final long thisRequest = requestID.getAndIncrement();
-            NettyStreamingServerMsg r =
-                    new NettyStreamingServerMsg(clientID, thisRequest,
-                            NettyStreamingServerMsg.NMStreamingServerMsgType.PING);
-            final CompletableFuture<Boolean> cf = new CompletableFuture<>();
-            rpcMap.put(thisRequest, cf);
-            val p = pool.getSizedBuffer();
-            r.serialize(p.getBuffer());
-            channel.writeAndFlush(p.writeSize());
-            final CompletableFuture<Boolean> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(5));
-            cfTimeout.exceptionally( e -> {
-                rpcMap.remove(thisRequest);
-                return null;
-            });
-            return cfTimeout;
+            NettyCorfuMsg r =
+                    new NettyCorfuMsg();
+            r.setMsgType(NettyCorfuMsg.NettyCorfuMsgType.PING);
+            return sendMessageAndGetCompletable(pool, epoch, r);
         }
+
 
         //endregion
-        //region Netty Handlers
-        @Override
-        public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
-            channel = ctx.channel();
-            clientID = UUID.randomUUID();
-            requestID = new AtomicLong();
-            rpcMap = new ConcurrentHashMap<>();
-        }
-
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        }
-
-        @Override
-        @SuppressWarnings("unchecked")
-        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            ByteBuf m = (ByteBuf) msg;
-            try {
-                NettyStreamingServerMsg pm = NettyStreamingServerMsg.deserialize(m);
-                switch (pm.getMsgType()) {
-                    case TOKEN_RES: {
-                        Long token = ((NettyStreamingServerMsg.NettyStreamingServerTokenResponse) pm).getToken();
-                            ((CompletableFuture<Long>) rpcMap.get(pm.getRequestID()))
-                                    .complete(token);
-                        rpcMap.remove(pm.getRequestID());
-                    }
-                        break;
-                    case PONG:
-                        ((CompletableFuture<Boolean>)rpcMap.get(pm.getRequestID()))
-                                .complete(true);
-                        rpcMap.remove(pm.getRequestID());
-                        break;
-                }
-            }
-            finally {
-                m.release();
-            }
-        }
-
-        @Override
-        public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
-            ctx.flush();
-        }
-
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            log.error("Exception during channel handling.", cause);
-            ctx.close();
-        }
-//endregion
     }
 
     /**
