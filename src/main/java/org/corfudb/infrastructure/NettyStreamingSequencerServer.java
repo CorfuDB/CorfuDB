@@ -30,24 +30,7 @@ import static io.netty.buffer.Unpooled.directBuffer;
  * Created by mwei on 9/10/15.
  */
 @Slf4j
-public class NettyStreamingSequencerServer implements ICorfuDBServer {
-
-    /**
-     * The main thread for this server.
-     */
-    @Getter
-    Thread thread;
-
-    /**
-     * True, if the server is running, false otherwise.
-     */
-    final AtomicBoolean running = new AtomicBoolean(false);
-
-    /**
-     * The port this server is running on.
-     */
-    @Getter
-    Integer port;
+public class NettyStreamingSequencerServer extends AbstractNettyServer {
 
     /**
      * A simple map of the most recently issued token for any given stream.
@@ -59,42 +42,11 @@ public class NettyStreamingSequencerServer implements ICorfuDBServer {
      */
     AtomicLong globalIndex;
 
-    /**
-     * The current epoch.
-     */
-    Long epoch;
-
-    EventLoopGroup bossGroup;
-    EventLoopGroup workerGroup;
-    SizeBufferPool pool;
-
     @Override
-    public ICorfuDBServer getInstance(Map<String, Object> configuration) {
-        parseConfiguration(configuration);
-        thread = new Thread(this);
-        return this;
-    }
-
-    @Override
-    public void close() {
-        running.set(false);
-        thread.interrupt();
-        try {thread.join();}
-        catch (InterruptedException ie) {}
-    }
-
-    private void parseConfiguration(Map<String, Object> configuration)
+    void parseConfiguration(Map<String, Object> configuration)
     {
-        if ((port = (Integer) configuration.get("port")) == null)
-        {
-            log.error("Required key port is missing from configuration!");
-            throw new RuntimeException("Invalid configuration provided!");
-        }
-
-        pool = new SizeBufferPool(64);
         globalIndex = new AtomicLong(0);
         lastIssuedMap = new ConcurrentHashMap<>();
-        epoch = 0L;
     }
 
     /** Process an incoming message
@@ -102,8 +54,15 @@ public class NettyStreamingSequencerServer implements ICorfuDBServer {
      * @param msg   The message to process.
      * @param r     Where to send the response.
      */
-    private ByteBuf processMessage(NettyCorfuMsg msg)
+    void processMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx)
     {
+        if (msg.getEpoch() != epoch)
+        {
+            NettyCorfuMsg m = new NettyCorfuMsg();
+            m.setMsgType(NettyCorfuMsg.NettyCorfuMsgType.WRONG_EPOCH);
+            sendResponse(m, msg, ctx);
+        }
+
         switch (msg.getMsgType())
         {
             case TOKEN_REQ: {
@@ -113,108 +72,25 @@ public class NettyStreamingSequencerServer implements ICorfuDBServer {
                     lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue : Math.max(thisIssue, v));
                 }
                 NettyStreamingServerTokenResponseMsg resp = new NettyStreamingServerTokenResponseMsg(thisIssue);
-                resp.copyBaseFields(msg);
-                val p = pool.getSizedBuffer();
-                resp.serialize(p.getBuffer());
-                return p.writeSize();
+                sendResponse(resp, msg, ctx);
             }
+            break;
             case PING: {
                 NettyCorfuMsg resp = new NettyCorfuMsg(msg.getClientID(), msg.getRequestID(),
                         epoch, NettyCorfuMsg.NettyCorfuMsgType.PONG);
-                val p = pool.getSizedBuffer();
-                resp.serialize(p.getBuffer());
-                return p.writeSize();
+                sendResponse(resp, msg, ctx);
             }
+            break;
             case RESET: {
                 log.info("Request requested by client ", msg.getClientID());
                 pool = new SizeBufferPool(64);
                 globalIndex = new AtomicLong(0);
                 lastIssuedMap = new ConcurrentHashMap<>();
-                return null;
             }
+            break;
             default:
                 log.warn("Unknown message type {} passed to handler!", msg.getMsgType());
                 throw new RuntimeException("Unsupported message passed to handler!");
         }
-    }
-
-    public class NettyStreamingSequencerServerHandler extends ChannelInboundHandlerAdapter {
-        @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) {
-            try {
-                ByteBuf process = processMessage(NettyCorfuMsg.deserialize((ByteBuf) msg));
-                if (process != null) {ctx.writeAndFlush(process);}
-            }
-            catch (Exception e)
-            {
-                log.error("Exception during read!" , e);
-            }
-            ((ByteBuf) msg).release();
-        }
-
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            log.error("Error in handling inbound message, {}", cause);
-            ctx.close();
-        }
-    }
-
-    /**
-     * Serve sequence numbers.
-     *
-     * @return always True.
-     */
-    private Boolean serve()
-    {
-        log.info("{} starting on TCP port {}", this.getClass().getName(), port);
-
-        bossGroup = new NioEventLoopGroup(1);
-        workerGroup = new NioEventLoopGroup();
-
-        try {
-            ServerBootstrap b = new ServerBootstrap();
-            b.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class)
-                    .option(ChannelOption.SO_BACKLOG, 100)
-                    .option(ChannelOption.TCP_NODELAY, true)
-                    .handler(new LoggingHandler(LogLevel.INFO))
-                    .childHandler(new ChannelInitializer<io.netty.channel.socket.SocketChannel>() {
-                        @Override
-                        public void initChannel(io.netty.channel.socket.SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                            ch.pipeline().addLast(new NettyStreamingSequencerServerHandler());
-                        }
-                    });
-            ChannelFuture f = b.bind(port).sync();
-            while (running.get())
-            {
-                try {
-                    f.channel().closeFuture().sync();
-                } catch (InterruptedException ie)
-                {}
-            }
-
-        }
-        catch (InterruptedException ie)
-        {
-
-        }
-        finally {
-            bossGroup.shutdownGracefully();
-            workerGroup.shutdownGracefully();
-        }
-        return true;
-    }
-
-    /**
-     * Starts the streaming sequencer server as an IRetry.
-     */
-    @Override
-    public void run() {
-        running.set(true);
-        IRetry.build(IntervalAndSentinelRetry.class, this::serve)
-                .setOptions(x -> x.setRetryInterval(1000))
-                .setOptions(x -> x.setSentinelReference(running))
-                .runForever();
     }
 }

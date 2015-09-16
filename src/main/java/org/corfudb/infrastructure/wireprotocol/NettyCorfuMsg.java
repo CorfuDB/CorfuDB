@@ -31,6 +31,8 @@ public class NettyCorfuMsg {
         PONG(1, NettyCorfuMsg.class),
         RESET(2, NettyCorfuResetMsg.class),
         SET_EPOCH(3, NettyCorfuSetEpochMsg.class),
+        ACK(4, NettyCorfuMsg.class),
+        WRONG_EPOCH(5, NettyCorfuMsg.class),
         TOKEN_REQ(20, NettyStreamingServerTokenRequestMsg.class),
         TOKEN_RES(21, NettyStreamingServerTokenResponseMsg.class)
         ;
