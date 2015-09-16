@@ -1,7 +1,6 @@
 org.corfudb.infrastructure
 org.corfudb.infrastructure.configmaster.policies
 org.corfudb.infrastructure.thrift
-org.corfudb.infrastructure.wireprotocol
 org.corfudb.runtime
 org.corfudb.runtime.collections
 org.corfudb.runtime.entries
