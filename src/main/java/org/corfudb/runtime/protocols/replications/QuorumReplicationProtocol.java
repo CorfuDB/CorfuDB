@@ -1,6 +1,5 @@
 package org.corfudb.runtime.protocols.replications;
 
-import com.google.common.util.concurrent.FutureFallback;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
@@ -20,6 +19,7 @@ import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.regex.Matcher;
 
@@ -72,6 +72,68 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
         return new QuorumReplicationProtocol(populateGroupsFromList((List<Map<String,Object>>) fields.get("groups"), availableLogUnitProtocols, epoch));
     }
 
+    public void quorumConnect(List<IServerProtocol> chain, long mappedAddress, Set<String> streams, byte[] data) {
+        int sz = chain.size();
+        AtomicInteger nsucceed = new AtomicInteger(0);
+        AtomicInteger nfail = new AtomicInteger(0);
+        Object quorumLock = new Object();
+        Future[] chainFutures = new Future[sz]; int j = 0;
+
+        for (IServerProtocol unit : chain)
+        {
+            chainFutures[j++] = executorService.submit(() -> {
+                        try {
+                            ((IWriteOnceLogUnit) unit).write(mappedAddress, streams, data);
+                            if (nsucceed.incrementAndGet() > sz/2)
+                                synchronized (quorumLock) {
+                                    quorumLock.notify();
+                                }
+                        } catch (OutOfSpaceException e) {
+                            if (nfail.incrementAndGet() >= sz/2)
+                                synchronized (quorumLock) {
+                                    quorumLock.notify();
+                                    throw e;
+                                }
+                        } catch (TrimmedException e) {
+                            nfail.set(sz);
+                            synchronized (quorumLock) {
+                                quorumLock.notify();
+                                throw e;
+                            }
+                        } catch (OverwriteException e) {
+                            if (nfail.incrementAndGet() >= sz/2) // TODO handle differently?
+                                synchronized (quorumLock) {
+                                    quorumLock.notify();
+                                    throw e;
+                                }
+                        } catch (NetworkException e) {
+                            if (nfail.incrementAndGet() >= sz/2)
+                                synchronized (quorumLock) {
+                                    quorumLock.notify();
+                                    throw e;
+                                }
+                        }
+                    }
+            );
+        }
+
+        try {
+            synchronized (quorumLock) {
+                while (nsucceed.get() <= sz/2 && ! (nfail.get() >= sz/2))
+                    quorumLock.wait();
+            }
+            for (Future f: chainFutures) {
+                if (f.isDone()) f.get();
+            }
+        } catch (InterruptedException e) {
+            // TODO this is a real error?
+            e.printStackTrace();
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        }
+
+    }
+
     @Override
     public void write(CorfuDBRuntime client, long address, Set<String> streams, byte[] data)
             throws OverwriteException, TrimmedException, OutOfSpaceException {
@@ -82,41 +144,9 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
             int mod = groups.size();
             int groupnum =(int) (address % mod);
             List<IServerProtocol> chain = groups.get(groupnum);
-            int sz = chain.size();
-            CountDownLatch ltch = new CountDownLatch(sz/2+1);
             long mappedAddress = address/mod;
-            Future<Boolean>[] f = new Future[sz]; int j = 0;
-            for (IServerProtocol unit : chain)
-            {
-                f[j++] = executorService.submit(new Callable() {
-                       @Override
-                       public Boolean call() throws Exception {
-                           try {
-                               ((IWriteOnceLogUnit) unit).write(mappedAddress, streams, data);
-                               ltch.countDown();
-                           } catch (OverwriteException|TrimmedException|OutOfSpaceException e) {
-                               ltch.countDown();
-                               throw e;
-                           } catch (NetworkException e) {
-                               e.printStackTrace();
-                           }
-                           return true;
-                       }
-                   }
-                );
-            }
 
-            try {
-                ltch.await();
-                for (Future ff: f) {
-                    if (ff.isDone()) ff.get();
-                }
-            } catch (InterruptedException e) {
-                // TODO this is a real error?
-                e.printStackTrace();
-            } catch (ExecutionException e) {
-                e.printStackTrace();
-            }
+            quorumConnect(chain, mappedAddress, streams, data);
 
             return;
         }
