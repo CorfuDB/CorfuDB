@@ -32,7 +32,7 @@ public class NewLogUnitServerJMeter extends AbstractJavaSamplerClient {
         result.setSuccessful(true);
         result.sampleStart();
         try {
-            p.write(al.getAndIncrement(), Collections.emptySet(), ByteBuffer.wrap(new byte[1024]));
+         //   p.write(al.getAndIncrement(), Collections.emptySet(), ByteBuffer.wrap(new byte[1024]));
         }
         catch (Exception e)
         {
@@ -51,11 +51,11 @@ public class NewLogUnitServerJMeter extends AbstractJavaSamplerClient {
         l.lock();
         if (!reset)
         {
-            infrastructure =
-                    CorfuInfrastructureBuilder.getBuilder()
-                            .addSequencer(7776, StreamingSequencerServer.class, "cdbsts", null)
-                            .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
-                            .start(7775);
+        //    infrastructure =
+        //            CorfuInfrastructureBuilder.getBuilder()
+        //                    .addSequencer(7776, StreamingSequencerServer.class, "cdbsts", null)
+        //                    .addLoggingUnit(7777, 0, NewLogUnitServer.class, "cnlu", null)
+         //                   .start(7775);
             try {
                 p.reset(0);
             } catch (Exception e) {}
@@ -69,7 +69,7 @@ public class NewLogUnitServerJMeter extends AbstractJavaSamplerClient {
     public void teardownTest(JavaSamplerContext context) {
         l.lock();
         if (reset) {
-            infrastructure.shutdownAndWait();
+        //    infrastructure.shutdownAndWait();
             reset = false;
         }
         l.unlock();

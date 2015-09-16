@@ -39,7 +39,7 @@ public class NewStreamTest {
         instance = runtime.getLocalInstance();
     }
 
-    @Test
+    //@Test
     public void streamReadWrite()
             throws Exception
     {
@@ -49,7 +49,7 @@ public class NewStreamTest {
                 .isEqualTo("Hello World");
     }
 
-    @Test
+    //@Test
     public void streamsAreIndependent()
             throws Exception
     {
@@ -67,7 +67,7 @@ public class NewStreamTest {
                 .isEqualTo(null);
     }
 
-    @Test
+  //  @Test
     public void HoleFillingIsTransparent()
         throws Exception
     {

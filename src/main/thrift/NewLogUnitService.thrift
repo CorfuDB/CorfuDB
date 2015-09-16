@@ -26,6 +26,7 @@ service NewLogUnitService {
 	oneway void trim(1:i64 epoch, 2: Common.UUID stream, 3:i64 prefix),
     oneway void fillHole(1:i64 offset),
     oneway void forceGC(),
+    void setGCInterval(1:i64 millis),
     bool ping(),
     void reset()
 }

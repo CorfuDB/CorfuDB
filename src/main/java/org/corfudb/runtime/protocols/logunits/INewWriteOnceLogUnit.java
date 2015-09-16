@@ -26,6 +26,7 @@ import org.corfudb.runtime.protocols.IServerProtocol;
 import java.nio.ByteBuffer;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This interface represents the simplest type of stream unit.
@@ -60,10 +61,11 @@ public interface INewWriteOnceLogUnit extends IServerProtocol {
         }
     }
 
-    void write(long address, Set<UUID> streams, ByteBuffer payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
-    WriteOnceLogUnitRead read(long address) throws NetworkException;
+    CompletableFuture<Void> write(long address, Set<UUID> streams, ByteBuffer payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
+    CompletableFuture<WriteOnceLogUnitRead> read(long address) throws NetworkException;
     void trim(UUID stream, long address) throws NetworkException;
     void fillHole(long address);
     void forceGC();
+    void setGCInterval(long millis);
 }
 

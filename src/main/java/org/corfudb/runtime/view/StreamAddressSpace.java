@@ -64,7 +64,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                         List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
                         int unitNum = chain.size() - 1;
                         INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
-                        INewWriteOnceLogUnit.WriteOnceLogUnitRead result = lu.read(index / instance.getView().getSegments().get(0).getGroups().size());
+                        INewWriteOnceLogUnit.WriteOnceLogUnitRead result = lu.read(index / instance.getView().getSegments().get(0).getGroups().size()).join();
 
                         if (result.getResult() == ReadCode.READ_EMPTY) {
                             return new StreamAddressSpaceEntry<>(null, null, index, StreamAddressEntryCode.EMPTY);
@@ -108,7 +108,8 @@ public class StreamAddressSpace implements IStreamAddressSpace {
             List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
             for (IServerProtocol p : chain) {
                 INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) p;
-                lu.write(offset, streams, payload);
+                lu.write(offset, streams, payload)
+                        .join();
             }
 
             //finally, put this entry in the cache so we don't need to go over the network.

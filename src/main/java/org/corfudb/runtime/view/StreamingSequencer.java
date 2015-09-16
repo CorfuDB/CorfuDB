@@ -18,10 +18,12 @@ package org.corfudb.runtime.view;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
+import org.corfudb.runtime.protocols.sequencers.INewStreamSequencer;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
 import org.corfudb.runtime.RemoteException;
 
+import java.util.Collections;
 import java.util.UUID;
 
 import org.corfudb.util.retry.ExponentialBackoffRetry;
@@ -90,6 +92,10 @@ public class StreamingSequencer implements IStreamingSequencer {
                 if (sequencer instanceof IStreamSequencer)
                 {
                     return ((IStreamSequencer)sequencer).sequenceGetNext(streamID, numTokens);
+                }
+                else if (sequencer instanceof INewStreamSequencer)
+                {
+                    return ((INewStreamSequencer)sequencer).getNext(Collections.singleton(streamID), numTokens).get();
                 }
                 else
                 {

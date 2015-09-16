@@ -58,6 +58,7 @@ public class CDBSimpleMapLLTest {
             Integer result = testMapLocal.get(10);
             if (result == 100) {
                 testMapLocal.put(10, 1000);
+                testMapLocal.put(100, 1000);
                 return true;
             }
             return false;
@@ -66,6 +67,8 @@ public class CDBSimpleMapLLTest {
         testMap.getSMREngine().sync(txStamp);
         assertThat(testMap.get(10))
                 .isEqualTo(1000);
+        assertThat(testMap.size())
+                .isEqualTo(2);
     }
 
     @Test

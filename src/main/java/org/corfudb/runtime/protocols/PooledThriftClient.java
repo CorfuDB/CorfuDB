@@ -163,6 +163,7 @@ public class PooledThriftClient<T extends TServiceClient, U extends TAsyncClient
         @Override
         @SuppressWarnings("unchecked")
         public void onComplete(N t) {
+            //apparently, we are not supposed to reuse async clients. So we should refactor this code.
             client.getPool().returnAsyncResourceObject(client.getAsyncClient());
             callback.accept(t);
         }
@@ -171,7 +172,7 @@ public class PooledThriftClient<T extends TServiceClient, U extends TAsyncClient
         @SuppressWarnings("unchecked")
         public void onError(Exception e) {
             log.warn("Async method encountered exception!", e);
-            client.getPool().returnAsyncResourceObject(client.getAsyncClient());
+           // client.getPool().returnAsyncResourceObject(client.getAsyncClient());
         }
     }
 

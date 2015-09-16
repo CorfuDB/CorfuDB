@@ -9,17 +9,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** This class implements a basic interval-based retry, with sentinel.
+/** This class implements a sentinel based retry.
  *
  * Created by mwei on 9/1/15.
  */
 @Slf4j
-public class IntervalAndSentinelRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> implements IRetry<E,F,G,H,O,IntervalAndSentinelRetry> {
-
-    /** The interval, in milliseconds to wait for retry **/
-    @Getter
-    @Setter
-    long retryInterval = 0;
+public class SentinelRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> implements IRetry<E,F,G,H,O,SentinelRetry> {
 
     /**
      * The sentinel boolean reference. The sentinel should be set to true if we should
@@ -35,10 +30,11 @@ public class IntervalAndSentinelRetry<E extends Exception, F extends Exception, 
     @Getter
     final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
 
-    public IntervalAndSentinelRetry(IRetryable runFunction)
+    public SentinelRetry(IRetryable runFunction)
     {
         this.runFunction = runFunction;
     }
+
 
     /**
      * Handle an exception which has occurred and that has not been registered.
@@ -69,17 +65,6 @@ public class IntervalAndSentinelRetry<E extends Exception, F extends Exception, 
     @SuppressWarnings("unchecked")
     @SneakyThrows
     public boolean retryLogic() {
-        if (!checkSentinel()) { return false; }
-        try {
-            Thread.sleep(retryInterval);
-        } catch (InterruptedException ie)
-        {
-            //actually pass this up to the handler, in case interruptedexception was listened on.
-            if (handlerMap.containsKey(InterruptedException.class))
-            {
-                return handlerMap.get(InterruptedException.class).HandleException(ie, this);
-            }
-        }
         return checkSentinel();
     }
 

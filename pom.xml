@@ -57,6 +57,13 @@
         </developer>
     </developers>
 
+    <repositories>
+        <repository>
+            <id>clojars.org</id>
+            <url>http://clojars.org/repo</url>
+        </repository>
+    </repositories>
+
     <reporting>
             <plugins>
                 <plugin>
@@ -247,6 +254,23 @@
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>18.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.zeromq</groupId>
+            <artifactId>jeromq</artifactId>
+            <version>0.3.5</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
+            <version>4.0.31.Final</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.gatling.highcharts</groupId>
+            <artifactId>gatling-charts-highcharts</artifactId>
+            <version>2.1.7</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -594,7 +618,7 @@
             <plugin>
                 <groupId>org.eluder.coveralls</groupId>
                 <artifactId>coveralls-maven-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>4.0.0</version>
                 <configuration>
                     <jacocoReports>
                     </jacocoReports>
@@ -603,7 +627,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.7.4.201502262128</version>
+                <version>0.7.5.201505241946</version>
                 <configuration>
                     <excludes>
                         <excludes>**/thrift/**/*.class</excludes>
@@ -762,9 +786,13 @@
                             <goal>jmeter</goal>
                         </goals>
                         <configuration>
-			    <propertiesJMeter>
-				<jmeterengine.force.system.exit>true</jmeterengine.force.system.exit>
-			    </propertiesJMeter>
+                            <testFilesIncluded>
+                                <jMeterTestFile>nettystreamingsequencer.jmx</jMeterTestFile>
+                            </testFilesIncluded>
+                            <overrideRootLogLevel>debug</overrideRootLogLevel>
+                            <propertiesJMeter>
+                                <jmeterengine.force.system.exit>true</jmeterengine.force.system.exit>
+                            </propertiesJMeter>
                             <skipTests>${skipTests}</skipTests>
                         </configuration>
                     </execution>

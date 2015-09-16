@@ -23,13 +23,14 @@ import org.apache.thrift.TException;
 import org.corfudb.infrastructure.thrift.*;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.runtime.protocols.NullCallback;
 import org.corfudb.runtime.protocols.PooledThriftClient;
 import org.corfudb.util.Utils;
 
+import java.awt.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -138,44 +139,65 @@ public class CorfuNewLogUnitProtocol implements IServerProtocol, INewWriteOnceLo
 
 
     @Override
-    public void write(long address, Set<UUID> streams, ByteBuffer payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException {
-        try (val t = thriftPool.getCloseableResource())
-        {
+    public CompletableFuture<Void> write(long address, Set<UUID> streams, ByteBuffer payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException {
+        CompletableFuture<Void> cf = new CompletableFuture<>();
+            try (val t = thriftPool.getCloseableAsyncResource()) {
             /* convert streams to something usable by thrift */
-            Set<org.corfudb.infrastructure.thrift.UUID> thriftUUIDS =
-                    streams.stream()
-                            .map(s -> new org.corfudb.infrastructure.thrift.UUID(s.getMostSignificantBits(), s.getLeastSignificantBits()))
-                            .collect(Collectors.toSet());
-            WriteResult wr = t.getClient().write(epoch, address, thriftUUIDS, payload);
-            if (wr.getCode() == ErrorCode.ERR_OVERWRITE)
-            {
-                if (!wr.isSetData() || wr.getData() == null)
-                    throw new OverwriteException("Address was written to!", address, null);
-                throw new OverwriteException("Address was written to!", address, ByteBuffer.wrap(wr.getData()));
+                Set<org.corfudb.infrastructure.thrift.UUID> thriftUUIDS =
+                        streams.stream()
+                                .map(s -> new org.corfudb.infrastructure.thrift.UUID(s.getMostSignificantBits(), s.getLeastSignificantBits()))
+                                .collect(Collectors.toSet());
+                t.getAsyncClient().write(epoch, address, thriftUUIDS, payload, t.getCallback((NewLogUnitService.AsyncClient.write_call wc) -> {
+                    try {
+                        WriteResult wr = wc.getResult();
+                        if (wr.getCode() == ErrorCode.ERR_OVERWRITE) {
+                            if (!wr.isSetData() || wr.getData() == null) {
+                                cf.completeExceptionally(new OverwriteException("Address was written to!", address, null));
+                            } else {
+                                cf.completeExceptionally(new OverwriteException("Address was written to!", address, ByteBuffer.wrap(wr.getData())));
+                            }
+                        } else {
+                            cf.complete(null);
+                        }
+                    }
+                    catch (TException te)
+                    {
+                        cf.completeExceptionally(te);
+                    }
+                }));
             }
-        }
-        catch (TException e)
-        {
-            log.warn("Error writing to log unit!", e);
-            throw new NetworkException("Couldn't write to logging unit", this, address, true);
-        }
+            catch (TException t)
+            {
+                cf.completeExceptionally(t);
+            }
+        return cf;
     }
 
     @Override
-    public WriteOnceLogUnitRead read(long address) throws NetworkException {
-        try (val t = thriftPool.getCloseableResource())
+    public CompletableFuture<WriteOnceLogUnitRead> read(long address) throws NetworkException {
+        CompletableFuture<WriteOnceLogUnitRead> cf = new CompletableFuture<>();
+        try (val t = thriftPool.getCloseableAsyncResource())
         {
-            ReadResult r = t.getClient().read(epoch, address);
-            Set<UUID> streams = r.getStream() == null ? Collections.emptySet() : r.getStream().stream()
-                                .map(s -> new UUID(s.getMsb(), s.getLsb()))
-                                .collect(Collectors.toSet());
-            return new WriteOnceLogUnitRead(r.getCode(), streams, r.data, r.getHints());
+            t.getAsyncClient().read(
+                    epoch, address, t.getCallback((NewLogUnitService.AsyncClient.read_call rc) -> {
+                        try {
+                            ReadResult r = rc.getResult();
+                            Set<UUID> streams = r.getStream() == null ? Collections.emptySet() : r.getStream().stream()
+                                    .map(s -> new UUID(s.getMsb(), s.getLsb()))
+                                    .collect(Collectors.toSet());
+                            cf.complete(new WriteOnceLogUnitRead(r.getCode(), streams, r.data, r.getHints()));
+                        }
+                        catch (TException te)
+                        {
+                            cf.completeExceptionally(te);
+                        }
+                    }));
         }
         catch (TException e)
         {
-            log.warn("Error writing to log unit!", e);
-            throw new NetworkException("Couldn't read from logging unit", this, address, true);
+            cf.completeExceptionally(e);
         }
+        return cf;
     }
 
     /** Trims the given stream, freeing up all entries up to and including the address given.
@@ -214,6 +236,18 @@ public class CorfuNewLogUnitProtocol implements IServerProtocol, INewWriteOnceLo
         try (val t = thriftPool.getCloseableAsyncResource())
         {
             t.getAsyncClient().forceGC(t.getCallback());
+        }
+        catch (Exception e)
+        {
+            log.info("exception", e);
+        }
+    }
+
+    @Override
+    public void setGCInterval(long millis) {
+        try (val t = thriftPool.getCloseableAsyncResource())
+        {
+            t.getAsyncClient().setGCInterval(millis, t.getCallback());
         }
         catch (Exception e)
         {

@@ -36,7 +36,7 @@ public class StreamAddressSpaceIT {
         instance = runtime.getLocalInstance();
     }
 
-    @Test
+   // @Test
     public void addressSpaceWriteRead()
             throws Exception
     {

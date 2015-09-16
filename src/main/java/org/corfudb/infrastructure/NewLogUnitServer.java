@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import lombok.val;
 import org.apache.thrift.TException;
 import org.apache.thrift.async.AsyncMethodCallback;
 import org.apache.thrift.protocol.TCompactProtocol;
@@ -29,17 +30,19 @@ import java.lang.ref.SoftReference;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @NoArgsConstructor
 public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.AsyncIface {
 
     TServer server;
-    Boolean running;
+    AtomicBoolean running;
     @Getter
     Thread thread;
     ConcurrentHashMap<java.util.UUID, Long> trimMap;
     Thread gcThread;
+    IntervalAndSentinelRetry gcRetry;
 
     /**
      * When an object implementing interface <code>Runnable</code> is used
@@ -54,8 +57,8 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
      */
     @Override
     public void run() {
-        running = true;
-        while (running) {
+        running.set(true);
+        while (running.get()) {
             TNonblockingServerTransport serverTransport;
             NewLogUnitService.AsyncProcessor<NewLogUnitServer> processor;
             log.debug("New log unit entering service loop.");
@@ -138,7 +141,7 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
     public void close() {
         if (server != null)
         {
-            running = false;
+            running.set(false);
             server.stop();
         }
         if (gcThread != null)
@@ -290,10 +293,13 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
     public void runGC()
     {
         Thread.currentThread().setName("LogUnit-GC");
-        IRetry.build(IntervalAndSentinelRetry.class, this::handleGC)
-                .setOptions(x -> x.setSetinelReference(new SoftReference<>(running)))
-                .setOptions(x -> x.setRetryInterval(60_000))
-                .runForever();
+        val retry = IRetry.build(IntervalAndSentinelRetry.class, this::handleGC)
+                .setOptions(x -> x.setSentinelReference(running))
+                .setOptions(x -> x.setRetryInterval(60_000));
+
+        gcRetry = (IntervalAndSentinelRetry) retry;
+
+        retry.runForever();
     }
 
 
@@ -390,6 +396,14 @@ public class NewLogUnitServer implements ICorfuDBServer, NewLogUnitService.Async
     public void forceGC(AsyncMethodCallback resultHandler) throws TException {
         log.info("Garbage collection forced.");
         gcThread.interrupt();
+        resultHandler.onComplete(null);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void setGCInterval(long millis, AsyncMethodCallback resultHandler) throws TException {
+        log.info("Setting GC retry interval to {}", millis);
+        gcRetry.setRetryInterval(millis);
         resultHandler.onComplete(null);
     }
 
