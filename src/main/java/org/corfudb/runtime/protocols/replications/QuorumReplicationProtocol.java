@@ -79,57 +79,61 @@ public class QuorumReplicationProtocol implements IReplicationProtocol {
         Object quorumLock = new Object();
         Future[] chainFutures = new Future[sz]; int j = 0;
 
-        for (IServerProtocol unit : chain)
-        {
+        for (IServerProtocol unit : chain) {
+//            chainFutures[j++] = executorService.submit(() -> {
+//                if (true) throw new IOException();
+//                return null;
+//            });
             chainFutures[j++] = executorService.submit(() -> {
-                        try {
-                            ((IWriteOnceLogUnit) unit).write(mappedAddress, streams, data);
-                            if (nsucceed.incrementAndGet() > sz/2)
-                                synchronized (quorumLock) {
-                                    quorumLock.notify();
-                                }
-                        } catch (OutOfSpaceException e) {
-                            if (nfail.incrementAndGet() >= sz/2)
-                                synchronized (quorumLock) {
-                                    quorumLock.notify();
-                                    throw e;
-                                }
-                        } catch (TrimmedException e) {
-                            nfail.set(sz);
-                            synchronized (quorumLock) {
-                                quorumLock.notify();
-                                throw e;
-                            }
-                        } catch (OverwriteException e) {
-                            if (nfail.incrementAndGet() >= sz/2) // TODO handle differently?
-                                synchronized (quorumLock) {
-                                    quorumLock.notify();
-                                    throw e;
-                                }
-                        } catch (NetworkException e) {
-                            if (nfail.incrementAndGet() >= sz/2)
-                                synchronized (quorumLock) {
-                                    quorumLock.notify();
-                                    throw e;
-                                }
+                try {
+                    ((IWriteOnceLogUnit) unit).write(mappedAddress, streams, data);
+                    if (nsucceed.incrementAndGet() > sz / 2)
+                        synchronized (quorumLock) {
+                            quorumLock.notify();
                         }
+                } catch (OutOfSpaceException e) {
+                    if (nfail.incrementAndGet() >= sz / 2)
+                        synchronized (quorumLock) {
+                            quorumLock.notify();
+                            throw e;
+                        }
+                } catch (TrimmedException e) {
+                    nfail.set(sz);
+                    synchronized (quorumLock) {
+                        quorumLock.notify();
+                        throw e;
                     }
-            );
-        }
+                } catch (OverwriteException e) {
+                    if (nfail.incrementAndGet() >= sz / 2) // TODO handle differently?
+                        synchronized (quorumLock) {
+                            quorumLock.notify();
+                            throw e;
+                        }
+                } catch (NetworkException e) {
+                    if (nfail.incrementAndGet() >= sz / 2)
+                        synchronized (quorumLock) {
+                            quorumLock.notify();
+                            throw e;
+                        }
+                }
 
-        try {
-            synchronized (quorumLock) {
-                while (nsucceed.get() <= sz/2 && ! (nfail.get() >= sz/2))
-                    quorumLock.wait();
+                return null;
+            });
+
+            try {
+                synchronized (quorumLock) {
+                    while (nsucceed.get() <= sz / 2 && !(nfail.get() >= sz / 2))
+                        quorumLock.wait();
+                }
+                for (Future f : chainFutures) {
+                    if (f.isDone()) f.get();
+                }
+            } catch (InterruptedException e) {
+                // TODO this is a real error?
+                e.printStackTrace();
+            } catch (ExecutionException e) {
+                e.printStackTrace();
             }
-            for (Future f: chainFutures) {
-                if (f.isDone()) f.get();
-            }
-        } catch (InterruptedException e) {
-            // TODO this is a real error?
-            e.printStackTrace();
-        } catch (ExecutionException e) {
-            e.printStackTrace();
         }
 
     }
