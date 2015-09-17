@@ -37,6 +37,8 @@ public interface ICorfuDBInstance {
      */
     IStreamingSequencer getStreamingSequencer();
 
+    INewStreamingSequencer getNewStreamingSequencer();
+
     /**
      * Gets a sequencer (regular) for this instance.
      * @return  The sequencer for this instance.

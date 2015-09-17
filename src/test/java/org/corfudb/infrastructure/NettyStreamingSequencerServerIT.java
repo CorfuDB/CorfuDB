@@ -18,14 +18,15 @@ import java.util.UUID;
 import java.util.concurrent.*;
 
 import static io.netty.buffer.Unpooled.directBuffer;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 9/10/15.
  */
-public class NMStreamingSequencerServerIT {
+public class NettyStreamingSequencerServerIT {
 
     CorfuInfrastructureBuilder infrastructure;
-
+    NettyStreamingSequencerProtocol proto;
     int port;
     @Rule
     public TestRule watcher = new TestWatcher() {
@@ -43,9 +44,38 @@ public class NMStreamingSequencerServerIT {
                 CorfuInfrastructureBuilder.getBuilder()
                         .addSequencer(port, NettyStreamingSequencerServer.class, "nsss", null)
                         .start(7775);
+        proto =
+        new NettyStreamingSequencerProtocol("localhost", port, Collections.emptyMap(), 0);
     }
 
+    @Test
+    public void sequenceNumbersAreIncreasing()
+    throws Exception
+    {
+        long lastSequence = proto.getNext(Collections.singleton(UUID.randomUUID()), 1).get();
+        for (int i = 0; i < 100; i++)
+        {
+            long thisSequence = proto.getNext(Collections.singleton(UUID.randomUUID()), 1).get();
+            assertThat(thisSequence)
+                    .isGreaterThan(lastSequence);
+            lastSequence  = thisSequence;
+        }
+    }
 
+    @Test
+    public void perStreamSequenceNumbersWork()
+            throws Exception
+    {
+        UUID firstStream = UUID.randomUUID();
+        long firstSequence = proto.getNext(Collections.singleton(firstStream), 1).get();
+        for (int i = 0; i < 100; i++)
+        {
+            proto.getNext(Collections.singleton(UUID.randomUUID()), 1).get();
+        }
+        long lastSequence = proto.getNext(Collections.singleton(firstStream), 0).get();
+        assertThat(firstSequence)
+                .isEqualTo(lastSequence);
+    }
 
     @Test
     public void mtTest()

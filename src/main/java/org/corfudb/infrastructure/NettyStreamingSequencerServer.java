@@ -67,12 +67,23 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
         {
             case TOKEN_REQ: {
                 NettyStreamingServerTokenRequestMsg req = (NettyStreamingServerTokenRequestMsg) msg;
-                long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
-                for (UUID id : req.getStreamIDs()) {
-                    lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue : Math.max(thisIssue, v));
+                if (req.getNumTokens() == 0)
+                {
+                    long max = 0L;
+                    for (UUID id : req.getStreamIDs()) {
+                        max = Math.max(max, lastIssuedMap.get(id));
+                    }
+                    NettyStreamingServerTokenResponseMsg resp = new NettyStreamingServerTokenResponseMsg(max);
+                    sendResponse(resp, msg, ctx);
                 }
-                NettyStreamingServerTokenResponseMsg resp = new NettyStreamingServerTokenResponseMsg(thisIssue);
-                sendResponse(resp, msg, ctx);
+                else {
+                    long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
+                    for (UUID id : req.getStreamIDs()) {
+                        lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue : Math.max(thisIssue, v));
+                    }
+                    NettyStreamingServerTokenResponseMsg resp = new NettyStreamingServerTokenResponseMsg(thisIssue);
+                    sendResponse(resp, msg, ctx);
+                }
             }
             break;
             case PING: {

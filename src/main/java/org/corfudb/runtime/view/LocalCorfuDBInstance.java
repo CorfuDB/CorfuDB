@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import lombok.Getter;
 import org.apache.zookeeper.KeeperException;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
@@ -30,6 +31,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private IStreamingSequencer streamingSequencer;
     private IWriteOnceAddressSpace addressSpace;
     private IStreamAddressSpace streamAddressSpace;
+    @Getter
+    public INewStreamingSequencer newStreamingSequencer;
 
     private CorfuDBRuntime cdr;
     private CDBSimpleMap<UUID, IStreamMetadata> streamMap;
@@ -57,6 +60,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         streamingSequencer = ss.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
         addressSpace = as.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
         streamAddressSpace = new StreamAddressSpace(this);
+        newStreamingSequencer = new NewStreamingSequencer(this);
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
         this.cdr = cdr;
