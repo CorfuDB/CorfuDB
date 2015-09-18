@@ -3,23 +3,15 @@ package org.corfudb.infrastructure;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Range;
-import lombok.Data;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import lombok.*;
+import lombok.extern.java.Log;
 import lombok.extern.slf4j.Slf4j;
 
-import lombok.val;
-import org.apache.thrift.TException;
-import org.apache.thrift.async.AsyncMethodCallback;
-import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.server.TServer;
-import org.apache.thrift.server.TThreadedSelectorServer;
-import org.apache.thrift.transport.*;
-
-import org.corfudb.infrastructure.thrift.*;
-import org.corfudb.infrastructure.thrift.UUID;
-import org.corfudb.util.Utils;
+import org.corfudb.infrastructure.wireprotocol.*;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
@@ -29,89 +21,116 @@ import com.google.common.collect.TreeRangeSet;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @NoArgsConstructor
-public class NettyLogUnitServer implements ICorfuDBServer, NewLogUnitService.AsyncIface {
+public class NettyLogUnitServer extends AbstractNettyServer {
 
-    TServer server;
-    AtomicBoolean running;
-    @Getter
-    Thread thread;
     ConcurrentHashMap<java.util.UUID, Long> trimMap;
     Thread gcThread;
     IntervalAndSentinelRetry gcRetry;
 
-    /**
-     * When an object implementing interface <code>Runnable</code> is used
-     * to create a thread, starting the thread causes the object's
-     * <code>run</code> method to be called in that separately executing
-     * thread.
-     * <p>
-     * The general contract of the method <code>run</code> is that it may
-     * take any action whatsoever.
-     *
-     * @see Thread#run()
-     */
-    @Override
-    public void run() {
-        running.set(true);
-        while (running.get()) {
-            TNonblockingServerTransport serverTransport;
-            NewLogUnitService.AsyncProcessor<NettyLogUnitServer> processor;
-            log.debug("New log unit entering service loop.");
-            try {
-                serverTransport = new TNonblockingServerSocket(port);
-                processor =
-                        new NewLogUnitService.AsyncProcessor<NettyLogUnitServer>(this);
-                server = new TThreadedSelectorServer(new TThreadedSelectorServer.Args(serverTransport)
-                        .processor(processor)
-                        .protocolFactory(TCompactProtocol::new)
-                        .inputTransportFactory(new TFastFramedTransport.Factory())
-                        .outputTransportFactory(new TFastFramedTransport.Factory())
-                );
-                log.info("New log unit starting on port " + port);
-                server.serve();
-            } catch (TTransportException e) {
-                log.warn("New log unit encountered exception, restarting.", e);
-            }
-        }
-        log.info("New log unit server shutting down.");
-    }
-
     @Data
-    public class NewLogUnitHints {
-            HintType type;
-            byte[] hintData;
+    @RequiredArgsConstructor
+    public class LogUnitEntry {
+        final ByteBuf buffer;
+        final EnumMap<LogUnitMetadataType, Object> metadataMap;
+        final boolean isHole;
+
+        /** Generate a new log unit entry which is a hole */
+        public LogUnitEntry()
+        {
+            buffer = null;
+            metadataMap = new EnumMap<>(LogUnitMetadataType.class);
+            isHole = true;
+        }
+        /** Get the streams that belong to this entry.
+         *
+         * @return A set of streams that belong to this entry.
+         */
+        @SuppressWarnings("unchecked")
+        public Set<UUID> getStreams()
+        {
+            return (Set<UUID>) metadataMap.getOrDefault(NettyLogUnitServer.LogUnitMetadataType.STREAM,
+                    Collections.EMPTY_SET);
+        }
+
+        /** Set the streams that belong to this entry.
+         *
+         * @param streams The set of belong to this entry.
+         */
+        public void setStreams(Set<UUID> streams)
+        {
+            metadataMap.put(NettyLogUnitServer.LogUnitMetadataType.STREAM, streams);
+        }
+
+        /** Get the rank of this entry.
+         *
+         * @return The rank of this entry.
+         */
+        @SuppressWarnings("unchecked")
+        public Long getRank()
+        {
+            return (Long) metadataMap.getOrDefault(NettyLogUnitServer.LogUnitMetadataType.RANK,
+                    0L);
+        }
+
+        /** Set the rank of this entry.
+         *
+         * @param rank The rank of this entry.
+         */
+        public void setRank(Long rank)
+        {
+            metadataMap.put(NettyLogUnitServer.LogUnitMetadataType.RANK, rank);
+        }
+
     }
 
-    /**
-     * The port that this instance is being served on.
-     *
-     * @return The current port that this instance is being serviced on.
-     */
-    @Getter
-    Integer port;
+    @RequiredArgsConstructor
+    public enum LogUnitMetadataType {
+        STREAM(0),
+        RANK(1)
+        ;
 
-    /**
-     * The current epoch of this log unit.
-     *
-     * @return The current epoch this instance is in.
-     */
-    @Getter
-    long currentEpoch;
+        final int type;
+
+        public byte asByte() { return (byte)type; }
+    }
+
+    public static Map<Byte, LogUnitMetadataType> metadataTypeMap =
+            Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
+                    .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
+
+    @RequiredArgsConstructor
+    public enum ReadResultType {
+        EMPTY(0),
+        DATA(1),
+        FILLED_HOLE(2),
+        TRIMMED(3)
+        ;
+
+        final int type;
+
+        public byte asByte() { return (byte)type; }
+    }
+
+    public static Map<Byte, ReadResultType> readResultTypeMap =
+            Arrays.<ReadResultType>stream(ReadResultType.values())
+                    .collect(Collectors.toMap(ReadResultType::asByte, Function.identity()));
+
 
     /**
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
      */
-    Cache<Long, ByteBuffer> dataCache;
+    LoadingCache<Long, LogUnitEntry> dataCache;
 
     /**
      * This cache services requests for hints.
      */
-    Cache<Long, Set<NewLogUnitHints>> hintCache;
+    //Cache<Long, Set<NewLogUnitHints>> hintCache;
 
     /**
      * The contiguous head of the log (that is, the lowest address which has NOT been trimmed yet).
@@ -124,169 +143,143 @@ public class NettyLogUnitServer implements ICorfuDBServer, NewLogUnitService.Asy
      */
     RangeSet<Long> trimRange;
 
-    /**
-     * Returns an instance (main thread) of this server.
-     * @param configuration     The configuration from the parsed Yaml file.
-     * @return                  A runnable representing the main thread of this log unit.
-     */
-    @Override
-    public ICorfuDBServer getInstance(Map<String, Object> configuration) {
-        parseConfiguration(configuration);
-        thread = new Thread(this);
-        return this;
-    }
-
     @Override
     public void close() {
-        if (server != null)
-        {
-            running.set(false);
-            server.stop();
-        }
         if (gcThread != null)
         {
             gcThread.interrupt();
         }
+        /** Free all references */
+        dataCache.asMap().values().parallelStream()
+                .map(m -> m.buffer.release());
+        super.close();
     }
 
-    /**
-     * Parses the configuration for this server.
-     * @param configuration    The configuration from the parsed Yaml file.
-     * @throws RuntimeException     If the provided configuration is invalid.
-     */
-    void parseConfiguration(Map<String, Object> configuration) {
-        if (configuration.get("port") == null)
-        {
-            log.error("Required key port is missing from configuration!");
-            throw new RuntimeException("Invalid configuration provided!");
-        }
-
-        port = ((Integer)configuration.get("port"));
-        contiguousHead = 0L;
-        trimRange = TreeRangeSet.create();
-
-        // Currently, only an in-memory configuration is supported.
-        dataCache = Caffeine.newBuilder()
-                .weakKeys()
-                .build();
-
-        // Hints are always in memory and never persisted.
-        hintCache = Caffeine.newBuilder()
-                .weakKeys()
-                .build();
-
-        // Trim map is set to empty on start
-        // TODO: persist trim map - this is optional since trim is just a hint.
-        trimMap = new ConcurrentHashMap<>();
+    @Override
+    void parseConfiguration(Map<String, Object> configuration)
+    {
+        reset();
         gcThread = new Thread(this::runGC);
         gcThread.start();
     }
 
     /**
-     * Validate basic server parameters: namely, what epoch we are in and if the unit is in simulated failure mode.
-     * If the validation fails, we throw a TException which will be passed on to the client.
-     * @param epoch         What epoch the client thinks we should be in.
-     * @throws TException   If the validation fails.
+     * Process an incoming message
+     *
+     * @param msg The message to process.
+     * @param ctx The channel context from the handler adapter.
      */
-    public void validate(long epoch)
-            throws TException
-    {
-        if (epoch != currentEpoch)
+    @Override
+    @SuppressWarnings("unchecked")
+    void processMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx) {
+        switch(msg.getMsgType())
         {
-            throw new TException("Request from wrong epoch, got " + epoch + " expected " + currentEpoch);
+            case WRITE:
+                write((NettyLogUnitWriteMsg) msg, ctx);
+            break;
+            case READ_REQUEST:
+                read((NettyLogUnitReadRequestMsg) msg, ctx);
+            break;
+            case GC_INTERVAL:
+            {
+                NettyLogUnitGCIntervalMsg m = (NettyLogUnitGCIntervalMsg) msg;
+                gcRetry.setRetryInterval(m.getInterval());
+            }
+            break;
+            case FORCE_GC:
+            {
+                gcThread.interrupt();
+            }
+            break;
+            case FILL_HOLE:
+            {
+                NettyLogUnitFillHoleMsg m = (NettyLogUnitFillHoleMsg) msg;
+                dataCache.get(m.getAddress(), (address) -> new LogUnitEntry());
+            }
+            break;
+            case TRIM:
+            {
+                NettyLogUnitTrimMsg m = (NettyLogUnitTrimMsg) msg;
+                trimMap.compute(m.getStreamID(), (key, prev) ->
+                        prev == null ? m.getPrefix() : Math.max(prev, m.getPrefix()));
+            }
+            break;
         }
     }
 
     /**
-     * Perform an asynchronous write. When AsyncMethodCallback is invoked, the write is guaranteed to be persisted
-     * according to the persistence requirements in the configuration file.
-     * @param epoch     What epoch the client thinks we should be in.
-     * @param offset    The global offset (address) we are reading at.
-     * @param stream    Which streams this log entry belongs to.
-     * @param payload   The payload to store at the address.
-     * @param resultHandler An asynchronous method callback which will be invoked when write is completed.
-     * @throws TException   If there was an IO exception during the handling of this call.
+     * Reset the state of the server.
      */
     @Override
-    @SuppressWarnings("unchecked")
-    public void write(long epoch, long offset, Set<UUID> stream, ByteBuffer payload, AsyncMethodCallback resultHandler) throws TException {
-        validate(epoch);
+    public void reset() {
+        contiguousHead = 0L;
+        trimRange = TreeRangeSet.create();
 
-        ByteBuffer dataBuffer;
-        // The size of the metadata is equal to the number of stream UUIDs plus 2 16bit int.
-        int metadataSize = (stream.size() * 16) + 4;
-        short dataType = 0;
-        // in-memory mode just uses a bytebuffer which is not memory mapped.
-        dataBuffer = ByteBuffer.allocateDirect(payload.remaining() + metadataSize);
-
-        //dump the metadata in the buffer.
-        dataBuffer.putShort((short) ReadCode.READ_DATA.getValue());
-        dataBuffer.putShort((short)stream.size());
-        for (UUID streamid : stream)
+        if (dataCache != null)
         {
-            dataBuffer.putLong(streamid.getMsb());
-            dataBuffer.putLong(streamid.getLsb());
+            /** Free all references */
+            dataCache.asMap().values().parallelStream()
+                    .map(m -> m.buffer.release());
         }
+        // Currently, only an in-memory configuration is supported.
+        dataCache = Caffeine.newBuilder()
+                .weakKeys()
+                .build((a) -> {return null;});
 
-        //dump the payload in the buffer.
-        dataBuffer.put(payload);
-        dataBuffer.flip();
-
-        //put the buffer in the cache, if in memory (if it's not in-memory, we can rely on the cache retrieval).
-        ByteBuffer newVal = dataCache.get(offset, (address) -> dataBuffer);
-
-        if (newVal != dataBuffer)
-        {
-            resultHandler.onComplete(new WriteResult().setCode(ErrorCode.ERR_OVERWRITE).setData(newVal));
-            return;
-        }
-        resultHandler.onComplete(new WriteResult().setCode(ErrorCode.OK));
+        // Hints are always in memory and never persisted.
+        /*
+        hintCache = Caffeine.newBuilder()
+                .weakKeys()
+                .build();
+*/
+        // Trim map is set to empty on start
+        // TODO: persist trim map - this is optional since trim is just a hint.
+        trimMap = new ConcurrentHashMap<>();
     }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public void read(long epoch, long offset, AsyncMethodCallback resultHandler) throws TException {
-        validate(epoch);
-        //fetch the address from the cache.
-        ByteBuffer data = dataCache.getIfPresent(offset);
-        if (data == null) {
-            //is this in the trim range?
-            if (trimRange.contains(offset)) {
-                resultHandler.onComplete(new ReadResult(ReadCode.READ_TRIMMED, Collections.emptySet(), ByteBuffer.allocate(0), Collections.emptySet()));
-            } else {
-                resultHandler.onComplete(new ReadResult(ReadCode.READ_EMPTY, Collections.emptySet(), ByteBuffer.allocate(0), Collections.emptySet()));
-            }
+    /** Service an incoming read request. */
+    public void read(NettyLogUnitReadRequestMsg msg, ChannelHandlerContext ctx)
+    {
+        if (trimRange.contains (msg.getAddress()))
+        {
+            sendResponse(new NettyLogUnitReadResponseMsg(ReadResultType.TRIMMED), msg, ctx);
         }
         else
         {
-            data = data.duplicate();
-            //rewind the buffer
-            data.clear();
-            //decode the metadata
-            short dataType = data.getShort();
-            Set<UUID> cset = new HashSet();
-            if (dataType == (short)ReadCode.READ_DATA.getValue()) {
-                short numStreams = data.getShort();
-                for (short i = 0; i < numStreams; i++) {
-                    UUID streamId = new UUID();
-                    streamId.setMsb(data.getLong());
-                    streamId.setLsb(data.getLong());
-                    cset.add(streamId);
-                }
-                resultHandler.onComplete(new ReadResult(ReadCode.findByValue(dataType), cset, data.slice(), Collections.emptySet()));
+            LogUnitEntry e = dataCache.get(msg.getAddress());
+            if (e == null)
+            {
+                sendResponse(new NettyLogUnitReadResponseMsg(ReadResultType.EMPTY), msg, ctx);
             }
-            //write the buffer
-            resultHandler.onComplete(new ReadResult(ReadCode.findByValue(dataType), cset, null, Collections.emptySet()));
+            else if (e.isHole)
+            {
+                sendResponse(new NettyLogUnitReadResponseMsg(ReadResultType.FILLED_HOLE), msg, ctx);
+            }
+            else
+            {
+                sendResponse(new NettyLogUnitReadResponseMsg(e), msg, ctx);
+            }
         }
     }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public void trim(long epoch, UUID stream, long prefix, AsyncMethodCallback resultHandler) throws TException {
-        log.info("trim requested!");
-        validate(epoch);
-        trimMap.compute(Utils.fromThriftUUID(stream), (key, prev) -> prev == null ? prefix : Math.max(prev, prefix));
-        resultHandler.onComplete(null);
+    /** Service an incoming write request. */
+    public void write(NettyLogUnitWriteMsg msg, ChannelHandlerContext ctx)
+    {
+        if (trimRange.contains (msg.getAddress()))
+        {
+            sendResponse(new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ERROR_TRIMMED), msg, ctx);
+        }
+        else {
+            LogUnitEntry e = new LogUnitEntry(msg.getData(), msg.getMetadataMap(), false);
+            e.getBuffer().retain();
+            if (e == dataCache.get(msg.getAddress(), (address) -> e)) {
+                sendResponse(new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ERROR_OK), msg, ctx);
+            }
+            else
+            {
+                sendResponse(new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ERROR_OVERWRITE), msg, ctx);
+            }
+        }
     }
 
     public void runGC()
@@ -301,41 +294,21 @@ public class NettyLogUnitServer implements ICorfuDBServer, NewLogUnitService.Asy
         retry.runForever();
     }
 
-
-    public ReadCode getDataType(ByteBuffer data)
-    {
-        data.clear();
-        return ReadCode.findByValue(data.getShort());
-    }
-    public Set<java.util.UUID> streamsInEntry(ByteBuffer data)
-    {
-        data.clear();
-        //decode the metadata
-        short dataType = data.getShort();
-        Set<java.util.UUID> cset = new HashSet();
-        if (dataType == (short)ReadCode.READ_DATA.getValue()) {
-            short numStreams = data.getShort();
-            for (short i = 0; i < numStreams; i++) {
-                cset.add(new java.util.UUID(data.getLong(), data.getLong()));
-            }
-        }
-        return cset;
-    }
-
+    @SuppressWarnings("unchecked")
     public boolean handleGC()
     {
         log.info("Garbage collector starting...");
         long freedEntries = 0;
 
         /* Pick a non-compacted region or just scan the cache */
-        Map<Long, ByteBuffer> map = dataCache.asMap();
+        Map<Long, LogUnitEntry> map = dataCache.asMap();
         SortedSet<Long> addresses = new TreeSet<>(map.keySet());
         for (long address : addresses)
         {
-            ByteBuffer buffer = dataCache.getIfPresent(address);
+            LogUnitEntry buffer = dataCache.getIfPresent(address);
             if (buffer != null)
             {
-                Set<java.util.UUID> streams = streamsInEntry(buffer);
+                Set<UUID> streams = buffer.getStreams();
                 // this is a normal entry
                 if (streams.size() > 0) {
                     boolean trimmable = true;
@@ -370,54 +343,21 @@ public class NettyLogUnitServer implements ICorfuDBServer, NewLogUnitService.Asy
         return true;
     }
 
-    public void trimEntry(long address, Set<java.util.UUID> streams, ByteBuffer entry)
+    public void trimEntry(long address, Set<java.util.UUID> streams, LogUnitEntry entry)
     {
-        log.info("Trim requested.");
         // Add this entry to the trimmed range map.
         trimRange.add(Range.closed(address, address));
         // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
         // assuming the entry is back by disk
         dataCache.invalidate(address);
+        //and free any references the buffer might have
+        if (entry.getBuffer() != null)
+        {
+            entry.getBuffer().release();
+        }
     }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public void fillHole(long offset, AsyncMethodCallback resultHandler) throws TException {
-        //put the buffer in the cache, if in memory (if it's not in-memory, we can rely on the cache retrieval).
-        ByteBuffer newVal = ByteBuffer.allocateDirect(2);
-        newVal.putShort((short) ReadCode.READ_FILLEDHOLE.getValue());
-        dataCache.get(offset, (address) -> newVal);
-        resultHandler.onComplete(null);
-    }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public void forceGC(AsyncMethodCallback resultHandler) throws TException {
-        log.info("Garbage collection forced.");
-        gcThread.interrupt();
-        resultHandler.onComplete(null);
-    }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public void setGCInterval(long millis, AsyncMethodCallback resultHandler) throws TException {
-        log.info("Setting GC retry interval to {}", millis);
-        gcRetry.setRetryInterval(millis);
-        resultHandler.onComplete(null);
-    }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public void ping(AsyncMethodCallback resultHandler) throws TException {
-        resultHandler.onComplete(true);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public void reset(AsyncMethodCallback resultHandler) throws TException {
-        log.info("Reset requested!");
-        currentEpoch = 0;
-        dataCache.invalidateAll();
-        resultHandler.onComplete(null);
-    }
 }

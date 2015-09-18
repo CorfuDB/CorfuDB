@@ -16,14 +16,18 @@
 package org.corfudb.runtime.protocols.logunits;
 
 import lombok.Data;
+import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.thrift.Hint;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.infrastructure.thrift.ReadCode;
 import org.corfudb.infrastructure.thrift.ReadResult;
+import org.corfudb.infrastructure.wireprotocol.IMetadata;
+import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg;
 import org.corfudb.runtime.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
 import java.nio.ByteBuffer;
+import java.util.EnumMap;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -45,27 +49,95 @@ import java.util.concurrent.CompletableFuture;
 
 public interface INewWriteOnceLogUnit extends IServerProtocol {
 
-    @Data
-    class WriteOnceLogUnitRead {
-        final ReadCode result;
-        final Set<UUID> streams;
-        final ByteBuffer data;
-        final Set<Hint> hints;
+    enum WriteResult {
+        OK,
+        TRIMMED,
+        OVERWRITE,
+        RANK_SEALED,
+        OOS
+    }
 
-        public byte[] getDataAsArray() {
-            int oldPos = data.position();
-            byte[] b = new byte[data.remaining()];
-            data.get(b);
-            data.position(oldPos);
-            return b;
+    enum ReadResultType {
+        EMPTY,
+        DATA,
+        FILLED_HOLE,
+        TRIMMED
+    }
+
+    @Data
+    class ReadResult implements IMetadata {
+        final ReadResultType result;
+        final Object payload;
+        final EnumMap<NettyLogUnitServer.LogUnitMetadataType, Object> metadataMap;
+
+        public ReadResult(NettyLogUnitReadResponseMsg m)
+        {
+            switch (m.getResult())
+            {
+                case DATA:
+                    result = ReadResultType.DATA;
+                    payload = m.getPayload();
+                    metadataMap = m.getMetadataMap();
+                    break;
+                case EMPTY:
+                    result = ReadResultType.EMPTY;
+                    payload = null;
+                    metadataMap = m.getMetadataMap();
+                    break;
+                case FILLED_HOLE:
+                    result = ReadResultType.FILLED_HOLE;
+                    payload = null;
+                    metadataMap = m.getMetadataMap();
+                    break;
+                case TRIMMED:
+                    result = ReadResultType.TRIMMED;
+                    payload = null;
+                    metadataMap = m.getMetadataMap();
+                    break;
+                default:
+                    result = ReadResultType.EMPTY;
+                    metadataMap = m.getMetadataMap();
+                    payload = null;
+            }
         }
     }
 
-    CompletableFuture<Void> write(long address, Set<UUID> streams, ByteBuffer payload) throws OverwriteException, TrimmedException, NetworkException, OutOfSpaceException;
-    CompletableFuture<WriteOnceLogUnitRead> read(long address) throws NetworkException;
-    void trim(UUID stream, long address) throws NetworkException;
+    /** Asynchronously write to the logging unit.
+     *
+     * @param address       The address to write to.
+     * @param streams       The streams, if any, that this write belongs to.
+     * @param rank          The rank of this write (used for quorum replication).
+     * @param writeObject   The object, pre-serialization, to write.
+     * @return              A CompletableFuture which will complete with the WriteResult once the
+     *                      write completes.
+     */
+    CompletableFuture<WriteResult> write(long address, Set<UUID> streams, long rank, Object writeObject);
+
+    /** Asynchronously read from the logging unit.
+     *
+     * @param address       The address to read from.
+     * @return              A CompletableFuture which will complete with a ReadResult once the read
+     *                      completes.
+     */
+    CompletableFuture<ReadResult> read(long address);
+
+    /** Send a hint to the logging unit that a stream can be trimmed.
+     *
+     * @param stream        The stream to trim.
+     * @param prefix        The prefix of the stream, as a global physical offset, to trim.
+     */
+    void trim(UUID stream, long prefix);
+
+    /** Fill a hole at a given address.
+     *
+     * @param address       The address to fill a hole at.
+     */
     void fillHole(long address);
+
+    /** Force the garbage collector to begin garbage collection. */
     void forceGC();
+
+    /** Change the default garbage collection interval. */
     void setGCInterval(long millis);
 }
 

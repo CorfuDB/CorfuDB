@@ -108,7 +108,10 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             try {
-                 processMessage(NettyCorfuMsg.deserialize((ByteBuf) msg), ctx);
+                NettyCorfuMsg m = NettyCorfuMsg.deserialize((ByteBuf) msg);
+                if (validateEpoch(m, ctx)) {
+                 processBaseMessage(m, ctx);
+                }
             }
             catch (Exception e)
             {
@@ -171,8 +174,54 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
         return true;
     }
 
+    /** Process a base message, and call a specialized handler if this message is not a base message.
+     * @param msg   The message to process.
+     * @param ctx   The channel handler context to return a message with.
+     */
+    public void processBaseMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx)
+    {
+        switch (msg.getMsgType())
+        {
+            case PING: {
+                NettyCorfuMsg resp = new NettyCorfuMsg(msg.getClientID(), msg.getRequestID(),
+                        epoch, NettyCorfuMsg.NettyCorfuMsgType.PONG);
+                sendResponse(resp, msg, ctx);
+            }
+            break;
+            case RESET: {
+                log.info("Request requested by client ", msg.getClientID());
+                reset();
+            }
+            break;
+            default:
+                processMessage(msg, ctx);
+        }
+    }
+
+    /** Reset the state of the server. */
+    public abstract void reset();
+
+    /** Validate the epoch of a NettyCorfuMsg, and send a WRONG_EPOCH response if
+     * the server is in the wrong epoch. Ignored if the message type is reset (which
+     * is valid in any epoch).
+     * @param msg   The incoming message to validate.
+     * @param ctx   The context of the channel handler.
+     * @return      True, if the epoch is correct, but false otherwise.
+     */
+    public boolean validateEpoch(NettyCorfuMsg msg, ChannelHandlerContext ctx)
+    {
+        if (msg.getMsgType() != NettyCorfuMsg.NettyCorfuMsgType.RESET && msg.getEpoch() != epoch)
+        {
+            NettyCorfuMsg m = new NettyCorfuMsg();
+            m.setMsgType(NettyCorfuMsg.NettyCorfuMsgType.WRONG_EPOCH);
+            sendResponse(m, msg, ctx);
+            return false;
+        }
+        return true;
+    }
+
     /**
-     * Starts the streaming sequencer server as an IRetry.
+     * Starts the netty server as an IRetry.
      */
     @Override
     public void run() {

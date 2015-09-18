@@ -50,12 +50,23 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
         SizeBufferPool.PooledSizedBuffer p = pool.getSizedBuffer();
         message.serialize(p.getBuffer());
         channel.writeAndFlush(p.writeSize());
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(5));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(30));
         cfTimeout.exceptionally(e -> {
             rpcMap.remove(thisRequest);
             return null;
         });
         return cfTimeout;
+    }
+
+    public void sendMessage(SizeBufferPool pool, long epoch, NettyCorfuMsg message)
+    {
+        final long thisRequest = requestID.getAndIncrement();
+        message.setClientID(clientID);
+        message.setRequestID(thisRequest);
+        message.setEpoch(epoch);
+        SizeBufferPool.PooledSizedBuffer p = pool.getSizedBuffer();
+        message.serialize(p.getBuffer());
+        channel.writeAndFlush(p.writeSize());
     }
 
     @Override

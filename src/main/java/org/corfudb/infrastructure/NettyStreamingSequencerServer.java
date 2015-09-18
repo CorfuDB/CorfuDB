@@ -45,8 +45,7 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
     @Override
     void parseConfiguration(Map<String, Object> configuration)
     {
-        globalIndex = new AtomicLong(0);
-        lastIssuedMap = new ConcurrentHashMap<>();
+        reset();
     }
 
     /** Process an incoming message
@@ -56,13 +55,6 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
      */
     void processMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx)
     {
-        if (msg.getEpoch() != epoch)
-        {
-            NettyCorfuMsg m = new NettyCorfuMsg();
-            m.setMsgType(NettyCorfuMsg.NettyCorfuMsgType.WRONG_EPOCH);
-            sendResponse(m, msg, ctx);
-        }
-
         switch (msg.getMsgType())
         {
             case TOKEN_REQ: {
@@ -94,14 +86,21 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
             break;
             case RESET: {
                 log.info("Request requested by client ", msg.getClientID());
-                pool = new SizeBufferPool(64);
-                globalIndex = new AtomicLong(0);
-                lastIssuedMap = new ConcurrentHashMap<>();
             }
             break;
             default:
                 log.warn("Unknown message type {} passed to handler!", msg.getMsgType());
                 throw new RuntimeException("Unsupported message passed to handler!");
         }
+    }
+
+    /**
+     * Reset the state of the server.
+     */
+    @Override
+    public void reset() {
+        pool = new SizeBufferPool(64);
+        globalIndex = new AtomicLong(0);
+        lastIssuedMap = new ConcurrentHashMap<>();
     }
 }

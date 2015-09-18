@@ -27,14 +27,33 @@ public class NettyCorfuMsg {
 
     @RequiredArgsConstructor
     public enum NettyCorfuMsgType {
+        // Base Messages
         PING(0, NettyCorfuMsg.class),
         PONG(1, NettyCorfuMsg.class),
         RESET(2, NettyCorfuResetMsg.class),
         SET_EPOCH(3, NettyCorfuSetEpochMsg.class),
         ACK(4, NettyCorfuMsg.class),
         WRONG_EPOCH(5, NettyCorfuMsg.class),
+
+        // StreamingSequencer Messages
         TOKEN_REQ(20, NettyStreamingServerTokenRequestMsg.class),
-        TOKEN_RES(21, NettyStreamingServerTokenResponseMsg.class)
+        TOKEN_RES(21, NettyStreamingServerTokenResponseMsg.class),
+
+        // Logging Unit Messages
+        WRITE(30, NettyLogUnitWriteMsg.class),
+        READ_REQUEST(31, NettyLogUnitReadRequestMsg.class),
+        READ_RESPONSE(32, NettyLogUnitReadResponseMsg.class),
+        TRIM(33, NettyLogUnitTrimMsg.class),
+        FILL_HOLE(34, NettyLogUnitFillHoleMsg.class),
+        FORCE_GC(35, NettyCorfuMsg.class),
+        GC_INTERVAL(36, NettyLogUnitGCIntervalMsg.class),
+
+        // Logging Unit Error Codes
+        ERROR_OK(40, NettyCorfuMsg.class),
+        ERROR_TRIMMED(41, NettyCorfuMsg.class),
+        ERROR_OVERWRITE(42, NettyCorfuMsg.class),
+        ERROR_OOS(43, NettyCorfuMsg.class),
+        ERROR_RANK(44, NettyCorfuMsg.class)
         ;
 
         final int type;
@@ -100,5 +119,14 @@ public class NettyCorfuMsg {
         msg.msgType = message;
         msg.fromBuffer(buffer);
         return msg;
+    }
+
+    /** Constructor which generates a message based only the message type.
+     * Typically used for generating error messages, since sendmessage will populate the rest of the fields.
+     * @param type  The type of message to send.
+     */
+    public NettyCorfuMsg(NettyCorfuMsgType type)
+    {
+        this.msgType = type;
     }
 }
