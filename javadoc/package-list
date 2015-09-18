@@ -1,6 +1,7 @@
 org.corfudb.infrastructure
 org.corfudb.infrastructure.configmaster.policies
 org.corfudb.infrastructure.thrift
+org.corfudb.infrastructure.wireprotocol
 org.corfudb.runtime
 org.corfudb.runtime.collections
 org.corfudb.runtime.entries
@@ -20,3 +21,4 @@ org.corfudb.runtime.view
 org.corfudb.samples
 org.corfudb.util
 org.corfudb.util.retry
+org.corfudb.util.serializer
