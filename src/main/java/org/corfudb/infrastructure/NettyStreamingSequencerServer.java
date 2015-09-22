@@ -78,16 +78,6 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
                 }
             }
             break;
-            case PING: {
-                NettyCorfuMsg resp = new NettyCorfuMsg(msg.getClientID(), msg.getRequestID(),
-                        epoch, NettyCorfuMsg.NettyCorfuMsgType.PONG);
-                sendResponse(resp, msg, ctx);
-            }
-            break;
-            case RESET: {
-                log.info("Request requested by client ", msg.getClientID());
-            }
-            break;
             default:
                 log.warn("Unknown message type {} passed to handler!", msg.getMsgType());
                 throw new RuntimeException("Unsupported message passed to handler!");
@@ -99,7 +89,6 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
      */
     @Override
     public void reset() {
-        pool = new SizeBufferPool(64);
         globalIndex = new AtomicLong(0);
         lastIssuedMap = new ConcurrentHashMap<>();
     }

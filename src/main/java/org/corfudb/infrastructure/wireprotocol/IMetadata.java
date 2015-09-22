@@ -2,10 +2,7 @@ package org.corfudb.infrastructure.wireprotocol;
 
 import org.corfudb.infrastructure.NettyLogUnitServer;
 
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Created by mwei on 9/18/15.
@@ -54,4 +51,23 @@ public interface IMetadata {
         getMetadataMap().put(NettyLogUnitServer.LogUnitMetadataType.RANK, rank);
     }
 
+    /** Get the logical stream addresses that belong to this write.
+     *
+     * @return A list of logical stream addresses that belong to this write.
+     */
+    @SuppressWarnings("unchecked")
+    default List<Long> getLogicalAddresses()
+    {
+        return (List<Long>) getMetadataMap().getOrDefault(NettyLogUnitServer.LogUnitMetadataType.STREAM_ADDRESS,
+                Collections.EMPTY_LIST);
+    }
+
+    /** Set the logical stream addresses that belong to this write.
+     *
+     * @param streams The set of logical stream addresses that will belong to this write.
+     */
+    default void setLogicalAddresses(List<Long> streams)
+    {
+        getMetadataMap().put(NettyLogUnitServer.LogUnitMetadataType.STREAM_ADDRESS, streams);
+    }
 }

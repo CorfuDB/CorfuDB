@@ -2,6 +2,8 @@ package org.corfudb.runtime.view;
 
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.thrift.Hint;
 import org.corfudb.runtime.NetworkException;
@@ -9,16 +11,15 @@ import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;
 import org.corfudb.runtime.TrimmedException;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleTimestamp;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * A stream address space is a write-once address space which is fully stream-aware.
@@ -38,6 +39,13 @@ public interface IStreamAddressSpace {
         TRIMMED
     };
 
+    enum StreamAddressWriteResult {
+        OK,
+        OVERWRITE,
+        TRIMMED,
+        OOS
+    };
+
     /**
      * This class represents an entry in a stream address space.
      */
@@ -45,20 +53,29 @@ public interface IStreamAddressSpace {
     @Slf4j
     class StreamAddressSpaceEntry<T> implements IStreamEntry
     {
+
+        /**
+         * This constructor is for generating classes which contain a code only (i.e, trimmed)
+         * @param codeOnly
+         */
+        public StreamAddressSpaceEntry(Long globalIndex, StreamAddressEntryCode codeOnly)
+        {
+            this.streams = Collections.emptySet();
+            this.globalIndex = globalIndex;
+            this.code = codeOnly;
+            this.payload = null;
+        }
+
         /**
          * The set of streams that this entry belongs to.
          */
+        @NonNull
         final Set<UUID> streams;
 
         /**
          * The set of hints present when this entry was retrieved.
          */
         Set<Hint> hints;
-
-        /**
-         * The payload for this stream entry.
-         */
-        final ByteBuffer rawPayload;
 
         /**
          * The global index (address) for this entry.
@@ -73,31 +90,7 @@ public interface IStreamAddressSpace {
         /**
          * The deserialized version of the payload.
          */
-        @Getter(lazy=true)
-        private final T payload = deserializePayload();
-
-
-
-
-        /**
-         * Deserialize the payload. Used by the internal getter, which deserializes once and caches the
-         * result.
-         * @return  The deserialized payload.
-         */
-        @SuppressWarnings("unchecked")
-        private T deserializePayload()
-        {
-            try {
-                ByteBuffer deserializeBuffer = rawPayload.duplicate();
-                rawPayload.clear();
-                return (T) Serializer.deserialize(deserializeBuffer);
-            }
-            catch (Exception e)
-            {
-                log.error("Error deserializing payload at index " + getGlobalIndex(), e);
-            }
-            return null;
-        }
+        private final T payload;
 
         /**
          * Gets the list of of the streams this entry belongs to.
@@ -117,7 +110,7 @@ public interface IStreamAddressSpace {
          */
         @Override
         public boolean containsStream(UUID stream) {
-            return streams == null || streams.contains(stream);
+            return streams.contains(stream);
         }
 
         /**
@@ -142,16 +135,32 @@ public interface IStreamAddressSpace {
     }
 
     /**
+     * Asynchronously write to the stream address space.
+     * @param offset    The offset (global index) to write to.
+     * @param streams   The streams that this entry will belong to.
+     * @param payload   The unserialized payload that belongs to this entry.
+     */
+    CompletableFuture<StreamAddressWriteResult> writeAsync(long offset, Set<UUID> streams, Object payload);
+
+    /**
+     * Asynchronously read from the stream address space.
+     * @param offset    The offset (global index) to read from.
+     * @return          A StreamAddressSpaceEntry containing the data that was read.
+     */
+    CompletableFuture<StreamAddressSpaceEntry> readAsync(long offset);
+
+
+    /**
      * Write to the stream address space.
      * @param offset    The offset (global index) to write to.
      * @param streams   The streams that this entry will belong to.
-     * @param payload   The payload that belongs to this entry.
-     * @throws OverwriteException       If the index has been already written to.
-     * @throws TrimmedException         If the index has been previously written to and is now released for garbage collection.
-     * @throws OutOfSpaceException      If there is no space remaining in the current view of the address space.
+     * @param payload   The preserialized payload that belongs to this entry.
      */
-    void write(long offset, Set<UUID> streams, ByteBuffer payload)
-        throws OverwriteException, TrimmedException, OutOfSpaceException;
+    @SneakyThrows
+    default StreamAddressWriteResult write(long offset, Set<UUID> streams, Object payload)
+    {
+        return writeAsync(offset, streams, payload).get();
+    }
 
     /**
      * Fill an address in the address space with a hole entry. This method is unreliable (not guaranteed to send a request
@@ -160,20 +169,16 @@ public interface IStreamAddressSpace {
      */
     void fillHole(long offset);
 
-    default void writeObject(long offset, Set<UUID> streams, Serializable object)
-            throws OverwriteException, TrimmedException, OutOfSpaceException, IOException
-    {
-        ByteBuffer o = ByteBuffer.wrap(Serializer.serialize(object));
-        write(offset, streams, o);
-    }
-
     /**
      * Read from the stream address space.
      * @param offset    The offset (global index) to read from.
      * @return          A StreamAddressSpaceEntry which represents this entry, or null, if there is no entry at this space.
      * @throws TrimmedException        If the index has been previously written to and is now released for garbage collection.
      */
-    StreamAddressSpaceEntry read(long offset)
-        throws TrimmedException;
+    @SneakyThrows
+    default StreamAddressSpaceEntry read(long offset)
+    {
+        return readAsync(offset).get();
+    }
 
 }

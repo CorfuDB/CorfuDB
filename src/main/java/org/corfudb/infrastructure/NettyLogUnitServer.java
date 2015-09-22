@@ -91,7 +91,8 @@ public class NettyLogUnitServer extends AbstractNettyServer {
     @RequiredArgsConstructor
     public enum LogUnitMetadataType {
         STREAM(0),
-        RANK(1)
+        RANK(1),
+        STREAM_ADDRESS(2)
         ;
 
         final int type;

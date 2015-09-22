@@ -1,5 +1,6 @@
 package org.corfudb.runtime.protocols;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -13,8 +14,8 @@ import org.corfudb.util.SizeBufferPool;
 
 import java.time.Duration;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -49,8 +50,9 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
         rpcMap.put(thisRequest, cf);
         SizeBufferPool.PooledSizedBuffer p = pool.getSizedBuffer();
         message.serialize(p.getBuffer());
-        channel.writeAndFlush(p.writeSize());
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(30));
+        channel.write(p.writeSize());
+        queueFlush();
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(600));
         cfTimeout.exceptionally(e -> {
             rpcMap.remove(thisRequest);
             return null;
@@ -66,7 +68,13 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
         message.setEpoch(epoch);
         SizeBufferPool.PooledSizedBuffer p = pool.getSizedBuffer();
         message.serialize(p.getBuffer());
-        channel.writeAndFlush(p.writeSize());
+        channel.write(p.writeSize());
+        queueFlush();
+    }
+
+    public void queueFlush()
+    {
+        channel.flush();
     }
 
     @Override
@@ -96,7 +104,6 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
 
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
-        ctx.flush();
     }
 
     @Override

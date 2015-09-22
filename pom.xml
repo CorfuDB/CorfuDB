@@ -788,6 +788,7 @@
                         <configuration>
                             <testFilesIncluded>
                                 <jMeterTestFile>nettystreamingsequencer.jmx</jMeterTestFile>
+                                <jMeterTestFile>nettylogunit.jmx</jMeterTestFile>
                             </testFilesIncluded>
                             <overrideRootLogLevel>debug</overrideRootLogLevel>
                             <propertiesJMeter>

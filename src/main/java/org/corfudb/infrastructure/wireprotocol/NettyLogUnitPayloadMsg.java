@@ -30,7 +30,16 @@ public class NettyLogUnitPayloadMsg extends NettyLogUnitMetadataMsg {
 
     public Object getPayload()
     {
-        return data == null ? null : serializer.deserialize(data);
+        Object ret =
+                (payload != null) ? payload :
+                (data == null) ? null : serializer.deserialize(data);
+        if (data != null)
+        {
+            data.release();
+            data = null;
+        }
+        payload = ret;
+        return ret;
     }
 
     public ByteBuf getData()

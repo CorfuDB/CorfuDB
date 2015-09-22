@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import lombok.Getter;
@@ -19,6 +20,7 @@ import org.corfudb.util.retry.IRetry;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This is the default implementation of a stream address space, which is backed by a LRU cache.
@@ -37,7 +39,38 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      * The cache that supports this stream address space.
      */
     @Getter
-    LoadingCache<Long, StreamAddressSpaceEntry> cache;
+    AsyncLoadingCache<Long, StreamAddressSpaceEntry> cache;
+
+    StreamAddressEntryCode fromLogUnitcode(INewWriteOnceLogUnit.ReadResultType rrt) {
+        switch (rrt)
+        {
+            case DATA:
+                return StreamAddressEntryCode.DATA;
+            case FILLED_HOLE:
+                return StreamAddressEntryCode.HOLE;
+            case EMPTY:
+                return StreamAddressEntryCode.EMPTY;
+            case TRIMMED:
+                return StreamAddressEntryCode.TRIMMED;
+        }
+        throw new RuntimeException("unknown read result + " + rrt.toString());
+    }
+
+    CompletableFuture<StreamAddressSpaceEntry> load(long index)
+    {
+        int chainNum = (int) (index % instance.getView().getSegments().get(0).getGroups().size());
+        List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
+        int unitNum = chain.size() - 1;
+        INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
+        return lu.read(index)
+                .thenApply(r -> {
+                   switch (r.getResult())
+                   {
+                       default:
+                           return new StreamAddressSpaceEntry(index, fromLogUnitcode(r.getResult()));
+                   }
+                });
+    }
 
     /**
      * This constructor builds a default stream address space with a LRU cache of 10,000 entries.
@@ -47,82 +80,38 @@ public class StreamAddressSpace implements IStreamAddressSpace {
     public StreamAddressSpace(@NonNull ICorfuDBInstance instance)
     {
         this.instance = instance;
+        /*
         cache = Caffeine.newBuilder()
                 .weakKeys()
                 .maximumSize(10_000)
                 .build(index -> {
-                    //TODO: fold Amy's replication protocol into this..., for now we only support chain replication.
-                    //In addition, we currently only support the new-style logging units. Any old style logging units
-                    //in the system will cause this class to fail.
-                    return IRetry.build(ExponentialBackoffRetry.class, () -> {
-                        //First, we determine which chain to use.
-                        int chainNum = (int) (index % instance.getView().getSegments().get(0).getGroups().size());
-
-                        //Next, we perform the read. Currently we read from the last unit in the chain, but once we
-                        //have a mechanism that allows us to determine the tail, we can spread those reads
-                        //across the chain.
-                        List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
-                        int unitNum = chain.size() - 1;
-                        INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
-                        /*
-                        INewWriteOnceLogUnit.WriteOnceLogUnitRead result = lu.read(index / instance.getView().getSegments().get(0).getGroups().size()).join();
-
-                        if (result.getResult() == ReadCode.READ_EMPTY) {
-                            return new StreamAddressSpaceEntry<>(null, null, index, StreamAddressEntryCode.EMPTY);
-                        }
-                        else if (result.getResult() == ReadCode.READ_FILLEDHOLE)
-                        {
-                            return new StreamAddressSpaceEntry<>(null, null, index, StreamAddressEntryCode.HOLE);
-                        }
-                        else if (result.getResult() == ReadCode.READ_DATA) {
-                            return new StreamAddressSpaceEntry<>(result.getStreams(), result.getData(), index, StreamAddressEntryCode.DATA);
-                        }
-*/
-  //                      return new StreamAddressSpaceEntry<>(null, null, index, entryCodeFromReadCode(result.getResult()));
-    return (StreamAddressSpaceEntry)null;
-                    })
-                            .onException(NetworkException.class, e -> {
-                                log.error("Error performing read, requesting reconfiguration and retry...");
-                                instance.getConfigurationMaster().requestReconfiguration(e);
-                                return true;
-                            })
-                            .run();
+                    return (StreamAddressSpaceEntry) null;
                 });
+                */
     }
 
+
     /**
-     * Write to the stream address space.
+     * Asynchronously write to the stream address space.
      *
      * @param offset  The offset (global index) to write to.
      * @param streams The streams that this entry will belong to.
-     * @param payload The payload that belongs to this entry.
-     * @throws OverwriteException  If the index has been already written to.
-     * @throws TrimmedException    If the index has been previously written to and is now released for garbage collection.
-     * @throws OutOfSpaceException If there is no space remaining in the current view of the address space.
+     * @param payload The unserialized payload that belongs to this entry.
      */
     @Override
-    public void write(long offset, Set<UUID> streams, ByteBuffer payload) throws OverwriteException, TrimmedException, OutOfSpaceException {
-        IRetry.build(ExponentialBackoffRetry.class, OverwriteException.class, TrimmedException.class, OutOfSpaceException.class, () -> {
-            //First, we determine which chain to use.
-            int chainNum = (int) (offset % instance.getView().getSegments().get(0).getGroups().size());
+    public CompletableFuture<StreamAddressWriteResult> writeAsync(long offset, Set<UUID> streams, Object payload) {
+        return null;
+    }
 
-            //Next, we perform the write. We must write to every replica in the chain, in sequence.
-            List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
-            for (IServerProtocol p : chain) {
-                INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) p;
-               // lu.write(offset, streams, payload)
-                  //      .join();
-            }
-
-            //finally, put this entry in the cache so we don't need to go over the network.
-            cache.put(offset, new StreamAddressSpaceEntry<>(streams, payload, offset, StreamAddressEntryCode.DATA));
-            return true;
-        }).onException(NetworkException.class, e -> {
-            log.error("Error performing read, requesting reconfiguration and retry...");
-            instance.getConfigurationMaster().requestReconfiguration(e);
-            return true;
-        })
-            .run();
+    /**
+     * Asynchronously read from the stream address space.
+     *
+     * @param offset The offset (global index) to read from.
+     * @return A StreamAddressSpaceEntry containing the data that was read.
+     */
+    @Override
+    public CompletableFuture<StreamAddressSpaceEntry> readAsync(long offset) {
+        return null;
     }
 
     /**
@@ -143,19 +132,6 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         }
     }
 
-    /**
-     * Read from the stream address space.
-     *
-     * @param offset The offset (global index) to read from.
-     * @return A StreamAddressSpaceEntry which represents this entry, or null, if there is no entry at this space.
-     * @throws TrimmedException If the index has been previously written to and is now released for garbage collection.
-     */
-    @Override
-    public StreamAddressSpaceEntry read(long offset) throws TrimmedException {
-        StreamAddressSpaceEntry entry = cache.get(offset);
-        if (entry.getCode() == StreamAddressEntryCode.EMPTY) { cache.invalidate(offset); }
-        return entry;
-    }
 
     StreamAddressEntryCode entryCodeFromReadCode(ReadCode code)
     {

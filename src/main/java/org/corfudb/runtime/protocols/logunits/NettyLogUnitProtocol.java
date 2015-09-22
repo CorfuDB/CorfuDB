@@ -18,6 +18,7 @@ import org.corfudb.runtime.protocols.NettyRPCChannelInboundHandlerAdapter;
 import org.corfudb.runtime.protocols.sequencers.INewStreamSequencer;
 import org.corfudb.util.SizeBufferPool;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -101,6 +102,27 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
     public CompletableFuture<WriteResult> write(long address, Set<UUID> streams, long rank, Object writeObject) {
         NettyLogUnitWriteMsg w = new NettyLogUnitWriteMsg(address);
         w.setStreams(streams);
+        w.setRank(rank);
+        w.setPayload(writeObject);
+        return handler.sendMessageAndGetCompletable(pool, epoch, w);
+    }
+
+    /**
+     * Asynchronously write to the logging unit, giving a logical stream position.
+     *
+     * @param address                    The address to write to.
+     * @param streamsAndLogicalAddresses The streams, and logical addresses, if any, that this write belongs to.
+     * @param rank                       The rank of this write (used for quorum replication).
+     * @param writeObject                The object, pre-serialization, to write.
+     * @return A CompletableFuture which will complete with the WriteResult once the
+     * write completes.
+     */
+    @Override
+    public CompletableFuture<WriteResult> write(long address, Map<UUID, Long> streamsAndLogicalAddresses,
+                                                long rank, Object writeObject) {
+        NettyLogUnitWriteMsg w = new NettyLogUnitWriteMsg(address);
+        w.setStreams(streamsAndLogicalAddresses.keySet());
+        w.setLogicalAddresses(new ArrayList<>(streamsAndLogicalAddresses.values()));
         w.setRank(rank);
         w.setPayload(writeObject);
         return handler.sendMessageAndGetCompletable(pool, epoch, w);

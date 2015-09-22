@@ -16,7 +16,6 @@ import java.util.UUID;
 @NoArgsConstructor
 public class NettyLogUnitReadRequestMsg extends NettyCorfuMsg {
 
-
     /** The address to read from */
     long address;
 

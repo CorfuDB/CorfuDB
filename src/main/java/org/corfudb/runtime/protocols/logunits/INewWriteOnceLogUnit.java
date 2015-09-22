@@ -28,6 +28,7 @@ import org.corfudb.runtime.protocols.IServerProtocol;
 
 import java.nio.ByteBuffer;
 import java.util.EnumMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -112,6 +113,17 @@ public interface INewWriteOnceLogUnit extends IServerProtocol {
      *                      write completes.
      */
     CompletableFuture<WriteResult> write(long address, Set<UUID> streams, long rank, Object writeObject);
+
+    /** Asynchronously write to the logging unit, giving a logical stream position.
+     *
+     * @param address                       The address to write to.
+     * @param streamsAndLogicalAddresses    The streams, and logical addresses, if any, that this write belongs to.
+     * @param rank                          The rank of this write (used for quorum replication).
+     * @param writeObject                   The object, pre-serialization, to write.
+     * @return                              A CompletableFuture which will complete with the WriteResult once the
+     *                                      write completes.
+     */
+    CompletableFuture<WriteResult> write(long address, Map<UUID, Long> streamsAndLogicalAddresses, long rank, Object writeObject);
 
     /** Asynchronously read from the logging unit.
      *
