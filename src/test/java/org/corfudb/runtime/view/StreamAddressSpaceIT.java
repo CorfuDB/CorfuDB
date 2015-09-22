@@ -4,8 +4,10 @@ import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.StreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.util.CorfuInfrastructureBuilder;
+import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,22 +29,22 @@ public class StreamAddressSpaceIT {
     {
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()
-                .addSequencer(7776, StreamingSequencerServer.class, "cdbss", null)
-                .addLoggingUnit(7777, 0, NettyLogUnitServer.class, "cnlu", null)
-                .start(7775);
+                .addSequencer(RandomOpenPort.getOpenPort(), StreamingSequencerServer.class, "cdbss", null)
+                .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
+                .start(RandomOpenPort.getOpenPort());
 
         runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
         instance = runtime.getLocalInstance();
     }
 
-   // @Test
+   @Test
     public void addressSpaceWriteRead()
             throws Exception
     {
         IStreamAddressSpace s = instance.getStreamAddressSpace();
         String test = "hello world";
         UUID id = UUID.randomUUID();
-        s.write(0, Collections.singleton(id), ByteBuffer.wrap(Serializer.serialize(test)));
+        s.write(0, Collections.singleton(id), test);
         IStreamAddressSpace.StreamAddressSpaceEntry entry = s.read(0);
         assertThat(entry.getGlobalIndex())
                 .isEqualTo(0);

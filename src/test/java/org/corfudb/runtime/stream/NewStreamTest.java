@@ -9,6 +9,7 @@ import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Test;
 
 import java.util.UUID;
 
@@ -30,14 +31,14 @@ public class NewStreamTest {
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()
                         .addSequencer(RandomOpenPort.getOpenPort(), StreamingSequencerServer.class, "cdbsts", null)
-                        .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "cnlu", null)
+                        .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
                         .start(RandomOpenPort.getOpenPort());
 
         runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
         instance = runtime.getLocalInstance();
     }
 
-    //@Test
+    @Test
     public void streamReadWrite()
             throws Exception
     {
@@ -47,7 +48,7 @@ public class NewStreamTest {
                 .isEqualTo("Hello World");
     }
 
-    //@Test
+    @Test
     public void streamsAreIndependent()
             throws Exception
     {
@@ -65,7 +66,7 @@ public class NewStreamTest {
                 .isEqualTo(null);
     }
 
-  //  @Test
+    @Test
     public void HoleFillingIsTransparent()
         throws Exception
     {

@@ -66,7 +66,7 @@ public class NewStream implements IStream {
     public ITimestamp append(Serializable data) throws OutOfSpaceException, IOException {
         return IRetry.build(ExponentialBackoffRetry.class, OutOfSpaceException.class, () -> {
             long nextToken = instance.getStreamingSequencer().getNext(streamID);
-      //      instance.getStreamAddressSpace().writeObject(nextToken, Collections.singleton(streamID), data);
+            instance.getStreamAddressSpace().write(nextToken, Collections.singleton(streamID), data);
             return new SimpleTimestamp(nextToken);
         }).onException(OverwriteException.class, (e,r) -> {
             log.debug("Tried to write to " + e.address + " but overwrite occured, retrying...");
@@ -98,7 +98,7 @@ public class NewStream implements IStream {
      */
     @Override
     public void write(ITimestamp timestamp, Serializable data) throws OutOfSpaceException, OverwriteException, IOException {
-    //    instance.getStreamAddressSpace().writeObject(toPhysicalTimestamp(timestamp), Collections.singleton(streamID), data);
+        instance.getStreamAddressSpace().write(toPhysicalTimestamp(timestamp), Collections.singleton(streamID), data);
     }
 
     /**
@@ -152,7 +152,7 @@ public class NewStream implements IStream {
             final long thisRead = nextRead;
             IStreamAddressSpace.StreamAddressSpaceEntry e = IRetry.build(ExponentialBackoffRetry.class, () -> {
                 IStreamAddressSpace.StreamAddressSpaceEntry r = instance.getStreamAddressSpace().read(thisRead);
-                if (r.getCode() == IStreamAddressSpace.StreamAddressEntryCode.EMPTY) {
+                if (r == null) {
                     throw new HoleEncounteredException(new SimpleTimestamp(thisRead));
                 }
                 return r;
@@ -265,7 +265,7 @@ public class NewStream implements IStream {
      */
     @Override
     public void trim(ITimestamp address) {
-
+        instance.getStreamAddressSpace().trim(streamID, toPhysicalTimestamp(address));
     }
 
     /**

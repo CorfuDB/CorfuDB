@@ -56,7 +56,8 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         throw new RuntimeException("unknown read result + " + rrt.toString());
     }
 
-    CompletableFuture<StreamAddressSpaceEntry> load(long index)
+    @SuppressWarnings("unchecked")
+    public CompletableFuture<StreamAddressSpaceEntry> load(long index)
     {
         int chainNum = (int) (index % instance.getView().getSegments().get(0).getGroups().size());
         List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
@@ -66,6 +67,10 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                 .thenApply(r -> {
                    switch (r.getResult())
                    {
+                       case DATA:
+                           return new StreamAddressSpaceEntry(r.getStreams(), null, index, StreamAddressEntryCode.DATA, r.getPayload());
+                       case EMPTY:
+                           return null;
                        default:
                            return new StreamAddressSpaceEntry(index, fromLogUnitcode(r.getResult()));
                    }
@@ -80,14 +85,18 @@ public class StreamAddressSpace implements IStreamAddressSpace {
     public StreamAddressSpace(@NonNull ICorfuDBInstance instance)
     {
         this.instance = instance;
-        /*
         cache = Caffeine.newBuilder()
                 .weakKeys()
                 .maximumSize(10_000)
-                .build(index -> {
-                    return (StreamAddressSpaceEntry) null;
+                .buildAsync(idx -> {
+                    try {
+                        return load(idx).get();
+                    }
+                    catch (Exception e)
+                    {
+                        throw new RuntimeException(e);
+                    }
                 });
-                */
     }
 
 
@@ -99,8 +108,38 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      * @param payload The unserialized payload that belongs to this entry.
      */
     @Override
+    @SuppressWarnings("unchecked")
     public CompletableFuture<StreamAddressWriteResult> writeAsync(long offset, Set<UUID> streams, Object payload) {
-        return null;
+        CompletableFuture<StreamAddressSpaceEntry> e = cache.getIfPresent(offset);
+        if (e != null)
+        {
+            return e.thenApply(x -> StreamAddressWriteResult.OVERWRITE);
+        }
+        else {
+            int chainNum = (int) (offset % instance.getView().getSegments().get(0).getGroups().size());
+            List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
+            int unitNum = chain.size() - 1;
+            INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
+            return lu.write(offset, streams, 0, payload)
+                    .thenApply(res -> {
+                        if (res == INewWriteOnceLogUnit.WriteResult.OK) {
+                            // Write was OK, so generate an entry in our cache and return OK.
+                            StreamAddressSpaceEntry s = new StreamAddressSpaceEntry(streams, null, offset,
+                                    StreamAddressEntryCode.DATA, payload);
+                            cache.get(offset, idx -> s);
+                            return StreamAddressWriteResult.OK;
+                        } else {
+                            switch (res) {
+                                case TRIMMED:
+                                    return StreamAddressWriteResult.TRIMMED;
+                                case OVERWRITE:
+                                    return StreamAddressWriteResult.OVERWRITE;
+                                default:
+                                    throw new RuntimeException("Unknown writeresult type: " + res.name());
+                            }
+                        }
+                    });
+         }
     }
 
     /**
@@ -111,7 +150,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      */
     @Override
     public CompletableFuture<StreamAddressSpaceEntry> readAsync(long offset) {
-        return null;
+        return cache.get(offset);
     }
 
     /**
@@ -129,6 +168,24 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         for (IServerProtocol p : chain) {
             INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) p;
             lu.fillHole(offset);
+        }
+    }
+
+    /**
+     * Trim a prefix of a stream.
+     *
+     * @param stream The ID of the stream to be trimmed.
+     * @param prefix The prefix to be trimmed, inclusive.
+     */
+    @Override
+    public void trim(UUID stream, long prefix) {
+        // iterate through every log unit in the system
+        // TODO: handle multiple segments.
+        for (List<IServerProtocol> chain  : instance.getView().getSegments().get(0).getGroups()) {
+            for (IServerProtocol p : chain) {
+                INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) p;
+                lu.trim(stream, prefix);
+            }
         }
     }
 

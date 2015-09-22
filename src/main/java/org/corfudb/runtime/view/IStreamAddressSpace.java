@@ -1,9 +1,6 @@
 package org.corfudb.runtime.view;
 
-import lombok.Data;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.thrift.Hint;
 import org.corfudb.runtime.NetworkException;
@@ -50,7 +47,7 @@ public interface IStreamAddressSpace {
      * This class represents an entry in a stream address space.
      */
     @Data
-    @Slf4j
+    @AllArgsConstructor
     class StreamAddressSpaceEntry<T> implements IStreamEntry
     {
 
@@ -181,4 +178,10 @@ public interface IStreamAddressSpace {
         return readAsync(offset).get();
     }
 
+    /**
+     * Trim a prefix of a stream.
+     * @param stream    The ID of the stream to be trimmed.
+     * @param prefix    The prefix to be trimmed, inclusive.
+     */
+    void trim(UUID stream, long prefix);
 }
