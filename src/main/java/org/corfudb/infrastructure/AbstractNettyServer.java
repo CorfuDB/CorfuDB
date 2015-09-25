@@ -10,6 +10,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
@@ -22,7 +23,9 @@ import org.corfudb.util.retry.IntervalAndSentinelRetry;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -46,6 +49,12 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
      */
     @Getter
     Integer port;
+
+    /**
+     * The name of this server. Used for generating threads, responding to version info requests, etc.
+     */
+    @Getter @Setter
+    String serverName = "AbstractNettyServer";
 
     /**
      * The current epoch.
@@ -73,6 +82,7 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
         }
     }
 
+
     abstract void parseConfiguration(Map<String, Object> configuration);
 
     void baseParseConfiguration(Map<String, Object> configuration)
@@ -83,7 +93,7 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
             throw new RuntimeException("Invalid configuration provided!");
         }
 
-        pool = new SizeBufferPool(64);
+        pool = new SizeBufferPool(512);
         epoch = 0L;
         parseConfiguration(configuration);
     }
@@ -104,6 +114,7 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
         ctx.writeAndFlush(p.writeSize());
     }
 
+    @ChannelHandler.Sharable
     public class NettyServerHandler extends ChannelInboundHandlerAdapter {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
@@ -135,9 +146,26 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
     private Boolean serve()
     {
         log.info("{} starting on TCP port {}", this.getClass().getName(), port);
+        bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
+            final AtomicInteger threadNum = new AtomicInteger(0);
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName(serverName + "-accept-" +threadNum.getAndIncrement());
+                return t;
+            }
+        });
+        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
 
-        bossGroup = new NioEventLoopGroup(1);
-        workerGroup = new NioEventLoopGroup();
+            final AtomicInteger threadNum = new AtomicInteger(0);
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName(serverName + "-io-" + threadNum.getAndIncrement());
+                return t;
+            }
+        });
 
         try {
             ServerBootstrap b = new ServerBootstrap();

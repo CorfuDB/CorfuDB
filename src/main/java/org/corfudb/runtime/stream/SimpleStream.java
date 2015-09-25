@@ -112,7 +112,7 @@ public class SimpleStream implements IStream {
                         streamPointer.set(i + 1);
                         if (sse.containsStream(streamID)) {
                             if (oldPointer != -1) {
-                                instance.getAddressSpace().setHintsNext(oldPointer, streamID, i);
+                                //instance.getAddressSpace().setHintsNext(oldPointer, streamID, i);
                                 //log.info("just set next of {} to {}, stream: {}", oldPointer, i, streamID);
                             }
                             return sse;

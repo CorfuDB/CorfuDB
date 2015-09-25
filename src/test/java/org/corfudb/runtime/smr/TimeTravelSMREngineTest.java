@@ -35,7 +35,7 @@ public class TimeTravelSMREngineTest {
         s = instance.openStream(UUID.randomUUID());
     }
 
-    @Test
+    //@Test
     public void simpleIntegerSMRTest() throws Exception
     {
         TimeTravelSMREngine<AtomicInteger> smr = new TimeTravelSMREngine<AtomicInteger>(s, AtomicInteger.class);
@@ -52,7 +52,7 @@ public class TimeTravelSMREngineTest {
                 .isEqualTo(0);
     }
 
-    @Test
+  //  @Test
     public void timeTravelSMRTest() throws Exception
     {
         TimeTravelSMREngine<AtomicInteger> smr = new TimeTravelSMREngine<AtomicInteger>(s, AtomicInteger.class);

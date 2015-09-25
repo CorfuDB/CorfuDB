@@ -70,6 +70,8 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                        case DATA:
                            return new StreamAddressSpaceEntry(r.getStreams(), null, index, StreamAddressEntryCode.DATA, r.getPayload());
                        case EMPTY:
+                           //self invalidate
+                           cache.synchronous().invalidate(index);
                            return null;
                        default:
                            return new StreamAddressSpaceEntry(index, fromLogUnitcode(r.getResult()));
@@ -86,7 +88,6 @@ public class StreamAddressSpace implements IStreamAddressSpace {
     {
         this.instance = instance;
         cache = Caffeine.newBuilder()
-                .weakKeys()
                 .maximumSize(10_000)
                 .buildAsync(idx -> {
                     try {
@@ -110,36 +111,29 @@ public class StreamAddressSpace implements IStreamAddressSpace {
     @Override
     @SuppressWarnings("unchecked")
     public CompletableFuture<StreamAddressWriteResult> writeAsync(long offset, Set<UUID> streams, Object payload) {
-        CompletableFuture<StreamAddressSpaceEntry> e = cache.getIfPresent(offset);
-        if (e != null)
-        {
-            return e.thenApply(x -> StreamAddressWriteResult.OVERWRITE);
-        }
-        else {
-            int chainNum = (int) (offset % instance.getView().getSegments().get(0).getGroups().size());
-            List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
-            int unitNum = chain.size() - 1;
-            INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
-            return lu.write(offset, streams, 0, payload)
-                    .thenApply(res -> {
-                        if (res == INewWriteOnceLogUnit.WriteResult.OK) {
-                            // Write was OK, so generate an entry in our cache and return OK.
-                            StreamAddressSpaceEntry s = new StreamAddressSpaceEntry(streams, null, offset,
-                                    StreamAddressEntryCode.DATA, payload);
-                            cache.get(offset, idx -> s);
-                            return StreamAddressWriteResult.OK;
-                        } else {
-                            switch (res) {
-                                case TRIMMED:
-                                    return StreamAddressWriteResult.TRIMMED;
-                                case OVERWRITE:
-                                    return StreamAddressWriteResult.OVERWRITE;
-                                default:
-                                    throw new RuntimeException("Unknown writeresult type: " + res.name());
-                            }
+        int chainNum = (int) (offset % instance.getView().getSegments().get(0).getGroups().size());
+        List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
+        int unitNum = chain.size() - 1;
+        INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
+        return lu.write(offset, streams, 0, payload)
+                .thenApply(res -> {
+                    if (res == INewWriteOnceLogUnit.WriteResult.OK) {
+                        // Write was OK, so generate an entry in our cache and return OK.
+                        StreamAddressSpaceEntry s = new StreamAddressSpaceEntry(streams, null, offset,
+                                StreamAddressEntryCode.DATA, payload);
+                        cache.put(offset, CompletableFuture.completedFuture(s));
+                        return StreamAddressWriteResult.OK;
+                    } else {
+                        switch (res) {
+                            case TRIMMED:
+                                return StreamAddressWriteResult.TRIMMED;
+                            case OVERWRITE:
+                                return StreamAddressWriteResult.OVERWRITE;
+                            default:
+                                throw new RuntimeException("Unknown writeresult type: " + res.name());
                         }
-                    });
-         }
+                    }
+                });
     }
 
     /**

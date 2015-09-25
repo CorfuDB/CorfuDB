@@ -1,6 +1,8 @@
 package org.corfudb.runtime.smr;
 
 import com.esotericsoftware.kryo.Kryo;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -40,15 +42,6 @@ public interface ICorfuDBObject<U> extends Serializable {
         if (tx != null)
         {
             return tx.getEngine(getStreamID(), getUnderlyingType());
-        }
-
-        //We need this until we implement custom serialization
-        if (getUnderlyingSMREngine() == null)
-        {
-            IStream stream = getInstance().openStream(getStreamID());
-            SimpleSMREngine e = new SimpleSMREngine(stream, getUnderlyingType());
-            e.sync(null);
-            setUnderlyingSMREngine(e);
         }
         return getUnderlyingSMREngine();
     }
@@ -96,7 +89,7 @@ public interface ICorfuDBObject<U> extends Serializable {
      */
     @SuppressWarnings("unchecked")
     default ISMREngine<U> getUnderlyingSMREngine() {
-        return (ISMREngine<U>) engineMap.get(this);
+        return (ISMREngine<U>) getInstance().getBaseEngine(getStreamID(), getUnderlyingType());
     }
 
     /**
@@ -146,12 +139,13 @@ public interface ICorfuDBObject<U> extends Serializable {
      * @return              The result of the access.
      */
     @SuppressWarnings("unchecked")
+    @SneakyThrows
     default <R> R mutatorAccessorHelper(ISMREngineCommand<U,R> command)
     {
-        CompletableFuture<R> o = new CompletableFuture<R>();
+        CompletableFuture<R> o = new CompletableFuture<>();
         ISMREngine<U> e = getSMREngine();
-        ITimestamp proposal = e.propose(command, o);
-        if (!isAutomaticallyPlayedBack()) {e.sync(proposal);}
+        e.proposeAsync(command, o, false)
+                .thenAccept(e::sync);
         return o.join();
     }
 

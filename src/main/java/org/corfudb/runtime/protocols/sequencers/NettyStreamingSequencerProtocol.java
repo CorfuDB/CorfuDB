@@ -24,6 +24,8 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static io.netty.buffer.Unpooled.directBuffer;
@@ -69,7 +71,17 @@ public class NettyStreamingSequencerProtocol implements IServerProtocol, INewStr
         this.epoch = epoch;
 
         pool = new SizeBufferPool(64);
-        workerGroup = new NioEventLoopGroup();
+        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+
+            final AtomicInteger threadNum = new AtomicInteger(0);
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName("NettyStreamingSequencerProtocol-worker-" + threadNum.getAndIncrement());
+                return t;
+            }
+        });
 
             Bootstrap b = new Bootstrap();
             handler = new NettyStreamingSequencerHandler();
@@ -86,10 +98,9 @@ public class NettyStreamingSequencerProtocol implements IServerProtocol, INewStr
             });
 
 
-        if (!b.connect(host, port).awaitUninterruptibly(5000))
-        {
-            throw new RuntimeException("Couldn't connect to endpoint " + this.getFullString());
-        }
+            if (!b.connect(host, port).awaitUninterruptibly(5000)) {
+                throw new RuntimeException("Couldn't connect to endpoint " + this.getFullString());
+            }
     }
 
     /**

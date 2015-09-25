@@ -140,19 +140,23 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
      */
     @Override
     public void executeTransaction(ISMREngine engine) {
+
         Hints hint = null;
+        /*
         try {
             hint = instance.getAddressSpace().readHints(((SimpleTimestamp) timestamp).address);
         } catch (Exception e) {
             log.error("Exception in reading metadata: {}", e);
         }
-
+*/
         if (hint == null || !hint.isSetFlatTxn()) {
             ITransactionCommand command = getTransaction();
             executingEngine = engine;
             try (TransactionalContext tx = new TransactionalContext(this)) {
                 command.apply(new DeferredTransactionOptions());
             }
+        }
+ /*
             // Collect the commands and write to Hints section.
             HashMap<UUID, ISMREngineCommand[]> multicommandMap = new HashMap<UUID, ISMREngineCommand[]>();
 
@@ -192,6 +196,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
                     new PassThroughSMREngine(engine.getObject(), engine.check(), instance, engine.getStreamID());
             applyEngine.propose(mc, null, false);
         }
+        */
     }
 
     /**

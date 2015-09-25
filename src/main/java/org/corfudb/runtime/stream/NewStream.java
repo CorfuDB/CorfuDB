@@ -1,5 +1,8 @@
 package org.corfudb.runtime.stream;
 
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -17,10 +20,14 @@ import org.corfudb.util.retry.IRetry;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * This is the new stream implementation.
@@ -40,7 +47,7 @@ public class NewStream implements IStream {
     final UUID streamID;
 
     /** The position of this stream, in the global log index */
-    final transient AtomicLong streamPointer = new AtomicLong();
+    final transient AtomicLong streamPointer = new AtomicLong(0);
 
     /** A cache of pointers (contiguous) for this stream */
     final transient ConcurrentLinkedQueue<Long> nextPointers = new ConcurrentLinkedQueue<Long>();
@@ -53,6 +60,7 @@ public class NewStream implements IStream {
     /** A reference to the instance. Upon deserialization, this needs to be restored.
      *  TODO: maybe this needs to be retrieved from TLS.
      */
+    @Getter
     final transient ICorfuDBInstance instance;
 
     /**
@@ -63,7 +71,7 @@ public class NewStream implements IStream {
      * @return A timestamp, which reflects the physical position and the epoch the data was written in.
      */
     @Override
-    public ITimestamp append(Serializable data) throws OutOfSpaceException, IOException {
+    public ITimestamp append(Serializable data) throws IOException {
         return IRetry.build(ExponentialBackoffRetry.class, OutOfSpaceException.class, () -> {
             long nextToken = instance.getStreamingSequencer().getNext(streamID);
             instance.getStreamAddressSpace().write(nextToken, Collections.singleton(streamID), data);
@@ -85,7 +93,28 @@ public class NewStream implements IStream {
      */
     @Override
     public ITimestamp[] reserve(int numTokens) throws IOException {
-        return new ITimestamp[] {new SimpleTimestamp(instance.getStreamingSequencer().getNext(streamID))};
+        return new ITimestamp[] {new SimpleTimestamp(instance.getNewStreamingSequencer().nextToken(streamID,numTokens))};
+    }
+
+    /**
+     * Reserves a given number of timestamps in this stream. This operation may or may not retrieve
+     * valid timestamps. For example, a move operation may occur and these timestamps will not be valid on
+     * the stream.
+     *
+     * @param numTokens The number of tokens to allocate.
+     * @return A set of timestamps representing the tokens to allocate.
+     */
+    @Override
+    public CompletableFuture<ITimestamp[]> reserveAsync(int numTokens) {
+        return instance.getNewStreamingSequencer().nextTokenAsync(streamID,numTokens)
+                .thenApply(t -> {
+                    ITimestamp[] r = new ITimestamp[numTokens];
+                    for (int i = 0; i < numTokens; i++)
+                    {
+                        r[i] = toLogicalTimestamp(t + i);
+                    }
+                    return r;
+                });
     }
 
     /**
@@ -108,7 +137,7 @@ public class NewStream implements IStream {
      * @return A CorfuDBStreamEntry containing the payload of the next entry in the stream.
      */
     @Override
-    public IStreamEntry readNextEntry() throws HoleEncounteredException, TrimmedException, IOException {
+    public synchronized IStreamEntry readNextEntry() throws HoleEncounteredException, TrimmedException, IOException {
         /* We have several options here:
             1) If we have pointers to the next entry in our cache, we need to use them.
             2) Get information from the streaming sequencer. Here we can use backpointers
@@ -123,7 +152,7 @@ public class NewStream implements IStream {
         {
             // Increment the stream pointer. The pointer may have been updated by another
             // thread which is ahead of us, so we use the max.
-            streamPointer.getAndUpdate(i -> Math.max(i, nextPointer));
+          //  streamPointer.getAndUpdate(i -> Math.max(i, nextPointer));
 
             // We assume that next pointers are correct. If for some reason they are not,
             // we're going to have issues. Fetch the next item . If the item was trimmed,
@@ -143,11 +172,11 @@ public class NewStream implements IStream {
 
         // Nothing was in the cache so we ask the streaming sequencer.
         // TODO: fix streaming sequencer implementation.
-        long currentPointer = instance.getStreamingSequencer().getCurrent(streamID);
-        long nextRead;
+        long currentPointer = instance.getNewStreamingSequencer().nextToken(streamID, 0);
+        long nextRead = streamPointer.get();
         // The streaming sequencer wasn't able to give us any information, and we have
         // no next pointers. scan ahead...
-        while ((nextRead = streamPointer.getAndIncrement()) < currentPointer)
+        while (nextRead < currentPointer)
         {
             final long thisRead = nextRead;
             IStreamAddressSpace.StreamAddressSpaceEntry e = IRetry.build(ExponentialBackoffRetry.class, () -> {
@@ -162,6 +191,7 @@ public class NewStream implements IStream {
                 return true;
             }).run();
 
+       //     nextRead = streamPointer.getAndIncrement();
             if (e.containsStream(streamID) && e.getCode() != IStreamAddressSpace.StreamAddressEntryCode.HOLE)
             {
                 return e;
@@ -201,7 +231,11 @@ public class NewStream implements IStream {
      */
     @Override
     public ITimestamp getNextTimestamp(ITimestamp ts) {
-        return null;
+        if (ITimestamp.isMin(ts))
+        {
+            return toLogicalTimestamp(0);
+        }
+        return toLogicalTimestamp(toPhysicalTimestamp(ts) + 1);
     }
 
     /**
@@ -212,7 +246,7 @@ public class NewStream implements IStream {
      */
     @Override
     public ITimestamp getPreviousTimestamp(ITimestamp ts) {
-        return null;
+        return toLogicalTimestamp(toPhysicalTimestamp(ts) - 1);
     }
 
     /**
@@ -238,7 +272,68 @@ public class NewStream implements IStream {
      */
     @Override
     public ITimestamp check(boolean cached) {
-        return null;
+        return toLogicalTimestamp(streamPointer.get());
+    }
+
+    /**
+     * Asynchronously returns a new timestamp, which can serve as a linearization point.
+     *
+     * @return A completable future, which will return a timestamp when completed.
+     */
+    @Override
+    public CompletableFuture<ITimestamp> checkAsync() {
+        return instance.getNewStreamingSequencer().nextTokenAsync(this.getStreamID(), 0)
+                .thenApply(SimpleTimestamp::new);
+    }
+
+    protected CompletableFuture<IStreamEntry> readAtAddress(long address) {
+        return instance.getStreamAddressSpace().readAsync(address)
+                .thenApply(
+                        e -> {
+                            if (e == null) {
+                                e = IRetry.build(ExponentialBackoffRetry.class, () -> {
+                                    IStreamAddressSpace.StreamAddressSpaceEntry ret =
+                                            instance.getStreamAddressSpace().read(address);
+                                    if (ret == null) {
+                                        throw new HoleEncounteredException(toLogicalTimestamp(address));
+                                    }
+                                    return ret;
+                                }).onException(HoleEncounteredException.class, he -> {
+                                    holeFillingPolicy.apply(he, this);
+                                    return true;
+                                })
+                                .run();
+                            }
+
+                            if (e.containsStream(streamID) &&
+                                    e.getCode() != IStreamAddressSpace.StreamAddressEntryCode.HOLE) {
+                                return e;
+                            }
+                            return null;
+                        });
+    }
+
+    @Override
+    public CompletableFuture<IStreamEntry[]> readToAsync(ITimestamp point) {
+        long startPoint = streamPointer.getAndAccumulate(toPhysicalTimestamp(point), Math::max);
+        if (startPoint > toPhysicalTimestamp(point)){
+            return CompletableFuture.completedFuture(null);
+        }
+        else
+        {
+            List<CompletableFuture<IStreamEntry>> requestList = new ArrayList<>();
+            for (long i = startPoint; i < toPhysicalTimestamp(point); i++)
+            {
+                requestList.add(readAtAddress(i));
+            }
+            return CompletableFuture.allOf(requestList.toArray(new CompletableFuture[requestList.size()]))
+                    .thenApply(v ->
+                       requestList.stream()
+                               .map(CompletableFuture::join)
+                               .filter(x -> x != null)
+                               .toArray(IStreamEntry[]::new)
+                    );
+        }
     }
 
     /**
@@ -249,7 +344,7 @@ public class NewStream implements IStream {
      */
     @Override
     public ITimestamp getCurrentPosition() {
-        if (streamPointer.get() == 0)
+        if (streamPointer.get() <= 0)
         {
             return ITimestamp.getMinTimestamp();
         }
@@ -276,6 +371,17 @@ public class NewStream implements IStream {
 
     }
 
+    /**
+     * Move the stream pointer to the given position.
+     *
+     * @param pos The position to seek to. The next read will occur AFTER this position.
+     */
+    @Override
+    public void seek(ITimestamp pos) {
+        log.info("requested seek to " + pos.toString());
+        this.streamPointer.set(toPhysicalTimestamp(pos));
+    }
+
     protected long toPhysicalTimestamp(ITimestamp timestamp)
     {
         if (timestamp instanceof SimpleTimestamp)
@@ -283,5 +389,10 @@ public class NewStream implements IStream {
             return ((SimpleTimestamp) timestamp).address;
         }
         throw new RuntimeException("Unknown timestamp type " + timestamp.getClass() + " given!");
+    }
+
+    protected ITimestamp toLogicalTimestamp(long timestamp)
+    {
+        return new SimpleTimestamp(timestamp);
     }
 }

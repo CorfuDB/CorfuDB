@@ -82,6 +82,7 @@ public class NettyLogUnitPayloadMsg extends NettyLogUnitMetadataMsg {
         super.fromBuffer(buffer);
         int length = buffer.readInt();
         data = length == 0 ? null : buffer.slice(buffer.readerIndex(), length);
+        if (data != null) {buffer.retain();}
         buffer.skipBytes(length);
     }
 }

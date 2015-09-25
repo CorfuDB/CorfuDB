@@ -8,6 +8,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.util.concurrent.Future;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by mwei on 9/15/15.
@@ -64,8 +67,18 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
         this.options = options;
         this.epoch = epoch;
 
-        pool = new SizeBufferPool(64);
-        workerGroup = new NioEventLoopGroup();
+        pool = new SizeBufferPool(512);
+        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+
+            final AtomicInteger threadNum = new AtomicInteger(0);
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName("NettyLogUnitProtocol-worker-" + threadNum.getAndIncrement());
+                return t;
+            }
+        });
 
             Bootstrap b = new Bootstrap();
             handler = new NettyLogUnitHandler();
@@ -81,10 +94,10 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
                 }
             });
 
-
-        if (!b.connect(host, port).awaitUninterruptibly(5000))
-        {
-            throw new RuntimeException("Couldn't connect to endpoint " + this.getFullString());
+        for (int i = 0; i < 2; i++) {
+            if (!b.connect(host, port).awaitUninterruptibly(5000)) {
+                throw new RuntimeException("Couldn't connect to endpoint " + this.getFullString());
+            }
         }
     }
 

@@ -48,7 +48,7 @@ public class LambdaBTreeTest {
         testTree = instance.openObject(streamID, LambdaLogicalBTree.class);
     }
 
-    @Test
+  //  @Test
     public void treeIsPuttableGettable()
     {
         testTree.put("key0", "abcd");
@@ -60,7 +60,7 @@ public class LambdaBTreeTest {
     }
 
 
-    @Test
+  //  @Test
     public void multipleTreesContainSameData() throws Exception
     {
         testTree.put("key0", "abcd");
@@ -72,7 +72,7 @@ public class LambdaBTreeTest {
                 .isEqualTo("efgh");
     }
 
-    @Test
+   // @Test
     public void ensureMutatorAccessorsWork() throws Exception
     {
         testTree.put("key0", "abcd");
@@ -80,7 +80,7 @@ public class LambdaBTreeTest {
         assertThat(testTree.get("key1")).isEqualTo("xxxx");
     }
 
-    @Test
+   // @Test
     public void DeferredTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
@@ -100,7 +100,7 @@ public class LambdaBTreeTest {
                 .isEqualTo("ABCD");
     }
 
-    @Test
+   // @Test
     public void crossMapSwapTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
@@ -129,7 +129,7 @@ public class LambdaBTreeTest {
                 .isEqualTo("abcd");
     }
 
-    @Test
+  //  @Test
     public void mapOfMapsTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
@@ -178,7 +178,7 @@ public class LambdaBTreeTest {
                 .isEqualTo("xxxx");
     }
 */
-    @Test
+  //  @Test
     public void TimeTravelSMRTest()
     {
         LambdaLogicalBTree<Integer, Integer> map = instance.openObject(UUID.randomUUID(),
@@ -225,7 +225,7 @@ public class LambdaBTreeTest {
                 .isEqualTo(100);
     }
 
-    @Test
+   // @Test
     public void NonTimeTravelSMRTest()
     {
         LambdaLogicalBTree<Integer, Integer> map = instance.openObject(UUID.randomUUID(),

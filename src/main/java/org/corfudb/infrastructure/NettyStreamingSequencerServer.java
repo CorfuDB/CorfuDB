@@ -45,6 +45,7 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
     @Override
     void parseConfiguration(Map<String, Object> configuration)
     {
+        serverName = "NettyStreamingSequencerServer";
         reset();
     }
 
@@ -63,7 +64,8 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
                 {
                     long max = 0L;
                     for (UUID id : req.getStreamIDs()) {
-                        max = Math.max(max, lastIssuedMap.get(id));
+                        Long lastIssued = lastIssuedMap.get(id);
+                        max = Math.max(max, lastIssued == null ? Long.MIN_VALUE: lastIssued);
                     }
                     NettyStreamingServerTokenResponseMsg resp = new NettyStreamingServerTokenResponseMsg(max);
                     sendResponse(resp, msg, ctx);
@@ -71,7 +73,8 @@ public class NettyStreamingSequencerServer extends AbstractNettyServer {
                 else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
                     for (UUID id : req.getStreamIDs()) {
-                        lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue : Math.max(thisIssue, v));
+                        lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue + req.getNumTokens() :
+                                Math.max(thisIssue + req.getNumTokens(), v));
                     }
                     NettyStreamingServerTokenResponseMsg resp = new NettyStreamingServerTokenResponseMsg(thisIssue);
                     sendResponse(resp, msg, ctx);

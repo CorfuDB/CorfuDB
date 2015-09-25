@@ -31,12 +31,20 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private IStreamingSequencer streamingSequencer;
     private IWriteOnceAddressSpace addressSpace;
     private IStreamAddressSpace streamAddressSpace;
+
     @Getter
     public INewStreamingSequencer newStreamingSequencer;
+
 
     private CorfuDBRuntime cdr;
     private CDBSimpleMap<UUID, IStreamMetadata> streamMap;
     private ConcurrentMap<UUID, ICorfuDBObject> objectMap;
+
+    @Getter
+    public ConcurrentMap<UUID, IStream> localStreamMap;
+
+    @Getter
+    public ConcurrentMap<UUID, ISMREngine> baseEngineMap;
 
     // Classes to instantiate.
     private Class<? extends IStream> streamType;
@@ -46,7 +54,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
         this(cdr, ConfigurationMaster.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
-                SimpleStream.class);
+                NewStream.class);
     }
 
     public LocalCorfuDBInstance(CorfuDBRuntime cdr,
@@ -63,6 +71,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         newStreamingSequencer = new NewStreamingSequencer(this);
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
+        this.localStreamMap = new NonBlockingHashMap<>();
+        this.baseEngineMap = new NonBlockingHashMap<>();
         this.cdr = cdr;
     }
 
@@ -145,10 +155,18 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * using this instance.
      */
     @Override
-    public IStream openStream(UUID id) {
+    public synchronized IStream openStream(UUID id) {
         try {
-            return streamType.getConstructor(UUID.class, ICorfuDBInstance.class)
+            IStream r;
+            r = localStreamMap.get(id);
+            if (r != null) {
+                log.info("got cached stream");
+                return r;}
+            log.info("Stream id {} uncached, open new stream.", id);
+            r = streamType.getConstructor(UUID.class, ICorfuDBInstance.class)
                     .newInstance(id, this);
+            localStreamMap.put(id, r);
+            return r;
         }
         catch (InstantiationException | NoSuchMethodException | IllegalAccessException
                 | InvocationTargetException e)
@@ -157,6 +175,16 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         }
     }
 
+
+    @Override
+    public ISMREngine getBaseEngine(UUID id, Class<?> underlyingType) {
+        return baseEngineMap.compute(id, (k, e) -> {
+            if (e != null) { return e; }
+            else {
+                return new SimpleSMREngine(openStream(k), underlyingType);
+            }
+        });
+    }
     /**
      * Delete a stream given its identifier using this instance.
      *
@@ -205,6 +233,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         if (!oargs.typeCheck && cachedObject != null)
             return cachedObject;
         else {
+            log.info("opening cached object. {}", this);
             if (!oargs.createNew && cachedObject != null && cachedObject.getUnderlyingSMREngine().getClass().equals(smrType)) {
                 if (!(oargs.type.isInstance(cachedObject)))
                     throw new RuntimeException("Incorrect type! Requested to open object of type " + oargs.type +

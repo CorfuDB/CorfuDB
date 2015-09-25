@@ -40,7 +40,6 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G
         }
         else if (backoffTime.isAfter(LocalDateTime.now().minus((long)Math.pow(10, retryCounter), ChronoUnit.MILLIS)))
         {
-            log.info("Backoff reset to 0.");
             backoffTime = LocalDateTime.now();
             retryCounter = 0;
         }

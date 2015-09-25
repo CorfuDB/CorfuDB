@@ -34,7 +34,7 @@ public class NettyLogUnitServer extends AbstractNettyServer {
 
     @Data
     @RequiredArgsConstructor
-    public class LogUnitEntry {
+    public class LogUnitEntry implements IMetadata {
         final ByteBuf buffer;
         final EnumMap<LogUnitMetadataType, Object> metadataMap;
         final boolean isHole;
@@ -46,46 +46,6 @@ public class NettyLogUnitServer extends AbstractNettyServer {
             metadataMap = new EnumMap<>(LogUnitMetadataType.class);
             isHole = true;
         }
-        /** Get the streams that belong to this entry.
-         *
-         * @return A set of streams that belong to this entry.
-         */
-        @SuppressWarnings("unchecked")
-        public Set<UUID> getStreams()
-        {
-            return (Set<UUID>) metadataMap.getOrDefault(NettyLogUnitServer.LogUnitMetadataType.STREAM,
-                    Collections.EMPTY_SET);
-        }
-
-        /** Set the streams that belong to this entry.
-         *
-         * @param streams The set of belong to this entry.
-         */
-        public void setStreams(Set<UUID> streams)
-        {
-            metadataMap.put(NettyLogUnitServer.LogUnitMetadataType.STREAM, streams);
-        }
-
-        /** Get the rank of this entry.
-         *
-         * @return The rank of this entry.
-         */
-        @SuppressWarnings("unchecked")
-        public Long getRank()
-        {
-            return (Long) metadataMap.getOrDefault(NettyLogUnitServer.LogUnitMetadataType.RANK,
-                    0L);
-        }
-
-        /** Set the rank of this entry.
-         *
-         * @param rank The rank of this entry.
-         */
-        public void setRank(Long rank)
-        {
-            metadataMap.put(NettyLogUnitServer.LogUnitMetadataType.RANK, rank);
-        }
-
     }
 
     @RequiredArgsConstructor
@@ -159,6 +119,7 @@ public class NettyLogUnitServer extends AbstractNettyServer {
     @Override
     void parseConfiguration(Map<String, Object> configuration)
     {
+        serverName = "NettyLogUnitServer";
         reset();
         gcThread = new Thread(this::runGC);
         gcThread.start();
@@ -224,8 +185,7 @@ public class NettyLogUnitServer extends AbstractNettyServer {
         }
         // Currently, only an in-memory configuration is supported.
         dataCache = Caffeine.newBuilder()
-                .weakKeys()
-                .build((a) -> {return null;});
+                .build(a -> null);
 
         // Hints are always in memory and never persisted.
         /*
@@ -255,9 +215,7 @@ public class NettyLogUnitServer extends AbstractNettyServer {
             else if (e.isHole)
             {
                 sendResponse(new NettyLogUnitReadResponseMsg(ReadResultType.FILLED_HOLE), msg, ctx);
-            }
-            else
-            {
+            } else {
                 sendResponse(new NettyLogUnitReadResponseMsg(e), msg, ctx);
             }
         }
@@ -266,6 +224,7 @@ public class NettyLogUnitServer extends AbstractNettyServer {
     /** Service an incoming write request. */
     public void write(NettyLogUnitWriteMsg msg, ChannelHandlerContext ctx)
     {
+        //TODO: locking of trimRange.
         if (trimRange.contains (msg.getAddress()))
         {
             sendResponse(new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ERROR_TRIMMED), msg, ctx);
@@ -278,6 +237,7 @@ public class NettyLogUnitServer extends AbstractNettyServer {
             }
             else
             {
+                e.getBuffer().release();
                 sendResponse(new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ERROR_OVERWRITE), msg, ctx);
             }
         }
@@ -316,10 +276,11 @@ public class NettyLogUnitServer extends AbstractNettyServer {
                     for (java.util.UUID stream : streams)
                     {
                         Long trimMark = trimMap.getOrDefault(stream, null);
-                        // if the stream has not been trimmed,
-                        if (trimMark == null) {trimmable = false;}
-                        // or has not been trimmed to this point
-                        else if (address > trimMark) { trimmable = false;}
+                        // if the stream has not been trimmed, or has not been trimmed to this point
+                        if (trimMark == null || address > trimMark) {
+                            trimmable = false;
+                            break;
+                        }
                         // it is not trimmable.
                     }
                     if (trimmable) {
