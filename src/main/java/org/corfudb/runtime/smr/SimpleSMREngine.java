@@ -119,6 +119,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             if (entry.getPayload() instanceof ITransaction)
             {
                 ITransaction transaction = (ITransaction) entry.getPayload();
+                transaction.setTimestamp(entry.getTimestamp());
                 transaction.setInstance(stream.getInstance());
                 transaction.executeTransaction(this);
             }
@@ -169,7 +170,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             apply(applyQueue.poll());
         }
 
-        log.info("learnApply id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getLogicalTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
+      //  log.info("learnApply id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getLogicalTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
 
 
     }

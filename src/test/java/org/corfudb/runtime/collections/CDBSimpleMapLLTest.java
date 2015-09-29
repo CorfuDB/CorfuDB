@@ -36,7 +36,7 @@ public class CDBSimpleMapLLTest {
         assertThat(hint.isTxDec()).isEqualTo(expected);
     }
 
-    @Before
+   // @Before
     public void generateStream() throws Exception
     {
         cdr = CorfuDBRuntime.createRuntime("memory");
@@ -48,7 +48,7 @@ public class CDBSimpleMapLLTest {
         testMap = instance.openObject(streamID, CDBSimpleMap.class);
     }
 
-    @Test
+  //  @Test
     public void LLTransactionalTest() throws Exception
     {
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
@@ -71,7 +71,7 @@ public class CDBSimpleMapLLTest {
                 .isEqualTo(2);
     }
 
-    @Test
+  //  @Test
     public void twoMapLLTransactionalTest() throws Exception
     {
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
@@ -100,7 +100,7 @@ public class CDBSimpleMapLLTest {
         checkTxDec(((SimpleTimestamp) txStamp).address, true);
     }
 
-    @Test
+   // @Test
     public void backToBackLLTransactionalTest() throws Exception
     {
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
@@ -139,7 +139,7 @@ public class CDBSimpleMapLLTest {
         checkTxDec(((SimpleTimestamp) txStamp2).address, true);
     }
 
-    @Test
+  //  @Test
     public void abortLLTransactionalTest() throws Exception
     {
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
@@ -178,7 +178,7 @@ public class CDBSimpleMapLLTest {
     }
 
     // Intervening command should abort the transaction.
-    @Test
+   // @Test
     public void LLAbortTest() throws Exception
     {
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
@@ -212,7 +212,7 @@ public class CDBSimpleMapLLTest {
         checkTxDec(((SimpleTimestamp) txStamp).address, false);
     }
 
-    @Test
+   // @Test
     public void readSetTest() throws Exception {
         // Make sure we accurately determine what should go in the readset and what should not
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
@@ -233,7 +233,7 @@ public class CDBSimpleMapLLTest {
         checkTxDec(((SimpleTimestamp) txStamp).address, true);
     }
 
-    @Test
+   // @Test
     public void readSetOneTest() throws Exception {
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
 

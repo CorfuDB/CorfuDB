@@ -157,11 +157,11 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * using this instance.
      */
     @Override
-    public synchronized IStream openStream(UUID id) {
+    public synchronized IStream openStream(UUID id, EnumSet<OpenStreamFlags> flags) {
         try {
             IStream r;
             r = localStreamMap.get(id);
-            if (r != null) {
+            if (r != null && !flags.contains(OpenStreamFlags.NON_CACHED)) {
                 log.info("got cached stream");
                 return r;}
             log.info("Stream id {} uncached, open new stream.", id);
@@ -219,7 +219,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * Retrieves a corfuDB object.
      *
      * @param id   A unique ID for the object to be retrieved.
-     * @param type The type of object to instantiate.
      * @param args A list of arguments to pass to the constructor.
      * @return A CorfuDB object. A cached object may be returned
      * if one already exists in the system. A new object

@@ -273,7 +273,6 @@ public class NewStream implements IStream {
             batch = batchNumber.getAndIncrement();
             startPoint = streamPointer.getAndAccumulate(toPhysicalTimestamp(point), Math::max);
         }
-        log.info("Read {}, current batch={}", streamID, batch);
         if (startPoint > toPhysicalTimestamp(point)){
             return CompletableFuture.completedFuture(null);
         }

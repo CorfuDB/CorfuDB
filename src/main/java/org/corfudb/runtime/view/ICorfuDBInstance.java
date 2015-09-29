@@ -10,6 +10,7 @@ import org.corfudb.runtime.stream.IStreamMetadata;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStreamMetadata;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -69,6 +70,10 @@ public interface ICorfuDBInstance {
      */
     CorfuDBView getView();
 
+    enum OpenStreamFlags {
+        NON_CACHED //open a fresh, uncached stream rather than using an existing one.
+    }
+
     /**
      * Opens a stream given its identifier using this instance, or creates it
      * on this instance if one does not exist.
@@ -76,7 +81,18 @@ public interface ICorfuDBInstance {
      * @return      The stream, if it exists. Otherwise, a new stream is created
      *              using this instance.
      */
-    IStream openStream(UUID id);
+    default IStream openStream(UUID id) {
+        return openStream(id, EnumSet.noneOf(OpenStreamFlags.class));
+    }
+
+    /**
+     * Opens a stream given its identifier using this instance, using the flags given.
+     * @param id    The unique ID of the stream to be opened.
+     * @param flags The flags to apply to this stream open operation.
+     * @return      The stream, if it exists. Otherwise, a new stream is created
+     *              using this instance.
+     */
+    IStream openStream(UUID id, EnumSet<OpenStreamFlags> flags);
 
     /**
      * Delete a stream given its identifier using this instance.
@@ -149,7 +165,6 @@ public interface ICorfuDBInstance {
     /**
      * Retrieves a corfuDB object.
      * @param id    A unique ID for the object to be retrieved.
-     * @param type  The type of object to instantiate.
      * @param args  A list of arguments to pass to the constructor.
      * @return      A CorfuDB object. A cached object may be returned
      *              if one already exists in the system. A new object

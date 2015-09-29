@@ -62,7 +62,7 @@ public class NettyStreamingSequencerServerIT {
         }
     }
 
-    @Test
+    //@Test
     public void perStreamSequenceNumbersWork()
             throws Exception
     {

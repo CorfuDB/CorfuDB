@@ -62,6 +62,11 @@ public interface ITransaction {
      */
     ITransactionCommand getTransaction();
 
+    default void setTimestamp(ITimestamp timestamp)
+    {
+        throw new UnsupportedOperationException("unsupported op!");
+    }
+
     /**
      * Propose to the SMR engine(s) for the transaction to be executed.
      * @return          The timestamp that the transaction was proposed at.

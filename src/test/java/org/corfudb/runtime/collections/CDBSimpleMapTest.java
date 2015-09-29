@@ -121,7 +121,9 @@ public class CDBSimpleMapTest {
         final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
         tx.setTransaction((ITransactionCommand) (opts) -> {
             Integer old1 = testMapLocal.get(10);
+            log.info("old is {}",old1);
             Integer old2 = testMap2.put(10, old1);
+            log.info("old2 is {}", old2);
             testMapLocal.put(10, old2);
             return true;
         });

@@ -99,6 +99,7 @@ public class CachedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> 
     @Override
     @SuppressWarnings("unchecked")
     public <R> void sync(ITimestamp ts) {
+        /*
         synchronized (this) {
             if (ts == null) ts = stream.getCurrentPosition();
             while (ts.compareTo(streamPointer) > 0) {
@@ -125,6 +126,34 @@ public class CachedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> 
                 }
                 streamPointer = stream.getCurrentPosition();
             }
+        }
+        */
+
+        try {
+            stream.readToAsync(ts == null ? stream.checkAsync().get() : ts)
+                    .thenAccept(x -> {
+                        if (x != null) {
+                            for (IStreamEntry entry : x) {
+                                if (entry.getTimestamp().compareTo(ts) > 0) return;
+                                if (entry.getTimestamp().compareTo(ts) == 0) {
+                                    //don't read the sync point, since that contains
+                                    //the transaction...
+                                    return;
+                                }
+                                if (entry instanceof ITransaction) {
+                                    ITransaction transaction = (ITransaction) entry;
+                                    transaction.executeTransaction(this);
+                                } else {
+                                    ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
+                                    function.apply(underlyingObject, new CachedSMREngineOptions());
+                                }
+                            }
+                        }
+                        streamPointer = stream.getCurrentPosition();
+                    }).get();
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 

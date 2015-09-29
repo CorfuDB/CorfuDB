@@ -80,7 +80,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
             if (engine == null && executingEngine instanceof SimpleSMREngine) {
                 engine = (IBufferedSMREngine) ((SimpleSMREngine) executingEngine).getCachedEngines().get(streamID);
                 if (engine == null) {
-                    IStream sTemp = instance.openStream(streamID);
+                    IStream sTemp = instance.openStream(streamID, EnumSet.of(ICorfuDBInstance.OpenStreamFlags.NON_CACHED));
                     engine = new CachedSMREngine(sTemp, objClass, timestamp);
                     engine.sync(timestamp);
                     ((SimpleSMREngine) executingEngine).addCachedEngine(streamID, engine);
