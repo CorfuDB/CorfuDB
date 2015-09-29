@@ -33,7 +33,8 @@ public interface IStreamAddressSpace {
         DATA,
         HOLE,
         EMPTY,
-        TRIMMED
+        TRIMMED,
+        EMPTY_BATCH
     };
 
     enum StreamAddressWriteResult {
@@ -48,6 +49,7 @@ public interface IStreamAddressSpace {
      */
     @Data
     @AllArgsConstructor
+    @RequiredArgsConstructor
     class StreamAddressSpaceEntry<T> implements IStreamEntry
     {
 
@@ -85,6 +87,11 @@ public interface IStreamAddressSpace {
         final StreamAddressEntryCode code;
 
         /**
+         * The logical timestamp, to be set by the streaming implementation.
+         */
+        ITimestamp logicalTimestamp = ITimestamp.getInvalidTimestamp();
+
+        /**
          * The deserialized version of the payload.
          */
         private final T payload;
@@ -107,7 +114,7 @@ public interface IStreamAddressSpace {
          */
         @Override
         public boolean containsStream(UUID stream) {
-            return streams.contains(stream);
+            return streams.size() == 0 || streams.contains(stream); //an entry with no streams belongs in all streams.
         }
 
         /**

@@ -224,9 +224,18 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         /* The simple transaction just assumes that everything is on the same log,
          * so picking the next valid sequence is acceptable.
          */
-        Long sequence = instance.getSequencer().getNext();
-        instance.getAddressSpace().write(sequence, this);
-        return new SimpleTimestamp(sequence);
+        try {
+            Long sequence = instance.getNewStreamingSequencer().nextTokenAsync(Collections.<UUID>emptySet(), 1)
+                    .thenApplyAsync(x -> {
+                        instance.getStreamAddressSpace().write(x, Collections.<UUID>emptySet(), this);
+                        return x;
+                    }).get();
+            return new SimpleTimestamp(sequence);
+        } catch (Exception e)
+        {
+            log.error("Error during tx propose", e);
+            throw new RuntimeException(e);
+        }
     }
 
     /**

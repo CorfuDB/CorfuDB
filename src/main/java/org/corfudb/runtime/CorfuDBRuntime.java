@@ -96,7 +96,7 @@ public class CorfuDBRuntime implements AutoCloseable {
      *                              a local in memory instance of CorfuDB with a single
      *                              stream unit and sequencer.
      */
-    private CorfuDBRuntime(String configurationString) {
+    public CorfuDBRuntime(String configurationString) {
         this.configurationString = configurationString;
 
         viewLock = new StampedLock();

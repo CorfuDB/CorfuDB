@@ -6,6 +6,7 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.entries.MetadataEntry;
+import org.corfudb.runtime.objects.CorfuObjectRuntimeProcessor;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.smr.legacy.CorfuDBObject;
 import org.corfudb.runtime.stream.*;
@@ -14,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
@@ -261,12 +263,24 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
                     .getConstructor(classes.toArray(new Class[classes.size()]))
                     .newInstance(largs.toArray(new Object[largs.size()]));
             */
+
+
             T returnObject = oargs.type.newInstance();
             returnObject.setUnderlyingSMREngine(smrType.getConstructor(IStream.class, Class.class, Class[].class)
                     .newInstance(openStream(id), returnObject.getUnderlyingType(), args));
             returnObject.setStreamID(id);
             returnObject.setInstance(this);
 
+/*
+            T returnObject = (T)
+                    Proxy.newProxyInstance(
+                    CorfuObjectRuntimeProcessor.class.getClassLoader(),
+                    new Class[] {oargs.type},
+                    new CorfuObjectRuntimeProcessor(
+                            oargs.type.newInstance()
+                            , this, id)
+            );
+*/
             objectMap.put(id, returnObject);
             return returnObject;
         }

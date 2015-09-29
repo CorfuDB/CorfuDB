@@ -68,7 +68,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                    switch (r.getResult())
                    {
                        case DATA:
-                           return new StreamAddressSpaceEntry(r.getStreams(), null, index, StreamAddressEntryCode.DATA, r.getPayload());
+                           return new StreamAddressSpaceEntry(r.getStreams(), index, StreamAddressEntryCode.DATA, r.getPayload());
                        case EMPTY:
                            //self invalidate
                            cache.synchronous().invalidate(index);
@@ -119,7 +119,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                 .thenApply(res -> {
                     if (res == INewWriteOnceLogUnit.WriteResult.OK) {
                         // Write was OK, so generate an entry in our cache and return OK.
-                        StreamAddressSpaceEntry s = new StreamAddressSpaceEntry(streams, null, offset,
+                        StreamAddressSpaceEntry s = new StreamAddressSpaceEntry(streams, offset,
                                 StreamAddressEntryCode.DATA, payload);
                         cache.put(offset, CompletableFuture.completedFuture(s));
                         return StreamAddressWriteResult.OK;

@@ -97,10 +97,11 @@ public class NettyStreamingSequencerProtocol implements IServerProtocol, INewStr
                 }
             });
 
-
-            if (!b.connect(host, port).awaitUninterruptibly(5000)) {
-                throw new RuntimeException("Couldn't connect to endpoint " + this.getFullString());
-            }
+           // for (int i = 0; i < 2; i++) {
+                if (!b.connect(host, port).awaitUninterruptibly(5000)) {
+                    throw new RuntimeException("Couldn't connect to endpoint " + this.getFullString());
+                }
+        //    }
     }
 
     /**

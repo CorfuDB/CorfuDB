@@ -75,7 +75,7 @@ public interface ISMREngine<T> {
      default <R> CompletableFuture<ITimestamp>
         proposeAsync(ISMREngineCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly)
         {
-            throw new UnsupportedOperationException("unsupported operation!");
+            return CompletableFuture.completedFuture(propose(command, completion, readOnly));
         }
     /**
      * Propose a new command to the SMR engine.

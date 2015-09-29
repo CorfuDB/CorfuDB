@@ -115,32 +115,47 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     public <R> void apply(IStreamEntry entry)
     {
-        try (TransactionalContext tc =
-                     new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
-            ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
-            ITimestamp entryTS = entry.getTimestamp();
-            CompletableFuture<R> completion = completionTable.get(entryTS);
-            if (completion == null) {
-                log.warn("Completion @ {} is null", entryTS);
+        if (entry.getPayload() != null) {
+            if (entry.getPayload() instanceof ITransaction)
+            {
+                ITransaction transaction = (ITransaction) entry.getPayload();
+                transaction.setInstance(stream.getInstance());
+                transaction.executeTransaction(this);
             }
-            completionTable.remove(entryTS);
-            if (entry instanceof MultiCommand) {
-                completion = new CompletableFuture<>();
-            }
-            // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
-            R result = (R) function.apply(underlyingObject, new SimpleSMREngineOptions());
-            if (completion != null) {
-                completion.complete(result);
+            else {
+                try (TransactionalContext tc =
+                             new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
+                  //  log.info("Applying command @ {} of type {}", entry.getTimestamp(), entry.getPayload().getClass());
+                    ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
+                    ITimestamp entryTS = entry.getTimestamp();
+                    CompletableFuture<R> completion = completionTable.get(entryTS);
+                /* commenting this out because this is to be expected with multiple clients */
+                /*
+                if (completion == null) {
+                    log.debug("Completion @ {} is null", entryTS);
+                }
+                */
+                    completionTable.remove(entryTS);
+                    if (entry instanceof MultiCommand) {
+                        completion = new CompletableFuture<>();
+                    }
+                    // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
+                    R result = (R) function.apply(underlyingObject, new SimpleSMREngineOptions());
+                    if (completion != null) {
+                        completion.complete(result);
+                    }
+                }
             }
         }
-
-        lastApplied = entry.getTimestamp();
+        lastApplied = entry.getLogicalTimestamp();
     }
 
     public synchronized void learnAndApply(IStreamEntry entry)
     {
-        //log.info("learnApply entry={} lastApplied={} count={} head={}", entry.getTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getTimestamp());
-        if (stream.getNextTimestamp(lastApplied).equals(entry.getTimestamp()))
+      //  log.info("learnApply id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getTimestamp());
+
+
+        if(ITimestamp.isMin(lastApplied) && stream.getNextTimestamp(lastApplied).equals(entry.getLogicalTimestamp()))
         {
             apply(entry);
         }
@@ -149,10 +164,14 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             applyQueue.offer(entry);
         }
 
-        while (applyQueue.peek() != null && applyQueue.peek().getTimestamp().equals(stream.getNextTimestamp(lastApplied)))
+        while (applyQueue.peek() != null && applyQueue.peek().getLogicalTimestamp().equals(stream.getNextTimestamp(lastApplied)))
         {
             apply(applyQueue.poll());
         }
+
+        log.info("learnApply id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getLogicalTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
+
+
     }
 
     /**
@@ -170,8 +189,10 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             stream.checkAsync()
                     .thenAccept(t -> {
                         stream.readToAsync(t).thenAccept(entryArray -> {
-                                    Arrays.stream(entryArray)
-                                            .forEach(this::learnAndApply);
+                                    if (entryArray != null) {
+                                        Arrays.stream(entryArray)
+                                                .forEach(this::learnAndApply);
+                                    }
                                 }
                         ).join();
                     }).join();
@@ -179,8 +200,10 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         else
         {
             stream.readToAsync(stream.getNextTimestamp(ts)).thenAccept(entryArray -> {
-                        Arrays.stream(entryArray)
-                                .forEach(this::learnAndApply);
+                        if (entryArray != null) {
+                            Arrays.stream(entryArray)
+                                    .forEach(this::learnAndApply);
+                        }
                     }
             ).join();
         }
@@ -344,7 +367,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         }
 
         return stream.reserveAsync(1)
-                .thenApply(
+                .thenApplyAsync(
                   t -> {
                       if (completion != null) {
                           completionTable.put(t[0], completion);

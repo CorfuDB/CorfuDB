@@ -23,11 +23,11 @@ public class TimeoutHoleFillPolicy implements IHoleFillingPolicy {
     TemporalUnit unit;
 
     /**
-     * Create a hole filling policy with a default timeout of 5ms.
+     * Create a hole filling policy with a default timeout of 30ms.
      */
     public TimeoutHoleFillPolicy()
     {
-        this(5, ChronoUnit.MILLIS);
+        this(30, ChronoUnit.MILLIS);
     }
 
     /**

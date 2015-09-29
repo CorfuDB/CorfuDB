@@ -38,6 +38,23 @@ public interface IStreamEntry extends Comparable<IStreamEntry> {
     void setTimestamp(ITimestamp ts);
 
     /**
+     * Gets the logical timestamp of the stream this entry belongs to.
+     * @return The logical timestamp of the stream this entry belongs to.
+     */
+    default ITimestamp getLogicalTimestamp() {
+        throw new UnsupportedOperationException("Unsupported!");
+    }
+
+    /**
+     * Gets the logical timestamp of the stream this entry belongs to.
+     * @return The logical timestamp of the stream this entry belongs to.
+     */
+    default void setLogicalTimestamp(ITimestamp ts) {
+        throw new UnsupportedOperationException("Unsupported!");
+    }
+
+
+    /**
      * Gets the payload of this stream.
      * @return The payload of the stream.
      */

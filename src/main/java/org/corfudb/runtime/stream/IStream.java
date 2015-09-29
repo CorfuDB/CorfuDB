@@ -168,6 +168,16 @@ public interface IStream extends AutoCloseable {
     ITimestamp getPreviousTimestamp(ITimestamp ts);
 
     /**
+     * Given a timestamp, get the first timestamp in the stream.
+     * @param ts            The timestamp to decrement.
+     * @return              The first timestamp in the stream, or null, if there is no first timestamps in the stream.
+     */
+    default ITimestamp getFirstTimestamp() {
+        throw new UnsupportedOperationException("not supported");
+    }
+
+
+    /**
      * Returns a fresh timestamp, which can serve as a linearization point. This function
      * may return a non-linearizable (invalid) timestamp which may never occur in the ordering
      * due to a move/epoch change.

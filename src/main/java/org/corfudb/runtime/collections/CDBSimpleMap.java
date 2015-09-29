@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.runtime.objects.Accessor;
 import org.corfudb.runtime.smr.*;
 import java.util.Collection;
 import java.util.Map;
@@ -19,6 +20,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      * @return the number of key-value mappings in this map
      */
     @Override
+    @Accessor
     public int size() {
         return accessorHelper((map, opts) -> {
             return map.size();
