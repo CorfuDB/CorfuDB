@@ -7,6 +7,7 @@ org.corfudb.runtime.collections
 org.corfudb.runtime.entries
 org.corfudb.runtime.entries.legacy
 org.corfudb.runtime.gossip
+org.corfudb.runtime.objects
 org.corfudb.runtime.protocols
 org.corfudb.runtime.protocols.configmasters
 org.corfudb.runtime.protocols.logunits
