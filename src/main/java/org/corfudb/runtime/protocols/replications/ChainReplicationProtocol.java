@@ -27,7 +27,7 @@ import java.util.regex.Matcher;
  */
 public class ChainReplicationProtocol implements IReplicationProtocol {
     private static final Logger log = LoggerFactory.getLogger(ChainReplicationProtocol.class);
-    private List<List<IServerProtocol>> groups = null;
+    protected List<List<IServerProtocol>> groups = null;
 
     public ChainReplicationProtocol(List<List<IServerProtocol>> groups) {
         this.groups = groups;
