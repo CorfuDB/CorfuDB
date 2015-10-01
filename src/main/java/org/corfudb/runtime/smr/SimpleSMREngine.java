@@ -3,18 +3,22 @@ package org.corfudb.runtime.smr;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.HoleEncounteredException;
 import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.entries.CorfuDBEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.smr.HoleFillingPolicy.IHoleFillingPolicy;
 import org.corfudb.runtime.smr.HoleFillingPolicy.TimeoutHoleFillPolicy;
+import org.corfudb.runtime.smr.smrprotocol.LambdaSMRCommand;
+import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.stream.Timestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.runtime.view.IStreamAddressSpace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,9 +35,8 @@ import java.util.stream.Collectors;
 /**
  * Created by mwei on 5/1/15.
  */
+@Slf4j
 public class SimpleSMREngine<T> implements ISMREngine<T> {
-
-    private final Logger log = LoggerFactory.getLogger(SimpleSMREngine.class);
 
     IStream stream;
     T underlyingObject;
@@ -43,6 +46,10 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     final ConcurrentHashMap<ITimestamp, CompletableFuture> completionTable = new ConcurrentHashMap<ITimestamp, CompletableFuture>();
     HashSet<ITimestamp> localTable;
     Map<UUID, IBufferedSMREngine> cachedEngines = Collections.synchronizedMap(new WeakHashMap<>());
+
+    @Getter
+    @Setter
+    ICorfuDBObject implementingObject;
 
     @Setter
     @Getter
@@ -111,10 +118,14 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     }
 
     public volatile ITimestamp lastApplied = ITimestamp.getMinTimestamp();
-    public PriorityQueue<IStreamEntry> applyQueue = new PriorityQueue<>();
+    public PriorityQueue<IStreamEntry> applyQueue = new PriorityQueue<IStreamEntry>(
+            //sort by logical timestamp.
+            (IStreamEntry x, IStreamEntry y) -> x.getLogicalTimestamp().compareTo(y.getLogicalTimestamp())
+    );
 
     public <R> void apply(IStreamEntry entry)
     {
+        //log.info("applying entry at {} ({})", entry.getTimestamp(), entry.getPayload() == null);
         if (entry.getPayload() != null) {
             if (entry.getPayload() instanceof ITransaction)
             {
@@ -127,7 +138,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                 try (TransactionalContext tc =
                              new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
                   //  log.info("Applying command @ {} of type {}", entry.getTimestamp(), entry.getPayload().getClass());
-                    ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
+                  //  ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
+                    SMRCommand command = (SMRCommand) entry.getPayload();
                     ITimestamp entryTS = entry.getTimestamp();
                     CompletableFuture<R> completion = completionTable.get(entryTS);
                 /* commenting this out because this is to be expected with multiple clients */
@@ -141,9 +153,10 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                         completion = new CompletableFuture<>();
                     }
                     // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
-                    R result = (R) function.apply(underlyingObject, new SimpleSMREngineOptions());
-                    if (completion != null) {
-                        completion.complete(result);
+                    R r = (R) command.execute(underlyingObject, this);
+                    if (completion != null)
+                    {
+                        completion.complete(r);
                     }
                 }
             }
@@ -153,8 +166,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     public synchronized void learnAndApply(IStreamEntry entry)
     {
-      //  log.info("learnApply id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getTimestamp());
-
+       // log.info("learnApply<enter> id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
 
         if(ITimestamp.isMin(lastApplied) && stream.getNextTimestamp(lastApplied).equals(entry.getLogicalTimestamp()))
         {
@@ -170,9 +182,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             apply(applyQueue.poll());
         }
 
-      //  log.info("learnApply id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getLogicalTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
-
-
+      // log.info("learnApply<exit> id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getLogicalTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
     }
 
     /**
@@ -185,28 +195,30 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     @Override
     @SuppressWarnings("unchecked")
     public <R> void sync(ITimestamp ts) {
-
+        log.info("sync to {}", ts);
         if (ts == null) {
             stream.checkAsync()
-                    .thenAccept(t -> {
-                        stream.readToAsync(t).thenAccept(entryArray -> {
+                    .thenApplyAsync(t -> {
+                        return stream.readToAsync(t).thenApplyAsync(entryArray -> {
                                     if (entryArray != null) {
                                         Arrays.stream(entryArray)
                                                 .forEach(this::learnAndApply);
                                     }
-                                }
-                        ).join();
+                                    return t;
+                                });
                     }).join();
         }
         else
         {
-            stream.readToAsync(stream.getNextTimestamp(ts)).thenAccept(entryArray -> {
+            stream.readToAsync(stream.getNextTimestamp(ts))
+                    .thenApplyAsync(entryArray -> {
                         if (entryArray != null) {
                             Arrays.stream(entryArray)
                                     .forEach(this::learnAndApply);
                         }
+                        return ts;
                     }
-            ).join();
+                    ).join();
         }
         /*
             if (ts == null) {
@@ -321,13 +333,12 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
      * @return              The timestamp the command was proposed at.
      */
     @Override
-    public <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
+    public <R> ITimestamp propose(SMRCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly) {
         if (readOnly)
         {
-            R result = command.apply(underlyingObject, new SimpleSMREngineOptions<>());
-            if (completion != null)
-            {
-                completion.complete(result);
+            R r = command.execute(underlyingObject, this);
+            if (completion != null) {
+                completion.complete(r);
             }
             return streamPointer;
         }
@@ -355,11 +366,12 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     }
 
     @Override
-    public <R> CompletableFuture<ITimestamp> proposeAsync(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
+    public <R> CompletableFuture<ITimestamp> proposeAsync(SMRCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly) {
+
         if (readOnly)
         {
             /* TODO: pretty sure we need some kind of locking here (what if the object changes during a read?) */
-            R result = command.apply(underlyingObject, new SimpleSMREngineOptions<>());
+            R result = command.execute(underlyingObject, this);
             if (completion != null)
             {
                 completion.complete(result);
@@ -367,23 +379,27 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             return CompletableFuture.completedFuture(streamPointer);
         }
 
+       final ITimestamp[] tRef = new ITimestamp[1];
         return stream.reserveAsync(1)
                 .thenApplyAsync(
-                  t -> {
-                      if (completion != null) {
-                          completionTable.put(t[0], completion);
-                      }
-                      try {
-                          stream.write(t[0], command);
-                      }  catch (Exception e)
-                      {
-                          //switch to sync operation.
-                          return propose(command, completion, readOnly);
-                      }
-                      lastProposal = t[0]; //TODO: fix thread safety?
-                      return t[0];
-                  }
-                );
+                        t -> {
+                            log.info("Proposing command at {}", t);
+                            if (completion != null) {
+                                completionTable.put(t[0], completion);
+                            }
+                            try {
+                                tRef[0] = t[0];
+                                return stream.writeAsync(t[0], command);
+                            } catch (Exception e) {
+                                log.error("Exception during write.", e);
+                                throw new RuntimeException(e);
+                            }
+                        }
+                )
+                .thenApplyAsync( r -> {
+                    lastProposal = tRef[0]; //TODO: fix thread safety?
+                    return tRef[0];
+                });
     }
 
     /**

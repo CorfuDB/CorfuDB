@@ -7,14 +7,18 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
+import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenResponseMsg;
 import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.protocols.AbstractNettyProtocol;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.NettyRPCChannelInboundHandlerAdapter;
 import org.corfudb.util.CFUtils;
@@ -34,24 +38,10 @@ import static io.netty.buffer.Unpooled.directBuffer;
  * Created by mwei on 9/15/15.
  */
 @Slf4j
-public class NettyStreamingSequencerProtocol implements IServerProtocol, INewStreamSequencer {
+public class NettyStreamingSequencerProtocol
+        extends AbstractNettyProtocol<NettyStreamingSequencerProtocol.NettyStreamingSequencerHandler>
+        implements INewStreamSequencer {
 
-    @Getter
-    Map<String, String> options;
-
-    @Getter
-    String host;
-
-    @Getter
-    Integer port;
-
-    @Getter
-    @Setter
-    long epoch;
-
-    private NettyStreamingSequencerHandler handler;
-    private EventLoopGroup workerGroup;
-    private SizeBufferPool pool;
 
     public static String getProtocolString()
     {
@@ -65,43 +55,7 @@ public class NettyStreamingSequencerProtocol implements IServerProtocol, INewStr
 
     public NettyStreamingSequencerProtocol(String host, Integer port, Map<String,String> options, long epoch)
     {
-        this.host = host;
-        this.port = port;
-        this.options = options;
-        this.epoch = epoch;
-
-        pool = new SizeBufferPool(64);
-        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-
-            final AtomicInteger threadNum = new AtomicInteger(0);
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("NettyStreamingSequencerProtocol-worker-" + threadNum.getAndIncrement());
-                return t;
-            }
-        });
-
-            Bootstrap b = new Bootstrap();
-            handler = new NettyStreamingSequencerHandler();
-            b.group(workerGroup);
-            b.channel(NioSocketChannel.class);
-            b.option(ChannelOption.SO_KEEPALIVE, true);
-            b.option(ChannelOption.TCP_NODELAY, true);
-            b.handler(new ChannelInitializer<SocketChannel>() {
-                @Override
-                public void initChannel(SocketChannel ch) throws Exception {
-                    ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                    ch.pipeline().addLast(handler);
-                }
-            });
-
-           // for (int i = 0; i < 2; i++) {
-                if (!b.connect(host, port).awaitUninterruptibly(5000)) {
-                    throw new RuntimeException("Couldn't connect to endpoint " + this.getFullString());
-                }
-        //    }
+        super(host, port, options, epoch, new NettyStreamingSequencerHandler());
     }
 
     /**
@@ -116,10 +70,9 @@ public class NettyStreamingSequencerProtocol implements IServerProtocol, INewStr
         return handler.getToken(streams, numTokens);
     }
 
-    class NettyStreamingSequencerHandler extends NettyRPCChannelInboundHandlerAdapter {
+    static class NettyStreamingSequencerHandler extends NettyRPCChannelInboundHandlerAdapter {
 
         //region Handler Interface
-
         @Override
         public void handleMessage(NettyCorfuMsg message)
         {
@@ -138,43 +91,9 @@ public class NettyStreamingSequencerProtocol implements IServerProtocol, INewStr
             NettyStreamingServerTokenRequestMsg r =
                     new NettyStreamingServerTokenRequestMsg
                             (streamIDs, numTokens);
-            return sendMessageAndGetCompletable(pool, epoch, r);
+            return sendMessageAndGetCompletable(protocol.getEpoch(), r);
         }
-
-        public CompletableFuture<Boolean> ping() {
-            NettyCorfuMsg r =
-                    new NettyCorfuMsg();
-            r.setMsgType(NettyCorfuMsg.NettyCorfuMsgType.PING);
-            return sendMessageAndGetCompletable(pool, epoch, r);
-        }
-
 
         //endregion
-    }
-
-    /**
-     * Returns a boolean indicating whether or not the server was reachable.
-     *
-     * @return True if the server was reachable, false otherwise.
-     */
-    @Override
-    public boolean ping() {
-        try {
-            return handler.ping().get();
-        } catch (Exception e)
-        {
-            return false;
-        }
-    }
-
-    /**
-     * Resets the server. Used by the configuration master to reset the state of the server.
-     * Should eliminate ALL hard state!
-     *
-     * @param epoch
-     */
-    @Override
-    public void reset(long epoch) throws NetworkException {
-
     }
 }

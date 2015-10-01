@@ -71,7 +71,6 @@ class HopAdapterStream implements IAdapterStream
         hopstream = (IStream) new org.corfudb.runtime.stream.Stream(cdb, streamid, 2, 10000, globalThreadPool, true);
     }
 
-    @Override
     public ITimestamp append(Serializable s, Set<UUID> streams) throws OutOfSpaceException, IOException
     {
         dbglog.debug("appending to streams " + streams + " from stream " + streamid);
@@ -119,7 +118,6 @@ class HopAdapterStream implements IAdapterStream
         }
     }
 
-    @Override
     public ITimestamp append(Serializable s) throws OutOfSpaceException, IOException {
         try {
             ITimestamp T = hopstream.append(s);
@@ -131,6 +129,18 @@ class HopAdapterStream implements IAdapterStream
             System.out.println(ioexc);
             throw new RuntimeException(ioexc);
         }
+    }
+
+    /**
+     * Append an object to the stream. This operation may or may not be successful. For example,
+     * a move operation may occur, and the append will not be part of the stream.
+     *
+     * @param data A serializable object to append to the stream.
+     * @return A timestamp, which reflects the physical position and the epoch the data was written in.
+     */
+    @Override
+    public ITimestamp append(Object data) throws OutOfSpaceException, IOException {
+        return null;
     }
 
     @Override

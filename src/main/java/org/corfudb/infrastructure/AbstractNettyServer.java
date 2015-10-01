@@ -2,20 +2,23 @@ package org.corfudb.infrastructure;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenResponseMsg;
+import org.corfudb.infrastructure.wireprotocol.*;
 import org.corfudb.util.SizeBufferPool;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
@@ -63,7 +66,7 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
 
     EventLoopGroup bossGroup;
     EventLoopGroup workerGroup;
-    SizeBufferPool pool;
+    EventExecutorGroup ee;
 
     @Override
     public ICorfuDBServer getInstance(Map<String, Object> configuration) {
@@ -93,7 +96,6 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
             throw new RuntimeException("Invalid configuration provided!");
         }
 
-        pool = new SizeBufferPool(512);
         epoch = 0L;
         parseConfiguration(configuration);
     }
@@ -109,9 +111,7 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
     {
         outMsg.copyBaseFields(inMsg);
         outMsg.setEpoch(epoch);
-        val p = pool.getSizedBuffer();
-        outMsg.serialize(p.getBuffer());
-        ctx.writeAndFlush(p.writeSize());
+        ctx.writeAndFlush(outMsg);
     }
 
     @ChannelHandler.Sharable
@@ -119,7 +119,7 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             try {
-                NettyCorfuMsg m = NettyCorfuMsg.deserialize((ByteBuf) msg);
+                NettyCorfuMsg m = ((NettyCorfuMsg) msg);
                 if (validateEpoch(m, ctx)) {
                  processBaseMessage(m, ctx);
                 }
@@ -128,7 +128,6 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
             {
                 log.error("Exception during read!" , e);
             }
-            ((ByteBuf) msg).release();
         }
 
         @Override
@@ -167,18 +166,34 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
             }
         });
 
+        ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+
+            final AtomicInteger threadNum = new AtomicInteger(0);
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName(serverName + "-event-" + threadNum.getAndIncrement());
+                return t;
+            }
+        });
+
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .option(ChannelOption.SO_BACKLOG, 100)
                     .option(ChannelOption.TCP_NODELAY, true)
+                    .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                     .handler(new LoggingHandler(LogLevel.INFO))
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(io.netty.channel.socket.SocketChannel ch) throws Exception {
+                            ch.pipeline().addLast(new LengthFieldPrepender(4));
                             ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                            ch.pipeline().addLast(new NettyServerHandler());
+                            ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
+                            ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
+                            ch.pipeline().addLast(ee, new NettyServerHandler());
                         }
                     });
             ChannelFuture f = b.bind(port).sync();

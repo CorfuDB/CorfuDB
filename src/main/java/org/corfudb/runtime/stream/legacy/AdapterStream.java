@@ -68,7 +68,6 @@ public class AdapterStream implements IAdapterStream
 //        return T;
 //    }
 
-    @Override
     public ITimestamp append(Serializable payload, Set<UUID> ustreams) throws OutOfSpaceException, IOException {
         List<Long> streams = new ArrayList();
         for(UUID uuid : ustreams) streams.add(uuid.getMostSignificantBits());
@@ -82,7 +81,6 @@ public class AdapterStream implements IAdapterStream
     }
 
 
-    @Override
     public ITimestamp append(Serializable payload) throws OutOfSpaceException, IOException {
         long address = seq.getNext();
         SimpleTimestamp T = new SimpleTimestamp(address);
@@ -91,6 +89,18 @@ public class AdapterStream implements IAdapterStream
         addrspace.write(address,(Serializable) S);
         dbglog.debug("wrote slot {}", address);
         return T;
+    }
+
+    /**
+     * Append an object to the stream. This operation may or may not be successful. For example,
+     * a move operation may occur, and the append will not be part of the stream.
+     *
+     * @param data A serializable object to append to the stream.
+     * @return A timestamp, which reflects the physical position and the epoch the data was written in.
+     */
+    @Override
+    public ITimestamp append(Object data) throws OutOfSpaceException, IOException {
+        return null;
     }
 
     @Override

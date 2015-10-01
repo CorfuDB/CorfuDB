@@ -159,10 +159,10 @@ public class Serializer
         public ICorfuDBObject read (Kryo kryo, Input input, final Class<ICorfuDBObject> type) {
             try {
                 ICorfuDBObject o = kryo.newInstance(type);
-                o.setStreamID(kryo.readObject(input, UUID.class));
+                //o.setStreamID(kryo.readObject(input, UUID.class));
                 if (TransactionalContext.getTX() != null)
                 {
-                    o.setInstance(TransactionalContext.getTX().getInstance());
+                    //o.setInstance(TransactionalContext.getTX().getInstance());
                 }
                 return o;
             } catch (Exception e) {

@@ -150,7 +150,7 @@ public interface ICorfuDBInstance {
         return openObject(id, new OpenObjectArgs<T>(type), args);
     }
 
-    ISMREngine getBaseEngine(UUID id, Class<?> underlyingType);
+    ISMREngine getBaseEngine(UUID id, Class<?> underlyingType, ICorfuDBObject t);
 
     /**
      * Retrieves the cached corfuDB object without requiring type knowledge.

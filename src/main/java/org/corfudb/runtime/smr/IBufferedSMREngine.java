@@ -1,5 +1,7 @@
 package org.corfudb.runtime.smr;
 
+import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
+
 import java.util.ArrayList;
 
 /**
@@ -7,7 +9,7 @@ import java.util.ArrayList;
  * Created by amytai on 7/31/15.
  */
 public interface IBufferedSMREngine<T> extends ISMREngine<T> {
-    default ArrayList<ISMREngineCommand> getCommandBuffer() {
+    default ArrayList<SMRCommand> getCommandBuffer() {
         throw new UnsupportedOperationException("This engine hasn't implemented getCommandBuffer yet");
     }
 }

@@ -1,6 +1,9 @@
 package org.corfudb.runtime.smr;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 
@@ -40,7 +43,11 @@ public class PassThroughSMREngine<T> implements ISMREngine<T>, IBufferedSMREngin
     ITimestamp ts;
     ICorfuDBInstance instance;
     UUID streamID;
-    ArrayList<ISMREngineCommand> commandBuffer;
+    ArrayList<SMRCommand> commandBuffer;
+
+    @Getter
+    @Setter
+    ICorfuDBObject implementingObject;
 
     public PassThroughSMREngine(T object, ITimestamp ts, ICorfuDBInstance instance, UUID streamID)
     {
@@ -48,7 +55,7 @@ public class PassThroughSMREngine<T> implements ISMREngine<T>, IBufferedSMREngin
         this.ts = ts;
         this.instance = instance;
         this.streamID = streamID;
-        this.commandBuffer = new ArrayList<ISMREngineCommand>();
+        this.commandBuffer = new ArrayList<SMRCommand>();
     }
 
     /**
@@ -108,8 +115,8 @@ public class PassThroughSMREngine<T> implements ISMREngine<T>, IBufferedSMREngin
      * @return A timestamp representing the timestamp that the command was proposed to.
      */
     @Override
-    public <R> ITimestamp propose(ISMREngineCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly) {
-        R result = command.apply(underlyingObject, new PassThroughSMREngineOptions<T>());
+    public <R> ITimestamp propose(SMRCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly) {
+        R result = command.execute(underlyingObject, this);
         if (completion != null)
         {
             completion.complete(result);
@@ -160,7 +167,7 @@ public class PassThroughSMREngine<T> implements ISMREngine<T>, IBufferedSMREngin
     }
 
     @Override
-    public ArrayList<ISMREngineCommand> getCommandBuffer() {
+    public ArrayList<SMRCommand> getCommandBuffer() {
         return commandBuffer;
     }
 }

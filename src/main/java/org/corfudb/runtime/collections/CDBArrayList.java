@@ -13,26 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CDBArrayList<T> implements ICorfuDBObject<ArrayList<T>>, List<T>, RandomAccess {
 
-    UUID streamID;
-
-    /**
-     * Get the UUID of the underlying stream
-     */
-    @Override
-    public UUID getStreamID() {
-        return streamID;
-    }
-
-    /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
-     */
-    @Override
-    public void setStreamID(UUID streamID) {
-        this.streamID = streamID;
-    }
-
     /**
      * Returns the number of elements in this list.  If this list contains
      * more than <tt>Integer.MAX_VALUE</tt> elements, returns

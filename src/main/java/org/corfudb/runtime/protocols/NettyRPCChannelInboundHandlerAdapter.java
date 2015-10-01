@@ -2,14 +2,16 @@ package org.corfudb.runtime.protocols;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.*;
+import io.netty.util.Attribute;
+import io.netty.util.AttributeKey;
+import lombok.AccessLevel;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyCorfuResetMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.SizeBufferPool;
@@ -19,6 +21,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -31,9 +34,12 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
 
     private volatile UUID clientID;
     private volatile AtomicLong requestID;
-    public List<Channel> channelList;
+    public List<ChannelHandlerContext> channelList;
     private ConcurrentHashMap<Long, CompletableFuture<?>> rpcMap;
     private Random random;
+
+    @Setter
+    public AbstractNettyProtocol protocol;
 
     public abstract void handleMessage(NettyCorfuMsg message);
 
@@ -48,10 +54,10 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
     }
 
     public @NonNull
-    Channel getChannel()
+    ChannelHandlerContext getChannel()
     {
-        Channel c = null;
-        while ((c = channelList.get(random.nextInt(channelList.size()))) == null) {
+        ChannelHandlerContext c = null;
+        while (channelList.size() == 0 || (c = channelList.get(random.nextInt(channelList.size()))) == null) {
             // this will be null if someone just removed the channel.
             try {
                 Thread.sleep(10);
@@ -72,7 +78,7 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
         }
     }
 
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(SizeBufferPool pool, long epoch, NettyCorfuMsg message)
+    public <T> CompletableFuture<T> sendMessageAndGetCompletable(long epoch, NettyCorfuMsg message)
     {
         final long thisRequest = requestID.getAndIncrement();
         message.setClientID(clientID);
@@ -80,11 +86,7 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
         message.setEpoch(epoch);
         final CompletableFuture<T> cf = new CompletableFuture<>();
         rpcMap.put(thisRequest, cf);
-        SizeBufferPool.PooledSizedBuffer p = pool.getSizedBuffer();
-        message.serialize(p.getBuffer());
-        Channel c = getChannel();
-        c.write(p.writeSize());
-        queueFlush(c);
+        getChannel().writeAndFlush(message);
         final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(600));
         cfTimeout.exceptionally(e -> {
             rpcMap.remove(thisRequest);
@@ -93,33 +95,37 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
         return cfTimeout;
     }
 
-    public void sendMessage(SizeBufferPool pool, long epoch, NettyCorfuMsg message)
+    public void sendMessage(long epoch, NettyCorfuMsg message)
     {
         final long thisRequest = requestID.getAndIncrement();
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
         message.setEpoch(epoch);
-        SizeBufferPool.PooledSizedBuffer p = pool.getSizedBuffer();
-        message.serialize(p.getBuffer());
-        Channel c = getChannel();
-        c.write(p.writeSize());
-        queueFlush(c);
+        getChannel().writeAndFlush(message);
     }
 
-    public void queueFlush(Channel channel)
-    {
-        channel.flush();
+    public CompletableFuture<Boolean> ping(long epoch) {
+        NettyCorfuMsg r =
+                new NettyCorfuMsg();
+        r.setMsgType(NettyCorfuMsg.NettyCorfuMsgType.PING);
+        return sendMessageAndGetCompletable(epoch, r);
+    }
+
+    public void reset(long newEpoch) {
+        NettyCorfuMsg r =
+                new NettyCorfuResetMsg(newEpoch);
+        sendMessage(0L, r);
     }
 
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
-        channelList.add(ctx.channel());
+        channelList.add(ctx);
     }
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
         super.channelUnregistered(ctx);
-        channelList.remove(ctx.channel());
+        channelList.remove(ctx);
     }
 
     @Override
@@ -129,14 +135,7 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
     @Override
     @SuppressWarnings("unchecked")
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        ByteBuf m = (ByteBuf) msg;
-        try {
-            NettyCorfuMsg pm = NettyCorfuMsg.deserialize(m);
-            handleMessage(pm);
-        }
-        finally {
-            m.release();
-        }
+        handleMessage((NettyCorfuMsg)msg);
     }
 
     @Override

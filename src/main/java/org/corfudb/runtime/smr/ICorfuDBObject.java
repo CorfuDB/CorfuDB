@@ -1,36 +1,19 @@
 package org.corfudb.runtime.smr;
 
-import com.esotericsoftware.kryo.Kryo;
 import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.stream.IStream;
+import org.corfudb.runtime.objects.DynamicallyGeneratedException;
+import org.corfudb.runtime.smr.smrprotocol.LambdaSMRCommand;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.ObjectInputStream;
 import java.io.Serializable;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * Created by mwei on 5/1/15.
  */
 public interface ICorfuDBObject<U> extends Serializable {
-
-    public static final Logger log = LoggerFactory.getLogger(ICorfuDBObject.class);
-
-    Map<ICorfuDBObject, ICorfuDBInstance> instanceMap = Collections.synchronizedMap(new WeakHashMap<>());
-    Map<ICorfuDBObject, ISMREngine> engineMap = Collections.synchronizedMap(new WeakHashMap<>());
-    Map<ICorfuDBObject, UUID> uuidMap = Collections.synchronizedMap(new WeakHashMap<>());
 
     /**
      * Returns the SMR engine associated with this object.
@@ -50,37 +33,30 @@ public interface ICorfuDBObject<U> extends Serializable {
      * Get the type of the underlying object
      */
     default Class<U> getUnderlyingType() {
-        for (Type t : this.getClass().getGenericInterfaces())
-        {
-            if (t instanceof ParameterizedType && ((ParameterizedType)t).getRawType().equals(ICorfuDBObject.class))
-            {
-                ParameterizedType p = (ParameterizedType) t;
-                Type r = p.getActualTypeArguments()[0];
-                if (r instanceof ParameterizedType)
-                {
-                    return (Class<U>) ((ParameterizedType)r).getRawType();
-                }
-                return (Class<U>) r;
-            }
-        }
-        throw new RuntimeException("Couldn't resolve underlying type!");
+        throw new DynamicallyGeneratedException();
     }
-
 
     /**
      * Get the UUID of the underlying stream
      */
     default UUID getStreamID() {
-        return uuidMap.get(this);
+        throw new DynamicallyGeneratedException();
     }
 
     /**
-     * Set the stream ID
-     *
-     * @param streamID The stream ID to set.
+     * Get the in-memory state for this object.
+     * @return  The in-memory state for this object.
      */
-    default void setStreamID(UUID streamID) {
-        uuidMap.put(this, streamID);
+    default U getState() {
+        throw new DynamicallyGeneratedException();
+    }
+
+    /** Get the current instance for this object.
+     * @return  The current instance for this object.
+     */
+    default ICorfuDBInstance getInstance()
+    {
+        throw new DynamicallyGeneratedException();
     }
 
     /**
@@ -89,16 +65,7 @@ public interface ICorfuDBObject<U> extends Serializable {
      */
     @SuppressWarnings("unchecked")
     default ISMREngine<U> getUnderlyingSMREngine() {
-        return (ISMREngine<U>) getInstance().getBaseEngine(getStreamID(), getUnderlyingType());
-    }
-
-    /**
-     * Set underlying SMR engine
-     * @param smrEngine The SMR engine to replace.
-     */
-    @SuppressWarnings("unchecked")
-    default void setUnderlyingSMREngine(ISMREngine<U> engine) {
-        engineMap.put(this, engine);
+        return (ISMREngine<U>) getInstance().getBaseEngine(getStreamID(), getUnderlyingType(), this);
     }
 
     /**
@@ -130,7 +97,13 @@ public interface ICorfuDBObject<U> extends Serializable {
     @SuppressWarnings("unchecked")
     default void mutatorHelper(IConsumerOnlySMREngineCommand<U> command)
     {
-        getSMREngine().propose(command, true);
+        BiFunction<U, ISMREngine.ISMREngineOptions, Void> bf = (x,o) -> {
+            command.apply(x,o);
+            return null;
+        };
+
+        getSMREngine().propose(new LambdaSMRCommand<U, Void>(
+                (BiFunction<U, ISMREngine.ISMREngineOptions, Void> & Serializable) bf), true);
     }
 
     /**
@@ -144,7 +117,7 @@ public interface ICorfuDBObject<U> extends Serializable {
     {
         CompletableFuture<R> o = new CompletableFuture<>();
         ISMREngine<U> e = getSMREngine();
-        e.proposeAsync(command, o, false)
+        e.proposeAsync(new LambdaSMRCommand<U, R>(command), o, false)
                 .thenAccept(e::sync);
         return o.join();
     }
@@ -164,15 +137,6 @@ public interface ICorfuDBObject<U> extends Serializable {
         return  o.join();
     }
 
-    default void setInstance(ICorfuDBInstance instance)
-    {
-        instanceMap.put(this, instance);
-    }
-
-    default ICorfuDBInstance getInstance()
-    {
-        return instanceMap.get(this);
-    }
 
     /**
      * Whether or not the object has been registered for automatic playback.

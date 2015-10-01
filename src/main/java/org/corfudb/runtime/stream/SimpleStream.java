@@ -41,12 +41,23 @@ public class SimpleStream implements IStream {
      * @param data A serializable object to append to the stream.
      * @return A timestamp, which reflects the physical position and the epoch the data was written in.
      */
-    @Override
     public ITimestamp append(Serializable data) throws OutOfSpaceException, IOException {
         long sequence = instance.getSequencer().getNext();
         SimpleTimestamp timestamp = new SimpleTimestamp(sequence);
         instance.getAddressSpace().write(sequence, new SimpleStreamEntry(streamID, data, timestamp));
         return timestamp;
+    }
+
+    /**
+     * Append an object to the stream. This operation may or may not be successful. For example,
+     * a move operation may occur, and the append will not be part of the stream.
+     *
+     * @param data A serializable object to append to the stream.
+     * @return A timestamp, which reflects the physical position and the epoch the data was written in.
+     */
+    @Override
+    public ITimestamp append(Object data) throws OutOfSpaceException, IOException {
+        return null;
     }
 
     /**
@@ -76,7 +87,6 @@ public class SimpleStream implements IStream {
      * @throws OutOfSpaceException If there is no space left to write to that log position.
      * @throws OverwriteException  If something was written to that log position already.
      */
-    @Override
     public void write(ITimestamp timestamp, Serializable data) throws OutOfSpaceException, OverwriteException, IOException {
         instance.getAddressSpace().write(((SimpleTimestamp) timestamp).address, new SimpleStreamEntry(streamID, data, timestamp));
     }

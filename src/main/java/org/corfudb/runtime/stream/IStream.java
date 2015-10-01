@@ -20,6 +20,7 @@ import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.runtime.view.IStreamAddressSpace;
 import org.corfudb.runtime.view.Serializer;
 
 import java.lang.ClassNotFoundException;
@@ -47,7 +48,7 @@ public interface IStream extends AutoCloseable {
      *
      * @return          A timestamp, which reflects the physical position and the epoch the data was written in.
      */
-    ITimestamp append(Serializable data)
+    ITimestamp append(Object data)
         throws OutOfSpaceException, IOException;
 
     /**
@@ -83,8 +84,13 @@ public interface IStream extends AutoCloseable {
      * @throws OutOfSpaceException      If there is no space left to write to that log position.
      * @throws OverwriteException       If something was written to that log position already.
      */
-    default void write(ITimestamp timestamp, Serializable data)
+    default void write(ITimestamp timestamp, Object data)
         throws OutOfSpaceException, OverwriteException, IOException
+    {
+        throw new UnsupportedOperationException("not supported by this stream");
+    }
+
+    default CompletableFuture<IStreamAddressSpace.StreamAddressWriteResult> writeAsync(ITimestamp timestamp, Object data)
     {
         throw new UnsupportedOperationException("not supported by this stream");
     }
@@ -105,7 +111,7 @@ public interface IStream extends AutoCloseable {
      *
      * @return          A timestamp, which reflects the physical position and the epoch the data was written in.
      */
-    default ITimestamp append(Serializable payload, Set<UUID> streams)
+    default ITimestamp append(Object payload, Set<UUID> streams)
             throws OutOfSpaceException, IOException {
         throw new RuntimeException("multi-stream append not supported by this IStream implementation.");
     }

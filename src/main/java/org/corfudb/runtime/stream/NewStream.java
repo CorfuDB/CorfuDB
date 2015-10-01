@@ -71,7 +71,7 @@ public class NewStream implements IStream {
      * @return A timestamp, which reflects the physical position and the epoch the data was written in.
      */
     @Override
-    public ITimestamp append(Serializable data) throws IOException {
+    public ITimestamp append(Object data) throws IOException {
         return IRetry.build(ExponentialBackoffRetry.class, OutOfSpaceException.class, () -> {
             long nextToken = instance.getStreamingSequencer().getNext(streamID);
             instance.getStreamAddressSpace().write(nextToken, Collections.singleton(streamID), data);
@@ -131,8 +131,13 @@ public class NewStream implements IStream {
      * @throws OverwriteException  If something was written to that log position already.
      */
     @Override
-    public void write(ITimestamp timestamp, Serializable data) throws OutOfSpaceException, OverwriteException, IOException {
+    public void write(ITimestamp timestamp, Object data) throws OutOfSpaceException, OverwriteException, IOException {
         instance.getStreamAddressSpace().write(toPhysicalTimestamp(timestamp), Collections.singleton(streamID), data);
+    }
+
+    @Override
+    public CompletableFuture<IStreamAddressSpace.StreamAddressWriteResult> writeAsync(ITimestamp timestamp, Object data) {
+        return instance.getStreamAddressSpace().writeAsync(toPhysicalTimestamp(timestamp), Collections.singleton(streamID), data);
     }
 
     /**
@@ -274,7 +279,23 @@ public class NewStream implements IStream {
             startPoint = streamPointer.getAndAccumulate(toPhysicalTimestamp(point), Math::max);
         }
         if (startPoint > toPhysicalTimestamp(point)){
-            return CompletableFuture.completedFuture(null);
+            IStreamEntry[] rl;
+            rl = new IStreamEntry[] {
+                    new IStreamAddressSpace.StreamAddressSpaceEntry<>(
+                            Collections.emptySet(),
+                            Long.MIN_VALUE,
+                            IStreamAddressSpace.StreamAddressEntryCode.EMPTY_BATCH,
+                            null
+                    )
+            };
+
+            rl[0].setLogicalTimestamp(
+                    new LogicalAsyncTimestamp(
+                            batch,
+                            0,
+                            0));
+
+            return CompletableFuture.completedFuture(rl);
         }
         else
         {
@@ -302,6 +323,7 @@ public class NewStream implements IStream {
 
                                 if (rl.length == 0)
                                 {
+                                    log.info("rl is 0, batch is {}", batch);
                                     //this batch was empty but we need to expire this batch
                                     rl = new IStreamEntry[] {
                                       new IStreamAddressSpace.StreamAddressSpaceEntry<>(

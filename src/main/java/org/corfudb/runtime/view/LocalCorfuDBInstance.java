@@ -6,6 +6,7 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.entries.MetadataEntry;
+import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
 import org.corfudb.runtime.objects.CorfuObjectRuntimeProcessor;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.smr.legacy.CorfuDBObject;
@@ -179,11 +180,13 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
 
 
     @Override
-    public ISMREngine getBaseEngine(UUID id, Class<?> underlyingType) {
+    public ISMREngine getBaseEngine(UUID id, Class<?> underlyingType, ICorfuDBObject t) {
         return baseEngineMap.compute(id, (k, e) -> {
             if (e != null) { return e; }
             else {
-                return new SimpleSMREngine(openStream(k), underlyingType);
+                ISMREngine e1 = new SimpleSMREngine(openStream(k), underlyingType);
+                e1.setImplementingObject(t);
+                return e1;
             }
         });
     }
@@ -236,9 +239,9 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         else {
             log.info("opening cached object. {}", this);
             if (!oargs.createNew && cachedObject != null && cachedObject.getUnderlyingSMREngine().getClass().equals(smrType)) {
-                if (!(oargs.type.isInstance(cachedObject)))
-                    throw new RuntimeException("Incorrect type! Requested to open object of type " + oargs.type +
-                            " but an object of type " + cachedObject.getClass() + " is already there!");
+                //if (!(cachedObject.getClass().isInstance(oargs.type)))
+                //    throw new RuntimeException("Incorrect type! Requested to open object of type " + oargs.type +
+                //            " but an object of type " + cachedObject.getClass() + " is already there!");
                 return cachedObject;
             }
         }
@@ -263,13 +266,15 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
                     .newInstance(largs.toArray(new Object[largs.size()]));
             */
 
-
+/*
             T returnObject = oargs.type.newInstance();
             returnObject.setUnderlyingSMREngine(smrType.getConstructor(IStream.class, Class.class, Class[].class)
                     .newInstance(openStream(id), returnObject.getUnderlyingType(), args));
             returnObject.setStreamID(id);
             returnObject.setInstance(this);
+*/
 
+            T returnObject = CorfuObjectByteBuddyProxy.getProxy().getObject(oargs.type, this, id);
 /*
             T returnObject = (T)
                     Proxy.newProxyInstance(
@@ -283,10 +288,14 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
             objectMap.put(id, returnObject);
             return returnObject;
         }
-        catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e)
+        catch (Exception e)
         {
             throw new RuntimeException(e);
         }
+       // catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e)
+      //  {
+      //      throw new RuntimeException(e);
+       // }
     }
 
     /**

@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KryoSerializer;
 
@@ -13,7 +14,7 @@ import org.corfudb.util.serializer.KryoSerializer;
 public class NettyLogUnitPayloadMsg extends NettyLogUnitMetadataMsg {
 
     /** The default serializer to use */
-    public static final ISerializer defaultSerializer = new KryoSerializer();
+    public static final ISerializer defaultSerializer = new CorfuSerializer();
 
     /** The object payload, if sending the message. */
     @Setter

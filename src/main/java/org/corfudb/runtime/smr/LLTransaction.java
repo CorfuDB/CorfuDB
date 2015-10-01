@@ -155,7 +155,9 @@ public class LLTransaction implements ITransaction, IStreamEntry, Serializable {
         // Committing transaction == apply the multicommands
         PassThroughSMREngine applyEngine =
                 new PassThroughSMREngine(engine.getObject(), engine.check(), instance, engine.getStreamID());
-        applyEngine.propose(bufferedCommands, null, false);
+
+        //TODO: fix this once the command engine is fixed.
+        //applyEngine.propose(bufferedCommands, null, false);
     }
 
     /**

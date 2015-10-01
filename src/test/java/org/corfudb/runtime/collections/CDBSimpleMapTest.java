@@ -71,7 +71,9 @@ public class CDBSimpleMapTest {
     @Test
     public void multipleMapsContainSameData() throws Exception
     {
-        testMap.put(0, 10);
+        for (int i =0 ; i < 100; i++) {
+            testMap.put(0, 10);
+        }
         testMap.put(10, 100);
         CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(streamID, CDBSimpleMap.class);
         assertThat(testMap2.get(0))
@@ -81,6 +83,40 @@ public class CDBSimpleMapTest {
     }
 
     @Test
+    public void tokenBasedTest() throws Exception
+    {
+        CorfuTokenMap<Integer, Integer> testMapT = instance.openObject(UUID.randomUUID(), CorfuTokenMap.class);
+        assertThat(testMapT.put(10, 100))
+                .isEqualTo(null);
+        for (int i = 0; i< 100; i++)
+        {
+            assertThat(testMapT.put(10, 100))
+                    .isEqualTo(100);
+        }
+    }
+
+    @Test
+    public void multiThreadTest() throws Exception
+    {
+        long ops = 500;
+        int num_threads = 2;
+        UUID streamID = UUID.randomUUID();
+        ExecutorService es = Executors.newFixedThreadPool(num_threads);
+        Runnable r = () -> {
+            CDBSimpleMap<Integer,String> testMap = instance.openObject(streamID, CDBSimpleMap.class);
+            for (int i = 0; i < ops; i++)
+            {
+                try {
+                    testMap.put(0,Integer.toString(i));
+                }catch (Exception e){}
+            }};
+        for (int j = 0; j < num_threads; j++) {
+            es.submit(r);
+        }
+        es.shutdown();
+        es.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+    }
+    @Test
     public void ensureMutatorAccessorsWork() throws Exception
     {
         testMap.put(0, 10);
@@ -88,7 +124,7 @@ public class CDBSimpleMapTest {
                 .isEqualTo(10);
     }
 
-    @Test
+   // @Test
     public void DeferredTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
@@ -109,7 +145,7 @@ public class CDBSimpleMapTest {
                 .isEqualTo(1000);
     }
 
-    @Test
+   // @Test
     public void crossMapSwapTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
@@ -139,7 +175,7 @@ public class CDBSimpleMapTest {
                 .isEqualTo(100);
     }
 
-    @Test
+  //  @Test
     public void mapOfMapsTest() throws Exception
     {
         CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =

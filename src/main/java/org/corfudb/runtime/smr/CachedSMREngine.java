@@ -1,6 +1,9 @@
 package org.corfudb.runtime.smr;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
@@ -31,7 +34,11 @@ public class CachedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> 
     T underlyingObject;
     ITimestamp streamPointer;
     ITimestamp syncPoint;
-    ArrayList<ISMREngineCommand> commandBuffer;
+    ArrayList<SMRCommand> commandBuffer;
+
+    @Getter
+    @Setter
+    ICorfuDBObject implementingObject;
 
     class CachedSMREngineOptions<Y extends T> implements ISMREngineOptions<Y> {
 
@@ -61,7 +68,7 @@ public class CachedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> 
                     .newInstance(args);
 
             this.syncPoint = syncPoint;
-            this.commandBuffer = new ArrayList<ISMREngineCommand>();
+            this.commandBuffer = new ArrayList<SMRCommand>();
         }
         catch (Exception e)
         {
@@ -169,8 +176,8 @@ public class CachedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> 
      * @return A timestamp representing the timestamp that the command was proposed to.
      */
     @Override
-    public <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
-            R result = command.apply(underlyingObject, new CachedSMREngineOptions<T>());
+    public <R> ITimestamp propose(SMRCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
+            R result = command.execute(underlyingObject, this);
             if (completion != null)
             {
                 completion.complete(result);
@@ -239,7 +246,7 @@ public class CachedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> 
     }
 
     @Override
-    public ArrayList<ISMREngineCommand> getCommandBuffer() {
+    public ArrayList<SMRCommand> getCommandBuffer() {
         return commandBuffer;
     }
 }

@@ -50,7 +50,7 @@ public class NewStreamTest {
                 .isEqualTo("Hello World");
     }
 
-    @Test
+   // @Test
     public void AsyncReadAll()
             throws Exception
     {
@@ -84,7 +84,7 @@ public class NewStreamTest {
                 .isEqualTo(null);
     }
 
-    @Test
+   // @Test
     public void HoleFillingIsTransparent()
         throws Exception
     {

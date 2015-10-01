@@ -1,6 +1,7 @@
 package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 
@@ -46,6 +47,9 @@ public interface ISMREngine<T> {
      */
     <R> void sync(ITimestamp ts);
 
+    void setImplementingObject(ICorfuDBObject object);
+    ICorfuDBObject getImplementingObject();
+
     /**
      * Execute a read only command against this engine.
      * @param command   The command to execute. It must be read only.
@@ -70,10 +74,10 @@ public interface ISMREngine<T> {
      *
      * @return              A timestamp representing the timestamp that the command was proposed to.
      */
-     <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly);
+     <R> ITimestamp propose(SMRCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly);
 
      default <R> CompletableFuture<ITimestamp>
-        proposeAsync(ISMREngineCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly)
+        proposeAsync(SMRCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly)
         {
             return CompletableFuture.completedFuture(propose(command, completion, readOnly));
         }
@@ -88,7 +92,7 @@ public interface ISMREngine<T> {
      *
      * @return              A timestamp representing the timestamp that the command was proposed to.
      */
-    default <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion)
+    default <R> ITimestamp propose(SMRCommand<T,R> command, CompletableFuture<R> completion)
     {
         return propose(command, completion, false);
     }
@@ -101,12 +105,12 @@ public interface ISMREngine<T> {
      *                      The second argument of the lambda contains some TX that the engine
      * @return              A timestamp representing the timestamp the command was proposed to.
      */
-    default <R> ITimestamp propose(ISMREngineCommand<T, R> command)
+    default <R> ITimestamp propose(SMRCommand<T,R> command)
     {
         return propose(command, null, false);
     }
 
-    default <R> ITimestamp propose(ISMREngineCommand<T, R> command, boolean writeOnly) {
+    default <R> ITimestamp propose(SMRCommand<T,R> command, boolean writeOnly) {
         return propose(command);
     }
 

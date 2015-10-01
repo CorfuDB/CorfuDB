@@ -21,12 +21,6 @@ public class SizeBufferPool {
     public class PooledSizedBuffer
     {
         final ByteBuf buffer;
-
-        public ByteBuf writeSize() {
-            buffer.setInt(0, buffer.writerIndex() - 4);
-            return buffer;
-        }
-
     }
 
     private final PooledByteBufAllocator bufferPool;
@@ -41,7 +35,6 @@ public class SizeBufferPool {
     public PooledSizedBuffer getSizedBuffer()
     {
        ByteBuf b = bufferPool.directBuffer(initialSize);
-        b.writeInt(0);
        return new PooledSizedBuffer(b);
     }
 

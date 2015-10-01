@@ -13,7 +13,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
+import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.smr.legacy.TxDec;
 import org.corfudb.runtime.smr.legacy.TxInt;
@@ -186,10 +188,10 @@ public class KryoSerializer implements ISerializer{
         public ICorfuDBObject read (Kryo kryo, Input input, final Class<ICorfuDBObject> type) {
             try {
                 ICorfuDBObject o = kryo.newInstance(type);
-                o.setStreamID(kryo.readObject(input, UUID.class));
+                //o.setStreamID(kryo.readObject(input, UUID.class));
                 if (TransactionalContext.getTX() != null)
                 {
-                    o.setInstance(TransactionalContext.getTX().getInstance());
+                  //  o.setInstance(TransactionalContext.getTX().getInstance());
                 }
                 return o;
             } catch (Exception e) {
@@ -338,18 +340,19 @@ public class KryoSerializer implements ISerializer{
                     if (classToNameId != null) {
                         int nameId = classToNameId.get(type, -1);
                         if (nameId != -1) {
-                            log.trace("Write class name reference " + nameId + ": " + className(type));
+                            log.warn("Write class name reference " + nameId + ": " + className(type));
                             output.writeVarInt(nameId, true);
                             return;
                         }
                     }
                     // Only write the class name the first time encountered in object graph.
-                    log.trace("Write class name: " + className(type));
                     int nameId = nextNameId++;
+                    log.warn("Write class name: " + className(type) + "id=" + nameId);
                     if (classToNameId == null) classToNameId = new IdentityObjectIntMap();
                     classToNameId.put(type, nameId);
                     output.writeVarInt(nameId, true);
-                    output.writeString(type.getName());
+                    String className = type.getName();
+                    output.writeString(className);
                 }
 
                 @Override
@@ -365,7 +368,7 @@ public class KryoSerializer implements ISerializer{
                     if (classID == memoizedClassId) return memoizedClassIdValue;
                     Registration registration = idToRegistration.get(classID - 2);
                     if (registration == null) throw new KryoException("Encountered unregistered class ID: " + (classID - 2));
-                    log.trace("Read class " + (classID - 2) + ": " + className(registration.getType()));
+                    log.warn("Read class " + (classID - 2) + ": " + className(registration.getType()));
                     memoizedClassId = classID;
                     memoizedClassIdValue = registration;
                     return registration;
@@ -381,7 +384,21 @@ public class KryoSerializer implements ISerializer{
                         type = getTypeByName(className);
                         if (type == null) {
                             try {
-                                type = Class.forName(className, false, kryo.getClassLoader());
+                                if (className.contains("$ByteBuddy$"))
+                                {
+                                    String undecoratedName = className.substring(0, className.indexOf("$ByteBuddy$"));
+                                    type = Class.forName(undecoratedName, false, kryo.getClassLoader());
+                                    /*
+                                    log.info("Bytebuddy undecorated name: {}", undecoratedName);
+                                    type =  CorfuObjectByteBuddyProxy.getProxy().getType(
+                                            (Class<?>) Class.forName(undecoratedName),
+                                            null,
+                                            UUID.randomUUID());
+                                            */
+                                }
+                                else {
+                                    type = Class.forName(className, false, kryo.getClassLoader());
+                                }
                             } catch (ClassNotFoundException ex) {
                                 throw new KryoException("Unable to find class: " + className, ex);
                             }
@@ -389,9 +406,9 @@ public class KryoSerializer implements ISerializer{
                             nameToClass.put(className, type);
                         }
                         nameIdToClass.put(nameId, type);
-                        log.trace("Read class name: " + className);
+                        log.warn("Read class name: " + className);
                     } else {
-                        log.trace("Read class name reference " + nameId + ": " + className(type));
+                        log.warn("Read class name reference " + nameId + ": " + className(type));
                     }
                     return kryo.getRegistration(type);
                 }

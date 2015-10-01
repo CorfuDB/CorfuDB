@@ -1,8 +1,11 @@
 package org.corfudb.runtime.smr;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.HoleEncounteredException;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
@@ -27,7 +30,11 @@ public class BufferedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T
     UUID streamID;
     ICorfuDBInstance instance;
 
-    ArrayList<ISMREngineCommand> commandBuffer;
+    @Getter
+    @Setter
+    ICorfuDBObject implementingObject;
+
+    ArrayList<SMRCommand> commandBuffer;
     boolean writeOnly;
 
     class BufferedSMREngineOptions<Y extends T> implements ISMREngineOptions<Y>
@@ -51,7 +58,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T
         this.ts = ts;
         this.streamID = streamID;
         this.instance = instance;
-        this.commandBuffer = new ArrayList<ISMREngineCommand>();
+        this.commandBuffer = new ArrayList<SMRCommand>();
         this.writeOnly = true;
     }
 
@@ -70,7 +77,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T
                             .toArray(Class[]::new))
                     .newInstance(args);
 
-            this.commandBuffer = new ArrayList<ISMREngineCommand>();
+            this.commandBuffer = new ArrayList<SMRCommand>();
 
             ITimestamp streamPointer;
             IStream stream = instance.openStream(streamID);
@@ -164,14 +171,14 @@ public class BufferedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T
      * @return A timestamp representing the timestamp that the command was proposed to.
      */
     @Override
-    public <R> ITimestamp propose(ISMREngineCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
+    public <R> ITimestamp propose(SMRCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
         writeOnly = false;
         if (!readOnly)
         {
             //buffer the command.
             commandBuffer.add(command);
         }
-        R result = command.apply(underlyingObject, new BufferedSMREngineOptions<T>());
+        R result = command.execute(underlyingObject, this);
         if (completion != null) {
             completion.complete(result);
         }
@@ -231,14 +238,14 @@ public class BufferedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T
     }
 
     @Override
-    public <R> ITimestamp propose(ISMREngineCommand<T, R> command, boolean writeOnly) {
+    public <R> ITimestamp propose(SMRCommand<T, R> command, boolean writeOnly) {
         commandBuffer.add(command);
-        command.apply(underlyingObject, new BufferedSMREngineOptions<T>());
+        command.execute(underlyingObject, this);
         return ts;
     }
 
     @Override
-    public ArrayList<ISMREngineCommand> getCommandBuffer() {
+    public ArrayList<SMRCommand> getCommandBuffer() {
         return commandBuffer;
     }
 

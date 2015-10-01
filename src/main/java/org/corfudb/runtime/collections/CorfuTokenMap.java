@@ -1,16 +1,19 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.objects.Accessor;
-import org.corfudb.runtime.smr.*;
+import org.corfudb.runtime.objects.MutatorAccessor;
+import org.corfudb.runtime.smr.ICorfuDBObject;
+
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
- * Created by mwei on 5/1/15.
+ * Created by mwei on 9/29/15.
  */
-public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>, Map<K,V> {
+public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, ConcurrentMap<K,V> {
 
     /**
      * Returns the number of key-value mappings in this map.  If the
@@ -20,10 +23,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      * @return the number of key-value mappings in this map
      */
     @Override
+    @Accessor
     public int size() {
-        return accessorHelper((map, opts) -> {
-            return map.size();
-        });
+        return getState().size();
     }
 
     /**
@@ -33,9 +35,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public boolean isEmpty() {
-        return accessorHelper((map, opts) -> {
-            return map.isEmpty();
-        });
+        return false;
     }
 
     /**
@@ -57,9 +57,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public boolean containsKey(Object key) {
-        return accessorHelper((map, opts) -> {
-            return map.containsKey(key);
-        });
+        return false;
     }
 
     /**
@@ -82,9 +80,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public boolean containsValue(Object value) {
-        return (boolean) accessorHelper((map, opts) -> {
-            return map.containsValue(value);
-        });
+        return false;
     }
 
     /**
@@ -114,9 +110,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public V get(Object key) {
-        return accessorHelper((map, opts) -> {
-            return map.get(key);
-        });
+        return null;
     }
 
     /**
@@ -144,33 +138,9 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      *                                       or value prevents it from being stored in this map
      */
     @Override
+    @MutatorAccessor
     public V put(K key, V value) {
-        return mutatorAccessorHelper((map, opts) -> {
-                    return map.put(key, value);
-                }
-        );
-    }
-
-    /**
-     * Associates the specified value with the specified key in this map
-     * (optional operation).   (A map
-     * <tt>m</tt> is said to contain a mapping for a key <tt>k</tt> if and only
-     * if {@link #containsKey(Object) m.containsKey(k)} would return
-     * <tt>true</tt>.)
-     *
-     * @param key   key with which the specified value is to be associated
-     * @param value value to be associated with the specified key
-     * @throws UnsupportedOperationException if the <tt>put</tt> operation
-     *                                       is not supported by this map
-     * @throws ClassCastException            if the class of the specified key or value
-     *                                       prevents it from being stored in this map
-     * @throws NullPointerException          if the specified key or value is null
-     *                                       and this map does not permit null keys or values
-     * @throws IllegalArgumentException      if some property of the specified key
-     *                                       or value prevents it from being stored in this map
-     */
-    public void fastPut(K key, V value) {
-        mutatorHelper((map, opts) -> map.put(key,value));
+        return getState().put(key,value);
     }
 
     /**
@@ -205,9 +175,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public V remove(Object key) {
-        return mutatorAccessorHelper((map, opts) -> {
-            return map.remove(key);
-        });
+        return null;
     }
 
     /**
@@ -231,9 +199,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
-        mutatorHelper((map,opts) -> {
-            map.putAll(m);
-        });
+
     }
 
     /**
@@ -245,9 +211,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public void clear() {
-        mutatorHelper((map, opts) -> {
-            map.clear();
-        });
+
     }
 
     /**
@@ -267,9 +231,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public Set<K> keySet() {
-        return accessorHelper((map, opts) -> {
-            return map.keySet();
-        });
+        return null;
     }
 
     /**
@@ -289,9 +251,7 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public Collection<V> values() {
-        return accessorHelper((map, opts) -> {
-            return map.values();
-        });
+        return null;
     }
 
     /**
@@ -312,8 +272,142 @@ public class CDBSimpleMap<K,V> implements ICorfuDBObject<ConcurrentHashMap<K,V>>
      */
     @Override
     public Set<Entry<K, V>> entrySet() {
-        return accessorHelper( (map, opts) -> {
-           return map.entrySet();
-        });
+        return null;
+    }
+
+    /**
+     * If the specified key is not already associated
+     * with a value, associate it with the given value.
+     * This is equivalent to
+     * <pre> {@code
+     * if (!map.containsKey(key))
+     *   return map.put(key, value);
+     * else
+     *   return map.get(key);
+     * }</pre>
+     * <p>
+     * except that the action is performed atomically.
+     *
+     * @param key   key with which the specified value is to be associated
+     * @param value value to be associated with the specified key
+     * @return the previous value associated with the specified key, or
+     * {@code null} if there was no mapping for the key.
+     * (A {@code null} return can also indicate that the map
+     * previously associated {@code null} with the key,
+     * if the implementation supports null values.)
+     * @throws UnsupportedOperationException if the {@code put} operation
+     *                                       is not supported by this map
+     * @throws ClassCastException            if the class of the specified key or value
+     *                                       prevents it from being stored in this map
+     * @throws NullPointerException          if the specified key or value is null,
+     *                                       and this map does not permit null keys or values
+     * @throws IllegalArgumentException      if some property of the specified key
+     *                                       or value prevents it from being stored in this map
+     * @implNote This implementation intentionally re-abstracts the
+     * inappropriate default provided in {@code Map}.
+     */
+    @Override
+    public V putIfAbsent(K key, V value) {
+        return null;
+    }
+
+    /**
+     * Removes the entry for a key only if currently mapped to a given value.
+     * This is equivalent to
+     * <pre> {@code
+     * if (map.containsKey(key) && Objects.equals(map.get(key), value)) {
+     *   map.remove(key);
+     *   return true;
+     * } else
+     *   return false;
+     * }</pre>
+     * <p>
+     * except that the action is performed atomically.
+     *
+     * @param key   key with which the specified value is associated
+     * @param value value expected to be associated with the specified key
+     * @return {@code true} if the value was removed
+     * @throws UnsupportedOperationException if the {@code remove} operation
+     *                                       is not supported by this map
+     * @throws ClassCastException            if the key or value is of an inappropriate
+     *                                       type for this map
+     *                                       (<a href="../Collection.html#optional-restrictions">optional</a>)
+     * @throws NullPointerException          if the specified key or value is null,
+     *                                       and this map does not permit null keys or values
+     *                                       (<a href="../Collection.html#optional-restrictions">optional</a>)
+     * @implNote This implementation intentionally re-abstracts the
+     * inappropriate default provided in {@code Map}.
+     */
+    @Override
+    public boolean remove(Object key, Object value) {
+        return false;
+    }
+
+    /**
+     * Replaces the entry for a key only if currently mapped to a given value.
+     * This is equivalent to
+     * <pre> {@code
+     * if (map.containsKey(key) && Objects.equals(map.get(key), oldValue)) {
+     *   map.put(key, newValue);
+     *   return true;
+     * } else
+     *   return false;
+     * }</pre>
+     * <p>
+     * except that the action is performed atomically.
+     *
+     * @param key      key with which the specified value is associated
+     * @param oldValue value expected to be associated with the specified key
+     * @param newValue value to be associated with the specified key
+     * @return {@code true} if the value was replaced
+     * @throws UnsupportedOperationException if the {@code put} operation
+     *                                       is not supported by this map
+     * @throws ClassCastException            if the class of a specified key or value
+     *                                       prevents it from being stored in this map
+     * @throws NullPointerException          if a specified key or value is null,
+     *                                       and this map does not permit null keys or values
+     * @throws IllegalArgumentException      if some property of a specified key
+     *                                       or value prevents it from being stored in this map
+     * @implNote This implementation intentionally re-abstracts the
+     * inappropriate default provided in {@code Map}.
+     */
+    @Override
+    public boolean replace(K key, V oldValue, V newValue) {
+        return false;
+    }
+
+    /**
+     * Replaces the entry for a key only if currently mapped to some value.
+     * This is equivalent to
+     * <pre> {@code
+     * if (map.containsKey(key)) {
+     *   return map.put(key, value);
+     * } else
+     *   return null;
+     * }</pre>
+     * <p>
+     * except that the action is performed atomically.
+     *
+     * @param key   key with which the specified value is associated
+     * @param value value to be associated with the specified key
+     * @return the previous value associated with the specified key, or
+     * {@code null} if there was no mapping for the key.
+     * (A {@code null} return can also indicate that the map
+     * previously associated {@code null} with the key,
+     * if the implementation supports null values.)
+     * @throws UnsupportedOperationException if the {@code put} operation
+     *                                       is not supported by this map
+     * @throws ClassCastException            if the class of the specified key or value
+     *                                       prevents it from being stored in this map
+     * @throws NullPointerException          if the specified key or value is null,
+     *                                       and this map does not permit null keys or values
+     * @throws IllegalArgumentException      if some property of the specified key
+     *                                       or value prevents it from being stored in this map
+     * @implNote This implementation intentionally re-abstracts the
+     * inappropriate default provided in {@code Map}.
+     */
+    @Override
+    public V replace(K key, V value) {
+        return null;
     }
 }

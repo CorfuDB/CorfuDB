@@ -8,12 +8,14 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.util.concurrent.Future;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.wireprotocol.*;
 import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.protocols.AbstractNettyProtocol;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.NettyRPCChannelInboundHandlerAdapter;
 import org.corfudb.runtime.protocols.sequencers.INewStreamSequencer;
@@ -31,24 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Created by mwei on 9/15/15.
  */
 @Slf4j
-public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUnit {
+public class NettyLogUnitProtocol
+        extends AbstractNettyProtocol<NettyLogUnitProtocol.NettyLogUnitHandler>
+        implements IServerProtocol, INewWriteOnceLogUnit {
 
-    @Getter
-    Map<String, String> options;
-
-    @Getter
-    String host;
-
-    @Getter
-    Integer port;
-
-    @Getter
-    @Setter
-    long epoch;
-
-    private NettyLogUnitHandler handler;
-    private EventLoopGroup workerGroup;
-    private SizeBufferPool pool;
 
     public static String getProtocolString()
     {
@@ -62,43 +50,7 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
 
     public NettyLogUnitProtocol(String host, Integer port, Map<String, String> options, long epoch)
     {
-        this.host = host;
-        this.port = port;
-        this.options = options;
-        this.epoch = epoch;
-
-        pool = new SizeBufferPool(512);
-        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-
-            final AtomicInteger threadNum = new AtomicInteger(0);
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("NettyLogUnitProtocol-worker-" + threadNum.getAndIncrement());
-                return t;
-            }
-        });
-
-            Bootstrap b = new Bootstrap();
-            handler = new NettyLogUnitHandler();
-            b.group(workerGroup);
-            b.channel(NioSocketChannel.class);
-            b.option(ChannelOption.SO_KEEPALIVE, true);
-            b.option(ChannelOption.TCP_NODELAY, true);
-            b.handler(new ChannelInitializer<SocketChannel>() {
-                @Override
-                public void initChannel(SocketChannel ch) throws Exception {
-                    ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                    ch.pipeline().addLast(handler);
-                }
-            });
-
-        for (int i = 0; i < 2; i++) {
-            if (!b.connect(host, port).awaitUninterruptibly(5000)) {
-                throw new RuntimeException("Couldn't connect to endpoint " + this.getFullString());
-            }
-        }
+        super(host, port, options, epoch, new NettyLogUnitHandler());
     }
 
     /**
@@ -117,7 +69,7 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
         w.setStreams(streams);
         w.setRank(rank);
         w.setPayload(writeObject);
-        return handler.sendMessageAndGetCompletable(pool, epoch, w);
+        return handler.sendMessageAndGetCompletable(epoch, w);
     }
 
     /**
@@ -138,7 +90,7 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
         w.setLogicalAddresses(new ArrayList<>(streamsAndLogicalAddresses.values()));
         w.setRank(rank);
         w.setPayload(writeObject);
-        return handler.sendMessageAndGetCompletable(pool, epoch, w);
+        return handler.sendMessageAndGetCompletable(epoch, w);
     }
 
     /**
@@ -150,7 +102,7 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
      */
     @Override
     public CompletableFuture<ReadResult> read(long address) {
-        return handler.sendMessageAndGetCompletable(pool, epoch, new NettyLogUnitReadRequestMsg(address));
+        return handler.sendMessageAndGetCompletable(epoch, new NettyLogUnitReadRequestMsg(address));
     }
 
     /**
@@ -161,7 +113,7 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
      */
     @Override
     public void trim(UUID stream, long prefix) {
-        handler.sendMessage(pool, epoch, new NettyLogUnitTrimMsg(prefix, stream));
+        handler.sendMessage(epoch, new NettyLogUnitTrimMsg(prefix, stream));
     }
 
     /**
@@ -171,7 +123,7 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
      */
     @Override
     public void fillHole(long address) {
-        handler.sendMessage(pool, epoch, new NettyLogUnitFillHoleMsg(address));
+        handler.sendMessage(epoch, new NettyLogUnitFillHoleMsg(address));
     }
 
     /**
@@ -179,7 +131,7 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
      */
     @Override
     public void forceGC() {
-        handler.sendMessage(pool, epoch, new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.FORCE_GC));
+        handler.sendMessage(epoch, new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.FORCE_GC));
     }
 
     /**
@@ -189,10 +141,10 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
      */
     @Override
     public void setGCInterval(long millis) {
-        handler.sendMessage(pool, epoch, new NettyLogUnitGCIntervalMsg(millis));
+        handler.sendMessage(epoch, new NettyLogUnitGCIntervalMsg(millis));
     }
 
-    class NettyLogUnitHandler extends NettyRPCChannelInboundHandlerAdapter {
+    static class NettyLogUnitHandler extends NettyRPCChannelInboundHandlerAdapter {
 
         //region Handler Interface
 
@@ -226,40 +178,6 @@ public class NettyLogUnitProtocol implements IServerProtocol, INewWriteOnceLogUn
             }
         }
 
-
-        public CompletableFuture<Boolean> ping() {
-            NettyCorfuMsg r =
-                    new NettyCorfuMsg();
-            r.setMsgType(NettyCorfuMsg.NettyCorfuMsgType.PING);
-            return sendMessageAndGetCompletable(pool, epoch, r);
-        }
-
         //endregion
-    }
-
-    /**
-     * Returns a boolean indicating whether or not the server was reachable.
-     *
-     * @return True if the server was reachable, false otherwise.
-     */
-    @Override
-    public boolean ping() {
-        try {
-            return handler.ping().get();
-        } catch (Exception e)
-        {
-            return false;
-        }
-    }
-
-    /**
-     * Resets the server. Used by the configuration master to reset the state of the server.
-     * Should eliminate ALL hard state!
-     *
-     * @param epoch
-     */
-    @Override
-    public void reset(long epoch) throws NetworkException {
-
     }
 }

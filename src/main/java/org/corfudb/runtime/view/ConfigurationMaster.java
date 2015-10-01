@@ -33,8 +33,7 @@ public class ConfigurationMaster implements IConfigurationMaster {
             IServerProtocol firstEntry = masters.get(0);
             IConfigMaster master = (IConfigMaster) firstEntry;
             master.resetAll();
-            log.info("successful resetAll(), current log sequence@{}",
-                    ((ISimpleSequencer) cdr.getView().getSequencers().get(0)).sequenceGetCurrent());
+            log.info("successful resetAll()");
             return true;
         })
         .run();
