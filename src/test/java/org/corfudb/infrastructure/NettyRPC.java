@@ -12,6 +12,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
+import org.corfudb.runtime.protocols.AbstractNettyProtocol;
 import org.corfudb.runtime.protocols.NettyRPCChannelInboundHandlerAdapter;
 import org.corfudb.util.SizeBufferPool;
 import org.junit.Test;
@@ -55,7 +56,7 @@ public class NettyRPC {
 
         @Override
         void parseConfiguration(Map<String, Object> configuration) {
-
+            System.out.println("parse config");
         }
 
         @Override
@@ -78,41 +79,23 @@ public class NettyRPC {
         }
     }
 
+    class NettyTestClientHandler extends NettyRPCChannelInboundHandlerAdapter {
+
+        @Override
+        public void handleMessage(NettyCorfuMsg message) {
+            System.out.println("client receive response");
+        }
+    }
+
+    NettyTestClientHandler nettyTestClientHandler = new NettyTestClientHandler();
+
     // my Netty test client
     //
-    class NettyTestClient {
-
-        NettyTestClientHandler handler;
-
-        class NettyTestClientHandler extends NettyRPCChannelInboundHandlerAdapter {
-
-            @Override
-            public void handleMessage(NettyCorfuMsg message) {
-                System.out.println("client receive response");
-            }
-        }
+    class NettyTestClient  extends AbstractNettyProtocol<NettyRPC.NettyTestClientHandler>
+    {
 
         public NettyTestClient() {
-            NioEventLoopGroup workerGroup = new NioEventLoopGroup(/*Runtime.getRuntime().availableProcessors() * 2 */);
-
-            handler = new NettyTestClientHandler();
-
-            Bootstrap b = new Bootstrap();
-            b.group(workerGroup);
-            b.channel(NioSocketChannel.class);
-            b.option(ChannelOption.SO_KEEPALIVE, true);
-            b.option(ChannelOption.TCP_NODELAY, true);
-            b.handler(new ChannelInitializer<SocketChannel>() {
-                @Override
-                public void initChannel(SocketChannel ch) throws Exception {
-                    // ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                    ch.pipeline().addLast(handler);
-                }
-            });
-
-            if (!b.connect("localhost", 9999).awaitUninterruptibly(5000)) {
-                throw new RuntimeException("Couldn't connect to endpoint ");
-            }
+            super("localhost", 9999, null, 0, nettyTestClientHandler);
         }
 
        public void run() {
@@ -140,20 +123,27 @@ public class NettyRPC {
         new Thread(() -> {
             NettyTestServer ns = new NettyTestServer();
             ns.getInstance(new HashMap<String, Object>(){{
-            put("port", 9999);
+                put("port", 9999);
             }});
             ns.run();
         }).start();
 
  //       new Thread(() -> {
-            NettyTestClient nc = new NettyTestClient();
-            nc.run();
+ //           NettyTestClient nc = new NettyTestClient();
+ //           nc.run();
  //       }).start();
 
         try {
             Thread.sleep(5000);
+            NettyTestClient nc = new NettyTestClient();
+            nc.run();
+            Thread.sleep(5000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+
+        NettyTestClient nc = new NettyTestClient();
+        nc.run();
+
     }
 }
