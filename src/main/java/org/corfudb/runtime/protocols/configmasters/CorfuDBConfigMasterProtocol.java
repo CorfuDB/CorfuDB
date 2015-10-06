@@ -32,7 +32,6 @@ import com.thetransactioncompany.jsonrpc2.client.*;
 import com.thetransactioncompany.jsonrpc2.*;
 import java.net.*;
 
-import org.corfudb.runtime.gossip.IGossip;
 import org.corfudb.runtime.view.StreamData;
 
 
@@ -252,16 +251,6 @@ public class CorfuDBConfigMasterProtocol implements IServerProtocol, IConfigMast
         } catch(Exception e) {
             return null;
         }
-    }
-
-    /**
-     * Sends gossip to this configuration master. Unreliable.
-     *
-     * @param gossip The gossip object to send to the remote configuration master.
-     */
-    @Override
-    public void sendGossip(IGossip gossip) {
-
     }
 
     @SuppressWarnings("unchecked")

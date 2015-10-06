@@ -17,7 +17,6 @@ package org.corfudb.runtime.protocols.configmasters;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
-import org.corfudb.runtime.gossip.IGossip;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.StreamData;
 import java.util.Map;
@@ -82,13 +81,6 @@ public interface IConfigMaster extends IServerProtocol {
      * @return              The configuration string used to access that stream.
      */
     String getLog(UUID logID);
-
-    /**
-     * Sends gossip to this configuration master. Unreliable.
-     *
-     * @param gossip        The gossip object to send to the remote configuration master.
-     */
-    void sendGossip(IGossip gossip);
 
     /**
      * Resets the entire stream, and increments the epoch. Use only during testing to restore the system to a

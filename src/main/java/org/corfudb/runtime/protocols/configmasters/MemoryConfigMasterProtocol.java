@@ -3,7 +3,6 @@ package org.corfudb.runtime.protocols.configmasters;
 import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
 import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
 import org.corfudb.runtime.NetworkException;
-import org.corfudb.runtime.gossip.IGossip;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.MemoryLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.MemorySequencerProtocol;
@@ -151,15 +150,6 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
         return null;
     }
 
-    /**
-     * Sends gossip to this configuration master. Unreliable.
-     *
-     * @param gossip The gossip object to send to the remote configuration master.
-     */
-    @Override
-    public void sendGossip(IGossip gossip) {
-
-    }
 
     /**
      * Resets the entire stream, and increments the epoch. Use only during testing to restore the system to a
