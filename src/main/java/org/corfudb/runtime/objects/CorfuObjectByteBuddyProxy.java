@@ -138,7 +138,7 @@ public class CorfuObjectByteBuddyProxy implements CorfuObjectProxy {
                     .method(isAnnotatedWith(Mutator.class))
                     .intercept(MethodDelegation.to(new CorfuObjectMutatorInterceptor()))
                     .make()
-                    .load(getClass().getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
+                    .load(getClass().getClassLoader(), ClassLoadingStrategy.Default.INJECTION)
                     .getLoaded();
         }
         catch (Exception e)

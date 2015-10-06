@@ -14,6 +14,7 @@ import java.util.*;
 /**
  * Created by mwei on 6/1/15.
  */
+/*
 public class LocalTransaction implements ITransaction {
 
     ISMREngine executingEngine;
@@ -31,13 +32,13 @@ public class LocalTransaction implements ITransaction {
         this.spawnedEngines = new HashMap<UUID, BufferedSMREngine>();
     }
 
-    /**
+    *//**
      * Returns an SMR engine for a transactional context.
      *
      * @param streamID The streamID the SMR engine should run on.
      * @param objClass The class that the SMR engine runs against.
      * @return The SMR engine to be used for a transactional context.
-     */
+     *//*
     @Override
     @SuppressWarnings("unchecked")
     public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
@@ -60,76 +61,67 @@ public class LocalTransaction implements ITransaction {
         }
     }
 
-    /**
-     * Registers a stream to be part of a transactional context.
-     *
-     * @param stream A stream that will be joined into this transaction.
-     */
-    @Override
-    public void registerStream(UUID stream) {
 
-    }
-
-    /**
+    *//**
      * Set the CorfuDB instance for this transaction. Used during deserialization.
      *
      * @param instance The CorfuDB instance used for this tx.
-     */
+     *//*
     @Override
     public void setInstance(ICorfuDBInstance instance) {
         this.instance = instance;
     }
 
-    /**
+    *//**
      * return a pointer to the runtime managing this transaction.
      * this is needed for transactions on objects which may create
      * new objects during that transaction.
      *
      * @return the runtime
-     */
+     *//*
     @Override
     public ICorfuDBInstance getInstance() {
         return instance;
     }
 
-    /**
+    *//**
      * Set the command to be executed for this transaction.
      *
      * @param transaction The command(s) to be executed for this transaction.
-     */
+     *//*
     @Override
     public void setTransaction(ITransactionCommand transaction) {
 
     }
 
-    /**
+    *//**
      * Execute this command on a specific SMR engine.
      *
      * @param engine The SMR engine to run this command on.
-     */
+     *//*
     @Override
     public void executeTransaction(ISMREngine engine) {
 
     }
 
-    /**
+    *//**
      * Returns the transaction command.
      *
      * @return The command(s) to be executed for this transaction.
-     */
+     *//*
     @Override
     public ITransactionCommand getTransaction() {
         return null;
     }
 
-    /**
+    *//**
      * Propose to the SMR engine(s) for the transaction to be executed.
      *
      * @return The timestamp that the transaction was proposed at.
      * This timestamp should be a valid timestamp for all streams
      * that the transaction belongs to, otherwise, the transaction
      * will abort.
-     */
+     *//*
     @Override
     @SuppressWarnings("unchecked")
     public ITimestamp propose() throws IOException {
@@ -144,4 +136,4 @@ public class LocalTransaction implements ITransaction {
         instance.getAddressSpace().write(((SimpleTimestamp)res).address, mc);
         return res;
     }
-}
+}*/

@@ -18,7 +18,6 @@ import lombok.Getter;
 import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
 import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
 import org.corfudb.runtime.NetworkException;
-import org.corfudb.runtime.entries.OldBundleEntry;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;
 import org.corfudb.runtime.view.WriteOnceAddressSpace;
@@ -64,10 +63,6 @@ import com.esotericsoftware.kryonet.Server;
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Connection;
 */
-import org.corfudb.runtime.gossip.StreamEpochGossipEntry;
-import org.corfudb.runtime.gossip.StreamDiscoveryRequestGossip;
-import org.corfudb.runtime.gossip.StreamDiscoveryResponseGossip;
-import org.corfudb.runtime.gossip.IGossip;
 
 import org.corfudb.runtime.stream.Timestamp;
 import org.corfudb.runtime.view.StreamView;
@@ -75,10 +70,6 @@ import org.corfudb.runtime.view.RemoteLogView;
 import org.corfudb.runtime.RemoteException;
 import org.corfudb.runtime.view.StreamData;
 
-import org.corfudb.runtime.gossip.StreamPullGossip;
-import org.corfudb.runtime.gossip.StreamBundleGossip;
-import org.corfudb.runtime.view.StreamingSequencer;
-import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
 import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
 import org.corfudb.runtime.view.Serializer;
 
@@ -101,126 +92,6 @@ public class ConfigMasterServer implements ICorfuDBServer {
     int masterid = new SecureRandom().nextInt();
 
     public ConfigMasterServer() {
-    }
-
-    /*
-    private class GossipServer {
-      //  private Server server;
-        private int port;
-
-        public GossipServer(final Map<String,Object> config)
-        {
-            server = new Server(16384, 8192);
-            port = (Integer) config.get("port");
-            port += 1;
-            IGossip.registerSerializer(server.getKryo());
-        }
-
-        public void start()
-        {
-         /  server.start();
-            log.info("Gossip server bound to TCP/UDP port " + port);
-            try {
-                server.bind(port, port);
-            }
-            catch (IOException ie)
-            {
-                log.debug("Error binding gossip server", ie);
-            }
-           server.addListener(new Listener(){
-                public void received (Connection connection, Object object)
-                {
-                    if (object instanceof StreamEpochGossipEntry)
-                    {
-                        StreamEpochGossipEntry sege = (StreamEpochGossipEntry) object;
-                        if (!currentStreamView.checkStream(sege.streamID, sege.logPos))
-                        {
-                            if (!currentStreamView.learnStream(sege.streamID, sege.logID, null, -1, sege.epoch, sege.logPos))
-                            {
-                                log.debug("Learned about an epoch change for stream " + sege.streamID + ", but we don't know about that stream, discovering...");
-                                StreamDiscoveryRequestGossip sdrg = new StreamDiscoveryRequestGossip(sege.streamID);
-                                sendGossipToAllRemotes(sdrg);
-                                return;
-                            }
-                            if (!sege.fromMaster)
-                            {
-                                /* now we need to advertise this change to all other configuration masters */
-                             //   sege.fromMaster = true;
-                //                sendGossipToAllRemotes(sege);
-                          //  }
-                     //   }
-                   // }
-    /*
-                    else if (object instanceof StreamDiscoveryRequestGossip)
-                    {
-                        StreamDiscoveryRequestGossip sdrg = (StreamDiscoveryRequestGossip) object;
-                        StreamData sd = currentStreamView.getStream(sdrg.streamID);
-                        if (sd != null)
-                        {
-                            StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
-                                    sd.streamID,
-                                    sd.currentLog,
-                                    sd.startLog,
-                                    sd.startPos,
-                                    sd.epoch,
-                                    sd.lastUpdate
-                                    );
-                            sendGossipToAllRemotes(sdresp);
-                        }
-                    }
-                    else if (object instanceof StreamDiscoveryResponseGossip)
-                    {
-                        StreamDiscoveryResponseGossip sdrg = (StreamDiscoveryResponseGossip) object;
-                        if (!currentStreamView.checkStream(sdrg.streamID, sdrg.logPos))
-                        {
-                            currentStreamView.learnStream(sdrg.streamID, sdrg.currentLog, sdrg.startLog, sdrg.startPos, sdrg.epoch, sdrg.logPos);
-                        }
-                    }
-                    else if (object instanceof StreamPullGossip)
-                    {
-                        StreamPullGossip spg = (StreamPullGossip) object;
-                        StreamingSequencer slocal = new StreamingSequencer(currentView);
-                        long remoteToken = slocal.getNext(spg.streamID, spg.reservation);
-                        WriteOnceAddressSpace woaslocal = new WriteOnceAddressSpace(currentView);
-                        long streamEpoch = currentStreamView.getStream(spg.streamID).epoch;
-                        try{
-                        woaslocal.write(remoteToken, new CorfuDBStreamMoveEntry(spg.streamID, spg.destinationLog, spg.destinationStream, spg.physicalPos, spg.duration, streamEpoch, spg.destinationEpoch, spg.payload));
-                        } catch (Exception e) {}
-                    }
-                    else if (object instanceof StreamBundleGossip)
-                    {
-                        log.debug("Executing bundle!");
-                        StreamBundleGossip spg = (StreamBundleGossip) object;
-                        StreamingSequencer slocal = new StreamingSequencer(currentView);
-                        long remoteToken = slocal.getNext(spg.streamID, spg.reservation);
-                        WriteOnceAddressSpace woaslocal = new WriteOnceAddressSpace(currentView);
-                        long streamEpoch = currentStreamView.getStream(spg.streamID).epoch;
-                        try{
-                        woaslocal.write(remoteToken, new OldBundleEntry(spg.epochMap, spg.destinationLog, spg.destinationStream, spg.physicalPos,  streamEpoch, spg.payload, (int) spg.duration, spg.offset ));
-                        } catch (Exception e) {}
-                    }
-
-                }
-            });
-        }
-
-    }
-*/
-
-    private void sendGossipToAllRemotes(IGossip gossip)
-    {
-        for (UUID remote : currentRemoteView.getAllLogs())
-        {
-            try {
-                log.info("send remote gossip to {}", remote);
-                CorfuDBView cv = (CorfuDBView)currentRemoteView.getLog(remote);
-                IConfigMaster cm = (IConfigMaster) cv.getConfigMasters().get(0);
-                cm.sendGossip(gossip);
-            } catch (Exception e)
-            {
-                log.debug("Error Broadcasting Gossip", e);
-            }
-        }
     }
 
     @SuppressWarnings("unchecked")
@@ -412,16 +283,6 @@ public class ConfigMasterServer implements ICorfuDBServer {
                 }});
             }
             }
-/*
-            StreamDiscoveryResponseGossip sdresp = new StreamDiscoveryResponseGossip(
-                    sd.streamID,
-                    sd.currentLog,
-                    sd.startLog,
-                    sd.startPos,
-                    sd.epoch,
-                    sd.lastUpdate
-                    );
-            sendGossipToAllRemotes(sdresp);*/
             }
         }
         catch (Exception ex)

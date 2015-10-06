@@ -323,7 +323,6 @@ public class NewStream implements IStream {
 
                                 if (rl.length == 0)
                                 {
-                                    log.info("rl is 0, batch is {}", batch);
                                     //this batch was empty but we need to expire this batch
                                     rl = new IStreamEntry[] {
                                       new IStreamAddressSpace.StreamAddressSpaceEntry<>(

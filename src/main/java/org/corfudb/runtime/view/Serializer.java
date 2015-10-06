@@ -34,10 +34,6 @@ import java.util.HashSet;
 
 import static com.esotericsoftware.kryo.util.Util.*;
 
-import org.corfudb.runtime.smr.legacy.TxDec;
-import org.corfudb.runtime.smr.legacy.TxInt;
-import org.corfudb.runtime.smr.legacy.TxIntWriteSetEntry;
-import org.corfudb.runtime.smr.legacy.TxIntReadSetEntry;
 import org.corfudb.runtime.stream.ITimestamp;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -160,7 +156,7 @@ public class Serializer
             try {
                 ICorfuDBObject o = kryo.newInstance(type);
                 //o.setStreamID(kryo.readObject(input, UUID.class));
-                if (TransactionalContext.getTX() != null)
+               // if (TransactionalContext.getTX() != null)
                 {
                     //o.setInstance(TransactionalContext.getTX().getInstance());
                 }
@@ -198,10 +194,6 @@ public class Serializer
         k.register(SMRCommandWrapper.class);
         k.register(ITimestamp.class);
         k.register(LinkedList.class);
-        k.register(TxDec.class);
-        k.register(TxInt.class);
-        k.register(TxIntWriteSetEntry.class);
-        k.register(TxIntReadSetEntry.class);
         k.register(ArrayList.class);
         k.register(Triple.class);
         k.register(HashSet.class);

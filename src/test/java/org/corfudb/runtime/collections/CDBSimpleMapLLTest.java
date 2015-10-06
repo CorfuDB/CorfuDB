@@ -51,6 +51,7 @@ public class CDBSimpleMapLLTest {
   //  @Test
     public void LLTransactionalTest() throws Exception
     {
+        /*
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
         final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
         testMap.put(10, 100);
@@ -69,11 +70,13 @@ public class CDBSimpleMapLLTest {
                 .isEqualTo(1000);
         assertThat(testMap.size())
                 .isEqualTo(2);
+                */
     }
 
   //  @Test
     public void twoMapLLTransactionalTest() throws Exception
     {
+        /*
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
         CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
 
@@ -98,11 +101,13 @@ public class CDBSimpleMapLLTest {
 
         // Make sure TxDec is now set
         checkTxDec(((SimpleTimestamp) txStamp).address, true);
+        */
     }
 
    // @Test
     public void backToBackLLTransactionalTest() throws Exception
     {
+        /*
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
         LLTransaction tx2 = new LLTransaction(cdr.getLocalInstance());
         CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
@@ -137,11 +142,13 @@ public class CDBSimpleMapLLTest {
         // Make sure TxDec is now set
         checkTxDec(((SimpleTimestamp) txStamp).address, true);
         checkTxDec(((SimpleTimestamp) txStamp2).address, true);
+        */
     }
 
   //  @Test
     public void abortLLTransactionalTest() throws Exception
     {
+        /*
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
         LLTransaction tx2 = new LLTransaction(cdr.getLocalInstance());
         CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
@@ -175,12 +182,14 @@ public class CDBSimpleMapLLTest {
         // Make sure TxDec is now set
         checkTxDec(((SimpleTimestamp) txStamp).address, true);
         checkTxDec(((SimpleTimestamp) txStamp2).address, false);
+        */
     }
 
     // Intervening command should abort the transaction.
    // @Test
     public void LLAbortTest() throws Exception
     {
+        /*
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
         CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
 
@@ -210,10 +219,12 @@ public class CDBSimpleMapLLTest {
 
         // Make sure TxDec is now set
         checkTxDec(((SimpleTimestamp) txStamp).address, false);
+        */
     }
 
    // @Test
     public void readSetTest() throws Exception {
+        /*
         // Make sure we accurately determine what should go in the readset and what should not
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
 
@@ -231,10 +242,12 @@ public class CDBSimpleMapLLTest {
 
         // Make sure TxDec is now set
         checkTxDec(((SimpleTimestamp) txStamp).address, true);
+        */
     }
 
    // @Test
     public void readSetOneTest() throws Exception {
+        /*
         LLTransaction tx = new LLTransaction(cdr.getLocalInstance());
 
         testMap.put(10, 100);
@@ -255,5 +268,6 @@ public class CDBSimpleMapLLTest {
 
         // Make sure TxDec is now set
         checkTxDec(((SimpleTimestamp) txStamp).address, true);
+        */
     }
 }

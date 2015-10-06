@@ -135,8 +135,8 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                 transaction.executeTransaction(this);
             }
             else {
-                try (TransactionalContext tc =
-                             new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
+             //   try (TransactionalContext tc =
+               //              new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
                   //  log.info("Applying command @ {} of type {}", entry.getTimestamp(), entry.getPayload().getClass());
                   //  ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
                     SMRCommand command = (SMRCommand) entry.getPayload();
@@ -160,7 +160,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     }
                 }
             }
-        }
+        //}
         lastApplied = entry.getLogicalTimestamp();
     }
 
@@ -195,7 +195,6 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     @Override
     @SuppressWarnings("unchecked")
     public <R> void sync(ITimestamp ts) {
-        log.info("sync to {}", ts);
         if (ts == null) {
             stream.checkAsync()
                     .thenApplyAsync(t -> {

@@ -9,7 +9,6 @@ import org.corfudb.runtime.entries.MetadataEntry;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
 import org.corfudb.runtime.objects.CorfuObjectRuntimeProcessor;
 import org.corfudb.runtime.smr.*;
-import org.corfudb.runtime.smr.legacy.CorfuDBObject;
 import org.corfudb.runtime.stream.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

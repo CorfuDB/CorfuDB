@@ -1,7 +1,11 @@
 package org.corfudb.runtime.smr;
 
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.smr.smrprotocol.LambdaSMRCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleTimestamp;
@@ -14,6 +18,8 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A deferred transaction gets resolved at runtime:
@@ -27,34 +33,31 @@ import java.util.*;
  *
  * Created by mwei on 5/3/15.
  */
-public class DeferredTransaction implements ITransaction, IStreamEntry, Serializable {
-    private Logger log = LoggerFactory.getLogger(DeferredTransaction.class);
+@Slf4j
+public class DeferredTransaction<R> implements ITransaction<R> {
 
-    ITransactionCommand transaction;
-    List<UUID> streamList;
-    ITimestamp timestamp;
-    transient ICorfuDBInstance instance;
-    transient ISMREngine executingEngine;
+    @Getter
+    @Setter
+    ITransactionCommand<R> transaction;
 
-    // This is used to collect the Hint info
-    transient MultiCommand flattenedCommands;
-    transient HashMap<UUID, IBufferedSMREngine> bufferedSMRMap;
-    transient ArrayList<IBufferedSMREngine> passThroughEngines;
+    @Getter
+    @Setter
+    public List<UUID> streamList;
 
-    class DeferredTransactionOptions implements ITransactionOptions
-    {
-
-        public DeferredTransactionOptions() {
-        }
-
-    }
+    @Getter
+    @Setter
+    public ICorfuDBInstance instance;
 
     public DeferredTransaction(ICorfuDBInstance instance)
     {
-        streamList = null;
+        streamList = new ArrayList<>();
         this.instance = instance;
-        bufferedSMRMap = new HashMap<UUID, IBufferedSMREngine>();
-        passThroughEngines = new ArrayList<IBufferedSMREngine>();
+    }
+
+    public DeferredTransaction(ICorfuDBInstance instance, ITransactionCommand<R> transaction)
+    {
+        this(instance);
+        this.transaction = transaction;
     }
 
     /**
@@ -67,6 +70,7 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     @Override
     @SuppressWarnings("unchecked")
     public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
+        /*
         if (streamID.equals(executingEngine.getStreamID()))
         {
             PassThroughSMREngine engine = new PassThroughSMREngine(executingEngine.getObject(), timestamp, instance, streamID);
@@ -89,48 +93,8 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
             }
             return engine;
         }
-    }
-
-    /**
-     * Registers a stream to be part of a transactional context.
-     *
-     * @param stream A stream that will be joined into this transaction.
-     */
-    @Override
-    public void registerStream(UUID stream) {
-        //streamList.add(stream);
-    }
-
-    /**
-     * Set the CorfuDB instance for this transaction. Used during deserialization.
-     *
-     * @param instance The CorfuDB instance used for this tx.
-     */
-    @Override
-    public void setInstance(ICorfuDBInstance instance) {
-        this.instance = instance;
-    }
-
-    /**
-     * return a pointer to the runtime managing this transaction.
-     * this is needed for transactions on objects which may create
-     * new objects during that transaction.
-     *
-     * @return the runtime
-     */
-    @Override
-    public ICorfuDBInstance getInstance() {
-        return instance;
-    }
-
-    /**
-     * Set the command to be executed for this transaction.
-     *
-     * @param transaction The command(s) to be executed for this transaction.
-     */
-    @Override
-    public <T> void setTransaction(ITransactionCommand<T> transaction) {
-        this.transaction = transaction;
+        */
+        return null;
     }
 
     /**
@@ -141,72 +105,6 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     @Override
     public void executeTransaction(ISMREngine engine) {
 
-        Hints hint = null;
-        /*
-        try {
-            hint = instance.getAddressSpace().readHints(((SimpleTimestamp) timestamp).address);
-        } catch (Exception e) {
-            log.error("Exception in reading metadata: {}", e);
-        }
-*/
-        if (hint == null || !hint.isSetFlatTxn()) {
-            ITransactionCommand command = getTransaction();
-            executingEngine = engine;
-            try (TransactionalContext tx = new TransactionalContext(this)) {
-                command.apply(new DeferredTransactionOptions());
-            }
-        }
- /*
-            // Collect the commands and write to Hints section.
-            HashMap<UUID, ISMREngineCommand[]> multicommandMap = new HashMap<UUID, ISMREngineCommand[]>();
-
-            Iterator<UUID> streamIterator = bufferedSMRMap.keySet().iterator();
-            while (streamIterator.hasNext()) {
-                UUID stream = streamIterator.next();
-                IBufferedSMREngine eng = bufferedSMRMap.get(stream);
-                multicommandMap.put(stream,
-                        (ISMREngineCommand[]) eng.getCommandBuffer().toArray(new ISMREngineCommand[1]));
-            }
-
-            Iterator<IBufferedSMREngine> passThroughIterator = passThroughEngines.iterator();
-            ArrayList<ISMREngineCommand> thisStreamCommands = new ArrayList<>();
-            while (passThroughIterator.hasNext()) {
-                IBufferedSMREngine eng = passThroughIterator.next();
-                thisStreamCommands.addAll(eng.getCommandBuffer());
-            }
-            multicommandMap.put(executingEngine.getStreamID(), thisStreamCommands.toArray(new ISMREngineCommand[1]));
-
-            flattenedCommands = new MultiCommand(multicommandMap);
-            try {
-                instance.getAddressSpace().setHintsFlatTxn(((SimpleTimestamp) timestamp).address, flattenedCommands);
-            } catch (Exception e) {
-                log.error("Exception trying to write DeferredTxn flat transaction {}", e);
-            }
-        } else {
-            MultiCommand mc = null;
-            try {
-                ByteArrayInputStream bais = new ByteArrayInputStream(hint.getFlatTxn());
-                ObjectInputStream ois = new ObjectInputStream(bais);
-                mc = (MultiCommand) ois.readObject();
-            } catch (Exception e) {
-                log.error("Got exception while deserializing flattened Txn: {}", e);
-            }
-            // Apply the multicommands
-            PassThroughSMREngine applyEngine =
-                    new PassThroughSMREngine(engine.getObject(), engine.check(), instance, engine.getStreamID());
-            applyEngine.propose(mc, null, false);
-        }
-        */
-    }
-
-    /**
-     * Returns the transaction command.
-     *
-     * @return The command(s) to be executed for this transaction.
-     */
-    @Override
-    public ITransactionCommand getTransaction() {
-        return this.transaction;
     }
 
     /**
@@ -221,13 +119,13 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
     public ITimestamp propose()
     throws IOException
     {
-        /* The simple transaction just assumes that everything is on the same log,
-         * so picking the next valid sequence is acceptable.
-         */
         try {
             Long sequence = instance.getNewStreamingSequencer().nextTokenAsync(Collections.<UUID>emptySet(), 1)
                     .thenApplyAsync(x -> {
-                        instance.getStreamAddressSpace().write(x, Collections.<UUID>emptySet(), this);
+                        TransactionalContext.setTransactionalFuture(
+                                new SimpleTimestamp(x), new CompletableFuture());
+                        instance.getStreamAddressSpace().write(x, Collections.<UUID>emptySet(),
+                                new LambdaSMRCommand<>(transaction));
                         return x;
                     }).get();
             return new SimpleTimestamp(sequence);
@@ -238,56 +136,19 @@ public class DeferredTransaction implements ITransaction, IStreamEntry, Serializ
         }
     }
 
-    /**
-     * Gets the list of of the streams this entry belongs to.
-     *
-     * @return The list of streams this entry belongs to.
-     */
     @Override
-    public List<UUID> getStreamIds() {
-        return null;
-        //return streamList;
-    }
-
-    /**
-     * Returns whether this entry belongs to a given stream ID.
-     *
-     * @param stream The stream ID to check
-     * @return True, if this entry belongs to that stream, false otherwise.
-     */
-    @Override
-    public boolean containsStream(UUID stream) {
-        return true;
-        //return streamList.contains(stream);
-    }
-
-    /**
-     * Gets the timestamp of the stream this entry belongs to.
-     *
-     * @return The timestamp of the stream this entry belongs to.
-     */
-    @Override
-    public ITimestamp getTimestamp() {
-        return timestamp;
-    }
-
-    /**
-     * Set the timestamp.
-     *
-     * @param ts    The new timestamp of the entry.
-     */
-    @Override
-    public void setTimestamp(ITimestamp ts) {
-        timestamp = ts;
-    }
-
-    /**
-     * Gets the payload of this stream.
-     *
-     * @return The payload of the stream.
-     */
-    @Override
-    public Object getPayload() {
-        return this;
+    @SuppressWarnings("unchecked")
+    public CompletableFuture<R> executeAsync() {
+        NullSMREngine nse = new NullSMREngine(instance);
+        ITimestamp t;
+        try {
+            t = propose();
+            nse.sync(t);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+        return (CompletableFuture<R>) TransactionalContext.getTransactionalFuture(t);
     }
 }

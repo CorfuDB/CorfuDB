@@ -8,13 +8,15 @@ import org.corfudb.runtime.view.ICorfuDBInstance;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
  * Created by mwei on 5/3/15.
  */
-public interface ITransaction {
+public interface ITransaction<R> {
 
     /**
      * Returns an SMR engine for a transactional context.
@@ -23,12 +25,6 @@ public interface ITransaction {
      * @return          The SMR engine to be used for a transactional context.
      */
     ISMREngine getEngine(UUID streamID, Class<?> objClass);
-
-    /**
-     * Registers a stream to be part of a transactional context.
-     * @param stream    A stream that will be joined into this transaction.
-     */
-    void registerStream(UUID stream);
 
     /**
      * Set the CorfuDB instance for this transaction. Used during deserialization.
@@ -48,7 +44,7 @@ public interface ITransaction {
      * Set the command to be executed for this transaction.
      * @param transaction   The command(s) to be executed for this transaction.
      */
-    <T> void setTransaction(ITransactionCommand<T> transaction);
+    void setTransaction(ITransactionCommand<R> transaction);
 
     /**
      * Execute this command on a specific SMR engine.
@@ -76,5 +72,26 @@ public interface ITransaction {
      */
     ITimestamp propose()
     throws IOException;
+
+    default R execute()
+    throws TransactionAbortedException {
+        try {
+            return executeAsync().get();
+        }
+        catch (ExecutionException ee)
+        {
+            if (ee.getCause() instanceof TransactionAbortedException)
+            {
+                throw (TransactionAbortedException) ee.getCause();
+            }
+            throw new RuntimeException(ee);
+        }
+        catch (InterruptedException ie)
+        {
+            throw new RuntimeException(ie);
+        }
+    }
+
+    CompletableFuture<R> executeAsync();
 }
 

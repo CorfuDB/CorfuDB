@@ -54,6 +54,9 @@ public class NettyRPC {
 
         AtomicInteger nreceived = new AtomicInteger(0);
 
+        @Getter
+        Thread t;
+
         @Override
         void parseConfiguration(Map<String, Object> configuration) {
             System.out.println("parse config");
@@ -61,6 +64,7 @@ public class NettyRPC {
 
         @Override
         void processMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx) {
+                System.out.println("hello");
             int r = nreceived.getAndIncrement();
             if (nmessages < 5 || r % (nmessages/5) == 0)
                 System.out.println("got mesg :" + msg); // r + ">, requestID = " + msg.getRequestID() + ", epoch=" + msg.getEpoch()) ;
@@ -73,10 +77,6 @@ public class NettyRPC {
 
         }
 
-        @Override
-        public Thread getThread() {
-            return null;
-        }
     }
 
     class NettyTestClientHandler extends NettyRPCChannelInboundHandlerAdapter {
@@ -94,19 +94,22 @@ public class NettyRPC {
     class NettyTestClient  extends AbstractNettyProtocol<NettyRPC.NettyTestClientHandler>
     {
 
-        public NettyTestClient() {
+       public NettyTestClient() {
             super("localhost", 9999, null, 0, nettyTestClientHandler);
         }
 
        public void run() {
             // send some requests ...
+           try {Thread.sleep(2000);}
+           catch (Exception e) {}
             System.out.println("send something");
            UUID myid = new UUID(0,0);
            for (int i = 0; i < nmessages; i++) {
-               NettyCorfuMsg msg = new NettyCorfuMsg(myid, (long)i, (long) 100, NettyCorfuMsg.NettyCorfuMsgType.ERROR_OK);
+               NettyCorfuMsg msg = new NettyCorfuMsg(myid, (long)0L, (long) i, NettyCorfuMsg.NettyCorfuMsgType.FORCE_GC);
+               msg.setEpoch(0);
                if (nmessages <  5 || i % (nmessages/5) == 0)
                    System.out.println("send msg: " + msg);
-               handler.sendMessage(100, msg);
+               handler.sendMessage(0, msg);
            }
         }
 

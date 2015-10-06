@@ -8,11 +8,12 @@ import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Created by mwei on 6/1/15.
  */
-public class PassthroughTransaction implements ITransaction{
+public class PassthroughTransaction<T> implements ITransaction<T>{
 
     ISMREngine executingEngine;
     ITimestamp timestamp;
@@ -46,16 +47,6 @@ public class PassthroughTransaction implements ITransaction{
             engine.sync(timestamp);
             return engine;
         }
-    }
-
-    /**
-     * Registers a stream to be part of a transactional context.
-     *
-     * @param stream A stream that will be joined into this transaction.
-     */
-    @Override
-    public void registerStream(UUID stream) {
-
     }
 
 
@@ -122,5 +113,10 @@ public class PassthroughTransaction implements ITransaction{
     @Override
     public ITimestamp propose() throws IOException {
         throw new UnsupportedOperationException("Local transactions can never be proposed to the log");
+    }
+
+    @Override
+    public CompletableFuture executeAsync() {
+        return null;
     }
 }

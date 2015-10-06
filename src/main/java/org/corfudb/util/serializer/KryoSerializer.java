@@ -17,10 +17,6 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
 import org.corfudb.runtime.smr.*;
-import org.corfudb.runtime.smr.legacy.TxDec;
-import org.corfudb.runtime.smr.legacy.TxInt;
-import org.corfudb.runtime.smr.legacy.TxIntReadSetEntry;
-import org.corfudb.runtime.smr.legacy.TxIntWriteSetEntry;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.objenesis.strategy.StdInstantiatorStrategy;
@@ -189,7 +185,7 @@ public class KryoSerializer implements ISerializer{
             try {
                 ICorfuDBObject o = kryo.newInstance(type);
                 //o.setStreamID(kryo.readObject(input, UUID.class));
-                if (TransactionalContext.getTX() != null)
+               // if (TransactionalContext.getTX() != null)
                 {
                   //  o.setInstance(TransactionalContext.getTX().getInstance());
                 }
@@ -227,10 +223,6 @@ public class KryoSerializer implements ISerializer{
         k.register(SMRCommandWrapper.class);
         k.register(ITimestamp.class);
         k.register(LinkedList.class);
-        k.register(TxDec.class);
-        k.register(TxInt.class);
-        k.register(TxIntWriteSetEntry.class);
-        k.register(TxIntReadSetEntry.class);
         k.register(ArrayList.class);
         k.register(Triple.class);
         k.register(HashSet.class);
@@ -384,21 +376,7 @@ public class KryoSerializer implements ISerializer{
                         type = getTypeByName(className);
                         if (type == null) {
                             try {
-                                if (className.contains("$ByteBuddy$"))
-                                {
-                                    String undecoratedName = className.substring(0, className.indexOf("$ByteBuddy$"));
-                                    type = Class.forName(undecoratedName, false, kryo.getClassLoader());
-                                    /*
-                                    log.info("Bytebuddy undecorated name: {}", undecoratedName);
-                                    type =  CorfuObjectByteBuddyProxy.getProxy().getType(
-                                            (Class<?>) Class.forName(undecoratedName),
-                                            null,
-                                            UUID.randomUUID());
-                                            */
-                                }
-                                else {
-                                    type = Class.forName(className, false, kryo.getClassLoader());
-                                }
+                                type = Class.forName(className, false, kryo.getClassLoader());
                             } catch (ClassNotFoundException ex) {
                                 throw new KryoException("Unable to find class: " + className, ex);
                             }

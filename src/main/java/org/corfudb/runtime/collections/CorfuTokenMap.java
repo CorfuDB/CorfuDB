@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.objects.Accessor;
+import org.corfudb.runtime.objects.Mutator;
 import org.corfudb.runtime.objects.MutatorAccessor;
 import org.corfudb.runtime.smr.ICorfuDBObject;
 
@@ -34,8 +35,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      * @return <tt>true</tt> if this map contains no key-value mappings
      */
     @Override
+    @Accessor
     public boolean isEmpty() {
-        return false;
+        return getState().isEmpty();
     }
 
     /**
@@ -56,8 +58,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
+    @Accessor
     public boolean containsKey(Object key) {
-        return false;
+        return getState().containsKey(key);
     }
 
     /**
@@ -79,8 +82,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
+    @Accessor
     public boolean containsValue(Object value) {
-        return false;
+        return getState().containsValue(value);
     }
 
     /**
@@ -109,8 +113,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
+    @Accessor
     public V get(Object key) {
-        return null;
+        return getState().get(key);
     }
 
     /**
@@ -174,8 +179,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
+    @MutatorAccessor
     public V remove(Object key) {
-        return null;
+        return getState().remove(key);
     }
 
     /**
@@ -198,8 +204,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      *                                       the specified map prevents it from being stored in this map
      */
     @Override
+    @Mutator
     public void putAll(Map<? extends K, ? extends V> m) {
-
+        getState().putAll(m);
     }
 
     /**
@@ -210,8 +217,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      *                                       is not supported by this map
      */
     @Override
+    @Mutator
     public void clear() {
-
+        getState().clear();
     }
 
     /**
@@ -230,8 +238,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      * @return a set view of the keys contained in this map
      */
     @Override
+    @Accessor
     public Set<K> keySet() {
-        return null;
+        return getState().keySet();
     }
 
     /**
@@ -250,8 +259,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      * @return a collection view of the values contained in this map
      */
     @Override
+    @Accessor
     public Collection<V> values() {
-        return null;
+        return getState().values();
     }
 
     /**
@@ -271,8 +281,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      * @return a set view of the mappings contained in this map
      */
     @Override
+    @Accessor
     public Set<Entry<K, V>> entrySet() {
-        return null;
+        return getState().entrySet();
     }
 
     /**
@@ -307,8 +318,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      * inappropriate default provided in {@code Map}.
      */
     @Override
+    @MutatorAccessor
     public V putIfAbsent(K key, V value) {
-        return null;
+        return getState().put(key, value);
     }
 
     /**
@@ -339,8 +351,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      * inappropriate default provided in {@code Map}.
      */
     @Override
+    @MutatorAccessor
     public boolean remove(Object key, Object value) {
-        return false;
+        return getState().remove(key, value);
     }
 
     /**
@@ -372,8 +385,9 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      * inappropriate default provided in {@code Map}.
      */
     @Override
+    @MutatorAccessor
     public boolean replace(K key, V oldValue, V newValue) {
-        return false;
+        return replace(key, oldValue, newValue);
     }
 
     /**
@@ -408,6 +422,6 @@ public class CorfuTokenMap<K,V> implements ICorfuDBObject<HashMap<K,V>>, Concurr
      */
     @Override
     public V replace(K key, V value) {
-        return null;
+        return getState().replace(key, value);
     }
 }

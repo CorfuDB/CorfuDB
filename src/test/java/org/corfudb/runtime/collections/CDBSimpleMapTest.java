@@ -21,6 +21,7 @@ import org.junit.runner.JUnitCore;
 import java.sql.Time;
 import java.util.ArrayList;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -86,13 +87,49 @@ public class CDBSimpleMapTest {
     public void tokenBasedTest() throws Exception
     {
         CorfuTokenMap<Integer, Integer> testMapT = instance.openObject(UUID.randomUUID(), CorfuTokenMap.class);
-        assertThat(testMapT.put(10, 100))
-                .isEqualTo(null);
         for (int i = 0; i< 100; i++)
         {
-            assertThat(testMapT.put(10, 100))
-                    .isEqualTo(100);
+            assertThat(testMapT.put(i, 100))
+                    .isEqualTo(null);
         }
+        assertThat(testMapT.size())
+                .isEqualTo(100);
+    }
+
+    @Test
+    public void tokenMapContainsTokenMapTest() throws Exception
+    {
+        CorfuTokenMap<Integer, CorfuTokenMap> testMapT = instance.openObject(UUID.randomUUID(), CorfuTokenMap.class);
+        for (int i = 0; i< 100; i++)
+        {
+            CorfuTokenMap<Integer, Integer> thisMap = instance.openObject(UUID.randomUUID(), CorfuTokenMap.class);
+            thisMap.put(0, i);
+            assertThat(testMapT.put(i, thisMap))
+                    .isEqualTo(null);
+        }
+        assertThat(testMapT.size())
+                .isEqualTo(100);
+        for (int i = 0; i< 100; i++)
+        {
+            assertThat(testMapT.get(i).get(0))
+                    .isEqualTo(i);
+        }
+    }
+
+    @Test
+    public void simpleDeferredTXTest() throws Exception
+    {
+        DeferredTransaction<Integer> simpleTX = new DeferredTransaction<Integer>(instance,
+                (v) -> {
+                    testMap.put(0, 10);
+                    return testMap.get(0);
+                });
+        CompletableFuture<Integer> cf = simpleTX.executeAsync();
+        testMap.sync(null);
+        assertThat(cf.get())
+                .isEqualTo(10);
+        assertThat(testMap.get(0))
+                .isEqualTo(10);
     }
 
     @Test
@@ -124,7 +161,7 @@ public class CDBSimpleMapTest {
                 .isEqualTo(10);
     }
 
-   // @Test
+    @Test
     public void DeferredTransactionalTest() throws Exception
     {
         DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
@@ -175,7 +212,7 @@ public class CDBSimpleMapTest {
                 .isEqualTo(100);
     }
 
-  //  @Test
+    @Test
     public void mapOfMapsTest() throws Exception
     {
         CDBSimpleMap<Integer, CDBSimpleMap<Integer, Integer>> testMap2 =
@@ -189,6 +226,7 @@ public class CDBSimpleMapTest {
     //@Test
     public void OpaqueDeferredTransactionalTest() throws Exception
     {
+        /*
         OpaqueDeferredTransaction tx = new OpaqueDeferredTransaction(cdr.getLocalInstance());
 
         final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
@@ -223,11 +261,13 @@ public class CDBSimpleMapTest {
         assertThat(testMap.get(10))
                 .isNotEqualTo(42)
                 .isEqualTo(1000);
+                */
     }
 
     //@Test
     public void TimeTravelSMRTest()
     {
+        /*
         IStream s1 = instance.openStream(UUID.randomUUID());
         CDBSimpleMap<Integer, Integer> map = instance.openObject(streamID, new ICorfuDBInstance.OpenObjectArgs<CDBSimpleMap>(
                     CDBSimpleMap.class,
@@ -273,6 +313,7 @@ public class CDBSimpleMapTest {
                 .isEqualTo(1234);
         assertThat(map.get(10))
                 .isEqualTo(100);
+                */
     }
 
     //@Test
