@@ -15,18 +15,13 @@
 
 package org.corfudb.runtime.stream;
 
-import org.apache.zookeeper.KeeperException;
 import org.corfudb.runtime.*;
-import org.corfudb.runtime.entries.CorfuDBStreamEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.IStreamAddressSpace;
-import org.corfudb.runtime.view.Serializer;
 
 import java.lang.ClassNotFoundException;
 import java.io.IOException;
-import java.io.Serializable;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;

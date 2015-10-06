@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import org.apache.zookeeper.KeeperException;
+import lombok.extern.slf4j.Slf4j;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.collections.CDBSimpleMap;
@@ -24,9 +24,8 @@ import java.util.stream.Collectors;
 /**
  * Created by mwei on 5/22/15.
  */
+@Slf4j
 public class LocalCorfuDBInstance implements ICorfuDBInstance {
-
-    private static final Logger log = LoggerFactory.getLogger(LocalCorfuDBInstance.class);
 
     // Members of this CorfuDBInstance
     private IConfigurationMaster configMaster;
