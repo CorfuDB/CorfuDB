@@ -29,25 +29,15 @@ import org.apache.thrift.transport.TFastFramedTransport;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.corfudb.infrastructure.thrift.StreamingSequencerService;
 import org.corfudb.infrastructure.thrift.StreamSequence;
 
-import org.corfudb.runtime.view.IWriteOnceAddressSpace;
-import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
-import org.corfudb.runtime.entries.CorfuDBStreamMoveEntry;
-
-import java.util.UUID;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.lang.Math;
-import java.util.concurrent.CompletableFuture;
 
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class StreamingSequencerServer implements StreamingSequencerService.Iface, ICorfuDBServer {
 
