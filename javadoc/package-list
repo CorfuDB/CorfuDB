@@ -5,8 +5,6 @@ org.corfudb.infrastructure.wireprotocol
 org.corfudb.runtime
 org.corfudb.runtime.collections
 org.corfudb.runtime.entries
-org.corfudb.runtime.entries.legacy
-org.corfudb.runtime.gossip
 org.corfudb.runtime.objects
 org.corfudb.runtime.protocols
 org.corfudb.runtime.protocols.configmasters
@@ -15,9 +13,8 @@ org.corfudb.runtime.protocols.replications
 org.corfudb.runtime.protocols.sequencers
 org.corfudb.runtime.smr
 org.corfudb.runtime.smr.HoleFillingPolicy
-org.corfudb.runtime.smr.legacy
+org.corfudb.runtime.smr.smrprotocol
 org.corfudb.runtime.stream
-org.corfudb.runtime.stream.legacy
 org.corfudb.runtime.view
 org.corfudb.samples
 org.corfudb.util
