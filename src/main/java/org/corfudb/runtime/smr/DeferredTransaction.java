@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.smr.smrprotocol.LambdaSMRCommand;
+import org.corfudb.runtime.smr.smrprotocol.TransactionalLambdaSMRCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleTimestamp;
@@ -34,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Created by mwei on 5/3/15.
  */
 @Slf4j
-public class DeferredTransaction<R> implements ITransaction<R> {
+public class DeferredTransaction<R> implements ITransaction<R>, Serializable {
 
     @Getter
     @Setter
@@ -46,7 +47,10 @@ public class DeferredTransaction<R> implements ITransaction<R> {
 
     @Getter
     @Setter
-    public ICorfuDBInstance instance;
+    public transient ICorfuDBInstance instance;
+
+    @Setter
+    public transient ITimestamp timestamp;
 
     public DeferredTransaction(ICorfuDBInstance instance)
     {
@@ -70,6 +74,30 @@ public class DeferredTransaction<R> implements ITransaction<R> {
     @Override
     @SuppressWarnings("unchecked")
     public ISMREngine getEngine(UUID streamID, Class<?> objClass) {
+        /* do we have this object in memory? */
+        ICorfuDBObject obj = instance.openObject(streamID, (Class<? extends ICorfuDBObject>) objClass);
+        // lock the object, add it to the list of objects we own
+
+        // now check if the object is at the version we need (or before, in case we can sync).
+        if (obj.getUnderlyingSMREngine().getStreamPointer().compareTo(timestamp) > 0)
+        {
+            throw new UnsupportedOperationException("Not yet implemented: object out of sync. " +
+                    "ts=" + obj.getUnderlyingSMREngine().getStreamPointer() + ", " +
+                    "need ts="  + timestamp + "-1");
+        }
+
+        // return a passthrough engine, which runs the command directly on the object.
+        // we cannot release the object until the TX is done executing.
+        if (obj != null) {
+            return new PassThroughSMREngine<>(obj.getUnderlyingSMREngine().getObject(),
+                    timestamp,
+                    instance,
+                    streamID
+            );
+        }
+        else {
+            throw new UnsupportedOperationException("Can't open remote objects, yet!");
+        }
         /*
         if (streamID.equals(executingEngine.getStreamID()))
         {
@@ -94,7 +122,6 @@ public class DeferredTransaction<R> implements ITransaction<R> {
             return engine;
         }
         */
-        return null;
     }
 
     /**
@@ -103,8 +130,11 @@ public class DeferredTransaction<R> implements ITransaction<R> {
      * @param engine The SMR engine to run this command on.
      */
     @Override
-    public void executeTransaction(ISMREngine engine) {
-
+    public R executeTransaction(ISMREngine engine) {
+        log.info("Executing transaction.");
+        try (TransactionalContext tc = new TransactionalContext(this)) {
+            return transaction.apply(engine.getObject());
+        }
     }
 
     /**
@@ -125,7 +155,7 @@ public class DeferredTransaction<R> implements ITransaction<R> {
                         TransactionalContext.setTransactionalFuture(
                                 new SimpleTimestamp(x), new CompletableFuture());
                         instance.getStreamAddressSpace().write(x, Collections.<UUID>emptySet(),
-                                new LambdaSMRCommand<>(transaction));
+                                new TransactionalLambdaSMRCommand<>(this));
                         return x;
                     }).get();
             return new SimpleTimestamp(sequence);

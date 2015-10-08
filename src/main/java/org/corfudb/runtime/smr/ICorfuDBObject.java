@@ -24,7 +24,7 @@ public interface ICorfuDBObject<U> extends Serializable {
         ITransaction tx = getUnderlyingTransaction();
         if (tx != null)
         {
-            return tx.getEngine(getStreamID(), getUnderlyingType());
+            return tx.getEngine(getStreamID(), getClass());
         }
         return getUnderlyingSMREngine();
     }
@@ -75,7 +75,7 @@ public interface ICorfuDBObject<U> extends Serializable {
      */
     default ITransaction getUnderlyingTransaction()
     {
-        return null;
+        return TransactionalContext.getCurrentTX();
     }
 
     /**

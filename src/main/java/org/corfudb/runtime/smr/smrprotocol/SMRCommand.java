@@ -4,6 +4,8 @@ import io.netty.buffer.ByteBuf;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.smr.ISMREngine;
+import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.util.serializer.ICorfuSerializable;
 
 import java.util.Arrays;
@@ -26,7 +28,8 @@ public class SMRCommand<T,R> implements ICorfuSerializable {
         // Type of SMR command
         NOP(0, SMRCommand.class),
         LAMBDA_COMMAND(20, LambdaSMRCommand.class),
-        METHOD_TOKEN(21, MethodTokenSMRCommand.class)
+        METHOD_TOKEN(21, MethodTokenSMRCommand.class),
+        TRANSACTIONAL_LAMBDA_COMMAND(22, TransactionalLambdaSMRCommand.class)
         ;
 
         final int type;
@@ -43,11 +46,14 @@ public class SMRCommand<T,R> implements ICorfuSerializable {
     //region Fields
     /* The type of SMR command being executed. */
     SMRCommandType type;
+
+    /* The instance that the SMR command should be executed under. */
+    ICorfuDBInstance instance;
     //endregion
 
     //region Methods
     /* The operation to execute when the command is processed by the SMR engine. */
-    public R execute(T state, ISMREngine<T> engine) {return null;};
+    public R execute(T state, ISMREngine<T> engine, ITimestamp ts) {return null;};
     //endregion
 
     //region Serialization
@@ -69,6 +75,7 @@ public class SMRCommand<T,R> implements ICorfuSerializable {
     /** Take the given bytebuffer and deserialize it into a message.
      *
      * @param buffer    The buffer to deserialize.
+     * @param instance  A pointer to the instance that messages should run under.
      * @return          The corresponding message.
      */
     @SneakyThrows

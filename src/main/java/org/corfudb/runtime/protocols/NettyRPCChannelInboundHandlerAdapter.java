@@ -87,7 +87,7 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
         final CompletableFuture<T> cf = new CompletableFuture<>();
         rpcMap.put(thisRequest, cf);
         getChannel().writeAndFlush(message);
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(600));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(500));
         cfTimeout.exceptionally(e -> {
             rpcMap.remove(thisRequest);
             return null;

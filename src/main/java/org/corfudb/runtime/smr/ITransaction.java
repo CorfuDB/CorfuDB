@@ -50,7 +50,7 @@ public interface ITransaction<R> {
      * Execute this command on a specific SMR engine.
      * @param engine        The SMR engine to run this command on.
      */
-    void executeTransaction(ISMREngine engine);
+    R executeTransaction(ISMREngine engine);
 
     /**
      * Returns the transaction command.

@@ -1,6 +1,5 @@
 package org.corfudb.runtime.smr;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -28,8 +27,8 @@ public class TransactionalContext implements AutoCloseable {
     /**
      * The currently executing transaction on this thread.
      */
-    public static ThreadLocal<Deque<TransactionalContext>> currentTX =
-            ThreadLocal.withInitial(ArrayDeque<TransactionalContext>::new);
+    public static ThreadLocal<Deque<ITransaction>> currentTX =
+            ThreadLocal.withInitial(ArrayDeque<ITransaction>::new);
 
     public static ConcurrentHashMap<ITimestamp, CompletableFuture<?>> transactionalFutureMap
             = new ConcurrentHashMap<>();
@@ -42,25 +41,13 @@ public class TransactionalContext implements AutoCloseable {
         transactionalFutureMap.put(ts, cf);
     }
 
-    enum TransactionalMode {
-        PASS_THROUGH,   // Apply mutations directly to object state
-        BUFFER          // Buffer away mutations
+    public static ITransaction getCurrentTX() {
+        return currentTX.get().peekFirst();
     }
 
-    public static TransactionalMode getCurrentTXMode() {
-        return currentTX.get().peekFirst().getMode();
-    }
-
-    @Getter
-    TransactionalMode mode;
-
-    @Getter
-    ITimestamp timestamp;
-
-    public TransactionalContext(TransactionalMode mode, ITimestamp ts)
+    public TransactionalContext(ITransaction tx)
     {
-        this.mode = mode;
-        currentTX.get().addFirst(this);
+        currentTX.get().addFirst(tx);
     }
 
     /**

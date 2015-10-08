@@ -6,6 +6,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
 import org.corfudb.runtime.smr.ISMREngine;
+import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KryoSerializer;
 
@@ -42,7 +43,7 @@ public class MethodTokenSMRCommand<T,R> extends SMRCommand<T,R> {
 
     @Override
     @SuppressWarnings("unchecked")
-    public R execute(T state, ISMREngine<T> engine) {
+    public R execute(T state, ISMREngine<T> engine, ITimestamp ts) {
         try {
             Method m = Arrays.stream(engine.getImplementingObject().getClass().getDeclaredMethods())
                     .filter(x -> CorfuObjectByteBuddyProxy.getAccessorShortMethodNameOrEmpty(x).equals(functionName))

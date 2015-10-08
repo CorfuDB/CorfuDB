@@ -178,7 +178,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T
             //buffer the command.
             commandBuffer.add(command);
         }
-        R result = command.execute(underlyingObject, this);
+        R result = command.execute(underlyingObject, this, getStreamPointer());
         if (completion != null) {
             completion.complete(result);
         }
@@ -240,7 +240,7 @@ public class BufferedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T
     @Override
     public <R> ITimestamp propose(SMRCommand<T, R> command, boolean writeOnly) {
         commandBuffer.add(command);
-        command.execute(underlyingObject, this);
+        command.execute(underlyingObject, this, getStreamPointer());
         return ts;
     }
 

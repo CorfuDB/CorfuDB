@@ -177,7 +177,7 @@ public class CachedSMREngine<T> implements ISMREngine<T>, IBufferedSMREngine<T> 
      */
     @Override
     public <R> ITimestamp propose(SMRCommand<T, R> command, CompletableFuture<R> completion, boolean readOnly) {
-            R result = command.execute(underlyingObject, this);
+            R result = command.execute(underlyingObject, this, streamPointer);
             if (completion != null)
             {
                 completion.complete(result);

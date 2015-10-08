@@ -40,8 +40,13 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     IStream stream;
     T underlyingObject;
+
+    @Getter
     public ITimestamp streamPointer;
+
+    @Getter
     ITimestamp lastProposal;
+
     Class<T> type;
     final ConcurrentHashMap<ITimestamp, CompletableFuture> completionTable = new ConcurrentHashMap<ITimestamp, CompletableFuture>();
     HashSet<ITimestamp> localTable;
@@ -126,41 +131,17 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     public <R> void apply(IStreamEntry entry)
     {
         //log.info("applying entry at {} ({})", entry.getTimestamp(), entry.getPayload() == null);
-        if (entry.getPayload() != null) {
-            if (entry.getPayload() instanceof ITransaction)
-            {
-                ITransaction transaction = (ITransaction) entry.getPayload();
-                transaction.setTimestamp(entry.getTimestamp());
-                transaction.setInstance(stream.getInstance());
-                transaction.executeTransaction(this);
+        if (entry.getPayload() != null && entry.getPayload() instanceof SMRCommand) {
+            SMRCommand command = (SMRCommand) entry.getPayload();
+            command.setInstance(getInstance());
+            ITimestamp entryTS = entry.getTimestamp();
+            CompletableFuture<R> completion = completionTable.get(entryTS);
+            completionTable.remove(entryTS);
+            R r = (R) command.execute(underlyingObject, this, entryTS);
+            if (completion != null) {
+                completion.complete(r);
             }
-            else {
-             //   try (TransactionalContext tc =
-               //              new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
-                  //  log.info("Applying command @ {} of type {}", entry.getTimestamp(), entry.getPayload().getClass());
-                  //  ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
-                    SMRCommand command = (SMRCommand) entry.getPayload();
-                    ITimestamp entryTS = entry.getTimestamp();
-                    CompletableFuture<R> completion = completionTable.get(entryTS);
-                /* commenting this out because this is to be expected with multiple clients */
-                /*
-                if (completion == null) {
-                    log.debug("Completion @ {} is null", entryTS);
-                }
-                */
-                    completionTable.remove(entryTS);
-                    if (entry instanceof MultiCommand) {
-                        completion = new CompletableFuture<>();
-                    }
-                    // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
-                    R r = (R) command.execute(underlyingObject, this);
-                    if (completion != null)
-                    {
-                        completion.complete(r);
-                    }
-                }
-            }
-        //}
+        }
         lastApplied = entry.getLogicalTimestamp();
     }
 
@@ -335,7 +316,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
     public <R> ITimestamp propose(SMRCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly) {
         if (readOnly)
         {
-            R r = command.execute(underlyingObject, this);
+            R r = command.execute(underlyingObject, this, streamPointer);
             if (completion != null) {
                 completion.complete(r);
             }
@@ -370,7 +351,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         if (readOnly)
         {
             /* TODO: pretty sure we need some kind of locking here (what if the object changes during a read?) */
-            R result = command.execute(underlyingObject, this);
+            R result = command.execute(underlyingObject, this, streamPointer);
             if (completion != null)
             {
                 completion.complete(result);
@@ -450,15 +431,6 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         return stream.append(checkpoint);
     }
 
-    /**
-     * Get the timestamp of the most recently proposed command.
-     *
-     * @return A timestamp representing the most recently proposed command.
-     */
-    @Override
-    public ITimestamp getLastProposal() {
-        return lastProposal;
-    }
 
     /**
      * Pass through to check for the underlying stream.
@@ -490,8 +462,6 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         return stream.getInstance();
     }
 
-    @Override
-    public ITimestamp getStreamPointer() { return streamPointer; }
 
     public Map<UUID, IBufferedSMREngine> getCachedEngines() {
         return cachedEngines;

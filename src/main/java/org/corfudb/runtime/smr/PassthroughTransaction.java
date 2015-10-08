@@ -66,8 +66,8 @@ public class PassthroughTransaction<T> implements ITransaction<T>{
      * @param engine The SMR engine to run this command on.
      */
     @Override
-    public void executeTransaction(ISMREngine engine) {
-
+    public T executeTransaction(ISMREngine engine) {
+        return null;
     }
 
     /**

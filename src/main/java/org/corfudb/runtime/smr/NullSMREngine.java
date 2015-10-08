@@ -61,7 +61,8 @@ public class NullSMREngine implements ISMREngine<Void>{
             IStreamEntry se = getInstance().getStreamAddressSpace().read(((SimpleTimestamp) ts).address);
             if (se.getPayload() instanceof SMRCommand) {
                 SMRCommand c = (SMRCommand) se.getPayload();
-                R result = (R) c.execute(null, this);
+                c.setInstance(instance);
+                R result = (R) c.execute(null, this, ts);
                 if (cf != null) {
                     cf.complete(result);
                 }

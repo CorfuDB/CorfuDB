@@ -1,10 +1,15 @@
 package org.corfudb.util.serializer;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.function.Function;
@@ -54,8 +59,18 @@ public class CorfuSerializer implements ISerializer {
     public Object deserialize(ByteBuf b) {
         byte magic;
         if ((magic = b.readByte()) != CorfuPayloadMagic) {
-            throw new ClassCastException("Unsupported/unknown payload. (magic was "
-                    + String.format("%02X ", magic) + " but expected 0x42");
+            b.resetReaderIndex();
+            try (ByteBufInputStream bbis = new ByteBufInputStream(b))
+            {
+                try (ObjectInputStream ois = new ObjectInputStream(bbis))
+                {
+                    return ois.readObject();
+                }
+            }
+            catch (IOException | ClassNotFoundException ie)
+            {
+                throw new RuntimeException(ie);
+            }
         }
         CorfuPayloadType type = typeMap.get(b.readByte());
         if (type == null)
@@ -82,7 +97,18 @@ public class CorfuSerializer implements ISerializer {
         }
         else
         {
-            throw new ClassCastException("Object must be Corfu Serializable!");
+            //try to java serialize things.
+            try (ByteBufOutputStream bbos = new ByteBufOutputStream(b))
+            {
+                try (ObjectOutputStream oos = new ObjectOutputStream(bbos))
+                {
+                    oos.writeObject(o);
+                }
+            }
+            catch (Exception e)
+            {
+                throw new RuntimeException(e);
+            }
         }
     }
     //endregion

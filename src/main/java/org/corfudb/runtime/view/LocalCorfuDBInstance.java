@@ -235,7 +235,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         if (!oargs.typeCheck && cachedObject != null)
             return cachedObject;
         else {
-            log.info("opening cached object. {}", this);
             if (!oargs.createNew && cachedObject != null && cachedObject.getUnderlyingSMREngine().getClass().equals(smrType)) {
                 //if (!(cachedObject.getClass().isInstance(oargs.type)))
                 //    throw new RuntimeException("Incorrect type! Requested to open object of type " + oargs.type +

@@ -39,6 +39,7 @@ public class NettyLogUnitServerIT {
         }
     };
 
+    //TODO: why do proto tests fail???
     @Before
     public void setup()
             throws Exception

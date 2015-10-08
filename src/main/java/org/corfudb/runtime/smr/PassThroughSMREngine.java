@@ -116,7 +116,7 @@ public class PassThroughSMREngine<T> implements ISMREngine<T>, IBufferedSMREngin
      */
     @Override
     public <R> ITimestamp propose(SMRCommand<T,R> command, CompletableFuture<R> completion, boolean readOnly) {
-        R result = command.execute(underlyingObject, this);
+        R result = command.execute(underlyingObject, this, null);
         if (completion != null)
         {
             completion.complete(result);

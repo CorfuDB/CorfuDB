@@ -126,4 +126,16 @@ public abstract class AbstractNettyProtocol<T extends NettyRPCChannelInboundHand
     public void reset(long epoch) throws NetworkException {
         handler.reset(epoch);
     }
+
+
+    public static String getProtocolString()
+    {
+        return "anp";
+    }
+
+    public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
+    {
+        throw new RuntimeException("This is an abstract class!");
+    }
+
 }
