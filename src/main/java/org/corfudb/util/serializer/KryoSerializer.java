@@ -332,14 +332,14 @@ public class KryoSerializer implements ISerializer{
                     if (classToNameId != null) {
                         int nameId = classToNameId.get(type, -1);
                         if (nameId != -1) {
-                            log.warn("Write class name reference " + nameId + ": " + className(type));
+                            log.trace("Write class name reference " + nameId + ": " + className(type));
                             output.writeVarInt(nameId, true);
                             return;
                         }
                     }
                     // Only write the class name the first time encountered in object graph.
                     int nameId = nextNameId++;
-                    log.warn("Write class name: " + className(type) + "id=" + nameId);
+                    log.trace("Write class name: " + className(type) + "id=" + nameId);
                     if (classToNameId == null) classToNameId = new IdentityObjectIntMap();
                     classToNameId.put(type, nameId);
                     output.writeVarInt(nameId, true);
@@ -384,9 +384,9 @@ public class KryoSerializer implements ISerializer{
                             nameToClass.put(className, type);
                         }
                         nameIdToClass.put(nameId, type);
-                        log.warn("Read class name: " + className);
+                        log.trace("Read class name: " + className);
                     } else {
-                        log.warn("Read class name reference " + nameId + ": " + className(type));
+                        log.trace("Read class name reference " + nameId + ": " + className(type));
                     }
                     return kryo.getRegistration(type);
                 }

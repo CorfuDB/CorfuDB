@@ -43,8 +43,31 @@ public abstract class AbstractNettyProtocol<T extends NettyRPCChannelInboundHand
     public long epoch;
 
     public T handler;
-    EventLoopGroup workerGroup;
-    EventExecutorGroup ee;
+
+    static final EventLoopGroup workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+        final AtomicInteger threadNum = new AtomicInteger(0);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r);
+            t.setName(this.getClass().getName() + "-worker-" + threadNum.getAndIncrement());
+            t.setDaemon(true);
+            return t;
+        }
+    });
+
+    static final EventExecutorGroup ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+
+        final AtomicInteger threadNum = new AtomicInteger(0);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r);
+            t.setName(this.getClass().getName() + "-event-" + threadNum.getAndIncrement());
+            t.setDaemon(true);
+            return t;
+        }
+    });
 
 
     public AbstractNettyProtocol(String host, Integer port, Map<String,String> options, long epoch, T handler)
@@ -55,29 +78,6 @@ public abstract class AbstractNettyProtocol<T extends NettyRPCChannelInboundHand
         this.epoch = epoch;
         handler.setProtocol(this);
         this.handler = handler;
-
-        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-            final AtomicInteger threadNum = new AtomicInteger(0);
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName(this.getClass().getName() + "-worker-" + threadNum.getAndIncrement());
-                return t;
-            }
-        });
-
-        ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-
-            final AtomicInteger threadNum = new AtomicInteger(0);
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName(this.getClass().getName() + "-event-" + threadNum.getAndIncrement());
-                return t;
-            }
-        });
 
         Bootstrap b = new Bootstrap();
         b.group(workerGroup);

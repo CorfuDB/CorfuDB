@@ -363,7 +363,6 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         return stream.reserveAsync(1)
                 .thenApplyAsync(
                         t -> {
-                            log.info("Proposing command at {}", t);
                             if (completion != null) {
                                 completionTable.put(t[0], completion);
                             }
