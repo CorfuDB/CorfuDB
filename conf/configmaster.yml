@@ -3,7 +3,7 @@ port: 8002
 pagesize: 4096
 epoch: 0
 sequencers:
-  - "cdbsts://localhost:8000"
+  - "nsss://localhost:8000"
 configmasters:
   - "cdbcm://localhost:8002"
 layout:
@@ -14,4 +14,4 @@ layout:
       replicas: 1
       groups:
         - nodes:
-          - "cdbslu://localhost:8001"
+          - "nlu://localhost:8001"

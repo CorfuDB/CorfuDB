@@ -316,7 +316,7 @@ public class CDBSimpleMapTest {
                 */
     }
 
-    //@Test
+    @Test
     public void doConcurrentGets() {
      //   instance.getConfigurationMaster().resetAll();
         JUnitCore.runClasses(ParallelComputer.methods(), ConcurrentGets.class);
