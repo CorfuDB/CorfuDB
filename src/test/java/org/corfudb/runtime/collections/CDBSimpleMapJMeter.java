@@ -4,8 +4,8 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.jmeter.protocol.java.sampler.AbstractJavaSamplerClient;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
-import org.corfudb.infrastructure.SimpleLogUnitServer;
-import org.corfudb.infrastructure.SimpleSequencerServer;
+import org.corfudb.infrastructure.NettyLogUnitServer;
+import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.SimpleSMREngine;
 import org.corfudb.runtime.view.ICorfuDBInstance;
@@ -80,8 +80,8 @@ public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
         if (!reset)
         {
            infrastructure = CorfuInfrastructureBuilder.getBuilder()
-                    .addSequencer(9001, SimpleSequencerServer.class, "cdbss", null)
-                    .addLoggingUnit(9000, 0, SimpleLogUnitServer.class, "cdbslu", luConfigMap)
+                   .addSequencer(9201, NettyStreamingSequencerServer.class, "nsss", null)
+                   .addLoggingUnit(9200, 0, NettyLogUnitServer.class, "nlu", luConfigMap)
                     .start(9002);
 
             reset = true;

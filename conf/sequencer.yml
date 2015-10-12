@@ -5,7 +5,7 @@
 # on port 8000.
 #
 # Required:
-# role - org.corfudb.sharedlog.sequencer.SimpleSequencerServer selects the sequencer
+# role - org.corfudb.sharedlog.sequencer.NettyStreamingSequencerServer selects the sequencer
 # port - the port number to run on
 
 role: org.corfudb.infrastructure.NettyStreamingSequencerServer
