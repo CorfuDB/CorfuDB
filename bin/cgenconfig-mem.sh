@@ -64,7 +64,7 @@ port: $baseport
 pagesize: 4096
 epoch: 0
 sequencers:
-  - "ms://localhost:$(( $baseport+2))"
+  - "nsss://localhost:$(( $baseport+2))"
 configmasters:
   - "cdbcm://localhost:$baseport"
 layout:
@@ -80,7 +80,7 @@ _EOF
 for (( port=$baseport+3; port < $baseport+3+$cnt; port++ ))
 do
 cat >> $cfg << _EOF
-          - "cdbslu://localhost:$port"
+          - "nlu://localhost:$port"
 _EOF
 done
 
@@ -89,7 +89,7 @@ done
 # ........................................
 logunit)
 cat > $cfg << _EOF
-role: org.corfudb.infrastructure.SimpleLogUnitServer
+role: org.corfudb.infrastructure.NettyLogUnitServer
 port: $port
 capacity: 10000
 ramdisk: true
@@ -103,7 +103,7 @@ _EOF
 # ........................................
 sequencer)
 cat > $cfg << _EOF
-role: org.corfudb.infrastructure.SimpleSequencerServer
+role: org.corfudb.infrastructure.NettyLogUnitServer
 port: $(( baseport+2 ))
 _EOF
 

@@ -1,9 +1,9 @@
 package org.corfudb.runtime;
 
-import org.corfudb.infrastructure.SimpleLogUnitServer;
-import org.corfudb.infrastructure.StreamingSequencerServer;
-import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
+import org.corfudb.infrastructure.NettyLogUnitServer;
+import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.protocols.logunits.NettyLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.CorfuInfrastructureBuilder;
@@ -35,8 +35,8 @@ public class CorfuDBRuntimeIT {
 
     static CorfuInfrastructureBuilder infrastructure =
             CorfuInfrastructureBuilder.getBuilder()
-                    .addSequencer(9201, StreamingSequencerServer.class, "cdbsts", null)
-                    .addLoggingUnit(9200, 0, SimpleLogUnitServer.class, "cdbslu", luConfigMap)
+                    .addSequencer(9201, NettyStreamingSequencerServer.class, "nsss", null)
+                    .addLoggingUnit(9200, 0, NettyLogUnitServer.class, "nlu", luConfigMap)
                     .start(9202);
 
     @Test
@@ -183,9 +183,9 @@ public class CorfuDBRuntimeIT {
 
         /* try writing from the wrong epoch to LU1 */
         seq = s.getNext();
-        ((CorfuDBSimpleLogUnitProtocol)LU1).epoch = cdr.getView().getEpoch()-1;
+        ((NettyLogUnitProtocol)LU1).epoch = cdr.getView().getEpoch()-1;
         assertRaises(() -> LU1.write(2, null, "hello world 3".getBytes()), NetworkException.class);
-        ((CorfuDBSimpleLogUnitProtocol)LU1).epoch = cdr.getView().getEpoch();
+        ((NettyLogUnitProtocol)LU1).epoch = cdr.getView().getEpoch();
 
         /* Un-fail LU2 */
         LU2.simulateFailure(false);

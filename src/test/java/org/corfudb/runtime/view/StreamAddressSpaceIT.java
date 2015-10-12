@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.NettyLogUnitServer;
-import org.corfudb.infrastructure.StreamingSequencerServer;
+import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
@@ -11,7 +11,6 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.UUID;
 
@@ -29,7 +28,7 @@ public class StreamAddressSpaceIT {
     {
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()
-                .addSequencer(RandomOpenPort.getOpenPort(), StreamingSequencerServer.class, "cdbss", null)
+                .addSequencer(RandomOpenPort.getOpenPort(), NettyStreamingSequencerServer.class, "nsss", null)
                 .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
                 .start(RandomOpenPort.getOpenPort());
 

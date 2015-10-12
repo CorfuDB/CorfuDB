@@ -2,16 +2,10 @@ package org.corfudb.samples;
 
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.infrastructure.SimpleLogUnitServer;
-import org.corfudb.infrastructure.StreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.collections.CDBCounter;
-import org.corfudb.runtime.protocols.logunits.CorfuDBSimpleLogUnitProtocol;
-import org.corfudb.runtime.protocols.logunits.NettyLogUnitProtocol;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.util.CorfuDBFactory;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 
 import java.io.IOException;
