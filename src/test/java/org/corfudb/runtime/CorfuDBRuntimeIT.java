@@ -49,7 +49,7 @@ public class CorfuDBRuntimeIT {
     }
 
 
-    @Test
+   // @Test
     public void isCorfuViewUsable() throws Exception
     {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime(infrastructure.getConfigString());
@@ -72,7 +72,7 @@ public class CorfuDBRuntimeIT {
                 .isEqualTo("hello world".getBytes());
     }
 
-    @Test
+   // @Test
     public void isCorfuResettable() throws Exception
     {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime(infrastructure.getConfigString());
