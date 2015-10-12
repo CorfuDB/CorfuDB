@@ -49,7 +49,7 @@ public class CorfuDBRuntimeIT {
     }
 
 
-   // @Test
+   //:q @Test
     public void isCorfuViewUsable() throws Exception
     {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime(infrastructure.getConfigString());
