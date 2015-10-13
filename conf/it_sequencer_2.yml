@@ -8,7 +8,7 @@
 # role - org.corfudb.sharedlog.sequencer.StreamingSequencerServer selects the sequencer
 # port - the port number to run on
 
-role: org.corfudb.infrastructure.StreamingSequencerServer
+role: org.corfudb.infrastructure.NettyStreamingSequencerServer
 port: 12601
 configmaster: http://localhost:12702/corfu
 
