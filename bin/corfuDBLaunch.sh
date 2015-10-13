@@ -16,7 +16,7 @@ then
     echo $1
     CORFUDBCFG="$CORFUDBCFGDIR/$1.yml"
 else
-    echo "Usage: $0 [--config <conf-dir>] <node-name> {start|stop|restart|status}" >&2
+    echo "Usage: $0 [--config <conf-dir>] <node-name> {start|debug <port-num>|stop|restart|status}" >&2
     exit
 fi
 
@@ -73,6 +73,51 @@ start)
         exit 1
     fi
     ;;
+debug)
+    if [ "x$3" == "x" ]
+    then
+        echo "Error, debug mode requires a debug <port-num>"
+        exit 1
+    fi
+
+    if ! [[ $3 =~ [0-9]+([.][0-9]+)?$ ]]
+    then
+       echo "Error, debug <port-num> must be a number" >&2
+       exit 1
+    fi
+
+    echo -n "Starting CorfuDB role ${1} in debug mode, debug <port-num> is ${3}..."
+    if [ -f "$CORFUDBPIDFILE" ]; then
+        if kill -0 `cat $CORFUDBPIDFILE` > /dev/null 2>&1; then
+            echo $command already running as process `cat "$CORFUDBPIDFILE"`.
+            exit 0
+        fi
+    fi
+    nohup "$JAVA" "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=$3" \
+    "-Dorg.slf4j.simpleLogger.defaultLogLevel=${CORFUDB_LOG4J_PROP}" \
+    -cp "$CLASSPATH" $JVMFLAGS "$CORFUDBMAIN" "$CORFUDBCFG" > "$CORFUDB_DAEMON_OUT" 2>&1 < /dev/null &
+    if [ $? -eq 0 ]
+    then
+        if /bin/echo -n $! > "$CORFUDBPIDFILE"
+        then
+            #sleep 1
+            # The server may have failed to start. Let's make sure it did
+            if kill -0 $! > /dev/null 2>&1;
+            then
+                echo Started
+            else
+                echo Failed to start, log was:
+                cat "$CORFUDB_DAEMON_OUT"
+            fi
+        else
+            echo Failed to write PID
+            exit 1
+        fi
+    else
+        echo Server failed to start
+        exit 1
+    fi
+    ;;
 stop)
     echo -n "Stopping CorfuDB role ${1}..."
     if [ ! -f "$CORFUDBPIDFILE" ];
@@ -105,6 +150,6 @@ status)
     fi
     ;;
 *)
-    echo "Usage: $0 [--config <conf-dir>] <node-name> {start|stop|restart|status}" >&2
+    echo "Usage: $0 [--config <conf-dir>] <node-name> {start|debug <port-num>|stop|restart|status}" >&2
     ;;
 esac
