@@ -13,7 +13,7 @@
 # recovery (boolean) - whether or not to attempt recovery when the logunit starts
 # drive (string) - the path to serve from, if not a ramdisk (required if not a ramdisk)
 
-role: org.corfudb.infrastructure.SimpleLogUnitServer
+role: org.corfudb.infrastructure.NettyLogUnitServer
 port: 12803
 capacity: 100000
 ramdisk: true

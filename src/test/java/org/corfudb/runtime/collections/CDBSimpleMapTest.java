@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.infrastructure.StreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;

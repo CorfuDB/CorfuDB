@@ -89,7 +89,7 @@ done
 # ........................................
 logunit)
 cat > $cfg << _EOF
-role: org.corfudb.infrastructure.SimpleLogUnitServer
+role: org.corfudb.infrastructure.NettyLogUnitServer
 port: $port
 capacity: 10000
 ramdisk: true
@@ -103,7 +103,7 @@ _EOF
 # ........................................
 sequencer)
 cat > $cfg << _EOF
-role: org.corfudb.infrastructure.SimpleSequencerServer
+role: org.corfudb.infrastructure.NettyStreamingSequencerServer
 port: $(( baseport+2 ))
 _EOF
 
