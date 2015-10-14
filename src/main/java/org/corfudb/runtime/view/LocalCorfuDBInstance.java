@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
@@ -40,6 +41,9 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private CorfuDBRuntime cdr;
     private CDBSimpleMap<UUID, IStreamMetadata> streamMap;
     private ConcurrentMap<UUID, ICorfuDBObject> objectMap;
+
+    @Getter
+    public UUID UUID;
 
     @Getter
     public ConcurrentMap<UUID, IStream> localStreamMap;
@@ -128,23 +132,44 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     }
 
     /**
-     * Gets a unique identifier for this instance.
-     *
-     * @return A unique identifier for this instance.
-     */
-    @Override
-    public UUID getUUID() {
-        return cdr.getView().getUUID();
-    }
-
-    /**
      * Gets the current view of this instance.
      *
      * @return A view of this instance.
      */
     @Override
     public CorfuDBView getView() {
-        return cdr.getView();
+        /* make sure that the view belongs to the same instance. */
+        CorfuDBView view = cdr.getView();
+        /* if the instance ID does not match, reset all the caches. */
+        if (!view.getUUID().equals(UUID))
+        {
+            /* This region is synchronized to make sure reset happens exactly once */
+            synchronized (this) {
+                if (!view.getUUID().equals(UUID) && (UUID != null)) {
+                    log.info("Instance has changed from ID {} to {}, resetting all local caches.",
+                            UUID, view.getUUID());
+                    resetAllCaches();
+                    UUID = view.getUUID();
+                }
+                else if (UUID == null)
+                {
+                    UUID = view.getUUID();
+                }
+            }
+        }
+        return view;
+    }
+
+
+    /**
+     * Resets all local caches.
+     */
+    public void resetAllCaches() {
+        this.objectMap.clear();
+        this.baseEngineMap.clear();
+        this.localStreamMap.clear();
+        this.streamAddressSpace.resetCaches();
+        log.info("All local caches have been reset.");
     }
 
     /**
