@@ -55,24 +55,30 @@ public class StreamAddressSpaceIT {
                 .isEqualTo(true);
     }
 
+    /** Test whether or not we can reset the caches */
     @Test
     public void resetCacheTest()
     {
+        /** Get the stream address space to test. */
         IStreamAddressSpace s = instance.getStreamAddressSpace();
         String test = "hello world";
+        /** Write to a random stream. */
         UUID id = UUID.randomUUID();
-        assertThat(instance.getView().getSegments().get(0).getGroups().get(0).get(0).ping())
-                .isTrue();
-
         s.write(0, Collections.singleton(id), test);
+        /** Read, so the entry gets cached. */
         IStreamAddressSpace.StreamAddressSpaceEntry entry = s.read(0);
+        /** The entry should not be null at this point. */
         assertThat(entry)
                 .isNotNull();
 
+        /** Reset the instance, so that nothing is on the log unit anymore. */
         instance.getConfigurationMaster().resetAll();
+        /** Manually reset the cache. The cache should now be empty. */
         s.resetCaches();
 
+        /** Read from the address space, which should now miss in the cache. */
         entry = s.read(0);
+        /** The entry should return NULL, which means that the cache was reset.*/
         assertThat(entry)
                 .isNull();
     }

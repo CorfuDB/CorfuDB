@@ -143,7 +143,10 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         /* if the instance ID does not match, reset all the caches. */
         if (!view.getUUID().equals(UUID))
         {
-            /* This region is synchronized to make sure reset happens exactly once */
+            /* This region is synchronized to make sure reset happens exactly once.
+             * One thread will go in and reset all the caches, updating the UUID.
+             * The other threads will see that the UUID has changed and get the view again.
+             */
             synchronized (this) {
                 if (!view.getUUID().equals(UUID) && (UUID != null)) {
                     log.info("Instance has changed from ID {} to {}, resetting all local caches.",
