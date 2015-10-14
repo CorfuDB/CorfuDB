@@ -55,6 +55,28 @@ public class StreamAddressSpaceIT {
                 .isEqualTo(true);
     }
 
+    @Test
+    public void resetCacheTest()
+    {
+        IStreamAddressSpace s = instance.getStreamAddressSpace();
+        String test = "hello world";
+        UUID id = UUID.randomUUID();
+        assertThat(instance.getView().getSegments().get(0).getGroups().get(0).get(0).ping())
+                .isTrue();
+
+        s.write(0, Collections.singleton(id), test);
+        IStreamAddressSpace.StreamAddressSpaceEntry entry = s.read(0);
+        assertThat(entry)
+                .isNotNull();
+
+        instance.getConfigurationMaster().resetAll();
+        s.resetCaches();
+
+        entry = s.read(0);
+        assertThat(entry)
+                .isNull();
+    }
+
     @After
     public void tearDown()
     {
