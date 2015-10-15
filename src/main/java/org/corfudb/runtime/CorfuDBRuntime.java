@@ -382,6 +382,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         closed = true;
         viewManagerThread.interrupt();
     }
+
     /**
      * Retrieves a runnable that provides a view manager thread. The view
      * manager retrieves the view and manages view changes.

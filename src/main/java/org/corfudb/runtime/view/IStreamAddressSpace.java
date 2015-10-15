@@ -191,4 +191,9 @@ public interface IStreamAddressSpace {
      * @param prefix    The prefix to be trimmed, inclusive.
      */
     void trim(UUID stream, long prefix);
+
+    /**
+     * Reset all caches.
+     */
+    void resetCaches();
 }
