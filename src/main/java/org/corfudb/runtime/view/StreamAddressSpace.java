@@ -183,6 +183,16 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         }
     }
 
+    /**
+     * Reset all caches.
+     */
+    @Override
+    public void resetCaches() {
+        /* Flush the async loading cache. */
+        cache.synchronous().invalidateAll();
+        log.info("Stream address space loading cache reset.");
+    }
+
 
     StreamAddressEntryCode entryCodeFromReadCode(ReadCode code)
     {
