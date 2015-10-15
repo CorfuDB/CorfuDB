@@ -21,6 +21,7 @@ public class LocalCorfuDBInstanceTest extends ICorfuDBInstanceTest {
 
     CorfuInfrastructureBuilder infrastructure;
     CorfuDBRuntime runtime;
+
     @Getter
     ICorfuDBInstance instance;
 
@@ -35,6 +36,9 @@ public class LocalCorfuDBInstanceTest extends ICorfuDBInstanceTest {
 
         runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
         instance = runtime.getLocalInstance();
+
+        assertThat(instance)
+                .isNotNull();
     }
 
     @Test
