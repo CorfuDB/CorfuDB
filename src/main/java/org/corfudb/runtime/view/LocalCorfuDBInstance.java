@@ -256,6 +256,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends ICorfuDBObject> T openObject(UUID id, OpenObjectArgs<T> oargs, Class<?>... args) {
+
         T cachedObject = (T) objectMap.getOrDefault(id, null);
 
         Class<? extends ISMREngine> smrType = oargs.smrType == null ? SimpleSMREngine.class : oargs.smrType;
@@ -347,5 +348,13 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Invalidate the current view, requiring that the view be refreshed.
+     */
+    @Override
+    public void invalidateView() {
+        cdr.invalidateViewAndWait(null);
     }
 }

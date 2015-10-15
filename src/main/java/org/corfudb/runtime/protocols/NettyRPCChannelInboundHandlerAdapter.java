@@ -13,6 +13,8 @@ import lombok.val;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuResetMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
+import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.WrongEpochException;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.SizeBufferPool;
 
@@ -78,6 +80,21 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
         }
     }
 
+    /**
+     * Fail the completable future with the given exception.
+     * @param requestID     The request ID which has failed.
+     * @param e             The exception to pass to the completable future.
+     * @param <T>           The type of the request to fail.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> void failRequest(long requestID, Exception e)
+    {
+        CompletableFuture<T> cf = (CompletableFuture<T>) rpcMap.get(requestID);
+        if (cf != null) {
+            cf.completeExceptionally(e);
+        }
+    }
+
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(long epoch, NettyCorfuMsg message)
     {
         final long thisRequest = requestID.getAndIncrement();
@@ -135,7 +152,16 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
     @Override
     @SuppressWarnings("unchecked")
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        handleMessage((NettyCorfuMsg)msg);
+        NettyCorfuMsg nettyMsg = (NettyCorfuMsg) msg;
+        // Handle the case where the epoch is wrong.
+        if (nettyMsg.getMsgType() == NettyCorfuMsg.NettyCorfuMsgType.WRONG_EPOCH)
+        {
+            failRequest(nettyMsg.getRequestID(),
+                    new WrongEpochException(nettyMsg.getEpoch()));
+        }
+        else {
+            handleMessage((NettyCorfuMsg) msg);
+        }
     }
 
     @Override

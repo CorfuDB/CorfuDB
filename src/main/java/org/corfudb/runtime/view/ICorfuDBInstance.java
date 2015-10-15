@@ -146,6 +146,11 @@ public interface ICorfuDBInstance {
         return openObject(id, new OpenObjectArgs<T>(type), args);
     }
 
+    /**
+     * Reset any caches that this instance might hold.
+     */
+    void resetAllCaches();
+
     ISMREngine getBaseEngine(UUID id, Class<?> underlyingType, ICorfuDBObject t);
 
     /**
@@ -176,4 +181,7 @@ public interface ICorfuDBInstance {
      * @return          The value returned in the transaction.
      */
     <T> T executeTransaction (Class<? extends ITransaction> type, ITransactionCommand<T> command);
+
+    /** Invalidate the current view, requiring that the view be refreshed. */
+    void invalidateView();
 }
