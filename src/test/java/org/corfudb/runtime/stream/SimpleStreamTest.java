@@ -1,13 +1,12 @@
 package org.corfudb.runtime.stream;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.exceptions.HoleEncounteredException;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.view.*;
 
 import org.junit.Before;
-import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.junit.Assert.assertEquals;

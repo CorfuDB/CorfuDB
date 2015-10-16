@@ -16,12 +16,12 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.sequencers.INewStreamSequencer;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
-import org.corfudb.runtime.RemoteException;
+import org.corfudb.runtime.exceptions.RemoteException;
 
 import java.util.Collections;
 import java.util.UUID;

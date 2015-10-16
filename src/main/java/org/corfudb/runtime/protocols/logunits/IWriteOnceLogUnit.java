@@ -15,12 +15,10 @@
 
 package org.corfudb.runtime.protocols.logunits;
 
-import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.infrastructure.thrift.Hints;
-import org.corfudb.runtime.*;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 

@@ -16,10 +16,10 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.thrift.Hints;
-import org.corfudb.runtime.OutOfSpaceException;
-import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.TrimmedException;
-import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.exceptions.OutOfSpaceException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.UnwrittenException;
 import org.corfudb.runtime.smr.MultiCommand;
 
 import java.io.IOException;

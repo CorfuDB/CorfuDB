@@ -15,19 +15,15 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.infrastructure.thrift.Hints;
-import org.corfudb.runtime.*;
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.exceptions.*;
 
 import java.io.*;
 import java.util.*;
 
 import org.corfudb.runtime.protocols.replications.IReplicationProtocol;
 import org.corfudb.runtime.smr.MultiCommand;
-import org.corfudb.runtime.smr.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

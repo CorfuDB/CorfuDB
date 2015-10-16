@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.UnwrittenException;
 import org.junit.Before;
 import org.junit.Test;
 

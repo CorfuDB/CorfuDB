@@ -16,7 +16,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 
 import org.slf4j.Logger;

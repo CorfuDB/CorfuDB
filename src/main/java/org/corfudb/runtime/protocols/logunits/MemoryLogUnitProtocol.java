@@ -1,9 +1,8 @@
 package org.corfudb.runtime.protocols.logunits;
 
 import org.cliffc.high_scale_lib.NonBlockingHashMapLong;
-import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.infrastructure.thrift.Hints;
-import org.corfudb.runtime.*;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.util.Utils;
 

@@ -13,18 +13,18 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime;
+package org.corfudb.runtime.exceptions;
 import java.io.IOException;
 
 /**
- * This exception is thrown whenever there is no space to
- * complete the requested operation.
+ * This exception is thrown whenever a read or write is attempted on a
+ * trimmed region.
  */
 @SuppressWarnings("serial")
-public class OutOfSpaceException extends IOException
+public class TrimmedException extends IOException
 {
     public long address;
-    public OutOfSpaceException(String desc, long address)
+    public TrimmedException(String desc, long address)
     {
         super(desc + "[address=" + address + "]");
         this.address = address;

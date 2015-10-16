@@ -15,7 +15,6 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.replications.IReplicationProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +34,6 @@ import java.lang.StringBuilder;
 import javax.json.Json;
 import javax.json.JsonValue;
 import javax.json.JsonString;
-import javax.json.JsonArray;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;

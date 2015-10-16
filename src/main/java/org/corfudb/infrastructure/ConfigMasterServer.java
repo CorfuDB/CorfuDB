@@ -17,7 +17,7 @@ package org.corfudb.infrastructure;
 import lombok.Getter;
 import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
 import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;
 import org.corfudb.runtime.view.WriteOnceAddressSpace;
@@ -49,8 +49,8 @@ import javax.json.JsonReader;
 import javax.json.JsonArray;
 import javax.json.JsonArrayBuilder;
 
-import org.corfudb.runtime.UnwrittenException;
-import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.exceptions.UnwrittenException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 
 import java.util.UUID;
 import java.lang.reflect.Field;
@@ -67,7 +67,7 @@ import com.esotericsoftware.kryonet.Connection;
 import org.corfudb.runtime.stream.Timestamp;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.runtime.view.RemoteLogView;
-import org.corfudb.runtime.RemoteException;
+import org.corfudb.runtime.exceptions.RemoteException;
 import org.corfudb.runtime.view.StreamData;
 
 import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;

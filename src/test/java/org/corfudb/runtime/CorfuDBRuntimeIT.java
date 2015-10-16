@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.logunits.NettyLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;

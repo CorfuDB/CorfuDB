@@ -15,13 +15,10 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.*;
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
+import org.corfudb.runtime.exceptions.*;
 
 import java.util.Collections;
-import java.util.List;
 
 import org.corfudb.runtime.protocols.replications.IReplicationProtocol;
 import org.slf4j.Logger;
@@ -30,7 +27,6 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.io.IOException;
 
-import java.util.Set;
 import java.util.function.Supplier;
 
 import java.util.UUID;

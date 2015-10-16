@@ -17,7 +17,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMessageEncoder;
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 
 import java.util.Map;
 import java.util.concurrent.ThreadFactory;

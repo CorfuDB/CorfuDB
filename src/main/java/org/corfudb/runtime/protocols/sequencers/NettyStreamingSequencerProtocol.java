@@ -1,36 +1,15 @@
 package org.corfudb.runtime.protocols.sequencers;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.handler.codec.LengthFieldPrepender;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
-import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenResponseMsg;
-import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.AbstractNettyProtocol;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.NettyRPCChannelInboundHandlerAdapter;
-import org.corfudb.util.CFUtils;
-import org.corfudb.util.SizeBufferPool;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static io.netty.buffer.Unpooled.directBuffer;
 

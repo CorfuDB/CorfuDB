@@ -8,7 +8,7 @@ import java.util.UUID;
 import java.io.IOException;
 
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.RemoteException;
+import org.corfudb.runtime.exceptions.RemoteException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

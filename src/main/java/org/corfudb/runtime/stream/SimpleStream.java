@@ -1,12 +1,10 @@
 package org.corfudb.runtime.stream;
 
-import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.infrastructure.thrift.Hints;
-import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.CorfuDBStreamHoleEntry;
 import org.corfudb.runtime.entries.IStreamEntry;
-import org.corfudb.runtime.entries.MetadataEntry;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.view.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

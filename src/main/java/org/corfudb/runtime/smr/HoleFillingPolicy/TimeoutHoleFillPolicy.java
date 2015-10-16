@@ -2,14 +2,12 @@ package org.corfudb.runtime.smr.HoleFillingPolicy;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.exceptions.HoleEncounteredException;
 import org.corfudb.runtime.stream.IStream;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.Temporal;
 import java.time.temporal.TemporalUnit;
-import java.util.concurrent.TimeUnit;
 
 /**
  * A simple hole-filling policy based on timeouts.

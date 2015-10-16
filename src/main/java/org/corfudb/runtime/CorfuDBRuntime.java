@@ -15,8 +15,9 @@
 
 package org.corfudb.runtime;
 
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.RemoteException;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
-import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.GitRepositoryState;
 import org.slf4j.Logger;
@@ -31,7 +32,6 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 
-import java.lang.reflect.InvocationTargetException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.LocalDateTime;
