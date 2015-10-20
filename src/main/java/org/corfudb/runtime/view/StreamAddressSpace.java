@@ -64,18 +64,26 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         int unitNum = chain.size() - 1;
         INewWriteOnceLogUnit lu = (INewWriteOnceLogUnit) chain.get(unitNum);
         return lu.read(index)
+                .exceptionally(e -> {
+                    log.error(e.getMessage());
+                    return null;
+                })
                 .thenApply(r -> {
-                   switch (r.getResult())
-                   {
-                       case DATA:
-                           return new StreamAddressSpaceEntry(r.getStreams(), index, StreamAddressEntryCode.DATA, r.getPayload());
-                       case EMPTY:
-                           //self invalidate
-                           cache.synchronous().invalidate(index);
-                           return null;
-                       default:
-                           return new StreamAddressSpaceEntry(index, fromLogUnitcode(r.getResult()));
-                   }
+                    if (r == null)
+                    {
+                        cache.synchronous().invalidate(index);
+                        return null;
+                    }
+                    switch (r.getResult()) {
+                        case DATA:
+                            return new StreamAddressSpaceEntry(r.getStreams(), index, StreamAddressEntryCode.DATA, r.getPayload());
+                        case EMPTY:
+                            //self invalidate
+                            cache.synchronous().invalidate(index);
+                            return null;
+                        default:
+                            return new StreamAddressSpaceEntry(index, fromLogUnitcode(r.getResult()));
+                    }
                 });
     }
 

@@ -13,47 +13,41 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public abstract class ICorfuDBInstanceTest {
 
-    ICorfuDBInstance instance;
 
     protected abstract ICorfuDBInstance getInstance();
-
-    @Before
-    public void setupInstance() {
-        instance = getInstance();
-    }
 
     @Test
     public void canGetAddressSpace()
     {
-        assertThat(instance.getAddressSpace())
+        assertThat(getInstance().getAddressSpace())
                 .isInstanceOf(IWriteOnceAddressSpace.class);
     }
 
     @Test
     public void canGetSequencer()
     {
-        assertThat(instance.getSequencer())
+        assertThat(getInstance().getSequencer())
                 .isInstanceOf(ISequencer.class);
     }
 
     @Test
     public void canGetStreamingSequencer()
     {
-        assertThat(instance.getStreamingSequencer())
+        assertThat(getInstance().getStreamingSequencer())
                 .isInstanceOf(IStreamingSequencer.class);
     }
 
     @Test
     public void canGetConfigurationMaster()
     {
-        assertThat(instance.getConfigurationMaster())
+        assertThat(getInstance().getConfigurationMaster())
                 .isInstanceOf(IConfigurationMaster.class);
     }
 
     @Test
     public void canGetCDBObject()
     {
-        assertThat(instance.openObject(UUID.randomUUID(), CDBSimpleMap.class))
+        assertThat(getInstance().openObject(UUID.randomUUID(), CDBSimpleMap.class))
                 .isInstanceOf(CDBSimpleMap.class);
     }
 
@@ -61,8 +55,8 @@ public abstract class ICorfuDBInstanceTest {
     public void checkCDBObjectAreCached()
     {
         UUID objID = UUID.randomUUID();
-        assertThat(instance.openObject(objID, CDBSimpleMap.class))
+        assertThat(getInstance().openObject(objID, CDBSimpleMap.class))
                 .isInstanceOf(CDBSimpleMap.class)
-                .isSameAs(instance.openObject(objID, CDBSimpleMap.class));
+                .isSameAs(getInstance().openObject(objID, CDBSimpleMap.class));
     }
 }

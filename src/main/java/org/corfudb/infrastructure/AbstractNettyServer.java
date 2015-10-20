@@ -232,7 +232,9 @@ public abstract class AbstractNettyServer implements ICorfuDBServer {
             }
             break;
             case RESET: {
-                log.info("Request requested by client ", msg.getClientID());
+                NettyCorfuResetMsg rMsg= (NettyCorfuResetMsg) msg;
+                log.info("Reset requested by client {}, new epoch is {}", msg.getClientID(), rMsg.getNewEpoch());
+                epoch = rMsg.getNewEpoch();
                 reset();
             }
             break;
