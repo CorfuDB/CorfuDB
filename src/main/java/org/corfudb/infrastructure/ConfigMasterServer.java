@@ -204,7 +204,7 @@ public class ConfigMasterServer implements ICorfuDBServer {
             server = HttpServer.create(new InetSocketAddress((Integer)config.get("port")), 0);
             server.createContext("/corfu", new RequestHandler());
             server.createContext("/control", new ControlRequestHandler());
-            server.createContext("/", new StaticRequestHandler());
+            //server.createContext("/", new StaticRequestHandler());
             server.setExecutor(null);
             server.start();
             loadRemoteLogs();
@@ -542,7 +542,7 @@ public class ConfigMasterServer implements ICorfuDBServer {
 
         return output.build();
     }
-
+/*
     private class StaticRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
             URI request = t.getRequestURI();
@@ -619,6 +619,7 @@ public class ConfigMasterServer implements ICorfuDBServer {
             }
         }
     }
+    */
     private class ControlRequestHandler implements HttpHandler {
         public void handle(HttpExchange t) throws IOException {
 

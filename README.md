@@ -1,27 +1,29 @@
-# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")
+# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")               
 
 [![Join the chat at https://gitter.im/CorfuDB/CorfuDB](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/CorfuDB/CorfuDB?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 [![Build Status](https://travis-ci.org/CorfuDB/CorfuDB.svg?branch=master)](https://travis-ci.org/CorfuDB/CorfuDB) [![Coverage Status](https://coveralls.io/repos/CorfuDB/CorfuDB/badge.svg?branch=master)](https://coveralls.io/r/CorfuDB/CorfuDB?branch=master) 
 [![Stories in Ready](https://badge.waffle.io/CorfuDB/CorfuDB.png?label=ready&title=Ready)](https://waffle.io/CorfuDB/CorfuDB)
 
-CorfuDB is a consistency platform designed around the abstraction
+
+Corfu is a consistency platform designed around the abstraction
 of a shared log. CorfuDB objects are in-memory, highly available
 data structures providing linearizable read/write operations and
 strictly serializable transactions. CorfuDB is based on
 peer-reviewed research, see [References](https://github.com/CorfuDB/CorfuDB/wiki/White-papers). 
 
-CorfuDB consists of two layers: a logging layer
+Corfu consists of two layers: a logging layer
 which implements a distributed, fault-tolerant shared log; and a
 runtime layer that implements transactional services over the shared log.
-Check the CorfuDB [wiki](https://github.com/CorfuDB/CorfuDB/wiki) for a detailed overview of the sofware architecture and example usage.
+
+Check the [Corfu Wiki](https://github.com/CorfuDB/CorfuDB/wiki) for a detailed overview of the sofware architecture and example usage.
 
 ## Prerequisites
-Currently we support and regularly test CorfuDB on Linux (Ubuntu), and
-Mac OS X. CorfuDB should also run on Windows as well, but the scripts
+Currently we support and regularly test Corfu on Linux (Ubuntu), and
+Mac OS X. Corfu should also run on Windows as well, but the scripts
 are not 100% there yet (pull requests welcome).
 
-To build and run CorfuDB, you will need the Java JDK 8 as well as Apache
+To build and run Corfu, you will need the Java JDK 8 as well as Apache
 Thrift, Redis and Maven.
 
 On Linux (Debian/Ubuntu), run:
@@ -45,9 +47,9 @@ You can run it directly, but you'll need to add it to your path to play nicely
 with maven; assuming you're using cygwin, you'll need to create an alias for
 it so that command line calls to 'thrift' do the right thing. 
 
-## Building CorfuDB
+## Building Corfu
 
-CorfuDB uses Apache maven for building. To build, from the root
+Corfu uses Apache maven for building. To build, from the root
 directory, run:
 
 ```
@@ -55,10 +57,10 @@ $ mvn clean install -DskipTests -Dexec.skip
 
 ```
 
-## CorfuDB quick deployment
+## Corfu quick deployment
 
 The default configuration files will start a single-node deployment
-of corfuDB. To start this default deployment, run:
+of Corfu. To start this default deployment, run:
 
 ```
 $ bin/crunall.sh --cmd start
@@ -74,21 +76,21 @@ $ bin/crunall.sh --cmd start --unitcnt n
 
 ## Checking if the deployment is working
 
-You will probably want to test if your deployment is working. The class org.corfudb.samples.HelloCorfu performs a few basic "health tests", such connecting with the config-master and retrieving the configuration from it; connecting with the sequencer and retrieving the current tail of the log; and connecting with each one of the logging-units.
+You will probably want to test if your deployment is working. The class org..samples.HelloCorfu performs a few basic "health tests", such connecting with the config-master and retrieving the configuration from it; connecting with the sequencer and retrieving the current tail of the log; and connecting with each one of the logging-units.
 
 To run is manually, either invoke within your Java IDE, or use:
 ```
 $ java -classpath <shaded-jar> org.corfudb.samples.HelloCorfu <master-URL>
 ```
-Where `<shaded-jar>` is the target shaded jar file, for example, target/corfudb-0.1-SNAPSHOT-shaded.jar , and `<master-URL>` is the full address of the master, for example,
+Where `<shaded-jar>` is the target shaded jar file, for example, target/-0.1-SNAPSHOT-shaded.jar , and `<master-URL>` is the full address of the master, for example,
 http://localhost:8000/corfu.
 
 ## Where is my output?
 
-At some point, you may run into problems or error, and you might want to look at output from CorfuDB. You will find various logs under /var/log/corfudb.<rolename>.log , where <rolename> is
+At some point, you may run into problems or error, and you might want to look at output from Corfu. You will find various logs under /var/log/.<rolename>.log , where <rolename> is
 one of sequencer, logunit, configmaster.
 
-## Bringing up a custom CorfuDB deployment
+## Bringing up a custom Corfu deployment
 
 The `crunall.sh` single node deployment brings up all the components of a single corfu log. They are:
 
@@ -101,7 +103,7 @@ these may exist in a deployment.
 *Configuration Master* - provides the configuration to clients. Only
 one of these may exist per deployment.
 
-Each corfudb role needs a configuration file that contains its port number and other essential parameters. 
+Each  role needs a configuration file that contains its port number and other essential parameters. 
 
 The single-node deployment script `crunall.sh` generates configuration files for all roles under the `/var/tmp` directory. Sample configuration files are provided in the `conf` directory and may be changed manually.
 
@@ -127,13 +129,13 @@ $ bin/crun.sh --unit configmaster --cmd start
 ## Deployment Tools
 
 The maven build scripts currently generate Debian packages, which should work
-on most Debian-based systems. Furthermore, the [CorfuDB-Ansible](https://github.com/CorfuDB/CorfuDB-Ansible)
+on most Debian-based systems. Furthermore, the [-Ansible](https://github.com/CorfuDB/-Ansible)
 repository provides a Ansible playbook to configure, deploy and orchestrate
-complex multi-node CorfuDB deployments.
+complex multi-node Corfu deployments.
 
 ## Running the tests
 
-The repository contains a set of unit tests and integration tests that we run CorfuDB against.
+The repository contains a set of unit tests and integration tests that we run Corfu against.
 To run the tests, you will need to install some additional dependencies - currently this is only
 Redis.
 
@@ -150,9 +152,9 @@ $ brew install redis
 
 Q: *I get a bunch of errors that look like*
 ```
-[ERROR] /tmp/CorfuDB/target/generated-sources/thrift/org/corfudb/loggingunit/LogUnitConfigService.java:[2566,7] cannot find symbol
+[ERROR] /tmp//target/generated-sources/thrift/org/corfudb/loggingunit/LogUnitConfigService.java:[2566,7] cannot find symbol
   symbol:   class HashCodeBuilder
-  location: class org.corfudb.loggingunit.LogUnitConfigService.rebuild_args
+  location: class org..loggingunit.LogUnitConfigService.rebuild_args
 ```
 *when I run mvn install.*
 
@@ -162,3 +164,4 @@ A: Make sure your version of Thrift matches the version of Thrift in the pom.xml
 
 ## TODO
 Remove Thrift Information
+=======
