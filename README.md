@@ -1,6 +1,7 @@
-# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")  [the wiki](https://github.com/CorfuDB/CorfuDB/wiki) 
+# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")               
 
 [![Join the chat at https://gitter.im/CorfuDB/CorfuDB](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/CorfuDB/CorfuDB?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Wiki](https://github.com/CorfuDB/CorfuDB/wiki)](https://github.com/CorfuDB/CorfuDB/wiki) 
 
 [![Build Status](https://travis-ci.org/CorfuDB/CorfuDB.svg?branch=master)](https://travis-ci.org/CorfuDB/CorfuDB) [![Coverage Status](https://coveralls.io/repos/CorfuDB/CorfuDB/badge.svg?branch=master)](https://coveralls.io/r/CorfuDB/CorfuDB?branch=master) 
 [![Stories in Ready](https://badge.waffle.io/CorfuDB/CorfuDB.png?label=ready&title=Ready)](https://waffle.io/CorfuDB/CorfuDB)
