@@ -67,7 +67,7 @@ public class NewStream implements IStream {
     @Override
     public ITimestamp append(Object data) throws IOException {
         return IRetry.build(ExponentialBackoffRetry.class, OutOfSpaceException.class, () -> {
-            long nextToken = instance.getStreamingSequencer().getNext(streamID);
+            long nextToken = instance.getNewStreamingSequencer().nextToken(streamID);
             instance.getStreamAddressSpace().write(nextToken, Collections.singleton(streamID), data);
             return new SimpleTimestamp(nextToken);
         }).onException(OverwriteException.class, (e,r) -> {

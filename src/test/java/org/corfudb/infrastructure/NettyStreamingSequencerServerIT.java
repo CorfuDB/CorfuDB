@@ -86,7 +86,7 @@ public class NettyStreamingSequencerServerIT {
             System.out.println("next: " + proto.getNext(Collections.singleton(UUID.randomUUID()), 1).get());
             System.out.println("next: " + proto.getNext(Collections.singleton(UUID.randomUUID()), 1).get());
             ICorfuDBInstance instance = CorfuDBRuntime.getRuntime(infrastructure.getConfigString()).getLocalInstance();
-            instance.getStreamingSequencer().getNext(UUID.randomUUID(), 1);
+            instance.getNewStreamingSequencer().nextToken(UUID.randomUUID(), 1);
             proto.getNext(Collections.singleton(UUID.randomUUID()), 1);
             ExecutorService es = Executors.newFixedThreadPool(4);
             Runnable r = () -> {

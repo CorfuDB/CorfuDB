@@ -5,7 +5,6 @@ import org.corfudb.runtime.smr.IStreamFactory;
 import org.corfudb.runtime.stream.ILog;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.SimpleLog;
-import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
 
 import java.lang.reflect.Constructor;
@@ -54,11 +53,6 @@ public class CorfuDBFactory {
         }
     }
 
-    public IStreamingSequencer getStreamingSequencer(CorfuDBRuntime cdr)
-    {
-        return new StreamingSequencer(cdr);
-    }
-
     public IConfigurationMaster getConfigurationMaster(CorfuDBRuntime cdr)
     {
         return new ConfigurationMaster(cdr);
@@ -72,7 +66,7 @@ public class CorfuDBFactory {
     public IStream getStream(UUID id, IStreamingSequencer sequencer, IWriteOnceAddressSpace woas)
     {
         try {
-            String type = (String) options.getOrDefault("--stream-impl", "SimpleStream");
+            String type = (String) options.getOrDefault("--stream-impl", "NewStream");
             Class<? extends IStream> streamClass;
             try {
                 streamClass = (Class<? extends IStream>) Class.forName("org.corfudb.runtime.stream." + type);
@@ -95,7 +89,7 @@ public class CorfuDBFactory {
     public IStreamFactory getStreamFactory(IStreamingSequencer sequencer, IWriteOnceAddressSpace woas)
     {
         try {
-            String type = (String) options.getOrDefault("--stream-impl", "SimpleStream");
+            String type = (String) options.getOrDefault("--stream-impl", "NewStream");
             Class<? extends IStreamFactory> factoryClass;
             try {
                 factoryClass = (Class<? extends IStreamFactory>) Class.forName("org.corfudb.runtime.stream." + type + "Factory");

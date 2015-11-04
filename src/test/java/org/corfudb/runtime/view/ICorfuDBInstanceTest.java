@@ -17,27 +17,6 @@ public abstract class ICorfuDBInstanceTest {
     protected abstract ICorfuDBInstance getInstance();
 
     @Test
-    public void canGetAddressSpace()
-    {
-        assertThat(getInstance().getAddressSpace())
-                .isInstanceOf(IWriteOnceAddressSpace.class);
-    }
-
-    @Test
-    public void canGetSequencer()
-    {
-        assertThat(getInstance().getSequencer())
-                .isInstanceOf(ISequencer.class);
-    }
-
-    @Test
-    public void canGetStreamingSequencer()
-    {
-        assertThat(getInstance().getStreamingSequencer())
-                .isInstanceOf(IStreamingSequencer.class);
-    }
-
-    @Test
     public void canGetConfigurationMaster()
     {
         assertThat(getInstance().getConfigurationMaster())

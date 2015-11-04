@@ -20,7 +20,6 @@ import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPol
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;
-import org.corfudb.runtime.view.WriteOnceAddressSpace;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 import com.sun.net.httpserver.HttpExchange;
@@ -70,7 +69,6 @@ import org.corfudb.runtime.view.RemoteLogView;
 import org.corfudb.runtime.exceptions.RemoteException;
 import org.corfudb.runtime.view.StreamData;
 
-import org.corfudb.runtime.view.CachedWriteOnceAddressSpace;
 import org.corfudb.runtime.view.Serializer;
 
 import java.util.concurrent.CompletableFuture;
@@ -394,9 +392,11 @@ public class ConfigMasterServer implements ICorfuDBServer {
 
     private JsonObject streamInspector(JsonObject params)
     {
+        /*
         long pos = params.getJsonNumber("pos").longValue();
         JsonObjectBuilder output = Json.createObjectBuilder();
         WriteOnceAddressSpace woas = new WriteOnceAddressSpace(currentView);
+        */
         return null;
     }
 
@@ -451,6 +451,9 @@ public class ConfigMasterServer implements ICorfuDBServer {
 
     private JsonObject logInfo(JsonObject params)
     {
+        //TODO: remove this completely
+        throw new UnsupportedOperationException("no longer supported");
+        /*
         long pos = params.getJsonNumber("pos").longValue();
         JsonObjectBuilder output = Json.createObjectBuilder();
         CachedWriteOnceAddressSpace woas = new CachedWriteOnceAddressSpace(currentView);
@@ -541,6 +544,7 @@ public class ConfigMasterServer implements ICorfuDBServer {
         }
 
         return output.build();
+        */
     }
 
     private class StaticRequestHandler implements HttpHandler {

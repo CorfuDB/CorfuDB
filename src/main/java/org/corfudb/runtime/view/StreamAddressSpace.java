@@ -11,6 +11,7 @@ import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 
 /**
  * This is the default implementation of a stream address space, which is backed by a LRU cache.
@@ -87,6 +88,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         this.instance = instance;
         cache = Caffeine.newBuilder()
                 .maximumSize(10_000)
+                .executor(Executors.newFixedThreadPool(8))
                 .buildAsync(idx -> {
                     try {
                         return load(idx).get();
@@ -142,7 +144,9 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      */
     @Override
     public CompletableFuture<StreamAddressSpaceEntry> readAsync(long offset) {
-        return cache.get(offset);
+        //for now, we bypass the cache.
+        return load(offset);
+        //return cache.get(offset);
     }
 
     /**

@@ -1,9 +1,7 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.io.IOException;

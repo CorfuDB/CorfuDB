@@ -1,5 +1,5 @@
 role: org.corfudb.infrastructure.ConfigMasterServer
-port: 8002
+port: 9000
 pagesize: 4096
 epoch: 0
 sequencers:

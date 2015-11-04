@@ -1,11 +1,7 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleStream;
-
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Created by mwei on 5/6/15.
