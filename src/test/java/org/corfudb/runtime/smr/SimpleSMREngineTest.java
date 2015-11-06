@@ -2,25 +2,19 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
-import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleStream;
+import org.corfudb.runtime.stream.NewStream;
 import org.corfudb.runtime.view.*;
-import org.junit.Before;
-import org.junit.Test;
 
-import java.io.Serializable;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
 
-import static org.assertj.core.api.Assertions.*;
 /**
  * Created by mwei on 5/1/15.
  */
 public class SimpleSMREngineTest {
 
-    SimpleStream s;
+    NewStream s;
     ICorfuDBInstance instance;
 
    // @Before
@@ -29,7 +23,7 @@ public class SimpleSMREngineTest {
         MemoryConfigMasterProtocol.inMemoryClear();
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("memory");
         instance = cdr.getLocalInstance();
-        s = (SimpleStream) instance.openStream(UUID.randomUUID());
+        s = (NewStream) instance.openStream(UUID.randomUUID());
     }
 
   //  @Test

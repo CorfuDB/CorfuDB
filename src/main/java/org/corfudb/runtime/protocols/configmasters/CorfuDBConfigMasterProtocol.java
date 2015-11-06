@@ -15,7 +15,7 @@
 
 package org.corfudb.runtime.protocols.configmasters;
 
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
 import java.util.Map;

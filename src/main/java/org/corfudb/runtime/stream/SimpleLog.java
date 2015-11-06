@@ -15,14 +15,12 @@
 
 package org.corfudb.runtime.stream;
 
-import org.corfudb.runtime.TrimmedException;
-import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.UnwrittenException;
 import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
-import org.corfudb.runtime.view.Sequencer;
-import org.corfudb.runtime.view.WriteOnceAddressSpace;
 
-import org.corfudb.runtime.OutOfSpaceException;
+import org.corfudb.runtime.exceptions.OutOfSpaceException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

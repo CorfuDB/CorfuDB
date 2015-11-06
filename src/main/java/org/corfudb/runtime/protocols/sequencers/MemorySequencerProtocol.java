@@ -1,6 +1,6 @@
 package org.corfudb.runtime.protocols.sequencers;
 
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

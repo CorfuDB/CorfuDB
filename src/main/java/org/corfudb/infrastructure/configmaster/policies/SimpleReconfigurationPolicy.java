@@ -1,13 +1,11 @@
 package org.corfudb.infrastructure.configmaster.policies;
 
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
-import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;
-import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

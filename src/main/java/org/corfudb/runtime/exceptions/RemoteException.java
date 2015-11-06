@@ -13,24 +13,21 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime;
+package org.corfudb.runtime.exceptions;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-
+import java.util.UUID;
 /**
- * This exception is thrown whenever a write is attempted on a page
- * that already has been written to. (Applies to write once address spaces)
+ * This exception is thrown whenever the result of an operation
+ * is unknown due to a network error
  */
 @SuppressWarnings("serial")
-public class OverwriteException extends IOException
+public class RemoteException extends IOException
 {
-    public long address;
-    public ByteBuffer payload;
-    public OverwriteException(String desc, long address, ByteBuffer payload)
+    public UUID remote;
+    public RemoteException(String desc, UUID remote)
     {
-        super(desc + "[address=" + address + "]");
-        this.address = address;
-        this.payload = payload;
+        super(desc + "[remote=" + remote.toString() + "]");
+        this.remote = remote;
     }
 }
 

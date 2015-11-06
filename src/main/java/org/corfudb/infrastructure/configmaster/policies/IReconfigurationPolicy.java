@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.configmaster.policies;
 
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.view.CorfuDBView;
 
 /**

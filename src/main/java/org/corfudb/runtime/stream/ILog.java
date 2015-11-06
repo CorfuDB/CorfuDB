@@ -1,8 +1,8 @@
 package org.corfudb.runtime.stream;
 
-import org.corfudb.runtime.OutOfSpaceException;
-import org.corfudb.runtime.TrimmedException;
-import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.exceptions.OutOfSpaceException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.UnwrittenException;
 
 import java.io.IOException;
 import java.io.Serializable;

@@ -1,30 +1,19 @@
 package org.corfudb.runtime.protocols;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
-import io.netty.util.Attribute;
-import io.netty.util.AttributeKey;
-import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuResetMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
-import org.corfudb.runtime.NetworkException;
-import org.corfudb.runtime.WrongEpochException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.SizeBufferPool;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**

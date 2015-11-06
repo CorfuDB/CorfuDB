@@ -15,7 +15,7 @@
 
 package org.corfudb.runtime.protocols.logunits;
 
-import org.corfudb.runtime.*;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
 import redis.clients.jedis.Jedis;

@@ -1,20 +1,12 @@
 package org.corfudb.runtime.view;
 
 import lombok.*;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.thrift.Hint;
-import org.corfudb.runtime.NetworkException;
-import org.corfudb.runtime.OutOfSpaceException;
-import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.TrimmedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.entries.IStreamEntry;
-import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleTimestamp;
 
-import java.io.IOException;
-import java.io.Serializable;
-import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 

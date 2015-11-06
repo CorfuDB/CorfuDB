@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 
 /**
  * Created by mwei on 5/1/15.

@@ -2,35 +2,20 @@ package org.corfudb.runtime.smr;
 
 import lombok.Getter;
 import lombok.Setter;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.HoleEncounteredException;
-import org.corfudb.runtime.OutOfSpaceException;
-import org.corfudb.runtime.OverwriteException;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.smr.HoleFillingPolicy.IHoleFillingPolicy;
 import org.corfudb.runtime.smr.HoleFillingPolicy.TimeoutHoleFillPolicy;
-import org.corfudb.runtime.smr.smrprotocol.LambdaSMRCommand;
 import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleTimestamp;
-import org.corfudb.runtime.stream.Timestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.runtime.view.IStreamAddressSpace;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.Serializable;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 5/1/15.

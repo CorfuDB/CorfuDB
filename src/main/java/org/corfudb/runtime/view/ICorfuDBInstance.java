@@ -28,25 +28,7 @@ public interface ICorfuDBInstance {
      */
     IConfigurationMaster getConfigurationMaster();
 
-    /**
-     * Gets a streaming sequencer for this instance.
-     * @return  The streaming sequencer for this instance.
-     */
-    IStreamingSequencer getStreamingSequencer();
-
     INewStreamingSequencer getNewStreamingSequencer();
-
-    /**
-     * Gets a sequencer (regular) for this instance.
-     * @return  The sequencer for this instance.
-     */
-    ISequencer getSequencer();
-
-    /**
-     * Gets a write-once address space for this instance.
-     * @return  A write-once address space for this instance.
-     */
-    IWriteOnceAddressSpace getAddressSpace();
 
     /**
      * Gets a stream address space for this instance.

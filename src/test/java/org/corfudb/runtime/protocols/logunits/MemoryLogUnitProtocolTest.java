@@ -4,8 +4,8 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertTrue;
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 
-import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.UnwrittenException;
 import org.junit.Test;
 
 import java.util.UUID;
