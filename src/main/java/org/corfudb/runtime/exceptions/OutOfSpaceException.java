@@ -13,21 +13,21 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime;
+package org.corfudb.runtime.exceptions;
 import java.io.IOException;
-import java.util.UUID;
+
 /**
- * This exception is thrown whenever the result of an operation
- * is unknown due to a network error
+ * This exception is thrown whenever there is no space to
+ * complete the requested operation.
  */
 @SuppressWarnings("serial")
-public class RemoteException extends IOException
+public class OutOfSpaceException extends IOException
 {
-    public UUID remote;
-    public RemoteException(String desc, UUID remote)
+    public long address;
+    public OutOfSpaceException(String desc, long address)
     {
-        super(desc + "[remote=" + remote.toString() + "]");
-        this.remote = remote;
+        super(desc + "[address=" + address + "]");
+        this.address = address;
     }
 }
 

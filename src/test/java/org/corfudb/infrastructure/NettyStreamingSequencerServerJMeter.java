@@ -6,6 +6,7 @@ import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.runtime.view.INewStreamingSequencer;
 import org.corfudb.runtime.view.IStreamingSequencer;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 
@@ -21,7 +22,7 @@ public class NettyStreamingSequencerServerJMeter extends AbstractJavaSamplerClie
 
     CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
-    IStreamingSequencer sequencer;
+    INewStreamingSequencer sequencer;
 
     UUID streamID;
 
@@ -34,7 +35,7 @@ public class NettyStreamingSequencerServerJMeter extends AbstractJavaSamplerClie
         SampleResult result = new SampleResult();
         result.setSampleLabel("Token Acquisition");
         result.sampleStart();
-        sequencer.getNext(streamID);
+        sequencer.nextToken(streamID);
         result.sampleEnd();
         result.setSuccessful(true);
         return result;
@@ -61,7 +62,7 @@ public class NettyStreamingSequencerServerJMeter extends AbstractJavaSamplerClie
 
         runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
         instance = runtime.getLocalInstance();
-        sequencer = instance.getStreamingSequencer();
+        sequencer = instance.getNewStreamingSequencer();
 
         streamID = UUID.randomUUID();
         super.setupTest(context);

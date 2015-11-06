@@ -31,7 +31,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     // Members of this CorfuDBInstance
     private IConfigurationMaster configMaster;
     private IStreamingSequencer streamingSequencer;
-    private IWriteOnceAddressSpace addressSpace;
     private IStreamAddressSpace streamAddressSpace;
 
     @Getter
@@ -58,20 +57,16 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     public LocalCorfuDBInstance(CorfuDBRuntime cdr)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        this(cdr, ConfigurationMaster.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
+        this(cdr, ConfigurationMaster.class,
                 NewStream.class);
     }
 
     public LocalCorfuDBInstance(CorfuDBRuntime cdr,
                                 Class<? extends IConfigurationMaster> cm,
-                                Class<? extends IStreamingSequencer> ss,
-                                Class<? extends IWriteOnceAddressSpace> as,
                                 Class<? extends IStream> streamType)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
         configMaster = cm.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
-        streamingSequencer = ss.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
-        addressSpace = as.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
         streamAddressSpace = new StreamAddressSpace(this);
         newStreamingSequencer = new NewStreamingSequencer(this);
         this.streamType = streamType;
@@ -89,36 +84,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     @Override
     public IConfigurationMaster getConfigurationMaster() {
         return configMaster;
-    }
-
-    /**
-     * Gets a streaming sequencer for this instance.
-     *
-     * @return The streaming sequencer for this instance.
-     */
-    @Override
-    public IStreamingSequencer getStreamingSequencer() {
-        return streamingSequencer;
-    }
-
-    /**
-     * Gets a sequencer (regular) for this instance.
-     *
-     * @return The sequencer for this instance.
-     */
-    @Override
-    public ISequencer getSequencer() {
-        return streamingSequencer;
-    }
-
-    /**
-     * Gets a write-once address space for this instance.
-     *
-     * @return A write-once address space for this instance.
-     */
-    @Override
-    public IWriteOnceAddressSpace getAddressSpace() {
-        return addressSpace;
     }
 
     /**

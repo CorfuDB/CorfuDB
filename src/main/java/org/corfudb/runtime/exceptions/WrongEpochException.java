@@ -1,4 +1,4 @@
-package org.corfudb.runtime;
+package org.corfudb.runtime.exceptions;
 
 import lombok.Data;
 

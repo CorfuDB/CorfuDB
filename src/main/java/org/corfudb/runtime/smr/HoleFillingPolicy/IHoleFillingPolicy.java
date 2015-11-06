@@ -1,6 +1,6 @@
 package org.corfudb.runtime.smr.HoleFillingPolicy;
 
-import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.exceptions.HoleEncounteredException;
 import org.corfudb.runtime.stream.IStream;
 
 /**

@@ -1,7 +1,7 @@
 package org.corfudb.runtime.protocols.logunits;
 
-import org.corfudb.runtime.OverwriteException;
-import org.corfudb.runtime.UnwrittenException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.UnwrittenException;
 import org.junit.Test;
 
 import java.util.UUID;

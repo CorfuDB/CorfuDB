@@ -1,15 +1,11 @@
 package org.corfudb.runtime.stream;
 
-import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
-import com.google.common.collect.TreeRangeSet;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
-import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.smr.HoleFillingPolicy.IHoleFillingPolicy;
 import org.corfudb.runtime.smr.HoleFillingPolicy.TimeoutHoleFillPolicy;
 import org.corfudb.runtime.view.ICorfuDBInstance;
@@ -19,12 +15,10 @@ import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 /**
  * This is the new stream implementation.
@@ -73,7 +67,7 @@ public class NewStream implements IStream {
     @Override
     public ITimestamp append(Object data) throws IOException {
         return IRetry.build(ExponentialBackoffRetry.class, OutOfSpaceException.class, () -> {
-            long nextToken = instance.getStreamingSequencer().getNext(streamID);
+            long nextToken = instance.getNewStreamingSequencer().nextToken(streamID);
             instance.getStreamAddressSpace().write(nextToken, Collections.singleton(streamID), data);
             return new SimpleTimestamp(nextToken);
         }).onException(OverwriteException.class, (e,r) -> {

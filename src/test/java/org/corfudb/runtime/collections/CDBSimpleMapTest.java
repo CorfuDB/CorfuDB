@@ -7,8 +7,6 @@ import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleStream;
-import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
@@ -17,8 +15,6 @@ import org.junit.Test;
 import org.junit.experimental.ParallelComputer;
 import org.junit.runner.JUnitCore;
 
-import java.sql.Time;
-import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;

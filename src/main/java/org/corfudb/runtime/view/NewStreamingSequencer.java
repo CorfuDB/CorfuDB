@@ -1,15 +1,10 @@
 package org.corfudb.runtime.view;
 
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.ICorfuDBServer;
-import org.corfudb.runtime.NetworkException;
-import org.corfudb.runtime.WrongEpochException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.sequencers.INewStreamSequencer;
-import org.corfudb.util.retry.ExponentialBackoffRetry;
-import org.corfudb.util.retry.IRetry;
 
 import java.util.List;
 import java.util.Set;

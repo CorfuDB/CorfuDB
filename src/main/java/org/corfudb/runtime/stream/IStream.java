@@ -15,8 +15,11 @@
 
 package org.corfudb.runtime.stream;
 
-import org.corfudb.runtime.*;
 import org.corfudb.runtime.entries.IStreamEntry;
+import org.corfudb.runtime.exceptions.HoleEncounteredException;
+import org.corfudb.runtime.exceptions.OutOfSpaceException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.IStreamAddressSpace;
 

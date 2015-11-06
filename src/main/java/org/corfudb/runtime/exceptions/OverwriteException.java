@@ -13,21 +13,24 @@
  * limitations under the License.
  */
 
-package org.corfudb.runtime;
+package org.corfudb.runtime.exceptions;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 /**
- * This exception is thrown whenever a read or write is attempted on a
- * trimmed region.
+ * This exception is thrown whenever a write is attempted on a page
+ * that already has been written to. (Applies to write once address spaces)
  */
 @SuppressWarnings("serial")
-public class TrimmedException extends IOException
+public class OverwriteException extends IOException
 {
     public long address;
-    public TrimmedException(String desc, long address)
+    public ByteBuffer payload;
+    public OverwriteException(String desc, long address, ByteBuffer payload)
     {
         super(desc + "[address=" + address + "]");
         this.address = address;
+        this.payload = payload;
     }
 }
 
