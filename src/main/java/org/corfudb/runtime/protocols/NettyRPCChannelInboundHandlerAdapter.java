@@ -40,11 +40,7 @@ public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboun
     private ConcurrentHashMap<Long, CompletableFuture<?>> rpcMap;
     private Random random;
 
-    @Setter
-    public AbstractNettyProtocol protocol;
-
     public abstract void handleMessage(NettyCorfuMsg message);
-
 
     public NettyRPCChannelInboundHandlerAdapter()
     {

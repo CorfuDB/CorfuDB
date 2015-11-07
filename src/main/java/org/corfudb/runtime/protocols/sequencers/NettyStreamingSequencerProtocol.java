@@ -67,7 +67,10 @@ public class NettyStreamingSequencerProtocol
      */
     @Override
     public CompletableFuture<Long> getNext(Set<UUID> streams, long numTokens) {
-        return handler.getToken(streams, numTokens);
+            NettyStreamingServerTokenRequestMsg r =
+                    new NettyStreamingServerTokenRequestMsg
+                            (streams, numTokens);
+            return handler.sendMessageAndGetCompletable(getEpoch(), r);
     }
 
     static class NettyStreamingSequencerHandler extends NettyRPCChannelInboundHandlerAdapter {
@@ -86,14 +89,5 @@ public class NettyStreamingSequencerProtocol
                     break;
             }
         }
-
-        public CompletableFuture<Long> getToken(Set<UUID> streamIDs, long numTokens) {
-            NettyStreamingServerTokenRequestMsg r =
-                    new NettyStreamingServerTokenRequestMsg
-                            (streamIDs, numTokens);
-            return sendMessageAndGetCompletable(protocol.getEpoch(), r);
-        }
-
-        //endregion
     }
 }
