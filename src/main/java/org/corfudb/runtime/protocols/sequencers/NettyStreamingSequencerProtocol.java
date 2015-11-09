@@ -89,5 +89,6 @@ public class NettyStreamingSequencerProtocol
                     break;
             }
         }
+        //endregion
     }
 }
