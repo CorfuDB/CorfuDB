@@ -5,6 +5,7 @@ org.corfudb.infrastructure.wireprotocol
 org.corfudb.runtime
 org.corfudb.runtime.collections
 org.corfudb.runtime.entries
+org.corfudb.runtime.exceptions
 org.corfudb.runtime.objects
 org.corfudb.runtime.protocols
 org.corfudb.runtime.protocols.configmasters
