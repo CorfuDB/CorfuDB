@@ -341,18 +341,22 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             {
                 completion.complete(result);
             }
+            log.trace("Read-only proposal completed at {}", streamPointer);
             return CompletableFuture.completedFuture(streamPointer);
         }
 
-       final ITimestamp[] tRef = new ITimestamp[1];
+        final ITimestamp[] proposalTimestamp = new ITimestamp[1];
         return stream.reserveAsync(1)
                 .thenApplyAsync(
                         t -> {
+                            log.trace("Proposal[{}]: Acquired token", t[0]);
                             if (completion != null) {
+                                log.trace("Proposal[{}]: Inserted into completion table.", t[0]);
                                 completionTable.put(t[0], completion);
                             }
                             try {
-                                tRef[0] = t[0];
+                                log.trace("Proposal[{}]: Writing proposal to stream", t[0]);
+                                proposalTimestamp[0] = t[0];
                                 return stream.writeAsync(t[0], command);
                             } catch (Exception e) {
                                 log.error("Exception during write.", e);
@@ -361,8 +365,9 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                         }
                 )
                 .thenApplyAsync( r -> {
-                    lastProposal = tRef[0]; //TODO: fix thread safety?
-                    return tRef[0];
+                    log.trace("Proposal[{}]: Wrote proposal to stream", proposalTimestamp[0]);
+                    lastProposal = proposalTimestamp[0]; //TODO: Should be max.
+                    return proposalTimestamp[0];
                 });
     }
 
