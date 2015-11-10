@@ -11,6 +11,7 @@ import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.runtime.view.IStreamAddressSpace;
 
 import java.io.IOException;
 import java.util.*;
@@ -115,7 +116,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     public <R> void apply(IStreamEntry entry)
     {
-        //log.info("applying entry at {} ({})", entry.getTimestamp(), entry.getPayload() == null);
+        log.trace("LearnApply[{}/{}]: Apply", entry.getTimestamp(), entry.getLogicalTimestamp());
         if (entry.getPayload() != null && entry.getPayload() instanceof SMRCommand) {
             SMRCommand command = (SMRCommand) entry.getPayload();
             command.setInstance(getInstance());
@@ -132,23 +133,19 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     public synchronized void learnAndApply(IStreamEntry entry)
     {
-       // log.info("learnApply<enter> id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
-
         if(ITimestamp.isMin(lastApplied) && stream.getNextTimestamp(lastApplied).equals(entry.getLogicalTimestamp()))
         {
             apply(entry);
         }
         else
         {
+            log.trace("LearnApply[{}/{}]: Enqueued, Previous={}, Next={}", entry.getTimestamp(), entry.getLogicalTimestamp(), lastApplied, stream.getNextTimestamp(lastApplied));
             applyQueue.offer(entry);
         }
-
         while (applyQueue.peek() != null && applyQueue.peek().getLogicalTimestamp().equals(stream.getNextTimestamp(lastApplied)))
         {
             apply(applyQueue.poll());
         }
-
-      // log.info("learnApply<exit> id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getLogicalTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
     }
 
     /**
@@ -164,6 +161,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         if (ts == null) {
             stream.checkAsync()
                     .thenApplyAsync(t -> {
+                        log.trace("Sync to most recent @ {}", t);
                         return stream.readToAsync(t).thenApplyAsync(entryArray -> {
                                     if (entryArray != null) {
                                         Arrays.stream(entryArray)
@@ -175,6 +173,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         }
         else
         {
+            log.trace("Sync to {}", ts);
             stream.readToAsync(stream.getNextTimestamp(ts))
                     .thenApplyAsync(entryArray -> {
                         if (entryArray != null) {

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.entries;
 
 import org.corfudb.runtime.stream.ITimestamp;
+import org.corfudb.runtime.view.IStreamAddressSpace;
 
 import java.util.List;
 import java.util.UUID;
@@ -53,12 +54,15 @@ public interface IStreamEntry extends Comparable<IStreamEntry> {
         throw new UnsupportedOperationException("Unsupported!");
     }
 
-
     /**
      * Gets the payload of this stream.
      * @return The payload of the stream.
      */
     Object getPayload();
+
+    default IStreamAddressSpace.StreamAddressEntryCode getCode() {
+        throw new UnsupportedOperationException("Unsupported!");
+    }
 
     /**
      * Compares the entries, using the timestamp.

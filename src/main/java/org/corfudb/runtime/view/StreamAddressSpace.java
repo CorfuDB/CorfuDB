@@ -50,6 +50,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
     @SuppressWarnings("unchecked")
     public CompletableFuture<StreamAddressSpaceEntry> load(long index)
     {
+        log.trace("Load[{}]: Read requested", index);
         int chainNum = (int) (index % instance.getView().getSegments().get(0).getGroups().size());
         List<IServerProtocol> chain = instance.getView().getSegments().get(0).getGroups().get(chainNum);
         int unitNum = chain.size() - 1;
@@ -67,12 +68,15 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                     }
                     switch (r.getResult()) {
                         case DATA:
+                            log.trace("Load[{}]: Data", index);
                             return new StreamAddressSpaceEntry(r.getStreams(), index, StreamAddressEntryCode.DATA, r.getPayload());
                         case EMPTY:
                             //self invalidate
+                            log.trace("Load[{}]: Empty", index);
                             cache.synchronous().invalidate(index);
                             return null;
                         default:
+                            log.trace("Load[{}]: {}", index , fromLogUnitcode(r.getResult()));
                             return new StreamAddressSpaceEntry(index, fromLogUnitcode(r.getResult()));
                     }
                 });

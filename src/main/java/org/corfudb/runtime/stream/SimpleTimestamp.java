@@ -20,6 +20,9 @@ public class SimpleTimestamp implements ITimestamp, Serializable {
     @Override
     public String toString()
     {
+        if (address == Long.MIN_VALUE) {
+            return "MIN_VALUE";
+        }
         return Long.toString(address);
     }
 
