@@ -246,6 +246,7 @@ public class NewStream implements IStream {
                                     IStreamAddressSpace.StreamAddressSpaceEntry ret =
                                             instance.getStreamAddressSpace().read(address);
                                     if (ret == null) {
+
                                         log.debug("Read[{}] Hole encountered, processing exception", address);
                                         throw new HoleEncounteredException(toLogicalTimestamp(address));
                                     }

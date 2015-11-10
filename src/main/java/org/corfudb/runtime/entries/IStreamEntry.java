@@ -60,6 +60,10 @@ public interface IStreamEntry extends Comparable<IStreamEntry> {
      */
     Object getPayload();
 
+    /**
+     * Get the return code for this stream.
+     * @return  A return code.
+     */
     default IStreamAddressSpace.StreamAddressEntryCode getCode() {
         throw new UnsupportedOperationException("Unsupported!");
     }
