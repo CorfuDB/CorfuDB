@@ -42,7 +42,7 @@ public class TimeoutHoleFillPolicy implements IHoleFillingPolicy {
 
     @Override
     public boolean apply(HoleEncounteredException he, IStream s) {
-        if (lastException == null || !lastException.getAddress().equals(he.getAddress())) {
+        if (lastException == null) {
             lastException = he;
             lastExceptionTime = LocalDateTime.now();
             return false;

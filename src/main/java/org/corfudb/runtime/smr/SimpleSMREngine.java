@@ -11,6 +11,7 @@ import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.runtime.view.IStreamAddressSpace;
 
 import java.io.IOException;
 import java.util.*;
@@ -115,7 +116,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     public <R> void apply(IStreamEntry entry)
     {
-        //log.info("applying entry at {} ({})", entry.getTimestamp(), entry.getPayload() == null);
+        log.trace("LearnApply[{}/{}]: Apply", entry.getTimestamp(), entry.getLogicalTimestamp());
         if (entry.getPayload() != null && entry.getPayload() instanceof SMRCommand) {
             SMRCommand command = (SMRCommand) entry.getPayload();
             command.setInstance(getInstance());
@@ -132,23 +133,19 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     public synchronized void learnAndApply(IStreamEntry entry)
     {
-       // log.info("learnApply<enter> id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
-
         if(ITimestamp.isMin(lastApplied) && stream.getNextTimestamp(lastApplied).equals(entry.getLogicalTimestamp()))
         {
             apply(entry);
         }
         else
         {
+            log.trace("LearnApply[{}/{}]: Enqueued, Previous={}, Next={}", entry.getTimestamp(), entry.getLogicalTimestamp(), lastApplied, stream.getNextTimestamp(lastApplied));
             applyQueue.offer(entry);
         }
-
         while (applyQueue.peek() != null && applyQueue.peek().getLogicalTimestamp().equals(stream.getNextTimestamp(lastApplied)))
         {
             apply(applyQueue.poll());
         }
-
-      // log.info("learnApply<exit> id={} entry={} lastApplied={} count={} head={}", getStreamID(), entry.getLogicalTimestamp(), lastApplied, applyQueue.size(), applyQueue.peek() == null ? "null" : applyQueue.peek().getLogicalTimestamp());
     }
 
     /**
@@ -164,6 +161,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         if (ts == null) {
             stream.checkAsync()
                     .thenApplyAsync(t -> {
+                        log.trace("Sync to most recent @ {}", t);
                         return stream.readToAsync(t).thenApplyAsync(entryArray -> {
                                     if (entryArray != null) {
                                         Arrays.stream(entryArray)
@@ -175,6 +173,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
         }
         else
         {
+            log.trace("Sync to {}", ts);
             stream.readToAsync(stream.getNextTimestamp(ts))
                     .thenApplyAsync(entryArray -> {
                         if (entryArray != null) {
@@ -185,90 +184,6 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                     }
                     ).join();
         }
-        /*
-            if (ts == null) {
-                ts = stream.check();
-                if (ts.compareTo(streamPointer) <= 0) {
-                    //we've already read to the most recent position, no need to keep reading.
-                    return;
-                }
-            }
-            while (ts.compareTo(streamPointer) > 0) {
-                IStreamEntry entry = null;
-                try {
-                    try (TransactionalContext tc =
-                                 new TransactionalContext(this, ts, stream.getInstance(), PassthroughTransaction.class)) {
-                        //for now, use this to pass the instance context to the deserializer.
-                        entry = stream.readNextEntry();
-                    }
-                    if (entry == null)
-                    {
-                        // we've reached the end of this stream.
-                        return;
-                    }
-                    // Add this, because now that we have next pointers, the pointer may jump beyond ts
-                    if (entry.getTimestamp().compareTo(ts) > 0) return;
-                    if (entry instanceof ITransaction)
-                    {
-                        ITransaction transaction = (ITransaction) entry;
-                        transaction.setInstance(stream.getInstance());
-                        transaction.executeTransaction(this);
-                    }
-                    else if (entry.getPayload() instanceof SMRLocalCommandWrapper)
-                    {
-                        if (localTable.contains(ts)) {
-                            localTable.remove(ts);
-                            SMRLocalCommandWrapper<T, R> function = (SMRLocalCommandWrapper<T, R>) entry.getPayload();
-                            try (TransactionalContext tc =
-                                         new TransactionalContext(this, entry.getTimestamp(), function.destination,
-                                                 stream.getInstance(), LocalTransaction.class)) {
-                                ITimestamp entryTS = entry.getTimestamp();
-                                CompletableFuture<Object> completion = completionTable.getOrDefault(entryTS, null);
-                                completionTable.remove(entryTS);
-                                R result = function.command.apply(underlyingObject, new SimpleSMREngineOptions());
-                                if (completion != null) {
-                                    completion.complete(result);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            log.debug("Dropping localTX proposed by other client@{}", ts);
-                        }
-                    }
-                    else {
-                        try (TransactionalContext tc =
-                                     new TransactionalContext(this, entry.getTimestamp(), stream.getInstance(), PassthroughTransaction.class)) {
-                            ISMREngineCommand<T, R> function = (ISMREngineCommand<T, R>) entry.getPayload();
-                            ITimestamp entryTS = entry.getTimestamp();
-                                CompletableFuture<R> completion = completionTable.get(entryTS);
-                                if (completion == null) {
-                                    log.debug("Completion @ {} is null", entryTS);
-                                }
-                                completionTable.remove(entryTS);
-                                if (entry instanceof MultiCommand) {
-                                    completion = new CompletableFuture<>();
-                                }
-                                // log.warn("syncing entry-" + entryTS + " cf=" + completion + (bStaleCompletion?" (stale)":""));
-                                R result = (R) function.apply(underlyingObject, new SimpleSMREngineOptions());
-                                if (completion != null) {
-                                    completion.complete(result);
-                                }
-                        }
-                    }
-                }
-                catch (HoleEncounteredException hle)
-                {
-                    log.debug("hole encountered, applying policy during sync to {} @ {}", stream.getCurrentPosition(), ts);
-                    holePolicy.apply(hle, stream);
-                }
-                catch (Exception e) {
-                    log.error("exception during sync@{}", stream.getCurrentPosition(), e);
-                }
-                if (entry != null)
-                    streamPointer = entry.getTimestamp();
-            }
-            */
     }
 
     /**
@@ -341,18 +256,22 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
             {
                 completion.complete(result);
             }
+            log.trace("Read-only proposal completed at {}", streamPointer);
             return CompletableFuture.completedFuture(streamPointer);
         }
 
-       final ITimestamp[] tRef = new ITimestamp[1];
+        final ITimestamp[] proposalTimestamp = new ITimestamp[1];
         return stream.reserveAsync(1)
                 .thenApplyAsync(
                         t -> {
+                            log.trace("Proposal[{}]: Acquired token", t[0]);
                             if (completion != null) {
+                                log.trace("Proposal[{}]: Inserted into completion table.", t[0]);
                                 completionTable.put(t[0], completion);
                             }
                             try {
-                                tRef[0] = t[0];
+                                log.trace("Proposal[{}]: Writing proposal to stream", t[0]);
+                                proposalTimestamp[0] = t[0];
                                 return stream.writeAsync(t[0], command);
                             } catch (Exception e) {
                                 log.error("Exception during write.", e);
@@ -361,8 +280,9 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                         }
                 )
                 .thenApplyAsync( r -> {
-                    lastProposal = tRef[0]; //TODO: fix thread safety?
-                    return tRef[0];
+                    log.trace("Proposal[{}]: Wrote proposal to stream", proposalTimestamp[0]);
+                    lastProposal = proposalTimestamp[0]; //TODO: Should be max.
+                    return proposalTimestamp[0];
                 });
     }
 

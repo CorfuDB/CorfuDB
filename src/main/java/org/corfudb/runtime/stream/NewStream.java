@@ -207,6 +207,7 @@ public class NewStream implements IStream {
      */
     @Override
     public boolean fillHole(ITimestamp ts) {
+        log.trace("Hole fill at [{}]", ts);
         instance.getStreamAddressSpace().fillHole(toPhysicalTimestamp(ts));
         return true;
     }
@@ -245,20 +246,23 @@ public class NewStream implements IStream {
                                     IStreamAddressSpace.StreamAddressSpaceEntry ret =
                                             instance.getStreamAddressSpace().read(address);
                                     if (ret == null) {
+
+                                        log.debug("Read[{}] Hole encountered, processing exception", address);
                                         throw new HoleEncounteredException(toLogicalTimestamp(address));
                                     }
                                     return ret;
                                 }).onException(HoleEncounteredException.class, he -> {
-                                    holeFillingPolicy.apply(he, this);
+                                    fillHole(toLogicalTimestamp(address));
                                     return true;
                                 })
-                                        .run();
+                                .run();
                             }
 
                             if (e.containsStream(streamID)) {
                                 return e;
                             }
 
+                            log.trace("Read[{}] Not in stream, dropping.", address);
                             return null;
                         });
     }
@@ -272,6 +276,7 @@ public class NewStream implements IStream {
             batch = batchNumber.getAndIncrement();
             startPoint = streamPointer.getAndAccumulate(toPhysicalTimestamp(point), Math::max);
         }
+        log.trace("AsyncRead[{}]: {} to {}", batch, startPoint, point);
         if (startPoint > toPhysicalTimestamp(point)){
             IStreamEntry[] rl;
             rl = new IStreamEntry[] {
