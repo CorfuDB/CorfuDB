@@ -4,6 +4,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ConfigMasterServer;
 import org.corfudb.infrastructure.ICorfuDBServer;
+import org.corfudb.infrastructure.LayoutServer;
 
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
@@ -119,9 +120,13 @@ public class CorfuInfrastructureBuilder {
             r.start();
             runningServers.add(r);
         });
-        ConfigMasterServer cms = new ConfigMasterServer();
-        ICorfuDBServer r = cms.getInstance(configMap);
+
         this.configMasterPort = configMasterPort;
+        LayoutServer cms = new LayoutServer();
+        // ConfigMasterServer cms = new ConfigMasterServer();
+        configMap.put("port", configMasterPort);
+        ICorfuDBServer r = cms.getInstance(configMap);
+
         /* wait for all threads to start*/
         runningServers.forEach( th -> {
             if (!th.getThread().isAlive())

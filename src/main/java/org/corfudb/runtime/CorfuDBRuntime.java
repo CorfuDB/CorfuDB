@@ -18,6 +18,8 @@ package org.corfudb.runtime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.RemoteException;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
+import org.corfudb.runtime.protocols.configmasters.NettyLayoutServerProtocol;
+import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.GitRepositoryState;
 import org.slf4j.Logger;
@@ -232,14 +234,8 @@ public class CorfuDBRuntime implements AutoCloseable {
         }
 
         URL url = new URL(configString);
-        HttpURLConnection huc = (HttpURLConnection) url.openConnection();
-        huc.setRequestProperty("Content-Type", "application/json");
-        huc.connect();
-        try (InputStream is = (InputStream) huc.getContent()) {
-            try (JsonReader jr = Json.createReader(new BufferedReader(new InputStreamReader(is)))) {
-                return new org.corfudb.runtime.view.CorfuDBView(jr.readObject());
-            }
-        }
+        NettyLayoutServerProtocol layoutServerProtocol = new NettyLayoutServerProtocol(url.getHost(), url.getPort(), Collections.emptyMap(), 0 /* epoch? */);
+        return layoutServerProtocol.getView();
     }
 
     /**
