@@ -15,25 +15,17 @@
 
 package org.corfudb.runtime;
 
+import org.corfudb.runtime.protocols.configmasters.IMetaData;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
-import org.corfudb.runtime.protocols.configmasters.NettyLayoutServerProtocol;
-import org.corfudb.runtime.stream.IStream;
+import org.corfudb.runtime.protocols.configmasters.NettyMetaDataKeeperProtocol;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.GitRepositoryState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-import javax.json.JsonReader;
-import javax.json.Json;
-
 import java.io.IOException;
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 
-import java.lang.reflect.InvocationTargetException;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -232,7 +224,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         }
 
         URL url = new URL(configString);
-        NettyLayoutServerProtocol layoutServerProtocol = new NettyLayoutServerProtocol(url.getHost(), url.getPort(), Collections.emptyMap(), 0 /* epoch? */);
+        NettyMetaDataKeeperProtocol layoutServerProtocol = new NettyMetaDataKeeperProtocol(url.getHost(), url.getPort(), Collections.emptyMap(), 0 /* epoch? */);
         return layoutServerProtocol.getView();
     }
 
@@ -318,23 +310,7 @@ public class CorfuDBRuntime implements AutoCloseable {
     {
         if (logID == null) {return getView();}
         if (logID.equals(localID)) { return getView(); }
-        /** Go to the current view, and communicate with the local configuration
-         *  master to resolve the stream.
-         */
-        try{
-            return remoteView.getLog(logID);
-        }
-        catch (RemoteException re)
-        {
-            IConfigMaster cm = (IConfigMaster) getView().getConfigMasters().get(0);
-            String remoteLog = cm.getLog(logID);
-            /** Go to the remote stream, communicate with the remote configuration master
-             * and resolve the remote configuration.
-             */
-            remoteLog = remoteLog.replace("cdbcm", "http");
-            remoteView.addLog(logID, remoteLog);
-            return remoteView.getLog(logID);
-        }
+        throw new RemoteException("remoting deprecated", logID);
     }
 
     /**

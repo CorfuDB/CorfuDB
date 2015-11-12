@@ -2,9 +2,8 @@ package org.corfudb.util;
 
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.ConfigMasterServer;
 import org.corfudb.infrastructure.ICorfuDBServer;
-import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.NettyMetaDataKeeper;
 
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
@@ -122,8 +121,7 @@ public class CorfuInfrastructureBuilder {
         });
 
         this.configMasterPort = configMasterPort;
-        LayoutServer cms = new LayoutServer();
-        // ConfigMasterServer cms = new ConfigMasterServer();
+        NettyMetaDataKeeper cms = new NettyMetaDataKeeper();
         configMap.put("port", configMasterPort);
         ICorfuDBServer r = cms.getInstance(configMap);
 

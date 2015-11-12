@@ -16,6 +16,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.protocols.configmasters.IMetaData;
 import org.corfudb.runtime.protocols.replications.IReplicationProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -461,7 +462,7 @@ public class CorfuDBView {
         return sequencerList;
     }
 
-    public static IConfigMaster getConfigurationMasterFromString(String masterString)
+    public static IMetaData getConfigurationMasterFromString(String masterString)
     {
         Matcher m = IServerProtocol.getMatchesFromServerString(masterString);
             if (m.find())
@@ -476,7 +477,7 @@ public class CorfuDBView {
                     Class<? extends IServerProtocol> sprotocol = availableConfigMasterProtocols.get(protocol);
                     try
                     {
-                        return (IConfigMaster) IServerProtocol.protocolFactory(sprotocol, masterString, 0);
+                        return (IMetaData) IServerProtocol.protocolFactory(sprotocol, masterString, 0);
                     }
                     catch (Exception ex){
                         log.error("Error invoking protocol for protocol: ", ex);

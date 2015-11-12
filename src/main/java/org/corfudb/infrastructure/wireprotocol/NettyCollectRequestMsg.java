@@ -3,31 +3,25 @@ package org.corfudb.infrastructure.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import javax.json.Json;
 import javax.json.JsonObject;
 import javax.json.JsonReader;
 import javax.json.JsonWriter;
-import java.io.BufferedReader;
-import java.io.StringReader;
 
 /**
- * Created by dmalkhi on 11/9/15.
+ * Created by dalia on 11/11/15.
  */
-@Getter
-@Setter
 @NoArgsConstructor
-public class NettyLayoutServerResponseMsg extends NettyCorfuMsg {
+public class NettyCollectRequestMsg extends NettyCorfuMsg {
 
-    JsonObject jo = null;
+    int rank = -1;
 
-    public NettyLayoutServerResponseMsg(JsonObject jo)
+    public NettyCollectRequestMsg(int rank)
     {
-        this.jo = jo;
-        this.msgType = NettyCorfuMsgType.LAYOUT_RES;
+        this.msgType = NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_REQ;
+        this.rank = rank;
     }
 
     /**
@@ -38,8 +32,7 @@ public class NettyLayoutServerResponseMsg extends NettyCorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        JsonWriter jw = Json.createWriter(new ByteBufOutputStream(buffer));
-        jw.writeObject(jo == null ? Json.createObjectBuilder().build() : jo);
+        buffer.writeInt(rank);
     }
 
     /**
@@ -51,8 +44,6 @@ public class NettyLayoutServerResponseMsg extends NettyCorfuMsg {
     @Override
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
-
-        JsonReader jr = Json.createReader(new ByteBufInputStream(buffer));
-        jo = jr.readObject();
+        rank = buffer.readInt();
     }
 }

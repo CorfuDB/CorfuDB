@@ -35,9 +35,11 @@ public class NettyCorfuMsg {
         ACK(4, NettyCorfuMsg.class),
         WRONG_EPOCH(5, NettyCorfuMsg.class),
 
-        // LayoutServer Messages
-        LAYOUT_REQ(10, NettyLayoutServerRequestMsg.class),
-        LAYOUT_RES(11, NettyLayoutServerResponseMsg.class),
+        // NettyMetaDataKeeper Messages
+        META_PROPOSE_REQ(10, NettyProposeRequestMsg.class),
+        META_PROPOSE_RES(11, NettyProposeResponseMsg.class),
+        META_COLLECT_REQ(12, NettyCollectRequestMsg.class),
+        META_COLLECT_RES(13, NettyCollectResponseMsg.class),
 
         // StreamingSequencer Messages
         TOKEN_REQ(20, NettyStreamingServerTokenRequestMsg.class),
