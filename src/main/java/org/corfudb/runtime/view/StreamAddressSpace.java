@@ -148,9 +148,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      */
     @Override
     public CompletableFuture<StreamAddressSpaceEntry> readAsync(long offset) {
-        //for now, we bypass the cache.
-        return load(offset);
-        //return cache.get(offset);
+        return cache.get(offset);
     }
 
     /**
