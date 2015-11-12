@@ -119,8 +119,8 @@ public class LayoutServer extends AbstractNettyServer implements ICorfuDBServer 
         switch (corfuMsg.getMsgType())
         {
             case LAYOUT_REQ:
-                NettyLayoutServerRequestMsg req = (NettyLayoutServerRequestMsg) corfuMsg;
                 NettyLayoutServerResponseMsg resp = new NettyLayoutServerResponseMsg(currentView.getSerializedJSONView());
+                log.info("layout response {}", resp);
                 sendResponse(resp, corfuMsg, ctx);
                 break;
             default:

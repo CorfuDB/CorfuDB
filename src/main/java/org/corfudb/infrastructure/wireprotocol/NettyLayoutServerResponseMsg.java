@@ -53,6 +53,6 @@ public class NettyLayoutServerResponseMsg extends NettyCorfuMsg {
         super.fromBuffer(buffer);
 
         JsonReader jr = Json.createReader(new ByteBufInputStream(buffer));
-        JsonObject jo = jr.readObject();
+        jo = jr.readObject();
     }
 }
