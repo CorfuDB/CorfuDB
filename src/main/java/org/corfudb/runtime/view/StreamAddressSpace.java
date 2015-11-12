@@ -126,14 +126,18 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                         StreamAddressSpaceEntry s = new StreamAddressSpaceEntry(streams, offset,
                                 StreamAddressEntryCode.DATA, payload);
                         cache.put(offset, CompletableFuture.completedFuture(s));
+                        log.trace("Write[{}] complete, cached.", offset);
                         return StreamAddressWriteResult.OK;
                     } else {
                         switch (res) {
                             case TRIMMED:
+                                log.trace("Write[{}] FAILED, trimmed!", offset);
                                 return StreamAddressWriteResult.TRIMMED;
                             case OVERWRITE:
+                                log.trace("Write[{}] FAILED, overwrite!", offset);
                                 return StreamAddressWriteResult.OVERWRITE;
                             default:
+                                log.trace("Write[{}] FAILED, unknown ({})!", offset, res.name());
                                 throw new RuntimeException("Unknown writeresult type: " + res.name());
                         }
                     }
