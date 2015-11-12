@@ -51,6 +51,7 @@ public class CorfuInOne {
             public void run() {
                 System.out.println("trying to connect to config-master...");
                 CorfuDBView view = cdr.getView();
+                System.out.println("view:" + view.toString());
 
                 System.out.println("trying to ping all view components...: " + view.isViewAccessible() );
                 synchronized (this) { notify();}
