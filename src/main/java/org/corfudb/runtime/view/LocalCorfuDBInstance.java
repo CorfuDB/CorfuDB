@@ -1,26 +1,19 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.collections.CDBSimpleMap;
-import org.corfudb.runtime.entries.MetadataEntry;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
-import org.corfudb.runtime.objects.CorfuObjectRuntimeProcessor;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Proxy;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 5/22/15.
@@ -29,7 +22,7 @@ import java.util.stream.Collectors;
 public class LocalCorfuDBInstance implements ICorfuDBInstance {
 
     // Members of this CorfuDBInstance
-    private IConfigurationMaster configMaster;
+    private ILayoutMonitor configMaster;
     private IStreamingSequencer streamingSequencer;
     private IStreamAddressSpace streamAddressSpace;
 
@@ -57,7 +50,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     public LocalCorfuDBInstance(CorfuDBRuntime cdr)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        this(cdr, ConfigurationMaster.class,
+        this(cdr, LayoutMonitor.class,
                 NewStream.class);
     }
 
@@ -82,7 +75,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * @return The configuration master for this instance.
      */
     @Override
-    public IConfigurationMaster getConfigurationMaster() {
+    public ILayoutMonitor getConfigurationMaster() {
         return configMaster;
     }
 
@@ -106,22 +99,22 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         /* make sure that the view belongs to the same instance. */
         CorfuDBView view = cdr.getView();
         /* if the instance ID does not match, reset all the caches. */
-        if (!view.getUUID().equals(UUID))
+        if (!view.getLogID().equals(UUID))
         {
             /* This region is synchronized to make sure reset happens exactly once.
              * One thread will go in and reset all the caches, updating the UUID.
              * The other threads will see that the UUID has changed and get the view again.
              */
             synchronized (this) {
-                if (!view.getUUID().equals(UUID) && (UUID != null)) {
+                if (!view.getLogID().equals(UUID) && (UUID != null)) {
                     log.info("Instance has changed from ID {} to {}, resetting all local caches.",
-                            UUID, view.getUUID());
+                            UUID, view.getLogID());
                     resetAllCaches();
-                    UUID = view.getUUID();
+                    UUID = view.getLogID();
                 }
                 else if (UUID == null)
                 {
-                    UUID = view.getUUID();
+                    UUID = view.getLogID();
                 }
             }
         }

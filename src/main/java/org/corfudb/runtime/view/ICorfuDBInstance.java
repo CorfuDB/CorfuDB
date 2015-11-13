@@ -26,7 +26,7 @@ public interface ICorfuDBInstance {
      * Gets a configuration master for this instance.
      * @return  The configuration master for this instance.
      */
-    IConfigurationMaster getConfigurationMaster();
+    ILayoutMonitor getConfigurationMaster();
 
     INewStreamingSequencer getNewStreamingSequencer();
 

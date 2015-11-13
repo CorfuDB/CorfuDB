@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * The abstract AbstractNettyProtocol provides a framework for client to interact with {@link org.corfudb.infrastructure.AbstractNettyServer} servers.
  *
- * The framework sets up a threa pool to handle outgoing requests and incoming messages using NioEvenLooopGroup.
+ * The framework sets up a thread pool to handle outgoing requests and incoming messages using NioEvenLooopGroup.
  *
  * Each specific client protocol must instantiate this class with a response-handler class that extends NettyRPCChannelInboundHandlerAdapter.
  * A repsonse handler of the appropriate type needs to be supplied as parameter to the constructor.

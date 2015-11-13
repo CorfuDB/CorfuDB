@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.configmaster.policies;
+package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.view.CorfuDBView;

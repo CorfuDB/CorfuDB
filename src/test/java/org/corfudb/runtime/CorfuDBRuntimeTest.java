@@ -1,19 +1,12 @@
 package org.corfudb.runtime;
 
-import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.protocols.logunits.MemoryLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.MemorySequencerProtocol;
-import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.*;
-import org.junit.Assert;
 import org.junit.Test;
 import static org.junit.Assert.assertNotNull;
 import static org.assertj.core.api.Assertions.*;
-
-import org.reflections.Reflections;
-import org.reflections.scanners.SubTypesScanner;
 
 import java.util.*;
 
@@ -43,7 +36,7 @@ public class CorfuDBRuntimeTest {
         CorfuDBRuntime runtime = CorfuDBRuntime.createRuntime("memory");
         CorfuDBView view = runtime.getView();
         assertNotNull(view);
-        ConfigurationMaster cm = new ConfigurationMaster(runtime);
+        LayoutMonitor cm = new LayoutMonitor(runtime);
         cm.resetAll();
         view = runtime.getView();
         assertNotNull(view);

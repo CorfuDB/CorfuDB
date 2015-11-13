@@ -18,11 +18,10 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyMetaLayoutMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyProposeRequestMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyMetaBooleanMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyLayoutConfigMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyLayoutBooleanMsg;
 import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.runtime.protocols.configmasters.IMetaDataKeeper;
+import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
 import org.corfudb.runtime.view.CorfuDBView;
 
 import org.slf4j.LoggerFactory;
@@ -46,18 +45,18 @@ import com.esotericsoftware.kryonet.Connection;
  *
  * There are two parts, a passive meta-data keeper server, and an active layout-monitor that drives changes to the layout.
  *
- * - A NettyMetaDataKeeper server stores the latest committed meta-data.
+ * - A NettyLayoutKeeper server stores the latest committed meta-data.
  *   It participates as a Paxos 'acceptor' in voting on proposals for meta-data changes.
  *
- * - A NettyMetaDataKeeper monitor becomes activated upon storing a committed Corfu layout for the first time.
+ * - A NettyLayoutKeeper monitor becomes activated upon storing a committed Corfu layout for the first time.
  *   It then instantiates a local CorfuDBView which has connection endpoints to all the layout components.
  *   It spawns a thread that constantly monitors the health of other components.
  *
  *   The monitor may initiate change proposals and may also receive requests from clients to drive changes.
  *   To drive a layout change, the monitor picks a rank and tries to become a Paxos leader and affect the change via a consensus decision.
  */
-public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDBServer {
-    private static Logger log = LoggerFactory.getLogger(NettyMetaDataKeeper.class);
+public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBServer {
+    private static Logger log = LoggerFactory.getLogger(NettyLayoutKeeper.class);
 
     ConsensusKeeper<ConsensusLayoutObject> commitLayout = new ConsensusKeeper(new ConsensusLayoutObject());
     CorfuDBView currentView = null;
@@ -65,12 +64,12 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
 
     Thread monitorThread = monitor();
 
-    public NettyMetaDataKeeper() {
+    public NettyLayoutKeeper() {
     }
 
     @Override
     void parseConfiguration(Map<String, Object> configuration) {
-        log.info("NettyMetaDataKeeper configuration {}", configuration);
+        log.info("NettyLayoutKeeper configuration {}", configuration);
     }
 
     @Override
@@ -82,22 +81,22 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
         switch (corfuMsg.getMsgType())
         {
             case META_PROPOSE_REQ: {
-                NettyMetaLayoutMsg m = (NettyMetaLayoutMsg)corfuMsg;
+                NettyLayoutConfigMsg m = (NettyLayoutConfigMsg)corfuMsg;
 
                 commitLayout.commitProposal(m.getJo()); // TODO this should use propose, eventually, unless rank == -1 ?
                 reconfig(m.getJo());
 
-                NettyMetaBooleanMsg resp = new NettyMetaBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_RES, true);
+                NettyLayoutBooleanMsg resp = new NettyLayoutBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_RES, true);
                 sendResponse(resp, corfuMsg, ctx);
                 break;
             }
 
             case META_COLLECT_REQ: {
-                NettyMetaLayoutMsg resp = null;
+                NettyLayoutConfigMsg resp = null;
                 if (commitLayout.getCommitState() == null)
-                    resp = new NettyMetaLayoutMsg(NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_RES, -1, null);
+                    resp = new NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_RES, -1, null);
                 else
-                    resp = new NettyMetaLayoutMsg(
+                    resp = new NettyLayoutConfigMsg(
                             NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_RES,
                             commitLayout.getEpoch(),
                             commitLayout.getCommitState().getCurrentLayout()
@@ -112,10 +111,10 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
 
                 synchronized (monitorThread) {
                     if (newProposal != null) { // reject; handle leader roles one at a time
-                        NettyMetaBooleanMsg resp = new NettyMetaBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_LEADER_RES, false);
+                        NettyLayoutBooleanMsg resp = new NettyLayoutBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_LEADER_RES, false);
                         sendResponse(resp, corfuMsg, ctx);
                     } else {
-                        NettyMetaLayoutMsg m = (NettyMetaLayoutMsg)corfuMsg;
+                        NettyLayoutConfigMsg m = (NettyLayoutConfigMsg)corfuMsg;
                         newProposal = m.getJo();
                         monitorThread.interrupt();
                     }
@@ -144,7 +143,7 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
         // TODO the next part should be done by proposer or consensus engine?
         UUID logID =  UUID.randomUUID();
         log.info("New log instance id= " + logID.toString());
-        currentView.setUUID(logID);
+        currentView.setLogID(logID);
 
     }
 
@@ -165,11 +164,11 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
                 // loop through the MetaDataKeeper servers in currentView and send requests to all
                 //
 
-                CountDownLatch l = new CountDownLatch((currentView.getConfigMasters().size()+1)/2);
+                CountDownLatch l = new CountDownLatch((currentView.getLayouts().size()+1)/2);
                 AtomicBoolean proposalAccepted = new AtomicBoolean(true);
 
-                for (IServerProtocol s : currentView.getConfigMasters()) {
-                    IMetaDataKeeper ss = (IMetaDataKeeper) s;
+                for (IServerProtocol s : currentView.getLayouts()) {
+                    ILayoutKeeper ss = (ILayoutKeeper) s;
                     ss.proposeNewView(-1, newProposal).thenAccept((bool) -> {
                         if (!bool) proposalAccepted.set(false);
                         l.countDown();
@@ -183,7 +182,7 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
                     e.printStackTrace();
                 }
                 log.info("monitor acceptProposal={} normalCompletion={}", proposalAccepted.get(), normalCompletion);
-                
+
                 newProposal = null;
             }
         });

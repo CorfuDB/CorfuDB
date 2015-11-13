@@ -3,8 +3,8 @@ package org.corfudb.util;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ICorfuDBServer;
-import org.corfudb.infrastructure.NettyMetaDataKeeper;
-import org.corfudb.runtime.protocols.configmasters.IMetaDataKeeper;
+import org.corfudb.infrastructure.NettyLayoutKeeper;
+import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
 import org.corfudb.runtime.view.CorfuDBView;
 
 import java.lang.reflect.Constructor;
@@ -119,7 +119,7 @@ public class CorfuInfrastructureBuilder {
         Map<String, Object> params = new HashMap<>();
         params.put("port", metadataKeeperPort);
 
-        NettyMetaDataKeeper cms = new NettyMetaDataKeeper();
+        NettyLayoutKeeper cms = new NettyLayoutKeeper();
         ICorfuDBServer r = cms.getInstance(params);
 
         r.start();
@@ -131,7 +131,7 @@ public class CorfuInfrastructureBuilder {
         //
         CorfuDBView view = new CorfuDBView(configMap);
         view.setUUID(UUID.randomUUID());
-        ( (IMetaDataKeeper) view.getConfigMasters().get(0)).setBootstrapView(view.getSerializedJSONView());
+        ( (ILayoutKeeper) view.getConfigMasters().get(0)).setBootstrapView(view.getSerializedJSONView());
 
 
         // start all components

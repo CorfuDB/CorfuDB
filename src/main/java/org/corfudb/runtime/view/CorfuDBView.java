@@ -15,7 +15,9 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.protocols.configmasters.IMetaDataKeeper;
+import lombok.Getter;
+import lombok.Setter;
+import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
 import org.corfudb.runtime.protocols.replications.IReplicationProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,12 +47,29 @@ import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
 import org.corfudb.runtime.protocols.IServerProtocol;
 /**
- * This class provides a view of the CorfuDB infrastructure. Clients
- * should not directly access the view without an interface.
+ * This class provides a mapping between a desired-layout and a realized CorfuDB configuration:
+ *
+ *   A desired layout is a hierarchical structure containing the following components:
+ *
+ *      1. A chain of segments, which are ranges of log-indices, e.g., [0..9], [10..99], [100.. )
+ *         - each segments has a list of logging-unit groups, e.g., {A,B,C}, {D,E,F}, and a replication protocol for each
+ *      2. A list of sequencers, each is a client endpoint
+ *      3. A list of layout-keepers, each is a client endpoint (implementing, e.g., the ILayoutKeeper interface)
+ *
+ *   A realized view is a class of type CorfuDBView, containing lists of protocol endpoints corresponding to the layout:
+ *
+ *      1. For logging-units, each enpoint implements, e.g., the INewWriteOnceLogUnit interface;
+ *         A replication protocol implements the IReplication interface **TODO and is currently bypassed in the implementation!!**
+ *      2. For sequencers, each endpoint implements, e.g.,  the INewStreamSequencer interface
+ *      3. For layout-keepers, each endpoint implements, e.g., the ILayoutKeeper interface
+ *
+ * The class contains various utility method for translating between a desired-layout, expressed as a JsonObject, and a realized view.
  *
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
 
+@Getter
+@Setter
 public class CorfuDBView {
     private static final Logger log = LoggerFactory.getLogger(CorfuDBView.class);
 
@@ -65,7 +84,7 @@ public class CorfuDBView {
 
     private List<IServerProtocol> sequencers;
     private List<CorfuDBViewSegment> segments; //eventually this should be upgraded to rangemap or something..
-    private List<IServerProtocol> configmasters;
+    private List<IServerProtocol> layouts;
 
     public CorfuDBView(JsonObject jsonView)
     {
@@ -83,7 +102,7 @@ public class CorfuDBView {
         {
             lconfigmasters.add(((JsonString)j).getString());
         }
-        configmasters = populateConfigMastersFromList(lconfigmasters);
+        layouts = populateLayoutKeepersFromList(lconfigmasters);
 
         ArrayList<Map<String,Object>> lSegments = new ArrayList<Map<String,Object>>();
         for (JsonValue j : jsonView.getJsonArray("segments"))
@@ -137,111 +156,8 @@ public class CorfuDBView {
         epoch = config.get("epoch").getClass() == Long.class ? (Long) config.get("epoch") : (Integer) config.get("epoch");
         pagesize = config.get("pagesize").getClass() == Long.class ? (Long) config.get("pagesize") : (Integer) config.get("pagesize");
         sequencers = populateSequencersFromList((List<String>) config.get("sequencers"));
-        configmasters = populateConfigMastersFromList((List<String>)config.get("configmasters"));
+        layouts = populateLayoutKeepersFromList((List<String>)config.get("configmasters"));
         segments = populateSegmentsFromList((List<Map<String,Object>>)((Map<String,Object>)config.get("layout")).get("segments"));
-    }
-
-    public void setUUID(UUID uuid)
-    {
-        this.logID = uuid;
-    }
-
-    public UUID getUUID()
-    {
-        return this.logID;
-    }
-
-    public long getEpoch()
-    {
-        return epoch;
-    }
-
-    /**
-     * Attempts to move all servers in this view to the given epoch. This should be called by
-     * the configuration master only!
-     */
-    public void setEpoch(long epoch)
-    {
-        for (IServerProtocol sequencer : sequencers)
-        {
-            sequencer.setEpoch(epoch);
-        }
-
-        for (CorfuDBViewSegment vs : segments)
-        {
-            for (List<IServerProtocol> group : vs.getGroups()) {
-                for (IServerProtocol logunit : group) {
-                    logunit.setEpoch(epoch);
-                }
-            }
-        }
-    }
-
-    /**
-     * Manually force the view into the given epoch. This should be called by the configuration
-     * master only!
-     *
-     * @param epoch The epoch to move to
-     */
-    public void resetEpoch(long epoch)
-    {
-        this.epoch = epoch;
-    }
-
-    public List<IServerProtocol> getSequencers() {
-        return sequencers;
-    }
-
-    public List<CorfuDBViewSegment> getSegments() {
-        return segments;
-    }
-
-    public void moveAllToNewEpoch(long epoch)
-    {
-        this.epoch = epoch;
-        this.getSegments().stream().forEach(segment ->
-                segment.getGroups().stream().forEach(
-                        group -> group.stream().forEach(
-                                node -> node.setEpoch(epoch)
-                        )
-                ));
-
-        this.getSequencers().stream().forEach(sequencer -> sequencer.setEpoch(epoch));
-    }
-
-    public List<IServerProtocol> getConfigMasters() {
-        return configmasters;
-    }
-
-    /**
-     * Checks if all servers in the view can be accessed. Does not check
-     * to see if all the servers are in a valid configuration epoch.
-     */
-    public boolean isViewAccessible()
-    {
-        for (IServerProtocol sequencer : sequencers)
-        {
-            if (!sequencer.ping()) {
-                log.debug("View acessibility check failed, couldn't connect to: " + sequencer.getFullString());
-                return false;
-            }
-        }
-
-        for (CorfuDBViewSegment vs : segments)
-        {
-            for (List<IServerProtocol> group : vs.getGroups())
-            {
-                for (IServerProtocol logunit: group)
-                {
-                    if (!logunit.ping()) {
-                    log.debug("View acessibility check failed, couldn't connect to: " + logunit.getFullString());
-                    return false;
-                    }
-                }
-            }
-        }
-
-        return true;
     }
 
     public JsonObject getSerializedJSONView()
@@ -253,7 +169,7 @@ public class CorfuDBView {
         }
 
         JsonArrayBuilder configmasterObject = Json.createArrayBuilder();
-        for (IServerProtocol sp : configmasters)
+        for (IServerProtocol sp : layouts)
         {
             configmasterObject.add(sp.getFullString());
         }
@@ -426,7 +342,7 @@ public class CorfuDBView {
         return sequencerList;
     }
 
-    private List<IServerProtocol> populateConfigMastersFromList(List<String> list) {
+    private List<IServerProtocol> populateLayoutKeepersFromList(List<String> list) {
         LinkedList<IServerProtocol> sequencerList = new LinkedList<IServerProtocol>();
         for (String s : list)
         {
@@ -458,7 +374,7 @@ public class CorfuDBView {
         return sequencerList;
     }
 
-    public static IMetaDataKeeper getConfigurationMasterFromString(String masterString)
+    public static ILayoutKeeper getConfigurationMasterFromString(String masterString)
     {
         Matcher m = IServerProtocol.getMatchesFromServerString(masterString);
             if (m.find())
@@ -473,7 +389,7 @@ public class CorfuDBView {
                     Class<? extends IServerProtocol> sprotocol = availableConfigMasterProtocols.get(protocol);
                     try
                     {
-                        return (IMetaDataKeeper) IServerProtocol.protocolFactory(sprotocol, masterString, 0);
+                        return (ILayoutKeeper) IServerProtocol.protocolFactory(sprotocol, masterString, 0);
                     }
                     catch (Exception ex){
                         log.error("Error invoking protocol for protocol: ", ex);

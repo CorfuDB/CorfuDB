@@ -9,7 +9,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Created by dalia on 11/11/15.
  */
-public interface IMetaDataKeeper extends IServerProtocol {
+public interface ILayoutKeeper extends IServerProtocol {
 
     public CompletableFuture<JsonObject> getCurrentView();
     public CompletableFuture<Boolean> proposeNewView(int rank, JsonObject jo);

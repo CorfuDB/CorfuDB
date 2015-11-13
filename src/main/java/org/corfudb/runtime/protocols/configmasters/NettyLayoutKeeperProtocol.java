@@ -15,8 +15,8 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Created by dmalkhi on 11/6/15.
  */
-public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMetaDataKeeperProtocol.NettyLayoutServerHandler> implements IMetaDataKeeper {
-    private static final transient Logger log = LoggerFactory.getLogger(NettyMetaDataKeeperProtocol.class);
+public class NettyLayoutKeeperProtocol extends AbstractNettyProtocol<NettyLayoutKeeperProtocol.NettyLayoutServerHandler> implements ILayoutKeeper {
+    private static final transient Logger log = LoggerFactory.getLogger(NettyLayoutKeeperProtocol.class);
 
     public static String getProtocolString() {
         return "cdbmk";
@@ -24,17 +24,17 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
     {
-        return new NettyMetaDataKeeperProtocol(host, port, options, epoch);
+        return new NettyLayoutKeeperProtocol(host, port, options, epoch);
     }
 
-    public NettyMetaDataKeeperProtocol(String host, Integer port, Map<String,String> options, long epoch)
+    public NettyLayoutKeeperProtocol(String host, Integer port, Map<String,String> options, long epoch)
     {
         super(host, port, options, epoch, new NettyLayoutServerHandler());
     }
 
     public CompletableFuture<JsonObject> getCurrentView() {
         log.info("try to get current view");
-        NettyMetaQueryRequestMsg r = new NettyMetaQueryRequestMsg(NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_REQ, 0);
+        NettyLayoutQueryMsg r = new NettyLayoutQueryMsg(NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_REQ, 0);
         CompletableFuture<JsonObject> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
         log.info("wait for current view via completableFuture");
         return ret;
@@ -42,7 +42,7 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
 
     public CompletableFuture<Boolean> proposeNewView(int rank, JsonObject jo) {
         log.info("try to set new view");
-        NettyMetaLayoutMsg r = new NettyMetaLayoutMsg(NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_REQ, rank, jo);
+        NettyLayoutConfigMsg r = new NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_REQ, rank, jo);
         CompletableFuture<Boolean> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
         log.info("wait for propose ack via completableFuture");
         return ret;
@@ -61,10 +61,10 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
                     completeRequest(message.getRequestID(), true);
                     break;
                 case META_COLLECT_RES:
-                    completeRequest(message.getRequestID(), ((NettyMetaLayoutMsg)message).getJo());
+                    completeRequest(message.getRequestID(), ((NettyLayoutConfigMsg)message).getJo());
                     break;
                 case META_PROPOSE_RES:
-                    completeRequest(message.getRequestID(), ((NettyMetaBooleanMsg)message).isAck());
+                    completeRequest(message.getRequestID(), ((NettyLayoutBooleanMsg)message).isAck());
                     break;
             }
         }

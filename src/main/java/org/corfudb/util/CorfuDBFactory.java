@@ -53,9 +53,14 @@ public class CorfuDBFactory {
         }
     }
 
-    public IConfigurationMaster getConfigurationMaster(CorfuDBRuntime cdr)
+    public IStreamingSequencer getStreamingSequencer(CorfuDBRuntime cdr)
     {
-        return new ConfigurationMaster(cdr);
+        return new StreamingSequencer(cdr);
+    }
+
+    public ILayoutMonitor getConfigurationMaster(CorfuDBRuntime cdr)
+    {
+        return new LayoutMonitor(cdr);
     }
 
     public ILog getLog(ISequencer sequencer, IWriteOnceAddressSpace woas)
