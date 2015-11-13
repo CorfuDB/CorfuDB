@@ -12,6 +12,8 @@ import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This is the default implementation of a stream address space, which is backed by a LRU cache.
@@ -99,9 +101,18 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      */
     private AsyncLoadingCache<Long, StreamAddressSpaceEntry> buildCache()
     {
+        AtomicInteger threadNum = new AtomicInteger();
         return Caffeine.newBuilder()
                 .maximumSize(10_000)
-                .executor(Executors.newFixedThreadPool(8))
+                .executor(Executors.newFixedThreadPool(8, new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable runnable) {
+                        Thread thread = Executors.defaultThreadFactory().newThread(runnable);
+                        thread.setName("CachePool-" + threadNum.getAndIncrement());
+                        thread.setDaemon(true);
+                        return thread;
+                    }
+                }))
                 .buildAsync(idx -> {
                     try {
                         return load(idx).get();
