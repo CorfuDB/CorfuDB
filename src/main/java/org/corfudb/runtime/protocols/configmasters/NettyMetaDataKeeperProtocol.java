@@ -74,6 +74,9 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
                 case META_COLLECT_RES:
                     completeRequest(message.getRequestID(), ((NettyCollectResponseMsg)message).getJo());
                     break;
+                case META_PROPOSE_RES:
+                    completeRequest(message.getRequestID(), ((NettyProposeResponseMsg)message).isAck());
+                    break;
             }
         }
         //endregion
@@ -92,6 +95,7 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
 
     @Override
     public void setBootstrapView(JsonObject initialView) {
-        proposeNewView(-1, initialView); // .join();
+        boolean ack = proposeNewView(-1, initialView).join();
+        log.info("propose ack={}", ack);
     }
 }
