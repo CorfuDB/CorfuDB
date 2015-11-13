@@ -1,27 +1,21 @@
 package org.corfudb.infrastructure.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufInputStream;
-import io.netty.buffer.ByteBufOutputStream;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import javax.json.Json;
-import javax.json.JsonObject;
-import javax.json.JsonReader;
-import javax.json.JsonWriter;
 
 /**
  * Created by dalia on 11/11/15.
  */
 @NoArgsConstructor
-public class NettyCollectRequestMsg extends NettyCorfuMsg {
+@Getter
+public class NettyMetaBooleanMsg extends NettyCorfuMsg {
 
-    int rank = -1;
+    boolean ack = false;
 
-    public NettyCollectRequestMsg(int rank)
-    {
-        this.msgType = NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_REQ;
-        this.rank = rank;
+    public NettyMetaBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType t, boolean ack) {
+        this.msgType = t;
+        this.ack = ack;
     }
 
     /**
@@ -32,7 +26,7 @@ public class NettyCollectRequestMsg extends NettyCorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        buffer.writeInt(rank);
+        buffer.writeBoolean(ack);
     }
 
     /**
@@ -44,6 +38,6 @@ public class NettyCollectRequestMsg extends NettyCorfuMsg {
     @Override
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
-        rank = buffer.readInt();
+        ack = buffer.readBoolean();
     }
 }

@@ -4,7 +4,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ICorfuDBServer;
 import org.corfudb.infrastructure.NettyMetaDataKeeper;
-import org.corfudb.runtime.protocols.configmasters.IMetaData;
+import org.corfudb.runtime.protocols.configmasters.IMetaDataKeeper;
 import org.corfudb.runtime.view.CorfuDBView;
 
 import java.lang.reflect.Constructor;
@@ -131,7 +131,7 @@ public class CorfuInfrastructureBuilder {
         //
         CorfuDBView view = new CorfuDBView(configMap);
         view.setUUID(UUID.randomUUID());
-        ( (IMetaData) view.getConfigMasters().get(0)).setBootstrapView(view.getSerializedJSONView());
+        ( (IMetaDataKeeper) view.getConfigMasters().get(0)).setBootstrapView(view.getSerializedJSONView());
 
 
         // start all components
