@@ -3,6 +3,8 @@ package org.corfudb.runtime.protocols.configmasters;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.view.CorfuDBView;
 
+import javax.json.JsonObject;
+
 /**
  * Created by dalia on 11/11/15.
  */
@@ -12,4 +14,10 @@ public interface IMetaData extends IServerProtocol {
      * @return  The current view.
      */
     CorfuDBView getView();
+
+    /**
+     * sets a bootstrap view at a particular MetaDataKeeper unit
+     * @param initialView the initial view
+     */
+    void setBootstrapView(JsonObject initialView);
 }
