@@ -20,14 +20,15 @@ import java.io.StringReader;
 @Getter
 @Setter
 @NoArgsConstructor
-public class NettyCollectResponseMsg extends NettyCorfuMsg {
+public class NettyMetaLayoutMsg extends NettyCorfuMsg {
 
     JsonObject jo = null;
+    int rank = -1;
 
-    public NettyCollectResponseMsg(JsonObject jo)
+    public NettyMetaLayoutMsg(NettyCorfuMsg.NettyCorfuMsgType t, int rank, JsonObject jo)
     {
         this.jo = jo;
-        this.msgType = NettyCorfuMsgType.META_COLLECT_RES;
+        this.msgType = t;
     }
 
     /**
@@ -38,6 +39,7 @@ public class NettyCollectResponseMsg extends NettyCorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
+        buffer.writeInt(rank);
         JsonWriter jw = Json.createWriter(new ByteBufOutputStream(buffer));
         jw.writeObject(jo == null ? Json.createObjectBuilder().build() : jo);
     }
@@ -52,6 +54,7 @@ public class NettyCollectResponseMsg extends NettyCorfuMsg {
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
 
+        rank = buffer.readInt();
         JsonReader jr = Json.createReader(new ByteBufInputStream(buffer));
         jo = jr.readObject();
     }

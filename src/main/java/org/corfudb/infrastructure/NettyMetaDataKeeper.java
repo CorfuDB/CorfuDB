@@ -17,32 +17,29 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
-import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyCollectResponseMsg;
+import org.corfudb.infrastructure.wireprotocol.NettyMetaLayoutMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyProposeRequestMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyProposeResponseMsg;
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.infrastructure.wireprotocol.NettyMetaBooleanMsg;
+import org.corfudb.runtime.protocols.IServerProtocol;
+import org.corfudb.runtime.protocols.configmasters.IMetaDataKeeper;
 import org.corfudb.runtime.view.CorfuDBView;
 
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-import java.io.*;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import javax.json.Json;
 import javax.json.JsonObject;
-import javax.json.JsonReader;
 
 /*
 import com.esotericsoftware.kryonet.Server;
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Connection;
 */
-
-import org.corfudb.runtime.view.Serializer;
 
 /**
  * This class participates in keeping consensus about meta-data.
@@ -62,8 +59,11 @@ import org.corfudb.runtime.view.Serializer;
 public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDBServer {
     private static Logger log = LoggerFactory.getLogger(NettyMetaDataKeeper.class);
 
-    ConsensusKeeper currentConfig = new ConsensusKeeper(new ConsensusLayoutObject());
+    ConsensusKeeper<ConsensusLayoutObject> commitLayout = new ConsensusKeeper(new ConsensusLayoutObject());
     CorfuDBView currentView = null;
+    JsonObject newProposal = null;
+
+    Thread monitorThread = monitor();
 
     public NettyMetaDataKeeper() {
     }
@@ -76,25 +76,50 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
     @Override
     public void processMessage(NettyCorfuMsg corfuMsg, ChannelHandlerContext ctx) {
 
+        // todo: if not bootstrapped yet, ignore all by bootsrapLayout requests
+
         log.info("Received request of type {}", corfuMsg.getMsgType());
         switch (corfuMsg.getMsgType())
         {
             case META_PROPOSE_REQ: {
-                NettyProposeRequestMsg m = (NettyProposeRequestMsg)corfuMsg;
+                NettyMetaLayoutMsg m = (NettyMetaLayoutMsg)corfuMsg;
 
-                currentConfig.commitProposal(m.getJo()); // TODO this should use propose, eventually, unless rank == -1 ?
+                commitLayout.commitProposal(m.getJo()); // TODO this should use propose, eventually, unless rank == -1 ?
                 reconfig(m.getJo());
 
-                NettyProposeResponseMsg resp = new NettyProposeResponseMsg(true);
+                NettyMetaBooleanMsg resp = new NettyMetaBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_RES, true);
                 sendResponse(resp, corfuMsg, ctx);
                 break;
             }
 
             case META_COLLECT_REQ: {
-                NettyCollectResponseMsg resp = new NettyCollectResponseMsg((JsonObject)( (ConsensusLayoutObject) currentConfig.getState() ).getCurrentLayout() );
+                NettyMetaLayoutMsg resp = null;
+                if (commitLayout.getCommitState() == null)
+                    resp = new NettyMetaLayoutMsg(NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_RES, -1, null);
+                else
+                    resp = new NettyMetaLayoutMsg(
+                            NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_RES,
+                            commitLayout.getEpoch(),
+                            commitLayout.getCommitState().getCurrentLayout()
+                    );
                 log.info("layout response {}", resp);
                 sendResponse(resp, corfuMsg, ctx);
                 break;
+            }
+
+            case META_LEADER_REQ: {
+                // todo: enforce a delay (300 millisecs?) between leader requests
+
+                synchronized (monitorThread) {
+                    if (newProposal != null) { // reject; handle leader roles one at a time
+                        NettyMetaBooleanMsg resp = new NettyMetaBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_LEADER_RES, false);
+                        sendResponse(resp, corfuMsg, ctx);
+                    } else {
+                        NettyMetaLayoutMsg m = (NettyMetaLayoutMsg)corfuMsg;
+                        newProposal = m.getJo();
+                        monitorThread.interrupt();
+                    }
+                }
             }
 
             default:
@@ -121,8 +146,47 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
         log.info("New log instance id= " + logID.toString());
         currentView.setUUID(logID);
 
-        // TODO if no monitor thread exists already, start a monitor thread
+    }
 
+    private Thread monitor() {
+        return new Thread(() -> {
+            for (;;) {
+                try {
+                    Thread.sleep(3000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                if (currentView == null) continue;
+                // todo CorfuDB.checkconfiguration ..
+
+                if (newProposal == null) continue;
+
+                // loop through the MetaDataKeeper servers in currentView and send requests to all
+                //
+
+                CountDownLatch l = new CountDownLatch((currentView.getConfigMasters().size()+1)/2);
+                AtomicBoolean proposalAccepted = new AtomicBoolean(true);
+
+                for (IServerProtocol s : currentView.getConfigMasters()) {
+                    IMetaDataKeeper ss = (IMetaDataKeeper) s;
+                    ss.proposeNewView(-1, newProposal).thenAccept((bool) -> {
+                        if (!bool) proposalAccepted.set(false);
+                        l.countDown();
+                    });
+                }
+
+                boolean normalCompletion = true;
+                try {
+                    normalCompletion = l.await(3000, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                log.info("monitor acceptProposal={} normalCompletion={}", proposalAccepted.get(), normalCompletion);
+                
+                newProposal = null;
+            }
+        });
     }
 
     public interface ConsensusObject {
@@ -142,16 +206,16 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
     }
 
     @Getter
-    public class ConsensusKeeper {
+    public class ConsensusKeeper<T extends ConsensusObject> {
 
         private int highPhase1Rank;
-        private int highPhase2Rank;
-        private Object highPhase2Proposal;
-        private int epoch;
+        int highPhase2Rank;
+        Object highPhase2Proposal;
+        int epoch;
 
-        ConsensusObject state = null;
+        T commitState = null;
 
-        ConsensusKeeper(ConsensusObject initialState) { this.state = initialState; }
+        ConsensusKeeper(T initialState) { this.commitState = initialState; }
 
         Object getHighPhase2Proposal(int rank) {
             if (rank > highPhase1Rank) {
@@ -181,7 +245,7 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
         }
 
         void commitProposal(Object proposal) {
-            state.apply(proposal);
+            commitState.apply(proposal);
         }
     }
 }

@@ -36,10 +36,12 @@ public class NettyCorfuMsg {
         WRONG_EPOCH(5, NettyCorfuMsg.class),
 
         // NettyMetaDataKeeper Messages
-        META_PROPOSE_REQ(10, NettyProposeRequestMsg.class),
-        META_PROPOSE_RES(11, NettyProposeResponseMsg.class),
-        META_COLLECT_REQ(12, NettyCollectRequestMsg.class),
-        META_COLLECT_RES(13, NettyCollectResponseMsg.class),
+        META_PROPOSE_REQ(10, NettyMetaLayoutMsg.class),
+        META_PROPOSE_RES(11, NettyMetaBooleanMsg.class),
+        META_COLLECT_REQ(12, NettyMetaQueryRequestMsg.class),
+        META_COLLECT_RES(13, NettyMetaLayoutMsg.class),
+        META_LEADER_REQ(14, NettyMetaLayoutMsg.class),
+        META_LEADER_RES(13, NettyMetaBooleanMsg.class),
 
         // StreamingSequencer Messages
         TOKEN_REQ(20, NettyStreamingServerTokenRequestMsg.class),

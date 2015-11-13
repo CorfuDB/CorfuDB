@@ -4,15 +4,20 @@ import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.view.CorfuDBView;
 
 import javax.json.JsonObject;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Created by dalia on 11/11/15.
  */
-public interface IMetaData extends IServerProtocol {
-    /**
-     * Gets the current view from the configuration master.
-     * @return  The current view.
-     */
+public interface IMetaDataKeeper extends IServerProtocol {
+
+    public CompletableFuture<JsonObject> getCurrentView();
+    public CompletableFuture<Boolean> proposeNewView(int rank, JsonObject jo);
+
+        /**
+         * Gets the current view from the configuration master.
+         * @return  The current view.
+         */
     CorfuDBView getView();
 
     /**

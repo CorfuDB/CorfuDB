@@ -26,9 +26,9 @@ public class NettyProposeRequestMsg extends NettyCorfuMsg {
     int rank = -1;
     JsonObject jo = null;
 
-    public NettyProposeRequestMsg(int rank, JsonObject jsonObject)
+    public NettyProposeRequestMsg(NettyCorfuMsg.NettyCorfuMsgType t, int rank, JsonObject jsonObject)
     {
-        this.msgType = NettyCorfuMsgType.META_PROPOSE_REQ;
+        this.msgType = t;
         this.jo = jsonObject;
     }
 

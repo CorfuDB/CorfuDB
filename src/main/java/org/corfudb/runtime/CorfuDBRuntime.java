@@ -15,7 +15,6 @@
 
 package org.corfudb.runtime;
 
-import org.corfudb.runtime.protocols.configmasters.IMetaData;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.protocols.configmasters.NettyMetaDataKeeperProtocol;
 import org.corfudb.runtime.view.*;
@@ -30,8 +29,6 @@ import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-
-import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
 /**
  * Note, the following imports require Java 8
