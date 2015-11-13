@@ -104,6 +104,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         viewUpdatePending = new BooleanLock();
         viewUpdatePending.lock = true;
         viewManagerThread = getViewManagerThread();
+        viewManagerThread.setDaemon(true);
         try {
             localInstance = new LocalCorfuDBInstance(this);
         } catch (Exception e)

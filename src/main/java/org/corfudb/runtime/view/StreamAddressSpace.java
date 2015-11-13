@@ -90,7 +90,16 @@ public class StreamAddressSpace implements IStreamAddressSpace {
     public StreamAddressSpace(@NonNull ICorfuDBInstance instance)
     {
         this.instance = instance;
-        cache = Caffeine.newBuilder()
+        cache = buildCache();
+    }
+
+    /** Build the asynchronous loading cache.
+     *
+     * @return A new instance of an async loading cache.
+     */
+    private AsyncLoadingCache<Long, StreamAddressSpaceEntry> buildCache()
+    {
+        return Caffeine.newBuilder()
                 .maximumSize(10_000)
                 .executor(Executors.newFixedThreadPool(8))
                 .buildAsync(idx -> {
@@ -103,7 +112,6 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                     }
                 });
     }
-
 
     /**
      * Asynchronously write to the stream address space.
@@ -199,6 +207,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         /* Flush the async loading cache. */
         cache.synchronous().invalidateAll();
         log.info("Stream address space loading cache reset.");
+        cache = buildCache();
     }
 
 
