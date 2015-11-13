@@ -15,8 +15,8 @@
 package org.corfudb.infrastructure;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
-import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
+import org.corfudb.runtime.view.IReconfigurationPolicy;
+import org.corfudb.runtime.view.SimpleReconfigurationPolicy;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.CorfuDBViewSegment;

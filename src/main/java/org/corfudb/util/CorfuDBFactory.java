@@ -5,7 +5,6 @@ import org.corfudb.runtime.smr.IStreamFactory;
 import org.corfudb.runtime.stream.ILog;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.SimpleLog;
-import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.*;
 
 import java.lang.reflect.Constructor;
@@ -59,9 +58,9 @@ public class CorfuDBFactory {
         return new StreamingSequencer(cdr);
     }
 
-    public IConfigurationMaster getConfigurationMaster(CorfuDBRuntime cdr)
+    public ILayoutMonitor getConfigurationMaster(CorfuDBRuntime cdr)
     {
-        return new ConfigurationMaster(cdr);
+        return new LayoutMonitor(cdr);
     }
 
     public ILog getLog(ISequencer sequencer, IWriteOnceAddressSpace woas)

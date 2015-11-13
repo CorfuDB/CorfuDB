@@ -2,17 +2,10 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
-import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleTimestamp;
-import org.corfudb.runtime.view.ConfigurationMaster;
+import org.corfudb.runtime.view.LayoutMonitor;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.junit.Before;
-import org.junit.Test;
 
-import java.io.Serializable;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,7 +33,7 @@ public class CDBSimpleMapLLTest {
     public void generateStream() throws Exception
     {
         cdr = CorfuDBRuntime.createRuntime("memory");
-        ConfigurationMaster cm = new ConfigurationMaster(cdr);
+        LayoutMonitor cm = new LayoutMonitor(cdr);
         cm.resetAll();
         instance = cdr.getLocalInstance();
         streamID = UUID.randomUUID();

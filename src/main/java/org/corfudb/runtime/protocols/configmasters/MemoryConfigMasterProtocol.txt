@@ -1,7 +1,7 @@
 package org.corfudb.runtime.protocols.configmasters;
 
-import org.corfudb.infrastructure.configmaster.policies.IReconfigurationPolicy;
-import org.corfudb.infrastructure.configmaster.policies.SimpleReconfigurationPolicy;
+import org.corfudb.runtime.view.IReconfigurationPolicy;
+import org.corfudb.runtime.view.SimpleReconfigurationPolicy;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.MemoryLogUnitProtocol;
@@ -15,7 +15,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * Created by mwei on 4/30/15.

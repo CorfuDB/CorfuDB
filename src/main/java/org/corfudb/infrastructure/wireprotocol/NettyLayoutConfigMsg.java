@@ -1,35 +1,34 @@
 package org.corfudb.infrastructure.wireprotocol;
 
-import com.sun.corba.se.impl.orbutil.ObjectWriter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import javax.json.*;
-import java.io.*;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import javax.json.Json;
+import javax.json.JsonObject;
+import javax.json.JsonReader;
+import javax.json.JsonWriter;
+import java.io.BufferedReader;
+import java.io.StringReader;
 
 /**
  * Created by dmalkhi on 11/9/15.
  */
-@NoArgsConstructor
 @Getter
 @Setter
-public class NettyProposeRequestMsg extends NettyCorfuMsg {
+@NoArgsConstructor
+public class NettyLayoutConfigMsg extends NettyCorfuMsg {
 
-    int rank = -1;
     JsonObject jo = null;
+    int rank = -1;
 
-    public NettyProposeRequestMsg(NettyCorfuMsg.NettyCorfuMsgType t, int rank, JsonObject jsonObject)
+    public NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType t, int rank, JsonObject jo)
     {
+        this.jo = jo;
         this.msgType = t;
-        this.jo = jsonObject;
     }
 
     /**
@@ -54,6 +53,7 @@ public class NettyProposeRequestMsg extends NettyCorfuMsg {
     @Override
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
+
         rank = buffer.readInt();
         JsonReader jr = Json.createReader(new ByteBufInputStream(buffer));
         jo = jr.readObject();

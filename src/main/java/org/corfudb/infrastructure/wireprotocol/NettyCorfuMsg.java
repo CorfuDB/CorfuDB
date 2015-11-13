@@ -35,13 +35,13 @@ public class NettyCorfuMsg {
         ACK(4, NettyCorfuMsg.class),
         WRONG_EPOCH(5, NettyCorfuMsg.class),
 
-        // NettyMetaDataKeeper Messages
-        META_PROPOSE_REQ(10, NettyMetaLayoutMsg.class),
-        META_PROPOSE_RES(11, NettyMetaBooleanMsg.class),
-        META_COLLECT_REQ(12, NettyMetaQueryRequestMsg.class),
-        META_COLLECT_RES(13, NettyMetaLayoutMsg.class),
-        META_LEADER_REQ(14, NettyMetaLayoutMsg.class),
-        META_LEADER_RES(13, NettyMetaBooleanMsg.class),
+        // NettyLayoutKeeper Messages
+        META_PROPOSE_REQ(10, NettyLayoutConfigMsg.class),
+        META_PROPOSE_RES(11, NettyLayoutBooleanMsg.class),
+        META_COLLECT_REQ(12, NettyLayoutQueryMsg.class),
+        META_COLLECT_RES(13, NettyLayoutConfigMsg.class),
+        META_LEADER_REQ(14, NettyLayoutConfigMsg.class),
+        META_LEADER_RES(13, NettyLayoutBooleanMsg.class),
 
         // StreamingSequencer Messages
         TOKEN_REQ(20, NettyStreamingServerTokenRequestMsg.class),

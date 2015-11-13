@@ -1,14 +1,9 @@
-package org.corfudb.infrastructure.configmaster.policies;
+package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
-import org.corfudb.runtime.protocols.sequencers.IStreamSequencer;
-import org.corfudb.runtime.view.CorfuDBView;
-import org.corfudb.runtime.view.CorfuDBViewSegment;
-import org.corfudb.runtime.view.ISequencer;
-import org.corfudb.runtime.view.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,8 +41,7 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
                     }
                 }
 
-                log.info("Reconfiguring all nodes in view to new epoch " + oldView.getEpoch() + 1);
-                newView.moveAllToNewEpoch(oldView.getEpoch() + 1);
+                newView.setEpoch(oldView.getEpoch() + 1);
                 return newView;
             }
             /* for reads, we don't do anything, for now...
@@ -65,7 +59,7 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
             else
             {
                 CorfuDBView newView = (CorfuDBView) Serializer.copyShallow(oldView);
-                newView.moveAllToNewEpoch(oldView.getEpoch() + 1);
+                newView.setEpoch(oldView.getEpoch() + 1);
 
                 /* Interrogate each log unit to figure out last issued token */
                 long last = -1;

@@ -5,7 +5,7 @@ import org.corfudb.runtime.NetworkException;
 /**
  * Created by mwei on 5/1/15.
  */
-public interface IConfigurationMaster {
+public interface ILayoutMonitor {
 
     void resetAll();
     void requestReconfiguration(NetworkException e);

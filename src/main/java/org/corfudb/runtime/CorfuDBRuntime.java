@@ -16,7 +16,7 @@
 package org.corfudb.runtime;
 
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
-import org.corfudb.runtime.protocols.configmasters.NettyMetaDataKeeperProtocol;
+import org.corfudb.runtime.protocols.configmasters.NettyLayoutKeeperProtocol;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.GitRepositoryState;
 import org.slf4j.Logger;
@@ -221,7 +221,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         }
 
         URL url = new URL(configString);
-        NettyMetaDataKeeperProtocol layoutServerProtocol = new NettyMetaDataKeeperProtocol(url.getHost(), url.getPort(), Collections.emptyMap(), 0 /* epoch? */);
+        NettyLayoutKeeperProtocol layoutServerProtocol = new NettyLayoutKeeperProtocol(url.getHost(), url.getPort(), Collections.emptyMap(), 0 /* epoch? */);
         return layoutServerProtocol.getView();
     }
 
@@ -260,7 +260,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         if (currentView != null)
         {
             currentView.invalidate();
-            IConfigurationMaster cm = new ConfigurationMaster(this);
+            ILayoutMonitor cm = new LayoutMonitor(this);
             cm.requestReconfiguration(e);
         }
             synchronized(viewUpdatePending)
@@ -376,7 +376,7 @@ public class CorfuDBRuntime implements AutoCloseable {
                                     String oldEpoch = (currentView == null) ? "null" : Long.toString(currentView.getEpoch());
                                     log.info("New view epoch " + newView.getEpoch() + " greater than old view epoch " + oldEpoch + ", changing views");
                                     currentView = newView;
-                                    localID = currentView.getUUID();
+                                    localID = currentView.getLogID();
                                     viewUpdatePending.lock = false;
                                     viewUpdatePending.notifyAll();
                                 }

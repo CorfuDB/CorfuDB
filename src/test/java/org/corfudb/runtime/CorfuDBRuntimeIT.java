@@ -58,7 +58,7 @@ public class CorfuDBRuntimeIT {
         assertThat(cdr.getView())
                 .isNotNull();
 
-        IConfigurationMaster cm = new ConfigurationMaster(cdr);
+        ILayoutMonitor cm = new LayoutMonitor(cdr);
         cm.resetAll();
 
         Sequencer s = new Sequencer(cdr);
@@ -77,7 +77,7 @@ public class CorfuDBRuntimeIT {
     {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime(infrastructure.getConfigString());
         cdr.waitForViewReady();
-        IConfigurationMaster cm = new ConfigurationMaster(cdr);
+        ILayoutMonitor cm = new LayoutMonitor(cdr);
         cm.resetAll();
 
         Sequencer s = new Sequencer(cdr);
@@ -105,7 +105,7 @@ public class CorfuDBRuntimeIT {
     public void CorfuLogunitFailoverTest() throws Exception {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
-        IConfigurationMaster cm = new ConfigurationMaster(cdr);
+        ILayoutMonitor cm = new LayoutMonitor(cdr);
         cm.resetAll();
 
         CorfuDBView oldView = cdr.getView();
@@ -204,7 +204,7 @@ public class CorfuDBRuntimeIT {
     public void CorfuSequencerFailoverTest() throws Exception {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
-        IConfigurationMaster cm = new ConfigurationMaster(cdr);
+        ILayoutMonitor cm = new LayoutMonitor(cdr);
         cm.resetAll();
 
         CorfuDBView oldView = cdr.getView();
@@ -298,7 +298,7 @@ public class CorfuDBRuntimeIT {
     public void viewFailureDoesNotLoop() throws Exception {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("http://localhost:12700/corfu");
         cdr.waitForViewReady();
-        IConfigurationMaster cm = new ConfigurationMaster(cdr);
+        ILayoutMonitor cm = new LayoutMonitor(cdr);
         cm.resetAll();
 
 

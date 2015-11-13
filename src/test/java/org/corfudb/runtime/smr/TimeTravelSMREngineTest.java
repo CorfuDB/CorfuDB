@@ -2,15 +2,11 @@ package org.corfudb.runtime.smr;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.stream.IStream;
-import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.stream.SimpleStream;
-import org.corfudb.runtime.view.ConfigurationMaster;
+import org.corfudb.runtime.view.LayoutMonitor;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;
-import org.junit.Test;
 
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,7 +25,7 @@ public class TimeTravelSMREngineTest {
     {
         MemoryConfigMasterProtocol.inMemoryClear();
         cdr = CorfuDBRuntime.createRuntime("memory");
-        ConfigurationMaster cm = new ConfigurationMaster(cdr);
+        LayoutMonitor cm = new LayoutMonitor(cdr);
         cm.resetAll();
         instance = cdr.getLocalInstance();
         s = instance.openStream(UUID.randomUUID());
