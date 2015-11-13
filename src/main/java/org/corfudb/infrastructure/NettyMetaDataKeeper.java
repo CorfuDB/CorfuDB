@@ -44,10 +44,26 @@ import com.esotericsoftware.kryonet.Connection;
 
 import org.corfudb.runtime.view.Serializer;
 
+/**
+ * This class participates in keeping consensus about meta-data.
+ *
+ * There are two parts, a passive meta-data keeper server, and an active layout-monitor that drives changes to the layout.
+ *
+ * - A NettyMetaDataKeeper server stores the latest committed meta-data.
+ *   It participates as a Paxos 'acceptor' in voting on proposals for meta-data changes.
+ *
+ * - A NettyMetaDataKeeper monitor becomes activated upon storing a committed Corfu layout for the first time.
+ *   It then instantiates a local CorfuDBView which has connection endpoints to all the layout components.
+ *   It spawns a thread that constantly monitors the health of other components.
+ *
+ *   The monitor may initiate change proposals and may also receive requests from clients to drive changes.
+ *   To drive a layout change, the monitor picks a rank and tries to become a Paxos leader and affect the change via a consensus decision.
+ */
 public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDBServer {
     private static Logger log = LoggerFactory.getLogger(NettyMetaDataKeeper.class);
 
-    private JsonObject currentConfig = null;
+    ConsensusKeeper currentConfig = new ConsensusKeeper(new ConsensusLayoutObject());
+    CorfuDBView currentView = null;
 
     public NettyMetaDataKeeper() {
     }
@@ -55,13 +71,6 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
     @Override
     void parseConfiguration(Map<String, Object> configuration) {
         log.info("NettyMetaDataKeeper configuration {}", configuration);
-
-        // TODO the next part should be part of ClientLocalViewManager
-        UUID logID =  UUID.randomUUID();
-        log.info("New log instance id= " + logID.toString());
-        CorfuDBView currentView = new CorfuDBView(configuration);
-        currentView.setUUID(logID);
-        currentConfig = currentView.getSerializedJSONView();
     }
 
     @Override
@@ -71,14 +80,18 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
         switch (corfuMsg.getMsgType())
         {
             case META_PROPOSE_REQ: {
-                currentConfig = ((NettyProposeRequestMsg)corfuMsg).getJo();
+                NettyProposeRequestMsg m = (NettyProposeRequestMsg)corfuMsg;
+
+                currentConfig.commitProposal(m.getJo()); // TODO this should use propose, eventually, unless rank == -1 ?
+                reconfig(m.getJo());
+
                 NettyProposeResponseMsg resp = new NettyProposeResponseMsg(true);
                 sendResponse(resp, corfuMsg, ctx);
                 break;
             }
 
             case META_COLLECT_REQ: {
-                NettyCollectResponseMsg resp = new NettyCollectResponseMsg(currentConfig);
+                NettyCollectResponseMsg resp = new NettyCollectResponseMsg((JsonObject)( (ConsensusLayoutObject) currentConfig.getState() ).getCurrentLayout() );
                 log.info("layout response {}", resp);
                 sendResponse(resp, corfuMsg, ctx);
                 break;
@@ -96,24 +109,51 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
         // TODO reset to which configuration??
     }
 
-    public class LayoutConsensus {
+    private void reconfig(JsonObject newLayout) {
+        // instantiate new CorfuDB view
+        if (currentView != null) {
+            currentView.invalidate();
+        }
+        currentView = new CorfuDBView(newLayout);
+
+        // TODO the next part should be done by proposer or consensus engine?
+        UUID logID =  UUID.randomUUID();
+        log.info("New log instance id= " + logID.toString());
+        currentView.setUUID(logID);
+
+        // TODO if no monitor thread exists already, start a monitor thread
+
+    }
+
+    public interface ConsensusObject {
+        abstract void apply(Object proposal) ;
+    }
+
+    @Setter
+    @Getter
+    public class ConsensusLayoutObject implements ConsensusObject {
+        JsonObject currentLayout = null;
+
+        @Override
+        public void apply(Object proposal) {
+            // TODO check epoch successsion
+            setCurrentLayout((JsonObject) proposal);
+        }
+    }
+
+    @Getter
+    public class ConsensusKeeper {
 
         private int highPhase1Rank;
         private int highPhase2Rank;
-        private Proposal highPhase2Proposal;
+        private Object highPhase2Proposal;
+        private int epoch;
 
-        int thisEpoch;
+        ConsensusObject state = null;
 
-        @Getter
-        @Setter
-        class Proposal {
-            int nextEpoch;
-            int rank;
-            // currentView
-            // nextView
-        }
+        ConsensusKeeper(ConsensusObject initialState) { this.state = initialState; }
 
-        Proposal getHighPhase2Proposal(int rank) {
+        Object getHighPhase2Proposal(int rank) {
             if (rank > highPhase1Rank) {
                 highPhase1Rank = rank;
                 return highPhase2Proposal;
@@ -128,7 +168,7 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
          * @param proposal
          * @return 0 means proposal accepted, -1 means it is rejected
          */
-        int putHighPhase2Proposal(int rank, Proposal proposal) {
+        int putHighPhase2Proposal(int epoch, int rank, Object proposal) {
             if (rank >= highPhase1Rank) {
                 // accept proposal
                 highPhase2Rank = highPhase1Rank = rank;
@@ -139,44 +179,9 @@ public class NettyMetaDataKeeper extends AbstractNettyServer implements ICorfuDB
                 return -1;
             }
         }
-    /*
-        void proposeChange(view newView) {
-            Proposal myProposal = new Proposal();
-            myProposal.setRank(highPhase1Rank+1);
-            int adoptRank = -1;
-            boolean isLeader = true;
-            boolean isDone = false;
 
-            while (! done) {
-                for (ls : layoutServers) {
-                    CompletableFuture f = ls.getHighPhase2Proposal(myProposal.getRank());
-                    // TODO use completion to increment a completion counter, and to collect responses or process
-                }
-
-                // todo wait for counter to reach quorum size
-                //
-
-                // obtain the results from the future
-                //
-                Proposal readProposal = lst.get().result;
-
-                if (readProposal == null) {
-                        newRank++;
-                        break;
-                    }
-
-                    // check that myProposal epoch is highest than last installed
-                    //
-                    if (myProposal.epoch < readProposal.epoch) {
-                        // TODO something
-                    }
-
-                    if (highPhase2Proposal.next != null && highPhase2Proposal.nextRank > adoptRank) {
-                        adoptRank = highPhase2Rank.nextRank;
-                        myProposal = readProposal;
-                    }
-                }
+        void commitProposal(Object proposal) {
+            state.apply(proposal);
         }
-        */
     }
 }
