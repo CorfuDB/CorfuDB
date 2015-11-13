@@ -1,12 +1,14 @@
 package org.corfudb.infrastructure.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
  * Created by dalia on 11/11/15.
  */
 @NoArgsConstructor
+@Getter
 public class NettyProposeResponseMsg extends NettyCorfuMsg {
 
     boolean ack = false;
