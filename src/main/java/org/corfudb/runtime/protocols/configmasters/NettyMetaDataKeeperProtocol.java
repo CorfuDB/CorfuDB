@@ -92,6 +92,6 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
 
     @Override
     public void setBootstrapView(JsonObject initialView) {
-        proposeNewView(-1, initialView).join();
+        proposeNewView(-1, initialView); // .join();
     }
 }
