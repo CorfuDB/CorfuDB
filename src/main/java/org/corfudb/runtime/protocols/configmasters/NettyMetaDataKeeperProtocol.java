@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 /**
  * Created by dmalkhi on 11/6/15.
@@ -29,7 +30,7 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
     private static final transient Logger log = LoggerFactory.getLogger(NettyMetaDataKeeperProtocol.class);
 
     public static String getProtocolString() {
-        return "cdbls";
+        return "cdbmk";
     }
 
     public static IServerProtocol protocolFactory(String host, Integer port, Map<String,String> options, Long epoch)
@@ -48,6 +49,15 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
         CompletableFuture<JsonObject> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
         log.info("wait for current view via completableFuture");
         return ret;
+    }
+
+    public CompletableFuture<Boolean> proposeNewView(int rank, JsonObject jo) {
+        log.info("try to set new view");
+        NettyProposeRequestMsg r = new NettyProposeRequestMsg(rank, jo);
+        CompletableFuture<Boolean> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
+        log.info("wait for propose ack via completableFuture");
+        return ret;
+
     }
 
     static class NettyLayoutServerHandler extends NettyRPCChannelInboundHandlerAdapter {
@@ -78,5 +88,10 @@ public class NettyMetaDataKeeperProtocol extends AbstractNettyProtocol<NettyMeta
     public CorfuDBView getView() {
 
         return new CorfuDBView((JsonObject) getCurrentView().join());
+    }
+
+    @Override
+    public void setBootstrapView(JsonObject initialView) {
+        proposeNewView(-1, initialView).join();
     }
 }

@@ -4,12 +4,11 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ICorfuDBServer;
 import org.corfudb.infrastructure.NettyMetaDataKeeper;
+import org.corfudb.runtime.protocols.configmasters.IMetaData;
+import org.corfudb.runtime.view.CorfuDBView;
 
 import java.lang.reflect.Constructor;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Created by mwei on 8/26/15.
@@ -25,7 +24,7 @@ public class CorfuInfrastructureBuilder {
     Map<String, Object> layoutMap;
     List<Map<String,Object>> segmentMap;
 
-    int configMasterPort;
+    int metadataKeeperPort;
 
     @SuppressWarnings("unchecked")
     public CorfuInfrastructureBuilder()
@@ -69,9 +68,9 @@ public class CorfuInfrastructureBuilder {
     {
         Constructor<? extends ICorfuDBServer> serverConstructor = sequencerType.getConstructor();
         ICorfuDBServer server = serverConstructor.newInstance();
-        Map<String, Object> configuration = baseParams == null ? new HashMap<>() : baseParams;
-        configuration.put("port", port);
-        serverList.add(server.getInstance(configuration));
+        Map<String, Object> params = baseParams == null ? new HashMap<>() : baseParams;
+        params.put("port", port);
+        serverList.add(server.getInstance(params));
         ((LinkedList<String>)configMap.get("sequencers")).add(clientProtocol + "://localhost:" + port);
         return this;
     }
@@ -90,9 +89,9 @@ public class CorfuInfrastructureBuilder {
     {
         Constructor<? extends ICorfuDBServer> serverConstructor = loggingType.getConstructor();
         ICorfuDBServer server = serverConstructor.newInstance();
-        Map<String, Object> configuration = baseParams == null ? new HashMap<>() : baseParams;
-        configuration.put("port", port);
-        serverList.add(server.getInstance(configuration));
+        Map<String, Object> params = baseParams == null ? new HashMap<>() : baseParams;
+        params.put("port", port);
+        serverList.add(server.getInstance(params));
         for (int i = ((LinkedList<HashMap<String, Object>>)segmentMap.get(0).get("groups")).size(); i < chain; i++)
         {
             ((LinkedList<HashMap<String, Object>>)segmentMap.get(0).get("groups")).add(new HashMap<String, Object>());
@@ -105,25 +104,43 @@ public class CorfuInfrastructureBuilder {
 
 
     /**
-     * Start the configuration by initializing the configmaster at the specified port and running each server.
-     * @param configMasterPort     The port to run the configuration master on.
+     * Start the system by initializing the MetaDataKeeper at the specified port and running each server.
+     * @param metadataKeeperPort     The port to run the MetaDataKeeper on.
      */
     @SneakyThrows
     @SuppressWarnings("unchecked")
-    public CorfuInfrastructureBuilder start(int configMasterPort)
+    public CorfuInfrastructureBuilder start(int metadataKeeperPort)
     {
-        configMap.put("port", configMasterPort);
-        ((LinkedList<String>)configMap.get("configmasters")).add("cdbcm://localhost:" + configMasterPort);
-        log.info("Starting dynamically created infrastructure...");
-        serverList.forEach(r -> {
-            r.start();
-            runningServers.add(r);
-        });
+        ((LinkedList<String>)configMap.get("configmasters")).add("cdbmk://localhost:" + metadataKeeperPort);
 
-        this.configMasterPort = configMasterPort;
+        // start MetaDataKeeper
+        //
+        this.metadataKeeperPort = metadataKeeperPort;
+        Map<String, Object> params = new HashMap<>();
+        params.put("port", metadataKeeperPort);
+
         NettyMetaDataKeeper cms = new NettyMetaDataKeeper();
-        configMap.put("port", configMasterPort);
-        ICorfuDBServer r = cms.getInstance(configMap);
+        ICorfuDBServer r = cms.getInstance(params);
+
+        r.start();
+        runningServers.add(r);
+        Thread.sleep(1000);
+        log.info("metadata-keeper started...");
+
+        //install initial layout
+        //
+        CorfuDBView view = new CorfuDBView(configMap);
+        view.setUUID(UUID.randomUUID());
+        ( (IMetaData) view.getConfigMasters().get(0)).setBootstrapView(view.getSerializedJSONView());
+
+
+        // start all components
+        //
+        log.info("Starting all components...");
+        serverList.forEach(rr -> {
+            rr.start();
+            runningServers.add(rr);
+        });
 
         /* wait for all threads to start*/
         runningServers.forEach( th -> {
@@ -138,12 +155,6 @@ public class CorfuInfrastructureBuilder {
                 }
             }
         });
-        //again, wait for everything to settle...
-        //TODO:: loop until everything is pingable...
-        r.start();
-        runningServers.add(r);
-        Thread.sleep(1000);
-        log.info("Dynamically created infrastruacture built and started...");
        return this;
     }
 
@@ -162,7 +173,7 @@ public class CorfuInfrastructureBuilder {
      */
     public String getConfigString()
     {
-        return "http://localhost:" + configMasterPort + "/corfu";
+        return "http://localhost:" + metadataKeeperPort + "/corfu";
     }
     /**
      * Shutdown servers and wait. 
