@@ -176,55 +176,6 @@ public class CorfuDBRuntime implements AutoCloseable {
      */
     public static org.corfudb.runtime.view.CorfuDBView retrieveView(String configString)
         throws IOException {
-        if (configString.equals("custom"))
-        {
-            if (MemoryConfigMasterProtocol.memoryConfigMasters.get(0) != null)
-            {
-                return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
-            }
-        }
-        else if (configString.equals("memory"))
-        {
-            if (MemoryConfigMasterProtocol.memoryConfigMasters.get(0) != null)
-            {
-                return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
-            }
-            //this is an in-memory request.
-            HashMap<String, Object> MemoryView = new HashMap<String, Object>();
-            MemoryView.put("epoch", 0L);
-
-            MemoryView.put("logid", UUID.randomUUID().toString());
-            MemoryView.put("pagesize", 4096);
-
-            LinkedList<String> configMasters = new LinkedList<String>();
-            configMasters.push("mcm://localhost:0");
-            MemoryView.put("configmasters", configMasters);
-
-            LinkedList<String> sequencers = new LinkedList<String>();
-            sequencers.push("ms://localhost:0");
-            MemoryView.put("sequencers", sequencers);
-
-            HashMap<String,Object> layout = new HashMap<String,Object>();
-            LinkedList<HashMap<String,Object>> segments = new LinkedList<HashMap<String,Object>>();
-            HashMap<String,Object> segment = new HashMap<String,Object>();
-            segment.put("replication", "cdbcr");
-            segment.put("start", 0L);
-            segment.put("sealed", 0L);
-            LinkedList<HashMap<String,Object>> groups = new LinkedList<HashMap<String,Object>>();
-            HashMap<String,Object> group0 = new HashMap<String,Object>();
-            LinkedList<String> group0nodes = new LinkedList<String>();
-            group0nodes.add("mlu://localhost:0");
-            group0.put("nodes", group0nodes);
-            groups.add(group0);
-            segment.put("groups", groups);
-            segments.add(segment);
-            layout.put("segments", segments);
-            MemoryView.put("layout", layout);
-            CorfuDBView newView = new CorfuDBView(MemoryView);
-            MemoryConfigMasterProtocol.memoryConfigMasters.get(0).setInitialView(newView);
-            return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
-        }
-
         URL url = new URL(configString);
         NettyLayoutKeeperProtocol layoutServerProtocol = new NettyLayoutKeeperProtocol(url.getHost(), url.getPort(), Collections.emptyMap(), 0 /* epoch? */);
         return layoutServerProtocol.getView();

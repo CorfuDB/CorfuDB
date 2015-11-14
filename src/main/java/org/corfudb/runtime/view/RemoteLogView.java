@@ -8,11 +8,14 @@ import java.util.UUID;
 import java.io.IOException;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+<<<<<<< HEAD
 import org.corfudb.runtime.exceptions.RemoteException;
+=======
+import org.corfudb.runtime.RemoteException;
+import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
+>>>>>>> cleanups
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
 /**
  *      This class manages and caches views of remote logs.
@@ -96,12 +99,12 @@ public class RemoteLogView {
         }
         try {
             RemoteData rd = new RemoteData(logRemote);
-            if (logSelf != null && logSelf.equals(rd.getView().getUUID()))
+            if (logSelf != null && logSelf.equals(rd.getView().getLogID()))
             {
                 return logSelf;
             }
-            remoteMap.putIfAbsent(rd.getView().getUUID(), new RemoteData(logRemote));
-            return rd.getView().getUUID();
+            remoteMap.putIfAbsent(rd.getView().getLogID(), new RemoteData(logRemote));
+            return rd.getView().getLogID();
         }
         catch (NullPointerException ie)
         {
@@ -132,7 +135,7 @@ public class RemoteLogView {
         try {
             CorfuDBView view = getLog(logID);
             //it only matters whether or not we can talk to the config master.
-            IConfigMaster icm = (IConfigMaster)view.getConfigMasters().get(0);
+            ILayoutKeeper icm = (ILayoutKeeper) view.getLayouts().get(0);
             if (icm.ping())
             {
                 return true;

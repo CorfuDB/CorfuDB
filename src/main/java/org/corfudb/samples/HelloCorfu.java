@@ -86,7 +86,7 @@ public class HelloCorfu implements Runnable {
                 System.out.println("trying to connect to config-master...");
                 view = cdr.getView();
 
-                System.out.println("trying to ping all view components...: " + view.isViewAccessible() );
+                System.out.println("trying to ping all view components...: " + instance.getConfigurationMaster(). );
                 synchronized (this) { notify();}
             } } );
         b.start();
