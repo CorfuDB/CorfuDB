@@ -55,7 +55,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         this.getView = () ->  {
             return this.client.getView();
         };
-        this.logID = getView.get().getUUID();
+        this.logID = getView.get().getLogID();
     }
 
     public CachedWriteOnceAddressSpace(CorfuDBRuntime client, UUID logID)
@@ -80,7 +80,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         this.getView = () -> {
             return this.view;
         };
-        this.logID = getView.get().getUUID();
+        this.logID = getView.get().getLogID();
     }
 
     public void write(long address, Serializable s)
@@ -95,7 +95,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         //TODO: handle multiple segments
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        replicationProtocol.write(client, address, Collections.singleton(getView.get().getUUID()), data);
+        replicationProtocol.write(client, address, Collections.singleton(getView.get().getLogID()), data);
         return;
 
     }
@@ -106,7 +106,7 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
         //TODO: cache the layout so we don't have to determine it on every write.
 
         byte[] data = null;
-        data = AddressSpaceCache.get(getView.get().getUUID(), address);
+        data = AddressSpaceCache.get(getView.get().getLogID(), address);
         if (data != null) {
             return data;
         }
@@ -115,8 +115,8 @@ public class CachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
 
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        data = replicationProtocol.read(client, address, getView.get().getUUID());
-        AddressSpaceCache.put(getView.get().getUUID(), address, data);
+        data = replicationProtocol.read(client, address, getView.get().getLogID());
+        AddressSpaceCache.put(getView.get().getLogID(), address, data);
         return data;
     }
 

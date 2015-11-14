@@ -59,10 +59,12 @@ public class LayoutMonitor implements ILayoutMonitor {
         }
     }
 
+    /*
     @Override
     public void forceNewView(CorfuDBView v) {
         log.info("forceNewView not supported");
     }
+    */
 
     /**
      * Checks if all servers in the view can be accessed. Does not check

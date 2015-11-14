@@ -49,7 +49,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
     {
         this.client = client;
         this.getView = this.client::getView;
-        this.logID = getView.get().getUUID();
+        this.logID = getView.get().getLogID();
     }
 
     public WriteOnceAddressSpace(CorfuDBRuntime client, UUID logID)

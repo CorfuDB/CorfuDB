@@ -130,8 +130,8 @@ public class CorfuInfrastructureBuilder {
         //install initial layout
         //
         CorfuDBView view = new CorfuDBView(configMap);
-        view.setUUID(UUID.randomUUID());
-        ( (ILayoutKeeper) view.getConfigMasters().get(0)).setBootstrapView(view.getSerializedJSONView());
+        view.setLogID(UUID.randomUUID());
+        ( (ILayoutKeeper) view.getLayouts().get(0)).setBootstrapView(view.getSerializedJSONView());
 
 
         // start all components

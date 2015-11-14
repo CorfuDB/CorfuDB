@@ -83,7 +83,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         write(address, Serializer.serialize(s));
 
         //A successful write means we can just put it in the cache.
-        AddressSpaceObjectCache.put(getView.get().getUUID(), address, s);
+        AddressSpaceObjectCache.put(getView.get().getLogID(), address, s);
         /*
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {
@@ -108,7 +108,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         //TODO: handle multiple segments
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        replicationProtocol.write(client, address, Collections.singleton(getView.get().getUUID()), data);
+        replicationProtocol.write(client, address, Collections.singleton(getView.get().getLogID()), data);
         return;
     }
 
@@ -127,7 +127,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         //TODO: handle multiple segments
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        return replicationProtocol.read(client, address, getView.get().getUUID());
+        return replicationProtocol.read(client, address, getView.get().getLogID());
 
         //    stream.debug("Objcache MISS @ {}", address);
         //   AddressSpaceCache.put(logID, address, data);
@@ -138,13 +138,13 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
             throws UnwrittenException, TrimmedException, ClassNotFoundException, IOException
     {
         //    log.info("Read from id=" + getView.get().getUUID());
-        Object o = AddressSpaceObjectCache.get(getView.get().getUUID(), address);
+        Object o = AddressSpaceObjectCache.get(getView.get().getLogID(), address);
         if (o != null) {
             return o; }
 
         byte[] data = read(address);
         o = Serializer.deserialize(data);
-        AddressSpaceObjectCache.put(getView.get().getUUID(), address ,o);
+        AddressSpaceObjectCache.put(getView.get().getLogID(), address ,o);
         return o;
          /*
          Kryo k = Serializer.kryos.get();

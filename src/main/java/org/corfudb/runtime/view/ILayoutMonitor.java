@@ -9,5 +9,5 @@ public interface ILayoutMonitor {
 
     void resetAll();
     void requestReconfiguration(NetworkException e);
-    void forceNewView(CorfuDBView v);
+//    void forceNewView(CorfuDBView v);
 }

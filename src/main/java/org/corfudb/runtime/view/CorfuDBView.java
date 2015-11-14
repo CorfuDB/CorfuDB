@@ -53,17 +53,17 @@ import org.corfudb.runtime.protocols.IServerProtocol;
  *
  *      1. A chain of segments, which are ranges of log-indices, e.g., [0..9], [10..99], [100.. )
  *         - each segments has a list of logging-unit groups, e.g., {A,B,C}, {D,E,F}, and a replication protocol for each
- *      2. A list of sequencers, each is a client endpoint
- *      3. A list of layout-keepers, each is a client endpoint (implementing, e.g., the ILayoutKeeper interface)
+ *      2. A list of sequencers
+ *      3. A list of layout-keepers
  *
  *   A realized view is a class of type CorfuDBView, containing lists of protocol endpoints corresponding to the layout:
  *
- *      1. For logging-units, each enpoint implements, e.g., the INewWriteOnceLogUnit interface;
+ *      1. For logging-units, each enpoint implements a logging interface, e.g., the INewWriteOnceLogUnit interface;
  *         A replication protocol implements the IReplication interface **TODO and is currently bypassed in the implementation!!**
- *      2. For sequencers, each endpoint implements, e.g.,  the INewStreamSequencer interface
- *      3. For layout-keepers, each endpoint implements, e.g., the ILayoutKeeper interface
+ *      2. For sequencers, each endpoint implements a sequencer interface, e.g.,  the INewStreamSequencer interface
+ *      3. For layout-keepers, each endpoint implements a layout-keeper interface, e.g., the ILayoutKeeper interface
  *
- * The class contains various utility method for translating between a desired-layout, expressed as a JsonObject, and a realized view.
+ * The class contains various utility methods for translating between a desired-layout, expressed as a JsonObject, and a realized view.
  *
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
@@ -343,7 +343,7 @@ public class CorfuDBView {
     }
 
     private List<IServerProtocol> populateLayoutKeepersFromList(List<String> list) {
-        LinkedList<IServerProtocol> sequencerList = new LinkedList<IServerProtocol>();
+        LinkedList<IServerProtocol> layoutList = new LinkedList<IServerProtocol>();
         for (String s : list)
         {
             Matcher m = IServerProtocol.getMatchesFromServerString(s);
@@ -359,7 +359,7 @@ public class CorfuDBView {
                     Class<? extends IServerProtocol> sprotocol = availableConfigMasterProtocols.get(protocol);
                     try
                     {
-                        sequencerList.add(IServerProtocol.protocolFactory(sprotocol, s, epoch));
+                        layoutList.add(IServerProtocol.protocolFactory(sprotocol, s, epoch));
                     }
                     catch (Exception ex){
                         log.error("Error invoking protocol for protocol: ", ex);
@@ -371,7 +371,7 @@ public class CorfuDBView {
                 log.warn("Configmaster string " + s + " appears to be an invalid configmaster string");
             }
         }
-        return sequencerList;
+        return layoutList;
     }
 
     public static ILayoutKeeper getConfigurationMasterFromString(String masterString)
