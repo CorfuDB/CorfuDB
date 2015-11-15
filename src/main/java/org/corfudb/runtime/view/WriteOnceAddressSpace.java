@@ -36,44 +36,13 @@ import java.util.function.Supplier;
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
 
-public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
-
-    private CorfuDBRuntime client;
-    private UUID logID;
-    private CorfuDBView view;
-    private Supplier<CorfuDBView> getView;
+public class WriteOnceAddressSpace extends CorfuDBRuntimeComponent implements IWriteOnceAddressSpace {
 
     private final Logger log = LoggerFactory.getLogger(WriteOnceAddressSpace.class);
 
-    public WriteOnceAddressSpace(CorfuDBRuntime client)
+    public WriteOnceAddressSpace(ICorfuDBInstance corfuInstance)
     {
-        this.client = client;
-        this.getView = this.client::getView;
-        this.logID = getView.get().getLogID();
-    }
-
-    public WriteOnceAddressSpace(CorfuDBRuntime client, UUID logID)
-    {
-        this.client = client;
-        this.logID = logID;
-        this.getView = () -> {
-            try {
-                return this.client.getView(this.logID);
-            }
-            catch (RemoteException re)
-            {
-                log.warn("Error getting remote view", re);
-                return null;
-            }
-        };
-    }
-
-    public WriteOnceAddressSpace(CorfuDBView view)
-    {
-        this.view = view;
-        this.getView = () -> {
-            return this.view;
-        };
+        super(corfuInstance);
     }
 
     public void write(long address, Serializable s)
@@ -102,7 +71,7 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         if (logID != null)
             streams = Collections.singleton(logID);
 
-        replicationProtocol.write(client, address, streams, data);
+        replicationProtocol.write(corfuInstance, address, streams, data);
         return;
            /* }
             catch (NetworkException e)
@@ -131,8 +100,8 @@ public class WriteOnceAddressSpace implements IWriteOnceAddressSpace {
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
 
         if (logID != null)
-            return replicationProtocol.read(client, address, logID);
-        return replicationProtocol.read(client, address, null);
+            return replicationProtocol.read(corfuInstance, address, logID);
+        return replicationProtocol.read(corfuInstance, address, null);
     }
 
     public Object readObject(long address)

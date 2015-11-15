@@ -2,7 +2,6 @@ package org.corfudb.samples;
 
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.collections.CDBSimpleMap;
-import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.util.CorfuDBFactory;
 import org.slf4j.Logger;
@@ -68,7 +67,7 @@ public class HelloMap implements Runnable {
          * testing purposes.
          */
         System.out.println("resetting configuration...");
-        instance.getConfigurationMaster().resetAll();
+        instance.getViewJanitor().resetAll();
 
         UUID streamID = UUID.randomUUID();
         testMap = instance.openObject(streamID, CDBSimpleMap.class);

@@ -216,7 +216,7 @@ public class CorfuDBRuntime implements AutoCloseable {
         if (currentView != null)
         {
             currentView.invalidate();
-            ILayoutMonitor cm = new LayoutMonitor(this);
+            IViewMaintenance cm = new ViewMaintenance(this.getView());
             cm.requestReconfiguration(e);
         }
             synchronized(viewUpdatePending)

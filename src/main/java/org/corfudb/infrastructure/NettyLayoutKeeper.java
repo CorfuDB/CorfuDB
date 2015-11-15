@@ -21,16 +21,13 @@ import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyLayoutConfigMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyLayoutBooleanMsg;
 import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
 import org.corfudb.runtime.view.CorfuDBView;
 
+import org.corfudb.runtime.view.ViewJanitor;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.json.JsonObject;
 
@@ -62,7 +59,7 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
     CorfuDBView currentView = null;
     JsonObject newProposal = null;
 
-    Thread monitorThread = monitor();
+    Thread monitorThread = null;
 
     public NettyLayoutKeeper() {
     }
@@ -83,8 +80,9 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
             case META_PROPOSE_REQ: {
                 NettyLayoutConfigMsg m = (NettyLayoutConfigMsg)corfuMsg;
 
-                commitLayout.commitProposal(m.getJo()); // TODO this should use propose, eventually, unless rank == -1 ?
+                commitLayout.commitProposal(m.getJo()); // TODO this should use 2-step protocol, unless rank == -1 ?
                 reconfig(m.getJo());
+                if (monitorThread == null) monitorThread = monitor();
 
                 NettyLayoutBooleanMsg resp = new NettyLayoutBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_RES, true);
                 sendResponse(resp, corfuMsg, ctx);
@@ -149,41 +147,22 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
 
     private Thread monitor() {
         return new Thread(() -> {
+            assert currentView != null;
+            ViewJanitor monitor = new ViewJanitor(currentView);
+
             for (;;) {
                 try {
                     Thread.sleep(3000);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    // todo check reason for interrupt; for now, we simply deduce that have a new CorfuDBview
+                    break;
                 }
 
-                if (currentView == null) continue;
-                // todo CorfuDB.checkconfiguration ..
+                IServerProtocol faulty = monitor.isViewAccessible();
+                if (faulty == null) continue;
+                log.warn("removing fault unit {} from configuration", faulty.getFullString());
 
-                if (newProposal == null) continue;
-
-                // loop through the MetaDataKeeper servers in currentView and send requests to all
-                //
-
-                CountDownLatch l = new CountDownLatch((currentView.getLayouts().size()+1)/2);
-                AtomicBoolean proposalAccepted = new AtomicBoolean(true);
-
-                for (IServerProtocol s : currentView.getLayouts()) {
-                    ILayoutKeeper ss = (ILayoutKeeper) s;
-                    ss.proposeNewView(-1, newProposal).thenAccept((bool) -> {
-                        if (!bool) proposalAccepted.set(false);
-                        l.countDown();
-                    });
-                }
-
-                boolean normalCompletion = true;
-                try {
-                    normalCompletion = l.await(3000, TimeUnit.MILLISECONDS);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                log.info("monitor acceptProposal={} normalCompletion={}", proposalAccepted.get(), normalCompletion);
-
-                newProposal = null;
+                monitor.driveReconfiguration(faulty);
             }
         });
     }

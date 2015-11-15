@@ -1,8 +1,13 @@
 package org.corfudb.runtime.smr.HoleFillingPolicy;
 
 import org.corfudb.runtime.CorfuDBRuntime;
+<<<<<<< HEAD
 import org.corfudb.runtime.exceptions.HoleEncounteredException;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
+=======
+import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.collections.CDBSimpleMap;
+>>>>>>> disable CorfuDBruntime layer altogether
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;

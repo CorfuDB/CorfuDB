@@ -4,7 +4,6 @@ package org.corfudb.runtime.collections;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;
-import org.junit.Test;
 
 import java.util.UUID;
 
@@ -25,7 +24,7 @@ public class CDBConcurrentSkipListMapTest {
     {
         cdr = CorfuDBRuntime.getRuntime("memory");
         instance = cdr.getLocalInstance();
-        instance.getConfigurationMaster().resetAll();
+        instance.getViewJanitor().resetAll();
         map = instance.openObject(UUID.randomUUID(), CDBConcurrentSkipListMap.class);
     }
 

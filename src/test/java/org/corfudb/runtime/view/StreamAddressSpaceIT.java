@@ -94,7 +94,7 @@ public class StreamAddressSpaceIT {
                 .isNotNull();
 
         /** Reset the instance, so that nothing is on the log unit anymore. */
-        instance.getConfigurationMaster().resetAll();
+        instance.getViewJanitor().resetAll();
         /** Manually reset the cache. The cache should now be empty. */
         s.resetCaches();
 

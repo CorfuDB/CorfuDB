@@ -3,7 +3,7 @@ package org.corfudb.runtime.collections;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
-import org.corfudb.runtime.view.LayoutMonitor;
+import org.corfudb.runtime.view.ViewJanitor;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 
 import java.util.UUID;
@@ -33,7 +33,7 @@ public class CDBSimpleMapLLTest {
     public void generateStream() throws Exception
     {
         cdr = CorfuDBRuntime.createRuntime("memory");
-        LayoutMonitor cm = new LayoutMonitor(cdr);
+        ViewJanitor cm = new ViewJanitor(cdr);
         cm.resetAll();
         instance = cdr.getLocalInstance();
         streamID = UUID.randomUUID();

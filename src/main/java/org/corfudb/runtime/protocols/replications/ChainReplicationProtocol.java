@@ -64,7 +64,7 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
     }
 
     @Override
-    public void write(CorfuDBRuntime client, long address, Set<UUID> streams, byte[] data)
+    public void write(ICorfuDBInstance corfuInstance, long address, Set<UUID> streams, byte[] data)
             throws OverwriteException, TrimmedException, OutOfSpaceException {
         // TODO: Handle multiple segments?
         IReplicationProtocol reconfiguredRP = null;
@@ -72,7 +72,7 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
         {
             try {
                 if (reconfiguredRP != null) {
-                    reconfiguredRP.write(client, address, streams, data);
+                    reconfiguredRP.write(corfuInstance, address, streams, data);
                     return;
                 }
                 int mod = groups.size();
@@ -97,22 +97,22 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
             catch (NetworkException e)
             {
                 log.warn("Unable to write, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-                reconfiguredRP = client.getView().getSegments().get(0).getReplicationProtocol();
+                corfuInstance.invalidateViewAndWait(e);
+                reconfiguredRP = corfuInstance.getView().getSegments().get(0).getReplicationProtocol();
             }
         }
 
     }
 
     @Override
-    public byte[] read(CorfuDBRuntime client, long address, UUID stream) throws UnwrittenException, TrimmedException {
+    public byte[] read(ICorfuDBInstance corfuInstance, long address, UUID stream) throws UnwrittenException, TrimmedException {
         // TODO: Handle multiple segments?
         IReplicationProtocol reconfiguredRP = null;
         while (true)
         {
             try {
                 if (reconfiguredRP != null) {
-                    return reconfiguredRP.read(client, address, stream);
+                    return reconfiguredRP.read(corfuInstance, address, stream);
                 }
                 int mod = groups.size();
                 int groupnum =(int) (address % mod);
@@ -125,8 +125,8 @@ public class ChainReplicationProtocol implements IReplicationProtocol {
             catch (NetworkException e)
             {
                 log.warn("Unable to read, requesting new view.", e);
-                client.invalidateViewAndWait(e);
-                reconfiguredRP = client.getView().getSegments().get(0).getReplicationProtocol();
+                corfuInstance.invalidateViewAndWait(e);
+                reconfiguredRP = corfuInstance.getView().getSegments().get(0).getReplicationProtocol();
             }
         }
     }

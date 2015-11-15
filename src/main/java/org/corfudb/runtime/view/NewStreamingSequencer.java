@@ -49,7 +49,7 @@ public class NewStreamingSequencer implements INewStreamingSequencer{
                         log.error("Exception during nextTokenAsync, retrying.", e);
                         if (base instanceof WrongEpochException)
                         {
-                            instance.invalidateView();
+                            instance.invalidateViewAndWait((NetworkException) e); // todo this type cast might not work, handle!!
                         }
                         return nextTokenAsync(streams, numTokens).get();
                     }
