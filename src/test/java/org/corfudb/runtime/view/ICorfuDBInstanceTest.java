@@ -39,8 +39,8 @@ public abstract class ICorfuDBInstanceTest {
     @Test
     public void canGetConfigurationMaster()
     {
-        assertThat(getInstance().getConfigurationMaster())
-                .isInstanceOf(ILayoutMonitor.class);
+        assertThat(getInstance().getViewJanitor())
+                .isInstanceOf(IViewJanitor.class);
     }
 
     @Test

@@ -15,7 +15,6 @@
 
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.sequencers.INewStreamSequencer;
@@ -40,50 +39,19 @@ import java.util.function.Supplier;
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
 
-public class StreamingSequencer implements IStreamingSequencer {
-
-    private CorfuDBRuntime client;
-    private UUID logID;
-    private CorfuDBView view;
-    private Supplier<CorfuDBView> getView;
+public class StreamingSequencer extends CorfuDBRuntimeComponent implements IStreamingSequencer {
 
     private final Logger log = LoggerFactory.getLogger(StreamingSequencer.class);
 
-    public StreamingSequencer(CorfuDBRuntime client)
-    {
-        this.client = client;
-        this.getView = this.client::getView;
-    }
-
-    public StreamingSequencer(CorfuDBRuntime client, UUID logID)
-    {
-        this.client = client;
-        this.logID = logID;
-        this.getView = () -> {
-            try {
-            return this.client.getView(this.logID);
-            }
-            catch (RemoteException re)
-            {
-                log.warn("Error getting remote view", re);
-                return null;
-            }
-        };
-    }
-
-    public StreamingSequencer(CorfuDBView view)
-    {
-        this.view = view;
-        this.getView = () -> {
-            return this.view;
-        };
+    StreamingSequencer(ICorfuDBInstance corfuInstance) {
+        super(corfuInstance);
     }
 
     @Override
     public long getNext(UUID streamID, int numTokens)
     {
         return IRetry.build(ExponentialBackoffRetry.class, () -> {
-            IServerProtocol sequencer= getView.get().getSequencers().get(0);
+            IServerProtocol sequencer= view.getSequencers().get(0);
                 if (streamID == null)
                 {
                     //when the stream ID is null, get a global sequence #
@@ -104,7 +72,7 @@ public class StreamingSequencer implements IStreamingSequencer {
             }
         ).onException(NetworkException.class, e -> {
                 log.warn("Unable to get next sequence, requesting new view.", e);
-                client.invalidateViewAndWait(e);
+                corfuInstance.invalidateViewAndWait(e);
                 return true;
             }).run();
     }
@@ -129,7 +97,7 @@ public class StreamingSequencer implements IStreamingSequencer {
             catch (NetworkException e)
             {
                 log.warn("Unable to get current sequencer, requesting new view.", e);
-                client.invalidateViewAndWait(e);
+                corfuInstance.invalidateViewAndWait(e);
             }
         }
 

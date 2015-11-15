@@ -36,7 +36,7 @@ public class CorfuDBRuntimeTest {
         CorfuDBRuntime runtime = CorfuDBRuntime.createRuntime("memory");
         CorfuDBView view = runtime.getView();
         assertNotNull(view);
-        LayoutMonitor cm = new LayoutMonitor(runtime);
+        ViewJanitor cm = new ViewJanitor(runtime);
         cm.resetAll();
         view = runtime.getView();
         assertNotNull(view);

@@ -11,15 +11,17 @@ import org.corfudb.runtime.view.StreamData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.json.JsonObject;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by mwei on 4/30/15.
  */
-public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtocol {
+public class MemoryConfigMasterProtocol implements ILayoutKeeper, IServerProtocol {
 
     private Logger log = LoggerFactory.getLogger(MemoryConfigMasterProtocol.class);
     private Map<String,String> options;
@@ -63,11 +65,27 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
         memoryConfigMasters.put(this.port, this);
     }
 
+  public CompletableFuture<Boolean> proposeNewView(int rank, JsonObject jo) {
+      return null;
+  }
+
+    /**
+     * Gets the current view from the configuration master.
+     * @return  The current view.
+     */
+    public CompletableFuture<JsonObject> getCurrentView() { return null; }
+
+    /**
+     * sets a bootstrap view at a particular MetaDataKeeper unit
+     * @param initialView the initial view
+     */
+    public void setBootstrapView(JsonObject initialView) { setInitialView(new CorfuDBView(initialView));}
+
     public void setInitialView(CorfuDBView view)
     {
         this.view = view;
         logID = UUID.randomUUID();
-        this.view.setUUID(logID);
+        this.view.setLogID(logID);
         this.initialView = view;
     }
 
@@ -78,109 +96,6 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
         MemoryLogUnitProtocol.memoryUnits.clear();
         MemorySequencerProtocol.memorySequencers.clear();
     }
-    /**
-     * Adds a new stream to the system.
-     *
-     * @param logID    The ID of the stream the stream starts on.
-     * @param streamID The streamID of the stream.
-     * @param startPos The start position of the stream.
-     * @return True if the stream was successfully added to the system, false otherwise.
-     */
-    @Override
-    public boolean addStream(UUID logID, UUID streamID, long startPos) {
-        return false;
-    }
-
-    /**
-     * Adds a new stream to the system.
-     *
-     * @param logID    The ID of the stream the stream starts on.
-     * @param streamID The streamID of the stream.
-     * @param startPos The start position of the stream.
-     * @param nopass
-     * @return True if the stream was successfully added to the system, false otherwise.
-     */
-    @Override
-    public boolean addStreamCM(UUID logID, UUID streamID, long startPos, boolean nopass) {
-        return false;
-    }
-
-    /**
-     * Gets information about a stream in the system.
-     *
-     * @param streamID The ID of the stream to retrieve.
-     * @return A StreamData object containing information about the stream, or null if the
-     * stream could not be found.
-     */
-    @Override
-    public StreamData getStream(UUID streamID) {
-        return null;
-    }
-
-    /**
-     * Adds a stream to the system.
-     *
-     * @param logID The ID of the stream to add.
-     * @param path  True, if the stream was added to the system, or false otherwise.
-     */
-    @Override
-    public boolean addLog(UUID logID, String path) {
-        return false;
-    }
-
-    /**
-     * Gets information about all logs known to the system.
-     *
-     * @return A map containing all logs known to the system.
-     */
-    @Override
-    public Map<UUID, String> getAllLogs() {
-        return null;
-    }
-
-    /**
-     * Gets the configuration string for a stream, given its id.
-     *
-     * @param logID The ID of the stream to retrieve.
-     * @return The configuration string used to access that stream.
-     */
-    @Override
-    public String getLog(UUID logID) {
-        return null;
-    }
-
-
-    /**
-     * Resets the entire stream, and increments the epoch. Use only during testing to restore the system to a
-     * known state.
-     */
-    @Override
-    public void resetAll() {
-        /* just reset everything in memory */
-        log.info("Request reset of memory configuration");
-        try {
-            this.reset(epoch + 1);
-        } catch (Exception e) {
-            log.error("Error during configmaster reset", e);
-        }
-        for (MemorySequencerProtocol msp : MemorySequencerProtocol.memorySequencers.values())
-        {
-            try {
-            msp.reset(epoch+1);}
-            catch (Exception e) {
-                log.error("Error during sequencer reset", e);
-            }
-        }
-        for (MemoryLogUnitProtocol mlu : MemoryLogUnitProtocol.memoryUnits.values())
-        {
-            try {
-                mlu.reset(epoch+1);}
-            catch (Exception e) {
-                log.error("Error during log unit reset", e);
-            }
-        }
-        this.epoch++;
-    }
 
     /**
      * Gets the current view from the configuration master.
@@ -190,28 +105,6 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     @Override
     public CorfuDBView getView() {
         return view;
-    }
-
-    /**
-     * Request reconfiguration due to a network exception.
-     *
-     * @param e The network exception that caused the reconfiguration request.
-     */
-    @Override
-    public void requestReconfiguration(NetworkException e) {
-        this.view = reconfigPolicy.getNewView(this.view, e);
-        log.info("Reconfiguration requested, moving to new view epoch " + this.view.getEpoch());
-    }
-
-    /**
-     * Force the configuration master to install a new view. This method should only be called during
-     * testing.
-     *
-     * @param v The new view to install.
-     */
-    @Override
-    public void forceNewView(CorfuDBView v) {
-        this.view = v;
     }
 
     /**
@@ -284,7 +177,7 @@ public class MemoryConfigMasterProtocol implements IConfigMaster, IServerProtoco
     public void reset(long epoch) throws NetworkException {
         this.view = this.initialView;
         logID = UUID.randomUUID();
-        this.view.setUUID(logID);
+        this.view.setLogID(logID);
         this.initialView.setEpoch(epoch);
     }
 }

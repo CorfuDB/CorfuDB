@@ -50,7 +50,7 @@ public class LocalCorfuDBInstanceTest extends ICorfuDBInstanceTest {
         /* Insert a test item into the stream. */
         map.put("test", "helloword");
         /* reset the instance */
-        instance.getConfigurationMaster().resetAll();
+        instance.getViewJanitor().resetAll();
         instance.resetAllCaches();
 
         /* Re-open the test object, but under the same stream ID */

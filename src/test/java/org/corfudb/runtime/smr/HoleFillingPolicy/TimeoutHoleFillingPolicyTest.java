@@ -6,7 +6,6 @@ import com.codahale.metrics.Timer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.HoleEncounteredException;
 import org.corfudb.runtime.collections.CDBSimpleMap;
-import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.view.ICorfuDBInstance;

@@ -18,7 +18,6 @@ package org.corfudb.runtime.view;
 import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 
@@ -39,41 +38,12 @@ import java.util.function.Supplier;
  * @author Michael Wei <mwei@cs.ucsd.edu>
  */
 
-public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace {
-
-    private CorfuDBRuntime client;
-    private CorfuDBView view;
-    private Supplier<CorfuDBView> getView;
-
+public class ObjectCachedWriteOnceAddressSpace extends CorfuDBRuntimeComponent implements IWriteOnceAddressSpace {
     private final Logger log = LoggerFactory.getLogger(org.corfudb.runtime.view.ObjectCachedWriteOnceAddressSpace.class);
 
-    public ObjectCachedWriteOnceAddressSpace(CorfuDBRuntime client)
+    public ObjectCachedWriteOnceAddressSpace(ICorfuDBInstance corfuInstance)
     {
-        this.client = client;
-        this.getView = client::getView;
-    }
-
-    public ObjectCachedWriteOnceAddressSpace(CorfuDBRuntime client, UUID logID)
-    {
-        this.client = client;
-        this.getView = () -> {
-            try {
-                return this.client.getView(logID);
-            }
-            catch (RemoteException re)
-            {
-                log.warn("Error getting remote view", re);
-                return null;
-            }
-        };
-    }
-
-    public ObjectCachedWriteOnceAddressSpace(CorfuDBView view)
-    {
-        this.view = view;
-        this.getView = () -> {
-            return this.view;
-        };
+        super(corfuInstance);
     }
 
     public void write(long address, Serializable s)
@@ -108,7 +78,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         //TODO: handle multiple segments
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        replicationProtocol.write(client, address, Collections.singleton(getView.get().getLogID()), data);
+        replicationProtocol.write(corfuInstance, address, Collections.singleton(getView.get().getLogID()), data);
         return;
     }
 
@@ -127,7 +97,7 @@ public class ObjectCachedWriteOnceAddressSpace implements IWriteOnceAddressSpace
         //TODO: handle multiple segments
         CorfuDBViewSegment segments =  getView.get().getSegments().get(0);
         IReplicationProtocol replicationProtocol = segments.getReplicationProtocol();
-        return replicationProtocol.read(client, address, getView.get().getLogID());
+        return replicationProtocol.read(corfuInstance, address, getView.get().getLogID());
 
         //    stream.debug("Objcache MISS @ {}", address);
         //   AddressSpaceCache.put(logID, address, data);

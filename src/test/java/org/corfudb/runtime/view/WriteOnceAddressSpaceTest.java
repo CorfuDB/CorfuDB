@@ -14,7 +14,7 @@ public class WriteOnceAddressSpaceTest extends IWriteOnceAddressSpaceTest {
     public IWriteOnceAddressSpace getAddressSpace()
     {
         CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("memory");
-        LayoutMonitor cm = new LayoutMonitor(cdr);
+        ViewJanitor cm = new ViewJanitor(cdr);
         cm.resetAll();
         return new WriteOnceAddressSpace(cdr);
     }

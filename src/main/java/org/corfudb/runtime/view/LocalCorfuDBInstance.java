@@ -3,12 +3,12 @@ package org.corfudb.runtime.view;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
-import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.collections.CDBSimpleMap;
+import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.*;
 
+import javax.json.JsonObject;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentMap;
 public class LocalCorfuDBInstance implements ICorfuDBInstance {
 
     // Members of this CorfuDBInstance
-    private ILayoutMonitor configMaster;
+    private IViewJanitor viewJanitor;
     private IStreamingSequencer streamingSequencer;
     private IWriteOnceAddressSpace addressSpace;
     private IStreamAddressSpace streamAddressSpace;
@@ -31,8 +31,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     public INewStreamingSequencer newStreamingSequencer;
 
 
-    private CorfuDBRuntime cdr;
-    private CDBSimpleMap<UUID, IStreamMetadata> streamMap;
     private ConcurrentMap<UUID, ICorfuDBObject> objectMap;
 
     @Getter
@@ -48,30 +46,31 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private Class<? extends IStream> streamType;
 
 
-    public LocalCorfuDBInstance(CorfuDBRuntime cdr)
+    public LocalCorfuDBInstance(JsonObject bootstrapLayout)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        this(cdr, LayoutMonitor.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
+        this(bootstrapLayout, ViewJanitor.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
                 NewStream.class);
     }
 
-    public LocalCorfuDBInstance(CorfuDBRuntime cdr,
-                                Class<? extends ILayoutMonitor> cm,
+    public LocalCorfuDBInstance(JsonObject bootsrapLayout,
+                                Class<? extends IViewJanitor> cm,
                                 Class<? extends IStreamingSequencer> ss,
                                 Class<? extends IWriteOnceAddressSpace> as,
                                 Class<? extends IStream> streamType)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        configMaster = cm.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
-        streamingSequencer = ss.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
-        addressSpace = as.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
+        CorfuDBView view = new CorfuDBView(bootsrapLayout);
+
+        viewJanitor = cm.getConstructor(ICorfuDBInstance.class).newInstance(this);
+        streamingSequencer = ss.getConstructor(ICorfuDBInstance.class).newInstance(this);
+        addressSpace = as.getConstructor(ICorfuDBInstance.class).newInstance(this);
         streamAddressSpace = new StreamAddressSpace(this);
         newStreamingSequencer = new NewStreamingSequencer(this);
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
         this.localStreamMap = new NonBlockingHashMap<>();
         this.baseEngineMap = new NonBlockingHashMap<>();
-        this.cdr = cdr;
     }
 
     /**
@@ -80,8 +79,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * @return The configuration master for this instance.
      */
     @Override
-    public ILayoutMonitor getConfigurationMaster() {
-        return configMaster;
+    public IViewJanitor getViewJanitor() {
+        return viewJanitor;
     }
 
     /**
@@ -131,31 +130,18 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      */
     @Override
     public CorfuDBView getView() {
-        /* make sure that the view belongs to the same instance. */
-        CorfuDBView view = cdr.getView();
-        /* if the instance ID does not match, reset all the caches. */
-        if (!view.getLogID().equals(UUID))
-        {
-            /* This region is synchronized to make sure reset happens exactly once.
-             * One thread will go in and reset all the caches, updating the UUID.
-             * The other threads will see that the UUID has changed and get the view again.
-             */
-            synchronized (this) {
-                if (!view.getLogID().equals(UUID) && (UUID != null)) {
-                    log.info("Instance has changed from ID {} to {}, resetting all local caches.",
-                            UUID, view.getLogID());
-                    resetAllCaches();
-                    UUID = view.getLogID();
-                }
-                else if (UUID == null)
-                {
-                    UUID = view.getLogID();
-                }
-            }
-        }
-        return view;
+
+        return viewJanitor.getView(); // todo check UUID , reset caches if needed!!!
     }
 
+    /**
+     * report a problem with view
+     *
+     * @param e
+     */
+    public void invalidateViewAndWait(NetworkException e) {
+        viewJanitor.requestReconfiguration(e); // todo not sure this is the right place for this API
+    }
 
     /**
      * Resets all local caches.
@@ -223,21 +209,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     }
 
     /**
-     * Retrieves the stream metadata map for this instance.
-     *
-     * @return The stream metadata map for this instance.
-     */
-    @Override
-    public Map<UUID, IStreamMetadata> getStreamMetadataMap() {
-        /* for now, the stream metadata is backed on a CDBSimpleMap
-            This could change if we need to support hopping, since
-            there needs to be a globally consistent view of the stream
-            start positions.
-         */
-        return streamMap;
-    }
-
-    /**
      * Retrieves a corfuDB object.
      *
      * @param id   A unique ID for the object to be retrieved.
@@ -297,13 +268,5 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * Invalidate the current view, requiring that the view be refreshed.
-     */
-    @Override
-    public void invalidateView() {
-        cdr.invalidateViewAndWait(null);
     }
 }

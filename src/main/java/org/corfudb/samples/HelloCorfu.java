@@ -71,7 +71,7 @@ public class HelloCorfu implements Runnable {
          * testing purposes.
          */
         /* System.out.println("resetting configuration...");
-        instance.getConfigurationMaster().resetAll();*/
+        instance.getViewJanitor().resetAll();*/
 
 
         /* check health of Configuration Master by trying to retrieve view
@@ -86,7 +86,7 @@ public class HelloCorfu implements Runnable {
                 System.out.println("trying to connect to config-master...");
                 view = cdr.getView();
 
-                System.out.println("trying to ping all view components...: " + instance.getConfigurationMaster(). );
+                System.out.println("trying to ping all view components...: " + instance.getViewJanitor().isViewAccessible() );
                 synchronized (this) { notify();}
             } } );
         b.start();

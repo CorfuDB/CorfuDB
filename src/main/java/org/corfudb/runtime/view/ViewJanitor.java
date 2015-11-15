@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.CorfuDBRuntime;
+import lombok.Getter;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
@@ -11,24 +11,23 @@ import org.slf4j.LoggerFactory;
 
 import javax.json.JsonObject;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Created by mwei on 5/1/15.
  */
-public class LayoutMonitor implements ILayoutMonitor {
+@Getter
+public class ViewJanitor implements IViewJanitor {
 
-    private static final Logger log = LoggerFactory.getLogger(LayoutMonitor.class);
+    private static final Logger log = LoggerFactory.getLogger(ViewJanitor.class);
 
-    CorfuDBRuntime cdr;
     CorfuDBView view;
 
     IReconfigurationPolicy reconfig = new SimpleReconfigurationPolicy();
 
-    public LayoutMonitor(CorfuDBRuntime cdr)
-    {
-        this.cdr = cdr;
-        view = cdr.getView();
-    }
+    public ViewJanitor(CorfuDBView view) { this.view = view; }
 
     public void resetAll() {
         IRetry.build(ExponentialBackoffRetry.class, () -> {
@@ -46,11 +45,15 @@ public class LayoutMonitor implements ILayoutMonitor {
     public void requestReconfiguration(NetworkException e) {
         while (true) {
             try {
-                ILayoutKeeper leader = (ILayoutKeeper) view.getLayouts().get(0);
-                CorfuDBView newView = reconfig.getNewView(view, e);
+                // prepare a reconfig-proposal (Json format)
+                //
+                CorfuDBView newView = reconfig.prepareReconfigProposal(view, e);
                 JsonObject newLayout = newView.getSerializedJSONView();
+
+                // get a proxy layout-keeper to drive the reconfiguration proposal on our behalf
+                //
+                ILayoutKeeper leader = (ILayoutKeeper) view.getLayouts().get(0);
                 leader.proposeNewView(-1, newLayout);
-                return;
             }
             catch (Exception ex)
             {
@@ -59,24 +62,56 @@ public class LayoutMonitor implements ILayoutMonitor {
         }
     }
 
-    /*
-    @Override
-    public void forceNewView(CorfuDBView v) {
-        log.info("forceNewView not supported");
+    /**
+     * this method is meant for use only by a wannabe-leader layout-keeper.
+     * client runtime should use @requestReconfiguration .
+     *
+     * @param faulty a reported non-responsive component
+     */
+    public void driveReconfiguration(IServerProtocol faulty) {
+        // prepare a reconfig-proposal (Json format)
+        //
+        CorfuDBView newView = reconfig.prepareReconfigProposal(view, faulty);
+        JsonObject newLayout = newView.getSerializedJSONView();
+
+        // our agreement protocol needs to reach a majority.
+        // we send proposals to the entire set of participants asyncornously, and wait for responses.
+        // we set a countdown-latch l to reach zero when a majority of the configuration has responded
+        // we set a boolean flag proposalAccepted to record any rejection response
+        //
+        CountDownLatch l = new CountDownLatch((view.getLayouts().size()+1)/2);
+        AtomicBoolean proposalAccepted = new AtomicBoolean(true);
+
+        for (IServerProtocol s : view.getLayouts()) {
+            ILayoutKeeper ss = (ILayoutKeeper) s;
+            ss.proposeNewView(-1, newLayout).thenAccept((bool) -> {
+                if (!bool) proposalAccepted.set(false);
+                l.countDown();
+            });
+        }
+
+        boolean normalCompletion = true;
+        try {
+            normalCompletion = l.await(3000, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+        }
+
+        // todo handle (a) interrupted during await, or (b) wait time elapsed without reaching a majority??
+        log.info("monitor acceptProposal={} normalCompletion={}", proposalAccepted.get(), normalCompletion);
     }
-    */
 
     /**
      * Checks if all servers in the view can be accessed. Does not check
      * to see if all the servers are in a valid configuration epoch.
      */
-    public boolean isViewAccessible()
+    @Override
+    public IServerProtocol isViewAccessible()
     {
         for (IServerProtocol sequencer : view.getSequencers())
         {
             if (!sequencer.ping()) {
                 log.debug("View acessibility check failed, couldn't connect to: " + sequencer.getFullString());
-                return false;
+                return sequencer;
             }
         }
 
@@ -88,13 +123,13 @@ public class LayoutMonitor implements ILayoutMonitor {
                 {
                     if (!logunit.ping()) {
                         log.debug("View acessibility check failed, couldn't connect to: " + logunit.getFullString());
-                        return false;
+                        return logunit;
                     }
                 }
             }
         }
 
-        return true;
+        return null;
     }
 
     /**
