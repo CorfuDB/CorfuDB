@@ -2,8 +2,7 @@ package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.util.CorfuInfrastructureBuilder;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
@@ -19,21 +18,12 @@ import java.util.UUID;
  */
 public class StreamAddressSpaceIT {
 
-    CorfuInfrastructureBuilder infrastructure;
-    CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
 
     @Before
     public void setup()
     {
-        infrastructure =
-                CorfuInfrastructureBuilder.getBuilder()
-                .addSequencer(RandomOpenPort.getOpenPort(), NettyStreamingSequencerServer.class, "nsss", null)
-                .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
-                .start(RandomOpenPort.getOpenPort());
-
-        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
-        instance = runtime.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
     }
 
    @Test
@@ -103,12 +93,5 @@ public class StreamAddressSpaceIT {
         /** The entry should return NULL, which means that the cache was reset.*/
       //  assertThat(entry)
        //         .isNull();  //TODO:: This test is broken until the reset all interface on the config master is restored.
-    }
-
-    @After
-    public void tearDown()
-    {
-        infrastructure
-                .shutdownAndWait();
     }
 }
