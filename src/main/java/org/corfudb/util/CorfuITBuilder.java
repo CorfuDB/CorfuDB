@@ -23,7 +23,8 @@ public class CorfuITBuilder {
     JsonArrayBuilder sequencerObject = Json.createArrayBuilder();
     JsonArrayBuilder configmasterObject = Json.createArrayBuilder();
     JsonArrayBuilder segmentObject = Json.createArrayBuilder();
-    JsonArrayBuilder groupObject = Json.createArrayBuilder(); // todo multiple segments and multiple groups
+    JsonArrayBuilder groups = Json.createArrayBuilder();
+    JsonArrayBuilder groupObject = Json.createArrayBuilder(); // todo this should be a list
 
     int layoutKeeperPort;
     CorfuDBView view;
@@ -33,18 +34,6 @@ public class CorfuITBuilder {
     {
         serverList = new LinkedList<ICorfuDBServer>();
         runningServers = new LinkedList<ICorfuDBServer>();
-
-//            configmasterObject.add(sp.getFullString());
-
-        JsonObjectBuilder jsb = Json.createObjectBuilder();
-        jsb.add("replication", "cdbcr");
-        jsb.add("start", 0L);
-        jsb.add("sealed", 0L);
-
-        JsonArrayBuilder groups = Json.createArrayBuilder();
-        groups.add(groupObject);
-        jsb.add("groups", groups);
-        segmentObject.add(jsb);
     }
 
     /**
@@ -94,7 +83,7 @@ public class CorfuITBuilder {
 
     /** construct a view from the parameters-map so far
      *
-     * @param layoutKeeperPort     The port to run the MetaDataKeeper on.
+     * @param layoutKeeperPort     The port to run the LayoutKeeper on.
      */
     public CorfuITBuilder getView(int layoutKeeperPort) {
 
@@ -103,6 +92,18 @@ public class CorfuITBuilder {
 
         // build the Json object
         //
+
+        // segments
+        //
+        JsonObjectBuilder jsb = Json.createObjectBuilder();
+        jsb.add("replication", "cdbcr");
+        jsb.add("start", 0L);
+        jsb.add("sealed", 0L);
+
+        groups.add(groupObject); // todo list ..
+        jsb.add("groups", groups);
+        segmentObject.add(jsb);
+
         JsonObject layoutObject = layout
                 .add("epoch", 0L)
                 .add("logid", UUID.randomUUID().toString())
@@ -112,8 +113,6 @@ public class CorfuITBuilder {
                 .build();
 
         view = new CorfuDBView(layoutObject);
-
-        ( (ILayoutKeeper) view.getLayouts().get(0)).setBootstrapView(view.getSerializedJSONView());
 
         return this;
     }
@@ -130,12 +129,11 @@ public class CorfuITBuilder {
         params.put("port", layoutKeeperPort);
 
         ICorfuDBServer layoutKeeper = new NettyLayoutKeeper().getInstance(params);
-
+        ((NettyLayoutKeeper)layoutKeeper).reconfig(view.getSerializedJSONView());
         layoutKeeper.start();
         runningServers.add(layoutKeeper);
         Thread.sleep(1000);
         log.info("layout-keeper started...");
-
 
         // start all components
         //
@@ -158,6 +156,11 @@ public class CorfuITBuilder {
                 }
             }
         });
+
+        // set bootstrap view
+        //( (ILayoutKeeper) view.getLayouts().get(0)).setBootstrapView(view.getSerializedJSONView());
+
+
         return this.view;
     }
 

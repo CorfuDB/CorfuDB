@@ -41,7 +41,7 @@ public class NettyCorfuMsg {
         META_COLLECT_REQ(12, NettyLayoutQueryMsg.class),
         META_COLLECT_RES(13, NettyLayoutConfigMsg.class),
         META_LEADER_REQ(14, NettyLayoutConfigMsg.class),
-        META_LEADER_RES(13, NettyLayoutBooleanMsg.class),
+        META_LEADER_RES(15, NettyLayoutBooleanMsg.class),
 
         // StreamingSequencer Messages
         TOKEN_REQ(20, NettyStreamingServerTokenRequestMsg.class),

@@ -66,7 +66,7 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
 
     @Override
     void parseConfiguration(Map<String, Object> params) {
-        log.info("NettyLayoutKeeper configuration {}", params);
+        log.info("NettyLayoutKeeper params {}", params);
     }
 
     @Override
@@ -131,7 +131,7 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
         // TODO reset to which configuration??
     }
 
-    private void reconfig(JsonObject newLayout) {
+    public void reconfig(JsonObject newLayout) { // todo make it private!
         // instantiate new CorfuDB view
         if (currentView != null) {
             currentView.invalidate();
