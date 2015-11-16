@@ -3,14 +3,13 @@ package org.corfudb.runtime.collections;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
 import org.corfudb.runtime.stream.SimpleTimestamp;
 import org.corfudb.runtime.view.*;
-import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.Before;
 import org.junit.Test;
@@ -33,24 +32,16 @@ import static org.assertj.core.api.Assertions.*;
 public class CDBSimpleMapTest {
 
     IStream s;
-    static CorfuInfrastructureBuilder infrastructure;
     static ICorfuDBInstance instance;
     static public CDBSimpleMap<Integer, Integer> testMap;
     UUID streamID;
-    CorfuDBRuntime cdr;
+
 
     @Before
     @SuppressWarnings("unchecked")
     public void generateStream() throws Exception
     {
-        infrastructure =
-                CorfuInfrastructureBuilder.getBuilder()
-                        .addSequencer(RandomOpenPort.getOpenPort(), NettyStreamingSequencerServer.class, "nsss", null)
-                        .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
-                        .start(RandomOpenPort.getOpenPort());
-
-        cdr = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
-        instance = cdr.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
         streamID = UUID.randomUUID();
         s = instance.openStream(streamID);
         testMap = instance.openObject(streamID, CDBSimpleMap.class);
@@ -163,7 +154,7 @@ public class CDBSimpleMapTest {
     @Test
     public void DeferredTransactionalTest() throws Exception
     {
-        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
+        DeferredTransaction tx = new DeferredTransaction(instance);
         final CDBSimpleMap<Integer, Integer> testMapLocal = testMap;
         testMap.put(10, 100);
         tx.setTransaction((ITransactionCommand) (opts) -> {
@@ -184,7 +175,7 @@ public class CDBSimpleMapTest {
    // @Test
     public void crossMapSwapTransactionalTest() throws Exception
     {
-        DeferredTransaction tx = new DeferredTransaction(cdr.getLocalInstance());
+        DeferredTransaction tx = new DeferredTransaction(instance);
         CDBSimpleMap<Integer,Integer> testMap2 = instance.openObject(UUID.randomUUID(), CDBSimpleMap.class);
 
         testMap.put(10, 100);

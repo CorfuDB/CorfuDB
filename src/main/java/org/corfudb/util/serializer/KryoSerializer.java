@@ -13,7 +13,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.SimpleStreamEntry;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
 import org.corfudb.runtime.smr.*;

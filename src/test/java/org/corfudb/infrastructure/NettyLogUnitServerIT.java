@@ -1,12 +1,10 @@
 package org.corfudb.infrastructure;
 
 import io.netty.util.ResourceLeakDetector;
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.logunits.NettyLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.NettyStreamingSequencerProtocol;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;

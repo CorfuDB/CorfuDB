@@ -5,12 +5,11 @@ import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.smr.DeferredTransaction;
 import org.corfudb.runtime.smr.ITransactionCommand;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.util.CorfuInfrastructureBuilder;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,12 +24,10 @@ import java.util.concurrent.locks.ReentrantLock;
  * Created by amytai on 7/9/15.
  */
 public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
-    CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
     CDBSimpleMap<Integer, Integer> map;
     UUID uuid;
 
-    static CorfuInfrastructureBuilder infrastructure;
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
 
@@ -76,21 +73,9 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
             }
         };
 
-        l.lock();
-        if (!reset)
-        {
-            infrastructure = CorfuInfrastructureBuilder.getBuilder()
-                    .addSequencer(9201, NettyStreamingSequencerServer.class, "nsss", null)
-                    .addLoggingUnit(9200, 0, NettyLogUnitServer.class, "nlu", luConfigMap)
-                    .start(9002);
+        uuid = UUID.randomUUID();
 
-            reset = true;
-            uuid = UUID.randomUUID();
-        }
-        l.unlock();
-
-        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
-        instance = runtime.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
         uuid = UUID.randomUUID();
 
         map = instance.openObject(uuid, CDBSimpleMap.class);
@@ -116,17 +101,5 @@ public class DeferredTxnJMeter extends AbstractJavaSamplerClient {
         }
 */
         super.setupTest(context);
-    }
-
-    @Override
-    public void teardownTest(JavaSamplerContext context) {
-        runtime.close();
-        l.lock();
-        if (reset) {
-            infrastructure.shutdownAndWait();
-            reset = false;
-        }
-        l.unlock();
-        super.teardownTest(context);
     }
 }

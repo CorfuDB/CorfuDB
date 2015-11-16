@@ -2,7 +2,6 @@ package org.corfudb.runtime.smr;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.IStream;

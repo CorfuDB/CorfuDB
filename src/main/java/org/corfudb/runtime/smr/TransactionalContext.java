@@ -1,7 +1,6 @@
 package org.corfudb.runtime.smr;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.slf4j.Logger;

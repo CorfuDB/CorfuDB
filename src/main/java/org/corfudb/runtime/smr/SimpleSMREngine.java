@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.HoleEncounteredException;
 import org.corfudb.runtime.OutOfSpaceException;
 import org.corfudb.runtime.OverwriteException;

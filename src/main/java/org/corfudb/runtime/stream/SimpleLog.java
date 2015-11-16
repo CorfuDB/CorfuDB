@@ -19,7 +19,6 @@ import org.corfudb.runtime.TrimmedException;
 import org.corfudb.runtime.UnwrittenException;
 import org.corfudb.runtime.view.ISequencer;
 import org.corfudb.runtime.view.IWriteOnceAddressSpace;
-import org.corfudb.runtime.view.Sequencer;
 import org.corfudb.runtime.view.WriteOnceAddressSpace;
 
 import org.corfudb.runtime.OutOfSpaceException;
