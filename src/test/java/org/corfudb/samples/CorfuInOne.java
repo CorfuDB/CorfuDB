@@ -38,6 +38,7 @@ public class CorfuInOne {
                 getView(9999).
                 start() ;
 
+        System.out.println("view:" + view.getSerializedJSONView());
         ICorfuDBInstance cinstance = new LocalCorfuDBInstance(view.getSerializedJSONView());
 
        /* check health of Configuration Master by trying to retrieve view
@@ -49,9 +50,6 @@ public class CorfuInOne {
         Thread b = new Thread(new Runnable() {
             @Override
             public void run() {
-                System.out.println("trying to connect to config-master...");
-                System.out.println("view:" + view.toString());
-
                 System.out.println("trying to ping all view components...: " + cinstance.getViewJanitor().isViewAccessible() );
                 synchronized (this) { notify();}
             } } );

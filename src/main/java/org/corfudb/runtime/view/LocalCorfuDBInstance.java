@@ -63,10 +63,15 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         CorfuDBView view = new CorfuDBView(bootsrapLayout);
 
         viewJanitor = cm.getConstructor(CorfuDBView.class).newInstance(view);
-        streamingSequencer = ss.getConstructor(ICorfuDBInstance.class).newInstance(this);
+        log.trace("local instance has a janitor initialized");
+        streamingSequencer = new StreamingSequencer(this); // ss.getConstructor(ICorfuDBInstance.class).newInstance(this);
+        log.trace("local instance has a sequencer initialized");
         addressSpace = as.getConstructor(ICorfuDBInstance.class).newInstance(this);
+        log.trace("local instance has a AS initialized");
         streamAddressSpace = new StreamAddressSpace(this);
+        log.trace("local instance has a stream AS initialized");
         newStreamingSequencer = new NewStreamingSequencer(this);
+        log.trace("local instance has a new streaming sequencer initialized");
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
         this.localStreamMap = new NonBlockingHashMap<>();
