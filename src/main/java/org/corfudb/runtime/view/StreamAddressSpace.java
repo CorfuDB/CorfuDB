@@ -12,6 +12,8 @@ import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This is the default implementation of a stream address space, which is backed by a LRU cache.
@@ -90,9 +92,27 @@ public class StreamAddressSpace implements IStreamAddressSpace {
     public StreamAddressSpace(@NonNull ICorfuDBInstance instance)
     {
         this.instance = instance;
-        cache = Caffeine.newBuilder()
+        cache = buildCache();
+    }
+
+    /** Build the asynchronous loading cache.
+     *
+     * @return A new instance of an async loading cache.
+     */
+    private AsyncLoadingCache<Long, StreamAddressSpaceEntry> buildCache()
+    {
+        AtomicInteger threadNum = new AtomicInteger();
+        return Caffeine.newBuilder()
                 .maximumSize(10_000)
-                .executor(Executors.newFixedThreadPool(8))
+                .executor(Executors.newFixedThreadPool(8, new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable runnable) {
+                        Thread thread = Executors.defaultThreadFactory().newThread(runnable);
+                        thread.setName("CachePool-" + threadNum.getAndIncrement());
+                        thread.setDaemon(true);
+                        return thread;
+                    }
+                }))
                 .buildAsync(idx -> {
                     try {
                         return load(idx).get();
@@ -103,7 +123,6 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                     }
                 });
     }
-
 
     /**
      * Asynchronously write to the stream address space.
@@ -126,14 +145,18 @@ public class StreamAddressSpace implements IStreamAddressSpace {
                         StreamAddressSpaceEntry s = new StreamAddressSpaceEntry(streams, offset,
                                 StreamAddressEntryCode.DATA, payload);
                         cache.put(offset, CompletableFuture.completedFuture(s));
+                        log.trace("Write[{}] complete, cached.", offset);
                         return StreamAddressWriteResult.OK;
                     } else {
                         switch (res) {
                             case TRIMMED:
+                                log.trace("Write[{}] FAILED, trimmed!", offset);
                                 return StreamAddressWriteResult.TRIMMED;
                             case OVERWRITE:
+                                log.trace("Write[{}] FAILED, overwrite!", offset);
                                 return StreamAddressWriteResult.OVERWRITE;
                             default:
+                                log.trace("Write[{}] FAILED, unknown ({})!", offset, res.name());
                                 throw new RuntimeException("Unknown writeresult type: " + res.name());
                         }
                     }
@@ -148,9 +171,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
      */
     @Override
     public CompletableFuture<StreamAddressSpaceEntry> readAsync(long offset) {
-        //for now, we bypass the cache.
-        return load(offset);
-        //return cache.get(offset);
+        return cache.get(offset);
     }
 
     /**
@@ -197,6 +218,7 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         /* Flush the async loading cache. */
         cache.synchronous().invalidateAll();
         log.info("Stream address space loading cache reset.");
+        cache = buildCache();
     }
 
 

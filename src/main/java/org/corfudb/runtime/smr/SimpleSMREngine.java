@@ -116,19 +116,26 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
     public <R> void apply(IStreamEntry entry)
     {
-        log.trace("LearnApply[{}/{}]: Apply", entry.getTimestamp(), entry.getLogicalTimestamp());
-        if (entry.getPayload() != null && entry.getPayload() instanceof SMRCommand) {
-            SMRCommand command = (SMRCommand) entry.getPayload();
-            command.setInstance(getInstance());
-            ITimestamp entryTS = entry.getTimestamp();
-            CompletableFuture<R> completion = completionTable.get(entryTS);
-            completionTable.remove(entryTS);
-            R r = (R) command.execute(underlyingObject, this, entryTS);
-            if (completion != null) {
-                completion.complete(r);
+        try {
+            log.trace("LearnApply[{}/{}]: Apply", entry.getTimestamp(), entry.getLogicalTimestamp());
+            if (entry.getPayload() != null && entry.getPayload() instanceof SMRCommand) {
+                SMRCommand command = (SMRCommand) entry.getPayload();
+                command.setInstance(getInstance());
+                ITimestamp entryTS = entry.getTimestamp();
+                CompletableFuture<R> completion = completionTable.get(entryTS);
+                completionTable.remove(entryTS);
+                R r = (R) command.execute(underlyingObject, this, entryTS);
+                if (completion != null) {
+                    log.trace("LearnApply[{}/{}]: Completing Future.", entry.getTimestamp(), entry.getLogicalTimestamp());
+                    completion.complete(r);
+                }
             }
+            lastApplied = entry.getLogicalTimestamp();
         }
-        lastApplied = entry.getLogicalTimestamp();
+        catch (Exception e)
+        {
+            log.error("LearnApply[{}/{}]: Error during apply of entry!", e);
+        }
     }
 
     public synchronized void learnAndApply(IStreamEntry entry)
@@ -262,7 +269,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
 
         final ITimestamp[] proposalTimestamp = new ITimestamp[1];
         return stream.reserveAsync(1)
-                .thenApplyAsync(
+                .thenApply(
                         t -> {
                             log.trace("Proposal[{}]: Acquired token", t[0]);
                             if (completion != null) {
@@ -279,7 +286,7 @@ public class SimpleSMREngine<T> implements ISMREngine<T> {
                             }
                         }
                 )
-                .thenApplyAsync( r -> {
+                .thenApply( r -> {
                     log.trace("Proposal[{}]: Wrote proposal to stream", proposalTimestamp[0]);
                     lastProposal = proposalTimestamp[0]; //TODO: Should be max.
                     return proposalTimestamp[0];
