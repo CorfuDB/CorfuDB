@@ -74,7 +74,7 @@ public class CorfuDBView {
     private static final Logger log = LoggerFactory.getLogger(CorfuDBView.class);
 
     private long epoch;
-    private long pagesize;
+//    private long pagesize;
     private UUID logID;
     private boolean isInvalid = false;
     private static Map<String,Class<? extends IServerProtocol>> availableSequencerProtocols= getSequencerProtocolClasses();
@@ -86,23 +86,33 @@ public class CorfuDBView {
     private List<CorfuDBViewSegment> segments; //eventually this should be upgraded to rangemap or something..
     private List<IServerProtocol> layouts;
 
+    /**
+     * build a CorfuDB class representing the input layout-description.
+     * A bare-minimal layout contains only a layout-keeper port.
+     *
+     * @param jsonView A Json object containing the layout-description
+     */
     public CorfuDBView(JsonObject jsonView)
     {
-        epoch = jsonView.getJsonNumber("epoch").longValue();
-        pagesize = jsonView.getJsonNumber("pagesize").longValue();
-        logID = UUID.fromString(jsonView.getJsonString("logid").getString());
+        if (jsonView.getJsonNumber("epoch") != null)
+            epoch = jsonView.getJsonNumber("epoch").longValue();
+
+        if (jsonView.getJsonString("logid") != null)
+            logID = UUID.fromString(jsonView.getJsonString("logid").getString());
+
         LinkedList<String> lsequencers = new LinkedList<String>();
         for (JsonValue j : jsonView.getJsonArray("sequencer"))
         {
             lsequencers.add(((JsonString)j).getString());
         }
         sequencers = populateSequencersFromList(lsequencers);
-        LinkedList<String> lconfigmasters = new LinkedList<String>();
+
+        LinkedList<String> llayouts = new LinkedList<String>();
         for (JsonValue j : jsonView.getJsonArray("configmaster"))
         {
-            lconfigmasters.add(((JsonString)j).getString());
+            llayouts.add(((JsonString)j).getString());
         }
-        layouts = populateLayoutKeepersFromList(lconfigmasters);
+        layouts = populateLayoutKeepersFromList(llayouts);
 
         ArrayList<Map<String,Object>> lSegments = new ArrayList<Map<String,Object>>();
         for (JsonValue j : jsonView.getJsonArray("segments"))
@@ -144,8 +154,7 @@ public class CorfuDBView {
      * the configuration master to construct the inital view of the
      * system.
      *
-     * @param config    A configuration object from the parsed yml file.
-     */
+     * @param /* config    A configuration object from the parsed yml file.
     @SuppressWarnings("unchecked")
     public CorfuDBView(Map<String,Object> config)
     {
@@ -159,6 +168,7 @@ public class CorfuDBView {
         layouts = populateLayoutKeepersFromList((List<String>)config.get("configmasters"));
         segments = populateSegmentsFromList((List<Map<String,Object>>)((Map<String,Object>)config.get("layout")).get("segments"));
     }
+     */
 
     public JsonObject getSerializedJSONView()
     {
@@ -206,7 +216,7 @@ public class CorfuDBView {
         return Json.createObjectBuilder()
                                 .add("epoch", epoch)
                                 .add("logid", logID.toString())
-                                .add("pagesize", pagesize)
+//                                .add("pagesize", pagesize)
                                 .add("sequencer", sequencerObject)
                                 .add("configmaster", configmasterObject)
                                 .add("segments", segmentObject)

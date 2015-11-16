@@ -1,9 +1,8 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.protocols.sequencers.NettyStreamingSequencerProtocol;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
@@ -25,7 +24,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class NettyStreamingSequencerServerIT {
 
-    CorfuInfrastructureBuilder infrastructure;
     NettyStreamingSequencerProtocol proto;
     int port;
     @Rule
@@ -39,6 +37,7 @@ public class NettyStreamingSequencerServerIT {
     public void setup()
             throws Exception
     {
+        CorfuDBRuntimeIT.generateInstance().getNewStreamingSequencer();
         port = RandomOpenPort.getOpenPort();
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()

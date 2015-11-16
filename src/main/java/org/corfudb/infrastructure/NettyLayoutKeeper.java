@@ -65,8 +65,8 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
     }
 
     @Override
-    void parseConfiguration(Map<String, Object> configuration) {
-        log.info("NettyLayoutKeeper configuration {}", configuration);
+    void parseConfiguration(Map<String, Object> params) {
+        log.info("NettyLayoutKeeper configuration {}", params);
     }
 
     @Override
@@ -137,12 +137,6 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
             currentView.invalidate();
         }
         currentView = new CorfuDBView(newLayout);
-
-        // TODO the next part should be done by proposer or consensus engine?
-        UUID logID =  UUID.randomUUID();
-        log.info("New log instance id= " + logID.toString());
-        currentView.setLogID(logID);
-
     }
 
     private Thread monitor() {

@@ -1,8 +1,10 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.infrastructure.thrift.Hints;
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.stream.IStream;
+import org.corfudb.runtime.view.IViewJanitor;
+import org.corfudb.runtime.view.LocalCorfuDBInstance;
 import org.corfudb.runtime.view.ViewJanitor;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 
@@ -21,7 +23,6 @@ public class CDBSimpleMapLLTest {
     ICorfuDBInstance instance;
     static public CDBSimpleMap<Integer, Integer> testMap;
     UUID streamID;
-    CorfuDBRuntime cdr;
 
     public void checkTxDec(long address, boolean expected) throws Exception {
         Hints hint = instance.getAddressSpace().readHints(address);
@@ -32,10 +33,10 @@ public class CDBSimpleMapLLTest {
    // @Before
     public void generateStream() throws Exception
     {
-        cdr = CorfuDBRuntime.createRuntime("memory");
-        ViewJanitor cm = new ViewJanitor(cdr);
+        instance = new LocalCorfuDBInstance(CorfuDBRuntimeIT.view);
+        IViewJanitor cm = instance.getViewJanitor();
         cm.resetAll();
-        instance = cdr.getLocalInstance();
+
         streamID = UUID.randomUUID();
         s = instance.openStream(streamID);
         testMap = instance.openObject(streamID, CDBSimpleMap.class);

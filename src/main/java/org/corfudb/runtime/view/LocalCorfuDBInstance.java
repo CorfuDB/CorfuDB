@@ -45,6 +45,11 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private Class<? extends IStream> streamType;
 
 
+    public LocalCorfuDBInstance(CorfuDBView view)
+            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+        this(view.getSerializedJSONView());
+    }
+
     public LocalCorfuDBInstance(JsonObject bootstrapLayout)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
@@ -57,7 +62,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     {
         CorfuDBView view = new CorfuDBView(bootsrapLayout);
 
-        viewJanitor = cm.getConstructor(ICorfuDBInstance.class).newInstance(this);
+        viewJanitor = cm.getConstructor(CorfuDBView.class).newInstance(view);
         streamingSequencer = ss.getConstructor(ICorfuDBInstance.class).newInstance(this);
         addressSpace = as.getConstructor(ICorfuDBInstance.class).newInstance(this);
         streamAddressSpace = new StreamAddressSpace(this);

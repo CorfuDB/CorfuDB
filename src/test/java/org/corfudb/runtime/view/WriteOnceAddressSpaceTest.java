@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.junit.Assert.assertEquals;
@@ -13,10 +13,11 @@ public class WriteOnceAddressSpaceTest extends IWriteOnceAddressSpaceTest {
     @Override
     public IWriteOnceAddressSpace getAddressSpace()
     {
-        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("memory");
-        ViewJanitor cm = new ViewJanitor(cdr);
+        LocalCorfuDBInstance instance = CorfuDBRuntimeIT.generateInstance();
+        IViewJanitor cm = instance.getViewJanitor();
         cm.resetAll();
-        return new WriteOnceAddressSpace(cdr);
+
+        return new WriteOnceAddressSpace(instance);
     }
 
 }

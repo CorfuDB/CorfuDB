@@ -1,6 +1,5 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.view.ICorfuDBInstance;

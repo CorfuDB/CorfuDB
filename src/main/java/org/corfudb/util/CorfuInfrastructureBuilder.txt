@@ -24,6 +24,8 @@ public class CorfuInfrastructureBuilder {
     Map<String, Object> layoutMap;
     List<Map<String,Object>> segmentMap;
 
+    CorfuDBView view;
+
     int metadataKeeperPort;
 
     @SuppressWarnings("unchecked")
@@ -102,36 +104,44 @@ public class CorfuInfrastructureBuilder {
         return this;
     }
 
-
-    /**
-     * Start the system by initializing the MetaDataKeeper at the specified port and running each server.
+    /** construct a view from the parameters-map so far
+     *
      * @param metadataKeeperPort     The port to run the MetaDataKeeper on.
      */
-    @SneakyThrows
-    @SuppressWarnings("unchecked")
-    public CorfuInfrastructureBuilder start(int metadataKeeperPort)
-    {
+    public CorfuInfrastructureBuilder getView(int metadataKeeperPort) {
         ((LinkedList<String>)configMap.get("configmasters")).add("cdbmk://localhost:" + metadataKeeperPort);
 
         // start MetaDataKeeper
         //
         this.metadataKeeperPort = metadataKeeperPort;
-        Map<String, Object> params = new HashMap<>();
-        params.put("port", metadataKeeperPort);
-
-        NettyLayoutKeeper cms = new NettyLayoutKeeper();
-        ICorfuDBServer r = cms.getInstance(params);
-
-        r.start();
-        runningServers.add(r);
-        Thread.sleep(1000);
-        log.info("metadata-keeper started...");
 
         //install initial layout
         //
         CorfuDBView view = new CorfuDBView(configMap);
         view.setLogID(UUID.randomUUID());
         ( (ILayoutKeeper) view.getLayouts().get(0)).setBootstrapView(view.getSerializedJSONView());
+
+        return this;
+    }
+
+
+    /**
+     * Start the system by initializing the MetaDataKeeper at the specified port and running every component.
+     */
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    public CorfuDBView start()
+    {
+        Map<String, Object> params = new HashMap<>();
+        params.put("port", metadataKeeperPort);
+
+        NettyLayoutKeeper cms = new NettyLayoutKeeper();
+        ICorfuDBServer layoutKeeper = cms.getInstance(params);
+
+        layoutKeeper.start();
+        runningServers.add(layoutKeeper);
+        Thread.sleep(1000);
+        log.info("metadata-keeper started...");
 
 
         // start all components
@@ -155,7 +165,7 @@ public class CorfuInfrastructureBuilder {
                 }
             }
         });
-       return this;
+       return this.view;
     }
 
     /**
