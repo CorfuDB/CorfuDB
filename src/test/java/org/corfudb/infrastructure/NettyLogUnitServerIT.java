@@ -1,10 +1,14 @@
 package org.corfudb.infrastructure;
 
 import io.netty.util.ResourceLeakDetector;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.logunits.NettyLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.NettyStreamingSequencerProtocol;
 import org.corfudb.runtime.view.ICorfuDBInstance;
+import org.corfudb.runtime.view.IStreamAddressSpace;
+import org.corfudb.runtime.view.IWriteOnceAddressSpace;
+import org.corfudb.runtime.view.WriteOnceAddressSpace;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
@@ -27,9 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class NettyLogUnitServerIT {
 
-    CorfuInfrastructureBuilder infrastructure;
-    NettyLogUnitProtocol proto;
-    int port;
+    IStreamAddressSpace proto;
     @Rule
     public TestRule watcher = new TestWatcher() {
         protected void starting(Description description) {
@@ -42,13 +44,7 @@ public class NettyLogUnitServerIT {
     public void setup()
             throws Exception
     {
-        port = RandomOpenPort.getOpenPort();
-        infrastructure =
-                CorfuInfrastructureBuilder.getBuilder()
-                        .addLoggingUnit(port, 0, NettyLogUnitServer.class, "nlu", new HashMap<String,Object>())
-                        .start(7775);
-        proto =
-        new NettyLogUnitProtocol("localhost", port, Collections.emptyMap(), 0);
+        proto = CorfuDBRuntimeIT.generateInstance().getStreamAddressSpace();
     }
 
     @Test
@@ -57,10 +53,10 @@ public class NettyLogUnitServerIT {
     {
         UUID streamID = UUID.randomUUID();
         String test = "Hello World";
-        INewWriteOnceLogUnit.WriteResult wr = proto.write(0, Collections.singleton(streamID), 0, test).join();
+        IStreamAddressSpace.StreamAddressWriteResult wr = proto.writeAsync(0, Collections.singleton(streamID), test).join();
         assertThat(wr)
                 .isEqualTo(INewWriteOnceLogUnit.WriteResult.OK);
-        INewWriteOnceLogUnit.ReadResult rr = proto.read(0).join();
+        IStreamAddressSpace.StreamAddressSpaceEntry rr = proto.readAsync(0).join();
 
         assertThat(rr.getPayload())
                 .isEqualTo(test);
@@ -70,9 +66,6 @@ public class NettyLogUnitServerIT {
 
         assertThat(rr.getStreams())
                 .hasSize(1);
-
-        assertThat(rr.getRank())
-                .isEqualTo(0);
     }
 
     @Test
@@ -80,22 +73,22 @@ public class NettyLogUnitServerIT {
             throws Exception {
         UUID streamID = UUID.randomUUID();
         String test = "Hello World";
-        List<CompletableFuture<INewWriteOnceLogUnit.WriteResult>> cfList = new ArrayList<>();
+        List<CompletableFuture<IStreamAddressSpace.StreamAddressWriteResult>> cfList = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
-            cfList.add(proto.write(0, Collections.singleton(streamID), 0, test));
+            cfList.add(proto.writeAsync(0, Collections.singleton(streamID), test));
         }
         CompletableFuture.allOf(cfList.toArray(new CompletableFuture[cfList.size()])).join();
 
         long okCount = cfList.stream()
                 .map(CompletableFuture::join)
-                .filter(wr -> wr == INewWriteOnceLogUnit.WriteResult.OK)
+                .filter(wr -> wr == IStreamAddressSpace.StreamAddressWriteResult.OK)
                 .count();
         assertThat(okCount)
                 .isEqualTo(1);
 
         long overwriteCount = cfList.stream()
                 .map(CompletableFuture::join)
-                .filter(wr -> wr == INewWriteOnceLogUnit.WriteResult.OVERWRITE)
+                .filter(wr -> wr == IStreamAddressSpace.StreamAddressWriteResult.OVERWRITE)
                 .count();
         assertThat(overwriteCount)
                 .isEqualTo(999);
@@ -106,45 +99,35 @@ public class NettyLogUnitServerIT {
             throws Exception {
         UUID streamID = UUID.randomUUID();
         String test = "Hello World";
-        List<CompletableFuture<INewWriteOnceLogUnit.ReadResult>> cfList = new ArrayList<>();
+        List<CompletableFuture<IStreamAddressSpace.StreamAddressSpaceEntry>> cfList = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
             proto.fillHole(i);
         }
         Thread.sleep(500);
         for (int i = 0; i < 1000; i++) {
-            cfList.add(proto.read(0));
+            cfList.add(proto.readAsync(0));
         }
         CompletableFuture.allOf(cfList.toArray(new CompletableFuture[cfList.size()])).join();
 
         long holeCount = cfList.stream()
                 .map(CompletableFuture::join)
-                .filter(rr -> rr.getResult() == INewWriteOnceLogUnit.ReadResultType.FILLED_HOLE)
+                .filter(rr -> rr.getCode() == IStreamAddressSpace.StreamAddressEntryCode.HOLE)
                 .count();
 
         assertThat(holeCount)
                 .isEqualTo(1000);
 
-        List<CompletableFuture<INewWriteOnceLogUnit.WriteResult>> cfListWrite = new ArrayList<>();
+        List<CompletableFuture<IStreamAddressSpace.StreamAddressWriteResult>> cfListWrite = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
-            cfListWrite.add(proto.write(0, Collections.singleton(streamID), 0, test));
+            cfListWrite.add(proto.writeAsync(0, Collections.singleton(streamID), test));
         }
 
         long overwriteCount = cfListWrite.stream()
                 .map(CompletableFuture::join)
-                .filter(wr -> wr == INewWriteOnceLogUnit.WriteResult.OVERWRITE)
+                .filter(wr -> wr == IStreamAddressSpace.StreamAddressWriteResult.OK)
                 .count();
 
         assertThat(overwriteCount)
                 .isEqualTo(1000);
     }
-
-
-
-    @After
-    public void tearDown()
-            throws Exception
-    {
-        infrastructure.shutdownAndWait();
-    }
-
 }

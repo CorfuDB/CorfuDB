@@ -1,6 +1,6 @@
 package org.corfudb.runtime.stream;
 
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.HoleEncounteredException;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
@@ -22,15 +22,13 @@ import java.util.UUID;
 public class SimpleStreamTest {
 
     SimpleStream s;
-    CorfuDBRuntime cdr;
     ICorfuDBInstance instance;
 
     @Before
     public void generateStream()
     {
         MemoryConfigMasterProtocol.inMemoryClear();
-        cdr = CorfuDBRuntime.createRuntime("memory");
-        instance = cdr.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
         s = (SimpleStream) instance.openStream(UUID.randomUUID());
     }
 

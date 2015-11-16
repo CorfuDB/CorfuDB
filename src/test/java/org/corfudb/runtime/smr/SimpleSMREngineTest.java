@@ -1,6 +1,6 @@
 package org.corfudb.runtime.smr;
 
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.stream.ITimestamp;
 import org.corfudb.runtime.stream.SimpleStream;
@@ -26,9 +26,7 @@ public class SimpleSMREngineTest {
    // @Before
     public void generateStream()
     {
-        MemoryConfigMasterProtocol.inMemoryClear();
-        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("memory");
-        instance = cdr.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
         s = (SimpleStream) instance.openStream(UUID.randomUUID());
     }
 

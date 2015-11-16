@@ -1,9 +1,8 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.protocols.sequencers.NettyStreamingSequencerProtocol;
-import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
@@ -24,9 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class NewStreamingSequencerTest {
 
-    CorfuInfrastructureBuilder infrastructure;
-    CorfuDBRuntime runtime;
-    int port;
+    LocalCorfuDBInstance instance;
+
     @Rule
     public TestRule watcher = new TestWatcher() {
         protected void starting(Description description) {
@@ -38,12 +36,7 @@ public class NewStreamingSequencerTest {
     public void setup()
             throws Exception
     {
-        port = RandomOpenPort.getOpenPort();
-        infrastructure =
-                CorfuInfrastructureBuilder.getBuilder()
-                        .addSequencer(port, NettyStreamingSequencerServer.class, "nsss", null)
-                        .start(RandomOpenPort.getOpenPort());
-        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
+        instance = CorfuDBRuntimeIT.generateInstance();
     }
 
     @Test
@@ -53,7 +46,7 @@ public class NewStreamingSequencerTest {
         final int NUM_REQUESTS = 1000;
         for (int i = 0; i < NUM_REQUESTS; i++)
         {
-            futures.add(runtime.getLocalInstance().getNewStreamingSequencer().nextTokenAsync(UUID.randomUUID(), 1));
+            futures.add(instance.getNewStreamingSequencer().nextTokenAsync(UUID.randomUUID(), 1));
         }
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()])).join();
         Set<Long> allItems = new HashSet<>();
@@ -74,11 +67,11 @@ public class NewStreamingSequencerTest {
     public void sequenceNumbersAreIncreasing()
             throws Exception
     {
-        runtime.getLocalInstance().getNewStreamingSequencer().nextTokenAsync(UUID.randomUUID(), 1)
+        instance.getNewStreamingSequencer().nextTokenAsync(UUID.randomUUID(), 1)
                 .thenApplyAsync((Long l) -> {
                             Long next = l;
                             try {
-                                next = runtime.getLocalInstance().getNewStreamingSequencer().nextTokenAsync(UUID.randomUUID(), 1).get();
+                                next = instance.getNewStreamingSequencer().nextTokenAsync(UUID.randomUUID(), 1).get();
                             } catch (Exception e) {
                                 assertThat(e)
                                         .isNull();
@@ -90,7 +83,7 @@ public class NewStreamingSequencerTest {
                 ).thenApplyAsync((Long l) -> {
                     Long next = l;
                     try {
-                        next = runtime.getLocalInstance().getNewStreamingSequencer().nextTokenAsync(UUID.randomUUID(), 1).get();
+                        next = instance.getNewStreamingSequencer().nextTokenAsync(UUID.randomUUID(), 1).get();
                     } catch (Exception e) {
                         assertThat(e)
                                 .isNull();
@@ -99,12 +92,5 @@ public class NewStreamingSequencerTest {
                             .isGreaterThan(l);
                     return l;
                 }).join();
-    }
-
-    @After
-    public void shutdown()
-        throws Exception
-    {
-        infrastructure.shutdownAndWait();
     }
 }
