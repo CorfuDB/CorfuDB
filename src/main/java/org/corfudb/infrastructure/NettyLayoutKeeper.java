@@ -19,7 +19,6 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
 import org.corfudb.infrastructure.wireprotocol.NettyLayoutConfigMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyLayoutBooleanMsg;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.view.CorfuDBView;
 
@@ -29,13 +28,8 @@ import org.slf4j.Logger;
 
 import java.util.*;
 
+import javax.json.Json;
 import javax.json.JsonObject;
-
-/*
-import com.esotericsoftware.kryonet.Server;
-import com.esotericsoftware.kryonet.Listener;
-import com.esotericsoftware.kryonet.Connection;
-*/
 
 /**
  * This class participates in keeping consensus about meta-data.
@@ -75,30 +69,55 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
         // todo: if not bootstrapped yet, ignore all by bootsrapLayout requests
 
         log.info("Received request of type {}", corfuMsg.getMsgType());
+        NettyLayoutConfigMsg m = (NettyLayoutConfigMsg)corfuMsg;
         switch (corfuMsg.getMsgType())
         {
             case META_PROPOSE_REQ: {
-                NettyLayoutConfigMsg m = (NettyLayoutConfigMsg)corfuMsg;
+                commitLayout.putHighPhase2Proposal(m.getEpoch(), m.getRank(), m.getJo());
 
-                commitLayout.commitProposal(m.getJo()); // TODO this should use 2-step protocol, unless rank == -1 ?
-                reconfig(m.getJo());
-                if (monitorThread == null) monitorThread = monitor();
-
-                NettyLayoutBooleanMsg resp = new NettyLayoutBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_RES, true);
+                NettyLayoutConfigMsg resp = new NettyLayoutConfigMsg(
+                        NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_RES,
+                        commitLayout.getEpoch(),
+                        commitLayout.getHighPhase1Rank()
+                );
                 sendResponse(resp, corfuMsg, ctx);
                 break;
             }
 
             case META_COLLECT_REQ: {
-                NettyLayoutConfigMsg resp = null;
-                if (commitLayout.getCommitState() == null)
-                    resp = new NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_RES, -1, null);
-                else
-                    resp = new NettyLayoutConfigMsg(
+                commitLayout.getHighPhase2Proposal(m.getEpoch(), m.getRank());
+
+                NettyLayoutConfigMsg resp =
+                    new NettyLayoutConfigMsg(
                             NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_RES,
                             commitLayout.getEpoch(),
-                            commitLayout.getCommitState().getCurrentLayout()
+                            commitLayout.getHighPhase2Rank()
                     );
+
+                if (commitLayout.getCommitState() != null)
+                    resp.setJo(commitLayout.commitState.getCurrentLayout());
+                log.info("layout response {}", resp);
+                sendResponse(resp, corfuMsg, ctx);
+                break;
+            }
+
+            case META_COMMIT: {
+                commitLayout.commitProposal(m.getJo()); // TODO this should use 2-step protocol, unless rank == -1 ?
+                reconfig(m.getJo());
+                if (monitorThread == null) monitorThread = monitor();
+                break;
+            }
+
+            case META_QUERY_REQ: {
+                NettyLayoutConfigMsg resp =
+                        new NettyLayoutConfigMsg(
+                                NettyCorfuMsg.NettyCorfuMsgType.META_QUERY_RES,
+                                commitLayout.getEpoch(),
+                                commitLayout.getHighPhase2Rank()
+                        );
+
+                if (commitLayout.getCommitState() != null)
+                    resp.setJo(commitLayout.commitState.getCurrentLayout());
                 log.info("layout response {}", resp);
                 sendResponse(resp, corfuMsg, ctx);
                 break;
@@ -109,17 +128,21 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
 
                 synchronized (monitorThread) {
                     if (newProposal != null) { // reject; handle leader roles one at a time
-                        NettyLayoutBooleanMsg resp = new NettyLayoutBooleanMsg(NettyCorfuMsg.NettyCorfuMsgType.META_LEADER_RES, false);
-                        sendResponse(resp, corfuMsg, ctx);
+                        NettyLayoutConfigMsg resp = new NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType.META_LEADER_RES,
+                                commitLayout.getEpoch(),
+                                commitLayout.highPhase1Rank
+                        );
+                        // todo ? sendResponse(resp, corfuMsg, ctx);
                     } else {
-                        NettyLayoutConfigMsg m = (NettyLayoutConfigMsg)corfuMsg;
                         newProposal = m.getJo();
                         monitorThread.interrupt();
                     }
                 }
+                break;
             }
 
             default:
+                log.warn("unrecognized Layout keeper message type {}", corfuMsg.getMsgType());
                 break;
         }
     }
@@ -180,39 +203,32 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
     @Getter
     public class ConsensusKeeper<T extends ConsensusObject> {
 
-        private int highPhase1Rank;
-        int highPhase2Rank;
+        private long highPhase1Rank;
+        long highPhase2Rank;
         Object highPhase2Proposal;
-        int epoch;
+        long epoch;
 
         T commitState = null;
 
         ConsensusKeeper(T initialState) { this.commitState = initialState; }
 
-        Object getHighPhase2Proposal(int rank) {
-            if (rank > highPhase1Rank) {
+        ConsensusKeeper<T> getHighPhase2Proposal(long epoch, long rank) {
+            if (rank > highPhase1Rank)
                 highPhase1Rank = rank;
-                return highPhase2Proposal;
-            } else {
-                return null;
-            }
+            return this;
         }
 
 
         /**
          * @param rank
          * @param proposal
-         * @return 0 means proposal accepted, -1 means it is rejected
          */
-        int putHighPhase2Proposal(int epoch, int rank, Object proposal) {
-            if (rank >= highPhase1Rank) {
+        void putHighPhase2Proposal(long epoch, long rank, Object proposal) {
+            if (epoch >= this.epoch && rank >= highPhase1Rank) {
                 // accept proposal
                 highPhase2Rank = highPhase1Rank = rank;
                 highPhase2Proposal = proposal;
                 // todo should we learn from the proposal if a higher epoch has been installed by other layout servers already?
-                return 0;
-            } else {
-                return -1;
             }
         }
 
