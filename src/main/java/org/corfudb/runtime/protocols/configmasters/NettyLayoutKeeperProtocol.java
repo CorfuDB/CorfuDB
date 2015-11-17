@@ -1,5 +1,8 @@
 package org.corfudb.runtime.protocols.configmasters;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.infrastructure.wireprotocol.*;
 import org.corfudb.runtime.protocols.AbstractNettyProtocol;
 import org.corfudb.runtime.protocols.IServerProtocol;
@@ -34,16 +37,22 @@ public class NettyLayoutKeeperProtocol extends AbstractNettyProtocol<NettyLayout
 
     public CompletableFuture<JsonObject> getCurrentView() {
         log.info("try to get current view");
-        NettyLayoutQueryMsg r = new NettyLayoutQueryMsg(NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_REQ, 0);
+        NettyLayoutConfigMsg r = new NettyLayoutConfigMsg(
+                NettyCorfuMsg.NettyCorfuMsgType.META_QUERY_REQ,
+                getEpoch(),
+                -1);
         CompletableFuture<JsonObject> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
         log.info("wait for current view via completableFuture");
         return ret;
     }
 
-    public CompletableFuture<Boolean> proposeNewView(int rank, JsonObject jo) {
+    public CompletableFuture<LayoutKeeperInfo> proposeNewView(int rank, JsonObject jo) {
         log.info("try to set new view");
-        NettyLayoutConfigMsg r = new NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_REQ, rank, jo);
-        CompletableFuture<Boolean> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
+        NettyLayoutConfigMsg r = new NettyLayoutConfigMsg(
+                NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_REQ,
+                getEpoch(),
+                rank, jo);
+        CompletableFuture<LayoutKeeperInfo> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
         log.info("wait for propose ack via completableFuture");
         return ret;
 
@@ -55,16 +64,19 @@ public class NettyLayoutKeeperProtocol extends AbstractNettyProtocol<NettyLayout
         @Override
         public void handleMessage(NettyCorfuMsg message)
         {
+            NettyLayoutConfigMsg m = (NettyLayoutConfigMsg) message;
+
             switch (message.getMsgType())
             {
                 case PONG:
                     completeRequest(message.getRequestID(), true);
                     break;
                 case META_COLLECT_RES:
-                    completeRequest(message.getRequestID(), ((NettyLayoutConfigMsg)message).getJo());
-                    break;
                 case META_PROPOSE_RES:
-                    completeRequest(message.getRequestID(), ((NettyLayoutBooleanMsg)message).isAck());
+                    completeRequest(message.getRequestID(), new LayoutKeeperInfo(m.getEpoch(), m.getRank(), m.getJo()));
+                    break;
+                case META_QUERY_RES:
+                    completeRequest(message.getRequestID(), m.getJo());
                     break;
             }
         }
@@ -84,7 +96,6 @@ public class NettyLayoutKeeperProtocol extends AbstractNettyProtocol<NettyLayout
 
     @Override
     public void setBootstrapView(JsonObject initialView) {
-        boolean ack = proposeNewView(-1, initialView).join();
-        log.info("propose ack={}", ack);
+        proposeNewView(-1, initialView).join(); // todo ...
     }
 }

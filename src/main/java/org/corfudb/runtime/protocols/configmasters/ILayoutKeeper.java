@@ -1,5 +1,8 @@
 package org.corfudb.runtime.protocols.configmasters;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.view.CorfuDBView;
 
@@ -11,8 +14,17 @@ import java.util.concurrent.CompletableFuture;
  */
 public interface ILayoutKeeper extends IServerProtocol {
 
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    public class LayoutKeeperInfo {
+        long epoch;
+        long rank;
+        JsonObject jo;
+    }
+
     public CompletableFuture<JsonObject> getCurrentView();
-    public CompletableFuture<Boolean> proposeNewView(int rank, JsonObject jo);
+    public CompletableFuture<LayoutKeeperInfo> proposeNewView(int rank, JsonObject jo);
 
         /**
          * Gets the current view from the configuration master.
