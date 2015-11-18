@@ -48,40 +48,22 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     // Classes to instantiate.
     private Class<? extends IStream> streamType;
 
-
-    public LocalCorfuDBInstance(CorfuDBView view)
+    public LocalCorfuDBInstance(int myLayoutIndex)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
-        this(view.getSerializedJSONView());
-    }
-
-    public LocalCorfuDBInstance(CorfuDBView view, int myLayoutIndex)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
-        this(view.getSerializedJSONView(), myLayoutIndex);
-    }
-
-    public LocalCorfuDBInstance(JsonObject bootstrapLayout)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
-        this(bootstrapLayout, -1);
-    }
-
-    public LocalCorfuDBInstance(JsonObject bootstrapLayout, int myLayoutIndex)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
-    {
-        this(bootstrapLayout, myLayoutIndex, ViewJanitor.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
+        this(myLayoutIndex, ViewJanitor.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
                 NewStream.class);
     }
 
-    public LocalCorfuDBInstance(JsonObject bootsrapLayout, int myLayoutIndex,
+    public LocalCorfuDBInstance(int myLayoutIndex,
                                 Class<? extends IViewJanitor> cm,
                                 Class<? extends IStreamingSequencer> ss,
                                 Class<? extends IWriteOnceAddressSpace> as,
                                 Class<? extends IStream> streamType)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        CorfuDBView view = new CorfuDBView(bootsrapLayout);
         this.myLayoutIndex = myLayoutIndex;
 
-        viewJanitor = cm.getConstructor(CorfuDBView.class).newInstance(view);
+        viewJanitor = cm.getConstructor(ICorfuDBInstance.class).newInstance(this);
         log.trace("local instance has a janitor initialized");
         streamingSequencer = new StreamingSequencer(this); // ss.getConstructor(ICorfuDBInstance.class).newInstance(this);
         log.trace("local instance has a sequencer initialized");

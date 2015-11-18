@@ -1,6 +1,5 @@
 package org.corfudb.runtime.smr;
 import org.corfudb.runtime.CorfuDBRuntimeIT;
-import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.IViewJanitor;
 import org.corfudb.runtime.view.ViewJanitor;

@@ -18,8 +18,11 @@ public class ViewMonitor {
     public Thread monitor () {
         return new Thread(() -> {
             IViewJanitor janitor = instance.getViewJanitor();
+            IReconfigurationPolicy reconfig = new SimpleReconfigurationPolicy();
 
             for (; ; ) {
+                CorfuDBView view = instance.getView(); // todo should we really do this every time??
+
                 try {
                     Thread.sleep(3000);
                 } catch (InterruptedException e) {
@@ -31,10 +34,9 @@ public class ViewMonitor {
                 if (faulty == null) continue;
                 log.warn("removing fault unit {} from configuration", faulty.getFullString());
 
-                janitor.driveReconfiguration(faulty);
+                // todo
+                janitor.driveReconfiguration(reconfig.prepareReconfigProposal(view, faulty).getSerializedJSONView());
             }
         });
-    }
-
     }
 }
