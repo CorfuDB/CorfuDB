@@ -6,8 +6,7 @@ import org.corfudb.infrastructure.ICorfuDBServer;
 import org.corfudb.infrastructure.NettyLayoutKeeper;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
-import org.corfudb.runtime.view.CorfuDBView;
-import org.corfudb.runtime.view.CorfuDBViewSegment;
+import org.corfudb.runtime.view.*;
 
 import javax.json.*;
 import java.lang.reflect.Constructor;
@@ -129,7 +128,6 @@ public class CorfuITBuilder {
         params.put("port", layoutKeeperPort);
 
         ICorfuDBServer layoutKeeper = new NettyLayoutKeeper().getInstance(params);
-        ((NettyLayoutKeeper)layoutKeeper).reconfig(view.getSerializedJSONView());
         layoutKeeper.start();
         runningServers.add(layoutKeeper);
         Thread.sleep(1000);
@@ -157,9 +155,14 @@ public class CorfuITBuilder {
             }
         });
 
+        ((NettyLayoutKeeper)layoutKeeper).reconfig(view.getSerializedJSONView());
         // set bootstrap view
-        //( (ILayoutKeeper) view.getLayouts().get(0)).setBootstrapView(view.getSerializedJSONView());
+        // ( (ILayoutKeeper) view.getLayouts().get(0)).setBootstrapView(view.getSerializedJSONView());
 
+        // start monitor thread
+        //
+        ICorfuDBInstance instance = new LocalCorfuDBInstance(0);
+        new ViewMonitor(instance);
 
         return this.view;
     }

@@ -28,10 +28,11 @@ public class ViewJanitor implements IViewJanitor {
     final ICorfuDBInstance instance;
 
     IReconfigurationPolicy reconfig = new SimpleReconfigurationPolicy();
+    private CorfuDBView cachedView = null;
 
     public void resetAll() {
         IRetry.build(ExponentialBackoffRetry.class, () -> {
-            List<IServerProtocol> layouts = instance.getView().getLayouts();
+            List<IServerProtocol> layouts = cachedView.getLayouts();
             IServerProtocol firstEntry = layouts.get(0);
             ILayoutKeeper l = (ILayoutKeeper) firstEntry;
             l.reset(0);
@@ -41,18 +42,29 @@ public class ViewJanitor implements IViewJanitor {
         .run();
     }
 
-    public CorfuDBView getView() { return instance.getView(); }
+    public CorfuDBView getView() {
+        if (cachedView == null) {
+            for (IServerProtocol s : cachedView.getLayouts()) {
+                ILayoutKeeper lk = (ILayoutKeeper) s;
+                CorfuDBView tmp = lk.getView();
+                if (cachedView == null ||
+                        tmp.getEpoch() > cachedView.getEpoch())
+                    cachedView = tmp;
+            }
+        }
+        return cachedView;
+    }
 
     @Override
     public void reconfig(NetworkException e) {
         // prepare a reconfig-proposal (Json format)
         //
-        CorfuDBView newView = reconfig.prepareReconfigProposal(instance.getView(), e);
+        CorfuDBView newView = reconfig.prepareReconfigProposal(cachedView, e);
         JsonObject newLayout = newView.getSerializedJSONView();
 
         // get a proxy layout-keeper to drive the reconfiguration proposal on our behalf
         //
-        for (IServerProtocol s : instance.getView().getLayouts()) {
+        for (IServerProtocol s : cachedView.getLayouts()) {
             ILayoutKeeper leader = (ILayoutKeeper) s;
             try {
                 leader.proposeNewView(-1, newLayout);
@@ -72,13 +84,24 @@ public class ViewJanitor implements IViewJanitor {
      * @param min lower bound for rank
      */
     private void chooseRank(long min) {
-        long rounding = instance.getView().getLayouts().size();
+        long rounding = cachedView.getLayouts().size();
         myRank = (min / rounding + 1)*rounding + instance.getMyLayoutIndex();
     }
 
     /**
      * this method is meant for use only by a wannabe-leader , usually the first layout-keeper of a configuration.
      * client runtime should use @reconfig .
+     *
+     * this method implements a 2-phase consensus protocol, forming agreement on a configuration-change for this epoch.
+     *
+     * our agreement protocol needs to reach a majority twice:
+     *   - once to establish a high rank (via 'collectView()' ),
+     *   - and once to propose reconfiguration (via 'proposeNewView()' ).
+     *
+     * In both phases, we send proposals to the entire set of participants asynchronously, and wait for a quorum of responses.
+     * Because each RPC invokation is asynchronous, we set a countdown-latch 'l' which is decremented by every future completion.
+     * We initialize the latch to (configuration-size+1)/2, so it reachs zero when a majority of the configuration has responded.
+     * A completion also record whether any rejection response has been received, using a boolean 'accept'
      *
      * @param newLayout a proposed new configuration
      */
@@ -88,21 +111,18 @@ public class ViewJanitor implements IViewJanitor {
             return;
         }
 
-        // our agreement protocol needs to reach a majority twice, once to establish a high rank, and one to propose reconfiguration.
-        //
-        // we send proposals to the entire set of participants asyncornously, and wait for responses.
-        // we set a countdown-latch l to reach zero when a majority of the configuration has responded
-        // we set a boolean flag proposalAccepted to record any rejection response
-        //
         if (myRank < 0) chooseRank(myRank);
 
         // first phase
         //
-        CountDownLatch l = new CountDownLatch((instance.getView().getLayouts().size()+1)/2);
+        CountDownLatch l = new CountDownLatch((cachedView.getLayouts().size()+1)/2);
         AtomicBoolean accept = new AtomicBoolean(true);
 
-        for (IServerProtocol s : instance.getView().getLayouts()) {
+        for (IServerProtocol s : cachedView.getLayouts()) {
             ILayoutKeeper ss = (ILayoutKeeper) s;
+
+            // invoke 'collectView()' on all layout-keeper servers
+            //
             ss.collectView(myRank).thenAccept((layoutKeeperInfo) -> {
                 if (layoutKeeperInfo.getEpoch() != newLayout.getJsonNumber("epoch").longValue()) {
                     log.warn("epoch is different, cannot drive reconfiguration");
@@ -135,11 +155,14 @@ public class ViewJanitor implements IViewJanitor {
 
         // phase 2
         //
-        CountDownLatch l2 = new CountDownLatch((instance.getView().getLayouts().size()+1)/2);
+        CountDownLatch l2 = new CountDownLatch((cachedView.getLayouts().size()+1)/2);
         AtomicBoolean accept2 = new AtomicBoolean(true);
 
-        for (IServerProtocol s : instance.getView().getLayouts()) {
+        for (IServerProtocol s : cachedView.getLayouts()) {
             ILayoutKeeper ss = (ILayoutKeeper) s;
+
+            // invoke 'proposeNewView()' on all layout-keeper servers
+            //
             ss.proposeNewView(myRank, newLayout).thenAccept((layoutKeeperInfo) -> {
                 if (layoutKeeperInfo.getEpoch() != newLayout.getJsonNumber("epoch").longValue()) {
                     log.warn("epoch is different, cannot drive reconfiguration");
@@ -176,7 +199,7 @@ public class ViewJanitor implements IViewJanitor {
     @Override
     public IServerProtocol isViewAccessible()
     {
-        for (IServerProtocol sequencer : instance.getView().getSequencers())
+        for (IServerProtocol sequencer : cachedView.getSequencers())
         {
             if (!sequencer.ping()) {
                 log.debug("View acessibility check failed, couldn't connect to: " + sequencer.getFullString());
@@ -184,7 +207,7 @@ public class ViewJanitor implements IViewJanitor {
             }
         }
 
-        for (CorfuDBViewSegment vs : instance.getView().getSegments())
+        for (CorfuDBViewSegment vs : cachedView.getSegments())
         {
             for (List<IServerProtocol> group : vs.getGroups())
             {
@@ -206,12 +229,12 @@ public class ViewJanitor implements IViewJanitor {
      */
     public void sealEpoch(long epoch)
     {
-        for (IServerProtocol sequencer : instance.getView().getSequencers())
+        for (IServerProtocol sequencer : cachedView.getSequencers())
         {
             sequencer.setEpoch(epoch);
         }
 
-        for (CorfuDBViewSegment vs : instance.getView().getSegments())
+        for (CorfuDBViewSegment vs : cachedView.getSegments())
         {
             for (List<IServerProtocol> group : vs.getGroups()) {
                 for (IServerProtocol logunit : group) {

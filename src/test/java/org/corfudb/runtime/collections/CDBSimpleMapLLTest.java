@@ -33,7 +33,7 @@ public class CDBSimpleMapLLTest {
    // @Before
     public void generateStream() throws Exception
     {
-        instance = new LocalCorfuDBInstance(CorfuDBRuntimeIT.view);
+        instance = CorfuDBRuntimeIT.generateInstance();
         IViewJanitor cm = instance.getViewJanitor();
         cm.resetAll();
 

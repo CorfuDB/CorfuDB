@@ -45,7 +45,7 @@ public class CorfuDBRuntimeIT {
 
     @Test
     public void isCorfuViewAccessible() throws InvocationTargetException, NoSuchMethodException, InstantiationException, IllegalAccessException {
-        LocalCorfuDBInstance cinstance = new LocalCorfuDBInstance(view);
+        LocalCorfuDBInstance cinstance = new LocalCorfuDBInstance(0);
         assertThat(cinstance.getViewJanitor())
                 .isNotNull();
         assertThat(cinstance.getViewJanitor().isViewAccessible())
@@ -54,7 +54,7 @@ public class CorfuDBRuntimeIT {
 
     public static LocalCorfuDBInstance generateInstance() {
         try {
-            return new LocalCorfuDBInstance(view);
+            return new LocalCorfuDBInstance(0);
         } catch (NoSuchMethodException e) {
             e.printStackTrace();
         } catch (InstantiationException e) {
@@ -69,7 +69,7 @@ public class CorfuDBRuntimeIT {
    //:q @Test
     public void isCorfuViewUsable() throws Exception
     {
-        LocalCorfuDBInstance cinstance = new LocalCorfuDBInstance(view);
+        LocalCorfuDBInstance cinstance = new LocalCorfuDBInstance(0);
         IViewJanitor cm = cinstance.getViewJanitor();
 
         assertThat(cm)
@@ -93,7 +93,7 @@ public class CorfuDBRuntimeIT {
    // @Test
     public void isCorfuResettable() throws Exception
     {
-        LocalCorfuDBInstance cinstance = new LocalCorfuDBInstance(view);
+        LocalCorfuDBInstance cinstance = new LocalCorfuDBInstance(0);
         IViewJanitor cm = cinstance.getViewJanitor();
 
         cm.resetAll();
