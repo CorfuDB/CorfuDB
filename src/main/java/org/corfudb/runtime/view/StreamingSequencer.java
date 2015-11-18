@@ -51,7 +51,7 @@ public class StreamingSequencer extends CorfuDBRuntimeComponent implements IStre
     public long getNext(UUID streamID, int numTokens)
     {
         return IRetry.build(ExponentialBackoffRetry.class, () -> {
-            IServerProtocol sequencer= view.getSequencers().get(0);
+            IServerProtocol sequencer= getView.get().getSequencers().get(0);
                 if (streamID == null)
                 {
                     //when the stream ID is null, get a global sequence #

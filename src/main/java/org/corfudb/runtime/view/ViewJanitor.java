@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
@@ -20,19 +21,44 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Created by mwei on 5/1/15.
  */
 @Getter
-@RequiredArgsConstructor
 public class ViewJanitor implements IViewJanitor {
 
     private static final Logger log = LoggerFactory.getLogger(ViewJanitor.class);
 
-    final ICorfuDBInstance instance;
+    ICorfuDBInstance instance;
+    private CorfuDBView view = null;
+    String myHost;
+    int myPort;
 
-    IReconfigurationPolicy reconfig = new SimpleReconfigurationPolicy();
-    private CorfuDBView cachedView = null;
+    int myInd;
+
+    private ViewJanitor() {}
+
+    ViewJanitor(ICorfuDBInstance instance, CorfuDBView bootstrapView, String host, int port) {
+        this.instance = instance;
+        this.view = bootstrapView;
+        this.myHost = host;
+        this.myPort = port;
+        setMyInd();
+    }
+
+    /**
+     * Determine my index within the layout array (-1 if none)
+     */
+    private void setMyInd() {
+        myInd = -1;
+        int i = 0;
+        for (IServerProtocol s : view.getLayouts()) {
+            if (s.getHost().compareTo(myHost) == 0  && s.getPort() == myPort)
+                myInd = i;
+            i++;
+        }
+    }
+
 
     public void resetAll() {
         IRetry.build(ExponentialBackoffRetry.class, () -> {
-            List<IServerProtocol> layouts = cachedView.getLayouts();
+            List<IServerProtocol> layouts = getView().getLayouts();
             IServerProtocol firstEntry = layouts.get(0);
             ILayoutKeeper l = (ILayoutKeeper) firstEntry;
             l.reset(0);
@@ -42,29 +68,29 @@ public class ViewJanitor implements IViewJanitor {
         .run();
     }
 
-    public CorfuDBView getView() {
-        if (cachedView == null) {
-            for (IServerProtocol s : cachedView.getLayouts()) {
-                ILayoutKeeper lk = (ILayoutKeeper) s;
-                CorfuDBView tmp = lk.getView();
-                if (cachedView == null ||
-                        tmp.getEpoch() > cachedView.getEpoch())
-                    cachedView = tmp;
-            }
+    public CorfuDBView refreshView() {
+        for (IServerProtocol s : view.getLayouts()) {
+            ILayoutKeeper lk = (ILayoutKeeper) s;
+            CorfuDBView tmp = lk.getView();
+            if (view == null ||
+                    tmp.getEpoch() > view.getEpoch())
+                view = tmp;
         }
-        return cachedView;
+        return view;
     }
 
     @Override
     public void reconfig(NetworkException e) {
         // prepare a reconfig-proposal (Json format)
         //
-        CorfuDBView newView = reconfig.prepareReconfigProposal(cachedView, e);
+        IReconfigurationPolicy reconfig = new SimpleReconfigurationPolicy();
+        CorfuDBView currentView = getView();
+        CorfuDBView newView = reconfig.prepareReconfigProposal(currentView, e);
         JsonObject newLayout = newView.getSerializedJSONView();
 
         // get a proxy layout-keeper to drive the reconfiguration proposal on our behalf
         //
-        for (IServerProtocol s : cachedView.getLayouts()) {
+        for (IServerProtocol s : currentView.getLayouts()) {
             ILayoutKeeper leader = (ILayoutKeeper) s;
             try {
                 leader.proposeNewView(-1, newLayout);
@@ -83,9 +109,9 @@ public class ViewJanitor implements IViewJanitor {
      * choose a unique rank within this configuration
      * @param min lower bound for rank
      */
-    private void chooseRank(long min) {
-        long rounding = cachedView.getLayouts().size();
-        myRank = (min / rounding + 1)*rounding + instance.getMyLayoutIndex();
+    private void chooseRank(CorfuDBView baseView, int baseInd, long min) {
+        long rounding = baseView.getLayouts().size();
+        myRank = (min / rounding + 1)*rounding + baseInd;
     }
 
     /**
@@ -106,19 +132,21 @@ public class ViewJanitor implements IViewJanitor {
      * @param newLayout a proposed new configuration
      */
     public void driveReconfiguration(JsonObject newLayout) {
-        if (instance.getMyLayoutIndex() < 0) {
+        if (myInd < 0) {
             log.warn("driveReconfiguration cannot be invoked from outside the layout");
             return;
         }
+        CorfuDBView baseView = new CorfuDBView(view.getSerializedJSONView()); // clone
+        int baseInd = myInd;
 
-        if (myRank < 0) chooseRank(myRank);
+        if (myRank < 0) chooseRank(baseView, baseInd, myRank);
 
         // first phase
         //
-        CountDownLatch l = new CountDownLatch((cachedView.getLayouts().size()+1)/2);
+        CountDownLatch l = new CountDownLatch((view.getLayouts().size()+1)/2);
         AtomicBoolean accept = new AtomicBoolean(true);
 
-        for (IServerProtocol s : cachedView.getLayouts()) {
+        for (IServerProtocol s : view.getLayouts()) {
             ILayoutKeeper ss = (ILayoutKeeper) s;
 
             // invoke 'collectView()' on all layout-keeper servers
@@ -132,7 +160,7 @@ public class ViewJanitor implements IViewJanitor {
                 if (layoutKeeperInfo.getRank() > myRank) {
                     log.info("yield to higher rank leader");
                     accept.set(false);
-                    chooseRank(layoutKeeperInfo.getRank()+1);
+                    chooseRank(baseView, baseInd, layoutKeeperInfo.getRank());
                 }
 
                 // todo keep track of any past proposals on this epoch, and adopt instead of my 'newLayout'!!
@@ -155,10 +183,10 @@ public class ViewJanitor implements IViewJanitor {
 
         // phase 2
         //
-        CountDownLatch l2 = new CountDownLatch((cachedView.getLayouts().size()+1)/2);
+        CountDownLatch l2 = new CountDownLatch((view.getLayouts().size()+1)/2);
         AtomicBoolean accept2 = new AtomicBoolean(true);
 
-        for (IServerProtocol s : cachedView.getLayouts()) {
+        for (IServerProtocol s : view.getLayouts()) {
             ILayoutKeeper ss = (ILayoutKeeper) s;
 
             // invoke 'proposeNewView()' on all layout-keeper servers
@@ -172,7 +200,7 @@ public class ViewJanitor implements IViewJanitor {
                 if (layoutKeeperInfo.getRank() > myRank) {
                     log.info("yield to higher rank leader");
                     accept2.set(false);
-                    chooseRank(layoutKeeperInfo.getRank()+1);
+                    chooseRank(baseView, baseInd, layoutKeeperInfo.getRank()+1);
                 }
                 l2.countDown();
             });
@@ -199,7 +227,7 @@ public class ViewJanitor implements IViewJanitor {
     @Override
     public IServerProtocol isViewAccessible()
     {
-        for (IServerProtocol sequencer : cachedView.getSequencers())
+        for (IServerProtocol sequencer : getView().getSequencers())
         {
             if (!sequencer.ping()) {
                 log.debug("View acessibility check failed, couldn't connect to: " + sequencer.getFullString());
@@ -207,7 +235,7 @@ public class ViewJanitor implements IViewJanitor {
             }
         }
 
-        for (CorfuDBViewSegment vs : cachedView.getSegments())
+        for (CorfuDBViewSegment vs : getView().getSegments())
         {
             for (List<IServerProtocol> group : vs.getGroups())
             {
@@ -229,12 +257,12 @@ public class ViewJanitor implements IViewJanitor {
      */
     public void sealEpoch(long epoch)
     {
-        for (IServerProtocol sequencer : cachedView.getSequencers())
+        for (IServerProtocol sequencer : getView().getSequencers())
         {
             sequencer.setEpoch(epoch);
         }
 
-        for (CorfuDBViewSegment vs : cachedView.getSegments())
+        for (CorfuDBViewSegment vs : getView().getSegments())
         {
             for (List<IServerProtocol> group : vs.getGroups()) {
                 for (IServerProtocol logunit : group) {
