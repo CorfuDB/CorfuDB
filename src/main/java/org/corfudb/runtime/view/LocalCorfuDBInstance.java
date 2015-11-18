@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
+import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.*;
 
@@ -27,9 +28,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private IStreamAddressSpace streamAddressSpace;
 
     @Getter
-    private int myLayoutIndex;
-
-    @Getter
     public INewStreamingSequencer newStreamingSequencer;
 
 
@@ -47,9 +45,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     // Classes to instantiate.
     private Class<? extends IStream> streamType;
 
-    public LocalCorfuDBInstance(int myLayoutIndex)
+    public LocalCorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
-<<<<<<< HEAD
         this(view.getSerializedJSONView(), myLayoutIndex);
     }
 
@@ -65,14 +62,13 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
                 NewStream.class);
     }
 
-    public LocalCorfuDBInstance(int myLayoutIndex,
+    public LocalCorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView,
                                 Class<? extends IViewJanitor> cm,
                                 Class<? extends IStream> streamType)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        this.myLayoutIndex = myLayoutIndex;
 
-        viewJanitor = cm.getConstructor(ICorfuDBInstance.class).newInstance(this);
+        viewJanitor = new ViewJanitor(this, bootstrapView,  myHost, myPort);
         log.trace("local instance has a janitor initialized");
         streamingSequencer = new StreamingSequencer(this); // ss.getConstructor(ICorfuDBInstance.class).newInstance(this);
         log.trace("local instance has a sequencer initialized");

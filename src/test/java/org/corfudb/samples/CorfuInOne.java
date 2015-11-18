@@ -39,7 +39,7 @@ public class CorfuInOne {
                 start() ;
 
         System.out.println("view:" + view.getSerializedJSONView());
-        ICorfuDBInstance cinstance = new LocalCorfuDBInstance(0);
+        ICorfuDBInstance cinstance = new LocalCorfuDBInstance("localhost", 9999, view);
 
        /* check health of Configuration Master by trying to retrieve view
          */

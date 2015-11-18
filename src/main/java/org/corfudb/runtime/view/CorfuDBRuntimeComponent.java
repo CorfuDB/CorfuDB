@@ -9,16 +9,21 @@ import java.util.function.Supplier;
 public class CorfuDBRuntimeComponent {
     protected ICorfuDBInstance corfuInstance;
     protected UUID logID;
-    protected CorfuDBView view;
+    private CorfuDBView view;
     protected Supplier<CorfuDBView> getView;
 
     CorfuDBRuntimeComponent(ICorfuDBInstance corfuInstance) {
         this.corfuInstance = corfuInstance;
-        this.view = corfuInstance.getView();
+        this.view = null;
+        this.logID = null;
+
         this.getView = () -> {
+            if (this.view == null) {
+                view = corfuInstance.getView();
+                this.logID = view.getLogID();
+            }
             return this.view;
         };
-        this.logID = view.getLogID();
 
     }
 }

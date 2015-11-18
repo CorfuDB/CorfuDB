@@ -100,53 +100,51 @@ public class CorfuDBView {
         if (jsonView.getJsonString("logid") != null)
             logID = UUID.fromString(jsonView.getJsonString("logid").getString());
 
-        LinkedList<String> lsequencers = new LinkedList<String>();
-        for (JsonValue j : jsonView.getJsonArray("sequencer"))
-        {
-            lsequencers.add(((JsonString)j).getString());
-        }
-        sequencers = populateSequencersFromList(lsequencers);
-
-        LinkedList<String> llayouts = new LinkedList<String>();
-        for (JsonValue j : jsonView.getJsonArray("configmaster"))
-        {
-            llayouts.add(((JsonString)j).getString());
-        }
-        layouts = populateLayoutKeepersFromList(llayouts);
-
-        ArrayList<Map<String,Object>> lSegments = new ArrayList<Map<String,Object>>();
-        for (JsonValue j : jsonView.getJsonArray("segments"))
-        {
-            JsonObject jo = (JsonObject) j;
-
-            Map<String, Object> segmentMap = null;
-            String replication = jo.getJsonString("replication").getString();
-            if (replication == null) {
-                // The default replication protocol is Chain Replication
-                replication = "cdbcr";
+        if (jsonView.getJsonArray("sequencer") != null) {
+            LinkedList<String> lsequencers = new LinkedList<String>();
+            for (JsonValue j : jsonView.getJsonArray("sequencer")) {
+                lsequencers.add(((JsonString) j).getString());
             }
-            if (!availableReplicationProtocols.keySet().contains(replication))
-            {
-                log.warn("Unsupported replication protocol: " + replication);
+            sequencers = populateSequencersFromList(lsequencers);
+        }
+
+        if (jsonView.getJsonArray("sequencer") != null) {
+            LinkedList<String> llayouts = new LinkedList<String>();
+            for (JsonValue j : jsonView.getJsonArray("configmaster")) {
+                llayouts.add(((JsonString) j).getString());
             }
-            else
-            {
-                Class<? extends IReplicationProtocol> replicationClass = availableReplicationProtocols.get(replication);
-                try
-                {
-                    segmentMap = (Map<String, Object>) replicationClass.getMethod("segmentParser", JsonObject.class).invoke(null, jo);
+            layouts = populateLayoutKeepersFromList(llayouts);
+        }
+
+        if (jsonView.getJsonArray("segments") != null) {
+            ArrayList<Map<String, Object>> lSegments = new ArrayList<Map<String, Object>>();
+            for (JsonValue j : jsonView.getJsonArray("segments")) {
+                JsonObject jo = (JsonObject) j;
+
+                Map<String, Object> segmentMap = null;
+                String replication = jo.getJsonString("replication").getString();
+                if (replication == null) {
+                    // The default replication protocol is Chain Replication
+                    replication = "cdbcr";
                 }
-                catch (Exception ex) {
-                    log.error("Error invoking protocol for protocol: ", ex);
+                if (!availableReplicationProtocols.keySet().contains(replication)) {
+                    log.warn("Unsupported replication protocol: " + replication);
+                } else {
+                    Class<? extends IReplicationProtocol> replicationClass = availableReplicationProtocols.get(replication);
+                    try {
+                        segmentMap = (Map<String, Object>) replicationClass.getMethod("segmentParser", JsonObject.class).invoke(null, jo);
+                    } catch (Exception ex) {
+                        log.error("Error invoking protocol for protocol: ", ex);
+                    }
                 }
-            }
 
-            segmentMap.put("replication", replication);
-            segmentMap.put("start", jo.getJsonNumber("start").longValue());
-            segmentMap.put("sealed", jo.getJsonNumber("sealed").longValue());
-            lSegments.add(segmentMap);
+                segmentMap.put("replication", replication);
+                segmentMap.put("start", jo.getJsonNumber("start").longValue());
+                segmentMap.put("sealed", jo.getJsonNumber("sealed").longValue());
+                lSegments.add(segmentMap);
+            }
+            segments = populateSegmentsFromList(lSegments);
         }
-        segments = populateSegmentsFromList(lSegments);
     }
 
     /**

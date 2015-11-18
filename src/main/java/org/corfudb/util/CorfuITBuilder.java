@@ -89,9 +89,6 @@ public class CorfuITBuilder {
         this.layoutKeeperPort = layoutKeeperPort;
         configmasterObject.add("cdbmk://localhost:" + layoutKeeperPort);
 
-        // build the Json object
-        //
-
         // segments
         //
         JsonObjectBuilder jsb = Json.createObjectBuilder();
@@ -161,7 +158,7 @@ public class CorfuITBuilder {
 
         // start monitor thread
         //
-        ICorfuDBInstance instance = new LocalCorfuDBInstance(0);
+        ICorfuDBInstance instance = new LocalCorfuDBInstance("localhost", layoutKeeperPort, view);
         new ViewMonitor(instance);
 
         return this.view;
