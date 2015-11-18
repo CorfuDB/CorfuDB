@@ -24,6 +24,12 @@ import java.util.UUID;
 public interface ICorfuDBInstance {
 
     /**
+     * Obtains the position of the caller in the group of layout managers. For clients, return -1.
+     * @return
+     */
+    int getMyLayoutIndex();
+
+    /**
      * Gets a configuration master for this instance.
      * @return  The configuration master for this instance.
      */

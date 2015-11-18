@@ -36,24 +36,36 @@ public class NettyLayoutKeeperProtocol extends AbstractNettyProtocol<NettyLayout
     }
 
     public CompletableFuture<JsonObject> getCurrentView() {
-        log.info("try to get current view");
+        log.trace("try to get current view");
         NettyLayoutConfigMsg r = new NettyLayoutConfigMsg(
                 NettyCorfuMsg.NettyCorfuMsgType.META_QUERY_REQ,
                 getEpoch(),
                 -1);
         CompletableFuture<JsonObject> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
-        log.info("wait for current view via completableFuture");
+        log.trace("wait for current view");
         return ret;
     }
 
-    public CompletableFuture<LayoutKeeperInfo> proposeNewView(int rank, JsonObject jo) {
-        log.info("try to set new view");
+    public CompletableFuture<LayoutKeeperInfo> collectView(long rank) {
+        log.trace("try to collect new view");
+        NettyLayoutConfigMsg r = new NettyLayoutConfigMsg(
+                NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_REQ,
+                getEpoch(),
+                rank);
+        CompletableFuture<LayoutKeeperInfo> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
+        log.trace("wait for collect");
+        return ret;
+
+    }
+
+    public CompletableFuture<LayoutKeeperInfo> proposeNewView(long rank, JsonObject jo) {
+        log.trace("try to set new view");
         NettyLayoutConfigMsg r = new NettyLayoutConfigMsg(
                 NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_REQ,
                 getEpoch(),
                 rank, jo);
         CompletableFuture<LayoutKeeperInfo> ret = handler.sendMessageAndGetCompletable(getEpoch(), r);
-        log.info("wait for propose ack via completableFuture");
+        log.trace("wait for propose ack");
         return ret;
 
     }

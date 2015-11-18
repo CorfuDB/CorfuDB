@@ -28,6 +28,9 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     private IStreamAddressSpace streamAddressSpace;
 
     @Getter
+    private int myLayoutIndex;
+
+    @Getter
     public INewStreamingSequencer newStreamingSequencer;
 
 
@@ -51,14 +54,24 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         this(view.getSerializedJSONView());
     }
 
+    public LocalCorfuDBInstance(CorfuDBView view, int myLayoutIndex)
+            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+        this(view.getSerializedJSONView(), myLayoutIndex);
+    }
+
     public LocalCorfuDBInstance(JsonObject bootstrapLayout)
+            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+        this(bootstrapLayout, -1);
+    }
+
+    public LocalCorfuDBInstance(JsonObject bootstrapLayout, int myLayoutIndex)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        this(bootstrapLayout, ViewJanitor.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
+        this(bootstrapLayout, myLayoutIndex, ViewJanitor.class, StreamingSequencer.class, ObjectCachedWriteOnceAddressSpace.class,
                 NewStream.class);
     }
 
-    public LocalCorfuDBInstance(JsonObject bootsrapLayout,
+    public LocalCorfuDBInstance(JsonObject bootsrapLayout, int myLayoutIndex,
                                 Class<? extends IViewJanitor> cm,
                                 Class<? extends IStreamingSequencer> ss,
                                 Class<? extends IWriteOnceAddressSpace> as,
@@ -66,6 +79,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
         CorfuDBView view = new CorfuDBView(bootsrapLayout);
+        this.myLayoutIndex = myLayoutIndex;
 
         viewJanitor = cm.getConstructor(CorfuDBView.class).newInstance(view);
         log.trace("local instance has a janitor initialized");
@@ -150,7 +164,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * @param e
      */
     public void invalidateViewAndWait(NetworkException e) {
-        viewJanitor.requestReconfiguration(e); // todo not sure this is the right place for this API
+        viewJanitor.reconfig(e); // todo not sure this is the right place for this API
     }
 
     /**
