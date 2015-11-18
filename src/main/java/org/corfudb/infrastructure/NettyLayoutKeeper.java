@@ -53,8 +53,6 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
     CorfuDBView currentView = null;
     JsonObject newProposal = null;
 
-    Thread monitorThread = null;
-
     public NettyLayoutKeeper() {
     }
 
@@ -104,7 +102,6 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
             case META_COMMIT: {
                 commitLayout.commitProposal(m.getJo()); // TODO this should use 2-step protocol, unless rank == -1 ?
                 reconfig(m.getJo());
-                if (monitorThread == null) monitorThread = monitor();
                 break;
             }
 
@@ -126,7 +123,7 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
             case META_LEADER_REQ: {
                 // todo: enforce a delay (300 millisecs?) between leader requests
 
-                synchronized (monitorThread) {
+                synchronized (newProposal) {
                     if (newProposal != null) { // reject; handle leader roles one at a time
                         NettyLayoutConfigMsg resp = new NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType.META_LEADER_RES,
                                 commitLayout.getEpoch(),
@@ -135,7 +132,7 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
                         // todo ? sendResponse(resp, corfuMsg, ctx);
                     } else {
                         newProposal = m.getJo();
-                        monitorThread.interrupt();
+                        // todo ? monitorThread.interrupt();
                     }
                 }
                 break;
@@ -160,28 +157,6 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
             currentView.invalidate();
         }
         currentView = new CorfuDBView(newLayout);
-    }
-
-    private Thread monitor() {
-        return new Thread(() -> {
-            assert currentView != null;
-            ViewJanitor monitor = new ViewJanitor(currentView);
-
-            for (;;) {
-                try {
-                    Thread.sleep(3000);
-                } catch (InterruptedException e) {
-                    // todo check reason for interrupt; for now, we simply deduce that have a new CorfuDBview
-                    break;
-                }
-
-                IServerProtocol faulty = monitor.isViewAccessible();
-                if (faulty == null) continue;
-                log.warn("removing fault unit {} from configuration", faulty.getFullString());
-
-                monitor.driveReconfiguration(faulty);
-            }
-        });
     }
 
     public interface ConsensusObject {

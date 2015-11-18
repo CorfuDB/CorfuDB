@@ -24,7 +24,8 @@ public interface ILayoutKeeper extends IServerProtocol {
     }
 
     public CompletableFuture<JsonObject> getCurrentView();
-    public CompletableFuture<LayoutKeeperInfo> proposeNewView(int rank, JsonObject jo);
+    public CompletableFuture<LayoutKeeperInfo> proposeNewView(long rank, JsonObject jo);
+    public CompletableFuture<LayoutKeeperInfo> collectView(long rank);
 
         /**
          * Gets the current view from the configuration master.
