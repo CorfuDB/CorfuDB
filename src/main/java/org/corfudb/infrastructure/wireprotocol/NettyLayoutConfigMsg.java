@@ -25,16 +25,13 @@ public class NettyLayoutConfigMsg extends NettyCorfuMsg {
     JsonObject jo = Json.createObjectBuilder().build();
     ;
     long rank = -1;
-    long epoch;
 
-    public NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType t, long epoch, long rank) {
-        this.epoch = epoch;
+    public NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType t, long rank) {
         this.rank = rank;
         this.msgType = t;
     }
-    public NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType t, long epoch, long rank, JsonObject jo)
+    public NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType t, long rank, JsonObject jo)
     {
-        this.epoch = epoch;
         this.rank = rank;
         this.jo = jo;
         this.msgType = t;
@@ -48,7 +45,6 @@ public class NettyLayoutConfigMsg extends NettyCorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        buffer.writeLong(epoch);
         buffer.writeLong(rank);
         JsonWriter jw = Json.createWriter(new ByteBufOutputStream(buffer));
         jw.writeObject(jo == null ? Json.createObjectBuilder().build() : jo);
@@ -64,7 +60,6 @@ public class NettyLayoutConfigMsg extends NettyCorfuMsg {
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
 
-        epoch = buffer.readLong();
         rank = buffer.readLong();
         JsonReader jr = Json.createReader(new ByteBufInputStream(buffer));
         jo = jr.readObject();

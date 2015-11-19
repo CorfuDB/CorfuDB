@@ -5,11 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
-import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.*;
 
-import javax.json.JsonObject;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -20,7 +18,7 @@ import java.util.concurrent.ConcurrentMap;
  * Created by mwei on 5/22/15.
  */
 @Slf4j
-public class LocalCorfuDBInstance implements ICorfuDBInstance {
+public class CorfuDBInstance implements ICorfuDBInstance {
 
     // Members of this CorfuDBInstance
     private IViewJanitor viewJanitor;
@@ -45,7 +43,7 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     // Classes to instantiate.
     private Class<? extends IStream> streamType;
 
-    public LocalCorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView)
+    public CorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
         this(view.getSerializedJSONView(), myLayoutIndex);
     }
@@ -62,9 +60,9 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
                 NewStream.class);
     }
 
-    public LocalCorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView,
-                                Class<? extends IViewJanitor> cm,
-                                Class<? extends IStream> streamType)
+    public CorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView,
+                           Class<? extends IViewJanitor> cm,
+                           Class<? extends IStream> streamType)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
 

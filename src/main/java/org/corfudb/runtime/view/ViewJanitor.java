@@ -149,6 +149,10 @@ public class ViewJanitor implements IViewJanitor {
         for (IServerProtocol s : view.getLayouts()) {
             ILayoutKeeper ss = (ILayoutKeeper) s;
 
+            // todo: seal the current epoch in all the view components.
+            //       in the future, the collect phase should  also "seal" the current epoch
+            // ///////////////////////////////////////////////////////
+
             // invoke 'collectView()' on all layout-keeper servers
             //
             ss.collectView(myRank).thenAccept((layoutKeeperInfo) -> {
@@ -229,10 +233,11 @@ public class ViewJanitor implements IViewJanitor {
     {
         for (IServerProtocol sequencer : getView().getSequencers())
         {
-            if (!sequencer.ping()) {
-                log.debug("View acessibility check failed, couldn't connect to: " + sequencer.getFullString());
-                return sequencer;
-            }
+            log.info("pinging sequencer {}", sequencer.getFullString());
+//            if (!sequencer.ping()) {
+//                log.debug("View acessibility check failed, couldn't connect to: " + sequencer.getFullString());
+//                return sequencer;
+//            }
         }
 
         for (CorfuDBViewSegment vs : getView().getSegments())
@@ -241,6 +246,7 @@ public class ViewJanitor implements IViewJanitor {
             {
                 for (IServerProtocol logunit: group)
                 {
+                    log.info("pinging logunit {}", logunit.getFullString());
                     if (!logunit.ping()) {
                         log.debug("View acessibility check failed, couldn't connect to: " + logunit.getFullString());
                         return logunit;
