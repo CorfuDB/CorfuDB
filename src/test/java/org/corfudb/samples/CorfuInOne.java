@@ -5,7 +5,7 @@ import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.runtime.view.LocalCorfuDBInstance;
+import org.corfudb.runtime.view.CorfuDBInstance;
 import org.corfudb.util.CorfuITBuilder;
 
 import java.io.IOException;
@@ -35,11 +35,11 @@ public class CorfuInOne {
                 addLoggingUnit(7004, 0, NettyLogUnitServer.class, "nlu", luConfigMap).
                 addSequencer(7001, NettyStreamingSequencerServer.class, "nsss", null).
   //              setReplication("cdbqr").
-                getView(9999).
+                addView(9999).
                 start() ;
 
         System.out.println("view:" + view.getSerializedJSONView());
-        ICorfuDBInstance cinstance = new LocalCorfuDBInstance("localhost", 9999, view);
+        ICorfuDBInstance cinstance = new CorfuDBInstance("localhost", 9999, view);
 
        /* check health of Configuration Master by trying to retrieve view
          */
@@ -50,7 +50,8 @@ public class CorfuInOne {
         Thread b = new Thread(new Runnable() {
             @Override
             public void run() {
-                System.out.println("trying to ping all view components...: " + cinstance.getViewJanitor().isViewAccessible() );
+                System.out.println("trying to ping all view components...");
+                System.out.println("access check return value: " + cinstance.getViewJanitor().isViewAccessible() );
                 synchronized (this) { notify();}
             } } );
         b.start();

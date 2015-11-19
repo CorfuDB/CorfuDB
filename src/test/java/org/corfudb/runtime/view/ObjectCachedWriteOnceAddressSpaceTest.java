@@ -9,7 +9,7 @@ public class ObjectCachedWriteOnceAddressSpaceTest extends IWriteOnceAddressSpac
 
     @Override
     protected IWriteOnceAddressSpace getAddressSpace() {
-        LocalCorfuDBInstance instance = CorfuDBRuntimeIT.generateInstance();
+        CorfuDBInstance instance = CorfuDBRuntimeIT.generateInstance();
         IViewJanitor cm = instance.getViewJanitor();
         cm.resetAll();
         return new ObjectCachedWriteOnceAddressSpace(instance);

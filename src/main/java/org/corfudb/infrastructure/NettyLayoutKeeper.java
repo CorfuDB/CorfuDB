@@ -75,7 +75,6 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
 
                 NettyLayoutConfigMsg resp = new NettyLayoutConfigMsg(
                         NettyCorfuMsg.NettyCorfuMsgType.META_PROPOSE_RES,
-                        commitLayout.getEpoch(),
                         commitLayout.getHighPhase1Rank()
                 );
                 sendResponse(resp, corfuMsg, ctx);
@@ -88,7 +87,6 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
                 NettyLayoutConfigMsg resp =
                     new NettyLayoutConfigMsg(
                             NettyCorfuMsg.NettyCorfuMsgType.META_COLLECT_RES,
-                            commitLayout.getEpoch(),
                             commitLayout.getHighPhase2Rank()
                     );
 
@@ -109,7 +107,6 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
                 NettyLayoutConfigMsg resp =
                         new NettyLayoutConfigMsg(
                                 NettyCorfuMsg.NettyCorfuMsgType.META_QUERY_RES,
-                                commitLayout.getEpoch(),
                                 commitLayout.getHighPhase2Rank()
                         );
 
@@ -126,7 +123,6 @@ public class NettyLayoutKeeper extends AbstractNettyServer implements ICorfuDBSe
                 synchronized (newProposal) {
                     if (newProposal != null) { // reject; handle leader roles one at a time
                         NettyLayoutConfigMsg resp = new NettyLayoutConfigMsg(NettyCorfuMsg.NettyCorfuMsgType.META_LEADER_RES,
-                                commitLayout.getEpoch(),
                                 commitLayout.highPhase1Rank
                         );
                         // todo ? sendResponse(resp, corfuMsg, ctx);

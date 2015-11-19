@@ -2,20 +2,14 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
-import org.corfudb.runtime.protocols.logunits.NettyLogUnitProtocol;
-import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.CorfuITBuilder;
 import org.junit.Test;
 
-import javax.sound.midi.Sequencer;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,21 +33,21 @@ public class CorfuDBRuntimeIT {
             CorfuITBuilder.getBuilder()
                     .addSequencer(9201, NettyStreamingSequencerServer.class, "nsss", null)
                     .addLoggingUnit(9200, 0, NettyLogUnitServer.class, "nlu", luConfigMap)
-                    .getView(9202)
+                    .addView(9202)
                     .start();
 
     @Test
     public void isCorfuViewAccessible() throws InvocationTargetException, NoSuchMethodException, InstantiationException, IllegalAccessException {
-        LocalCorfuDBInstance cinstance = generateInstance();
+        CorfuDBInstance cinstance = generateInstance();
         assertThat(cinstance.getViewJanitor())
                 .isNotNull();
         assertThat(cinstance.getViewJanitor().isViewAccessible())
                 .isNull();
     }
 
-    public static LocalCorfuDBInstance generateInstance() {
+    public static CorfuDBInstance generateInstance() {
         try {
-            return new LocalCorfuDBInstance("localhost", 9202, view);
+            return new CorfuDBInstance("localhost", 9202, view);
         } catch (NoSuchMethodException e) {
             e.printStackTrace();
         } catch (InstantiationException e) {
@@ -69,7 +63,7 @@ public class CorfuDBRuntimeIT {
    //:q @Test
     public void isCorfuViewUsable() throws Exception
     {
-        LocalCorfuDBInstance cinstance = generateInstance();
+        CorfuDBInstance cinstance = generateInstance();
         IViewJanitor cm = cinstance.getViewJanitor();
 
         assertThat(cm)
@@ -93,7 +87,7 @@ public class CorfuDBRuntimeIT {
    // @Test
     public void isCorfuResettable() throws Exception
     {
-        LocalCorfuDBInstance cinstance = generateInstance();
+        CorfuDBInstance cinstance = generateInstance();
         IViewJanitor cm = cinstance.getViewJanitor();
 
         cm.resetAll();

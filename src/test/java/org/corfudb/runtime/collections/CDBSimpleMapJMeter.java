@@ -4,17 +4,11 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.jmeter.protocol.java.sampler.AbstractJavaSamplerClient;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
-import org.corfudb.infrastructure.NettyLogUnitServer;
-import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.smr.SimpleSMREngine;
-import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.runtime.view.LocalCorfuDBInstance;
+import org.corfudb.runtime.view.CorfuDBInstance;
 
-import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.locks.Lock;
@@ -66,7 +60,7 @@ public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
     @SuppressWarnings("unchecked")
     public void setupTest(JavaSamplerContext context) {
 
-        LocalCorfuDBInstance instance = CorfuDBRuntimeIT.generateInstance();
+        CorfuDBInstance instance = CorfuDBRuntimeIT.generateInstance();
 
         UUID uuid = UUID.randomUUID();
         map = instance.openObject(uuid, new ICorfuDBInstance.OpenObjectArgs<CDBSimpleMap>(

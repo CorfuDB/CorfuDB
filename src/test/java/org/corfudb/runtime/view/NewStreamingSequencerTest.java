@@ -1,10 +1,6 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntimeIT;
-import org.corfudb.runtime.protocols.sequencers.NettyStreamingSequencerProtocol;
-import org.corfudb.util.RandomOpenPort;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -23,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class NewStreamingSequencerTest {
 
-    LocalCorfuDBInstance instance;
+    CorfuDBInstance instance;
 
     @Rule
     public TestRule watcher = new TestWatcher() {

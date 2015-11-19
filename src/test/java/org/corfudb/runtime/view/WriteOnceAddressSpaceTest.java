@@ -13,7 +13,7 @@ public class WriteOnceAddressSpaceTest extends IWriteOnceAddressSpaceTest {
     @Override
     public IWriteOnceAddressSpace getAddressSpace()
     {
-        LocalCorfuDBInstance instance = CorfuDBRuntimeIT.generateInstance();
+        CorfuDBInstance instance = CorfuDBRuntimeIT.generateInstance();
         IViewJanitor cm = instance.getViewJanitor();
         cm.resetAll();
 

@@ -4,8 +4,6 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ICorfuDBServer;
 import org.corfudb.infrastructure.NettyLayoutKeeper;
-import org.corfudb.runtime.protocols.IServerProtocol;
-import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
 import org.corfudb.runtime.view.*;
 
 import javax.json.*;
@@ -84,7 +82,7 @@ public class CorfuITBuilder {
      *
      * @param layoutKeeperPort     The port to run the LayoutKeeper on.
      */
-    public CorfuITBuilder getView(int layoutKeeperPort) {
+    public CorfuITBuilder addView(int layoutKeeperPort) {
 
         this.layoutKeeperPort = layoutKeeperPort;
         configmasterObject.add("cdbmk://localhost:" + layoutKeeperPort);
@@ -158,7 +156,7 @@ public class CorfuITBuilder {
 
         // start monitor thread
         //
-        ICorfuDBInstance instance = new LocalCorfuDBInstance("localhost", layoutKeeperPort, view);
+        ICorfuDBInstance instance = new CorfuDBInstance("localhost", layoutKeeperPort, view);
         new ViewMonitor(instance);
 
         return this.view;
