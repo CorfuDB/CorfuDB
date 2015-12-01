@@ -161,3 +161,7 @@ Q: *I get a bunch of errors that look like*
 A: Make sure your version of Thrift matches the version of Thrift in the pom.xml file (currently 0.9.2)
 
 ## [References](https://github.com/CorfuDB/CorfuDB/wiki/White-papers).
+
+## TODO
+Remove Thrift Information
+=======
