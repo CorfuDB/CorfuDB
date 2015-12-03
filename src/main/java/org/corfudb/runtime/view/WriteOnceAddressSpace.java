@@ -17,6 +17,7 @@ package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.replications.IReplicationProtocol;

@@ -2,21 +2,16 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-<<<<<<< HEAD
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.logunits.NettyLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
-=======
->>>>>>> some cleanups. there is a low-level bug preventing netty communication from going through
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.CorfuITBuilder;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,13 +74,13 @@ public class CorfuDBRuntimeIT {
 
         cm.resetAll();
 
-        ISequencer s = cinstance.getSequencer();
+        IStreamingSequencer s = cinstance.getStreamingSequencer();
         assertThat(s.getCurrent())
                 .isEqualTo(0);
 
-        IWriteOnceAddressSpace woas = cinstance.getAddressSpace();
-        long addr = s.getNext();
-        woas.write(addr, "hello world".getBytes());
+        IStreamAddressSpace woas = cinstance.getStreamAddressSpace();
+        long addr = s.getCurrent();
+        woas.write(addr, new HashSet<UUID>(), "hello world".getBytes());
         assertThat(woas.read(addr))
                 .isEqualTo("hello world".getBytes());
     }
@@ -98,7 +93,7 @@ public class CorfuDBRuntimeIT {
 
         cm.resetAll();
 
-        ISequencer s = cinstance.getSequencer();
+        IStreamingSequencer s = cinstance.getStreamingSequencer();
         assertThat(s.getCurrent())
                 .isEqualTo(0);
         s.getNext();
@@ -106,15 +101,15 @@ public class CorfuDBRuntimeIT {
         assertThat(s.getCurrent())
                 .isEqualTo(0);
 
-        IWriteOnceAddressSpace woas = cinstance.getAddressSpace();
+        IStreamAddressSpace woas = cinstance.getStreamAddressSpace();
         long addr = s.getNext();
-        woas.write(addr, "hello world".getBytes());
+        woas.write(addr, new HashSet<UUID>(),"hello world".getBytes());
         assertThat(woas.read(addr))
                 .isEqualTo("hello world".getBytes());
 
         cm.resetAll();
         addr = s.getNext();
-        woas.write(addr, "hello world 2".getBytes());
+        woas.write(addr, new HashSet<UUID>(),"hello world 2".getBytes());
         assertThat(woas.read(addr))
                 .isEqualTo("hello world 2".getBytes());
     }

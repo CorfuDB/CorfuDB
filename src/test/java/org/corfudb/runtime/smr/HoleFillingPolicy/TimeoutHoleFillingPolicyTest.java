@@ -1,12 +1,11 @@
 package org.corfudb.runtime.smr.HoleFillingPolicy;
 
 import org.corfudb.runtime.exceptions.HoleEncounteredException;
-import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import com.codahale.metrics.ConsoleReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import org.corfudb.runtime.CorfuDBRuntimeIT;
-import org.corfudb.runtime.HoleEncounteredException;
+import org.corfudb.runtime.exceptions.HoleEncounteredException;
 import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.ICorfuDBInstance;

@@ -18,6 +18,7 @@ package org.corfudb.runtime.view;
 import org.corfudb.infrastructure.thrift.ExtntInfo;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.*;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 
@@ -53,7 +54,7 @@ public class ObjectCachedWriteOnceAddressSpace extends CorfuDBRuntimeComponent i
         write(address, Serializer.serialize(s));
 
         //A successful write means we can just put it in the cache.
-        AddressSpaceObjectCache.put(getView.get().getLogID(), address, s);
+        CachedWriteOnceAddressSpace.put(getView.get().getLogID(), address, s);
         /*
         try (ByteArrayOutputStream bs = new ByteArrayOutputStream())
         {

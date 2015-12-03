@@ -23,7 +23,7 @@ public class CDBSimpleMapLLTest {
     UUID streamID;
 
     public void checkTxDec(long address, boolean expected) throws Exception {
-        Hints hint = instance.getAddressSpace().readHints(address);
+        Hints hint = instance.getStreamAddressSpace().readHints(address);
         assert(hint.isSetTxDec());
         assertThat(hint.isTxDec()).isEqualTo(expected);
     }

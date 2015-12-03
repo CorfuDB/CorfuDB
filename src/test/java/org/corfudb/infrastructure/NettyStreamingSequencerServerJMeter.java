@@ -40,25 +40,8 @@ public class NettyStreamingSequencerServerJMeter extends AbstractJavaSamplerClie
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-        l.lock();
-        if (!reset)
-        {
-            infrastructure =
-                    CorfuInfrastructureBuilder.getBuilder()
-                            .addSequencer(7779, NettyStreamingSequencerServer.class, "nsss", null)
-                            .start(7777);
-            try {
-                Thread.sleep(500);
-            } catch (Exception e)
-            {
-
-            }
-            reset = true;
-        }
-        l.unlock();
-
         instance = CorfuDBRuntimeIT.generateInstance();
-        sequencer = instance.getStreamingSequencer();
+        sequencer = instance.getNewStreamingSequencer();
 
         streamID = UUID.randomUUID();
         super.setupTest(context);

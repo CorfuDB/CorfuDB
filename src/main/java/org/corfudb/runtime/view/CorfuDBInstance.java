@@ -23,7 +23,11 @@ public class CorfuDBInstance implements ICorfuDBInstance {
 
     // Members of this CorfuDBInstance
     private IViewJanitor viewJanitor;
+
+    @Getter
     private IStreamingSequencer streamingSequencer;
+
+    @Getter
     private IStreamAddressSpace streamAddressSpace;
 
     @Getter
