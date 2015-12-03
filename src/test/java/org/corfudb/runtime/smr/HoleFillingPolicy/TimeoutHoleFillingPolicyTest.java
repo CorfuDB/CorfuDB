@@ -1,8 +1,12 @@
 package org.corfudb.runtime.smr.HoleFillingPolicy;
 
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.exceptions.HoleEncounteredException;
-import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
+import com.codahale.metrics.ConsoleReporter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
+import org.corfudb.runtime.exceptions.HoleEncounteredException;
+import org.corfudb.runtime.collections.CDBSimpleMap;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;
@@ -24,9 +28,7 @@ public class TimeoutHoleFillingPolicyTest {
     @Before
     public void generateStream()
     {
-        MemoryConfigMasterProtocol.inMemoryClear();
-        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime("memory");
-        instance = cdr.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
         s = instance.openStream(UUID.randomUUID());
     }
 

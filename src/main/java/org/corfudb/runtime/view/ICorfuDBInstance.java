@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.smr.ICorfuDBObject;
 import org.corfudb.runtime.smr.ISMREngine;
 import org.corfudb.runtime.smr.ITransaction;
@@ -26,7 +27,7 @@ public interface ICorfuDBInstance {
      * Gets a configuration master for this instance.
      * @return  The configuration master for this instance.
      */
-    IConfigurationMaster getConfigurationMaster();
+    IViewJanitor getViewJanitor();
 
     INewStreamingSequencer getNewStreamingSequencer();
 
@@ -47,6 +48,13 @@ public interface ICorfuDBInstance {
      * @return  A view of this instance.
      */
     CorfuDBView getView();
+
+    /**
+     * report a problem with view
+     *
+     * @param e
+     */
+    public void invalidateViewAndWait(NetworkException e);
 
     enum OpenStreamFlags {
         NON_CACHED //open a fresh, uncached stream rather than using an existing one.
@@ -79,12 +87,6 @@ public interface ICorfuDBInstance {
      *              was an error deleting the stream (does not exist).
      */
     boolean deleteStream(UUID id);
-
-    /**
-     * Retrieves the stream metadata map for this instance.
-     * @return      The stream metadata map for this instance.
-     */
-    Map<UUID, IStreamMetadata> getStreamMetadataMap();
 
     class OpenObjectArgs<T extends ICorfuDBObject>
     {
@@ -163,7 +165,4 @@ public interface ICorfuDBInstance {
      * @return          The value returned in the transaction.
      */
     <T> T executeTransaction (Class<? extends ITransaction> type, ITransactionCommand<T> command);
-
-    /** Invalidate the current view, requiring that the view be refreshed. */
-    void invalidateView();
 }

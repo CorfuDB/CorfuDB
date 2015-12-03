@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.sequencers.INewStreamSequencer;
@@ -49,7 +50,7 @@ public class NewStreamingSequencer implements INewStreamingSequencer{
                         log.error("Exception during nextTokenAsync, retrying.", e);
                         if (base instanceof WrongEpochException)
                         {
-                            instance.invalidateView();
+                            instance.invalidateViewAndWait((NetworkException) e); // todo this type cast might not work, handle!!
                         }
                         return nextTokenAsync(streams, numTokens).get();
                     }

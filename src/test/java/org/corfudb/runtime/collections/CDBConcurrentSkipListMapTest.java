@@ -1,10 +1,8 @@
 package org.corfudb.runtime.collections;
 
-
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.junit.Before;
-import org.junit.Test;
 
 import java.util.UUID;
 
@@ -15,7 +13,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class CDBConcurrentSkipListMapTest {
 
-    CorfuDBRuntime cdr;
     ICorfuDBInstance instance;
     CDBConcurrentSkipListMap<Integer, Integer> map;
 
@@ -23,9 +20,8 @@ public class CDBConcurrentSkipListMapTest {
     @SuppressWarnings("unchecked")
     public void generateMap() throws Exception
     {
-        cdr = CorfuDBRuntime.getRuntime("memory");
-        instance = cdr.getLocalInstance();
-        instance.getConfigurationMaster().resetAll();
+        instance = CorfuDBRuntimeIT.generateInstance();
+        instance.getViewJanitor().resetAll();
         map = instance.openObject(UUID.randomUUID(), CDBConcurrentSkipListMap.class);
     }
 

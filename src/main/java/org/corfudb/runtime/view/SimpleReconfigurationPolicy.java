@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.configmaster.policies;
+package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
@@ -10,6 +10,7 @@ import org.corfudb.runtime.view.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.json.JsonObject;
 import java.util.List;
 
 /**
@@ -20,40 +21,37 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
     private Logger log = LoggerFactory.getLogger(SimpleReconfigurationPolicy.class);
 
     @Override
-    public CorfuDBView getNewView(CorfuDBView oldView, NetworkException e) {
-        /* it's null, don't change anything */
-        if (e == null) { return oldView; }
-        /* Is the exception for a Logging Unit? */
-        if (e.protocol instanceof IWriteOnceLogUnit)
-        {
-            /* Okay, so was it a read or a write? */
-            if (e.write)
-            {
-                /* in the case of a write, find the segment belonging to the protocol,
-                   and remove that protocol from the segment.
-                 */
-                CorfuDBView newView = (CorfuDBView) Serializer.copyShallow(oldView);
+    public CorfuDBView prepareReconfigProposal(CorfuDBView oldView, NetworkException e) {
 
-                for (CorfuDBViewSegment segment : newView.getSegments())
+        assert e != null;
+        return prepareReconfigProposal(oldView, e.protocol);
+    }
+
+    @Override
+    public CorfuDBView prepareReconfigProposal(CorfuDBView oldView, IServerProtocol faulty) {
+
+        /* Is the exception for a Logging Unit? */
+        if (faulty instanceof IWriteOnceLogUnit)
+        {
+            /* in the case of a write, find the segment belonging to the protocol,
+               and remove that protocol from the segment.
+             */
+            CorfuDBView newView = (CorfuDBView) Serializer.copyShallow(oldView);
+
+            for (CorfuDBViewSegment segment : newView.getSegments())
+            {
+                for (List<IServerProtocol> nodeList : segment.getGroups())
                 {
-                    for (List<IServerProtocol> nodeList : segment.getGroups())
-                    {
-                        if (nodeList.size() > 1) {
-                            nodeList.removeIf(n -> n.getFullString().equals(e.protocol.getFullString()));
-                        }
+                    if (nodeList.size() > 1) {
+                        nodeList.removeIf(n -> n.getFullString().equals(faulty.getFullString()));
                     }
                 }
-
-                log.info("Reconfiguring all nodes in view to new epoch " + oldView.getEpoch() + 1);
-                newView.moveAllToNewEpoch(oldView.getEpoch() + 1);
-                return newView;
             }
-            /* for reads, we don't do anything, for now...
-             */
-            log.warn("Reconfigure due to read, ignoring");
-            return oldView;
+
+            newView.setEpoch(oldView.getEpoch() + 1);
+            return newView;
         }
-        else if (e.protocol instanceof ISimpleSequencer)
+        else if (faulty instanceof ISimpleSequencer)
         {
             if (oldView.getSequencers().size() <= 1)
             {
@@ -63,7 +61,7 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
             else
             {
                 CorfuDBView newView = (CorfuDBView) Serializer.copyShallow(oldView);
-                newView.moveAllToNewEpoch(oldView.getEpoch() + 1);
+                newView.setEpoch(oldView.getEpoch() + 1);
 
                 /* Interrogate each log unit to figure out last issued token */
                 long last = -1;
@@ -82,19 +80,19 @@ public class SimpleReconfigurationPolicy implements IReconfigurationPolicy {
                     }
                 }
 
-                log.warn("Removing sequencer " + e.protocol.getFullString() + " from configuration, discover last sequence was " + last);
-                newView.getSequencers().removeIf(n -> n.getFullString().equals(e.protocol.getFullString()));
+                log.warn("Removing sequencer " + faulty.getFullString() + " from configuration, discover last sequence was " + last);
+                newView.getSequencers().removeIf(n -> n.getFullString().equals(faulty.getFullString()));
                 try {
                     ((ISimpleSequencer) newView.getSequencers().get(0)).recover(last);
                 } catch (Exception ex){
-                    log.warn("Tried to install recovered sequence from sequencer, but failed", e);
+                    log.warn("Tried to install recovered sequence from sequencer, but failed");
                 }
                 return newView;
             }
         }
         else
         {
-            log.warn("Request reconfiguration for protocol we don't know how to reconfigure", e.protocol);
+            log.warn("Request reconfiguration for protocol we don't know how to reconfigure", faulty);
             return (CorfuDBView) Serializer.copyShallow(oldView);
         }
     }

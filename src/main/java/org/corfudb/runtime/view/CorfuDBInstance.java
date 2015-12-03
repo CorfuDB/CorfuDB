@@ -1,44 +1,39 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
-import org.corfudb.runtime.CorfuDBRuntime;
-import org.corfudb.runtime.collections.CDBSimpleMap;
-import org.corfudb.runtime.entries.MetadataEntry;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
-import org.corfudb.runtime.objects.CorfuObjectRuntimeProcessor;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import javax.json.JsonObject;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Proxy;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 5/22/15.
  */
 @Slf4j
-public class LocalCorfuDBInstance implements ICorfuDBInstance {
+public class CorfuDBInstance implements ICorfuDBInstance {
 
     // Members of this CorfuDBInstance
-    private IConfigurationMaster configMaster;
+    private IViewJanitor viewJanitor;
+
+    @Getter
     private IStreamingSequencer streamingSequencer;
+
+    @Getter
     private IStreamAddressSpace streamAddressSpace;
 
     @Getter
     public INewStreamingSequencer newStreamingSequencer;
 
 
-    private CorfuDBRuntime cdr;
-    private CDBSimpleMap<UUID, IStreamMetadata> streamMap;
     private ConcurrentMap<UUID, ICorfuDBObject> objectMap;
 
     @Getter
@@ -53,27 +48,21 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     // Classes to instantiate.
     private Class<? extends IStream> streamType;
 
+    public CorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView)
+            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
 
-    public LocalCorfuDBInstance(CorfuDBRuntime cdr)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
-    {
-        this(cdr, ConfigurationMaster.class,
-                NewStream.class);
-    }
-
-    public LocalCorfuDBInstance(CorfuDBRuntime cdr,
-                                Class<? extends IConfigurationMaster> cm,
-                                Class<? extends IStream> streamType)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
-    {
-        configMaster = cm.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
+        viewJanitor = new ViewJanitor(this, bootstrapView,  myHost, myPort);
+        log.trace("local instance has a janitor initialized");
+        streamingSequencer = new StreamingSequencer(this); // ss.getConstructor(ICorfuDBInstance.class).newInstance(this);
+        log.trace("local instance has a sequencer initialized");
         streamAddressSpace = new StreamAddressSpace(this);
+        log.trace("local instance has a stream AS initialized");
         newStreamingSequencer = new NewStreamingSequencer(this);
+        log.trace("local instance has a new streaming sequencer initialized");
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
         this.localStreamMap = new NonBlockingHashMap<>();
         this.baseEngineMap = new NonBlockingHashMap<>();
-        this.cdr = cdr;
     }
 
     /**
@@ -82,8 +71,8 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      * @return The configuration master for this instance.
      */
     @Override
-    public IConfigurationMaster getConfigurationMaster() {
-        return configMaster;
+    public IViewJanitor getViewJanitor() {
+        return viewJanitor;
     }
 
     /**
@@ -103,31 +92,18 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
      */
     @Override
     public CorfuDBView getView() {
-        /* make sure that the view belongs to the same instance. */
-        CorfuDBView view = cdr.getView();
-        /* if the instance ID does not match, reset all the caches. */
-        if (!view.getUUID().equals(UUID))
-        {
-            /* This region is synchronized to make sure reset happens exactly once.
-             * One thread will go in and reset all the caches, updating the UUID.
-             * The other threads will see that the UUID has changed and get the view again.
-             */
-            synchronized (this) {
-                if (!view.getUUID().equals(UUID) && (UUID != null)) {
-                    log.info("Instance has changed from ID {} to {}, resetting all local caches.",
-                            UUID, view.getUUID());
-                    resetAllCaches();
-                    UUID = view.getUUID();
-                }
-                else if (UUID == null)
-                {
-                    UUID = view.getUUID();
-                }
-            }
-        }
-        return view;
+
+        return viewJanitor.getView(); // todo check UUID , reset caches if needed!!!
     }
 
+    /**
+     * report a problem with view
+     *
+     * @param e
+     */
+    public void invalidateViewAndWait(NetworkException e) {
+        viewJanitor.reconfig(e); // todo not sure this is the right place for this API
+    }
 
     /**
      * Resets all local caches.
@@ -195,21 +171,6 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     }
 
     /**
-     * Retrieves the stream metadata map for this instance.
-     *
-     * @return The stream metadata map for this instance.
-     */
-    @Override
-    public Map<UUID, IStreamMetadata> getStreamMetadataMap() {
-        /* for now, the stream metadata is backed on a CDBSimpleMap
-            This could change if we need to support hopping, since
-            there needs to be a globally consistent view of the stream
-            start positions.
-         */
-        return streamMap;
-    }
-
-    /**
      * Retrieves a corfuDB object.
      *
      * @param id   A unique ID for the object to be retrieved.
@@ -269,13 +230,5 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
         {
             throw new RuntimeException(e);
         }
-    }
-
-    /**
-     * Invalidate the current view, requiring that the view be refreshed.
-     */
-    @Override
-    public void invalidateView() {
-        cdr.invalidateViewAndWait(null);
     }
 }

@@ -4,11 +4,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.jmeter.protocol.java.sampler.AbstractJavaSamplerClient;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.view.ICorfuDBInstance;
 import org.corfudb.runtime.view.INewStreamingSequencer;
 import org.corfudb.runtime.view.IStreamingSequencer;
-import org.corfudb.util.CorfuInfrastructureBuilder;
 
 import java.util.UUID;
 import java.util.concurrent.locks.Lock;
@@ -20,13 +19,11 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class NettyStreamingSequencerServerJMeter extends AbstractJavaSamplerClient {
 
-    CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
     INewStreamingSequencer sequencer;
 
     UUID streamID;
 
-    static CorfuInfrastructureBuilder infrastructure;
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
 
@@ -43,41 +40,10 @@ public class NettyStreamingSequencerServerJMeter extends AbstractJavaSamplerClie
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-        l.lock();
-        if (!reset)
-        {
-            infrastructure =
-                    CorfuInfrastructureBuilder.getBuilder()
-                            .addSequencer(7779, NettyStreamingSequencerServer.class, "nsss", null)
-                            .start(7777);
-            try {
-                Thread.sleep(500);
-            } catch (Exception e)
-            {
-
-            }
-            reset = true;
-        }
-        l.unlock();
-
-        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
-        instance = runtime.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
         sequencer = instance.getNewStreamingSequencer();
 
         streamID = UUID.randomUUID();
         super.setupTest(context);
     }
-
-    @Override
-    public void teardownTest(JavaSamplerContext context) {
-        runtime.close();
-        l.lock();
-        if (reset) {
-            infrastructure.shutdownAndWait();
-            reset = false;
-        }
-        l.unlock();
-        super.teardownTest(context);
-    }
-
 }

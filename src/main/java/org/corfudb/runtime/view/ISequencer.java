@@ -7,7 +7,6 @@ public interface ISequencer {
 
     /**
      * This convenience function returns the most recent token not yet issued.
-     * @param stream        The stream ID to return tokens for.
      * @return              The next token to be issued.
      */
     default long getCurrent()

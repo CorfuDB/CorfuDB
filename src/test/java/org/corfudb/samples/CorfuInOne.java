@@ -2,13 +2,14 @@ package org.corfudb.samples;
 
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.stream.IStream;
 import org.corfudb.runtime.view.CorfuDBView;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.util.CorfuInfrastructureBuilder;
+import org.corfudb.runtime.view.CorfuDBInstance;
+import org.corfudb.util.CorfuITBuilder;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -18,7 +19,7 @@ import java.util.UUID;
  */
 public class CorfuInOne {
 
-    public static void main(String args[]) {
+    public static void main(String args[]) throws InvocationTargetException, NoSuchMethodException, InstantiationException, IllegalAccessException {
 
         Map<String, Object> luConfigMap = new HashMap<String,Object>() {
             {
@@ -28,17 +29,17 @@ public class CorfuInOne {
                 put("trim", 0);
             }
         };
-        CorfuInfrastructureBuilder cbuilder = new CorfuInfrastructureBuilder().
+        CorfuDBView view = new CorfuITBuilder().
                 addLoggingUnit(7002, 0, NettyLogUnitServer.class, "nlu", luConfigMap).
                 addLoggingUnit(7003, 0, NettyLogUnitServer.class, "nlu", luConfigMap).
                 addLoggingUnit(7004, 0, NettyLogUnitServer.class, "nlu", luConfigMap).
                 addSequencer(7001, NettyStreamingSequencerServer.class, "nsss", null).
   //              setReplication("cdbqr").
-                start(9999) ;
+                addView(9999).
+                start() ;
 
-        CorfuDBRuntime cdr = CorfuDBRuntime.getRuntime("http://localhost:9999/corfu");
-
-        ICorfuDBInstance cinstance = cdr.getLocalInstance();
+        System.out.println("view:" + view.getSerializedJSONView());
+        ICorfuDBInstance cinstance = new CorfuDBInstance("localhost", 9999, view);
 
        /* check health of Configuration Master by trying to retrieve view
          */
@@ -49,10 +50,8 @@ public class CorfuInOne {
         Thread b = new Thread(new Runnable() {
             @Override
             public void run() {
-                System.out.println("trying to connect to config-master...");
-                CorfuDBView view = cdr.getView();
-
-                System.out.println("trying to ping all view components...: " + view.isViewAccessible() );
+                System.out.println("trying to ping all view components...");
+                System.out.println("access check return value: " + cinstance.getViewJanitor().isViewAccessible() );
                 synchronized (this) { notify();}
             } } );
         b.start();
@@ -68,7 +67,7 @@ public class CorfuInOne {
         Thread work = new Thread(new Runnable() {
             @Override
             public void run() {
-                IStream iStream = cdr.getLocalInstance().openStream(UUID.randomUUID());
+                IStream iStream = cinstance.openStream(UUID.randomUUID());
                 try {
                     for (int j = 0; j < 10000; j++)
                         iStream.append("hello");

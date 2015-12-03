@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.collections.CDBSimpleMap;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.UUID;
@@ -19,8 +18,8 @@ public abstract class ICorfuDBInstanceTest {
     @Test
     public void canGetConfigurationMaster()
     {
-        assertThat(getInstance().getConfigurationMaster())
-                .isInstanceOf(IConfigurationMaster.class);
+        assertThat(getInstance().getViewJanitor())
+                .isInstanceOf(IViewJanitor.class);
     }
 
     @Test

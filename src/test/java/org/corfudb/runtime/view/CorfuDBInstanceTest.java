@@ -3,9 +3,8 @@ package org.corfudb.runtime.view;
 import lombok.Getter;
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.collections.CDBSimpleMap;
-import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.Before;
 import org.junit.Test;
@@ -17,10 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by mwei on 6/3/15.
  */
-public class LocalCorfuDBInstanceTest extends ICorfuDBInstanceTest {
-
-    CorfuInfrastructureBuilder infrastructure;
-    CorfuDBRuntime runtime;
+public class CorfuDBInstanceTest extends ICorfuDBInstanceTest {
 
     @Getter
     ICorfuDBInstance instance;
@@ -28,14 +24,7 @@ public class LocalCorfuDBInstanceTest extends ICorfuDBInstanceTest {
     @Before
     public void setup()
     {
-        infrastructure =
-                CorfuInfrastructureBuilder.getBuilder()
-                        .addSequencer(RandomOpenPort.getOpenPort(), NettyStreamingSequencerServer.class, "nsss", null)
-                        .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
-                        .start(RandomOpenPort.getOpenPort());
-
-        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
-        instance = runtime.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
 
         assertThat(instance)
                 .isNotNull();
@@ -51,7 +40,7 @@ public class LocalCorfuDBInstanceTest extends ICorfuDBInstanceTest {
         /* Insert a test item into the stream. */
         map.put("test", "helloword");
         /* reset the instance */
-        instance.getConfigurationMaster().resetAll();
+        instance.getViewJanitor().resetAll();
         instance.resetAllCaches();
 
         /* Re-open the test object, but under the same stream ID */

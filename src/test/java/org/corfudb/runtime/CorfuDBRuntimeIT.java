@@ -7,14 +7,11 @@ import org.corfudb.runtime.protocols.logunits.IWriteOnceLogUnit;
 import org.corfudb.runtime.protocols.logunits.NettyLogUnitProtocol;
 import org.corfudb.runtime.protocols.sequencers.ISimpleSequencer;
 import org.corfudb.runtime.view.*;
-import org.corfudb.util.CorfuInfrastructureBuilder;
+import org.corfudb.util.CorfuITBuilder;
 import org.junit.Test;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.lang.reflect.InvocationTargetException;
+import java.util.*;
 
 import static com.github.marschall.junitlambda.LambdaAssert.assertRaises;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,8 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class CorfuDBRuntimeIT {
 
-    static UUID uuid = UUID.randomUUID();
-    static Map<String, Object> luConfigMap = new HashMap<String,Object>() {
+    public static UUID uuid = UUID.randomUUID();
+    public static Map<String, Object> luConfigMap = new HashMap<String,Object>() {
         {
             put("capacity", 200000);
             put("ramdisk", true);
@@ -34,20 +31,86 @@ public class CorfuDBRuntimeIT {
         }
     };
 
-    static CorfuInfrastructureBuilder infrastructure =
-            CorfuInfrastructureBuilder.getBuilder()
+    public static CorfuDBView view =
+            CorfuITBuilder.getBuilder()
                     .addSequencer(9201, NettyStreamingSequencerServer.class, "nsss", null)
                     .addLoggingUnit(9200, 0, NettyLogUnitServer.class, "nlu", luConfigMap)
-                    .start(9202);
+                    .addView(9202)
+                    .start();
 
     @Test
-    public void isCorfuViewAccessible()
-    {
-        CorfuDBRuntime cdr = CorfuDBRuntime.createRuntime(infrastructure.getConfigString());
-        cdr.waitForViewReady();
-        assertThat(cdr.getView())
+    public void isCorfuViewAccessible() throws InvocationTargetException, NoSuchMethodException, InstantiationException, IllegalAccessException {
+        CorfuDBInstance cinstance = generateInstance();
+        assertThat(cinstance.getViewJanitor())
                 .isNotNull();
+        assertThat(cinstance.getViewJanitor().isViewAccessible())
+                .isNull();
     }
 
+    public static CorfuDBInstance generateInstance() {
+        try {
+            return new CorfuDBInstance("localhost", 9202, view);
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+   //:q @Test
+    public void isCorfuViewUsable() throws Exception
+    {
+        CorfuDBInstance cinstance = generateInstance();
+        IViewJanitor cm = cinstance.getViewJanitor();
 
+        assertThat(cm)
+                .isNotNull();
+        assertThat(cm.isViewAccessible())
+                .isNull();
+
+        cm.resetAll();
+
+        IStreamingSequencer s = cinstance.getStreamingSequencer();
+        assertThat(s.getCurrent())
+                .isEqualTo(0);
+
+        IStreamAddressSpace woas = cinstance.getStreamAddressSpace();
+        long addr = s.getCurrent();
+        woas.write(addr, new HashSet<UUID>(), "hello world".getBytes());
+        assertThat(woas.read(addr))
+                .isEqualTo("hello world".getBytes());
+    }
+
+   // @Test
+    public void isCorfuResettable() throws Exception
+    {
+        CorfuDBInstance cinstance = generateInstance();
+        IViewJanitor cm = cinstance.getViewJanitor();
+
+        cm.resetAll();
+
+        IStreamingSequencer s = cinstance.getStreamingSequencer();
+        assertThat(s.getCurrent())
+                .isEqualTo(0);
+        s.getNext();
+        cm.resetAll();
+        assertThat(s.getCurrent())
+                .isEqualTo(0);
+
+        IStreamAddressSpace woas = cinstance.getStreamAddressSpace();
+        long addr = s.getNext();
+        woas.write(addr, new HashSet<UUID>(),"hello world".getBytes());
+        assertThat(woas.read(addr))
+                .isEqualTo("hello world".getBytes());
+
+        cm.resetAll();
+        addr = s.getNext();
+        woas.write(addr, new HashSet<UUID>(),"hello world 2".getBytes());
+        assertThat(woas.read(addr))
+                .isEqualTo("hello world 2".getBytes());
+    }
 }

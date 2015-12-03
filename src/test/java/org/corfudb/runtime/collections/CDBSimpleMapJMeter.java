@@ -4,15 +4,11 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.jmeter.protocol.java.sampler.AbstractJavaSamplerClient;
 import org.apache.jmeter.protocol.java.sampler.JavaSamplerContext;
 import org.apache.jmeter.samplers.SampleResult;
-import org.corfudb.infrastructure.NettyLogUnitServer;
-import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.smr.SimpleSMREngine;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.util.CorfuInfrastructureBuilder;
+import org.corfudb.runtime.view.CorfuDBInstance;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.locks.Lock;
@@ -22,12 +18,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * Created by mwei on 6/11/15.
  */
 public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
-    CorfuDBRuntime runtime;
-    ICorfuDBInstance instance;
     CDBSimpleMap<String, String> map;
 
-    static CorfuInfrastructureBuilder infrastructure;
-    static UUID uuid;
     static Lock l = new ReentrantLock();
     static Boolean reset = false;
 
@@ -67,31 +59,10 @@ public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
     @Override
     @SuppressWarnings("unchecked")
     public void setupTest(JavaSamplerContext context) {
-        Map<String, Object> luConfigMap = new HashMap<String,Object>() {
-            {
-                put("capacity", 200000);
-                put("ramdisk", true);
-                put("pagesize", 4096);
-                put("trim", 0);
-            }
-        };
 
-        l.lock();
-        if (!reset)
-        {
-           infrastructure = CorfuInfrastructureBuilder.getBuilder()
-                   .addSequencer(9201, NettyStreamingSequencerServer.class, "nsss", null)
-                   .addLoggingUnit(9200, 0, NettyLogUnitServer.class, "nlu", luConfigMap)
-                    .start(9002);
+        CorfuDBInstance instance = CorfuDBRuntimeIT.generateInstance();
 
-            reset = true;
-            uuid = UUID.randomUUID();
-        }
-        l.unlock();
-
-        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
-        instance = runtime.getLocalInstance();
-
+        UUID uuid = UUID.randomUUID();
         map = instance.openObject(uuid, new ICorfuDBInstance.OpenObjectArgs<CDBSimpleMap>(
                 CDBSimpleMap.class,
                 SimpleSMREngine.class,
@@ -99,17 +70,5 @@ public class CDBSimpleMapJMeter extends AbstractJavaSamplerClient {
         ));
 
         super.setupTest(context);
-    }
-
-    @Override
-    public void teardownTest(JavaSamplerContext context) {
-        runtime.close();
-        l.lock();
-        if (reset) {
-            infrastructure.shutdownAndWait();
-            reset = false;
-        }
-        l.unlock();
-        super.teardownTest(context);
     }
 }

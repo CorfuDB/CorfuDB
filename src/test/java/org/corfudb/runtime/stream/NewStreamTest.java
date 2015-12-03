@@ -3,10 +3,9 @@ package org.corfudb.runtime.stream;
 import lombok.SneakyThrows;
 import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.NettyStreamingSequencerServer;
-import org.corfudb.runtime.CorfuDBRuntime;
+import org.corfudb.runtime.CorfuDBRuntimeIT;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.view.ICorfuDBInstance;
-import org.corfudb.util.CorfuInfrastructureBuilder;
 import org.corfudb.util.RandomOpenPort;
 import org.junit.After;
 import org.junit.Before;
@@ -21,22 +20,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class NewStreamTest {
 
-    CorfuInfrastructureBuilder infrastructure;
-    CorfuDBRuntime runtime;
     ICorfuDBInstance instance;
 
     @Before
     @SneakyThrows
     public void setup()
     {
-        infrastructure =
-                CorfuInfrastructureBuilder.getBuilder()
-                        .addSequencer(RandomOpenPort.getOpenPort(), NettyStreamingSequencerServer.class, "nsss", null)
-                        .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
-                        .start(RandomOpenPort.getOpenPort());
-
-        runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());
-        instance = runtime.getLocalInstance();
+        instance = CorfuDBRuntimeIT.generateInstance();
     }
 
   //  @Test
@@ -94,13 +84,5 @@ public class NewStreamTest {
         ITimestamp ts = ns1.checkAsync().get();
         assertThat(ns1.readToAsync(ts).get()[1].getPayload())
                 .isEqualTo("Hello World from stream 1");
-    }
-
-    @After
-    @SneakyThrows
-    public void tearDown()
-    {
-        infrastructure
-                .shutdownAndWait();
     }
 }
