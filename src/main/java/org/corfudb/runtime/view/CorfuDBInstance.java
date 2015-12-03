@@ -3,11 +3,12 @@ package org.corfudb.runtime.view;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.objects.CorfuObjectByteBuddyProxy;
 import org.corfudb.runtime.smr.*;
 import org.corfudb.runtime.stream.*;
 
+import javax.json.JsonObject;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -45,33 +46,11 @@ public class CorfuDBInstance implements ICorfuDBInstance {
 
     public CorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
-        this(view.getSerializedJSONView(), myLayoutIndex);
-    }
-
-    public LocalCorfuDBInstance(JsonObject bootstrapLayout)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
-        this(bootstrapLayout, -1);
-    }
-
-    public LocalCorfuDBInstance(JsonObject bootstrapLayout, int myLayoutIndex)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
-    {
-        this(cdr, LayoutMonitor.class,
-                NewStream.class);
-    }
-
-    public CorfuDBInstance(String myHost, int myPort, CorfuDBView bootstrapView,
-                           Class<? extends IViewJanitor> cm,
-                           Class<? extends IStream> streamType)
-            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
-    {
 
         viewJanitor = new ViewJanitor(this, bootstrapView,  myHost, myPort);
         log.trace("local instance has a janitor initialized");
         streamingSequencer = new StreamingSequencer(this); // ss.getConstructor(ICorfuDBInstance.class).newInstance(this);
         log.trace("local instance has a sequencer initialized");
-        addressSpace = as.getConstructor(ICorfuDBInstance.class).newInstance(this);
-        log.trace("local instance has a AS initialized");
         streamAddressSpace = new StreamAddressSpace(this);
         log.trace("local instance has a stream AS initialized");
         newStreamingSequencer = new NewStreamingSequencer(this);

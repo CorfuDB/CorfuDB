@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.smr.ICorfuDBObject;
 import org.corfudb.runtime.smr.ISMREngine;
 import org.corfudb.runtime.smr.ITransaction;

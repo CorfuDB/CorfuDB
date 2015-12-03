@@ -1,11 +1,7 @@
 package org.corfudb.runtime.view;
 
-<<<<<<< HEAD
 import org.corfudb.runtime.exceptions.NetworkException;
-=======
-import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
->>>>>>> disable CorfuDBruntime layer altogether
 import org.corfudb.runtime.view.CorfuDBView;
 
 /**

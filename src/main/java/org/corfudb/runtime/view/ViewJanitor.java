@@ -3,7 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.corfudb.runtime.NetworkException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.configmasters.ILayoutKeeper;
 import org.corfudb.util.retry.ExponentialBackoffRetry;

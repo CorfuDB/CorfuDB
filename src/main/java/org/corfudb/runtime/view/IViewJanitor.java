@@ -1,11 +1,7 @@
 package org.corfudb.runtime.view;
 
-<<<<<<< HEAD:src/main/java/org/corfudb/runtime/view/ILayoutMonitor.java
 import org.corfudb.runtime.exceptions.NetworkException;
-=======
-import org.corfudb.runtime.NetworkException;
 import org.corfudb.runtime.protocols.IServerProtocol;
->>>>>>> disable CorfuDBruntime layer altogether:src/main/java/org/corfudb/runtime/view/IViewJanitor.java
 
 import javax.json.JsonObject;
 
