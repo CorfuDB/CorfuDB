@@ -1,0 +1,46 @@
+package org.corfudb.runtime.view;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Created by mwei on 12/11/15.
+ */
+@Slf4j
+public abstract class AbstractReplicationView {
+
+    public static AbstractReplicationView getReplicationView(Layout l, Layout.ReplicationMode mode)
+    {
+        switch (mode)
+        {
+            case CHAIN_REPLICATION:
+                return new ChainReplicationView(l);
+            case QUORUM_REPLICATION:
+                log.warn("Quorum replication is not yet supported!");
+                break;
+        }
+        log.error("Unknown replication mode {} selected.", mode);
+        throw new RuntimeException("Unsupported replication mode.");
+    }
+
+    @Getter
+    public final Layout layout;
+
+    public AbstractReplicationView(Layout layout)
+    {
+        this.layout = layout;
+    }
+
+    /** Write the given object to an address and streams, using the replication method given.
+     *
+     * @param address   An address to write to.
+     * @param stream    The streams which will belong on this entry.
+     * @param data      The data to write.
+     */
+    public abstract void write(long address, Set<UUID> stream, Object data)
+        throws Exception;
+}

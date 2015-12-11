@@ -15,8 +15,11 @@ import org.corfudb.runtime.view.SequencerView;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/9/15.
@@ -61,6 +64,11 @@ public class CorfuRuntime {
      */
     public CorfuRuntime parseConfigurationString(String configurationString)
     {
+        // Parse comma sep. list.
+        layoutServers = Pattern.compile(",")
+                .splitAsStream(configurationString)
+                .map(String::trim)
+                .collect(Collectors.toList());
         return this;
     }
 

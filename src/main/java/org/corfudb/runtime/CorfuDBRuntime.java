@@ -60,7 +60,6 @@ public class CorfuDBRuntime implements AutoCloseable {
     private BooleanLock viewUpdatePending;
     private Boolean closed = false;
     private UUID localID = null;
-    private org.corfudb.runtime.view.RemoteLogView remoteView;
     private LocalDateTime lastInvalidation;
     private LocalDateTime backOffTime;
     private long backOff = 0;
@@ -99,7 +98,6 @@ public class CorfuDBRuntime implements AutoCloseable {
         this.configurationString = configurationString;
 
         viewLock = new StampedLock();
-        remoteView = new org.corfudb.runtime.view.RemoteLogView();
         viewUpdatePending = new BooleanLock();
         viewUpdatePending.lock = true;
         viewManagerThread = getViewManagerThread();
@@ -321,25 +319,7 @@ public class CorfuDBRuntime implements AutoCloseable {
     public org.corfudb.runtime.view.CorfuDBView getView(UUID logID)
     throws RemoteException
     {
-        if (logID == null) {return getView();}
-        if (logID.equals(localID)) { return getView(); }
-        /** Go to the current view, and communicate with the local configuration
-         *  master to resolve the stream.
-         */
-        try{
-            return remoteView.getLog(logID);
-        }
-        catch (RemoteException re)
-        {
-            IConfigMaster cm = (IConfigMaster) getView().getConfigMasters().get(0);
-            String remoteLog = cm.getLog(logID);
-            /** Go to the remote stream, communicate with the remote configuration master
-             * and resolve the remote configuration.
-             */
-            remoteLog = remoteLog.replace("cdbcm", "http");
-            remoteView.addLog(logID, remoteLog);
-            return remoteView.getLog(logID);
-        }
+        return null;
     }
 
     /**

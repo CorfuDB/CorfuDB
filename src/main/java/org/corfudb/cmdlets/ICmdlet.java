@@ -3,6 +3,7 @@ package org.corfudb.cmdlets;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
@@ -44,6 +45,13 @@ public interface ICmdlet {
                 System.out.println("Level " + opts.get("--log-level") + " not recognized, defaulting to level INFO");
         }
         root.debug("Arguments are: {}", opts);
+    }
+
+    default CorfuRuntime configureRuntime(Map<String,Object> opts)
+    {
+        return new CorfuRuntime()
+                .parseConfigurationString((String)opts.get("--config"))
+                .connect();
     }
 
     default Set<UUID> streamsFromString(String streamString)
