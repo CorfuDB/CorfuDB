@@ -16,16 +16,10 @@
 package org.corfudb.runtime.protocols.logunits;
 
 import lombok.Data;
-import org.corfudb.infrastructure.thrift.Hint;
-import org.corfudb.infrastructure.thrift.Hints;
-import org.corfudb.infrastructure.thrift.ReadCode;
-import org.corfudb.infrastructure.thrift.ReadResult;
-import org.corfudb.infrastructure.wireprotocol.IMetadata;
-import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg;
-import org.corfudb.runtime.*;
+import org.corfudb.runtime.wireprotocol.IMetadata;
+import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg;
 import org.corfudb.runtime.protocols.IServerProtocol;
 
-import java.nio.ByteBuffer;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;

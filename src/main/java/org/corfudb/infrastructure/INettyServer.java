@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
+import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
 
 /**
  * Created by mwei on 12/4/15.

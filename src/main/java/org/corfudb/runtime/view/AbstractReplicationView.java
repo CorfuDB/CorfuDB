@@ -1,11 +1,11 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 import java.util.UUID;
+import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
 
 /**
  * Created by mwei on 12/11/15.
@@ -42,5 +42,13 @@ public abstract class AbstractReplicationView {
      * @param data      The data to write.
      */
     public abstract void write(long address, Set<UUID> stream, Object data)
+        throws Exception;
+
+    /** Read the given object from an address, using the replication method given.
+     *
+     * @param address   The address to read from.
+     * @return          The result of the read.
+     */
+    public abstract ReadResult read(long address)
         throws Exception;
 }

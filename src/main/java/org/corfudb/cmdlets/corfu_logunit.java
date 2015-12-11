@@ -1,23 +1,17 @@
 package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg;
-import org.corfudb.runtime.protocols.LayoutClient;
 import org.corfudb.runtime.protocols.LogUnitClient;
 import org.corfudb.runtime.protocols.NettyClientRouter;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
-import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
+import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
 
 /**
  * Created by mwei on 12/10/15.

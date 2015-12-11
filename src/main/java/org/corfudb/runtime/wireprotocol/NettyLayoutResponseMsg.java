@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 /**
  * Created by mwei on 12/8/15.

@@ -1,11 +1,10 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.KryoSerializer;
 
 /**
  * Created by mwei on 9/17/15.

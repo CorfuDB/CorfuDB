@@ -3,9 +3,9 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenResponseMsg;
+import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
+import org.corfudb.runtime.wireprotocol.NettyStreamingServerTokenRequestMsg;
+import org.corfudb.runtime.wireprotocol.NettyStreamingServerTokenResponseMsg;
 
 import java.util.Map;
 import java.util.UUID;

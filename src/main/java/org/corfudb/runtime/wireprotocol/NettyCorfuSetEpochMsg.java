@@ -1,12 +1,9 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.util.UUID;
-
 
 /**
  * Created by mwei on 9/15/15.
@@ -14,21 +11,18 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
-public class NettyLogUnitTrimMsg extends NettyCorfuMsg {
+public class NettyCorfuSetEpochMsg extends NettyCorfuMsg {
 
 
-    /** The address to prefix trim, inclusive. */
-    long prefix;
+    /** The new epoch to move to. */
+    long newEpoch;
 
-    /** The stream ID to trim. */
-    UUID streamID;
-
-    public NettyLogUnitTrimMsg(long prefix, UUID streamID)
+    public NettyCorfuSetEpochMsg (long newEpoch)
     {
-        this.msgType = NettyCorfuMsgType.TRIM;
-        this.streamID = streamID;
-        this.prefix = prefix;
+        this.msgType = NettyCorfuMsgType.SET_EPOCH;
+        this.newEpoch = newEpoch;
     }
+
     /**
      * Serialize the message into the given bytebuffer.
      *
@@ -37,9 +31,7 @@ public class NettyLogUnitTrimMsg extends NettyCorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        buffer.writeLong(prefix);
-        buffer.writeLong(streamID.getMostSignificantBits());
-        buffer.writeLong(streamID.getMostSignificantBits());
+        buffer.writeLong(newEpoch);
     }
 
     /**
@@ -51,7 +43,6 @@ public class NettyLogUnitTrimMsg extends NettyCorfuMsg {
     @Override
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
-        prefix = buffer.readLong();
-        streamID = new UUID(buffer.readLong(), buffer.readLong());
+        newEpoch = buffer.readLong();
     }
 }

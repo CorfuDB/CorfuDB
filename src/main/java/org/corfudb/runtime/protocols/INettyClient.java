@@ -1,8 +1,7 @@
 package org.corfudb.runtime.protocols;
 
 import io.netty.channel.ChannelHandlerContext;
-import org.corfudb.infrastructure.NettyServerRouter;
-import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
+import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
 
 import java.util.Set;
 

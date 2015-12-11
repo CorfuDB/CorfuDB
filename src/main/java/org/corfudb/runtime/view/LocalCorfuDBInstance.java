@@ -29,8 +29,7 @@ import java.util.stream.Collectors;
 public class LocalCorfuDBInstance implements ICorfuDBInstance {
 
     // Members of this CorfuDBInstance
-    private IConfigurationMaster configMaster;
-    private IStreamingSequencer streamingSequencer;
+    //private IStreamingSequencer streamingSequencer;
     private IStreamAddressSpace streamAddressSpace;
 
     @Getter
@@ -57,33 +56,22 @@ public class LocalCorfuDBInstance implements ICorfuDBInstance {
     public LocalCorfuDBInstance(CorfuDBRuntime cdr)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        this(cdr, ConfigurationMaster.class,
+        this(cdr, null,
                 NewStream.class);
     }
 
     public LocalCorfuDBInstance(CorfuDBRuntime cdr,
-                                Class<? extends IConfigurationMaster> cm,
+                                Class<?> cm,
                                 Class<? extends IStream> streamType)
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
-        configMaster = cm.getConstructor(CorfuDBRuntime.class).newInstance(cdr);
         streamAddressSpace = new StreamAddressSpace(this);
-        newStreamingSequencer = new NewStreamingSequencer(this);
+        //newStreamingSequencer = new NewStreamingSequencer(this);
         this.streamType = streamType;
         this.objectMap = new NonBlockingHashMap<UUID, ICorfuDBObject>();
         this.localStreamMap = new NonBlockingHashMap<>();
         this.baseEngineMap = new NonBlockingHashMap<>();
         this.cdr = cdr;
-    }
-
-    /**
-     * Gets a configuration master for this instance.
-     *
-     * @return The configuration master for this instance.
-     */
-    @Override
-    public IConfigurationMaster getConfigurationMaster() {
-        return configMaster;
     }
 
     /**

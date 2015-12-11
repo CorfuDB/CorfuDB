@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import lombok.RequiredArgsConstructor;
 

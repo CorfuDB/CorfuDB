@@ -274,8 +274,8 @@ public class CorfuDBRuntime implements AutoCloseable {
         if (currentView != null)
         {
             currentView.invalidate();
-            IConfigurationMaster cm = new ConfigurationMaster(this);
-            cm.requestReconfiguration(e);
+          //  IConfigurationMaster cm = new ConfigurationMaster(this);
+          //  cm.requestReconfiguration(e);
         }
             synchronized(viewUpdatePending)
             {
