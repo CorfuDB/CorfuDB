@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.infrastructure.wireprotocol.*;
+import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
 
 import java.util.Set;
 import java.util.UUID;
@@ -42,6 +43,8 @@ public class LogUnitClient implements INettyClient {
             case ERROR_RANK:
                 router.completeExceptionally(msg.getRequestID(), new Exception("Rank"));
                 break;
+            case READ_RESPONSE:
+                router.completeRequest(msg.getRequestID(), new ReadResult((NettyLogUnitReadResponseMsg)msg));
         }
     }
 
@@ -81,4 +84,52 @@ public class LogUnitClient implements INettyClient {
         w.setPayload(writeObject);
         return router.sendMessageAndGetCompletable(w);
     }
+
+    /**
+     * Asynchronously read from the logging unit.
+     *
+     * @param address The address to read from.
+     * @return A CompletableFuture which will complete with a ReadResult once the read
+     * completes.
+     */
+    public CompletableFuture<ReadResult> read(long address) {
+        return router.sendMessageAndGetCompletable(new NettyLogUnitReadRequestMsg(address));
+    }
+
+    /**
+     * Send a hint to the logging unit that a stream can be trimmed.
+     *
+     * @param stream The stream to trim.
+     * @param prefix The prefix of the stream, as a global physical offset, to trim.
+     */
+    public void trim(UUID stream, long prefix) {
+
+        router.sendMessage(new NettyLogUnitTrimMsg(prefix, stream));
+    }
+
+    /**
+     * Fill a hole at a given address.
+     *
+     * @param address The address to fill a hole at.
+     */
+    public CompletableFuture<Boolean> fillHole(long address) {
+        return router.sendMessageAndGetCompletable(new NettyLogUnitFillHoleMsg(address));
+    }
+
+    /**
+     * Force the garbage collector to begin garbage collection.
+     */
+    public void forceGC() {
+        router.sendMessage(new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.FORCE_GC));
+    }
+
+    /**
+     * Change the default garbage collection interval.
+     *
+     * @param millis    The new garbage collection interval, in milliseconds.
+     */
+    public void setGCInterval(long millis) {
+        router.sendMessage(new NettyLogUnitGCIntervalMsg(millis));
+    }
+
 }

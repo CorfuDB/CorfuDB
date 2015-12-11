@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 @Getter
 @Setter
 @NoArgsConstructor
+@ToString
 public class NettyLogUnitReadResponseMsg extends NettyLogUnitPayloadMsg {
 
 
@@ -53,6 +54,30 @@ public class NettyLogUnitReadResponseMsg extends NettyLogUnitPayloadMsg {
             isHole = true;
             isPersisted = false;
         }
+    }
+
+    public static class ReadResult {
+
+        /** The backing message for this read result. */
+        NettyLogUnitReadResponseMsg msg;
+
+        public ReadResult(NettyLogUnitReadResponseMsg msg)
+        {
+            this.msg = msg;
+        }
+
+        @Getter(lazy=true)
+        private final ReadResultType resultType = msg.getResult();
+
+        @Getter(lazy=true)
+        private final EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap = msg.getMetadataMap();
+
+        @Getter(lazy=true)
+        private final ByteBuf buffer = msg.getData();
+
+        @Getter(lazy=true)
+        private final Object payload = msg.getPayload();
+
     }
 
     /** The result of this read. */

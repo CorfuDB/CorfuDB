@@ -4,6 +4,7 @@ import com.google.common.io.ByteStreams;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg;
 import org.corfudb.runtime.protocols.LayoutClient;
 import org.corfudb.runtime.protocols.LogUnitClient;
 import org.corfudb.runtime.protocols.NettyClientRouter;
@@ -13,10 +14,10 @@ import org.docopt.Docopt;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
+import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
 
 /**
  * Created by mwei on 12/10/15.
@@ -29,10 +30,17 @@ public class corfu_logunit implements ICmdlet {
                     + "\n"
                     + "Usage:\n"
                     + "\tcorfu_logunit write <address>:<port> -a <log-address> [-s <stream-ids>] [-r <rank>] [-d <level>]\n"
+                    + "\tcorfu_logunit read <address>:<port> -a <log-address> [-d <level>]\n"
+                    + "\tcorfu_logunit trim <address>:<port> -a <log-address> [-r <stream-id>] [-d <level>]\n"
+                    + "\tcorfu_logunit fillHole <address>:<port> -a <log-address> [-d <level>]\n"
+                    + "\tcorfu_logunit forceGC <address>:<port> [-d <level>]\n"
+                    + "\tcorfu_logunit setGCInterval <address>:<port> -i <interval> [-d <level>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -a <log-address>, --log-address=<log-address>  The log address to use. \n"
+                    + " -i <interval>, --interval=<interval>           Interval to set garbage collection to. \n"
                     + " -s <stream-ids>, --stream-ids=<stream-ids>     The stream ids to use, comma separated. \n"
+                    + " -t <stream-id>, --stream-id=<stream-id>        A stream id to use, comma separated. \n"
                     + " -r <rank>, --rank=<rank>                       The rank to use [default: 0]. \n"
                     + " -d <level>, --log-level=<level>                Set the logging level, valid levels are: \n"
                     + "                                                ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
@@ -60,18 +68,91 @@ public class corfu_logunit implements ICmdlet {
                 .start();
 
         try {
-            router.getClient(LogUnitClient.class).write(Long.parseLong((String) opts.get("--log-address")),
-                    Collections.emptySet(), Integer.parseInt((String) opts.get("--rank")),
-                    ByteStreams.toByteArray(System.in)).get();
+            if ((Boolean)opts.get("write"))
+            {
+                write(router, opts);
+            } else if ((Boolean)opts.get("read"))
+            {
+                read(router, opts);
+            } else if ((Boolean)opts.get("trim"))
+            {
+                trim(router, opts);
+            } else if ((Boolean)opts.get("fillHole"))
+            {
+                fillHole(router, opts);
+            } else if ((Boolean)opts.get("forceGC"))
+            {
+                forceGC(router, opts);
+            } else if ((Boolean)opts.get("setGCInterval"))
+            {
+                setGCInterval(router, opts);
+            }
         } catch (ExecutionException ex)
         {
-            log.error("Exception writing", ex.getCause());
+            log.error("Exception", ex.getCause());
             throw new RuntimeException(ex.getCause());
         }
         catch (Exception e)
         {
-            log.error("Exception writing", e);
+            log.error("Exception", e);
             throw new RuntimeException(e);
+        }
+    }
+
+    void write(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
+        router.getClient(LogUnitClient.class).write(Long.parseLong((String) opts.get("--log-address")),
+                streamsFromString((String) opts.get("--stream-ids")), Integer.parseInt((String) opts.get("--rank")),
+                ByteStreams.toByteArray(System.in)).get();
+    }
+
+    void trim(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
+        String streamID = (String) opts.get("--stream-id");
+        UUID stream = streamID == null ? null : UUID.fromString(streamID);
+        router.getClient(LogUnitClient.class).trim(stream,
+                Long.parseLong((String) opts.get("--log-address")));
+    }
+
+    void fillHole(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
+        router.getClient(LogUnitClient.class).fillHole(
+                Long.parseLong((String) opts.get("--log-address"))).get();
+    }
+
+    void forceGC(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
+        router.getClient(LogUnitClient.class).forceGC();
+    }
+
+    void setGCInterval(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
+        router.getClient(LogUnitClient.class).setGCInterval(Long.parseLong((String) opts.get("--interval")));
+    }
+
+    void read(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
+        ReadResult r = router.getClient(LogUnitClient.class).read(Long.parseLong((String) opts.get("--log-address"))).get();
+        switch (r.getResultType())
+        {
+            case EMPTY:
+                System.err.println("Error: EMPTY");
+                break;
+            case FILLED_HOLE:
+                System.err.println("Error: HOLE");
+                break;
+            case TRIMMED:
+                System.err.println("Error: TRIMMED");
+                break;
+            case DATA:
+                r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
+                break;
         }
     }
 }

@@ -5,7 +5,12 @@ import ch.qos.logback.classic.Logger;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/10/15.
@@ -39,5 +44,15 @@ public interface ICmdlet {
                 System.out.println("Level " + opts.get("--log-level") + " not recognized, defaulting to level INFO");
         }
         root.debug("Arguments are: {}", opts);
+    }
+
+    default Set<UUID> streamsFromString(String streamString)
+    {
+        if (streamString == null) { return Collections.emptySet(); }
+        return Pattern.compile(",")
+                .splitAsStream(streamString)
+                .map(String::trim)
+                .map(UUID::fromString)
+                .collect(Collectors.toSet());
     }
 }
