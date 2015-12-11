@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.*;
+import org.corfudb.infrastructure.*;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -17,7 +18,7 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class NettyCorfuMsg {
     /** The unique id of the client making the request */
-    UUID clientID;
+    long clientID;
 
     /** The request id of this request/response */
     long requestID;
@@ -28,38 +29,43 @@ public class NettyCorfuMsg {
     @RequiredArgsConstructor
     public enum NettyCorfuMsgType {
         // Base Messages
-        PING(0, NettyCorfuMsg.class),
-        PONG(1, NettyCorfuMsg.class),
-        RESET(2, NettyCorfuResetMsg.class),
-        SET_EPOCH(3, NettyCorfuSetEpochMsg.class),
-        ACK(4, NettyCorfuMsg.class),
-        WRONG_EPOCH(5, NettyCorfuMsg.class),
+        PING(0, NettyCorfuMsg.class, BaseNettyServer.class),
+        PONG(1, NettyCorfuMsg.class, BaseNettyServer.class),
+        RESET(2, NettyCorfuResetMsg.class, BaseNettyServer.class),
+        SET_EPOCH(3, NettyCorfuSetEpochMsg.class, BaseNettyServer.class),
+        ACK(4, NettyCorfuMsg.class, BaseNettyServer.class),
+        WRONG_EPOCH(5, NettyCorfuMsg.class, BaseNettyServer.class),
 
-        // StreamingSequencer Messages
-        TOKEN_REQ(20, NettyStreamingServerTokenRequestMsg.class),
-        TOKEN_RES(21, NettyStreamingServerTokenResponseMsg.class),
+        // Layout Messages
+        LAYOUT_REQUEST(10, NettyCorfuMsg.class, LayoutServer.class),
+        LAYOUT_RESPONSE(11, NettyLayoutResponseMsg.class, LayoutServer.class),
+
+        // Sequencer Messages
+        TOKEN_REQ(20, NettyStreamingServerTokenRequestMsg.class, SequencerServer.class),
+        TOKEN_RES(21, NettyStreamingServerTokenResponseMsg.class, SequencerServer.class),
 
         // Logging Unit Messages
-        WRITE(30, NettyLogUnitWriteMsg.class),
-        READ_REQUEST(31, NettyLogUnitReadRequestMsg.class),
-        READ_RESPONSE(32, NettyLogUnitReadResponseMsg.class),
-        TRIM(33, NettyLogUnitTrimMsg.class),
-        FILL_HOLE(34, NettyLogUnitFillHoleMsg.class),
-        FORCE_GC(35, NettyCorfuMsg.class),
-        GC_INTERVAL(36, NettyLogUnitGCIntervalMsg.class),
+        WRITE(30, NettyLogUnitWriteMsg.class, LogUnitServer.class),
+        READ_REQUEST(31, NettyLogUnitReadRequestMsg.class, LogUnitServer.class),
+        READ_RESPONSE(32, NettyLogUnitReadResponseMsg.class, LogUnitServer.class),
+        TRIM(33, NettyLogUnitTrimMsg.class, LogUnitServer.class),
+        FILL_HOLE(34, NettyLogUnitFillHoleMsg.class, LogUnitServer.class),
+        FORCE_GC(35, NettyCorfuMsg.class, LogUnitServer.class),
+        GC_INTERVAL(36, NettyLogUnitGCIntervalMsg.class, LogUnitServer.class),
 
         // Logging Unit Error Codes
-        ERROR_OK(40, NettyCorfuMsg.class),
-        ERROR_TRIMMED(41, NettyCorfuMsg.class),
-        ERROR_OVERWRITE(42, NettyCorfuMsg.class),
-        ERROR_OOS(43, NettyCorfuMsg.class),
-        ERROR_RANK(44, NettyCorfuMsg.class)
+        ERROR_OK(40, NettyCorfuMsg.class, LogUnitServer.class),
+        ERROR_TRIMMED(41, NettyCorfuMsg.class, LogUnitServer.class),
+        ERROR_OVERWRITE(42, NettyCorfuMsg.class, LogUnitServer.class),
+        ERROR_OOS(43, NettyCorfuMsg.class, LogUnitServer.class),
+        ERROR_RANK(44, NettyCorfuMsg.class, LogUnitServer.class)
         ;
 
-        final int type;
-        final Class<? extends NettyCorfuMsg> messageType;
+        public final int type;
+        public final Class<? extends NettyCorfuMsg> messageType;
+        public final Class<? extends INettyServer> handler;
 
-        byte asByte() { return (byte)type; }
+        public byte asByte() { return (byte)type; }
     };
 
     static Map<Byte, NettyCorfuMsgType> typeMap =
@@ -70,16 +76,13 @@ public class NettyCorfuMsg {
     NettyCorfuMsgType msgType;
 
         /* The wire format of the NettyCorfuMessage message is below:
-        | client ID(16) | request ID(8) |  epoch(8)   |  type(1)  |
-        |  MSB  |  LSB  |               |             |           |
-        0       7       15              23            31          32
+        | client ID(8) | request ID(8) |  epoch(8)   |  type(1)  |
 */
     /** Serialize the message into the given bytebuffer.
      * @param buffer    The buffer to serialize to.
      * */
     public void serialize(ByteBuf buffer) {
-        buffer.writeLong(clientID.getMostSignificantBits());
-        buffer.writeLong(clientID.getLeastSignificantBits());
+        buffer.writeLong(clientID);
         buffer.writeLong(requestID);
         buffer.writeLong(epoch);
         buffer.writeByte(msgType.asByte());
@@ -108,7 +111,7 @@ public class NettyCorfuMsg {
      */
     @SneakyThrows
     public static NettyCorfuMsg deserialize(ByteBuf buffer) {
-        UUID clientID = new UUID(buffer.readLong(), buffer.readLong());
+        long clientID = buffer.readLong();
         long requestID = buffer.readLong();
         long epoch = buffer.readLong();
         NettyCorfuMsgType message = typeMap.get(buffer.readByte());

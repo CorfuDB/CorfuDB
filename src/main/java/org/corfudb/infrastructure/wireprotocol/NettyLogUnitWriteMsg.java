@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.corfudb.infrastructure.NettyLogUnitServer;
+import lombok.ToString;
 
 import java.util.*;
 
@@ -15,6 +15,7 @@ import java.util.*;
 @Getter
 @Setter
 @NoArgsConstructor
+@ToString
 public class NettyLogUnitWriteMsg extends NettyLogUnitPayloadMsg {
 
 
@@ -25,7 +26,7 @@ public class NettyLogUnitWriteMsg extends NettyLogUnitPayloadMsg {
     {
         this.msgType = NettyCorfuMsgType.WRITE;
         this.address = address;
-        this.metadataMap = new EnumMap<>(NettyLogUnitServer.LogUnitMetadataType.class);
+        this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }
 
 

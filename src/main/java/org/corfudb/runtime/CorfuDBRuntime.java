@@ -17,7 +17,6 @@ package org.corfudb.runtime;
 
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.RemoteException;
-import org.corfudb.runtime.protocols.configmasters.MemoryConfigMasterProtocol;
 import org.corfudb.runtime.view.*;
 import org.corfudb.util.GitRepositoryState;
 import org.slf4j.Logger;
@@ -184,17 +183,17 @@ public class CorfuDBRuntime implements AutoCloseable {
         throws IOException {
         if (configString.equals("custom"))
         {
-            if (MemoryConfigMasterProtocol.memoryConfigMasters.get(0) != null)
-            {
-                return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
-            }
+         //   if (MemoryConfigMasterProtocol.memoryConfigMasters.get(0) != null)
+         //   {
+         //       return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
+          //  }
         }
         else if (configString.equals("memory"))
         {
-            if (MemoryConfigMasterProtocol.memoryConfigMasters.get(0) != null)
-            {
-                return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
-            }
+          //  if (MemoryConfigMasterProtocol.memoryConfigMasters.get(0) != null)
+        //    {
+         //       return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
+         //   }
             //this is an in-memory request.
             HashMap<String, Object> MemoryView = new HashMap<String, Object>();
             MemoryView.put("epoch", 0L);
@@ -227,8 +226,8 @@ public class CorfuDBRuntime implements AutoCloseable {
             layout.put("segments", segments);
             MemoryView.put("layout", layout);
             CorfuDBView newView = new CorfuDBView(MemoryView);
-            MemoryConfigMasterProtocol.memoryConfigMasters.get(0).setInitialView(newView);
-            return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
+            //MemoryConfigMasterProtocol.memoryConfigMasters.get(0).setInitialView(newView);
+         //   return MemoryConfigMasterProtocol.memoryConfigMasters.get(0).getView();
         }
 
         URL url = new URL(configString);
