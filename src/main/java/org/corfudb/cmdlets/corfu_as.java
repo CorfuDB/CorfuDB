@@ -3,10 +3,10 @@ package org.corfudb.cmdlets;
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.protocols.LogUnitClient;
-import org.corfudb.runtime.protocols.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
+
+import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
 
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -21,15 +21,13 @@ public class corfu_as implements ICmdlet {
                     + "\n"
                     + "Usage:\n"
                     + "\tcorfu_as write -c <config> -a <log-address> [-s <stream-ids>] [-d <level>]\n"
+                    + "\tcorfu_as read -c <config> -a <log-address> [-d <level>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -c <config>, --config=<config>                 The config string to pass to the runtime. \n"
                     + "                                                Usually a comma-delimited list of layout servers.\n"
                     + " -a <log-address>, --log-address=<log-address>  The log address to use. \n"
-                    + " -i <interval>, --interval=<interval>           Interval to set garbage collection to. \n"
                     + " -s <stream-ids>, --stream-ids=<stream-ids>     The stream ids to use, comma separated. \n"
-                    + " -t <stream-id>, --stream-id=<stream-id>        A stream id to use, comma separated. \n"
-                    + " -r <rank>, --rank=<rank>                       The rank to use [default: 0]. \n"
                     + " -d <level>, --log-level=<level>                Set the logging level, valid levels are: \n"
                     + "                                                ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
                     + " -h, --help  Show this screen\n"
@@ -52,6 +50,10 @@ public class corfu_as implements ICmdlet {
             {
                 write(rt, opts);
             }
+            else if ((Boolean)opts.get("read"))
+            {
+                read(rt, opts);
+            }
         } catch (ExecutionException ex)
         {
             log.error("Exception", ex.getCause());
@@ -69,5 +71,26 @@ public class corfu_as implements ICmdlet {
     {
         runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
                 streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in));
+    }
+
+    void read(CorfuRuntime runtime, Map<String,Object> opts)
+            throws Exception
+    {
+        ReadResult r = runtime.getAddressSpaceView().read(Long.parseLong((String) opts.get("--log-address")));
+        switch (r.getResultType())
+        {
+            case EMPTY:
+                System.err.println("Error: EMPTY");
+                break;
+            case FILLED_HOLE:
+                System.err.println("Error: HOLE");
+                break;
+            case TRIMMED:
+                System.err.println("Error: TRIMMED");
+                break;
+            case DATA:
+                r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
+                break;
+        }
     }
 }

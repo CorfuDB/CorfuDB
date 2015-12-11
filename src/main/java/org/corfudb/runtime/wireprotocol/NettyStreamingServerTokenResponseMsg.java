@@ -1,11 +1,7 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.*;
-
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
 
 /**
  * Created by mwei on 9/15/15.

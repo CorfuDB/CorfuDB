@@ -2,7 +2,7 @@ package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
+import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
 
 /**
  * Created by mwei on 12/8/15.

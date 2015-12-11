@@ -5,7 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
+import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;

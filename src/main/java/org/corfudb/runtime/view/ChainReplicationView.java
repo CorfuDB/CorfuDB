@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
 
 import java.util.Set;
 import java.util.UUID;
@@ -29,9 +30,25 @@ public class ChainReplicationView extends AbstractReplicationView {
         int numUnits = getLayout().getSegmentLength(address);
         for (int i = 0; i < numUnits; i++)
         {
-            log.trace("Write[{}]: chain {}/{}", address, i, numUnits);
+            log.trace("Write[{}]: chain {}/{}", address, i+1, numUnits);
+            // In chain replication, we write synchronously to every unit in the chain.
             getLayout().getLogUnitClient(address, i)
                     .write(address, stream, 0L, data).get();
         }
+    }
+
+    /**
+     * Read the given object from an address, using the replication method given.
+     *
+     * @param address The address to read from.
+     * @return The result of the read.
+     */
+    @Override
+    public ReadResult read(long address) throws Exception {
+        int numUnits = getLayout().getSegmentLength(address);
+        log.trace("Read[{}]: chain {}/{}", address, numUnits, numUnits);
+        // In chain replication, we read from the last unit, though we can optimize if we
+        // know where the committed tail is.
+        return getLayout().getLogUnitClient(address, numUnits-1).read(address).get();
     }
 }

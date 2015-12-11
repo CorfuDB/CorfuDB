@@ -1,11 +1,9 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.util.UUID;
 
 
 /**

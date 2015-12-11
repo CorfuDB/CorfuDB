@@ -1,12 +1,9 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import lombok.ToString;
-
-import java.util.*;
 
 
 /**
@@ -15,31 +12,26 @@ import java.util.*;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString
-public class NettyLogUnitWriteMsg extends NettyLogUnitPayloadMsg {
+public class NettyLogUnitGCIntervalMsg extends NettyCorfuMsg {
 
 
-    /** The address to write to */
-    long address;
+    /** The interval to use, in milliseconds */
+    long interval;
 
-    public NettyLogUnitWriteMsg(long address)
+    public NettyLogUnitGCIntervalMsg(long interval)
     {
-        this.msgType = NettyCorfuMsgType.WRITE;
-        this.address = address;
-        this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+        this.msgType = NettyCorfuMsgType.GC_INTERVAL;
+        this.interval = interval;
     }
-
-
     /**
      * Serialize the message into the given bytebuffer.
      *
      * @param buffer The buffer to serialize to.
      */
     @Override
-    @SuppressWarnings("unchecked")
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        buffer.writeLong(address);
+        buffer.writeLong(interval);
     }
 
     /**
@@ -51,6 +43,6 @@ public class NettyLogUnitWriteMsg extends NettyLogUnitPayloadMsg {
     @Override
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
-        address = buffer.readLong();
+        interval = buffer.readLong();
     }
 }

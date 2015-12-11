@@ -1,13 +1,10 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
 import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 9/17/15.

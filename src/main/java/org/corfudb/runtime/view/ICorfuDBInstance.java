@@ -22,11 +22,6 @@ import java.util.UUID;
  */
 public interface ICorfuDBInstance {
 
-    /**
-     * Gets a configuration master for this instance.
-     * @return  The configuration master for this instance.
-     */
-    IConfigurationMaster getConfigurationMaster();
 
     INewStreamingSequencer getNewStreamingSequencer();
 

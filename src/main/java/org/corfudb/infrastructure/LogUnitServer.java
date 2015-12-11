@@ -11,7 +11,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.wireprotocol.*;
+import org.corfudb.runtime.wireprotocol.*;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
@@ -23,11 +23,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
-import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg.ReadResultType;
-import org.corfudb.infrastructure.wireprotocol.NettyLogUnitReadResponseMsg.LogUnitEntry;
+import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResultType;
+import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.LogUnitEntry;
 /**
  * Created by mwei on 12/10/15.
  */

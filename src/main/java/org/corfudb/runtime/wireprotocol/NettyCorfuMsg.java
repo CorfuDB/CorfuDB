@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.*;
@@ -6,7 +6,6 @@ import org.corfudb.infrastructure.*;
 
 import java.util.Arrays;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 

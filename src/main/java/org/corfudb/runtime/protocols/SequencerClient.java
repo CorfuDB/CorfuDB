@@ -4,11 +4,9 @@ import com.google.common.collect.ImmutableSet;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyLayoutResponseMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenResponseMsg;
-import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
+import org.corfudb.runtime.wireprotocol.NettyStreamingServerTokenRequestMsg;
+import org.corfudb.runtime.wireprotocol.NettyStreamingServerTokenResponseMsg;
 
 import java.util.Set;
 import java.util.UUID;

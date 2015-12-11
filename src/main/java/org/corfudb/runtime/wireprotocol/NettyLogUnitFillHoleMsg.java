@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.wireprotocol;
+package org.corfudb.runtime.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
@@ -12,16 +12,16 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class NettyCorfuResetMsg extends NettyCorfuMsg {
+public class NettyLogUnitFillHoleMsg extends NettyCorfuMsg {
 
 
-    /** The new epoch to reset to. */
-    long newEpoch;
+    /** The address to fill the hole at. */
+    long address;
 
-    public NettyCorfuResetMsg(long newEpoch)
+    public NettyLogUnitFillHoleMsg(long address)
     {
-        this.msgType = NettyCorfuMsgType.RESET;
-        this.newEpoch = newEpoch;
+        this.msgType = NettyCorfuMsgType.FILL_HOLE;
+        this.address = address;
     }
     /**
      * Serialize the message into the given bytebuffer.
@@ -31,7 +31,7 @@ public class NettyCorfuResetMsg extends NettyCorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        buffer.writeLong(newEpoch);
+        buffer.writeLong(address);
     }
 
     /**
@@ -43,6 +43,6 @@ public class NettyCorfuResetMsg extends NettyCorfuMsg {
     @Override
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
-        newEpoch = buffer.readLong();
+        address = buffer.readLong();
     }
 }

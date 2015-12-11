@@ -1,18 +1,14 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.collect.ImmutableList;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.wireprotocol.NettyCorfuMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyLayoutResponseMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenRequestMsg;
-import org.corfudb.infrastructure.wireprotocol.NettyStreamingServerTokenResponseMsg;
+import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
+import org.corfudb.runtime.wireprotocol.NettyLayoutResponseMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Created by mwei on 12/8/15.
