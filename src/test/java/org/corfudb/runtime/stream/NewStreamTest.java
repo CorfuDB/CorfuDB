@@ -1,8 +1,6 @@
 package org.corfudb.runtime.stream;
 
 import lombok.SneakyThrows;
-import org.corfudb.infrastructure.NettyLogUnitServer;
-import org.corfudb.infrastructure.NettyStreamingSequencerServer;
 import org.corfudb.runtime.CorfuDBRuntime;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.view.ICorfuDBInstance;
@@ -31,8 +29,8 @@ public class NewStreamTest {
     {
         infrastructure =
                 CorfuInfrastructureBuilder.getBuilder()
-                        .addSequencer(RandomOpenPort.getOpenPort(), NettyStreamingSequencerServer.class, "nsss", null)
-                        .addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
+                       // .addSequencer(RandomOpenPort.getOpenPort(), NettyStreamingSequencerServer.class, "nsss", null)
+                        //.addLoggingUnit(RandomOpenPort.getOpenPort(), 0, NettyLogUnitServer.class, "nlu", null)
                         .start(RandomOpenPort.getOpenPort());
 
         runtime = CorfuDBRuntime.getRuntime(infrastructure.getConfigString());

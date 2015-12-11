@@ -1,10 +1,7 @@
 package org.corfudb.infrastructure.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -16,6 +13,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
+@ToString
 public class NettyStreamingServerTokenResponseMsg extends NettyCorfuMsg {
     /** The issued token */
     Long token;

@@ -2,10 +2,12 @@ package org.corfudb.infrastructure.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.Setter;
-import org.corfudb.infrastructure.NettyLogUnitServer;
 
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 9/17/15.
@@ -14,9 +16,9 @@ import java.util.*;
 @Setter
 public abstract class NettyLogUnitMetadataMsg extends NettyCorfuMsg implements IMetadata {
 
+
     /** A map of the metadata read from this entry */
-    EnumMap<NettyLogUnitServer.LogUnitMetadataType, Object> metadataMap =
-            new EnumMap<NettyLogUnitServer.LogUnitMetadataType, Object>(NettyLogUnitServer.LogUnitMetadataType.class);
+    EnumMap<LogUnitMetadataType, Object> metadataMap;
 
     /**
      * Serialize the message into the given bytebuffer.
@@ -27,26 +29,7 @@ public abstract class NettyLogUnitMetadataMsg extends NettyCorfuMsg implements I
     @SuppressWarnings("unchecked")
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        buffer.writeByte(metadataMap.size());
-        for (NettyLogUnitServer.LogUnitMetadataType t : metadataMap.keySet())
-        {
-            buffer.writeByte(t.asByte());
-            switch (t)
-            {
-                case STREAM:
-                    Set<UUID> streams = (Set<UUID>) metadataMap.get(t);
-                    buffer.writeByte(streams.size());
-                    for (UUID id : streams)
-                    {
-                        buffer.writeLong(id.getMostSignificantBits());
-                        buffer.writeLong(id.getLeastSignificantBits());
-                    }
-                    break;
-                case RANK:
-                    buffer.writeLong((Long)metadataMap.get(t));
-                    break;
-            }
-        }
+        bufferFromMap(buffer, metadataMap);
     }
 
     /**
@@ -58,10 +41,25 @@ public abstract class NettyLogUnitMetadataMsg extends NettyCorfuMsg implements I
     @Override
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
+        metadataMap = mapFromBuffer(buffer);
+    }
+
+    /* Utility functions */
+
+    /** Generate a metadata map from a bytebuf
+     *
+     * @param buffer    The bytebuf to generate the metadata map from.
+     * @return          The deserialized metadata map.
+     */
+    public static EnumMap<LogUnitMetadataType, Object> mapFromBuffer(ByteBuf buffer)
+    {
+        EnumMap<LogUnitMetadataType, Object> metadataMap =
+                new EnumMap<LogUnitMetadataType, Object>(LogUnitMetadataType.class);
+
         byte numEntries = buffer.readByte();
         while (numEntries > 0 && buffer.isReadable())
         {
-            NettyLogUnitServer.LogUnitMetadataType t = NettyLogUnitServer.metadataTypeMap.get(buffer.readByte());
+            IMetadata.LogUnitMetadataType t = IMetadata.metadataTypeMap.get(buffer.readByte());
             switch (t)
             {
                 case STREAM:
@@ -71,13 +69,39 @@ public abstract class NettyLogUnitMetadataMsg extends NettyCorfuMsg implements I
                     {
                         streams.add(new UUID(buffer.readLong(), buffer.readLong()));
                     }
-                    metadataMap.put(NettyLogUnitServer.LogUnitMetadataType.STREAM, streams);
+                    metadataMap.put(LogUnitMetadataType.STREAM, streams);
                     break;
                 case RANK:
-                    metadataMap.put(NettyLogUnitServer.LogUnitMetadataType.RANK, buffer.readLong());
+                    metadataMap.put(LogUnitMetadataType.RANK, buffer.readLong());
                     break;
             }
             numEntries--;
+        }
+
+        return metadataMap;
+    }
+
+    public static void bufferFromMap(ByteBuf buffer, EnumMap<LogUnitMetadataType, Object> metadataMap)
+    {
+        if (metadataMap == null) {buffer.writeByte(0);}
+        else {
+            buffer.writeByte(metadataMap.size());
+            for (LogUnitMetadataType t : metadataMap.keySet()) {
+                buffer.writeByte(t.asByte());
+                switch (t) {
+                    case STREAM:
+                        Set<UUID> streams = (Set<UUID>) metadataMap.get(t);
+                        buffer.writeByte(streams.size());
+                        for (UUID id : streams) {
+                            buffer.writeLong(id.getMostSignificantBits());
+                            buffer.writeLong(id.getLeastSignificantBits());
+                        }
+                        break;
+                    case RANK:
+                        buffer.writeLong((Long) metadataMap.get(t));
+                        break;
+                }
+            }
         }
     }
 }

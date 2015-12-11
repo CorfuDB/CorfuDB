@@ -23,21 +23,20 @@ import java.util.concurrent.atomic.AtomicLong;
 @ChannelHandler.Sharable
 public abstract class NettyRPCChannelInboundHandlerAdapter extends ChannelInboundHandlerAdapter {
 
-    private volatile UUID clientID;
+    private volatile long clientID;
     private volatile AtomicLong requestID;
     public List<ChannelHandlerContext> channelList;
     private ConcurrentHashMap<Long, CompletableFuture<?>> rpcMap;
-    private Random random;
+    private static final Random random = new Random();
 
     public abstract void handleMessage(NettyCorfuMsg message);
 
     public NettyRPCChannelInboundHandlerAdapter()
     {
         channelList = new CopyOnWriteArrayList<>();
-        clientID = UUID.randomUUID();
+        clientID = random.nextLong();
         requestID = new AtomicLong();
         rpcMap = new ConcurrentHashMap<>();
-        random = new Random();
     }
 
     public @NonNull

@@ -1,15 +1,33 @@
 package org.corfudb.infrastructure.wireprotocol;
 
-import org.corfudb.infrastructure.NettyLogUnitServer;
+import lombok.RequiredArgsConstructor;
 
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 9/18/15.
  */
 public interface IMetadata {
 
-    EnumMap<NettyLogUnitServer.LogUnitMetadataType, Object> getMetadataMap();
+    @RequiredArgsConstructor
+    public enum LogUnitMetadataType {
+        STREAM(0),
+        RANK(1),
+        STREAM_ADDRESS(2)
+        ;
+
+        final int type;
+
+        public byte asByte() { return (byte)type; }
+    }
+
+    public static Map<Byte, LogUnitMetadataType> metadataTypeMap =
+            Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
+                    .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
+
+    EnumMap<IMetadata.LogUnitMetadataType, Object> getMetadataMap();
 
     /** Get the streams that belong to this write.
      *
@@ -18,7 +36,8 @@ public interface IMetadata {
     @SuppressWarnings("unchecked")
     default Set<UUID> getStreams()
     {
-        return (Set<UUID>) getMetadataMap().getOrDefault(NettyLogUnitServer.LogUnitMetadataType.STREAM,
+        return (Set<UUID>) getMetadataMap().getOrDefault(
+                LogUnitMetadataType.STREAM,
                 Collections.EMPTY_SET);
     }
 
@@ -28,7 +47,7 @@ public interface IMetadata {
      */
     default void setStreams(Set<UUID> streams)
     {
-        getMetadataMap().put(NettyLogUnitServer.LogUnitMetadataType.STREAM, streams);
+        getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM, streams);
     }
 
     /** Get the rank of this write.
@@ -38,7 +57,7 @@ public interface IMetadata {
     @SuppressWarnings("unchecked")
     default Long getRank()
     {
-        return (Long) getMetadataMap().getOrDefault(NettyLogUnitServer.LogUnitMetadataType.RANK,
+        return (Long) getMetadataMap().getOrDefault(IMetadata.LogUnitMetadataType.RANK,
                 0L);
     }
 
@@ -48,7 +67,7 @@ public interface IMetadata {
      */
     default void setRank(Long rank)
     {
-        getMetadataMap().put(NettyLogUnitServer.LogUnitMetadataType.RANK, rank);
+        getMetadataMap().put(IMetadata.LogUnitMetadataType.RANK, rank);
     }
 
     /** Get the logical stream addresses that belong to this write.
@@ -58,7 +77,7 @@ public interface IMetadata {
     @SuppressWarnings("unchecked")
     default List<Long> getLogicalAddresses()
     {
-        return (List<Long>) getMetadataMap().getOrDefault(NettyLogUnitServer.LogUnitMetadataType.STREAM_ADDRESS,
+        return (List<Long>) getMetadataMap().getOrDefault(IMetadata.LogUnitMetadataType.STREAM_ADDRESS,
                 Collections.EMPTY_LIST);
     }
 
@@ -68,6 +87,6 @@ public interface IMetadata {
      */
     default void setLogicalAddresses(List<Long> streams)
     {
-        getMetadataMap().put(NettyLogUnitServer.LogUnitMetadataType.STREAM_ADDRESS, streams);
+        getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM_ADDRESS, streams);
     }
 }

@@ -16,7 +16,6 @@
 package org.corfudb.runtime.protocols.logunits;
 
 import lombok.Data;
-import org.corfudb.infrastructure.NettyLogUnitServer;
 import org.corfudb.infrastructure.thrift.Hint;
 import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.infrastructure.thrift.ReadCode;
@@ -69,7 +68,7 @@ public interface INewWriteOnceLogUnit extends IServerProtocol {
     class ReadResult implements IMetadata {
         final ReadResultType result;
         final Object payload;
-        final EnumMap<NettyLogUnitServer.LogUnitMetadataType, Object> metadataMap;
+        final EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap;
 
         public ReadResult(NettyLogUnitReadResponseMsg m)
         {
