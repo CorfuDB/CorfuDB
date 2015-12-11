@@ -97,7 +97,47 @@ public class LogUnitServer implements INettyServer {
 
     @Override
     public void handleMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
-
+        switch(msg.getMsgType())
+        {
+            case WRITE:
+                NettyLogUnitWriteMsg writeMsg = (NettyLogUnitWriteMsg) msg;
+                log.trace("Handling write request for address {}", writeMsg.getAddress());
+                write(writeMsg, ctx, r);
+                break;
+            case READ_REQUEST:
+                NettyLogUnitReadRequestMsg readMsg = (NettyLogUnitReadRequestMsg) msg;
+                log.trace("Handling read request for address {}", readMsg.getAddress());
+                read(readMsg, ctx, r);
+                break;
+            case GC_INTERVAL:
+            {
+                NettyLogUnitGCIntervalMsg m = (NettyLogUnitGCIntervalMsg) msg;
+                log.info("Garbage collection interval set to {}", m.getInterval());
+                gcRetry.setRetryInterval(m.getInterval());
+            }
+            break;
+            case FORCE_GC:
+            {
+                log.info("GC forced by client {}", msg.getClientID());
+                gcThread.interrupt();
+            }
+            break;
+            case FILL_HOLE:
+            {
+                NettyLogUnitFillHoleMsg m = (NettyLogUnitFillHoleMsg) msg;
+                log.debug("Hole fill requested at {}", m.getAddress());
+                dataCache.get(m.getAddress(), (address) -> new LogUnitEntry());
+            }
+            break;
+            case TRIM:
+            {
+                NettyLogUnitTrimMsg m = (NettyLogUnitTrimMsg) msg;
+                trimMap.compute(m.getStreamID(), (key, prev) ->
+                        prev == null ? m.getPrefix() : Math.max(prev, m.getPrefix()));
+                log.debug("Trim requested at prefix={}", m.getPrefix());
+            }
+            break;
+        }
     }
 
     @Override
@@ -298,6 +338,8 @@ public class LogUnitServer implements INettyServer {
         log.info("Garbage collector starting...");
         long freedEntries = 0;
 
+        log.trace("Trim range is {}", trimRange);
+
         /* Pick a non-compacted region or just scan the cache */
         Map<Long, LogUnitEntry> map = dataCache.asMap();
         SortedSet<Long> addresses = new TreeSet<>(map.keySet());
@@ -321,19 +363,13 @@ public class LogUnitServer implements INettyServer {
                         // it is not trimmable.
                     }
                     if (trimmable) {
+                        log.trace("Trimming entry at {}", address);
                         trimEntry(address, streams, buffer);
                         freedEntries++;
                     }
                 }
                 else {
                     //this is an entry which belongs in all streams
-                    //find the minimum contiguous range - and see if this entry is after it.
-                    Range<Long> minRange = (Range<Long>) trimRange.complement().asRanges().toArray()[0];
-                    if (minRange.contains(address))
-                    {
-                        trimEntry(address, streams, buffer);
-                        freedEntries++;
-                    }
                 }
             }
         }
