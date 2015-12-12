@@ -3,9 +3,9 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
-import org.corfudb.runtime.wireprotocol.NettyStreamingServerTokenRequestMsg;
-import org.corfudb.runtime.wireprotocol.NettyStreamingServerTokenResponseMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
+import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
 
 import java.util.Map;
 import java.util.UUID;
@@ -63,11 +63,11 @@ public class SequencerServer implements INettyServer {
     }
 
     @Override
-    public void handleMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
+    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
         switch (msg.getMsgType())
         {
             case TOKEN_REQ: {
-                NettyStreamingServerTokenRequestMsg req = (NettyStreamingServerTokenRequestMsg) msg;
+                TokenRequestMsg req = (TokenRequestMsg) msg;
                 if (req.getNumTokens() == 0)
                 {
                     long max = 0L;
@@ -76,7 +76,7 @@ public class SequencerServer implements INettyServer {
                         max = Math.max(max, lastIssued == null ? Long.MIN_VALUE: lastIssued);
                     }
                     r.sendResponse(ctx, msg,
-                            new NettyStreamingServerTokenResponseMsg(max));
+                            new TokenResponseMsg(max));
                 }
                 else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
@@ -85,7 +85,7 @@ public class SequencerServer implements INettyServer {
                                 Math.max(thisIssue + req.getNumTokens(), v));
                     }
                     r.sendResponse(ctx, msg,
-                            new NettyStreamingServerTokenResponseMsg(thisIssue));
+                            new TokenResponseMsg(thisIssue));
                 }
             }
             break;

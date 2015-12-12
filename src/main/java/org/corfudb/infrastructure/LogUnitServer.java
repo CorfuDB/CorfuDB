@@ -11,7 +11,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
@@ -24,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResultType;
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.LogUnitEntry;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.LogUnitEntry;
 /**
  * Created by mwei on 12/10/15.
  */
@@ -65,7 +65,7 @@ public class LogUnitServer implements INettyServer {
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
      */
-    LoadingCache<Long, NettyLogUnitReadResponseMsg.LogUnitEntry> dataCache;
+    LoadingCache<Long, LogUnitReadResponseMsg.LogUnitEntry> dataCache;
 
     public LogUnitServer(Map<String, Object> opts)
     {
@@ -94,22 +94,22 @@ public class LogUnitServer implements INettyServer {
     }
 
     @Override
-    public void handleMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
+    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
         switch(msg.getMsgType())
         {
             case WRITE:
-                NettyLogUnitWriteMsg writeMsg = (NettyLogUnitWriteMsg) msg;
+                LogUnitWriteMsg writeMsg = (LogUnitWriteMsg) msg;
                 log.trace("Handling write request for address {}", writeMsg.getAddress());
                 write(writeMsg, ctx, r);
                 break;
             case READ_REQUEST:
-                NettyLogUnitReadRequestMsg readMsg = (NettyLogUnitReadRequestMsg) msg;
+                LogUnitReadRequestMsg readMsg = (LogUnitReadRequestMsg) msg;
                 log.trace("Handling read request for address {}", readMsg.getAddress());
                 read(readMsg, ctx, r);
                 break;
             case GC_INTERVAL:
             {
-                NettyLogUnitGCIntervalMsg m = (NettyLogUnitGCIntervalMsg) msg;
+                LogUnitGCIntervalMsg m = (LogUnitGCIntervalMsg) msg;
                 log.info("Garbage collection interval set to {}", m.getInterval());
                 gcRetry.setRetryInterval(m.getInterval());
             }
@@ -122,15 +122,15 @@ public class LogUnitServer implements INettyServer {
             break;
             case FILL_HOLE:
             {
-                NettyLogUnitFillHoleMsg m = (NettyLogUnitFillHoleMsg) msg;
+                LogUnitFillHoleMsg m = (LogUnitFillHoleMsg) msg;
                 log.debug("Hole fill requested at {}", m.getAddress());
                 dataCache.get(m.getAddress(), (address) -> new LogUnitEntry());
-                r.sendResponse(ctx, m, new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ACK));
+                r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.ACK));
             }
             break;
             case TRIM:
             {
-                NettyLogUnitTrimMsg m = (NettyLogUnitTrimMsg) msg;
+                LogUnitTrimMsg m = (LogUnitTrimMsg) msg;
                 trimMap.compute(m.getStreamID(), (key, prev) ->
                         prev == null ? m.getPrefix() : Math.max(prev, m.getPrefix()));
                 log.debug("Trim requested at prefix={}", m.getPrefix());
@@ -212,7 +212,7 @@ public class LogUnitServer implements INettyServer {
                         ByteBuf mBuf = Unpooled.wrappedBuffer(mData);
                         log.trace("Retrieve[{}]: Match for data at address {}.", address, fAddress);
                         LogUnitEntry o =  new LogUnitEntry(Unpooled.wrappedBuffer(oData),
-                                NettyLogUnitMetadataMsg.mapFromBuffer(mBuf),
+                                LogUnitMetadataMsg.mapFromBuffer(mBuf),
                                 false,
                                 true);
                         mBuf.release();
@@ -246,7 +246,7 @@ public class LogUnitServer implements INettyServer {
                 //evict the data by getting the next pointer.
                 try {
                     ByteBuf metadataBuffer = Unpooled.buffer();
-                    NettyLogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
+                    LogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
                     int entrySize = entry.getBuffer().writerIndex() + metadataBuffer.writerIndex() + 21;
                     long entryPointer = filePointer.getAndAdd(entrySize);
                     log.trace("Eviction[{}]: Mapped to {}", address, entryPointer);
@@ -273,48 +273,48 @@ public class LogUnitServer implements INettyServer {
         }
     }
     /** Service an incoming read request. */
-    public void read(NettyLogUnitReadRequestMsg msg, ChannelHandlerContext ctx, NettyServerRouter r)
+    public void read(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, NettyServerRouter r)
     {
         log.trace("Read[{}]", msg.getAddress());
         if (trimRange.contains (msg.getAddress()))
         {
-            r.sendResponse(ctx, msg, new NettyLogUnitReadResponseMsg(ReadResultType.TRIMMED));
+            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.TRIMMED));
         }
         else
         {
             LogUnitEntry e = dataCache.get(msg.getAddress());
             if (e == null)
             {
-                r.sendResponse(ctx, msg, new NettyLogUnitReadResponseMsg(ReadResultType.EMPTY));
+                r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
             }
             else if (e.isHole)
             {
-                r.sendResponse(ctx, msg, new NettyLogUnitReadResponseMsg(ReadResultType.FILLED_HOLE));
+                r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.FILLED_HOLE));
             } else {
-                r.sendResponse(ctx, msg, new NettyLogUnitReadResponseMsg(e));
+                r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(e));
             }
         }
     }
 
     /** Service an incoming write request. */
-    public void write(NettyLogUnitWriteMsg msg, ChannelHandlerContext ctx, NettyServerRouter r)
+    public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, NettyServerRouter r)
     {
         log.trace("Write[{}]", msg.getAddress());
         //TODO: locking of trimRange.
         if (trimRange.contains (msg.getAddress()))
         {
-            r.sendResponse(ctx, msg, new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ERROR_TRIMMED));
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.ERROR_TRIMMED));
         }
         else {
             LogUnitEntry e = new LogUnitEntry(msg.getData(), msg.getMetadataMap(), false);
             e.getBuffer().retain();
             if (e == dataCache.get(msg.getAddress(), (address) -> e)) {
-                r.sendResponse(ctx, msg, new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ERROR_OK));
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.ERROR_OK));
             }
             else
             {
                 e.getBuffer().release();
-                r.sendResponse(ctx, msg, new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ERROR_OVERWRITE));
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.ERROR_OVERWRITE));
             }
         }
     }

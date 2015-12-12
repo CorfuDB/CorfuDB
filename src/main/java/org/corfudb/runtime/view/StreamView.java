@@ -1,10 +1,10 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.wireprotocol.IMetadata;
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg;
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
 import java.util.Collections;
 import java.util.Set;
@@ -64,7 +64,7 @@ public class StreamView implements AutoCloseable {
             long thisRead = logPointer.getAndIncrement();
             log.trace("Read[{}]: reading at {}", streamID, thisRead);
             ReadResult r = runtime.getAddressSpaceView().read(thisRead);
-            if (r.getResultType() == NettyLogUnitReadResponseMsg.ReadResultType.EMPTY)
+            if (r.getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY)
             {
                 //determine whether or not this is a hole
                 long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);

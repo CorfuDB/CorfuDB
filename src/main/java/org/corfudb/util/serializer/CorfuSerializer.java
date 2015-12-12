@@ -5,7 +5,6 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -25,7 +24,6 @@ public class CorfuSerializer implements ISerializer {
     @RequiredArgsConstructor
     public enum CorfuPayloadType {
         // Type of SMR command
-        SMR(0, SMRCommand.class, SMRCommand::deserialize)
         ;
 
         final int type;

@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.runtime.protocols.BaseNettyClient;
-import org.corfudb.runtime.protocols.LayoutClient;
-import org.corfudb.runtime.protocols.NettyClientRouter;
+import org.corfudb.runtime.clients.BaseNettyClient;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.junit.Before;
 import org.junit.Test;
 

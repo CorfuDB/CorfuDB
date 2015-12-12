@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
 import java.util.Set;
 import java.util.UUID;

@@ -2,16 +2,15 @@ package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.protocols.LogUnitClient;
-import org.corfudb.runtime.protocols.NettyClientRouter;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
 /**
  * Created by mwei on 12/10/15.

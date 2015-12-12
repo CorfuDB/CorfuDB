@@ -1,16 +1,14 @@
 package org.corfudb.cmdlets;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.protocols.BaseNettyClient;
-import org.corfudb.runtime.protocols.NettyClientRouter;
+import org.corfudb.runtime.clients.BaseNettyClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
-import java.util.Formatter;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.fusesource.jansi.Ansi.ansi;

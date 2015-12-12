@@ -1,12 +1,8 @@
 package org.corfudb.cmdlets;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.protocols.LayoutClient;
-import org.corfudb.runtime.protocols.NettyClientRouter;
-import org.corfudb.runtime.protocols.SequencerClient;
-import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
