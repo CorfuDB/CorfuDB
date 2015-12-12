@@ -1,4 +1,4 @@
-package org.corfudb.exceptions;
+package org.corfudb.runtime.exceptions;
 
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
