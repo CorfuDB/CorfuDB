@@ -54,13 +54,28 @@ public interface ICmdlet {
                 .connect();
     }
 
+    default UUID getUUIDfromString(String id)
+    {
+        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        if (id == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(id);
+        } catch (IllegalArgumentException iae)
+        {
+            UUID o = UUID.nameUUIDFromBytes(id.getBytes());
+            root.debug("Mapped name UUID {} to {}", id, o);
+            return o;
+        }
+    }
     default Set<UUID> streamsFromString(String streamString)
     {
         if (streamString == null) { return Collections.emptySet(); }
         return Pattern.compile(",")
                 .splitAsStream(streamString)
                 .map(String::trim)
-                .map(UUID::fromString)
+                .map(this::getUUIDfromString)
                 .collect(Collectors.toSet());
     }
 }

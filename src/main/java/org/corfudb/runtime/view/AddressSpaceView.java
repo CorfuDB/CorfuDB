@@ -41,4 +41,16 @@ public class AddressSpaceView extends AbstractView {
                     .read(address)
         );
     }
+
+    /**
+     * Fill a hole at the given address.
+     * @param address An address to hole fill at.
+     */
+    public void fillHole(long address) {
+        layoutHelper(l -> {AbstractReplicationView
+                .getReplicationView(l, l.getReplicationMode(address))
+                .fillHole(address);
+                return null;}
+        );
+    }
 }

@@ -51,4 +51,21 @@ public class ChainReplicationView extends AbstractReplicationView {
         // know where the committed tail is.
         return getLayout().getLogUnitClient(address, numUnits-1).read(address).get();
     }
+
+    /**
+     * Fill a hole at an address, using the replication method given.
+     *
+     * @param address The address to hole fill at.
+     */
+    @Override
+    public void fillHole(long address) throws Exception {
+        int numUnits = getLayout().getSegmentLength(address);
+        for (int i = 0; i < numUnits; i++)
+        {
+            log.trace("fillHole[{}]: chain {}/{}", address, i+1, numUnits);
+            // In chain replication, we write synchronously to every unit in the chain.
+            getLayout().getLogUnitClient(address, i)
+                    .fillHole(address).get();
+        }
+    }
 }

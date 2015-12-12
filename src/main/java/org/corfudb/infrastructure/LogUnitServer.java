@@ -125,6 +125,7 @@ public class LogUnitServer implements INettyServer {
                 NettyLogUnitFillHoleMsg m = (NettyLogUnitFillHoleMsg) msg;
                 log.debug("Hole fill requested at {}", m.getAddress());
                 dataCache.get(m.getAddress(), (address) -> new LogUnitEntry());
+                r.sendResponse(ctx, m, new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.ACK));
             }
             break;
             case TRIM:

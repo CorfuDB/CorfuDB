@@ -104,9 +104,7 @@ public class corfu_logunit implements ICmdlet {
     void trim(NettyClientRouter router, Map<String,Object> opts)
             throws Exception
     {
-        String streamID = (String) opts.get("--stream-id");
-        UUID stream = streamID == null ? null : UUID.fromString(streamID);
-        router.getClient(LogUnitClient.class).trim(stream,
+        router.getClient(LogUnitClient.class).trim(getUUIDfromString((String) opts.get("--stream-id")),
                 Long.parseLong((String) opts.get("--log-address")));
     }
 

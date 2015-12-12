@@ -2,20 +2,15 @@ package org.corfudb.runtime;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.runtime.protocols.LayoutClient;
 import org.corfudb.runtime.protocols.LogUnitClient;
 import org.corfudb.runtime.protocols.NettyClientRouter;
 import org.corfudb.runtime.protocols.SequencerClient;
-import org.corfudb.runtime.view.AddressSpaceView;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutView;
-import org.corfudb.runtime.view.SequencerView;
+import org.corfudb.runtime.view.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -50,6 +45,10 @@ public class CorfuRuntime {
     /** A view of the address space in the Corfu server instance. */
     @Getter(lazy=true)
     private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
+
+    /** A view of streams in the Corfu server instance. */
+    @Getter(lazy=true)
+    private final StreamsView streamsView = new StreamsView(this);
 
     public CorfuRuntime() {
         layoutServers = new ArrayList<>();

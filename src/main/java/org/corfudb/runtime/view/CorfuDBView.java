@@ -38,8 +38,6 @@ import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonArrayBuilder;
 
-import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
-
 import java.util.UUID;
 
 import org.reflections.Reflections;
@@ -457,35 +455,6 @@ public class CorfuDBView {
             }
         }
         return sequencerList;
-    }
-
-    public static IConfigMaster getConfigurationMasterFromString(String masterString)
-    {
-        Matcher m = IServerProtocol.getMatchesFromServerString(masterString);
-            if (m.find())
-            {
-                String protocol = m.group("protocol");
-                if (!availableConfigMasterProtocols.keySet().contains(protocol))
-                {
-                    log.warn("Unsupported config master protocol: " + protocol);
-                }
-                else
-                {
-                    Class<? extends IServerProtocol> sprotocol = availableConfigMasterProtocols.get(protocol);
-                    try
-                    {
-                        return (IConfigMaster) IServerProtocol.protocolFactory(sprotocol, masterString, 0);
-                    }
-                    catch (Exception ex){
-                        log.error("Error invoking protocol for protocol: ", ex);
-                    }
-                }
-            }
-            else
-            {
-                log.warn("Configmaster string " + masterString + " appears to be an invalid configmaster string");
-            }
-        return null;
     }
 
     @SuppressWarnings("unchecked")
