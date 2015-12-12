@@ -51,4 +51,11 @@ public abstract class AbstractReplicationView {
      */
     public abstract ReadResult read(long address)
         throws Exception;
+
+    /** Fill a hole at an address, using the replication method given.
+     *
+     * @param address   The address to hole fill at.
+     */
+    public abstract void fillHole(long address)
+        throws Exception;
 }

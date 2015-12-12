@@ -38,6 +38,9 @@ public class BaseNettyClient implements INettyClient {
             case PING:
                     router.sendResponse(ctx, msg, new NettyCorfuMsg(NettyCorfuMsg.NettyCorfuMsgType.PONG));
                 break;
+            case ACK:
+                    router.completeRequest(msg.getRequestID(), true);
+                break;
         }
     }
 

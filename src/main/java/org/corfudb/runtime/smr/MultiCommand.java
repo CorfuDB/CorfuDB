@@ -2,7 +2,6 @@ package org.corfudb.runtime.smr;
 
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.ITimestamp;
-import org.corfudb.runtime.view.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

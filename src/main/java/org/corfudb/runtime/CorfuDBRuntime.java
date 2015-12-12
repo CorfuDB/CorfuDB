@@ -37,7 +37,6 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
-import org.corfudb.runtime.protocols.configmasters.IConfigMaster;
 
 /**
  * Note, the following imports require Java 8
