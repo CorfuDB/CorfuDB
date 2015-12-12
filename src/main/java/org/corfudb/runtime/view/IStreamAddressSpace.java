@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import lombok.*;
-import org.corfudb.infrastructure.thrift.Hint;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.stream.ITimestamp;
@@ -66,7 +65,7 @@ public interface IStreamAddressSpace {
         /**
          * The set of hints present when this entry was retrieved.
          */
-        Set<Hint> hints;
+        //Set<Hint> hints;
 
         /**
          * The global index (address) for this entry.
