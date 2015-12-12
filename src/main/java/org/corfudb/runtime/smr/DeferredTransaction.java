@@ -3,7 +3,6 @@ package org.corfudb.runtime.smr;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.thrift.Hints;
 import org.corfudb.runtime.entries.IStreamEntry;
 import org.corfudb.runtime.smr.smrprotocol.LambdaSMRCommand;
 import org.corfudb.runtime.smr.smrprotocol.TransactionalLambdaSMRCommand;

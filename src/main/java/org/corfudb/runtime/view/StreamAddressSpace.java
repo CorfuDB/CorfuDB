@@ -5,7 +5,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.thrift.ReadCode;
 import org.corfudb.runtime.protocols.IServerProtocol;
 import org.corfudb.runtime.protocols.logunits.INewWriteOnceLogUnit;
 
@@ -221,20 +220,4 @@ public class StreamAddressSpace implements IStreamAddressSpace {
         cache = buildCache();
     }
 
-
-    StreamAddressEntryCode entryCodeFromReadCode(ReadCode code)
-    {
-        switch(code)
-        {
-            case READ_DATA:
-                return StreamAddressEntryCode.DATA;
-            case READ_EMPTY:
-                return StreamAddressEntryCode.EMPTY;
-            case READ_FILLEDHOLE:
-                return StreamAddressEntryCode.HOLE;
-            case READ_TRIMMED:
-                return StreamAddressEntryCode.TRIMMED;
-        }
-        return null;
-    }
 }
