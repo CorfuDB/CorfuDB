@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 import java.util.UUID;
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
 /**
  * Created by mwei on 12/11/15.

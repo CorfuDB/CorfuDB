@@ -6,7 +6,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class NettyServerRouter extends ChannelInboundHandlerAdapter {
 
     /** This map stores the mapping from message type to netty server handler. */
-    Map<NettyCorfuMsg.NettyCorfuMsgType, INettyServer> handlerMap;
+    Map<CorfuMsg.NettyCorfuMsgType, INettyServer> handlerMap;
 
     BaseNettyServer baseServer;
 
@@ -45,7 +45,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter {
      */
     public void addServer(INettyServer server) {
         // Iterate through all types of NettyCorfuMsgType, registering the handler
-        Arrays.<NettyCorfuMsg.NettyCorfuMsgType>stream(NettyCorfuMsg.NettyCorfuMsgType.values())
+        Arrays.<CorfuMsg.NettyCorfuMsgType>stream(CorfuMsg.NettyCorfuMsgType.values())
                 .forEach(x -> {
                     if (x.handler.isInstance(server))
                     {
@@ -61,7 +61,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter {
      * @param inMsg     Incoming message to respond to.
      * @param outMsg    Outgoing message.
      */
-    public void sendResponse(ChannelHandlerContext ctx, NettyCorfuMsg inMsg, NettyCorfuMsg outMsg)
+    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg)
     {
         outMsg.copyBaseFields(inMsg);
         outMsg.setEpoch(epoch);
@@ -69,19 +69,19 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter {
         log.trace("Sent response: {}", outMsg);
     }
 
-    /** Validate the epoch of a NettyCorfuMsg, and send a WRONG_EPOCH response if
+    /** Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
      * the server is in the wrong epoch. Ignored if the message type is reset (which
      * is valid in any epoch).
      * @param msg   The incoming message to validate.
      * @param ctx   The context of the channel handler.
      * @return      True, if the epoch is correct, but false otherwise.
      */
-    public boolean validateEpoch(NettyCorfuMsg msg, ChannelHandlerContext ctx)
+    public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx)
     {
-        if (msg.getMsgType() != NettyCorfuMsg.NettyCorfuMsgType.RESET && msg.getEpoch() != epoch)
+        if (msg.getMsgType() != CorfuMsg.NettyCorfuMsgType.RESET && msg.getEpoch() != epoch)
         {
-            NettyCorfuMsg m = new NettyCorfuMsg();
-            m.setMsgType(NettyCorfuMsg.NettyCorfuMsgType.WRONG_EPOCH);
+            CorfuMsg m = new CorfuMsg();
+            m.setMsgType(CorfuMsg.NettyCorfuMsgType.WRONG_EPOCH);
             sendResponse(ctx, msg, m);
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), epoch, msg);
@@ -98,8 +98,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         try {
-            // The incoming message should have been transformed to a NettyCorfuMsg earlier in the pipeline.
-            NettyCorfuMsg m = ((NettyCorfuMsg) msg);
+            // The incoming message should have been transformed to a CorfuMsg earlier in the pipeline.
+            CorfuMsg m = ((CorfuMsg) msg);
             // We get the handler for this message from the map
             INettyServer handler = handlerMap.get(m.getMsgType());
             if (handler == null)

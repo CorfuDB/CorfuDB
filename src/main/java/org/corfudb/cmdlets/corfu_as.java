@@ -6,7 +6,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
 import java.util.Map;
 import java.util.concurrent.ExecutionException;

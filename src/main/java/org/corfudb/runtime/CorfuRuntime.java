@@ -2,10 +2,10 @@ package org.corfudb.runtime;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.protocols.LayoutClient;
-import org.corfudb.runtime.protocols.LogUnitClient;
-import org.corfudb.runtime.protocols.NettyClientRouter;
-import org.corfudb.runtime.protocols.SequencerClient;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.*;
 
 import java.util.ArrayList;

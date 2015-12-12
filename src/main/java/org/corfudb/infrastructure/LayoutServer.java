@@ -2,8 +2,8 @@ package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.wireprotocol.NettyCorfuMsg;
-import org.corfudb.runtime.wireprotocol.NettyLayoutResponseMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.LayoutResponseMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 
@@ -51,11 +51,11 @@ public class LayoutServer implements INettyServer {
     }
 
     @Override
-    public void handleMessage(NettyCorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
+    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
         switch (msg.getMsgType())
         {
             case LAYOUT_REQUEST:
-                r.sendResponse(ctx, msg, new NettyLayoutResponseMsg(currentLayout));
+                r.sendResponse(ctx, msg, new LayoutResponseMsg(currentLayout));
             break;
             default:
                 log.warn("Unknown message type {} passed to handler!", msg.getMsgType());

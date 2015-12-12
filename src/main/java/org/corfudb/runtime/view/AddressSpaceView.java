@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Set;

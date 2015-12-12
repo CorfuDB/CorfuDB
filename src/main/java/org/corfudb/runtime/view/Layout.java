@@ -2,9 +2,9 @@ package org.corfudb.runtime.view;
 
 import lombok.*;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.protocols.LayoutClient;
-import org.corfudb.runtime.protocols.LogUnitClient;
-import org.corfudb.runtime.protocols.SequencerClient;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.SequencerClient;
 
 import java.util.List;
 

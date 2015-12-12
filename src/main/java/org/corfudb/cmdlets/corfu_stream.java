@@ -2,7 +2,7 @@ package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.wireprotocol.NettyLogUnitReadResponseMsg.ReadResult;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.GitRepositoryState;
