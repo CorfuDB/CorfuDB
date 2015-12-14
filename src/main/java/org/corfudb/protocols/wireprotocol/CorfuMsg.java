@@ -28,12 +28,12 @@ public class CorfuMsg {
     @RequiredArgsConstructor
     public enum NettyCorfuMsgType {
         // Base Messages
-        PING(0, CorfuMsg.class, BaseNettyServer.class),
-        PONG(1, CorfuMsg.class, BaseNettyServer.class),
-        RESET(2, CorfuResetMsg.class, BaseNettyServer.class),
-        SET_EPOCH(3, CorfuSetEpochMsg.class, BaseNettyServer.class),
-        ACK(4, CorfuMsg.class, BaseNettyServer.class),
-        WRONG_EPOCH(5, CorfuMsg.class, BaseNettyServer.class),
+        PING(0, CorfuMsg.class, BaseServer.class),
+        PONG(1, CorfuMsg.class, BaseServer.class),
+        RESET(2, CorfuResetMsg.class, BaseServer.class),
+        SET_EPOCH(3, CorfuSetEpochMsg.class, BaseServer.class),
+        ACK(4, CorfuMsg.class, BaseServer.class),
+        WRONG_EPOCH(5, CorfuMsg.class, BaseServer.class),
 
         // Layout Messages
         LAYOUT_REQUEST(10, CorfuMsg.class, LayoutServer.class),
@@ -62,7 +62,7 @@ public class CorfuMsg {
 
         public final int type;
         public final Class<? extends CorfuMsg> messageType;
-        public final Class<? extends INettyServer> handler;
+        public final Class<? extends IServer> handler;
 
         public byte asByte() { return (byte)type; }
     };

@@ -20,12 +20,13 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @ChannelHandler.Sharable
-public class NettyServerRouter extends ChannelInboundHandlerAdapter {
+public class NettyServerRouter extends ChannelInboundHandlerAdapter
+implements IServerRouter {
 
     /** This map stores the mapping from message type to netty server handler. */
-    Map<CorfuMsg.NettyCorfuMsgType, INettyServer> handlerMap;
+    Map<CorfuMsg.NettyCorfuMsgType, IServer> handlerMap;
 
-    BaseNettyServer baseServer;
+    BaseServer baseServer;
 
     /** The epoch of this router. This is managed by the base server implementation. */
     @Getter
@@ -35,7 +36,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter {
     public NettyServerRouter()
     {
         handlerMap = new ConcurrentHashMap<>();
-        baseServer = new BaseNettyServer(this);
+        baseServer = new BaseServer(this);
         addServer(baseServer);
     }
 
@@ -43,7 +44,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter {
      *
      * @param server The server to add.
      */
-    public void addServer(INettyServer server) {
+    public void addServer(IServer server) {
         // Iterate through all types of NettyCorfuMsgType, registering the handler
         Arrays.<CorfuMsg.NettyCorfuMsgType>stream(CorfuMsg.NettyCorfuMsgType.values())
                 .forEach(x -> {
@@ -101,7 +102,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter {
             // The incoming message should have been transformed to a CorfuMsg earlier in the pipeline.
             CorfuMsg m = ((CorfuMsg) msg);
             // We get the handler for this message from the map
-            INettyServer handler = handlerMap.get(m.getMsgType());
+            IServer handler = handlerMap.get(m.getMsgType());
             if (handler == null)
             {
                 // The message was unregistered, we are dropping it.

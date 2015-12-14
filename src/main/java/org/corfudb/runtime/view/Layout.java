@@ -26,7 +26,7 @@ public class Layout {
     /** Whether or not this layout is valid. */
     transient boolean valid;
 
-    /** The runtime this layout is associated with. */
+    /** The org.corfudb.runtime this layout is associated with. */
     @Getter
     @Setter
     transient CorfuRuntime runtime;

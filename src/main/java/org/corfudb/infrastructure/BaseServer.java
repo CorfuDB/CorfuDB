@@ -8,17 +8,17 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-public class BaseNettyServer implements INettyServer {
+public class BaseServer implements IServer {
 
     NettyServerRouter router;
 
-    public BaseNettyServer(NettyServerRouter router)
+    public BaseServer(NettyServerRouter router)
     {
         this.router = router;
     }
 
     @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
+    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         switch (msg.getMsgType())
         {
             case PING:

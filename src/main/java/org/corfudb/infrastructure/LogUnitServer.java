@@ -30,7 +30,7 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.LogUnitEntry;
  * Created by mwei on 12/10/15.
  */
 @Slf4j
-public class LogUnitServer implements INettyServer {
+public class LogUnitServer implements IServer {
 
     /** The options map. */
     Map<String,Object> opts;
@@ -94,7 +94,7 @@ public class LogUnitServer implements INettyServer {
     }
 
     @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
+    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         switch(msg.getMsgType())
         {
             case WRITE:
@@ -273,7 +273,7 @@ public class LogUnitServer implements INettyServer {
         }
     }
     /** Service an incoming read request. */
-    public void read(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, NettyServerRouter r)
+    public void read(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, IServerRouter r)
     {
         log.trace("Read[{}]", msg.getAddress());
         if (trimRange.contains (msg.getAddress()))
@@ -297,7 +297,7 @@ public class LogUnitServer implements INettyServer {
     }
 
     /** Service an incoming write request. */
-    public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, NettyServerRouter r)
+    public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, IServerRouter r)
     {
         log.trace("Write[{}]", msg.getAddress());
         //TODO: locking of trimRange.

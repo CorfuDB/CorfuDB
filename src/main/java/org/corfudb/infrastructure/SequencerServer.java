@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-public class SequencerServer implements INettyServer {
+public class SequencerServer implements IServer {
 
     /** The options map */
     Map<String,Object> opts;
@@ -63,7 +63,7 @@ public class SequencerServer implements INettyServer {
     }
 
     @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
+    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         switch (msg.getMsgType())
         {
             case TOKEN_REQ: {
@@ -75,14 +75,18 @@ public class SequencerServer implements INettyServer {
                         Long lastIssued = lastIssuedMap.get(id);
                         max = Math.max(max, lastIssued == null ? Long.MIN_VALUE: lastIssued);
                     }
+                    if (req.getStreamIDs().size() == 0)
+                    {
+                        max = globalIndex.get() - 1;
+                    }
                     r.sendResponse(ctx, msg,
                             new TokenResponseMsg(max));
                 }
                 else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
                     for (UUID id : req.getStreamIDs()) {
-                        lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue + req.getNumTokens() :
-                                Math.max(thisIssue + req.getNumTokens(), v));
+                        lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue + req.getNumTokens() -1:
+                                Math.max(thisIssue + req.getNumTokens()-1, v));
                     }
                     r.sendResponse(ctx, msg,
                             new TokenResponseMsg(thisIssue));
