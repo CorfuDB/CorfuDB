@@ -13,7 +13,7 @@ import java.util.UUID;
 @Slf4j
 public class StreamsView {
 
-    /** The runtime which backs this view. */
+    /** The org.corfudb.runtime which backs this view. */
     CorfuRuntime runtime;
 
     public StreamsView(CorfuRuntime runtime)

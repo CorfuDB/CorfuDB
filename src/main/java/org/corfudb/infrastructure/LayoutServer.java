@@ -14,7 +14,7 @@ import java.util.Map;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-public class LayoutServer implements INettyServer {
+public class LayoutServer implements IServer {
 
     /** The options map. */
     Map<String,Object> opts;
@@ -51,7 +51,7 @@ public class LayoutServer implements INettyServer {
     }
 
     @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, NettyServerRouter r) {
+    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         switch (msg.getMsgType())
         {
             case LAYOUT_REQUEST:

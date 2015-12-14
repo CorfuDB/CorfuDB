@@ -24,7 +24,7 @@ public class corfu_as implements ICmdlet {
                     + "\tcorfu_as read -c <config> -a <log-address> [-d <level>]\n"
                     + "\n"
                     + "Options:\n"
-                    + " -c <config>, --config=<config>                 The config string to pass to the runtime. \n"
+                    + " -c <config>, --config=<config>                 The config string to pass to the org.corfudb.runtime. \n"
                     + "                                                Usually a comma-delimited list of layout servers.\n"
                     + " -a <log-address>, --log-address=<log-address>  The log address to use. \n"
                     + " -s <stream-ids>, --stream-ids=<stream-ids>     The stream ids to use, comma separated. \n"
@@ -42,7 +42,7 @@ public class corfu_as implements ICmdlet {
         // Configure base options
         configureBase(opts);
 
-        // Get a runtime instance from the options.
+        // Get a org.corfudb.runtime instance from the options.
         CorfuRuntime rt = configureRuntime(opts);
 
         try {
