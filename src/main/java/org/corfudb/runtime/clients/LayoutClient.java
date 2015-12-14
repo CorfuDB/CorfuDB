@@ -14,10 +14,10 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Created by mwei on 12/9/15.
  */
-public class LayoutClient implements INettyClient {
+public class LayoutClient implements IClient {
 
     @Setter
-    NettyClientRouter router;
+    IClientRouter router;
 
     /**
      * Handle a incoming message on the channel

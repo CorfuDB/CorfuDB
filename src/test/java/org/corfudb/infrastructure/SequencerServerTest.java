@@ -102,4 +102,5 @@ public class SequencerServerTest extends AbstractServerTest {
                     .isGreaterThan(checkTokenA2);
         }
     }
+
 }

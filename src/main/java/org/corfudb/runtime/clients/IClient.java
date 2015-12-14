@@ -8,13 +8,13 @@ import java.util.Set;
 /**
  * Created by mwei on 12/8/15.
  */
-public interface INettyClient {
+public interface IClient {
 
     /** Set the router used by the Netty client.
      *
      * @param router    The router to be used by the Netty client.
      */
-    void setRouter(NettyClientRouter router);
+    void setRouter(IClientRouter router);
 
     /**
      * Handle a incoming message on the channel
