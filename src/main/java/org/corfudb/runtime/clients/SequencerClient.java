@@ -37,10 +37,10 @@ public class SequencerClient implements IClient {
 
     /** The messages this client should handle. */
     @Getter
-    public final Set<CorfuMsg.NettyCorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.NettyCorfuMsgType>()
-                    .add(CorfuMsg.NettyCorfuMsgType.TOKEN_REQ)
-                    .add(CorfuMsg.NettyCorfuMsgType.TOKEN_RES)
+    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
+            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
+                    .add(CorfuMsg.CorfuMsgType.TOKEN_REQ)
+                    .add(CorfuMsg.CorfuMsgType.TOKEN_RES)
                     .build();
 
 

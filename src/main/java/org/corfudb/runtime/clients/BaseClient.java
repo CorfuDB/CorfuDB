@@ -36,7 +36,7 @@ public class BaseClient implements IClient {
                     router.completeRequest(msg.getRequestID(), true);
                 break;
             case PING:
-                    router.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.PONG));
+                    router.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.PONG));
                 break;
             case ACK:
                     router.completeRequest(msg.getRequestID(), true);
@@ -46,11 +46,11 @@ public class BaseClient implements IClient {
 
     /** The messages this client should handle. */
     @Getter
-    public final Set<CorfuMsg.NettyCorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.NettyCorfuMsgType>()
-                    .add(CorfuMsg.NettyCorfuMsgType.PING)
-                    .add(CorfuMsg.NettyCorfuMsgType.PONG)
-                    .add(CorfuMsg.NettyCorfuMsgType.ACK)
+    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
+            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
+                    .add(CorfuMsg.CorfuMsgType.PING)
+                    .add(CorfuMsg.CorfuMsgType.PONG)
+                    .add(CorfuMsg.CorfuMsgType.ACK)
                     .build();
 
     /** Ping the endpoint, synchronously.
@@ -74,6 +74,6 @@ public class BaseClient implements IClient {
      */
     public CompletableFuture<Boolean> ping() {
         return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsg.NettyCorfuMsgType.PING));
+                new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
     }
 }

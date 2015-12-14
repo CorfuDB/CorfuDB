@@ -24,7 +24,7 @@ public class LogUnitWriteMsg extends LogUnitPayloadMsg {
 
     public LogUnitWriteMsg(long address)
     {
-        this.msgType = NettyCorfuMsgType.WRITE;
+        this.msgType = CorfuMsgType.WRITE;
         this.address = address;
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }

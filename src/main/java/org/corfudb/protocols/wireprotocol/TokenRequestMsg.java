@@ -31,7 +31,7 @@ public class TokenRequestMsg extends CorfuMsg {
 
     public TokenRequestMsg(Set<UUID> streamIDs, long numTokens)
     {
-        this.msgType = NettyCorfuMsgType.TOKEN_REQ;
+        this.msgType = CorfuMsgType.TOKEN_REQ;
         this.numTokens = numTokens;
         this.streamIDs = streamIDs;
     }

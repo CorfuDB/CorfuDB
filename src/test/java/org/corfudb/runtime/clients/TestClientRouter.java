@@ -22,13 +22,13 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     public List<IClient> clientList;
 
     /** The handlers registered to this router. */
-    public Map<CorfuMsg.NettyCorfuMsgType, IClient> handlerMap;
+    public Map<CorfuMsg.CorfuMsgType, IClient> handlerMap;
 
     /** The outstanding requests on this router. */
     public Map<Long, CompletableFuture> outstandingRequests;
 
     /** The list of test server handlers attached to this router. */
-    public Map<CorfuMsg.NettyCorfuMsgType, IServer> serverMap;
+    public Map<CorfuMsg.CorfuMsgType, IServer> serverMap;
 
     public AtomicLong requestID;
 
@@ -43,8 +43,8 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
 
     public void addServer(IServer server)
     {
-        // Iterate through all types of NettyCorfuMsgType, registering the handler
-        Arrays.<CorfuMsg.NettyCorfuMsgType>stream(CorfuMsg.NettyCorfuMsgType.values())
+        // Iterate through all types of CorfuMsgType, registering the handler
+        Arrays.<CorfuMsg.CorfuMsgType>stream(CorfuMsg.CorfuMsgType.values())
                 .forEach(x -> {
                     if (x.handler.isInstance(server))
                     {
@@ -70,7 +70,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         // Set the client's router to this instance.
         client.setRouter(this);
 
-        // Iterate through all types of NettyCorfuMsgType, registering the handler
+        // Iterate through all types of CorfuMsgType, registering the handler
         client.getHandledTypes().stream()
                 .forEach(x -> {
                     handlerMap.put(x, client);

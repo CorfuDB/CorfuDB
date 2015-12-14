@@ -19,7 +19,7 @@ public class LogUnitReadRequestMsg extends CorfuMsg {
 
     public LogUnitReadRequestMsg(long address)
     {
-        this.msgType = NettyCorfuMsgType.READ_REQUEST;
+        this.msgType = CorfuMsgType.READ_REQUEST;
         this.address = address;
     }
     /**

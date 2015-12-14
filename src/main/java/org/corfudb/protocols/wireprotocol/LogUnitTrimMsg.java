@@ -25,7 +25,7 @@ public class LogUnitTrimMsg extends CorfuMsg {
 
     public LogUnitTrimMsg(long prefix, UUID streamID)
     {
-        this.msgType = NettyCorfuMsgType.TRIM;
+        this.msgType = CorfuMsgType.TRIM;
         this.streamID = streamID;
         this.prefix = prefix;
     }

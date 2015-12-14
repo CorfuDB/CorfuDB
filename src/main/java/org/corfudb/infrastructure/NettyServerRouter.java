@@ -24,7 +24,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
 implements IServerRouter {
 
     /** This map stores the mapping from message type to netty server handler. */
-    Map<CorfuMsg.NettyCorfuMsgType, IServer> handlerMap;
+    Map<CorfuMsg.CorfuMsgType, IServer> handlerMap;
 
     BaseServer baseServer;
 
@@ -45,8 +45,8 @@ implements IServerRouter {
      * @param server The server to add.
      */
     public void addServer(IServer server) {
-        // Iterate through all types of NettyCorfuMsgType, registering the handler
-        Arrays.<CorfuMsg.NettyCorfuMsgType>stream(CorfuMsg.NettyCorfuMsgType.values())
+        // Iterate through all types of CorfuMsgType, registering the handler
+        Arrays.<CorfuMsg.CorfuMsgType>stream(CorfuMsg.CorfuMsgType.values())
                 .forEach(x -> {
                     if (x.handler.isInstance(server))
                     {
@@ -79,10 +79,10 @@ implements IServerRouter {
      */
     public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx)
     {
-        if (msg.getMsgType() != CorfuMsg.NettyCorfuMsgType.RESET && msg.getEpoch() != epoch)
+        if (msg.getMsgType() != CorfuMsg.CorfuMsgType.RESET && msg.getEpoch() != epoch)
         {
             CorfuMsg m = new CorfuMsg();
-            m.setMsgType(CorfuMsg.NettyCorfuMsgType.WRONG_EPOCH);
+            m.setMsgType(CorfuMsg.CorfuMsgType.WRONG_EPOCH);
             sendResponse(ctx, msg, m);
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), epoch, msg);

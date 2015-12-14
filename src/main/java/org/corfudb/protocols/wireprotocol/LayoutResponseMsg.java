@@ -34,7 +34,7 @@ public class LayoutResponseMsg extends CorfuMsg {
 
     public LayoutResponseMsg(Layout layout)
     {
-        this.msgType = NettyCorfuMsgType.LAYOUT_RESPONSE;
+        this.msgType = CorfuMsgType.LAYOUT_RESPONSE;
         this.layout = layout;
     }
 
