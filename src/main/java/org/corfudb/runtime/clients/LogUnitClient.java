@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
+import org.corfudb.runtime.exceptions.OutOfSpaceException;
+import org.corfudb.runtime.exceptions.OverwriteException;
 
 import java.util.Set;
 import java.util.UUID;
@@ -35,10 +37,10 @@ public class LogUnitClient implements IClient {
                 router.completeExceptionally(msg.getRequestID(), new Exception("Trimmed"));
                 break;
             case ERROR_OVERWRITE:
-                router.completeExceptionally(msg.getRequestID(), new Exception("Overwrite"));
+                router.completeExceptionally(msg.getRequestID(), new OverwriteException());
                 break;
             case ERROR_OOS:
-                router.completeExceptionally(msg.getRequestID(), new Exception("OOS"));
+                router.completeExceptionally(msg.getRequestID(), new OutOfSpaceException());
                 break;
             case ERROR_RANK:
                 router.completeExceptionally(msg.getRequestID(), new Exception("Rank"));

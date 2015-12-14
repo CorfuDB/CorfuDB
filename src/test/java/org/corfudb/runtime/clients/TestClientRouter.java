@@ -1,5 +1,7 @@
 package org.corfudb.runtime.clients;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServer;
@@ -56,7 +58,8 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
 
     void routeMessage(CorfuMsg message)
     {
-        serverMap.get(message.getMsgType()).handleMessage(message, null, this);
+        CorfuMsg m = simulateSerialization(message);
+        serverMap.get(message.getMsgType()).handleMessage(m, null, this);
     }
 
     /**
@@ -200,11 +203,20 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
 
     }
 
+    public CorfuMsg simulateSerialization(CorfuMsg message)
+    {
+        /* simulate serialization/deserialization */
+        ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
+        message.serialize(oBuf);
+        oBuf.resetReaderIndex();
+        return CorfuMsg.deserialize(oBuf);
+    }
     @Override
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
         log.info("(server) send Response: {}", outMsg);
-        IClient handler = handlerMap.get(outMsg.getMsgType());
-        handler.handleMessage(outMsg, null);
+        CorfuMsg m = simulateSerialization(outMsg);
+        IClient handler = handlerMap.get(m.getMsgType());
+        handler.handleMessage(m, null);
     }
 }

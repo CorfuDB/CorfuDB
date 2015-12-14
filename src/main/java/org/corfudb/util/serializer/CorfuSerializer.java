@@ -60,7 +60,8 @@ public class CorfuSerializer implements ISerializer {
         if ((magic = b.readByte()) != CorfuPayloadMagic) {
             b.resetReaderIndex();
             byte[] bytes = new byte[b.readableBytes()];
-            return b.readBytes(bytes);
+            b.readBytes(bytes);
+            return bytes;
         }
         CorfuPayloadType type = typeMap.get(b.readByte());
         if (type == null)
