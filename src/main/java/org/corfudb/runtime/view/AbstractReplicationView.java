@@ -7,7 +7,11 @@ import java.util.Set;
 import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
-/**
+/** All replication views must inherit from this class.
+ *
+ * This class takes a layout as a constructor and provides an address space with
+ * the correct replication view given a layout and mode.
+ *
  * Created by mwei on 12/11/15.
  */
 @Slf4j

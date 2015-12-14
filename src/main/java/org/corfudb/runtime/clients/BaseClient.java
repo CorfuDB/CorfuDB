@@ -10,7 +10,10 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
-/**
+/** This is a base client which processes basic messages.
+ * It mainly handles PINGs, as well as the ACK/NACKs defined by
+ * the Corfu protocol.
+ *
  * Created by mwei on 12/9/15.
  */
 @Slf4j

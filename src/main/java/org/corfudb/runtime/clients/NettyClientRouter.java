@@ -26,7 +26,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
+/** A client router which multiplexes operations over the Netty transport.
+ *
  * Created by mwei on 12/8/15.
  */
 @Slf4j

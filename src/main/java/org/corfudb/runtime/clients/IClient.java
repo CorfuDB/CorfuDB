@@ -6,6 +6,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import java.util.Set;
 
 /**
+ * This is an interface which all clients to a ClientRouter must implement.
  * Created by mwei on 12/8/15.
  */
 public interface IClient {

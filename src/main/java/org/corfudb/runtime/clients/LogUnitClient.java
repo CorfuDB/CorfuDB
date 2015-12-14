@@ -13,7 +13,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-/**
+/** A client to a LogUnit.
+ *
+ * This class provides access to operations on a remote log unit.
  * Created by mwei on 12/10/15.
  */
 public class LogUnitClient implements IClient {

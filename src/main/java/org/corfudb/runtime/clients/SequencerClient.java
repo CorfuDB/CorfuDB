@@ -12,7 +12,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-/**
+/** A sequencer client.
+ *
+ * This client allows the client to obtain sequence numbers from a sequencer.
+ *
  * Created by mwei on 12/10/15.
  */
 public class SequencerClient implements IClient {
