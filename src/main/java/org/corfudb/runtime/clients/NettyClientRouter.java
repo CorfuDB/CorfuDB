@@ -31,7 +31,8 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 @ChannelHandler.Sharable
-public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
+public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
+implements IClientRouter {
 
     /** The host that this router is routing requests for. */
     @Getter
@@ -59,10 +60,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
     public static final Random random = new Random();
 
     /** The handlers registered to this router. */
-    public Map<CorfuMsg.NettyCorfuMsgType, INettyClient> handlerMap;
+    public Map<CorfuMsg.NettyCorfuMsgType, IClient> handlerMap;
 
     /** The clients registered to this router. */
-    public List<INettyClient> clientList;
+    public List<IClient> clientList;
 
     /** The outstanding requests on this router. */
     public Map<Long, CompletableFuture> outstandingRequests;
@@ -90,7 +91,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
 
-        addClient(new BaseNettyClient());
+        addClient(new BaseClient());
     }
 
     /** Add a new client to the router.
@@ -98,7 +99,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
      * @param client    The client to add to the router.
      * @return          This NettyClientRouter, to support chaining and the builder pattern.
      */
-    public NettyClientRouter addClient(INettyClient client)
+    public IClientRouter addClient(IClient client)
     {
         // Set the client's router to this instance.
         client.setRouter(this);
@@ -123,7 +124,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
      * @throws NoSuchElementException   If there are no clients matching that type.
      */
     @SuppressWarnings("unchecked")
-    public <T extends INettyClient> T getClient(Class<T> clientType)
+    public <T extends IClient> T getClient(Class<T> clientType)
     {
         return (T) clientList.stream()
                                 .filter(clientType::isInstance)
@@ -221,18 +222,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
         return cfTimeout;
     }
 
-    /** Send a message using the router channel handler and get a completable future to be fulfilled by the reply.
-     *
-     * @param message       The message to send.
-     * @param <T>           The type of completable to return.
-     * @return              A completable future which will be fulfilled by the reply,
-     *                      or a timeout in the case there is no response.
-     */
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message)
-    {
-        return sendMessageAndGetCompletable(null, message);
-    }
-
     /** Send a one way message, without adding a completable future.
      *
      * @param ctx           The context to send the message under.
@@ -261,14 +250,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
         log.trace("Sent one-way message: {}", message);
     }
 
-    /** Send a one way message using the default channel handler, without adding a completable future.
-     *
-     * @param message       The message to send.
-     */
-    public void sendMessage(CorfuMsg message)
-    {
-        sendMessage(message);
-    }
 
     /** Send a netty message through this router, setting the fields in the outgoing message.
      *
@@ -276,7 +257,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
      * @param inMsg     Incoming message to respond to.
      * @param outMsg    Outgoing message.
      */
-    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg)
+    public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg)
     {
         outMsg.copyBaseFields(inMsg);
         outMsg.setEpoch(epoch);
@@ -359,7 +340,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg> {
     protected void channelRead0(ChannelHandlerContext ctx, CorfuMsg m) throws Exception {
         try {
             // We get the handler for this message from the map
-            INettyClient handler = handlerMap.get(m.getMsgType());
+            IClient handler = handlerMap.get(m.getMsgType());
             if (handler == null)
             {
                 // The message was unregistered, we are dropping it.

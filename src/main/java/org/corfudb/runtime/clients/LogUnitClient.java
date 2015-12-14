@@ -14,9 +14,9 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Created by mwei on 12/10/15.
  */
-public class LogUnitClient implements INettyClient {
+public class LogUnitClient implements IClient {
     @Setter
-    NettyClientRouter router;
+    IClientRouter router;
 
     /**
      * Handle a incoming message on the channel

@@ -1,7 +1,7 @@
 package org.corfudb.cmdlets;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.BaseNettyClient;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -62,7 +62,7 @@ public class corfu_ping implements ICmdlet{
                 long seqNo = sequence.getAndIncrement();
                 log.trace("Ping[{}] started at {}", seqNo, start);
                 // ping the endpoint.
-                CompletableFuture<Boolean> cf = router.getClient(BaseNettyClient.class).ping();
+                CompletableFuture<Boolean> cf = router.getClient(BaseClient.class).ping();
                 // if an exception occurs, print it out.
                 cf.exceptionally(e -> {
                     if (e instanceof CompletionException) {

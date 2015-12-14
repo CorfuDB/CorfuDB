@@ -14,12 +14,12 @@ import java.util.concurrent.CompletableFuture;
  * Created by mwei on 12/9/15.
  */
 @Slf4j
-public class BaseNettyClient implements INettyClient {
+public class BaseClient implements IClient {
 
     /** The router to use for the client. */
     @Getter
     @Setter
-    public NettyClientRouter router;
+    public IClientRouter router;
 
     /**
      * Handle a incoming message on the channel
@@ -36,7 +36,7 @@ public class BaseNettyClient implements INettyClient {
                     router.completeRequest(msg.getRequestID(), true);
                 break;
             case PING:
-                    router.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.PONG));
+                    router.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.PONG));
                 break;
             case ACK:
                     router.completeRequest(msg.getRequestID(), true);

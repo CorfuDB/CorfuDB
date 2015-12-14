@@ -1,11 +1,9 @@
 package org.corfudb.runtime;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.view.*;
 
 import java.util.ArrayList;
@@ -13,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -26,13 +25,40 @@ public class CorfuRuntime {
     public List<String> layoutServers;
 
     /** A map of routers, representing nodes. */
-    public Map<String, NettyClientRouter> nodeRouters;
+    public Map<String, IClientRouter> nodeRouters;
 
     /** A completable future containing a layout, when completed. */
     public CompletableFuture<Layout> layout;
 
     /** The rate in seconds to retry accessing a layout, in case of a failure. */
     public int retryRate;
+
+    /** A function to handle getting routers. Used by test framework to inject
+     * a test router. Can also be used to provide alternative logic for obtaining
+     * a router.
+     */
+    @Getter
+    @Setter
+    public Function<String, IClientRouter> getRouterFunction = (address) -> {
+
+        // Return an existing router if we already have one.
+        if (nodeRouters.containsKey(address))
+        {
+            return nodeRouters.get(address);
+        }
+        // Parse the string in host:port format.
+        String host = address.split(":")[0];
+        Integer port = Integer.parseInt(address.split(":")[1]);
+        // Generate a new router, start it and add it to the table.
+        NettyClientRouter router = new NettyClientRouter(host, port);
+        log.debug("Connecting to new router {}:{}", host, port);
+        router.addClient(new LayoutClient())
+                .addClient(new SequencerClient())
+                .addClient(new LogUnitClient())
+                .start();
+        nodeRouters.put(address, router);
+        return router;
+    };
 
     /** A view of the layout service in the Corfu server instance. */
     @Getter(lazy=true)
@@ -86,25 +112,9 @@ public class CorfuRuntime {
      * @param address   The address of the router to get.
      * @return          The router.
      */
-    public NettyClientRouter getRouter(String address)
+    public IClientRouter getRouter(String address)
     {
-        // Return an existing router if we already have one.
-        if (nodeRouters.containsKey(address))
-        {
-            return nodeRouters.get(address);
-        }
-        // Parse the string in host:port format.
-        String host = address.split(":")[0];
-        Integer port = Integer.parseInt(address.split(":")[1]);
-        // Generate a new router, start it and add it to the table.
-        NettyClientRouter router = new NettyClientRouter(host, port);
-        log.debug("Connecting to new router {}:{}", host, port);
-        router.addClient(new LayoutClient())
-                .addClient(new SequencerClient())
-                .addClient(new LogUnitClient())
-                .start();
-        nodeRouters.put(address, router);
-        return router;
+        return getRouterFunction.apply(address);
     }
 
     /** Invalidate the current layout.
@@ -135,7 +145,7 @@ public class CorfuRuntime {
                 for (String s : layoutServers) {
                     log.debug("Trying connection to layout server {}", s);
                     try {
-                        NettyClientRouter router = getRouter(s);
+                        IClientRouter router = getRouter(s);
                         // Try to get a layout.
                         layout = router.getClient(LayoutClient.class).getLayout();
                         Layout l = layout.get(); // wait for layout to complete
