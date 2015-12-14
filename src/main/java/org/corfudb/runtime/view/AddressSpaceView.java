@@ -6,7 +6,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import java.util.Set;
 import java.util.UUID;
 
-/**
+/** A view of the address space implemented by Corfu.
+ *
  * Created by mwei on 12/10/15.
  */
 public class AddressSpaceView extends AbstractView {

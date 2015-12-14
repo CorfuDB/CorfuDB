@@ -38,6 +38,7 @@ public class CorfuMsg {
         // Layout Messages
         LAYOUT_REQUEST(10, CorfuMsg.class, LayoutServer.class),
         LAYOUT_RESPONSE(11, LayoutResponseMsg.class, LayoutServer.class),
+        LAYOUT_NOBOOTSTRAP(19, CorfuMsg.class, LayoutServer.class),
 
         // Sequencer Messages
         TOKEN_REQ(20, TokenRequestMsg.class, SequencerServer.class),

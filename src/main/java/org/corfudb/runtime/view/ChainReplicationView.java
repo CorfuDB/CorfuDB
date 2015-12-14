@@ -6,7 +6,19 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import java.util.Set;
 import java.util.UUID;
 
-/**
+/** A view of an address implemented by chain replication.
+ *
+ * Chain replication is a protocol defined by Renesse and Schneider (OSDI'04),
+ * which is an alternative to quorum based replication protocols. It requires
+ * that writes be written to a chain of replicas in order, and that reads are
+ * always performed at the end of the chain.
+ *
+ * The primary advantage of chain replication is that unlike quorum replication,
+ * where reads must contact a quorum of replicas, chain replication only requires
+ * contacting the last replica in the chain. However, writes require contacting
+ * every replica in sequence. In general, chain replication is best suited for
+ * small chains.
+ *
  * Created by mwei on 12/11/15.
  */
 @Slf4j

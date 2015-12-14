@@ -52,6 +52,13 @@ public class LayoutServer implements IServer {
 
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // This server has not been bootstrapped yet, ignore ALL requests except for LAYOUT_BOOTSTRAP
+        if (currentLayout == null)
+        {
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_NOBOOTSTRAP));
+            return;
+        }
+
         switch (msg.getMsgType())
         {
             case LAYOUT_REQUEST:

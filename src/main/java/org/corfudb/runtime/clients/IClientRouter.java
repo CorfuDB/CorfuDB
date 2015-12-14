@@ -6,7 +6,11 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 
-/**
+/** This is an interface in which all client routers must implement.
+ * Client routers are classes which talk to server routers. Clients are registered
+ * on client routers using the addClient() interface, and can be retrieved using the
+ * getClient() inteface.
+ *
  * Created by mwei on 12/13/15.
  */
 public interface IClientRouter {

@@ -7,7 +7,15 @@ import org.corfudb.runtime.CorfuRuntime;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 
-/**
+/** All views inherit from AbstractView.
+ *
+ * AbstractView requires a runtime, and provides a layoutHelper function.
+ *
+ * The layoutHelper function is called whenever a view tries to access a layout.
+ * If the layoutHelper catches an exception which is due to connection issues
+ * or an incorrect epoch, it asks the runtime to invalidate that layout
+ * by reporting it to a layout server, and retries the function.
+ *
  * Created by mwei on 12/10/15.
  */
 @Slf4j

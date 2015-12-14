@@ -11,7 +11,12 @@ import org.corfudb.runtime.view.Layout;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
-/**
+/** A client to the layout server.
+ *
+ * In addition to being used by clients to obtain the layout and to report errors,
+ * The layout client is also used by layout servers to initiate a Paxos-based protocol
+ * for determining the next layout.
+ *
  * Created by mwei on 12/9/15.
  */
 public class LayoutClient implements IClient {
