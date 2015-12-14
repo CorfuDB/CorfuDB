@@ -19,7 +19,7 @@ public class CorfuSetEpochMsg extends CorfuMsg {
 
     public CorfuSetEpochMsg(long newEpoch)
     {
-        this.msgType = NettyCorfuMsgType.SET_EPOCH;
+        this.msgType = CorfuMsgType.SET_EPOCH;
         this.newEpoch = newEpoch;
     }
 

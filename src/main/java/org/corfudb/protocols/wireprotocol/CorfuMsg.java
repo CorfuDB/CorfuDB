@@ -26,7 +26,7 @@ public class CorfuMsg {
     long epoch;
 
     @RequiredArgsConstructor
-    public enum NettyCorfuMsgType {
+    public enum CorfuMsgType {
         // Base Messages
         PING(0, CorfuMsg.class, BaseServer.class),
         PONG(1, CorfuMsg.class, BaseServer.class),
@@ -67,12 +67,12 @@ public class CorfuMsg {
         public byte asByte() { return (byte)type; }
     };
 
-    static Map<Byte, NettyCorfuMsgType> typeMap =
-            Arrays.<NettyCorfuMsgType>stream(NettyCorfuMsgType.values())
-                    .collect(Collectors.toMap(NettyCorfuMsgType::asByte, Function.identity()));
+    static Map<Byte, CorfuMsgType> typeMap =
+            Arrays.<CorfuMsgType>stream(CorfuMsgType.values())
+                    .collect(Collectors.toMap(CorfuMsgType::asByte, Function.identity()));
 
     /** The type of message */
-    NettyCorfuMsgType msgType;
+    CorfuMsgType msgType;
 
         /* The wire format of the NettyCorfuMessage message is below:
         | client ID(8) | request ID(8) |  epoch(8)   |  type(1)  |
@@ -113,7 +113,7 @@ public class CorfuMsg {
         long clientID = buffer.readLong();
         long requestID = buffer.readLong();
         long epoch = buffer.readLong();
-        NettyCorfuMsgType message = typeMap.get(buffer.readByte());
+        CorfuMsgType message = typeMap.get(buffer.readByte());
         CorfuMsg msg = message.messageType.getConstructor().newInstance();
         msg.clientID = clientID;
         msg.requestID = requestID;
@@ -127,7 +127,7 @@ public class CorfuMsg {
      * Typically used for generating error messages, since sendmessage will populate the rest of the fields.
      * @param type  The type of message to send.
      */
-    public CorfuMsg(NettyCorfuMsgType type)
+    public CorfuMsg(CorfuMsgType type)
     {
         this.msgType = type;
     }

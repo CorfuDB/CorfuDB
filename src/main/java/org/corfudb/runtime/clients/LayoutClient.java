@@ -37,10 +37,10 @@ public class LayoutClient implements IClient {
 
     /** The messages this client should handle. */
     @Getter
-    public final Set<CorfuMsg.NettyCorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.NettyCorfuMsgType>()
-                    .add(CorfuMsg.NettyCorfuMsgType.LAYOUT_REQUEST)
-                    .add(CorfuMsg.NettyCorfuMsgType.LAYOUT_RESPONSE)
+    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
+            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
+                    .add(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST)
+                    .add(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE)
                     .build();
 
     /**
@@ -49,7 +49,7 @@ public class LayoutClient implements IClient {
      */
     public CompletableFuture<Layout> getLayout() {
         return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsg.NettyCorfuMsgType.LAYOUT_REQUEST));
+                new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
     }
 
 }

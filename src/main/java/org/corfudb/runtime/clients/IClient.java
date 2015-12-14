@@ -28,5 +28,5 @@ public interface IClient {
      * Returns a set of message types that the client handles.
      * @return  The set of message types this client handles.
      */
-    Set<CorfuMsg.NettyCorfuMsgType> getHandledTypes();
+    Set<CorfuMsg.CorfuMsgType> getHandledTypes();
 }

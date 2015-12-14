@@ -20,7 +20,7 @@ public class CorfuResetMsg extends CorfuMsg {
 
     public CorfuResetMsg(long newEpoch)
     {
-        this.msgType = NettyCorfuMsgType.RESET;
+        this.msgType = CorfuMsgType.RESET;
         this.newEpoch = newEpoch;
     }
     /**

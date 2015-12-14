@@ -50,21 +50,21 @@ public class LogUnitClient implements IClient {
 
     /** The messages this client should handle. */
     @Getter
-    public final Set<CorfuMsg.NettyCorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.NettyCorfuMsgType>()
-                    .add(CorfuMsg.NettyCorfuMsgType.WRITE)
-                    .add(CorfuMsg.NettyCorfuMsgType.READ_REQUEST)
-                    .add(CorfuMsg.NettyCorfuMsgType.READ_RESPONSE)
-                    .add(CorfuMsg.NettyCorfuMsgType.TRIM)
-                    .add(CorfuMsg.NettyCorfuMsgType.FILL_HOLE)
-                    .add(CorfuMsg.NettyCorfuMsgType.FORCE_GC)
-                    .add(CorfuMsg.NettyCorfuMsgType.GC_INTERVAL)
+    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
+            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
+                    .add(CorfuMsg.CorfuMsgType.WRITE)
+                    .add(CorfuMsg.CorfuMsgType.READ_REQUEST)
+                    .add(CorfuMsg.CorfuMsgType.READ_RESPONSE)
+                    .add(CorfuMsg.CorfuMsgType.TRIM)
+                    .add(CorfuMsg.CorfuMsgType.FILL_HOLE)
+                    .add(CorfuMsg.CorfuMsgType.FORCE_GC)
+                    .add(CorfuMsg.CorfuMsgType.GC_INTERVAL)
 
-                    .add(CorfuMsg.NettyCorfuMsgType.ERROR_OK)
-                    .add(CorfuMsg.NettyCorfuMsgType.ERROR_TRIMMED)
-                    .add(CorfuMsg.NettyCorfuMsgType.ERROR_OVERWRITE)
-                    .add(CorfuMsg.NettyCorfuMsgType.ERROR_OOS)
-                    .add(CorfuMsg.NettyCorfuMsgType.ERROR_RANK)
+                    .add(CorfuMsg.CorfuMsgType.ERROR_OK)
+                    .add(CorfuMsg.CorfuMsgType.ERROR_TRIMMED)
+                    .add(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE)
+                    .add(CorfuMsg.CorfuMsgType.ERROR_OOS)
+                    .add(CorfuMsg.CorfuMsgType.ERROR_RANK)
                     .build();
 
     /**
@@ -120,7 +120,7 @@ public class LogUnitClient implements IClient {
      * Force the garbage collector to begin garbage collection.
      */
     public void forceGC() {
-        router.sendMessage(new CorfuMsg(CorfuMsg.NettyCorfuMsgType.FORCE_GC));
+        router.sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.FORCE_GC));
     }
 
     /**

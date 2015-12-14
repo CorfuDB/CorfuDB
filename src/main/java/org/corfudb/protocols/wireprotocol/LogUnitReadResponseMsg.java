@@ -85,13 +85,13 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
 
     public LogUnitReadResponseMsg(ReadResultType result)
     {
-        this.msgType = NettyCorfuMsgType.READ_RESPONSE;
+        this.msgType = CorfuMsgType.READ_RESPONSE;
         this.result = result;
     }
 
     public LogUnitReadResponseMsg(LogUnitEntry entry)
     {
-        this.msgType = NettyCorfuMsgType.READ_RESPONSE;
+        this.msgType = CorfuMsgType.READ_RESPONSE;
         this.result = ReadResultType.DATA;
         this.setMetadataMap(entry.getMetadataMap());
         this.setData(entry.getBuffer());

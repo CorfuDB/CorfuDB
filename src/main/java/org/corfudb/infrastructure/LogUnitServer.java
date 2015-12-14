@@ -125,7 +125,7 @@ public class LogUnitServer implements IServer {
                 LogUnitFillHoleMsg m = (LogUnitFillHoleMsg) msg;
                 log.debug("Hole fill requested at {}", m.getAddress());
                 dataCache.get(m.getAddress(), (address) -> new LogUnitEntry());
-                r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.ACK));
+                r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
             }
             break;
             case TRIM:
@@ -303,18 +303,18 @@ public class LogUnitServer implements IServer {
         //TODO: locking of trimRange.
         if (trimRange.contains (msg.getAddress()))
         {
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.ERROR_TRIMMED));
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_TRIMMED));
         }
         else {
             LogUnitEntry e = new LogUnitEntry(msg.getData(), msg.getMetadataMap(), false);
             e.getBuffer().retain();
             if (e == dataCache.get(msg.getAddress(), (address) -> e)) {
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.ERROR_OK));
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OK));
             }
             else
             {
                 e.getBuffer().release();
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.ERROR_OVERWRITE));
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE));
             }
         }
     }

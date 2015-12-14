@@ -22,7 +22,7 @@ public class TokenResponseMsg extends CorfuMsg {
 
     public TokenResponseMsg(Long token)
     {
-        this.msgType = NettyCorfuMsgType.TOKEN_RES;
+        this.msgType = CorfuMsgType.TOKEN_RES;
         this.token = token;
     }
 

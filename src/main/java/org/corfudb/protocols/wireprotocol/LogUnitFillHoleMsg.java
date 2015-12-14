@@ -20,7 +20,7 @@ public class LogUnitFillHoleMsg extends CorfuMsg {
 
     public LogUnitFillHoleMsg(long address)
     {
-        this.msgType = NettyCorfuMsgType.FILL_HOLE;
+        this.msgType = CorfuMsgType.FILL_HOLE;
         this.address = address;
     }
     /**

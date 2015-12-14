@@ -60,7 +60,7 @@ implements IClientRouter {
     public static final Random random = new Random();
 
     /** The handlers registered to this router. */
-    public Map<CorfuMsg.NettyCorfuMsgType, IClient> handlerMap;
+    public Map<CorfuMsg.CorfuMsgType, IClient> handlerMap;
 
     /** The clients registered to this router. */
     public List<IClient> clientList;
@@ -104,7 +104,7 @@ implements IClientRouter {
         // Set the client's router to this instance.
         client.setRouter(this);
 
-        // Iterate through all types of NettyCorfuMsgType, registering the handler
+        // Iterate through all types of CorfuMsgType, registering the handler
         client.getHandledTypes().stream()
                 .forEach(x -> {
                     handlerMap.put(x, client);
@@ -319,7 +319,7 @@ implements IClientRouter {
             return false;
         }
         // Check if the message is in the right epoch.
-        if (msg.getMsgType() != CorfuMsg.NettyCorfuMsgType.RESET && msg.getEpoch() != epoch)
+        if (msg.getMsgType() != CorfuMsg.CorfuMsgType.RESET && msg.getEpoch() != epoch)
         {
             CorfuMsg m = new CorfuMsg();
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",

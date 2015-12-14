@@ -20,7 +20,7 @@ public class LogUnitGCIntervalMsg extends CorfuMsg {
 
     public LogUnitGCIntervalMsg(long interval)
     {
-        this.msgType = NettyCorfuMsgType.GC_INTERVAL;
+        this.msgType = CorfuMsgType.GC_INTERVAL;
         this.interval = interval;
     }
     /**

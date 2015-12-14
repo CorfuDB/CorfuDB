@@ -10,9 +10,9 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 @Slf4j
 public class BaseServer implements IServer {
 
-    NettyServerRouter router;
+    IServerRouter router;
 
-    public BaseServer(NettyServerRouter router)
+    public BaseServer(IServerRouter router)
     {
         this.router = router;
     }
@@ -22,7 +22,7 @@ public class BaseServer implements IServer {
         switch (msg.getMsgType())
         {
             case PING:
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.NettyCorfuMsgType.PONG));
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.PONG));
                 break;
         }
     }
