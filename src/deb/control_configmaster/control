@@ -1,9 +1,0 @@
-Package: [[artifactId]]-configmaster
-Version: [[version]]
-Section: misc
-Priority: optional
-Architecture: all
-Depends: openjdk-7-jre,[[artifactId]]-common
-Maintainer: Michael Wei <mwei@cs.ucsd.edu>
-Description: The [[name]] configuration master provides configuration for a [[name]] instance
-Distribution: development

@@ -33,6 +33,26 @@ public abstract class AbstractView {
         R apply(Layout l) throws Exception;
     }
 
+    /** Get the current layout.
+     *
+     * @return The current layout.
+     */
+    public Layout getCurrentLayout()
+    {
+        while(true) {
+            try {
+                return runtime.layout.get();
+            } catch (Exception ex) {
+                log.warn("Error executing remote call, invalidating view and retrying in {}s", runtime.retryRate, ex);
+                runtime.invalidateLayout();
+                try {
+                    Thread.sleep(runtime.retryRate * 1000);
+                } catch (InterruptedException ie) {
+                }
+            }
+        }
+    }
+
     /** Helper function for view to retrieve layouts.
      * This function will retry the given function indefinitely, invalidating the view if there was a exception
      * contacting the endpoint.

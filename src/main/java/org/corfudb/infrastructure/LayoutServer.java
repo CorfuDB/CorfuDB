@@ -23,9 +23,6 @@ public class LayoutServer implements IServer {
     /** The current layout. */
     Layout currentLayout;
 
-    /** The proposed layout. */
-    Layout proposedLayout;
-
     /** The current phase 1 rank */
     long phase1Rank;
 
@@ -118,25 +115,15 @@ public class LayoutServer implements IServer {
                     log.debug("New phase 2 rank={}, old rank={}, layout={}", ((LayoutRankMsg) msg).getRank(), phase2Rank,
                             ((LayoutRankMsg) msg).getLayout());
                     phase2Rank = ((LayoutRankMsg) msg).getRank();
-                    proposedLayout = ((LayoutRankMsg) msg).getLayout();
                     r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
                 }
             }
             break;
-            case LAYOUT_COMMIT:
+            case LAYOUT_COMMITTED:
             {
-                LayoutRankMsg m = (LayoutRankMsg)msg;
-                // This is a propose. If the rank is less than or equal to the phase 1 rank, reject.
-                if (m.getRank() != phase2Rank) {
-                    log.debug("Rejected commit of rank={}, phase2Rank={}", m.getRank(), phase2Rank);
-                    r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.NACK));
-                }
-                else
-                {
-                    log.debug("Proposal committed, new layout={}", proposedLayout);
-                    currentLayout = proposedLayout;
-                    r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
-                }
+                // Currently we just acknowledge the commit. We could do more than
+                // just that.
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
             }
             break;
             default:
