@@ -95,7 +95,7 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void commitRejectsWrongRank()
+    public void commitReturnsAck()
     {
         bootstrapServer(getTestLayout());
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
@@ -104,8 +104,10 @@ public class LayoutServerTest extends AbstractServerTest {
         sendMessage(new LayoutRankMsg(getTestLayout(), 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(null, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMIT));
+        sendMessage(new LayoutRankMsg(null, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.NACK);
+                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
     }
+
+
 }

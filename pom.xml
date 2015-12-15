@@ -3,10 +3,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.corfudb</groupId>
-    <artifactId>corfudb</artifactId>
+    <artifactId>corfu</artifactId>
     <version>0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
-    <name>CorfuDB</name>
+    <name>Corfu</name>
     <url>http://www.corfudb.org</url>
     <description>A cloud scale-consistency platform</description>
 
@@ -248,6 +248,15 @@
                       </goals>
                       <configuration>
                         <dataSet>
+                            <data>
+                                <src>src/deb/init.d/corfu_server</src>
+                                <type>file</type>
+                                <mapper>
+                                    <type>perm</type>
+                                    <prefix>/etc/init.d</prefix>
+                                    <filemode>755</filemode>
+                                </mapper>
+                            </data>
                           <data>
                             <src>${project.build.directory}/${project.build.finalName}-shaded.jar</src>
                             <type>file</type>

@@ -1,20 +1,20 @@
 #! /usr/bin/env bash
 
 ### BEGIN INIT INFO
-# Provides:             CorfuDB-sequencer
+# Provides:             corfu_server
 # Required-Start:       $remote_fs $syslog
 # Required-Stop:        $remote_fs $syslog
 # Default-Start:        2 3 4 5
 # Default-Stop:
-# Short-Description:    CorfuDB Sequencer
+# Short-Description:    Corfu Infrastructure Server
 ### END INIT INFO
 
 umask 022
 
-ROLE=sequencer
-ROLENAME="CorfuDB Sequencer"
-PIDFILE=/var/run/corfudb.${ROLE}.pid
+ROLENAME="Corfu Infrastructure Server"
+PIDFILE=/var/run/corfu.pid
 PREFIX=/usr/bin
+OPTS="-l /var/corfu 9000"
 
 . /lib/lsb/init-functions
 
@@ -22,15 +22,15 @@ export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
 case "$1" in
     start)
-        log_daemon_msg "Starting $ROLENAME" "CorfuDB-$ROLE"
-        if start-stop-daemon --start --quiet  --oknodo --pidfile $PIDFILE -x $PREFIX/corfuDBLaunch $ROLE start; then
+        log_daemon_msg "Starting $ROLENAME"
+        if start-stop-daemon --start --quiet  --oknodo --pidfile $PIDFILE -x $PREFIX/corfu_server $OPTS; then
             log_end_msg 0
         else
             log_end_msg 1
         fi
         ;;
     stop)
-        log_daemon_msg "Stopping $ROLENAME" "CorfuDB-$ROLE"
+        log_daemon_msg "Stopping $ROLENAME"
         if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
             log_end_msg 0
         else
@@ -38,14 +38,14 @@ case "$1" in
         fi
         ;;
     restart)
-        log_daemon_msg "Restarting $ROLENAME" "CorfuDB-$ROLE"
+        log_daemon_msg "Restarting $ROLENAME"
         set +e
         start-stop-daemon --stop --quiet --retry 30 --pidfile $PIDFILE
         RET="$?"
         set -e
         case $RET in
             0)
-                if start-stop-daemon --start --quiet  --oknodo --pidfile $PIDFILE -x $PREFIX/corfuDBLaunch $ROLE start; then
+                if start-stop-daemon --start --quiet  --oknodo --pidfile $PIDFILE -x $PREFIX/corfu_server $OPTS; then
                     log_end_msg 0
                 else
                     log_end_msg 1

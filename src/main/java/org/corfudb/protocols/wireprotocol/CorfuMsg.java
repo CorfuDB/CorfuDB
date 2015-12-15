@@ -43,7 +43,8 @@ public class CorfuMsg {
         LAYOUT_PREPARE_REJECT(13, LayoutRankMsg.class, LayoutServer.class),
         LAYOUT_PROPOSE(14, LayoutRankMsg.class, LayoutServer.class),
         LAYOUT_PROPOSE_REJECT(15, LayoutRankMsg.class, LayoutServer.class),
-        LAYOUT_COMMIT(16, LayoutRankMsg.class, LayoutServer.class),
+        LAYOUT_COMMITTED(16, LayoutRankMsg.class, LayoutServer.class),
+        LAYOUT_QUERY(17, LayoutRankMsg.class, LayoutServer.class),
         LAYOUT_BOOTSTRAP(18, LayoutMsg.class, LayoutServer.class),
         LAYOUT_NOBOOTSTRAP(19, CorfuMsg.class, LayoutServer.class),
 

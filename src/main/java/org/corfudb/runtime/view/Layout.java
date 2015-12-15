@@ -7,6 +7,7 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.SequencerClient;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -46,6 +47,16 @@ public class Layout {
         {
             return null;
         }
+    }
+
+    /** Get a java stream representing all layout clients for this layout.
+     *
+     * @return      A java stream representing all layout clients.
+     */
+    public Stream<LayoutClient> getLayoutClientStream() {
+        return layoutServers.stream()
+                .map(runtime::getRouter)
+                .map(x -> x.getClient(LayoutClient.class));
     }
 
     /** Return the sequencer client for a particular index.
