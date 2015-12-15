@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-for filename in /usr/share/corfu/bin; do
+for filename in /usr/share/corfu/bin/*; do
     if [ filename = "corfu_server" ]; then
         ln -s /usr/share/corfu/scripts/corfu_server.sh /usr/local/bin/$(basename "$filename")
     else

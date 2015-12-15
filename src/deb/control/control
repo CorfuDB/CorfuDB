@@ -1,9 +1,9 @@
-Package: [[name]]-common
+Package: [[name]]-server
 Version: [[version]]
 Section: misc
 Priority: optional
 Architecture: all
-Depends: java-runtime-headless (>=1.8)
+Depends: java-runtime-headless
 Maintainer: Michael Wei <mwei@cs.ucsd.edu>
 Description: Corfu is a consistency platform designed around the abstraction of a shared log.
 Distribution: development
