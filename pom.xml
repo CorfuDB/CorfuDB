@@ -274,6 +274,15 @@
                                 <filemode>755</filemode>
                             </mapper>
                            </data>
+                            <data>
+                                <src>scripts</src>
+                                <type>directory</type>
+                                <mapper>
+                                    <type>perm</type>
+                                    <prefix>/usr/share/corfu/scripts</prefix>
+                                    <filemode>755</filemode>
+                                </mapper>
+                            </data>
                             <!--
                            <data>
                                <type>link</type>
