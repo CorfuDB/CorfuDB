@@ -5,7 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.LayoutResponseMsg;
+import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Set;
@@ -35,7 +35,7 @@ public class LayoutClient implements IClient {
         switch (msg.getMsgType())
         {
             case LAYOUT_RESPONSE:
-                router.completeRequest(msg.getRequestID(), ((LayoutResponseMsg)msg).getLayout());
+                router.completeRequest(msg.getRequestID(), ((LayoutMsg)msg).getLayout());
                 break;
         }
     }
