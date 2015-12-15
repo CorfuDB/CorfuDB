@@ -262,7 +262,7 @@
                             <type>file</type>
                             <mapper>
                               <type>perm</type>
-                              <prefix>/usr/share/corfudb/lib</prefix>
+                              <prefix>/usr/share/corfu/lib</prefix>
                             </mapper>
                           </data>
                           <data>
@@ -270,7 +270,7 @@
                             <type>directory</type>
                             <mapper>
                                 <type>perm</type>
-                                <prefix>/usr/share/corfudb/bin</prefix>
+                                <prefix>/usr/share/corfu/bin</prefix>
                                 <filemode>755</filemode>
                             </mapper>
                            </data>

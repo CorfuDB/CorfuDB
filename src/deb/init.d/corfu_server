@@ -13,7 +13,7 @@ umask 022
 
 ROLENAME="Corfu Infrastructure Server"
 PIDFILE=/var/run/corfu.pid
-PREFIX=/usr/bin
+PREFIX=/usr/local/bin
 OPTS="-l /var/corfu 9000"
 
 . /lib/lsb/init-functions
