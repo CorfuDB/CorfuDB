@@ -34,10 +34,17 @@ public class CorfuMsg {
         SET_EPOCH(3, CorfuSetEpochMsg.class, BaseServer.class),
         ACK(4, CorfuMsg.class, BaseServer.class),
         WRONG_EPOCH(5, CorfuMsg.class, BaseServer.class),
+        NACK(6, CorfuMsg.class, BaseServer.class),
 
         // Layout Messages
         LAYOUT_REQUEST(10, CorfuMsg.class, LayoutServer.class),
-        LAYOUT_RESPONSE(11, LayoutResponseMsg.class, LayoutServer.class),
+        LAYOUT_RESPONSE(11, LayoutMsg.class, LayoutServer.class),
+        LAYOUT_PREPARE(12, LayoutRankMsg.class, LayoutServer.class),
+        LAYOUT_PREPARE_REJECT(13, LayoutRankMsg.class, LayoutServer.class),
+        LAYOUT_PROPOSE(14, LayoutRankMsg.class, LayoutServer.class),
+        LAYOUT_PROPOSE_REJECT(15, LayoutRankMsg.class, LayoutServer.class),
+        LAYOUT_COMMIT(16, LayoutRankMsg.class, LayoutServer.class),
+        LAYOUT_BOOTSTRAP(18, LayoutMsg.class, LayoutServer.class),
         LAYOUT_NOBOOTSTRAP(19, CorfuMsg.class, LayoutServer.class),
 
         // Sequencer Messages

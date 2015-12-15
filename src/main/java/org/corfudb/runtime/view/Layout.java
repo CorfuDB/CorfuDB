@@ -21,6 +21,7 @@ public class Layout {
     /** A list of the segments in the layout. */
     List<LayoutSegment> segments;
     /** The epoch of this layout. */
+    @Getter
     long epoch;
 
     /** Whether or not this layout is valid. */

@@ -1,40 +1,33 @@
 package org.corfudb.protocols.wireprotocol;
 
-/**
- * Created by mwei on 12/8/15.
- */
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import io.netty.buffer.ByteBuf;
-import lombok.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
+import lombok.ToString;
 import org.corfudb.runtime.view.Layout;
 
 import java.nio.charset.StandardCharsets;
 
 /**
- * Created by mwei on 9/15/15.
+ * Created by mwei on 12/14/15.
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @ToString
-@Slf4j
-public class LayoutResponseMsg extends CorfuMsg {
-
-
+public class LayoutMsg extends CorfuMsg {
     /** The current layout. */
+    @Getter
     Layout layout;
 
     static final Gson parser = new GsonBuilder().create();
 
-    public LayoutResponseMsg(Layout layout)
+    public LayoutMsg(Layout layout, CorfuMsgType type)
     {
-        this.msgType = CorfuMsgType.LAYOUT_RESPONSE;
+        this.msgType = type;
         this.layout = layout;
     }
 
