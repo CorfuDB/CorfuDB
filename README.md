@@ -14,7 +14,7 @@ peer-reviewed research, see [References](https://github.com/CorfuDB/CorfuDB/wiki
 
 Corfu consists of two layers: a logging layer
 which implements a distributed, fault-tolerant shared log; and a
-runtime layer that implements transactional services over the shared log.
+org.corfudb.runtime layer that implements transactional services over the shared log.
 
 Check the [Corfu Wiki](https://github.com/CorfuDB/CorfuDB/wiki) for a detailed overview of the sofware architecture and example usage.
 

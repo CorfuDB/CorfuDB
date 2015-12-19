@@ -1,16 +1,13 @@
 package org.corfudb.runtime.exceptions;
 
-import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 
 /**
- * Created by mwei on 10/15/15.
+ * Created by mwei on 12/11/15.
  */
+@ToString
+@RequiredArgsConstructor
 public class WrongEpochException extends Exception {
-    public final long correctEpoch;
-
-    public WrongEpochException(long correctEpoch)
-    {
-        super("Server indicates epoch is incorrect, correct epoch is " + correctEpoch);
-        this.correctEpoch = correctEpoch;
-    }
+    final long correctEpoch;
 }

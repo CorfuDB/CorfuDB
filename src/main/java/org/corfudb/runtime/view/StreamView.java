@@ -1,117 +1,102 @@
 package org.corfudb.runtime.view;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
-import java.util.UUID;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.util.Collections;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * This class represents a view of the streams in the system.
+ * Created by mwei on 12/11/15.
  */
-public class StreamView {
+@Slf4j
+public class StreamView implements AutoCloseable {
 
-    private static final Logger log = LoggerFactory.getLogger(StreamView.class);
-    private Map<UUID, StreamData> streamMap;
+    CorfuRuntime runtime;
 
-    /**
-     * Default constructor
-     */
-    public StreamView() {
-        this.streamMap = new ConcurrentHashMap<UUID, StreamData>();
+    /** The ID of the stream. */
+    final UUID streamID;
+
+    /** A pointer to the log. */
+    final AtomicLong logPointer;
+
+    public StreamView(CorfuRuntime runtime, UUID streamID)
+    {
+        this.runtime = runtime;
+        this.streamID = streamID;
+        this.logPointer = new AtomicLong(0);
     }
 
-    /**
-     * Returns the data in view for a given stream.
+    /** Write an object to this stream, returning the physical address it
+     * was written at.
      *
-     * @param stream    The UUID of the stream to query.
+     * Note: While the completion of this operation guarantees that the write
+     * has been persisted, it DOES NOT guarantee that the object has been
+     * written to the stream. For example, another client may have deleted
+     * the stream.
      *
-     * @return          The data for the stream in the view.
+     * @param object    The object to write to the stream.
+     * @return          The address this
      */
-    public StreamData getStream(UUID stream)
+    public long write(Object object)
     {
-        return streamMap.get(stream);
+        long token = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
+        log.trace("Write[{}]: acquired token = {}", streamID, token);
+        runtime.getAddressSpaceView().write(token, Collections.singleton(streamID), object);
+        return token;
     }
 
-    /**
-     * Get all streams that we know about.
+    /** Read the next item from the stream.
+     * This method is synchronized to protect against multiple readers.
      *
-     * @return          A list of streams in the view.
+     * @return          The next item from the stream.
      */
-    public Set<UUID> getAllStreams()
+    @SuppressWarnings("unchecked")
+    public synchronized ReadResult read()
     {
-        return streamMap.keySet();
-    }
-
-    /**
-     * Adds a stream to the view, if it does not exist, and returns whether or not
-     * a new stream was added.
-     *
-     * @param stream        The UUID of the stream to add.
-     * @param startLog      The UUID of the stream the stream starts on.
-     * @param startPos      The position that the stream starts at.
-     *
-     * @return              True, if the stream was added to the view, or false, if
-     *                      the stream already existed in the view.
-     */
-    public boolean addStream(UUID stream, UUID startLog, long startPos)
-    {
-        return streamMap.putIfAbsent(stream, new StreamData(stream, startLog, startLog, 0, startPos)) == null;
-    }
-
-    /**
-     * Returns whether the stream has been updated to the given logical position.
-     *
-     * @param stream        The UUID of the stream.
-     * @param logPos        The logical position to check.
-     *
-     * @return              True, if the stream has been updated to that position.
-     *                      False otherwise.
-     */
-    public boolean checkStream(UUID stream, long logPos)
-    {
-        StreamData sd = streamMap.get(stream);
-        if (sd == null) { return false; }
-        if (logPos > sd.lastUpdate) { return false; }
-        return true;
-    }
-
-    /**
-     * Adds or updates a learned stream to the view, and returns whether or not
-     * a stream was added or updated.
-     *
-     * @param stream        The UUID of the stream.
-     * @param currentLog    The UUID of the stream the stream is currently in.
-     * @param startLog      The UUID of the stream the stream resides on.
-     * @param epoch         The epoch the stream is currently in.
-     * @param startPos      The position the stream currently starts on.
-     * @param lastUpdate    The logical position this stream was last updated at
-     */
-    public boolean learnStream(UUID stream, UUID currentLog, UUID startLog, long startPos, long epoch, long lastUpdate)
-    {
-        StreamData old = streamMap.get(stream);
-        if (old == null) {
-            if (currentLog == null || startLog == null || epoch == -1 || startPos == -1)
-            {
-                return false;
-            }
-            else{
-                return streamMap.putIfAbsent(stream, new StreamData(stream, currentLog, startLog, epoch, startPos, lastUpdate)) == null;
-            }
-        }
-
-        synchronized(old)
+        while (true)
         {
-            if (currentLog != null) { old.currentLog = currentLog; }
-            if (startLog != null) { old.startLog = startLog; }
-            if (epoch != -1) {old.epoch = epoch; }
-            if (startPos != -1) {old.startPos = startPos; }
-            old.lastUpdate = lastUpdate;
-            return true;
+            long thisRead = logPointer.getAndIncrement();
+            log.trace("Read[{}]: reading at {}", streamID, thisRead);
+            ReadResult r = runtime.getAddressSpaceView().read(thisRead);
+            if (r.getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY)
+            {
+                //determine whether or not this is a hole
+                long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);
+                log.trace("Read[{}]: latest token at {}", streamID, latestToken);
+                if (latestToken == thisRead)
+                {
+                    logPointer.decrementAndGet();
+                    return null;
+                }
+                log.debug("Read[{}]: hole detected at {} (token at {}), attempting fill.", streamID, thisRead, latestToken);
+                runtime.getAddressSpaceView().fillHole(thisRead);
+                r = runtime.getAddressSpaceView().read(thisRead);
+                log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getResultType());
+            }
+            Set<UUID> streams = (Set<UUID>) r.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
+            if (streams != null && streams.contains(streamID))
+            {
+                log.trace("Read[]: valid entry at {}", streamID, thisRead);
+                return r;
+            }
         }
+    }
+
+    /**
+     * Closes this resource, relinquishing any underlying resources.
+     * This method is invoked automatically on objects managed by the
+     * {@code try}-with-resources statement.
+     *
+     * @throws Exception if this resource cannot be closed
+     */
+    @Override
+    public void close() throws Exception {
+
     }
 }

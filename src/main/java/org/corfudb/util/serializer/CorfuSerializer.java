@@ -5,11 +5,11 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import org.corfudb.runtime.smr.smrprotocol.SMRCommand;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.function.Function;
@@ -24,7 +24,6 @@ public class CorfuSerializer implements ISerializer {
     @RequiredArgsConstructor
     public enum CorfuPayloadType {
         // Type of SMR command
-        SMR(0, SMRCommand.class, SMRCommand::deserialize)
         ;
 
         final int type;
@@ -60,17 +59,9 @@ public class CorfuSerializer implements ISerializer {
         byte magic;
         if ((magic = b.readByte()) != CorfuPayloadMagic) {
             b.resetReaderIndex();
-            try (ByteBufInputStream bbis = new ByteBufInputStream(b))
-            {
-                try (ObjectInputStream ois = new ObjectInputStream(bbis))
-                {
-                    return ois.readObject();
-                }
-            }
-            catch (IOException | ClassNotFoundException ie)
-            {
-                throw new RuntimeException(ie);
-            }
+            byte[] bytes = new byte[b.readableBytes()];
+            b.readBytes(bytes);
+            return bytes;
         }
         CorfuPayloadType type = typeMap.get(b.readByte());
         if (type == null)
@@ -95,20 +86,14 @@ public class CorfuSerializer implements ISerializer {
             ICorfuSerializable c = (ICorfuSerializable) o;
             c.serialize(b);
         }
+        else if (o instanceof byte[])
+        {
+            byte[] bytes = (byte[])o;
+            b.writeBytes(bytes);
+        }
         else
         {
-            //try to java serialize things.
-            try (ByteBufOutputStream bbos = new ByteBufOutputStream(b))
-            {
-                try (ObjectOutputStream oos = new ObjectOutputStream(bbos))
-                {
-                    oos.writeObject(o);
-                }
-            }
-            catch (Exception e)
-            {
-                throw new RuntimeException(e);
-            }
+            throw new RuntimeException("Attempting to serialize unsupported type.");
         }
     }
     //endregion
