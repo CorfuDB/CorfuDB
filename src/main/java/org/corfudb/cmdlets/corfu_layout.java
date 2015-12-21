@@ -34,6 +34,9 @@ public class corfu_layout implements ICmdlet {
                     + "Usage:\n"
                     + "\tcorfu_layout query <address>:<port> [-d <level>]\n"
                     + "\tcorfu_layout bootstrap <address>:<port> [-l <layout>|-s] [-d <level>]\n"
+                    + "\tcorfu_layout prepare <address>:<port> -r <rank> [-d <level>]\n"
+                    + "\tcorfu_layout propose <address>:<port> -r <rank> [-l <layout>|-s] [-d <level>]\n"
+                    + "\tcorfu_layout committed <address>:<port> -r <rank> [-d <level>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <layout>, --layout-file=<layout>  Path to a JSON file describing the \n"
@@ -41,6 +44,7 @@ public class corfu_layout implements ICmdlet {
                     + "                                      --single not specified, takes input from stdin.\n"
                     + " -s, --single                         Generate a single node layout, with the node \n"
                     + "                                      itself serving all roles.                  \n"
+                    + " -r <rank>, --rank=<rank>             The rank to use for a Paxos operation. \n"
                     + " -d <level>, --log-level=<level>      Set the logging level, valid levels are: \n"
                     + "                                      ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
                     + " -h, --help  Show this screen\n"
@@ -101,6 +105,70 @@ public class corfu_layout implements ICmdlet {
                 throw new RuntimeException(ex.getCause());
             } catch (Exception e) {
                 log.error("Exception bootstrapping layout", e);
+                throw new RuntimeException(e);
+            }
+        }
+        else if ((Boolean) opts.get("prepare")) {
+            long rank = Long.parseLong((String) opts.get("--rank"));
+            log.debug("Prepare with new rank={}", rank);
+            try {
+                if (router.getClient(LayoutClient.class).prepare(rank).get()) {
+                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                            .reset().fg(GREEN).a(": ACK"));
+                }
+                else
+                {
+                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                            .reset().fg(RED).a(": NACK"));
+                }
+            } catch (ExecutionException ex) {
+                log.error("Exception during prepare", ex.getCause());
+                throw new RuntimeException(ex.getCause());
+            } catch (Exception e) {
+                log.error("Exception during prepare", e);
+                throw new RuntimeException(e);
+            }
+        }
+        else if ((Boolean) opts.get("propose")) {
+            long rank = Long.parseLong((String) opts.get("--rank"));
+            Layout l = getLayout(opts);
+            log.debug("Propose with new rank={}, layout={}", rank, l);
+            try {
+                if (router.getClient(LayoutClient.class).propose(rank, l).get()) {
+                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                            .reset().fg(GREEN).a(": ACK"));
+                }
+                else
+                {
+                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                            .reset().fg(RED).a(": NACK"));
+                }
+            } catch (ExecutionException ex) {
+                log.error("Exception during prepare", ex.getCause());
+                throw new RuntimeException(ex.getCause());
+            } catch (Exception e) {
+                log.error("Exception during prepare", e);
+                throw new RuntimeException(e);
+            }
+        }
+        else if ((Boolean) opts.get("committed")) {
+            long rank = Long.parseLong((String) opts.get("--rank"));
+            log.debug("Propose with new rank={}", rank);
+            try {
+                if (router.getClient(LayoutClient.class).committed(rank).get()) {
+                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                            .reset().fg(GREEN).a(": ACK"));
+                }
+                else
+                {
+                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                            .reset().fg(RED).a(": NACK"));
+                }
+            } catch (ExecutionException ex) {
+                log.error("Exception during prepare", ex.getCause());
+                throw new RuntimeException(ex.getCause());
+            } catch (Exception e) {
+                log.error("Exception during prepare", e);
                 throw new RuntimeException(e);
             }
         }

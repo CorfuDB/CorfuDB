@@ -45,6 +45,10 @@ public class LayoutClient implements IClient {
                         new NoBootstrapException());
                 break;
             case LAYOUT_PREPARE_REJECT:
+            router.completeExceptionally(msg.getRequestID(),
+                    new OutrankedException(((LayoutRankMsg)msg).getRank()));
+                break;
+            case LAYOUT_PROPOSE_REJECT:
                 router.completeExceptionally(msg.getRequestID(),
                         new OutrankedException(((LayoutRankMsg)msg).getRank()));
         }
@@ -59,6 +63,8 @@ public class LayoutClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE)
                     .add(CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP)
                     .add(CorfuMsg.CorfuMsgType.LAYOUT_NOBOOTSTRAP)
+                    .add(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_REJECT)
+                    .add(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT)
                     .build();
 
     /**
@@ -109,6 +115,20 @@ public class LayoutClient implements IClient {
     {
         return router.sendMessageAndGetCompletable(
                 new LayoutRankMsg(layout, rank, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE)
+        );
+    }
+
+    /**
+     * Informs the server that the rank has been committed to a quorum.
+     * @param rank  The rank to use for the prepare.
+     * @return      True, if the commit was successful.
+     *              Otherwise, the completablefuture completes exceptionally
+     *              with OutrankedException.
+     */
+    public CompletableFuture<Boolean> committed(long rank)
+    {
+        return router.sendMessageAndGetCompletable(
+                new LayoutRankMsg(null, rank, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED)
         );
     }
 }

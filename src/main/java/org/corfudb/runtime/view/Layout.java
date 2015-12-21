@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import lombok.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -32,6 +34,9 @@ public class Layout {
     @Getter
     @Setter
     transient CorfuRuntime runtime;
+
+    /** A Gson parser. */
+    static final Gson parser = new GsonBuilder().create();
 
     /** Return the layout client for a particular index.
      * @param index The index to return a layout client for.
@@ -125,6 +130,12 @@ public class Layout {
             }
         }
         return null;
+    }
+
+    /** Get the layout as a JSON string. */
+    public String asJSONString()
+    {
+        return parser.toJson(this);
     }
 
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, long epoch)

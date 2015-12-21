@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString
+@ToString(callSuper = true)
 public class LayoutMsg extends CorfuMsg {
     /** The current layout. */
     @Getter
