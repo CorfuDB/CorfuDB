@@ -68,7 +68,8 @@ public class LayoutServer implements IServer {
             {
                 log.info("Bootstrap with new layout={}", ((LayoutMsg)msg).getLayout());
                 currentLayout = ((LayoutMsg)msg).getLayout();
-                phase1Rank = phase2Rank = currentLayout.getEpoch();
+                //send a response that the bootstrap was successful.
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
             }
             else {
                 log.warn("Received message but not bootstrapped! Message={}", msg);

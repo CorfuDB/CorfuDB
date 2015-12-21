@@ -44,6 +44,9 @@ public class BaseClient implements IClient {
             case ACK:
                     router.completeRequest(msg.getRequestID(), true);
                 break;
+            case NACK:
+                router.completeRequest(msg.getRequestID(), false);
+                break;
         }
     }
 
@@ -54,6 +57,7 @@ public class BaseClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.PING)
                     .add(CorfuMsg.CorfuMsgType.PONG)
                     .add(CorfuMsg.CorfuMsgType.ACK)
+                    .add(CorfuMsg.CorfuMsgType.NACK)
                     .build();
 
     /** Ping the endpoint, synchronously.

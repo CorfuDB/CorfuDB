@@ -7,6 +7,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 
@@ -40,7 +41,8 @@ public class LayoutClient implements IClient {
                 router.completeRequest(msg.getRequestID(), ((LayoutMsg)msg).getLayout());
                 break;
             case LAYOUT_NOBOOTSTRAP:
-                router.completeRequest(msg.getRequestID(), false);
+                router.completeExceptionally(msg.getRequestID(),
+                        new NoBootstrapException());
                 break;
             case LAYOUT_PREPARE_REJECT:
                 router.completeExceptionally(msg.getRequestID(),
