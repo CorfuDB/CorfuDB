@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+for filename in /usr/share/corfu/bin/*; do
+    rm /usr/local/bin/$(basename "$filename")
+done
