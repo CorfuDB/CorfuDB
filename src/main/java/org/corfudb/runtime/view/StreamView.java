@@ -5,6 +5,7 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
+import org.corfudb.runtime.exceptions.OverwriteException;
 
 import java.util.Collections;
 import java.util.Set;
@@ -45,10 +46,17 @@ public class StreamView implements AutoCloseable {
      */
     public long write(Object object)
     {
-        long token = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
-        log.trace("Write[{}]: acquired token = {}", streamID, token);
-        runtime.getAddressSpaceView().write(token, Collections.singleton(streamID), object);
-        return token;
+        while (true) {
+            long token = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
+            log.trace("Write[{}]: acquired token = {}", streamID, token);
+            try {
+                runtime.getAddressSpaceView().write(token, Collections.singleton(streamID), object);
+                return token;
+            } catch (OverwriteException oe)
+            {
+                log.debug("Overwrite occurred at {}, retrying.", token);
+            }
+        }
     }
 
     /** Read the next item from the stream.
@@ -75,7 +83,11 @@ public class StreamView implements AutoCloseable {
                     return null;
                 }
                 log.debug("Read[{}]: hole detected at {} (token at {}), attempting fill.", streamID, thisRead, latestToken);
-                runtime.getAddressSpaceView().fillHole(thisRead);
+                try {
+                    runtime.getAddressSpaceView().fillHole(thisRead);
+                } catch (OverwriteException oe) {
+                    //ignore overwrite.
+                }
                 r = runtime.getAddressSpaceView().read(thisRead);
                 log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getResultType());
             }

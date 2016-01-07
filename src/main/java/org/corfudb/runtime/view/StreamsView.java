@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OverwriteException;
 
 import java.util.Collections;
 import java.util.Set;
@@ -47,9 +48,16 @@ public class StreamsView {
      */
     public long write(Set<UUID> streamIDs, Object object)
     {
-        long token = runtime.getSequencerView().nextToken(streamIDs, 1);
-        log.trace("Write: acquired token = {}", token);
-        runtime.getAddressSpaceView().write(token, streamIDs, object);
-        return token;
+        while (true) {
+            long token = runtime.getSequencerView().nextToken(streamIDs, 1);
+            log.trace("Write: acquired token = {}", token);
+            try {
+                runtime.getAddressSpaceView().write(token, streamIDs, object);
+                return token;
+            } catch (OverwriteException oe)
+            {
+                log.debug("Overwrite occurred at {}, retrying.", token);
+            }
+        }
     }
 }

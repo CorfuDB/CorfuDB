@@ -5,16 +5,18 @@ import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.IServer;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.clients.TestClientRouter;
+import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Before;
 
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 12/22/15.
@@ -48,6 +50,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                     r.addClient(new LayoutClient())
                             .addClient(new SequencerClient())
                             .addClient(new LogUnitClient())
+                            .addClient(new BaseClient())
                             .start();
                     serverMap.get(address).stream()
                             .forEach(r::addServer);
@@ -67,6 +70,18 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         });
     }
 
+    public void removeServerForTest(String address, IServer server) {
+        serverMap.compute(address, (k, v) -> {
+            Set<IServer> out = v;
+            if (v == null) {
+                out = new HashSet<IServer>();
+            }
+            out.remove(server);
+            return out;
+        });
+    }
+
+
     public AbstractViewTest()
     {
         runtime = new CorfuRuntime();
@@ -82,6 +97,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return "localhost:9000";
     }
 
+    public String getEndpoint(long port)
+    {
+        return "localhost:" + port;
+    }
+
     public Map<String,Object> defaultOptionsMap()
     {
         return new ImmutableMap.Builder<String,Object>()
@@ -91,5 +111,14 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .put("--address", getDefaultEndpoint().split(":")[0])
                 .put("<port>", getDefaultEndpoint().split(":")[1])
                 .build();
+    }
+
+    public void setLayout(Layout l)
+            throws QuorumUnreachableException, OutrankedException
+    {
+        getRuntime().getLayoutView().updateLayout(l, l.epoch);
+        getRuntime().invalidateLayout();
+        assertThat(getRuntime().getLayoutView().getLayout().epoch)
+                .isEqualTo(l.epoch);
     }
 }

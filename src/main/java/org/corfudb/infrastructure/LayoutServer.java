@@ -149,6 +149,7 @@ public class LayoutServer implements IServer {
                     log.debug("New phase 2 rank={}, old rank={}, layout={}", ((LayoutRankMsg) msg).getRank(), phase2Rank,
                             ((LayoutRankMsg) msg).getLayout());
                     phase2Rank = ((LayoutRankMsg) msg).getRank();
+                    currentLayout =  ((LayoutRankMsg) msg).getLayout();
                     r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
                 }
             }

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Set;
 import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
+import org.corfudb.runtime.exceptions.OverwriteException;
 
 /** All replication views must inherit from this class.
  *
@@ -46,20 +47,19 @@ public abstract class AbstractReplicationView {
      * @param data      The data to write.
      */
     public abstract void write(long address, Set<UUID> stream, Object data)
-        throws Exception;
+        throws OverwriteException;
 
     /** Read the given object from an address, using the replication method given.
      *
      * @param address   The address to read from.
      * @return          The result of the read.
      */
-    public abstract ReadResult read(long address)
-        throws Exception;
+    public abstract ReadResult read(long address);
 
     /** Fill a hole at an address, using the replication method given.
      *
      * @param address   The address to hole fill at.
      */
     public abstract void fillHole(long address)
-        throws Exception;
+        throws OverwriteException;
 }

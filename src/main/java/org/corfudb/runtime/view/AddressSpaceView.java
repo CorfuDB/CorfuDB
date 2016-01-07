@@ -2,6 +2,9 @@ package org.corfudb.runtime.view;
 
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 
 import java.util.Set;
 import java.util.UUID;
@@ -23,8 +26,12 @@ public class AddressSpaceView extends AbstractView {
      * @param stream  The streams which will belong on this entry.
      * @param data    The data to write.
      */
-    public void write(long address, Set<UUID> stream, Object data) {
-        layoutHelper(l -> {
+    public void write(long address, Set<UUID> stream, Object data)
+    throws OverwriteException
+    {
+        layoutHelper(
+          (LayoutFunction<Layout, Void, OverwriteException, RuntimeException, RuntimeException, RuntimeException>)
+                l -> {
            AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address))
                    .write(address, stream, data);
            return null;
@@ -36,7 +43,9 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address An address to read from.
      */
-    public ReadResult read(long address) {
+    public ReadResult read(long address)
+
+    {
         return layoutHelper(l -> AbstractReplicationView
                      .getReplicationView(l, l.getReplicationMode(address))
                     .read(address)
@@ -47,8 +56,12 @@ public class AddressSpaceView extends AbstractView {
      * Fill a hole at the given address.
      * @param address An address to hole fill at.
      */
-    public void fillHole(long address) {
-        layoutHelper(l -> {AbstractReplicationView
+    public void fillHole(long address)
+    throws OverwriteException
+    {
+        layoutHelper(
+                (LayoutFunction<Layout, Void, OverwriteException, RuntimeException, RuntimeException, RuntimeException>)
+                l -> {AbstractReplicationView
                 .getReplicationView(l, l.getReplicationMode(address))
                 .fillHole(address);
                 return null;}

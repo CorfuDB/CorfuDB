@@ -1,7 +1,10 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.util.concurrent.Uninterruptibles;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.CFUtils;
 
 import java.util.Set;
 import java.util.UUID;
@@ -38,14 +41,15 @@ public class ChainReplicationView extends AbstractReplicationView {
      */
     @Override
     public void write(long address, Set<UUID> stream, Object data)
-    throws Exception {
+    throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         for (int i = 0; i < numUnits; i++)
         {
             log.trace("Write[{}]: chain {}/{}", address, i+1, numUnits);
             // In chain replication, we write synchronously to every unit in the chain.
-            getLayout().getLogUnitClient(address, i)
-                    .write(address, stream, 0L, data).get();
+                CFUtils.getUninterruptibly(
+                        getLayout().getLogUnitClient(address, i)
+                                .write(address, stream, 0L, data), OverwriteException.class);
         }
     }
 
@@ -56,12 +60,12 @@ public class ChainReplicationView extends AbstractReplicationView {
      * @return The result of the read.
      */
     @Override
-    public ReadResult read(long address) throws Exception {
+    public ReadResult read(long address) {
         int numUnits = getLayout().getSegmentLength(address);
         log.trace("Read[{}]: chain {}/{}", address, numUnits, numUnits);
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
-        return getLayout().getLogUnitClient(address, numUnits-1).read(address).get();
+        return CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, numUnits - 1).read(address));
     }
 
     /**
@@ -70,14 +74,14 @@ public class ChainReplicationView extends AbstractReplicationView {
      * @param address The address to hole fill at.
      */
     @Override
-    public void fillHole(long address) throws Exception {
+    public void fillHole(long address) throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         for (int i = 0; i < numUnits; i++)
         {
             log.trace("fillHole[{}]: chain {}/{}", address, i+1, numUnits);
             // In chain replication, we write synchronously to every unit in the chain.
-            getLayout().getLogUnitClient(address, i)
-                    .fillHole(address).get();
+            CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, i)
+                    .fillHole(address), OverwriteException.class);
         }
     }
 }
