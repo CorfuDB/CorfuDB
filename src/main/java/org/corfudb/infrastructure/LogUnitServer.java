@@ -180,8 +180,7 @@ public class LogUnitServer implements IServer {
         log.trace("Retrieve[{}]", address);
         if (fc == null)
         {
-            log.warn("This is an in-memory log unit, but a load was requested. " +
-                    "This usually indicates data was evicted due to OOM.");
+            log.trace("This is an in-memory log unit, but a load was requested.");
             return null;
         }
         else
