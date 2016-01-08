@@ -100,9 +100,13 @@ public class StreamView implements AutoCloseable {
         }
     }
 
+    public synchronized ReadResult[] linearizedRead() {
+        return null;
+    }
+
     /**
      * Closes this resource, relinquishing any underlying resources.
-     * This method is invoked automatically on objects managed by the
+     * This method is invoked automatically on object managed by the
      * {@code try}-with-resources statement.
      *
      * @throws Exception if this resource cannot be closed
