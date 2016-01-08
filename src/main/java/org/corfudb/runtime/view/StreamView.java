@@ -77,7 +77,7 @@ public class StreamView implements AutoCloseable {
                 //determine whether or not this is a hole
                 long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);
                 log.trace("Read[{}]: latest token at {}", streamID, latestToken);
-                if (latestToken == thisRead)
+                if (latestToken < thisRead)
                 {
                     logPointer.decrementAndGet();
                     return null;
