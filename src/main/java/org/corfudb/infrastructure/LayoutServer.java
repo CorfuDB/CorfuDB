@@ -12,6 +12,33 @@ import java.util.Collections;
 import java.util.Map;
 
 /**
+ * The layout server serves layouts, which are used by clients to find the
+ * Corfu infrastructure.
+ *
+ * For replication and high availability, the layout server implements a
+ * basic Paxos protocol. The layout server functions as a Paxos acceptor,
+ * and accepts proposals from clients consisting of a rank and desired
+ * layout. The protocol consists of three rounds:
+ *
+ * 1)   Prepare(rank) - Clients first contact each server with a rank.
+ *      If the server responds with ACK, the server promises not to
+ *      accept any requests with a rank lower than the given rank.
+ *      If the server responds with LAYOUT_PREPARE_REJECT, the server
+ *      informs the client of the current high rank and the request is
+ *      rejected.
+ *
+ * 2)   Propose(rank,layout) - Clients then contact each server with
+ *      the previously prepared rank and the desired layout. If no other
+ *      client has sent a prepare with a higher rank, the layout is
+ *      persisted, and the server begins serving that layout to other
+ *      clients. If the server responds with LAYOUT_PROPOSE_REJECT,
+ *      either another client has sent a prepare with a higher rank,
+ *      or this was a propose of a previously accepted rank.
+ *
+ * 3)   Committed(rank) - Clients then send a hint to each layout
+ *      server that a new rank has been accepted by a quorum of
+ *      servers.
+ *
  * Created by mwei on 12/8/15.
  */
 @Slf4j
@@ -68,7 +95,8 @@ public class LayoutServer implements IServer {
             {
                 log.info("Bootstrap with new layout={}", ((LayoutMsg)msg).getLayout());
                 currentLayout = ((LayoutMsg)msg).getLayout();
-                phase1Rank = phase2Rank = currentLayout.getEpoch();
+                //send a response that the bootstrap was successful.
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
             }
             else {
                 log.warn("Received message but not bootstrapped! Message={}", msg);
@@ -110,11 +138,18 @@ public class LayoutServer implements IServer {
                     log.debug("Rejected phase 2 propose of rank={}, phase1Rank={}", m.getRank(), phase1Rank);
                     r.sendResponse(ctx, msg, new LayoutRankMsg(null, phase1Rank, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT));
                 }
+                // In addition, if the rank is equal to the current phase 2 rank (already accepted message), reject.
+                else if (m.getRank() == phase2Rank)
+                {
+                    log.debug("Rejected phase 2 propose of rank={}, phase2Rank={}", m.getRank(), phase2Rank);
+                    r.sendResponse(ctx, msg, new LayoutRankMsg(null, phase2Rank, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT));
+                }
                 else
                 {
                     log.debug("New phase 2 rank={}, old rank={}, layout={}", ((LayoutRankMsg) msg).getRank(), phase2Rank,
                             ((LayoutRankMsg) msg).getLayout());
                     phase2Rank = ((LayoutRankMsg) msg).getRank();
+                    currentLayout =  ((LayoutRankMsg) msg).getLayout();
                     r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
                 }
             }

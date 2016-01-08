@@ -5,11 +5,14 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.util.CFUtils;
 
+import java.sql.Time;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -40,63 +43,115 @@ public class LayoutView extends AbstractView {
 
     @SuppressWarnings("unchecked")
     public void updateLayout(Layout layout, long rank)
-            throws QuorumUnreachableException, OutrankedException
-    {
-        // Send a prepare to the layout. (phase 1)
-        CompletableFuture<Boolean>[] prepareList = layout.getLayoutClientStream()
-                .map(x -> x.prepare(rank))
-                .toArray(CompletableFuture[]::new);
-
-        while (true) {
-            try {
-                // do we still have enough for a quorum?
-                if (prepareList.length < getQuorumNumber())
-                {
-                    log.debug("Quorum unreachable, remaining={}, required={}", prepareList, getQuorumNumber());
-                    throw new QuorumUnreachableException(prepareList.length, getQuorumNumber());
-                }
-
-                // wait for someone to complete.
-                CompletableFuture.anyOf(prepareList).get();
-
-                // count successes.
-                long count = Arrays.stream(prepareList)
-                        .map(x -> x.getNow(false))
-                        .filter(x-> true)
-                        .count();
-                log.debug("Succesful responses={}, needed={}", count, getQuorumNumber());
-
-                if (count >= getQuorumNumber())
-                {
-                    break;
-                }
-            } catch (ExecutionException ee)
-            {
-                if (ee.getCause() instanceof OutrankedException) {
-                    log.debug("Outranked during propose, rank={}, aborting.",
-                            ((OutrankedException) ee.getCause()).getNewRank());
-                    throw (OutrankedException) ee.getCause();
-                }
-                else if (ee.getCause() instanceof NetworkException)
-                {
-                    // remove the cf that completed exceptionally.
-                    // note: (are we really sure this won't also accidentally filter a
-                    // outrankedexception?)
-                    prepareList = Arrays.stream(prepareList)
-                                        .filter(x -> !x.isCompletedExceptionally())
-                                        .toArray(CompletableFuture[]::new);
-                }
-            }
-            catch (InterruptedException ie)
-            {
-                // just keep retrying if interrupted.
-            }
-        }
-
-        // Send a propose to the layout. (phase 1)
-        CompletableFuture<Boolean>[] proposeList = layout.getLayoutClientStream()
-                .map(x -> x.prepare(rank))
-                .toArray(CompletableFuture[]::new);
+            throws QuorumUnreachableException, OutrankedException {
+        //phase 1: prepare with a given rank.
+        prepare(rank);
+        //phase 2: propose the new layout.
+        propose(rank, layout);
     }
 
+    @SuppressWarnings("unchecked")
+    public void prepare(long rank)
+            throws QuorumUnreachableException, OutrankedException
+    {
+        layoutHelper(
+        (LayoutFunction<Layout, Void, QuorumUnreachableException, OutrankedException, RuntimeException, RuntimeException>)
+                l -> {
+            CompletableFuture<Boolean>[] prepareList = l.getLayoutClientStream()
+                    .map(x -> x.prepare(rank))
+                    .toArray(CompletableFuture[]::new);
+
+                    long timeouts = 0L;
+                    while (true)
+                    {
+                        // do we still have enough for a quorum?
+                        if (prepareList.length < getQuorumNumber()) {
+                            log.debug("Quorum unreachable, remaining={}, required={}", prepareList, getQuorumNumber());
+                            throw new QuorumUnreachableException(prepareList.length, getQuorumNumber());
+                        }
+
+                        // wait for someone to complete.
+                        try {
+                            CFUtils.getUninterruptibly(CompletableFuture.anyOf(prepareList),
+                                    OutrankedException.class, TimeoutException.class);
+                        }
+                        catch (TimeoutException te)
+                        {
+                            timeouts++;
+                        }
+
+                        // remove errors.
+                        prepareList = Arrays.stream(prepareList)
+                                .filter(x -> !x.isCompletedExceptionally())
+                                .toArray(CompletableFuture[]::new);
+
+                        // count successes.
+                        long count = Arrays.stream(prepareList)
+                                .map(x -> x.getNow(false))
+                                .filter(x -> true)
+                                .count();
+
+                        log.debug("Successful responses={}, needed={}, timeouts={}", count, getQuorumNumber(), timeouts);
+
+                        if (count >= getQuorumNumber()) {
+                            break;
+                        }
+                    }
+
+                    return null;
+        });
+    }
+
+
+    @SuppressWarnings("unchecked")
+    public void propose(long rank, Layout layout)
+            throws QuorumUnreachableException, OutrankedException
+    {
+        layoutHelper(
+                (LayoutFunction<Layout, Void, QuorumUnreachableException, OutrankedException, RuntimeException, RuntimeException>)
+                        l -> {
+                            CompletableFuture<Boolean>[] proposeList = l.getLayoutClientStream()
+                                    .map(x -> x.propose(rank, layout))
+                                    .toArray(CompletableFuture[]::new);
+
+                            long timeouts = 0L;
+                            while (true)
+                            {
+                                // do we still have enough for a quorum?
+                                if (proposeList.length < getQuorumNumber()) {
+                                    log.debug("Quorum unreachable, remaining={}, required={}", proposeList, getQuorumNumber());
+                                    throw new QuorumUnreachableException(proposeList.length, getQuorumNumber());
+                                }
+
+                                // wait for someone to complete.
+                                try {
+                                    CFUtils.getUninterruptibly(CompletableFuture.anyOf(proposeList),
+                                            OutrankedException.class, TimeoutException.class);
+                                }
+                                catch (TimeoutException te)
+                                {
+                                    timeouts++;
+                                }
+
+                                // remove errors.
+                                proposeList = Arrays.stream(proposeList)
+                                        .filter(x -> !x.isCompletedExceptionally())
+                                        .toArray(CompletableFuture[]::new);
+
+                                // count successes.
+                                long count = Arrays.stream(proposeList)
+                                        .map(x -> x.getNow(false))
+                                        .filter(x -> true)
+                                        .count();
+
+                                log.debug("Successful responses={}, needed={}, timeouts={}", count, getQuorumNumber(), timeouts);
+
+                                if (count >= getQuorumNumber()) {
+                                    break;
+                                }
+                            }
+
+                            return null;
+                        });
+    }
 }

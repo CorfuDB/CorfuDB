@@ -17,9 +17,9 @@ done
 DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 if ls ${DIR}/../target/*.jar > /dev/null 2>&1; then
-  CLASSPATH=(${DIR}/../target/corfudb-*-shaded.jar)
-elif ls "${CORFUDB_PREFIX}"/share/corfudb/lib/corfudb-*.jar > /dev/null 2>&1; then
-  CLASSPATH=("${CORFUDB_PREFIX}"/share/corfudb/lib/*.jar)
+  CLASSPATH=(${DIR}/../target/corfu-*-shaded.jar)
+elif ls "${CORFUDB_PREFIX}"/share/corfudb/lib/corfu-*.jar > /dev/null 2>&1; then
+  CLASSPATH=("${CORFUDB_PREFIX}"/share/corfu/lib/*.jar)
 fi
 
 # Windows (cygwin) support

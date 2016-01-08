@@ -95,6 +95,21 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     @Test
+    public void proposeRejectsAlreadyProposed()
+    {
+        bootstrapServer(getTestLayout());
+        sendMessage(new LayoutRankMsg(null, 10, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        sendMessage(new LayoutRankMsg(getTestLayout(), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        sendMessage(new LayoutRankMsg(getTestLayout(), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT);
+    }
+
+    @Test
     public void commitReturnsAck()
     {
         bootstrapServer(getTestLayout());

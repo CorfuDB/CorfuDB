@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.CFUtils;
 
 import java.util.Set;
 import java.util.UUID;
@@ -22,6 +23,6 @@ public class SequencerView extends AbstractView {
      * @return               The first token retrieved.
      */
     public long nextToken(Set<UUID> streamIDs, int numTokens) {
-        return layoutHelper(l -> l.getSequencer(0).nextToken(streamIDs,numTokens).get());
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(streamIDs, numTokens)));
     }
 }

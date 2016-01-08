@@ -3,6 +3,8 @@ package org.corfudb.runtime.clients;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServer;
 import org.corfudb.infrastructure.IServerRouter;
@@ -33,6 +35,11 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     public Map<CorfuMsg.CorfuMsgType, IServer> serverMap;
 
     public AtomicLong requestID;
+
+    /** The optional address for this router, if set. */
+    @Getter
+    @Setter
+    public String address;
 
     public TestClientRouter()
     {

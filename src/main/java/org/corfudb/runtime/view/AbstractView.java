@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.concurrent.ExecutionException;
-import java.util.function.Function;
 
 /** All views inherit from AbstractView.
  *
@@ -29,8 +28,9 @@ public abstract class AbstractView {
     }
 
     @FunctionalInterface
-    public interface LayoutFunction<Layout, R> {
-        R apply(Layout l) throws Exception;
+    public interface LayoutFunction<Layout, R, A extends Throwable,
+            B extends Throwable, C extends Throwable, D extends Throwable> {
+        R apply(Layout l) throws A,B,C,D;
     }
 
     /** Get the current layout.
@@ -58,14 +58,20 @@ public abstract class AbstractView {
      * contacting the endpoint.
      * @param function  The function to execute.
      * @param <T>       The return type of the function.
+     * @param <A>       Any exception the function may throw.
+     * @param <B>       Any exception the function may throw.
+     * @param <C>       Any exception the function may throw.
+     * @param <D>       Any exception the function may throw.
      * @return          The return value of the function.
      */
-    public <T> T layoutHelper (LayoutFunction<Layout,T> function)
+    public <T,A extends Throwable, B extends Throwable, C extends Throwable, D extends Throwable>
+    T layoutHelper (LayoutFunction<Layout,T,A,B,C,D> function)
+    throws A,B,C,D
     {
         while(true) {
             try {
                 return function.apply(runtime.layout.get());
-            } catch (Exception ex) {
+            } catch (InterruptedException | ExecutionException ex) {
                 log.warn("Error executing remote call, invalidating view and retrying in {}s", runtime.retryRate, ex);
                 runtime.invalidateLayout();
                 try {
