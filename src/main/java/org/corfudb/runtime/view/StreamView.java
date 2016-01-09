@@ -7,6 +7,7 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
@@ -94,14 +95,31 @@ public class StreamView implements AutoCloseable {
             Set<UUID> streams = (Set<UUID>) r.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
             if (streams != null && streams.contains(streamID))
             {
-                log.trace("Read[]: valid entry at {}", streamID, thisRead);
+                log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
                 return r;
             }
         }
     }
 
-    public synchronized ReadResult[] linearizedRead() {
-        return null;
+    public synchronized ReadResult[] readTo(long pos) {
+        long latestToken = pos;
+        if (pos == Long.MAX_VALUE) {
+            latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);
+            log.trace("Linearization point set to {}", latestToken);
+        }
+        ArrayList<ReadResult> al = new ArrayList<ReadResult>();
+        while (logPointer.get() <= latestToken)
+        {
+            ReadResult r = read();
+            if (r == null) {
+                log.warn("ReadTo[{}]: Read returned null when it should not have!", streamID);
+                throw new RuntimeException("Unexpected stream state, aborting.");
+            }
+            else {
+                al.add(r);
+            }
+        }
+        return al.toArray(new ReadResult[al.size()]);
     }
 
     /**

@@ -16,7 +16,6 @@ import java.util.Set;
 /**
  * Created by mwei on 1/7/16.
  */
-@AutoService(Processor.class)
 @Slf4j
 public class CorfuObjectProcessor extends AbstractProcessor {
 

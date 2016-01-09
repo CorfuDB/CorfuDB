@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.corfudb.protocols.logprotocol.LogEntry;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -19,28 +20,6 @@ import java.util.stream.Collectors;
  * Created by mwei on 9/29/15.
  */
 public class CorfuSerializer implements ISerializer {
-
-    //region Command Type
-    @RequiredArgsConstructor
-    public enum CorfuPayloadType {
-        // Type of SMR command
-        ;
-
-        final int type;
-        @Getter
-        final Class<? extends ICorfuSerializable> cls;
-        final Function<ByteBuf, ?> deserializer;
-
-        byte asByte() { return (byte)type; }
-    };
-
-    static Map<Byte, CorfuPayloadType> typeMap =
-            Arrays.stream(CorfuPayloadType.values())
-                    .collect(Collectors.toMap(CorfuPayloadType::asByte, Function.identity()));
-    static Map<Class<?>, CorfuPayloadType> classMap =
-            Arrays.stream(CorfuPayloadType.values())
-                    .collect(Collectors.toMap(CorfuPayloadType::getCls, Function.identity()));
-    //endregion
 
     //region Constants
         /* The magic that denotes this is a corfu payload */
@@ -63,12 +42,7 @@ public class CorfuSerializer implements ISerializer {
             b.readBytes(bytes);
             return bytes;
         }
-        CorfuPayloadType type = typeMap.get(b.readByte());
-        if (type == null)
-        {
-            throw new ClassCastException("Unsupported/unknown payload type.");
-        }
-        return type.deserializer.apply(b);
+        return LogEntry.deserialize(b);
     }
 
     /**
@@ -82,7 +56,6 @@ public class CorfuSerializer implements ISerializer {
         if (o instanceof ICorfuSerializable)
         {
             b.writeByte(CorfuPayloadMagic);
-            b.writeByte(0); //TODO: Support multiple types (this only assumes SMR).
             ICorfuSerializable c = (ICorfuSerializable) o;
             c.serialize(b);
         }

@@ -27,11 +27,11 @@ public class Serializers {
         public byte asByte() { return (byte)type; }
     };
 
-    static final Map<Byte, SerializerType> typeMap =
+    public static final Map<Byte, SerializerType> typeMap =
             Arrays.stream(SerializerType.values())
                     .collect(Collectors.toMap(SerializerType::asByte, Function.identity()));
 
-    static final Map<SerializerType, ISerializer> serializerCache = new HashMap<>();
+    public static final Map<SerializerType, ISerializer> serializerCache = new HashMap<>();
 
     public static ISerializer getSerializer(SerializerType type)
     {

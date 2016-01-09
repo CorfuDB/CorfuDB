@@ -2,7 +2,9 @@ package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import org.corfudb.util.serializer.ICorfuSerializable;
 import sun.rmi.runtime.Log;
 
@@ -14,6 +16,8 @@ import java.util.stream.Collectors;
 /**
  * Created by mwei on 1/8/16.
  */
+@ToString
+@NoArgsConstructor
 public class LogEntry implements ICorfuSerializable {
 
     @RequiredArgsConstructor
@@ -44,7 +48,6 @@ public class LogEntry implements ICorfuSerializable {
     public LogEntry(LogEntryType type)
     {
         this.type = type;
-
     }
 
     /** This function provides the remaining buffer. Child entries
@@ -62,7 +65,16 @@ public class LogEntry implements ICorfuSerializable {
      * @return  A LogEntry.
      */
     public static ICorfuSerializable deserialize(ByteBuf b) {
-        return new LogEntry(typeMap.get(b.readByte()));
+        try {
+            LogEntryType let = typeMap.get(b.readByte());
+            LogEntry l = let.entryType.newInstance();
+            l.type = let;
+            l.deserializeBuffer(b);
+            return l;
+        } catch (InstantiationException | IllegalAccessException ie)
+        {
+            throw new RuntimeException("Error deserializing entry", ie);
+        }
     }
 
     /**
