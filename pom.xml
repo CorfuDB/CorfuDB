@@ -152,12 +152,6 @@
             <version>3.20.0-GA</version>
         </dependency>
         <dependency>
-            <groupId>com.google.auto.service</groupId>
-            <artifactId>auto-service</artifactId>
-            <version>1.0-rc2</version>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
             <version>0.7.8</version>
