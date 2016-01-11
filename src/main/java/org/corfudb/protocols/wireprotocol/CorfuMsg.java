@@ -26,19 +26,20 @@ public class CorfuMsg {
     long epoch;
 
     @RequiredArgsConstructor
+    @AllArgsConstructor
     public enum CorfuMsgType {
         // Base Messages
-        PING(0, CorfuMsg.class, BaseServer.class),
-        PONG(1, CorfuMsg.class, BaseServer.class),
+        PING(0, CorfuMsg.class, BaseServer.class, true),
+        PONG(1, CorfuMsg.class, BaseServer.class, true),
         RESET(2, CorfuResetMsg.class, BaseServer.class),
-        SET_EPOCH(3, CorfuSetEpochMsg.class, BaseServer.class),
+        SET_EPOCH(3, CorfuSetEpochMsg.class, BaseServer.class, true),
         ACK(4, CorfuMsg.class, BaseServer.class),
-        WRONG_EPOCH(5, CorfuMsg.class, BaseServer.class),
+        WRONG_EPOCH(5, CorfuSetEpochMsg.class, BaseServer.class),
         NACK(6, CorfuMsg.class, BaseServer.class),
 
         // Layout Messages
-        LAYOUT_REQUEST(10, CorfuMsg.class, LayoutServer.class),
-        LAYOUT_RESPONSE(11, LayoutMsg.class, LayoutServer.class),
+        LAYOUT_REQUEST(10, CorfuMsg.class, LayoutServer.class, true),
+        LAYOUT_RESPONSE(11, LayoutMsg.class, LayoutServer.class, true),
         LAYOUT_PREPARE(12, LayoutRankMsg.class, LayoutServer.class),
         LAYOUT_PREPARE_REJECT(13, LayoutRankMsg.class, LayoutServer.class),
         LAYOUT_PROPOSE(14, LayoutRankMsg.class, LayoutServer.class),
@@ -46,7 +47,7 @@ public class CorfuMsg {
         LAYOUT_COMMITTED(16, LayoutRankMsg.class, LayoutServer.class),
         LAYOUT_QUERY(17, LayoutRankMsg.class, LayoutServer.class),
         LAYOUT_BOOTSTRAP(18, LayoutMsg.class, LayoutServer.class),
-        LAYOUT_NOBOOTSTRAP(19, CorfuMsg.class, LayoutServer.class),
+        LAYOUT_NOBOOTSTRAP(19, CorfuMsg.class, LayoutServer.class, true),
 
         // Sequencer Messages
         TOKEN_REQ(20, TokenRequestMsg.class, SequencerServer.class),
@@ -72,6 +73,7 @@ public class CorfuMsg {
         public final int type;
         public final Class<? extends CorfuMsg> messageType;
         public final Class<? extends IServer> handler;
+        public Boolean ignoreEpoch = false;
 
         public byte asByte() { return (byte)type; }
     };

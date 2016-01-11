@@ -6,7 +6,6 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import org.corfudb.util.serializer.ICorfuSerializable;
-import sun.rmi.runtime.Log;
 
 import java.util.Arrays;
 import java.util.Map;

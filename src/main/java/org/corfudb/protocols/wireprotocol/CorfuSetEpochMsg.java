@@ -23,6 +23,12 @@ public class CorfuSetEpochMsg extends CorfuMsg {
         this.newEpoch = newEpoch;
     }
 
+    public CorfuSetEpochMsg(CorfuMsgType type, long newEpoch)
+    {
+        this.msgType = type;
+        this.newEpoch = newEpoch;
+    }
+
     /**
      * Serialize the message into the given bytebuffer.
      *

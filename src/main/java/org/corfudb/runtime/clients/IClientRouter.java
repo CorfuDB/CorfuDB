@@ -93,4 +93,13 @@ public interface IClientRouter {
 
     /** Starts routing requests. */
     void start();
+
+    /** Stops routing requests. */
+    void stop();
+
+    /** Get the current epoch. */
+    long getEpoch();
+
+    /** Set the current epoch. */
+    void setEpoch(long newEpoch);
 }

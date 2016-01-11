@@ -36,6 +36,10 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
 
     public AtomicLong requestID;
 
+    @Getter
+    @Setter
+    public long epoch;
+
     /** The optional address for this router, if set. */
     @Getter
     @Setter
@@ -208,6 +212,14 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Override
     public void start() {
 
+    }
+
+    /**
+     * Stops routing requests.
+     */
+    @Override
+    public void stop() {
+        serverMap.clear();
     }
 
     public CorfuMsg simulateSerialization(CorfuMsg message)

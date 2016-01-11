@@ -12,12 +12,14 @@ import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.util.CFUtils;
 
+import java.net.ConnectException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -177,13 +179,26 @@ implements IClientRouter {
             }
         });
 
-        ChannelFuture cf = b.connect(host, port);
-        cf.syncUninterruptibly();
-        if (!cf.awaitUninterruptibly(5000)) {
-            throw new RuntimeException("Couldn't connect to endpoint " + host + " " + port);
+        try {
+            ChannelFuture cf = b.connect(host, port);
+            cf.syncUninterruptibly();
+            if (!cf.awaitUninterruptibly(5000)) {
+                throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
+            }
+            channel = cf.channel();
+        } catch (Exception e)
+        {
+            throw new NetworkException(e.getClass().getSimpleName() +
+                    " connecting to endpoint", host + ":" + port, e);
         }
+    }
 
-        channel = cf.channel();
+    /**
+     * Stops routing requests.
+     */
+    @Override
+    public void stop() {
+        channel.disconnect();
     }
 
     /** Send a message and get a completable future to be fulfilled by the reply.
@@ -320,7 +335,7 @@ implements IClientRouter {
             return false;
         }
         // Check if the message is in the right epoch.
-        if (msg.getMsgType() != CorfuMsg.CorfuMsgType.RESET && msg.getEpoch() != epoch)
+        if (!msg.getMsgType().ignoreEpoch  && msg.getEpoch() != epoch)
         {
             CorfuMsg m = new CorfuMsg();
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
