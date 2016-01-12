@@ -23,7 +23,8 @@ public class LogEntry implements ICorfuSerializable {
     public enum LogEntryType {
         // Base Messages
         NOP(0, LogEntry.class),
-        SMR(1, SMREntry.class)
+        SMR(1, SMREntry.class),
+        TX(2, TXEntry.class)
         ;
 
         public final int type;

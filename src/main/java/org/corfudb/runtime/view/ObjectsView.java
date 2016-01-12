@@ -1,16 +1,10 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
-import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.description.annotation.AnnotationDescription;
-import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
-import net.bytebuddy.implementation.MethodDelegation;
-import net.bytebuddy.matcher.ElementMatchers;
+import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.Accessor;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
-import org.corfudb.runtime.object.Mutator;
 import org.corfudb.runtime.object.TransactionalContext;
 
 import java.util.UUID;
@@ -42,14 +36,14 @@ public class ObjectsView extends AbstractView {
     @SuppressWarnings("unchecked")
     public <T> T open(UUID streamID, Class<T> type) {
         StreamView sv = runtime.getStreamsView().get(streamID);
-        return CorfuSMRObjectProxy.getProxy(type, sv);
+        return CorfuSMRObjectProxy.getProxy(type, sv, runtime);
     }
 
     /** Begins a transaction on the current thread.
      *  Modifications to objects will not be visible
-     *  to other threads or clients until endTX is called.
+     *  to other threads or clients until TXEnd is called.
      */
-    public void beginTX() {
+    public void TXBegin() {
         TransactionalContext context = TransactionalContext.newContext();
         log.trace("Entering transactional context {}.", context.getTransactionID());
     }
@@ -58,7 +52,7 @@ public class ObjectsView extends AbstractView {
      * Modifications to objects in the current transactional
      * context will be discarded.
      */
-    public void abortTX() {
+    public void TXAbort() {
         TransactionalContext context = TransactionalContext.removeContext();
         if (context == null)
         {
@@ -74,14 +68,14 @@ public class ObjectsView extends AbstractView {
      * @return  True, if called within a transactional context,
      *          False, otherwise.
      */
-    public boolean activeTX() {
+    public boolean TXActive() {
         return TransactionalContext.isInTransaction();
     }
 
     /** End a transaction on the current thread.
      *  @throws TransactionAbortedException      If the transaction could not be executed successfully.
      */
-    public void endTX()
+    public void TXEnd()
         throws TransactionAbortedException
     {
         TransactionalContext context = TransactionalContext.getCurrentContext();
@@ -90,7 +84,16 @@ public class ObjectsView extends AbstractView {
             log.warn("Attempted to end a transaction, but no transaction active!");
         }
         else {
-            log.trace("Exiting transactional context {}.", context.getTransactionID());
+            log.trace("Exiting (committing) transactional context {}.", context.getTransactionID());
+            TXEntry entry = context.getEntry();
+            long address = runtime.getStreamsView().write(entry.getAffectedStreams(), entry);
+            TransactionalContext.removeContext();
+            log.trace("TX entry {} written at address {}", entry, address);
+            //now check if the TX will be an abort...
+            if (entry.isAborted(runtime, address))
+            {
+                throw new TransactionAbortedException();
+            }
         }
     }
 
@@ -104,9 +107,9 @@ public class ObjectsView extends AbstractView {
     public <T> T executeTX(Supplier<T> txFunction)
         throws TransactionAbortedException
     {
-        beginTX();
+        TXBegin();
         T result = txFunction.get();
-        endTX();
+        TXEnd();
         return result;
     }
 

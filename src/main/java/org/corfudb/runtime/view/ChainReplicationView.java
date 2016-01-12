@@ -65,7 +65,8 @@ public class ChainReplicationView extends AbstractReplicationView {
         log.trace("Read[{}]: chain {}/{}", address, numUnits, numUnits);
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
-        return CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, numUnits - 1).read(address));
+        return new ReadResult(address,
+                CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, numUnits - 1).read(address)));
     }
 
     /**

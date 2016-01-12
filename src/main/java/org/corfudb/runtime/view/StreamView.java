@@ -5,8 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.AbstractReplicationView.ReadResult;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -75,7 +75,7 @@ public class StreamView implements AutoCloseable {
             long thisRead = logPointer.getAndIncrement();
             log.trace("Read[{}]: reading at {}", streamID, thisRead);
             ReadResult r = runtime.getAddressSpaceView().read(thisRead);
-            if (r.getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY)
+            if (r.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY)
             {
                 //determine whether or not this is a hole
                 long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);
@@ -92,9 +92,9 @@ public class StreamView implements AutoCloseable {
                     //ignore overwrite.
                 }
                 r = runtime.getAddressSpaceView().read(thisRead);
-                log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getResultType());
+                log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getResult().getResultType());
             }
-            Set<UUID> streams = (Set<UUID>) r.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
+            Set<UUID> streams = (Set<UUID>) r.getResult().getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
             if (streams != null && streams.contains(streamID))
             {
                 log.trace("Read[{}]: valid entry at {}", streamID, thisRead);

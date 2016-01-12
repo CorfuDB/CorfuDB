@@ -21,18 +21,21 @@ import net.bytebuddy.implementation.attribute.TypeAttributeAppender;
 import net.bytebuddy.implementation.bind.annotation.*;
 import net.bytebuddy.jar.asm.MethodVisitor;
 import net.bytebuddy.matcher.ElementMatchers;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.TXEntry;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.UnprocessedException;
+import org.corfudb.runtime.view.AbstractReplicationView;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Callable;
 
 /**
@@ -47,11 +50,15 @@ public class CorfuSMRObjectProxy<P> {
     Class<?> originalClass;
     Class<?> generatedClass;
     Serializers.SerializerType serializer;
+    CorfuRuntime runtime;
+    long timestamp;
 
-    public CorfuSMRObjectProxy(StreamView sv, Class<?> originalClass) {
+    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<?> originalClass) {
+        this.runtime = runtime;
         this.sv = sv;
         this.originalClass = originalClass;
         this.serializer = Serializers.SerializerType.JAVA;
+        this.timestamp = -1L;
     }
 
     public static <T> Class<? extends T> getProxyClass(CorfuSMRObjectProxy proxy, Class<T> type) {
@@ -72,9 +79,9 @@ public class CorfuSMRObjectProxy<P> {
         return generatedClass;
     }
 
-    public static <T> T getProxy(Class<T> type, StreamView sv) {
+    public static <T> T getProxy(Class<T> type, StreamView sv, CorfuRuntime runtime) {
         try {
-            CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(sv, type);
+            CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type);
             return getProxyClass(proxy, type).newInstance();
         } catch (InstantiationException | IllegalAccessException ie) {
             throw new RuntimeException("Unexpected exception opening object", ie);
@@ -139,8 +146,11 @@ public class CorfuSMRObjectProxy<P> {
                 if (name.equals("interceptAccessor")) {
                     return TransactionalContext.getCurrentContext().getObjectRead(CorfuSMRObjectProxy.this);
                 }
-                else {
+                else if (name.equals("interceptMutatorAccessor")){
                     return TransactionalContext.getCurrentContext().getObjectWrite(CorfuSMRObjectProxy.this);
+                }
+                else {
+                    return TransactionalContext.getCurrentContext().getObjectReadWrite(CorfuSMRObjectProxy.this);
                 }
             }
             return smrObject;
@@ -221,8 +231,7 @@ public class CorfuSMRObjectProxy<P> {
                 sync(obj, Long.MAX_VALUE);
             }
             // Now we can safely call the accessor.
-            Object result = superMethod.call();
-            return result;
+            return superMethod.call();
         }
     }
 
@@ -257,28 +266,53 @@ public class CorfuSMRObjectProxy<P> {
         return sv.write(new SMREntry(getShortMethodName(method), arguments, serializer));
     }
 
-    void applyUpdate(SMREntry entry, P obj) {
-        log.trace("Apply update: {}", entry);
+    boolean applySMRUpdate(long address, SMREntry entry, P obj)
+    {
+        log.trace("Apply SMR update: {}", entry);
         // Look for the uninstrumented method
         try {
             Method m = obj.getClass().getMethod(getMethodNameOnlyFromString(entry.getSMRMethod()),
                     getArgumentTypesFromString(entry.getSMRMethod()));
+            // Execute the SMR command
             m.invoke(obj, entry.getSMRArguments());
-        } catch (NoSuchMethodException n)
-        {
+            // Update the current timestamp.
+            timestamp = address;
+            return true;
+        } catch (NoSuchMethodException n) {
             log.error("Couldn't find method {} during apply update", entry.getSMRMethod(), n);
-        }
-        catch (InvocationTargetException | IllegalAccessException iae)
-        {
+        } catch (InvocationTargetException | IllegalAccessException iae) {
             log.error("Couldn't dispatch method {} during apply update", entry.getSMRMethod(), iae);
         }
+        return false;
+    }
+
+    boolean applyUpdate(long address, LogEntry entry, P obj) {
+        if (entry instanceof SMREntry) {
+            return applySMRUpdate(address, (SMREntry)entry, obj);
+        } else if (entry instanceof TXEntry)
+        {
+            TXEntry txEntry = (TXEntry) entry;
+            log.trace("Apply TX update: {}", txEntry);
+            // First, determine if the TX is abort.
+            // Use backpointers if we have them.
+            if (txEntry.isAborted(runtime, address)){
+                return false;
+            }
+
+            // The TX has committed, apply updates for this object.
+            txEntry.getTxMap().get(sv.getStreamID())
+                    .getUpdates().stream()
+                    .forEach(x -> applySMRUpdate(address, x, obj));
+            return true;
+        }
+        return false;
     }
 
     synchronized public void sync(P obj, long maxPos) {
         Arrays.stream(sv.readTo(maxPos))
-                .filter(m -> m.getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
-                .map(LogUnitReadResponseMsg.ReadResult::getPayload)
-                .filter(m -> m instanceof SMREntry)
-                .forEach(m -> applyUpdate((SMREntry)m, obj));
+                .filter(m -> m.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
+                .filter(m -> m.getResult().getPayload() instanceof SMREntry ||
+                        m.getResult().getPayload() instanceof TXEntry)
+                .forEach(m -> applyUpdate(m.getAddress(), (LogEntry) m.getResult().getPayload(), obj));
     }
 }
