@@ -12,11 +12,26 @@ data structures providing linearizable read/write operations and
 strictly serializable transactions. CorfuDB is based on
 peer-reviewed research, see [References](https://github.com/CorfuDB/CorfuDB/wiki/White-papers). 
 
-Corfu consists of two layers: a logging layer
-which implements a distributed, fault-tolerant shared log; and a
-org.corfudb.runtime layer that implements transactional services over the shared log.
+Check the [Corfu Wiki](https://github.com/CorfuDB/CorfuDB/wiki) for a detailed overview of the 
+software architecture and example usage.
 
-Check the [Corfu Wiki](https://github.com/CorfuDB/CorfuDB/wiki) for a detailed overview of the sofware architecture and example usage.
+### Table of Contents
+[System Requirements](#what-do-i-need-to-run-corfu)
+[Corfu Basics](#corfu-basics)
+
+## What do I need to run Corfu?
+The Corfu infrastructure can run on any system which has Java 8 support. We do not impose any requirements on the kind of storage used -- Corfu works with any device that your operating system will allow Java to work with: traditional hard disks, SSDs, and even NVM. We also provide an in-memory mode* for nodes which do not require persistence. 
+
+Even though Corfu is a distributed system, you can start working with Corfu using just a single machine. In addition, you can easily simulate a distributed Corfu system on a single machine using just a few commands.
+
+## So how does Corfu work?
+Corfu is built upon the abstraction of a distributed shared log. The Corfu infrastructure provides this log to clients, which use the log for coordination, communication and storage. The log is a highly available, dynamic and high performance scalable fabric: it is resilient to failures and can be reconfigured at any time.
+
+The Corfu infrastructure consists of three components: a **layout server**, which helps Corfu clients locate the rest of the Corfu infrastructure, a **sequencer server**, which is used to order updates to the log, and a **log server**, which stores updates to the log. At minimum a Corfu infrastructure must have one of each server type, but for scalability and high availability a real-world deployment will have many. An administrator need not worry about installing each role seperately as they are provided as a single monolithic binary.
+
+Corfu clients interact with the infrastructure through the Corfu runtime. The runtime is currently only available in Java, but we plan on providing it in several other languages in the future. Given the address to a layout server in a Corfu infrastructure, the runtime enables clients to access distributed high-level data structures as if they were local data structures. We provide a mechanism to automatically distribute most Java objects as well. 
+
+For more details on the inner workings of Corfu, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
 
 ## Prerequisites
 Currently we support and regularly test Corfu on Linux (Ubuntu), and
