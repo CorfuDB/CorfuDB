@@ -4,6 +4,7 @@ import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.AbstractReplicationView;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -77,7 +78,7 @@ public class corfu_stream implements  ICmdlet {
             throws Exception {
         StreamView s = runtime.getStreamsView().get(getUUIDfromString((String) opts.get("--stream-id")));
         while (true) {
-            ReadResult r = s.read().getResult();
+            AbstractReplicationView.ReadResult r = s.read();
             if (r == null) {
                 if (!(Boolean) opts.get("--loop")) {
                     return;
@@ -85,7 +86,7 @@ public class corfu_stream implements  ICmdlet {
                 Thread.sleep(100);
             }
             else {
-                r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
+                r.getResult().getBuffer().getBytes(0, System.out, r.getResult().getBuffer().readableBytes());
             }
         }
     }

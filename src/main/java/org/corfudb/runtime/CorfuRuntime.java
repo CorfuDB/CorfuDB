@@ -9,6 +9,7 @@ import org.corfudb.runtime.view.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -32,6 +33,16 @@ public class CorfuRuntime {
 
     /** The rate in seconds to retry accessing a layout, in case of a failure. */
     public int retryRate;
+
+    /** Get a UUID for a named stream.
+     *
+     * @param string    The name of the stream.
+     * @return          The ID of the stream.
+     */
+    public static UUID getStreamID(String string)
+    {
+        return UUID.nameUUIDFromBytes(string.getBytes());
+    }
 
     /** A function to handle getting routers. Used by test framework to inject
      * a test router. Can also be used to provide alternative logic for obtaining
