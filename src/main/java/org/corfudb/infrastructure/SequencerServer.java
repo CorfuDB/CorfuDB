@@ -71,9 +71,14 @@ public class SequencerServer implements IServer {
                 if (req.getNumTokens() == 0)
                 {
                     long max = 0L;
+                    boolean hit = false;
                     for (UUID id : req.getStreamIDs()) {
                         Long lastIssued = lastIssuedMap.get(id);
+                        if (lastIssued != null) {hit = true;}
                         max = Math.max(max, lastIssued == null ? Long.MIN_VALUE: lastIssued);
+                    }
+                    if (!hit) {
+                        max = -1L; //no token ever issued
                     }
                     if (req.getStreamIDs().size() == 0)
                     {

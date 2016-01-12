@@ -1,6 +1,7 @@
 package org.corfudb.util.serializer;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.UnpooledByteBufAllocator;
 
 /**
  * This class represents a serializer, which takes an object and reads/writes it to a bytebuf.
@@ -21,4 +22,18 @@ public interface ISerializer {
      * @param b The bytebuf to serialize it into.
      */
     void serialize(Object o, ByteBuf b);
+
+    /** Clone an object through serialization.
+     *
+     * @param o The object to clone.
+     * @return  The cloned object.
+     */
+    default Object clone(Object o)
+    {
+        ByteBuf b = UnpooledByteBufAllocator.DEFAULT.buffer();
+        serialize(o, b);
+        Object out = deserialize(b);
+        b.release();
+        return out;
+    }
 }

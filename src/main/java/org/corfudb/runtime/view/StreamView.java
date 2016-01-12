@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -22,6 +23,7 @@ public class StreamView implements AutoCloseable {
     CorfuRuntime runtime;
 
     /** The ID of the stream. */
+    @Getter
     final UUID streamID;
 
     /** A pointer to the log. */

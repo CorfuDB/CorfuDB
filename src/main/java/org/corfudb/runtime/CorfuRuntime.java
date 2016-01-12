@@ -76,9 +76,9 @@ public class CorfuRuntime {
     @Getter(lazy=true)
     private final StreamsView streamsView = new StreamsView(this);
 
-    /** A view of objects in the Corfu server instance. */
+    /** Views of objects in the Corfu server instance. */
     @Getter(lazy=true)
-    private final ObjectView objectView = new ObjectView(this);
+    private final ObjectsView objectsView = new ObjectsView(this);
 
     public CorfuRuntime() {
         layoutServers = new ArrayList<>();

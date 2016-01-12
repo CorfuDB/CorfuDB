@@ -46,10 +46,12 @@ public class CorfuSMRObjectProxy<P> {
     Object[] creationArguments;
     Class<?> originalClass;
     Class<?> generatedClass;
+    Serializers.SerializerType serializer;
 
     public CorfuSMRObjectProxy(StreamView sv, Class<?> originalClass) {
         this.sv = sv;
         this.originalClass = originalClass;
+        this.serializer = Serializers.SerializerType.JAVA;
     }
 
     public static <T> Class<? extends T> getProxyClass(CorfuSMRObjectProxy proxy, Class<T> type) {
@@ -131,6 +133,16 @@ public class CorfuSMRObjectProxy<P> {
                     }
                 }
             }
+            if (TransactionalContext.isInTransaction())
+            {
+                String name = new Exception().getStackTrace()[6].getMethodName();
+                if (name.equals("interceptAccessor")) {
+                    return TransactionalContext.getCurrentContext().getObjectRead(CorfuSMRObjectProxy.this);
+                }
+                else {
+                    return TransactionalContext.getCurrentContext().getObjectWrite(CorfuSMRObjectProxy.this);
+                }
+            }
             return smrObject;
         }
     }
@@ -153,8 +165,14 @@ public class CorfuSMRObjectProxy<P> {
                     {
                         superMethod.call();
                     }
-                    else {
+                    else if (!TransactionalContext.isInTransaction()){
                         writeUpdate(getShortMethodName(method), allArguments);
+                    }
+                    else {
+                        // in a transaction, we add the update to the TX buffer and apply the update
+                        // immediately.
+                        TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
+                                getShortMethodName(method), allArguments, serializer);
                     }
             return null;
         }
@@ -176,13 +194,19 @@ public class CorfuSMRObjectProxy<P> {
                 lastResult = superMethod.call();
                 return lastResult;
             }
-            else {
+            else if (!TransactionalContext.isInTransaction()){
                 // write the update to the stream
                 long updatePos = writeUpdate(getShortMethodName(method), allArguments);
                 // read up to this update.
                 sync(obj, updatePos);
                 // Now we can safely call the accessor.
                 return lastResult;
+            } else {
+                // in a transaction, we add the update to the TX buffer and apply the update
+                // immediately.
+                TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
+                        getShortMethodName(method), allArguments, serializer);
+                return superMethod.call();
             }
         }
     }
@@ -193,7 +217,9 @@ public class CorfuSMRObjectProxy<P> {
         public Object interceptAccessor(@SuperCall Callable superMethod,
                                         @This P obj) throws Exception {
             // Linearize this access with respect to other accesses in the system.
-            sync(obj, Long.MAX_VALUE);
+            if (!TransactionalContext.isInTransaction()) {
+                sync(obj, Long.MAX_VALUE);
+            }
             // Now we can safely call the accessor.
             Object result = superMethod.call();
             return result;
@@ -228,7 +254,7 @@ public class CorfuSMRObjectProxy<P> {
     long writeUpdate(String method, Object[] arguments)
     {
         log.trace("Write update: {} with arguments {}", getShortMethodName(method), arguments);
-        return sv.write(new SMREntry(getShortMethodName(method), arguments, Serializers.SerializerType.JAVA));
+        return sv.write(new SMREntry(getShortMethodName(method), arguments, serializer));
     }
 
     void applyUpdate(SMREntry entry, P obj) {
