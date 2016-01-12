@@ -10,6 +10,7 @@ import org.junit.Test;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -115,13 +116,12 @@ public class SMRMapTest extends AbstractViewTest {
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
-        Thread t = new Thread(() -> {
+        CompletableFuture cf = CompletableFuture.runAsync(() -> {
             Map<String,String> testMap2 = getRuntime().getObjectsView()
                     .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class);
             testMap2.put("a", "f");
         });
-        t.run();
-        t.join();
+        cf.join();
         assertThatThrownBy(() -> getRuntime().getObjectsView().TXEnd())
                 .isInstanceOf(TransactionAbortedException.class);
 
