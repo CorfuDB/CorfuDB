@@ -86,7 +86,7 @@ public class corfu_stream implements  ICmdlet {
                 Thread.sleep(100);
             }
             else {
-                r.getResult().getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
+                r.getResult().getBuffer().getBytes(0, System.out, r.getResult().getBuffer().readableBytes());
             }
         }
     }

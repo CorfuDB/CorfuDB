@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
@@ -106,7 +107,7 @@ public class SMRMapTest extends AbstractViewTest {
         getRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView()
-                .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class);
+                .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
         assertThat(testMap.put("a","z"));
         getRuntime().getObjectsView().TXBegin();
         testMap.clear();
