@@ -1,12 +1,14 @@
 package org.corfudb.runtime.view;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.AbstractReplicationView.ReadResult;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
@@ -21,6 +23,7 @@ public class StreamView implements AutoCloseable {
     CorfuRuntime runtime;
 
     /** The ID of the stream. */
+    @Getter
     final UUID streamID;
 
     /** A pointer to the log. */
@@ -72,7 +75,7 @@ public class StreamView implements AutoCloseable {
             long thisRead = logPointer.getAndIncrement();
             log.trace("Read[{}]: reading at {}", streamID, thisRead);
             ReadResult r = runtime.getAddressSpaceView().read(thisRead);
-            if (r.getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY)
+            if (r.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY)
             {
                 //determine whether or not this is a hole
                 long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);
@@ -89,20 +92,41 @@ public class StreamView implements AutoCloseable {
                     //ignore overwrite.
                 }
                 r = runtime.getAddressSpaceView().read(thisRead);
-                log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getResultType());
+                log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getResult().getResultType());
             }
-            Set<UUID> streams = (Set<UUID>) r.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
+            Set<UUID> streams = (Set<UUID>) r.getResult().getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
             if (streams != null && streams.contains(streamID))
             {
-                log.trace("Read[]: valid entry at {}", streamID, thisRead);
+                log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
                 return r;
             }
         }
     }
 
+    public synchronized ReadResult[] readTo(long pos) {
+        long latestToken = pos;
+        if (pos == Long.MAX_VALUE) {
+            latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);
+            log.trace("Linearization point set to {}", latestToken);
+        }
+        ArrayList<ReadResult> al = new ArrayList<ReadResult>();
+        while (logPointer.get() <= latestToken)
+        {
+            ReadResult r = read();
+            if (r == null) {
+                log.warn("ReadTo[{}]: Read returned null when it should not have!", streamID);
+                throw new RuntimeException("Unexpected stream state, aborting.");
+            }
+            else {
+                al.add(r);
+            }
+        }
+        return al.toArray(new ReadResult[al.size()]);
+    }
+
     /**
      * Closes this resource, relinquishing any underlying resources.
-     * This method is invoked automatically on objects managed by the
+     * This method is invoked automatically on object managed by the
      * {@code try}-with-resources statement.
      *
      * @throws Exception if this resource cannot be closed

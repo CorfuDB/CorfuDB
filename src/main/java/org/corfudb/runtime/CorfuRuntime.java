@@ -76,6 +76,10 @@ public class CorfuRuntime {
     @Getter(lazy=true)
     private final StreamsView streamsView = new StreamsView(this);
 
+    /** Views of objects in the Corfu server instance. */
+    @Getter(lazy=true)
+    private final ObjectsView objectsView = new ObjectsView(this);
+
     public CorfuRuntime() {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
@@ -150,6 +154,9 @@ public class CorfuRuntime {
                         layout = router.getClient(LayoutClient.class).getLayout();
                         Layout l = layout.get(); // wait for layout to complete
                         l.setRuntime(this);
+                        l.getAllServers().stream()
+                                .map(getRouterFunction)
+                                .forEach(x -> x.setEpoch(l.getEpoch()));
                         log.debug("Layout server {} responded with layout {}", s, l);
                         return l;
                     } catch (Exception e) {

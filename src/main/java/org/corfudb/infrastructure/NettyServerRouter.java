@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -79,11 +80,10 @@ implements IServerRouter {
      */
     public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx)
     {
-        if (msg.getMsgType() != CorfuMsg.CorfuMsgType.RESET && msg.getEpoch() != epoch)
+        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != epoch)
         {
-            CorfuMsg m = new CorfuMsg();
-            m.setMsgType(CorfuMsg.CorfuMsgType.WRONG_EPOCH);
-            sendResponse(ctx, msg, m);
+            sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
+                    getEpoch()));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), epoch, msg);
             return false;

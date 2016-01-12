@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -29,7 +31,7 @@ public class BaseClient implements IClient {
      *
      * @param msg The incoming message
      * @param ctx The channel handler context
-     * @param r   The router that routed the incoming message.
+     * @param router   The router that routed the incoming message.
      */
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
@@ -45,8 +47,32 @@ public class BaseClient implements IClient {
                     router.completeRequest(msg.getRequestID(), true);
                 break;
             case NACK:
-                router.completeRequest(msg.getRequestID(), false);
+                    router.completeRequest(msg.getRequestID(), false);
                 break;
+            case SET_EPOCH:
+                {
+                    CorfuSetEpochMsg csem = (CorfuSetEpochMsg) msg;
+                    if (csem.getNewEpoch() >= router.getEpoch())
+                    {
+                        log.info("Received SET_EPOCH, moving to new epoch {}", csem.getNewEpoch());
+                        router.setEpoch(csem.getNewEpoch());
+                        router.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+                    }
+                    else
+                    {
+                        log.debug("Rejected SET_EPOCH currrent={}, requested={}",
+                                router.getEpoch(), csem.getNewEpoch());
+                        router.sendResponseToServer(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
+                                router.getEpoch()));
+                    }
+                }
+                break;
+            case WRONG_EPOCH:
+            {
+                CorfuSetEpochMsg csem = (CorfuSetEpochMsg) msg;
+                router.completeExceptionally(msg.getRequestID(), new WrongEpochException(csem.getNewEpoch()));
+            }
+            break;
         }
     }
 
@@ -58,6 +84,8 @@ public class BaseClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.PONG)
                     .add(CorfuMsg.CorfuMsgType.ACK)
                     .add(CorfuMsg.CorfuMsgType.NACK)
+                    .add(CorfuMsg.CorfuMsgType.SET_EPOCH)
+                    .add(CorfuMsg.CorfuMsgType.WRONG_EPOCH)
                     .build();
 
     /** Ping the endpoint, synchronously.
@@ -72,6 +100,13 @@ public class BaseClient implements IClient {
             log.trace("Ping failed due to exception", e);
             return false;
         }
+    }
+
+    public CompletableFuture<Boolean> setRemoteEpoch(long newEpoch) {
+        // Set our own epoch to this epoch.
+        router.setEpoch(newEpoch);
+        return router.sendMessageAndGetCompletable(
+                new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.SET_EPOCH, newEpoch));
     }
 
     /** Ping the endpoint, asynchronously.

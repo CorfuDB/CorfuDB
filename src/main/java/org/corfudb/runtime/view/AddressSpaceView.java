@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -43,7 +42,7 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address An address to read from.
      */
-    public ReadResult read(long address)
+    public AbstractReplicationView.ReadResult read(long address)
 
     {
         return layoutHelper(l -> AbstractReplicationView

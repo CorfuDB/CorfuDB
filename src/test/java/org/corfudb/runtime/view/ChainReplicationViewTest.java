@@ -41,10 +41,10 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
         r.getAddressSpaceView().write(0, Collections.singleton(streamA), testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload())
+        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getMetadataMap()
+        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getResult().getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
     }
@@ -84,10 +84,10 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
         r.getAddressSpaceView().write(0, Collections.singleton(streamA), testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload())
+        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getMetadataMap()
+        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getResult().getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
     }
@@ -132,10 +132,10 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
         r.getAddressSpaceView().write(0, Collections.singleton(streamA), testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload())
+        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getMetadataMap()
+        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getResult().getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
 

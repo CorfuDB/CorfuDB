@@ -19,6 +19,10 @@ public class TestServerRouter implements IServerRouter {
     AtomicLong requestCounter;
 
     @Getter
+    @Setter
+    long epoch;
+
+    @Getter
     public List<CorfuMsg> responseMessages;
 
     public TestServerRouter()

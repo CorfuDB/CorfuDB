@@ -36,6 +36,10 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
 
     public AtomicLong requestID;
 
+    @Getter
+    @Setter
+    public long epoch;
+
     /** The optional address for this router, if set. */
     @Getter
     @Setter
@@ -126,8 +130,8 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
         // Write the message out to the channel.
-        routeMessage(message);
         log.trace("Sent message: {}", message);
+        routeMessage(message);
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
         final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(100));
         cfTimeout.exceptionally(e -> {
@@ -208,6 +212,14 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Override
     public void start() {
 
+    }
+
+    /**
+     * Stops routing requests.
+     */
+    @Override
+    public void stop() {
+        serverMap.clear();
     }
 
     public CorfuMsg simulateSerialization(CorfuMsg message)

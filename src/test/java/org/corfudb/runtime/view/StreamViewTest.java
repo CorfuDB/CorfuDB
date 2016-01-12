@@ -40,7 +40,7 @@ public class StreamViewTest extends AbstractViewTest {
         StreamView sv = r.getStreamsView().get(streamA);
         sv.write(testPayload);
 
-        assertThat(sv.read().getPayload())
+        assertThat(sv.read().getResult().getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(sv.read())

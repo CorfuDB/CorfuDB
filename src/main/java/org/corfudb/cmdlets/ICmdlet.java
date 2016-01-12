@@ -4,6 +4,10 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
@@ -52,6 +56,23 @@ public interface ICmdlet {
         return new CorfuRuntime()
                 .parseConfigurationString((String)opts.get("--config"))
                 .connect();
+    }
+
+    default void checkEndpoint(String endpoint)
+            throws NetworkException
+    {
+        // Create a client router and ping.
+        String host = endpoint.split(":")[0];
+        Integer port = Integer.parseInt(endpoint.split(":")[1]);
+        NettyClientRouter router = new NettyClientRouter(host, port);
+        router.addClient(new BaseClient())
+                .start();
+
+        if (!router.getClient(BaseClient.class).pingSync()) {
+            throw new NetworkException("Couldn't connect to remote endpoint", endpoint);
+        }
+
+        router.stop();
     }
 
     default UUID getUUIDfromString(String id)

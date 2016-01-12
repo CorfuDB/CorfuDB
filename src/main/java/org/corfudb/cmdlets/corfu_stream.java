@@ -77,7 +77,7 @@ public class corfu_stream implements  ICmdlet {
             throws Exception {
         StreamView s = runtime.getStreamsView().get(getUUIDfromString((String) opts.get("--stream-id")));
         while (true) {
-            ReadResult r = s.read();
+            ReadResult r = s.read().getResult();
             if (r == null) {
                 if (!(Boolean) opts.get("--loop")) {
                     return;
