@@ -259,7 +259,7 @@
                       <configuration>
                         <dataSet>
                             <data>
-                                <src>src/deb/init.d/corfu_server</src>
+                                <src>src/deb/init.d/corfu-server</src>
                                 <type>file</type>
                                 <mapper>
                                     <type>perm</type>
