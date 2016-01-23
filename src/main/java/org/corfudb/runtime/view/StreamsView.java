@@ -49,7 +49,7 @@ public class StreamsView {
     public long write(Set<UUID> streamIDs, Object object)
     {
         while (true) {
-            long token = runtime.getSequencerView().nextToken(streamIDs, 1);
+            long token = runtime.getSequencerView().nextToken(streamIDs, 1).getToken();
             log.trace("Write: acquired token = {}", token);
             try {
                 runtime.getAddressSpaceView().write(token, streamIDs, object);

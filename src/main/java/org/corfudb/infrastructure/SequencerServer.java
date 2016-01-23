@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -7,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
 import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -85,16 +87,23 @@ public class SequencerServer implements IServer {
                         max = globalIndex.get() - 1;
                     }
                     r.sendResponse(ctx, msg,
-                            new TokenResponseMsg(max));
+                            new TokenResponseMsg(max, Collections.emptyMap()));
                 }
                 else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
+                    ImmutableMap.Builder<UUID,Long> mb  = ImmutableMap.builder();
                     for (UUID id : req.getStreamIDs()) {
-                        lastIssuedMap.compute(id, (k, v) -> v == null ? thisIssue + req.getNumTokens() -1:
-                                Math.max(thisIssue + req.getNumTokens()-1, v));
+                        lastIssuedMap.compute(id, (k, v) ->{
+                                if (v == null)
+                                {
+                                    return thisIssue + req.getNumTokens() -1;
+                                }
+                                mb.put(k, v);
+                                return Math.max(thisIssue + req.getNumTokens()-1, v);
+                        });
                     }
                     r.sendResponse(ctx, msg,
-                            new TokenResponseMsg(thisIssue));
+                            new TokenResponseMsg(thisIssue, mb.build()));
                 }
             }
             break;
