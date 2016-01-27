@@ -230,9 +230,9 @@ public class CorfuSMRObjectProxy<P> {
                                        @AllArguments Object[] allArguments,
                                        @SuperCall Callable superMethod
         ) throws Exception {
-            String name = new Exception().getStackTrace()[6].getClassName();
-                    if (name.equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
-                    {
+            StackTraceElement[] stack = new Exception().getStackTrace();
+            if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
+            {
                         if (isCorfuObject) {
                             return superMethod.call();
                         }
@@ -264,8 +264,8 @@ public class CorfuSMRObjectProxy<P> {
                                         @SuperCall Callable superMethod,
                                         @AllArguments Object[] allArguments,
                                         @This P obj) throws Exception {
-            String name = new Exception().getStackTrace()[6].getClassName();
-            if (name.equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
+            StackTraceElement[] stack = new Exception().getStackTrace();
+            if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
                 lastResult = superMethod.call();
                 return lastResult;
@@ -380,6 +380,7 @@ public class CorfuSMRObjectProxy<P> {
             txEntry.getTxMap().get(sv.getStreamID())
                     .getUpdates().stream()
                     .forEach(x -> applySMRUpdate(address, x, obj));
+
             return true;
         }
         return false;

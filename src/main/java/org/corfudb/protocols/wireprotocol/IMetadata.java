@@ -15,7 +15,8 @@ public interface IMetadata {
     public enum LogUnitMetadataType {
         STREAM(0),
         RANK(1),
-        STREAM_ADDRESS(2)
+        STREAM_ADDRESS(2),
+        BACKPOINTER_MAP(3)
         ;
 
         final int type;
@@ -88,5 +89,17 @@ public interface IMetadata {
     default void setLogicalAddresses(List<Long> streams)
     {
         getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM_ADDRESS, streams);
+    }
+
+    default void setBackpointerMap(Map<UUID, Long> backpointerMap)
+    {
+        getMetadataMap().put(LogUnitMetadataType.BACKPOINTER_MAP, backpointerMap);
+    }
+
+    @SuppressWarnings("unchecked")
+    default Map<UUID, Long> getBackpointerMap()
+    {
+        return (Map<UUID, Long>) getMetadataMap().getOrDefault(LogUnitMetadataType.BACKPOINTER_MAP,
+                Collections.EMPTY_MAP);
     }
 }
