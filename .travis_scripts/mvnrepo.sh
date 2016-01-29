@@ -4,7 +4,7 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
     if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
         echo -e "Publishing maven repository..."
 
-        mvn deploy
+        mvn deploy -DskipTests=true
         cp -R target/mvn-repo $HOME/mvn-repo-current
         cd $HOME
         git config --global user.email "travis@travis-ci.org"
