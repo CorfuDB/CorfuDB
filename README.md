@@ -47,7 +47,7 @@ There are currently two ways to run Corfu - by building the development sources,
 We currently host an apt repository for Ubuntu 14.04 LTS (Trusty).
 To install Corfu via ```apt-get```, run the following commands:
 
-```
+```bash
 # Install the package for add-apt-repository
 $ sudo apt-get install python-software-properties
 # Add the Corfu signing key to your keychain
@@ -63,7 +63,7 @@ $ sudo apt-get install corfu-server
 To build Corfu, you will need the Java JDK 8 as well as Apache Maven to invoke the build system.
 
 On Linux (Debian/Ubuntu), run:
-```
+```bash
 $ sudo add-apt-repository ppa:webupd8team/java
 $ sudo apt-get update
 $ sudo apt-get install oracle-java8-installer maven
