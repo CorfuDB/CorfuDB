@@ -6,6 +6,7 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -40,7 +41,7 @@ public class ChainReplicationView extends AbstractReplicationView {
      * @param data    The data to write.
      */
     @Override
-    public void write(long address, Set<UUID> stream, Object data)
+    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
     throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         for (int i = 0; i < numUnits; i++)
@@ -49,7 +50,7 @@ public class ChainReplicationView extends AbstractReplicationView {
             // In chain replication, we write synchronously to every unit in the chain.
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
-                                .write(address, stream, 0L, data), OverwriteException.class);
+                                .write(address, stream, 0L, data, backpointerMap), OverwriteException.class);
         }
     }
 

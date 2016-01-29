@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -74,17 +75,21 @@ public class LogUnitClient implements IClient {
     /**
      * Asynchronously write to the logging unit.
      *
-     * @param address     The address to write to.
-     * @param streams     The streams, if any, that this write belongs to.
-     * @param rank        The rank of this write (used for quorum replication).
-     * @param writeObject The object, pre-serialization, to write.
+     * @param address           The address to write to.
+     * @param streams           The streams, if any, that this write belongs to.
+     * @param rank              The rank of this write (used for quorum replication).
+     * @param writeObject       The object, pre-serialization, to write.
+     * @param backpointerMap    The map of backpointers to write.
      * @return A CompletableFuture which will complete with the WriteResult once the
      * write completes.
      */
-    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank, Object writeObject) {
+    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
+                                            Object writeObject, Map<UUID,Long> backpointerMap)
+    {
         LogUnitWriteMsg w = new LogUnitWriteMsg(address);
         w.setStreams(streams);
         w.setRank(rank);
+        w.setBackpointerMap(backpointerMap);
         w.setPayload(writeObject);
         return router.sendMessageAndGetCompletable(w);
     }

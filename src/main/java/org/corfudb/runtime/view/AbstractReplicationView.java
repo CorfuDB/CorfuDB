@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -58,7 +60,20 @@ public abstract class AbstractReplicationView {
      * @param stream    The streams which will belong on this entry.
      * @param data      The data to write.
      */
-    public abstract void write(long address, Set<UUID> stream, Object data)
+    public void write(long address, Set<UUID> stream, Object data)
+        throws OverwriteException
+    {
+        write(address, stream, data, Collections.emptyMap());
+    }
+
+    /** Write the given object to an address and streams, using the replication method given.
+     *
+     * @param address           An address to write to.
+     * @param stream            The streams which will belong on this entry.
+     * @param data              The data to write.
+     * @param backpointerMap    The map of backpointers to write.
+     */
+    public abstract void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
         throws OverwriteException;
 
     /** Read the given object from an address, using the replication method given.
