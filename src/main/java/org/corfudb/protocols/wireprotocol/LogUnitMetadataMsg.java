@@ -1,5 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.Setter;
@@ -71,6 +72,17 @@ public abstract class LogUnitMetadataMsg extends CorfuMsg implements IMetadata {
                 case RANK:
                     metadataMap.put(LogUnitMetadataType.RANK, buffer.readLong());
                     break;
+                case BACKPOINTER_MAP: {
+                    short bpEntries = buffer.readShort();
+                    ImmutableMap.Builder<UUID, Long> mb = ImmutableMap.builder();
+                    for (int i = 0; i < bpEntries; i++) {
+                        UUID id = new UUID(buffer.readLong(), buffer.readLong());
+                        Long backPointer = buffer.readLong();
+                        mb.put(id, backPointer);
+                    }
+                    metadataMap.put(LogUnitMetadataType.BACKPOINTER_MAP, mb.build());
+                }
+                    break;
             }
             numEntries--;
         }
@@ -78,6 +90,7 @@ public abstract class LogUnitMetadataMsg extends CorfuMsg implements IMetadata {
         return metadataMap;
     }
 
+    @SuppressWarnings("unchecked")
     public static void bufferFromMap(ByteBuf buffer, EnumMap<LogUnitMetadataType, Object> metadataMap)
     {
         if (metadataMap == null) {buffer.writeByte(0);}
@@ -96,6 +109,16 @@ public abstract class LogUnitMetadataMsg extends CorfuMsg implements IMetadata {
                         break;
                     case RANK:
                         buffer.writeLong((Long) metadataMap.get(t));
+                        break;
+                    case BACKPOINTER_MAP:
+                        Map<UUID, Long> backpointerMap = (Map<UUID,Long>) metadataMap.get(t);
+                        buffer.writeShort(backpointerMap.size());
+                        backpointerMap.entrySet().stream()
+                                .forEach(e -> {
+                                    buffer.writeLong(e.getKey().getMostSignificantBits());
+                                    buffer.writeLong(e.getKey().getLeastSignificantBits());
+                                    buffer.writeLong(e.getValue());
+                                });
                         break;
                 }
             }

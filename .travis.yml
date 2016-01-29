@@ -3,27 +3,29 @@ sudo: false
 jdk:
 - oraclejdk8
 before_install:
-- .travis_scripts/build_thrift.sh
-- export PATH=$PATH:$HOME/thrift/bin
-install:
-- travis_retry mvn clean install
+- openssl aes-256-cbc -K $encrypted_026743b97986_key -iv $encrypted_026743b97986_iv
+  -in private.key.enc -out private.key -d
 after_success:
 - mvn jacoco:report coveralls:report
 - .travis_scripts/javadocs.sh
 - .travis_scripts/mvnrepo.sh
+- .travis_scripts/push_deb.sh
 cache:
   directories:
   - $HOME/thrift
   - $HOME/.m2
 notifications:
   email:
-    - corfudb-dev@googlegroups.com
+  - corfudb-dev@googlegroups.com
   webhooks:
     urls:
-        - https://webhooks.gitter.im/e/e26458f01e3586e3c140
+    - https://webhooks.gitter.im/e/e26458f01e3586e3c140
     on_success: always
     on_failure: always
     on_start: true
 env:
   global:
     secure: WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
+addons:
+  apt:
+    packages: reprepro

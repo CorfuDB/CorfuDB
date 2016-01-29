@@ -50,7 +50,7 @@ public class StreamView implements AutoCloseable {
     public long write(Object object)
     {
         while (true) {
-            long token = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
+            long token = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1).getToken();
             log.trace("Write[{}]: acquired token = {}", streamID, token);
             try {
                 runtime.getAddressSpaceView().write(token, Collections.singleton(streamID), object);
@@ -78,7 +78,7 @@ public class StreamView implements AutoCloseable {
             if (r.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY)
             {
                 //determine whether or not this is a hole
-                long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);
+                long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
                 log.trace("Read[{}]: latest token at {}", streamID, latestToken);
                 if (latestToken < thisRead)
                 {
@@ -106,7 +106,7 @@ public class StreamView implements AutoCloseable {
     public synchronized ReadResult[] readTo(long pos) {
         long latestToken = pos;
         if (pos == Long.MAX_VALUE) {
-            latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0);
+            latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
             log.trace("Linearization point set to {}", latestToken);
         }
         ArrayList<ReadResult> al = new ArrayList<ReadResult>();

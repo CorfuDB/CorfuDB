@@ -87,7 +87,7 @@ $ corfu_layouts -c localhost:9000 query
 ```
 
 You should get output similar to this:
-```
+```json
 {
   "layoutServers": [
     "localhost:9000"
@@ -143,7 +143,7 @@ If you check the current layout using the query command:
 $ corfu_layouts query -c localhost:9000,localhost:9001
 ```
 You will see that you now have two servers in the layout.
-```
+```json
   "layoutServers": [
     "localhost:9000",
     "localhost:9001"
@@ -162,7 +162,7 @@ This adds the log unit at localhost:9001 to the only segment in the system. To l
 
 To write your first program that uses Corfu, you will want to add Corfu as a dependency. For Maven-based projects, you can add:
 
-```
+```xml
  <dependency>
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
@@ -173,7 +173,7 @@ To write your first program that uses Corfu, you will want to add Corfu as a dep
 to your pom.xml file. 
 
 You will also want to add the Corfu Maven repository, unless you ran ```mvn install``` from source to install the jar files locally:
-```
+```xml
 <repositories>
     <repository>
         <id>corfu-mvn-repo</id>
@@ -187,7 +187,7 @@ You will also want to add the Corfu Maven repository, unless you ran ```mvn inst
 ```
 
 Once you have Corfu added as a dependency, you can start writing Corfu code. Let's start with a map:
-```(java)
+```java
     CorfuRuntime rt = new CorfuRuntime("localhost:9000")
                             .connect();
     Map<String,Integer> map = rt.getObjectsView()

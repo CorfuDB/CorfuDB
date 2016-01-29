@@ -100,6 +100,16 @@ public class CorfuRuntime {
     /** Parse a configuration string and get a CorfuRuntime.
      *
      * @param configurationString   The configuration string to parse.
+     */
+    public CorfuRuntime(String configurationString)
+    {
+        this();
+        this.parseConfigurationString(configurationString);
+    }
+
+    /** Parse a configuration string and get a CorfuRuntime.
+     *
+     * @param configurationString   The configuration string to parse.
      * @return                      A CorfuRuntime Configured based on the configuration string.
      */
     public CorfuRuntime parseConfigurationString(String configurationString)

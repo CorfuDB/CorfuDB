@@ -27,7 +27,7 @@ public class SequencerViewTest extends AbstractViewTest {
 
         //begin tests
         CorfuRuntime r = getRuntime().connect();
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1))
+        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
                 .isEqualTo(0);
     }
 
@@ -39,9 +39,9 @@ public class SequencerViewTest extends AbstractViewTest {
 
         //begin tests
         CorfuRuntime r = getRuntime().connect();
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1))
+        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
                 .isEqualTo(0);
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1))
+        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
                 .isEqualTo(1);
     }
 
@@ -53,9 +53,9 @@ public class SequencerViewTest extends AbstractViewTest {
 
         //begin tests
         CorfuRuntime r = getRuntime().connect();
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1))
+        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
                 .isEqualTo(0);
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 0))
+        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 0).getToken())
                 .isEqualTo(0);
     }
 
@@ -70,15 +70,40 @@ public class SequencerViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
 
-        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 1))
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 1).getToken())
                 .isEqualTo(0);
-        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 0))
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 0).getToken())
                 .isEqualTo(0);
-        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 1))
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 1).getToken())
                 .isEqualTo(1);
-        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 0))
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 0).getToken())
                 .isEqualTo(1);
-        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 0))
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 0).getToken())
                 .isEqualTo(0);
+    }
+
+    @Test
+    public void checkBackPointersWork() {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        //begin tests
+        CorfuRuntime r = getRuntime().connect();
+        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+        UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
+
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 1).getBackpointerMap())
+                .isEmpty();
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 0).getBackpointerMap())
+                .isEmpty();
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 1).getBackpointerMap())
+                .isEmpty();
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 0).getBackpointerMap())
+                .isEmpty();
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 1).getBackpointerMap())
+                .containsEntry(streamA, 0L);
+        assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 1).getBackpointerMap())
+                .containsEntry(streamB, 1L);
     }
 }

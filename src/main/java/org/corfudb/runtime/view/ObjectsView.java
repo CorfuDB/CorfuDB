@@ -1,10 +1,12 @@
 package org.corfudb.runtime.view;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.object.ISMRInterface;
 import org.corfudb.runtime.object.TransactionalContext;
 
 import java.util.UUID;
@@ -33,10 +35,58 @@ public class ObjectsView extends AbstractView {
      * @param <T>           The type of object to return.
      * @return              Returns a view of the object in a Corfu instance.
      */
+    public <T> T open(@NonNull UUID streamID, @NonNull Class<T> type) {
+        return open(streamID, type, null);
+    }
+
+    /** Gets a view of an object in the Corfu instance.
+     *
+     * @param streamName    The stream that the object should be read from.
+     * @param type          The type of the object that should be opened.
+     *                      If the type implements ICorfuSMRObject or implements an interface which implements
+     *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
+     *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
+     *                      all methods are MutatorAccessors.
+     * @param <T>           The type of object to return.
+     * @return              Returns a view of the object in a Corfu instance.
+     */
+    public <T> T open(@NonNull String streamName, @NonNull Class<T> type) {
+        return open(CorfuRuntime.getStreamID(streamName), type);
+    }
+
+    /** Gets a view of an object in the Corfu instance.
+     *
+     * @param streamName    The stream that the object should be read from.
+     * @param type          The type of the object that should be opened.
+     *                      If the type implements ICorfuSMRObject or implements an interface which implements
+     *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
+     *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
+     *                      all methods are MutatorAccessors.
+     * @param overlay       The ISMRInterface to overlay on top of the object, if provided.
+     * @param <T>           The type of object to return.
+     * @return              Returns a view of the object in a Corfu instance.
+     */
     @SuppressWarnings("unchecked")
-    public <T> T open(UUID streamID, Class<T> type) {
+    public <T, R extends ISMRInterface> T open(@NonNull String streamName, @NonNull Class<T> type, Class<R> overlay) {
+        return open(CorfuRuntime.getStreamID(streamName), type, overlay);
+    }
+
+    /** Gets a view of an object in the Corfu instance.
+     *
+     * @param streamID      The stream that the object should be read from.
+     * @param type          The type of the object that should be opened.
+     *                      If the type implements ICorfuSMRObject or implements an interface which implements
+     *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
+     *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
+     *                      all methods are MutatorAccessors.
+     * @param overlay       The ISMRInterface to overlay on top of the object, if provided.
+     * @param <T>           The type of object to return.
+     * @return              Returns a view of the object in a Corfu instance.
+     */
+    @SuppressWarnings("unchecked")
+    public <T, R extends ISMRInterface> T open(@NonNull UUID streamID, @NonNull Class<T> type, Class<R> overlay) {
         StreamView sv = runtime.getStreamsView().get(streamID);
-        return CorfuSMRObjectProxy.getProxy(type, sv, runtime);
+        return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime);
     }
 
     /** Begins a transaction on the current thread.

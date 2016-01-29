@@ -6,6 +6,7 @@ import javassist.CtClass;
 import javassist.bytecode.annotation.NoSuchClassError;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import net.bytebuddy.ByteBuddy;
@@ -53,36 +54,79 @@ public class CorfuSMRObjectProxy<P> {
     CorfuRuntime runtime;
     long timestamp;
 
+    @Getter
+    boolean isCorfuObject = false;
+
     public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<?> originalClass) {
         this.runtime = runtime;
         this.sv = sv;
         this.originalClass = originalClass;
         this.serializer = Serializers.SerializerType.JAVA;
         this.timestamp = -1L;
+        if (Arrays.stream(originalClass.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom)) {
+            isCorfuObject = true;
+        }
     }
 
-    public static <T> Class<? extends T> getProxyClass(CorfuSMRObjectProxy proxy, Class<T> type) {
-        Class<? extends T> generatedClass = new ByteBuddy()
-                .subclass(type)
-                .method(ElementMatchers.named("getSMRObject"))
-                .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
-                .method(ElementMatchers.isAnnotatedWith(Mutator.class))
-                .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()))
-                        .method(ElementMatchers.isAnnotatedWith(Accessor.class))
-                        .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()))
-                        .method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
-                        .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
-                        .make()
-                        .load(ClassLoader.getSystemClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
-                        .getLoaded();
-        proxy.generatedClass = generatedClass;
-        return generatedClass;
+    public static <T,R extends ISMRInterface> Class<? extends T>
+    getProxyClass(CorfuSMRObjectProxy proxy, Class<T> type, Class<R> overlay) {
+        if (Arrays.stream(type.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom))
+        {
+            log.trace("Detected ICorfuSMRObject({}), instrumenting methods.", type);
+            Class<? extends T> generatedClass = new ByteBuddy()
+                    .subclass(type)
+                    .method(ElementMatchers.named("getSMRObject"))
+                    .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
+                    .method(ElementMatchers.isAnnotatedWith(Mutator.class))
+                    .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()))
+                    .method(ElementMatchers.isAnnotatedWith(Accessor.class))
+                    .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()))
+                    .method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
+                    .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
+                    .make()
+                    .load(ClassLoader.getSystemClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
+                    .getLoaded();
+            proxy.generatedClass = generatedClass;
+            return generatedClass;
+        }
+        else if (overlay != null) {
+            log.trace("Detected Overlay({}), instrumenting methods", overlay);
+        }
+        else if (Arrays.stream(type.getInterfaces()).anyMatch(ISMRInterface.class::isAssignableFrom)){
+            ISMRInterface[] iface = Arrays.stream(type.getInterfaces())
+                    .filter(ISMRInterface.class::isAssignableFrom)
+                    .toArray(ISMRInterface[]::new);
+            log.trace("Detected ISMRInterfaces({}), instrumenting methods", iface);
+        }
+        else {
+            log.trace("{} is not an ICorfuSMRObject, no ISMRInterfaces and no overlay provided. " +
+                    "Instrumenting all methods as mutatorAccessors but respecting annotations", type);
+            Class<? extends T> generatedClass = new ByteBuddy()
+                    .subclass(type)
+                    .method(ElementMatchers.isAnnotatedWith(Mutator.class))
+                    .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()))
+                    .method(ElementMatchers.isAnnotatedWith(Accessor.class))
+                    .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()))
+                    .method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
+                    .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
+                    .method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
+                                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
+                    )
+                    .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
+                    .make()
+                    .load(ClassLoader.getSystemClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
+                    .getLoaded();
+            proxy.generatedClass = generatedClass;
+            return generatedClass;
+        }
+        throw new UnsupportedOperationException("Not yet implemented.");
     }
 
-    public static <T> T getProxy(Class<T> type, StreamView sv, CorfuRuntime runtime) {
+    public static <T,R extends ISMRInterface>
+        T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime) {
         try {
             CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type);
-            return getProxyClass(proxy, type).newInstance();
+            return getProxyClass(proxy, type, overlay).newInstance();
         } catch (InstantiationException | IllegalAccessException ie) {
             throw new RuntimeException("Unexpected exception opening object", ie);
         }
@@ -105,6 +149,21 @@ public class CorfuSMRObjectProxy<P> {
         @SuppressWarnings("unchecked")
         @RuntimeType
         public Object interceptGetSMRObject(@This ICorfuSMRObject obj) throws Exception {
+            if (obj == null && smrObject == null)
+            {
+                log.trace("SMR object not yet set, generating one.");
+                if (creationArguments == null) {
+                    smrObject = originalClass.newInstance();
+                } else {
+                    Class[] typeList = Arrays.stream(creationArguments)
+                            .map(x -> x.getClass())
+                            .toArray(s -> new Class[s]);
+
+                    originalClass
+                            .getDeclaredConstructor(typeList)
+                            .newInstance(creationArguments);
+                }
+            }
             if (smrObject == null) {
                 // We don't have an SMR object yet, so we'll need to create one.
                 log.trace("SMR object not yet set, generating one.");
@@ -167,13 +226,19 @@ public class CorfuSMRObjectProxy<P> {
          */
         @RuntimeType
         public Object interceptMutator(@Origin String method,
+                                       @Origin Method Mmethod,
                                        @AllArguments Object[] allArguments,
                                        @SuperCall Callable superMethod
         ) throws Exception {
-            String name = new Exception().getStackTrace()[6].getClassName();
-                    if (name.equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
-                    {
-                        superMethod.call();
+            StackTraceElement[] stack = new Exception().getStackTrace();
+            if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
+            {
+                        if (isCorfuObject) {
+                            return superMethod.call();
+                        }
+                        else {
+                            return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+                        }
                     }
                     else if (!TransactionalContext.isInTransaction()){
                         writeUpdate(getShortMethodName(method), allArguments);
@@ -195,11 +260,12 @@ public class CorfuSMRObjectProxy<P> {
         @RuntimeType
         public Object interceptMutatorAccessor(
                                         @Origin String method,
+                                        @Origin Method Mmethod,
                                         @SuperCall Callable superMethod,
                                         @AllArguments Object[] allArguments,
                                         @This P obj) throws Exception {
-            String name = new Exception().getStackTrace()[6].getClassName();
-            if (name.equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
+            StackTraceElement[] stack = new Exception().getStackTrace();
+            if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
                 lastResult = superMethod.call();
                 return lastResult;
@@ -216,7 +282,12 @@ public class CorfuSMRObjectProxy<P> {
                 // immediately.
                 TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
                         getShortMethodName(method), allArguments, serializer);
-                return superMethod.call();
+                if (isCorfuObject) {
+                    return superMethod.call();
+                }
+                else {
+                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+                }
             }
         }
     }
@@ -225,13 +296,19 @@ public class CorfuSMRObjectProxy<P> {
 
         @RuntimeType
         public Object interceptAccessor(@SuperCall Callable superMethod,
+                                        @Origin Method method,
                                         @This P obj) throws Exception {
             // Linearize this access with respect to other accesses in the system.
             if (!TransactionalContext.isInTransaction()) {
                 sync(obj, Long.MAX_VALUE);
             }
             // Now we can safely call the accessor.
-            return superMethod.call();
+            if (isCorfuObject) {
+                return superMethod.call();
+            }
+            else {
+                return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+            }
         }
     }
 
@@ -303,6 +380,7 @@ public class CorfuSMRObjectProxy<P> {
             txEntry.getTxMap().get(sv.getStreamID())
                     .getUpdates().stream()
                     .forEach(x -> applySMRUpdate(address, x, obj));
+
             return true;
         }
         return false;

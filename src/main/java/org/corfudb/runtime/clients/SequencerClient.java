@@ -2,12 +2,14 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
 import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -19,8 +21,15 @@ import java.util.concurrent.CompletableFuture;
  * Created by mwei on 12/10/15.
  */
 public class SequencerClient implements IClient {
+
     @Setter
     IClientRouter router;
+
+    @Data
+    public class TokenResponse {
+        public final Long token;
+        public final Map<UUID, Long> backpointerMap;
+    }
 
     /**
      * Handle a incoming message on the channel
@@ -33,7 +42,9 @@ public class SequencerClient implements IClient {
         switch (msg.getMsgType())
         {
             case TOKEN_RES:
-                router.completeRequest(msg.getRequestID(), ((TokenResponseMsg)msg).getToken());
+                TokenResponseMsg tmsg = ((TokenResponseMsg)msg);
+                router.completeRequest(msg.getRequestID(),
+                        new TokenResponse(tmsg.getToken(), tmsg.getBackpointerMap()));
                 break;
         }
     }
@@ -47,7 +58,7 @@ public class SequencerClient implements IClient {
                     .build();
 
 
-    public CompletableFuture<Long> nextToken(Set<UUID> streamIDs, long numTokens)
+    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens)
     {
         return router.sendMessageAndGetCompletable(
                 new TokenRequestMsg(streamIDs, numTokens));

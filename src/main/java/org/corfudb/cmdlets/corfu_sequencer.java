@@ -56,7 +56,7 @@ public class corfu_sequencer implements ICmdlet {
         try {
             long token = router.getClient(SequencerClient.class).nextToken(
                     streamsFromString((String) opts.get("--stream-ids")),
-                    Integer.parseInt((String) opts.get("--num-tokens"))).get();
+                    Integer.parseInt((String) opts.get("--num-tokens"))).get().getToken();
             System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port).reset().a(":"));
             System.out.println(token);
         } catch (ExecutionException ex)

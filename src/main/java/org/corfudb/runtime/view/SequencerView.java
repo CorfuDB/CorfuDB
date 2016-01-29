@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.util.CFUtils;
 
 import java.util.Set;
@@ -22,7 +23,7 @@ public class SequencerView extends AbstractView {
      * @param numTokens      The number of tokens to reserve.
      * @return               The first token retrieved.
      */
-    public long nextToken(Set<UUID> streamIDs, int numTokens) {
+    public SequencerClient.TokenResponse nextToken(Set<UUID> streamIDs, int numTokens) {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(streamIDs, numTokens)));
     }
 }

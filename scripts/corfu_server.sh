@@ -6,6 +6,7 @@ else
   JAVA=java
 fi
 
+CORFUDBBINDIR="${CORFUDBBINDIR:-/usr/bin}"
 CORFUDB_PREFIX="${CORFUDBBINDIR}/.."
 
 SOURCE="${BASH_SOURCE[0]}"
@@ -19,7 +20,7 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 if ls ${DIR}/../target/*.jar > /dev/null 2>&1; then
  # echo "Running from development source"
   CLASSPATH=(${DIR}/../target/corfu-*-shaded.jar)
-elif ls "${CORFUDB_PREFIX}"/share/corfudb/lib/corfu-*.jar > /dev/null 2>&1; then
+else
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfu/lib/*.jar)
 fi
 
@@ -34,7 +35,6 @@ then
     CLASSPATH=`cygpath -wp "$CLASSPATH"`
 fi
 
-echo $CORFUDBBINDIR
 
 # default heap for corfudb
 CORFUDB_HEAP="${CORFUDB_HEAP:-1000}"
