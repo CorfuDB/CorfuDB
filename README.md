@@ -65,9 +65,24 @@ $ mvn clean install
 ```
 
 The binaries which will be referenced in the following sections will be located in the ```bin``` directory.
+
 ### Install From Debian Package
 
-We are in the process of setting up a repository for our Debian package. This section will be updated when that is complete.
+We currently host an apt repository for Ubuntu 14.04 LTS (Trusty).
+To install Corfu via ```apt-get```, run the following commands:
+
+```
+# Install the package for add-apt-repository
+$ sudo apt-get install python-software-properties
+# Add the Corfu signing key to your keychain
+$ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 482CD4B4
+# Add the Corfu repository
+$ sudo apt-add-repository "deb https://raw.github.com/CorfuDB/CorfuDB/debian/ trusty main"
+# Update packages and install the Corfu server infrastructure
+$ sudo apt-get update
+$ sudo apt-get install corfu-server
+```
+
 
 ### Running Corfu for the first time
 
