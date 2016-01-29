@@ -15,7 +15,7 @@ if [ "$TRAVIS_BRANCH" == "Tracing" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; t
         git clone --quiet --branch=debian https://${GH_TOKEN}@github.com/CorfuDB/CorfuDB debian > /dev/null
 
         cd debian
-        reprepo -b . includedeb trusty $HOME/$DEBNAME
+        reprepro -b . includedeb trusty $HOME/$DEBNAME
         #git add -f .
         #git commit -m "Updated Debian repository from travis build $TRAVIS_BUILD_NUMBER"
         #git push -fq origin debian > /dev/null
