@@ -8,6 +8,7 @@ if [ "$TRAVIS_BRANCH" == "Tracing" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; t
         gpg --list-secret-keys
 #this is fragile and needs to account for changes in the filename
         DEBNAME="corfu_0.1.${TRAVIS_BUILD_NUMBER}_all.deb"
+        echo -e "Debian package to be output: ${DEBNAME}"
         cp -R target/corfu_0.1~SNAPSHOT_all.deb  $HOME/$DEBNAME
         cd $HOME
         git config --global user.email "travis@travis-ci.org"
