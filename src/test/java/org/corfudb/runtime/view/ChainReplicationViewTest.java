@@ -39,7 +39,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(0, Collections.singleton(streamA), testPayload);
+        r.getAddressSpaceView().write(0, Collections.singleton(streamA),
+                testPayload, Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
                 .isEqualTo("hello world".getBytes());
@@ -82,7 +83,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(0, Collections.singleton(streamA), testPayload);
+        r.getAddressSpaceView().write(0, Collections.singleton(streamA),
+                testPayload, Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
                 .isEqualTo("hello world".getBytes());
@@ -130,7 +132,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(0, Collections.singleton(streamA), testPayload);
+        r.getAddressSpaceView().write(0, Collections.singleton(streamA),
+                testPayload, Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
                 .isEqualTo("hello world".getBytes());

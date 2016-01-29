@@ -5,6 +5,7 @@ import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -21,18 +22,19 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Write the given object to an address and streams.
      *
-     * @param address An address to write to.
-     * @param stream  The streams which will belong on this entry.
-     * @param data    The data to write.
+     * @param address           An address to write to.
+     * @param stream        The streams which will belong on this entry.
+     * @param data          The data to write.
+     * @param backpointerMap
      */
-    public void write(long address, Set<UUID> stream, Object data)
+    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
     throws OverwriteException
     {
         layoutHelper(
           (LayoutFunction<Layout, Void, OverwriteException, RuntimeException, RuntimeException, RuntimeException>)
                 l -> {
            AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address))
-                   .write(address, stream, data);
+                   .write(address, stream, data, backpointerMap);
            return null;
         });
     }
@@ -43,7 +45,6 @@ public class AddressSpaceView extends AbstractView {
      * @param address An address to read from.
      */
     public AbstractReplicationView.ReadResult read(long address)
-
     {
         return layoutHelper(l -> AbstractReplicationView
                      .getReplicationView(l, l.getReplicationMode(address))

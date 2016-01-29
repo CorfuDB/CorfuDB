@@ -7,6 +7,7 @@ import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
@@ -97,7 +98,7 @@ public class corfu_logunit implements ICmdlet {
     {
         router.getClient(LogUnitClient.class).write(Long.parseLong((String) opts.get("--log-address")),
                 streamsFromString((String) opts.get("--stream-ids")), Integer.parseInt((String) opts.get("--rank")),
-                ByteStreams.toByteArray(System.in)).get();
+                ByteStreams.toByteArray(System.in), Collections.emptyMap()).get();
     }
 
     void trim(NettyClientRouter router, Map<String,Object> opts)

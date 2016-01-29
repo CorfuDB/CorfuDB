@@ -8,6 +8,7 @@ import org.docopt.Docopt;
 
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
@@ -70,7 +71,8 @@ public class corfu_as implements ICmdlet {
             throws Exception
     {
         runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
-                streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in));
+                streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
+                Collections.emptyMap());
     }
 
     void read(CorfuRuntime runtime, Map<String,Object> opts)

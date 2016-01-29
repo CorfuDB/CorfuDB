@@ -1,9 +1,11 @@
 package org.corfudb.runtime.clients;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.IServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.junit.Test;
 
@@ -43,7 +45,7 @@ public class LogUnitClientTest extends AbstractClientTest {
     throws Exception
     {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString).get();
+        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
         LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
         assertThat(r.getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.DATA);
@@ -56,8 +58,9 @@ public class LogUnitClientTest extends AbstractClientTest {
         throws Exception
     {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString).get();
-        assertThatThrownBy(() -> client.write(0,Collections.<UUID>emptySet(), 0, testString).get())
+        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
+        assertThatThrownBy(() -> client.write(0,Collections.<UUID>emptySet(), 0,
+                testString, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }
@@ -67,7 +70,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         throws Exception
     {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString).get();
+        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
         client.fillHole(0).get();
         LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
         assertThat(r.getResultType())
@@ -86,8 +89,28 @@ public class LogUnitClientTest extends AbstractClientTest {
         assertThat(r.getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.FILLED_HOLE);
 
-        assertThatThrownBy(() -> client.write(0,Collections.<UUID>emptySet(), 0, testString).get())
+        assertThatThrownBy(() -> client.write(0,Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }
+
+    @Test
+    public void backpointersCanBeWrittenAndRead()
+            throws Exception
+    {
+        byte[] testString = "hello world".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), 0, testString,
+                ImmutableMap.<UUID,Long>builder()
+                    .put(CorfuRuntime.getStreamID("hello"), 1337L)
+                    .put(CorfuRuntime.getStreamID("hello2"), 1338L)
+                    .build()).get();
+
+        LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
+        assertThat(r.getBackpointerMap())
+                .containsEntry(CorfuRuntime.getStreamID("hello"), 1337L);
+        assertThat(r.getBackpointerMap())
+                .containsEntry(CorfuRuntime.getStreamID("hello2"), 1338L);
+    }
+
+
 }

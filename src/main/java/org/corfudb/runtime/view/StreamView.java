@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.AbstractReplicationView.ReadResult;
 
@@ -50,10 +51,13 @@ public class StreamView implements AutoCloseable {
     public long write(Object object)
     {
         while (true) {
-            long token = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1).getToken();
+            SequencerClient.TokenResponse tokenResponse =
+                    runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
+            long token = tokenResponse.getToken();
             log.trace("Write[{}]: acquired token = {}", streamID, token);
             try {
-                runtime.getAddressSpaceView().write(token, Collections.singleton(streamID), object);
+                runtime.getAddressSpaceView().write(token, Collections.singleton(streamID),
+                        object, tokenResponse.getBackpointerMap());
                 return token;
             } catch (OverwriteException oe)
             {

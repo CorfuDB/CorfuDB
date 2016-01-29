@@ -42,11 +42,28 @@ For more details on the inner workings of Corfu, see the [Corfu wiki](https://gi
 
 There are currently two ways to run Corfu - by building the development sources, or on Debian-based systems, installing the corfu-server package. We'll describe how to build Corfu from the development sources first. If you just want to install the Debian package, skip [here](#install-from-debian-package).
 
+### Install From Debian Package
+
+We currently host an apt repository for Ubuntu 14.04 LTS (Trusty).
+To install Corfu via ```apt-get```, run the following commands:
+
+```bash
+# Install the package for add-apt-repository
+$ sudo apt-get install python-software-properties
+# Add the Corfu signing key to your keychain
+$ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 482CD4B4
+# Add the Corfu repository
+$ sudo apt-add-repository "deb https://raw.github.com/CorfuDB/CorfuDB/debian/ trusty main"
+# Update packages and install the Corfu server infrastructure
+$ sudo apt-get update
+$ sudo apt-get install corfu-server
+```
+
 ### Building Corfu From Source
 To build Corfu, you will need the Java JDK 8 as well as Apache Maven to invoke the build system.
 
 On Linux (Debian/Ubuntu), run:
-```
+```bash
 $ sudo add-apt-repository ppa:webupd8team/java
 $ sudo apt-get update
 $ sudo apt-get install oracle-java8-installer maven
@@ -65,9 +82,6 @@ $ mvn clean install
 ```
 
 The binaries which will be referenced in the following sections will be located in the ```bin``` directory.
-### Install From Debian Package
-
-We are in the process of setting up a repository for our Debian package. This section will be updated when that is complete.
 
 ### Running Corfu for the first time
 

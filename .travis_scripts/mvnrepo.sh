@@ -5,6 +5,10 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
         echo -e "Publishing maven repository..."
 
         mvn deploy -DskipTests=true
+        #delete debian artifacts before deploy
+        rm target/mvn-repo/org/corfudb/corfu/${PROJECT_VERSION}/*.deb
+        rm target/mvn-repo/org/corfudb/corfu/${PROJECT_VERSION}/*.deb.md5
+        rm target/mvn-repo/org/corfudb/corfu/${PROJECT_VERSION}/*.deb.sha1
         cp -R target/mvn-repo $HOME/mvn-repo-current
         cd $HOME
         git config --global user.email "travis@travis-ci.org"
