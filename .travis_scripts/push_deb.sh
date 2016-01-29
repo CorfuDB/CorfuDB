@@ -1,11 +1,9 @@
 #!/bin/bash
 
-if [ "$TRAVIS_BRANCH" == "Tracing" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
+if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
     if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
         echo -e "Shipping deb package..."
         gpg --import public.key private.key
-        echo -e "Listing installed keys:"
-        gpg --list-secret-keys
 #this is fragile and needs to account for changes in the filename
         DEBNAME="corfu_0.1.${TRAVIS_BUILD_NUMBER}_all.deb"
         echo -e "Debian package to be output: ${DEBNAME}"
@@ -17,8 +15,8 @@ if [ "$TRAVIS_BRANCH" == "Tracing" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; t
 
         cd debian
         reprepro -b . includedeb trusty $HOME/$DEBNAME
-        #git add -f .
-        #git commit -m "Updated Debian repository from travis build $TRAVIS_BUILD_NUMBER"
-        #git push -fq origin debian > /dev/null
+        git add -f .
+        git commit -m "Updated Debian repository from travis build $TRAVIS_BUILD_NUMBER"
+        git push -fq origin debian > /dev/null
     fi
 fi
