@@ -4,6 +4,7 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
     if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
         echo -e "Publishing maven repository..."
 
+        PROJECT_VERSION=$(cat ${HOME}/.project_version)
         mvn deploy -DskipTests=true
         #delete debian artifacts before deploy
         rm target/mvn-repo/org/corfudb/corfu/${PROJECT_VERSION}/*.deb
