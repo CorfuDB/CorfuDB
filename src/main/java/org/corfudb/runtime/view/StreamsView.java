@@ -32,10 +32,6 @@ public class StreamsView {
         return new StreamView(runtime, stream);
     }
 
-    public StreamView delete(UUID stream) {
-        return null;
-    }
-
     /** Write an object to multiple streams, retuning the physical address it
      * was written at.
      *

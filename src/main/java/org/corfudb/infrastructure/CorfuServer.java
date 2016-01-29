@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
@@ -84,8 +85,8 @@ public class CorfuServer {
         // Print a nice welcome message.
         AnsiConsole.systemInstall();
         System.out.println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER").reset());
-        System.out.println(ansi().a("You are running version ").fg(BLUE)
-                .a(GitRepositoryState.getRepositoryState().describe).reset());
+        System.out.println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
+                .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
         System.out.println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
 
         // Pick the correct logging level before outputting error messages.

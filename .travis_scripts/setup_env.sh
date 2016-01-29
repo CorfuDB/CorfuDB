@@ -10,3 +10,5 @@ export PROJECT_VERSION="$(mvn exec:exec -Dexec.executable="echo" \
 mvn versions:set -DnewVersion=$PROJECT_VERSION
 
 echo -e "Project version set to ${PROJECT_VERSION}"
+
+echo $PROJECT_VERSION > $HOME/.project_version
