@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+echo -e "Setting up project environment"
+
+# replace SNAPSHOT with actual version
+export PROJECT_VERSION="$(mvn exec:exec -Dexec.executable="echo" \
+                -Dexec.args='${project.version}' --non-recursive -q \
+                | tr -d '\n' | sed 's/-SNAPSHOT/-'$TRAVIS_BUILD_NUMBER'/')"
+
+mvn versions:set -DnewVersion=$PROJECT_VERSION
+
+echo -e "Project version set to ${PROJECT_VERSION}"
