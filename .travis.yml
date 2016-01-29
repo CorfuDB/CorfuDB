@@ -28,3 +28,6 @@ notifications:
 env:
   global:
     secure: WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
+addons:
+  apt:
+    packages: reprepo
