@@ -3,24 +3,25 @@ sudo: false
 jdk:
 - oraclejdk8
 before_install:
-- .travis_scripts/build_thrift.sh
-- export PATH=$PATH:$HOME/thrift/bin
+- openssl aes-256-cbc -K $encrypted_026743b97986_key -iv $encrypted_026743b97986_iv
+  -in private.key.enc -out private.key -d
 install:
 - travis_retry mvn clean install
 after_success:
 - mvn jacoco:report coveralls:report
 - .travis_scripts/javadocs.sh
 - .travis_scripts/mvnrepo.sh
+- .tracis_scripts/push_deb.sh
 cache:
   directories:
   - $HOME/thrift
   - $HOME/.m2
 notifications:
   email:
-    - corfudb-dev@googlegroups.com
+  - corfudb-dev@googlegroups.com
   webhooks:
     urls:
-        - https://webhooks.gitter.im/e/e26458f01e3586e3c140
+    - https://webhooks.gitter.im/e/e26458f01e3586e3c140
     on_success: always
     on_failure: always
     on_start: true
