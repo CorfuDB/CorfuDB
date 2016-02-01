@@ -39,9 +39,7 @@ public class AddressSpaceView extends AbstractView {
         // We don't lock readCache, this should be ok in the rare
         // case we generate a second readCache as it won't be pointed to.
         if (readCache == null) {
-            readCache = Caffeine.newBuilder()
-                    .maximumSize(10_000)
-                    .build(this::cacheFetch);
+            resetCaches();
         }
         else {
             log.debug("Read cache already built, re-using existing read cache.");
@@ -51,7 +49,9 @@ public class AddressSpaceView extends AbstractView {
     /** Reset all in-memory caches. */
     public void resetCaches()
     {
-        readCache.invalidateAll();
+        readCache = Caffeine.newBuilder()
+                .maximumSize(10_000)
+                .build(this::cacheFetch);
     }
 
     /**
