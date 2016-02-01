@@ -56,7 +56,6 @@ public class SMRMapTest extends AbstractViewTest {
         getRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
-        getRuntime().getObjectsView().TXBegin();
         testMap.clear();
         assertThat(testMap.put("a","a"))
                 .isNull();
@@ -64,7 +63,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
-        getRuntime().getObjectsView().TXEnd();
 
         assertThat(testMap.get("a"))
                 .isEqualTo("b");

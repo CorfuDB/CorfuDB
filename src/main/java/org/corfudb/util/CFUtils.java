@@ -90,6 +90,15 @@ public class CFUtils {
         return promise;
     }
 
+    /** Schedules a runnable after a given time
+     * @param duration  The duration to timeout after.
+     * @return          A completable future that will time out.
+     */
+    public static void runAfter(Duration duration, Runnable toRun) {
+        final CompletableFuture<Void> promise = new CompletableFuture<>();
+        scheduler.schedule(toRun::run, duration.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
     /** Takes a completable future, and ensures that it completes within a certain duration. If it does
      * not, it is cancelled and completes exceptionally with TimeoutException.
      *  inspired by NoBlogDefFound: http://www.nurkiewicz.com/2014/12/asynchronous-timeouts-with.html

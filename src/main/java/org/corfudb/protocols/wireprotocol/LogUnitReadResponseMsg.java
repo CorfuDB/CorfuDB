@@ -56,7 +56,7 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
         }
     }
 
-    public static class ReadResult implements IMetadata {
+    public static class ReadResult implements ILogUnitEntry {
 
         /** The backing message for this read result. */
         LogUnitReadResponseMsg msg;

@@ -2,6 +2,7 @@ package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -78,7 +79,8 @@ public class corfu_as implements ICmdlet {
     void read(CorfuRuntime runtime, Map<String,Object> opts)
             throws Exception
     {
-        ReadResult r = runtime.getAddressSpaceView().read(Long.parseLong((String) opts.get("--log-address"))).getResult();
+        ILogUnitEntry r = runtime.getAddressSpaceView()
+                .read(Long.parseLong((String) opts.get("--log-address"))).getResult();
         switch (r.getResultType())
         {
             case EMPTY:

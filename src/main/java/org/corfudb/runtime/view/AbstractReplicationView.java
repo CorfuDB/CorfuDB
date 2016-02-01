@@ -1,15 +1,15 @@
 package org.corfudb.runtime.view;
 
+import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
@@ -43,7 +43,32 @@ public abstract class AbstractReplicationView {
         @Getter
         final long address;
         @Getter
-        final LogUnitReadResponseMsg.ReadResult result;
+        final ILogUnitEntry result;
+    }
+
+    @ToString
+    @RequiredArgsConstructor
+    public static class CachedLogUnitEntry implements ILogUnitEntry
+    {
+        @Getter
+        final LogUnitReadResponseMsg.ReadResultType resultType;
+
+        @Getter
+        final EnumMap<LogUnitMetadataType, Object> metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+
+        @Getter
+        final Object payload;
+
+        /**
+         * Gets a ByteBuf representing the payload for this data.
+         *
+         * @return A ByteBuf representing the payload for this data.
+         */
+        @Override
+        public ByteBuf getBuffer() {
+            log.warn("Attempted to get a buffer of a cached entry!");
+            throw new RuntimeException("Invalid attempt to get the ByteBuf of a cached entry!");
+        }
     }
 
     @Getter
