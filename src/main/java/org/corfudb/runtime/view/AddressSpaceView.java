@@ -3,6 +3,8 @@ package org.corfudb.runtime.view;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -31,7 +33,9 @@ public class AddressSpaceView extends AbstractView {
     static LoadingCache<Long, AbstractReplicationView.ReadResult> readCache;
 
     /** Duration before retrying an empty read. */
-    static final Duration emptyDuration = Duration.ofMillis(5000L);
+    @Getter
+    @Setter
+    Duration emptyDuration = Duration.ofMillis(5000L);
 
     public AddressSpaceView(CorfuRuntime runtime)
     {
