@@ -33,7 +33,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         assertThat(getRuntime().getAddressSpaceView().read(0).getResult().getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.EMPTY);
         getRuntime().getLayoutView().getLayout().getLogUnitClient(0, 0).fillHole(0);
-        try {Thread.sleep(1);} catch (InterruptedException e) {// don't do anything
+        try {Thread.sleep(100);} catch (InterruptedException e) {// don't do anything
         }
         assertThat(getRuntime().getAddressSpaceView().read(0).getResult().getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.FILLED_HOLE);
