@@ -95,10 +95,10 @@ public class TXEntry extends LogEntry {
                     if (rr.getResultType() ==
                             LogUnitReadResponseMsg.ReadResultType.DATA &&
                             ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
-                                    .contains(e.getKey()))
+                                    .contains(e.getKey()) && e.getValue().getLastTimestamp() != i)
                     {
-                        log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}", e.getKey(),
-                                i, timestamp);
+                        log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
+                                i, timestamp, e.getValue().getLastTimestamp());
                         return true;
                     }
                 }

@@ -56,14 +56,15 @@ public class SMRMapTest extends AbstractViewTest {
         getRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
-        testMap.clear();
+        //testMap.clear();  //TODO: handle the state where the mutator is used (sync at TXBegin?).
+        getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a","a"))
                 .isNull();
         assertThat(testMap.put("a","b"))
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
-
+        getRuntime().getObjectsView().TXEnd();
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
     }
@@ -101,14 +102,15 @@ public class SMRMapTest extends AbstractViewTest {
                 .setCacheDisabled(false);
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
-        testMap.clear();
+        //testMap.clear();
+        getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a","a"))
                 .isNull();
         assertThat(testMap.put("a","b"))
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
-
+        getRuntime().getObjectsView().TXEnd();
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
     }
