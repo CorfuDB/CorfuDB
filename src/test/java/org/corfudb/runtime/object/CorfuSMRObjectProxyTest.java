@@ -49,4 +49,5 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         assertThat(testMap2.get("a"))
                 .isEqualTo("b");
     }
+
 }
