@@ -49,6 +49,32 @@ public class StreamViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void canReadWriteFromCachedStream()
+            throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        //begin tests
+        CorfuRuntime r = getRuntime().connect()
+                .setCacheDisabled(false);
+        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+        byte[] testPayload = "hello world".getBytes();
+
+        StreamView sv = r.getStreamsView().get(streamA);
+        sv.write(testPayload);
+
+        assertThat(sv.read().getResult().getPayload())
+                .isEqualTo("hello world".getBytes());
+
+        assertThat(sv.read())
+                .isEqualTo(null);
+    }
+
+        @Test
+    @SuppressWarnings("unchecked")
     public void streamCanSurviveOverwriteException()
             throws Exception {
         // default layout is chain replication.

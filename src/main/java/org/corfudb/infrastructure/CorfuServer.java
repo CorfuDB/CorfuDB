@@ -75,6 +75,18 @@ public class CorfuServer {
             + " -h, --help  Show this screen\n"
             + " --version  Show version\n";
 
+    public static void printLogo()
+    {
+        System.out.println(ansi().fg(WHITE).a("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄").reset());
+        System.out.println(ansi().fg(WHITE).a("███    ███ ███    ███   ███    ███   ███    ███ ███    ███").reset());
+        System.out.println(ansi().fg(WHITE).a("███    █▀  ███    ███   ███    ███   ███    █▀  ███    ███").reset());
+        System.out.println(ansi().fg(WHITE).a("███        ███    ███  ▄███▄▄▄▄██▀  ▄███▄▄▄     ███    ███").reset());
+        System.out.println(ansi().fg(WHITE).a("███        ███    ███ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀     ███    ███").reset());
+        System.out.println(ansi().fg(WHITE).a("███    █▄  ███    ███ ▀███████████   ███        ███    ███").reset());
+        System.out.println(ansi().fg(WHITE).a("███    ███ ███    ███   ███    ███   ███        ███    ███").reset());
+        System.out.println(ansi().fg(WHITE).a("████████▀   ▀██████▀    ███    ███   ███        ████████▀").reset());
+        System.out.println(ansi().fg(WHITE).a("                        ███    ███").reset());
+    }
     public static void main(String[] args) {
 
         // Parse the options given, using docopt.
@@ -84,6 +96,7 @@ public class CorfuServer {
         int port = Integer.parseInt((String) opts.get("<port>"));
         // Print a nice welcome message.
         AnsiConsole.systemInstall();
+        printLogo();
         System.out.println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER").reset());
         System.out.println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
                 .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));

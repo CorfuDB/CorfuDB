@@ -56,8 +56,8 @@ public class SMRMapTest extends AbstractViewTest {
         getRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        //testMap.clear();  //TODO: handle the state where the mutator is used (sync at TXBegin?).
         getRuntime().getObjectsView().TXBegin();
-        testMap.clear();
         assertThat(testMap.put("a","a"))
                 .isNull();
         assertThat(testMap.put("a","b"))
@@ -65,10 +65,56 @@ public class SMRMapTest extends AbstractViewTest {
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
         getRuntime().getObjectsView().TXEnd();
-
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void objectViewCorrectlyReportsInsideTX()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+        assertThat(getRuntime().getObjectsView().TXActive())
+                .isFalse();
+        getRuntime().getObjectsView().TXBegin();
+        assertThat(getRuntime().getObjectsView().TXActive())
+                .isTrue();
+        getRuntime().getObjectsView().TXEnd();
+        assertThat(getRuntime().getObjectsView().TXActive())
+                .isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canUpdateSingleObjectTransacationallyWhenCached()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect()
+                .setCacheDisabled(false);
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        //testMap.clear();
+        getRuntime().getObjectsView().TXBegin();
+        assertThat(testMap.put("a","a"))
+                .isNull();
+        assertThat(testMap.put("a","b"))
+                .isEqualTo("a");
+        assertThat(testMap.get("a"))
+                .isEqualTo("b");
+        getRuntime().getObjectsView().TXEnd();
+        assertThat(testMap.get("a"))
+                .isEqualTo("b");
+    }
+
 
     @Test
     @SuppressWarnings("unchecked")
@@ -125,6 +171,5 @@ public class SMRMapTest extends AbstractViewTest {
         cf.join();
         assertThatThrownBy(() -> getRuntime().getObjectsView().TXEnd())
                 .isInstanceOf(TransactionAbortedException.class);
-
     }
 }

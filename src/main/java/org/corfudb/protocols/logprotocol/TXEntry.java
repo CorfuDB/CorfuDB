@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -90,14 +91,14 @@ public class TXEntry extends LogEntry {
                 // Currently backpointers aren't available so we must scan.
                 for (long i = e.getValue().getLastTimestamp() + 1; i < timestamp; i++)
                 {
-                    LogUnitReadResponseMsg.ReadResult rr = runtime.getAddressSpaceView().read(i).getResult();
+                    ILogUnitEntry rr = runtime.getAddressSpaceView().read(i).getResult();
                     if (rr.getResultType() ==
                             LogUnitReadResponseMsg.ReadResultType.DATA &&
                             ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
-                                    .contains(e.getKey()))
+                                    .contains(e.getKey()) && e.getValue().getLastTimestamp() != i)
                     {
-                        log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}", e.getKey(),
-                                i, timestamp);
+                        log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
+                                i, timestamp, e.getValue().getLastTimestamp());
                         return true;
                     }
                 }

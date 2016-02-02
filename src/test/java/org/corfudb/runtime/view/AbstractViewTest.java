@@ -35,7 +35,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     {
         routerMap.clear();
         serverMap.clear();
-        runtime.parseConfigurationString(getDefaultConfigurationString());
+        runtime.parseConfigurationString(getDefaultConfigurationString())
+                .setCacheDisabled(true); // Disable cache during unit tests to fully stress the system.
+        runtime.getAddressSpaceView().resetCaches();
     }
 
     /** Wire all registered servers to the correct router.
