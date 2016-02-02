@@ -34,6 +34,21 @@ public class CorfuRuntime {
     /** The rate in seconds to retry accessing a layout, in case of a failure. */
     public int retryRate;
 
+    /** Whether or not to disable the cache. */
+    @Getter
+    public boolean cacheDisabled;
+
+    /**
+     * Whether or not to disable the cache
+     * @param disable   True, if the cache should be disabled, false otherwise.
+     * @return          A CorfuRuntime to support chaining.
+     */
+    public CorfuRuntime setCacheDisabled(boolean disable)
+    {
+        this.cacheDisabled = disable;
+        return this;
+    }
+
     /** Get a UUID for a named stream.
      *
      * @param string    The name of the stream.

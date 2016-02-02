@@ -74,12 +74,14 @@ public class AddressSpaceView extends AbstractView {
         });
 
         // Insert this write to our local cache.
-        AbstractReplicationView.CachedLogUnitEntry cachedEntry =
-                new AbstractReplicationView.CachedLogUnitEntry(LogUnitReadResponseMsg.ReadResultType.DATA,
-                        data);
-        cachedEntry.setBackpointerMap(backpointerMap);
-        cachedEntry.setStreams(stream);
-        readCache.put(address, new AbstractReplicationView.ReadResult(address, cachedEntry));
+        if (!runtime.isCacheDisabled()) {
+            AbstractReplicationView.CachedLogUnitEntry cachedEntry =
+                    new AbstractReplicationView.CachedLogUnitEntry(LogUnitReadResponseMsg.ReadResultType.DATA,
+                            data);
+            cachedEntry.setBackpointerMap(backpointerMap);
+            cachedEntry.setStreams(stream);
+            readCache.put(address, new AbstractReplicationView.ReadResult(address, cachedEntry));
+        }
     }
 
     /**
@@ -90,7 +92,10 @@ public class AddressSpaceView extends AbstractView {
      */
     public AbstractReplicationView.ReadResult read(long address)
     {
-        return readCache.get(address);
+        if (!runtime.isCacheDisabled()) {
+            return readCache.get(address);
+        }
+        return fetch(address);
     }
 
     /**
