@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import lombok.Getter;
@@ -8,19 +7,14 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.util.CFUtils;
-import sun.rmi.runtime.Log;
 
 import java.time.Duration;
-import java.time.temporal.TemporalUnit;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 /** A view of the address space implemented by Corfu.
  *
