@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -12,17 +13,24 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -37,11 +45,18 @@ public class LogUnitServer implements IServer {
     /** The options map. */
     Map<String,Object> opts;
 
-    /** The file channel. */
-    FileChannel fc;
+    /** The log file prefix, which can be null if the server is in memory. */
+    String prefix;
 
-    /** The file pointer. */
-    AtomicLong filePointer;
+    @Data
+    class FileHandle {
+        final AtomicLong filePointer;
+        final FileChannel channel;
+        final RangeSet<Long> knownAddresses = TreeRangeSet.create();
+    }
+
+    /** A map mapping to file channels. */
+    Map<Long, FileHandle> channelMap;
 
     /** The garbage collection thread. */
     Thread gcThread;
@@ -85,20 +100,175 @@ public class LogUnitServer implements IServer {
             reset();
         }
         else {
-            try {
-                fc = FileChannel.open(FileSystems.getDefault().getPath((String) opts.get("--log-path") + File.separator + "log"),
-                        EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
-                                StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
-                filePointer = new AtomicLong(fc.size());
-                reset();
-                log.info("Opened file channel for file {}", opts.get("--log-path"));
-            } catch (Exception e)
-            {
-                log.error("Exception opening file channel, switching to in-memory mode.", e);
-            }
+            channelMap = new ConcurrentHashMap<>();
+            prefix = opts.get("--log-path") + File.separator + "log";
         }
+
+        reset();
+
         gcThread = new Thread(this::runGC);
         gcThread.start();
+    }
+
+    @Data
+    static class LogFileHeader {
+        static final String magic = "CORFULOG";
+        final int version;
+        final long flags;
+        ByteBuffer getBuffer()
+        {
+            ByteBuffer b = ByteBuffer.allocate(64);
+            // 0: "CORFULOG" header(8)
+            b.put(magic.getBytes(Charset.forName("UTF-8")),0, 8);
+            // 8: Version number(4)
+            b.putInt(version);
+            // 12: Flags (8)
+            b.putLong(flags);
+            // 20: Reserved (54)
+            b.position(64);
+            b.flip();
+            return b;
+        }
+        static LogFileHeader fromBuffer(ByteBuffer buffer)
+        {
+            byte[] bMagic = new byte[8];
+            buffer.get(bMagic, 0, 8);
+            if (!new String(bMagic).equals(magic))
+            {
+                log.warn("Encountered invalid magic, expected {}, got {}", magic, new String(bMagic));
+                throw new RuntimeException("Invalid header magic!");
+            }
+            return new LogFileHeader(buffer.getInt(), buffer.getLong());
+        }
+    }
+
+    /** Write the header for a Corfu log file.
+     *
+     * @param fc            The filechannel to use.
+     * @param pointer       The pointer to increment to the start position.
+     * @param version       The version number to write to the header.
+     * @param flags         Flags, if any to write to the header.
+     * @throws IOException
+     */
+    public void writeHeader(FileChannel fc, AtomicLong pointer, int version, long flags)
+            throws IOException
+    {
+        LogFileHeader lfg = new LogFileHeader(version, flags);
+        ByteBuffer b = lfg.getBuffer();
+        pointer.getAndAdd(b.remaining());
+        fc.write(b);
+        fc.force(true);
+    }
+
+    /** Read the header for a Corfu log file.
+     *
+     * @param fc            The filechannel to use.
+     * @param version       The version number to write to the header.
+     * @param flags         Flags, if any to write to the header.
+     * @throws IOException
+     */
+    public LogFileHeader readHeader(FileChannel fc)
+            throws IOException
+    {
+        ByteBuffer b = fc.map(FileChannel.MapMode.READ_ONLY, 0, 64);
+        return LogFileHeader.fromBuffer(b);
+    }
+
+    /** Write a log entry to a file.
+     *
+     * @param fh            The file handle to use.
+     * @param address       The address of the entry.
+     * @param entry         The LogUnitEntry to write.
+     */
+    public void writeEntry(FileHandle fh, long address, LogUnitEntry entry)
+        throws IOException
+    {
+        ByteBuf metadataBuffer = Unpooled.buffer();
+        LogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
+        int entrySize = entry.getBuffer().writerIndex() + metadataBuffer.writerIndex() + 24;
+        long pos = fh.getFilePointer().getAndAdd(entrySize);
+        MappedByteBuffer o = fh.getChannel().map(FileChannel.MapMode.READ_WRITE, pos, entrySize);
+        o.putInt(0x4C450000); // Flags
+        o.putLong(address); // the log unit address
+        o.putInt(entrySize); // Size
+        o.putInt(metadataBuffer.writerIndex()); // the metadata size
+        o.put(metadataBuffer.nioBuffer());
+        o.put(entry.buffer.nioBuffer());
+        metadataBuffer.release();
+        o.putShort(2, (short) 1); // written flag
+        o.flip();
+        o.force();
+    }
+
+    /** Find a log entry in a file.
+     * @param fh            The file handle to use.
+     * @param address       The address of the entry.
+     * @return              The log unit entry at that address, or NULL if there was no entry.
+     */
+    public LogUnitEntry readEntry(FileHandle fh, long address)
+        throws IOException
+    {
+        MappedByteBuffer o = fh.getChannel().map(FileChannel.MapMode.READ_ONLY, 64L, fh.getChannel().size());
+        while (o.hasRemaining())
+        {
+            short magic = o.getShort();
+            if (magic != 0x4C45)
+            {
+                return null;
+            }
+            short flags = o.getShort();
+            long addr = o.getLong();
+            fh.knownAddresses.add(Range.singleton(address));
+            int size = o.getInt();
+            if (addr != address)
+            {
+                o.position(o.position() + size-16); //skip over (size-20 is what we haven't read).
+                log.trace("Read address {}, not match, skipping. (remain={})", addr, o.remaining());
+            }
+            else {
+                log.debug("Entry at {} hit, reading.", address);
+                if (flags % 2 == 0) {
+                    log.error("Read a log entry but the write was torn, aborting!");
+                    throw new IOException("Torn write detected!");
+                }
+                int metadataMapSize = o.getInt();
+                ByteBuf mBuf = Unpooled.wrappedBuffer(o.slice());
+                o.position(o.position() + metadataMapSize);
+                ByteBuffer dBuf = o.slice();
+                dBuf.limit(size - 36);
+                return new LogUnitEntry(Unpooled.wrappedBuffer(dBuf),
+                        LogUnitMetadataMsg.mapFromBuffer(mBuf),
+                        false,
+                        true);
+            }
+        }
+        return null;
+    }
+
+    /** Gets the file channel for a particular address, creating it
+     * if is not present in the map.
+     * @param address   The address to open.
+     * @return          The FileChannel for that address.
+     */
+    public FileHandle getChannelForAddress(long address)
+    {
+        return channelMap.computeIfAbsent(address/10000, a -> {
+            String filePath = prefix + a.toString();
+            try {
+                FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
+                        EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
+                                StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+                AtomicLong fp = new AtomicLong();
+                writeHeader(fc, fp, 1, 0);
+                log.info("Created new log file at {}", filePath);
+                return new FileHandle(fp, fc);
+            }
+            catch (IOException e)
+            {
+                log.error("Error opening file {}", a, e);
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Override
@@ -160,10 +330,39 @@ public class LogUnitServer implements IServer {
         }
 
         dataCache = Caffeine.newBuilder()
-                .<Long,LogUnitEntry>weigher((k,v) -> v.buffer == null ? 1 : v.buffer.readableBytes())
+                .<Long, LogUnitEntry>weigher((k, v) -> v.buffer == null ? 1 : v.buffer.readableBytes())
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
-                .build(this::handleRetrieval);
+                .writer(new CacheWriter<Long, LogUnitEntry>() {
+                    @Override
+                    public void write(Long address, LogUnitEntry entry) {
+                        if (dataCache.getIfPresent(address) != null) {
+                            throw new RuntimeException("overwrite");
+                        }
+                        if (!entry.isPersisted && prefix != null) { //don't persist an entry twice.
+                            //evict the data by getting the next pointer.
+                            try {
+                                // make sure the entry doesn't currently exist...
+                                // (probably need a faster way to do this - high watermark?)
+                                FileHandle fh = getChannelForAddress(address);
+                                if (!fh.getKnownAddresses().contains(address)) {
+                                    writeEntry(fh, address, entry);
+                                } else {
+                                    throw new Exception("overwrite");
+                                }
+                                log.info("Disk_write[{}]: Written to disk.", address);
+                            } catch (Exception e) {
+                                log.error("Disk_write[{}]: Exception", address, e);
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void delete(Long aLong, LogUnitEntry logUnitEntry, RemovalCause removalCause) {
+                        // never need to delete
+                    }
+                }).build(this::handleRetrieval);
 
 
         // Hints are always in memory and never persisted.
@@ -187,95 +386,27 @@ public class LogUnitServer implements IServer {
      */
     public LogUnitEntry handleRetrieval(Long address) {
         log.trace("Retrieve[{}]", address);
-        if (fc == null)
+        if (prefix == null)
         {
             log.trace("This is an in-memory log unit, but a load was requested.");
             return null;
         }
-        else
+        FileHandle fh = getChannelForAddress(address);
+        try {
+            log.info("Got header {}", readHeader(fh.getChannel()));
+            return readEntry(getChannelForAddress(address), address);
+        } catch (Exception e)
         {
-            //do a linear scan of the correct file.
-            long rAddress;
-            long fAddress = 0;
-            try {
-                do {
-                    ByteBuffer entryMeta = fc.map(FileChannel.MapMode.READ_ONLY, fAddress, 21);
-                    int magic = entryMeta.getInt();
-                    if (magic != 0xDEAD)
-                    {
-                        log.warn("Retrieve[{}]: magic expected to be 0xDEAD but found {}!", address, magic);
-                    }
-                    int entrySize = entryMeta.getInt();
-                    rAddress = entryMeta.getLong();
-                    int mmapSize = entryMeta.getInt();
-                    byte control = entryMeta.get();
-                    if (rAddress == address && control == 0)
-                    {
-                        log.warn("Retrieve[{}]: Found data but incomplete (control=0), skipping!", address);
-                    }
-                    else if (rAddress == address)
-                    {
-                        ByteBuffer oData = fc.map(FileChannel.MapMode.READ_ONLY, fAddress+21+mmapSize, entrySize-21-mmapSize);
-                        ByteBuffer mData = fc.map(FileChannel.MapMode.READ_ONLY, fAddress+21,mmapSize);
-                        ByteBuf mBuf = Unpooled.wrappedBuffer(mData);
-                        log.trace("Retrieve[{}]: Match for data at address {}.", address, fAddress);
-                        LogUnitEntry o =  new LogUnitEntry(Unpooled.wrappedBuffer(oData),
-                                LogUnitMetadataMsg.mapFromBuffer(mBuf),
-                                false,
-                                true);
-                        mBuf.release();
-                        return o;
-                    }
-                    fAddress = fAddress + entrySize;
-                    if (entrySize == 0)
-                    {
-                        log.warn("Encountered entry size of 0, aborting.");
-                        break;
-                    }
-                }
-                while (fAddress < fc.size());
-                log.error("Retrieve[{}]: Couldn't find data in file!", address);
-                return null;
-            }
-            catch (Exception e)
-            {
-                log.error("Retrieve[{}]: Exception reading file.", e);
-                return null;
-            }
+            throw new RuntimeException(e);
         }
     }
 
     public void handleEviction(Long address, LogUnitEntry entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
         if (entry.buffer != null) {
-            if (fc == null) {
+            if (prefix == null) {
                 log.warn("This is an in-memory log unit, data@{} will be trimmed and lost due to {}!", address, cause);
                 trimRange.add(Range.closed(address, address));
-            } else if (!entry.isPersisted) { //don't persist an entry twice.
-                //evict the data by getting the next pointer.
-                try {
-                    ByteBuf metadataBuffer = Unpooled.buffer();
-                    LogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
-                    int entrySize = entry.getBuffer().writerIndex() + metadataBuffer.writerIndex() + 21;
-                    long entryPointer = filePointer.getAndAdd(entrySize);
-                    log.trace("Eviction[{}]: Mapped to {}", address, entryPointer);
-                    ByteBuffer pointerBuffer = fc.map(FileChannel.MapMode.READ_WRITE, entryPointer, 21);
-                    pointerBuffer.putInt(0xDEAD);
-                    pointerBuffer.putInt(entrySize);
-                    pointerBuffer.putLong(address);
-                    pointerBuffer.putInt(metadataBuffer.writerIndex());
-                    fc.write(metadataBuffer.nioBuffer(), entryPointer + 21);
-                    fc.write(entry.buffer.nioBuffer(), entryPointer + 21 + metadataBuffer.writerIndex());
-                    fc.force(true);
-                    metadataBuffer.release();
-                    pointerBuffer.put((byte) 1);
-                    pointerBuffer.flip();
-                    log.info("Eviction[{}]: Written to disk.", address);
-                }
-                catch (Exception e)
-                {
-                    log.error("Eviction[{}]: Exception", address, e);
-                }
             }
             // Free the internal buffer once the data has been evicted (in the case the server is not sync).
             entry.buffer.release();
@@ -317,13 +448,13 @@ public class LogUnitServer implements IServer {
         else {
             LogUnitEntry e = new LogUnitEntry(msg.getData(), msg.getMetadataMap(), false);
             e.getBuffer().retain();
-            if (e == dataCache.get(msg.getAddress(), (address) -> e)) {
+            try {
+                dataCache.put(msg.getAddress(), e);
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OK));
-            }
-            else
+            } catch (Exception ex)
             {
-                e.getBuffer().release();
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE));
+                e.getBuffer().release();
             }
         }
     }
