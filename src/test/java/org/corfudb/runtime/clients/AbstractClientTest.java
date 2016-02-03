@@ -32,6 +32,7 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
                 .put("--initial-token", "0")
                 .put("--memory", true)
                 .put("--single", false)
+                .put("--max-cache", "256M")
                 .build();
     }
 }

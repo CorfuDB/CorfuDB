@@ -59,6 +59,9 @@ public abstract class AbstractReplicationView {
         @Getter
         final Object payload;
 
+        @Getter
+        final int sizeEstimate;
+
         /**
          * Gets a ByteBuf representing the payload for this data.
          *
@@ -97,8 +100,10 @@ public abstract class AbstractReplicationView {
      * @param stream            The streams which will belong on this entry.
      * @param data              The data to write.
      * @param backpointerMap    The map of backpointers to write.
+     *
+     * @return The number of bytes that was remotely written.
      */
-    public abstract void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
+    public abstract int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
         throws OverwriteException;
 
     /** Read the given object from an address, using the replication method given.

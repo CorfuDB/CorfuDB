@@ -78,6 +78,18 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
         @Getter(lazy=true)
         private final Object payload = msg.getPayload();
 
+        @Getter(lazy=true)
+        private final int sizeEstimate = calculateSize();
+
+        private int calculateSize() {
+            if (msg.getResult() != ReadResultType.DATA) {
+                return 1; // Non-data objects essentially take up no space.
+            }
+            else {
+                // If we have a payload, get that.
+                return msg.getData().readableBytes();
+            }
+        }
     }
 
     /** The result of this read. */

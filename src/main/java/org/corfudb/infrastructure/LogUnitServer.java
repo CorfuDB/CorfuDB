@@ -12,6 +12,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
@@ -67,13 +68,19 @@ public class LogUnitServer implements IServer {
      */
     LoadingCache<Long, LogUnitReadResponseMsg.LogUnitEntry> dataCache;
 
+    long maxCacheSize;
+
     public LogUnitServer(Map<String, Object> opts)
     {
         this.opts = opts;
 
+        maxCacheSize = Utils.parseLong((String)opts.get("--max-cache"));
+
         if ((Boolean)opts.get("--memory")) {
-            log.warn("Log unit opened in-memory mode. This should be run for testing purposes only. The unit" +
-                    " WILL LOSE ALL DATA if it exits.");
+            log.warn("Log unit opened in-memory mode (Maximum size={}). " +
+                    "This should be run for testing purposes only. " +
+                    "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
+                    "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
             reset();
         }
         else {
@@ -150,9 +157,10 @@ public class LogUnitServer implements IServer {
             dataCache.asMap().values().parallelStream()
                     .map(m -> m.buffer.release());
         }
-        // Currently, only an in-memory configuration is supported.
+
         dataCache = Caffeine.newBuilder()
-                .maximumSize(10_000)
+                .<Long,LogUnitEntry>weigher((k,v) -> v.buffer == null ? 1 : v.buffer.readableBytes())
+                .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .build(this::handleRetrieval);
 

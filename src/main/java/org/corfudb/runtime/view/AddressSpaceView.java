@@ -47,8 +47,9 @@ public class AddressSpaceView extends AbstractView {
     /** Reset all in-memory caches. */
     public void resetCaches()
     {
-        readCache = Caffeine.newBuilder()
-                .maximumSize(10_000)
+        readCache = Caffeine.<Long, AbstractReplicationView.ReadResult>newBuilder()
+                .<Long, AbstractReplicationView.ReadResult>weigher((k,v) -> v.result.getSizeEstimate())
+                .maximumWeight(runtime.getMaxCacheSize())
                 .build(this::cacheFetch);
     }
 
@@ -63,19 +64,14 @@ public class AddressSpaceView extends AbstractView {
     public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
     throws OverwriteException
     {
-        layoutHelper(
-          (LayoutFunction<Layout, Void, OverwriteException, RuntimeException, RuntimeException, RuntimeException>)
-                l -> {
-           AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address))
-                   .write(address, stream, data, backpointerMap);
-           return null;
-        });
+        int numBytes = layoutHelper(l -> AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address))
+                   .write(address, stream, data, backpointerMap));
 
         // Insert this write to our local cache.
         if (!runtime.isCacheDisabled()) {
             AbstractReplicationView.CachedLogUnitEntry cachedEntry =
                     new AbstractReplicationView.CachedLogUnitEntry(LogUnitReadResponseMsg.ReadResultType.DATA,
-                            data);
+                            data, numBytes);
             cachedEntry.setBackpointerMap(backpointerMap);
             cachedEntry.setStreams(stream);
             readCache.put(address, new AbstractReplicationView.ReadResult(address, cachedEntry));
@@ -140,7 +136,6 @@ public class AddressSpaceView extends AbstractView {
     throws OverwriteException
     {
         layoutHelper(
-                (LayoutFunction<Layout, Void, OverwriteException, RuntimeException, RuntimeException, RuntimeException>)
                 l -> {AbstractReplicationView
                 .getReplicationView(l, l.getReplicationMode(address))
                 .fillHole(address);

@@ -34,9 +34,17 @@ public class CorfuRuntime {
     /** The rate in seconds to retry accessing a layout, in case of a failure. */
     public int retryRate;
 
+    //region Address Space Options
+
     /** Whether or not to disable the cache. */
     @Getter
-    public boolean cacheDisabled;
+    public boolean cacheDisabled = false;
+
+    /** The maximum size of the cache, in bytes. */
+    @Getter
+    public int maxCacheSize = 100_000_000;
+
+    //endregion Address Space Options
 
     /**
      * Whether or not to disable the cache
