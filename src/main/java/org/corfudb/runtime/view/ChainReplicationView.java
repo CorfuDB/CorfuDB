@@ -1,10 +1,14 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.util.concurrent.Uninterruptibles;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.serializer.CorfuSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import java.util.Map;
 import java.util.Set;
@@ -41,17 +45,29 @@ public class ChainReplicationView extends AbstractReplicationView {
      * @param data    The data to write.
      */
     @Override
-    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
+    public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
     throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
+        int payloadBytes = 0;
         for (int i = 0; i < numUnits; i++)
         {
             log.trace("Write[{}]: chain {}/{}", address, i+1, numUnits);
             // In chain replication, we write synchronously to every unit in the chain.
+            // To reduce the overhead of serialization, we serialize only the first time we write, saving
+            // when we go down the chain.
+            ByteBuf b = ByteBufAllocator.DEFAULT.directBuffer();
+            try {
+                Serializers.getSerializer(Serializers.SerializerType.CORFU)
+                        .serialize(data, b);
+                payloadBytes = b.readableBytes();
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
                                 .write(address, stream, 0L, data, backpointerMap), OverwriteException.class);
+            } finally {
+                b.release();
+            }
         }
+        return payloadBytes;
     }
 
     /**

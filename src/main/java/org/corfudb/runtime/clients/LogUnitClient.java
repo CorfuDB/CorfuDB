@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -91,6 +92,28 @@ public class LogUnitClient implements IClient {
         w.setRank(rank);
         w.setBackpointerMap(backpointerMap);
         w.setPayload(writeObject);
+        return router.sendMessageAndGetCompletable(w);
+    }
+
+    /**
+     * Asynchronously write to the logging unit.
+     *
+     * @param address           The address to write to.
+     * @param streams           The streams, if any, that this write belongs to.
+     * @param rank              The rank of this write (used for quorum replication).
+     * @param buffer            The object, post-serialization, to write.
+     * @param backpointerMap    The map of backpointers to write.
+     * @return A CompletableFuture which will complete with the WriteResult once the
+     * write completes.
+     */
+    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
+                                            ByteBuf buffer, Map<UUID,Long> backpointerMap)
+    {
+        LogUnitWriteMsg w = new LogUnitWriteMsg(address);
+        w.setStreams(streams);
+        w.setRank(rank);
+        w.setBackpointerMap(backpointerMap);
+        w.setData(buffer);
         return router.sendMessageAndGetCompletable(w);
     }
 

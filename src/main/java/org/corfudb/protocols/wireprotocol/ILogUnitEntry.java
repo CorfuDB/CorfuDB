@@ -33,4 +33,12 @@ public interface ILogUnitEntry extends IMetadata {
      * @return  An object representing the deserialized payload.
      */
     Object getPayload();
+
+    /** Get an estimate of how large this entry is in memory.
+     *
+     * @return  An estimate on the size of this object, in bytes.
+     */
+    default int getSizeEstimate() {
+        return 1; // The default is that we don't know, so we return 1.
+    }
 }

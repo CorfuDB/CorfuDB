@@ -110,6 +110,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .put("--initial-token", "0")
                 .put("--memory", true)
                 .put("--single", true)
+                .put("--max-cache", "256M")
                 .put("--address", getDefaultEndpoint().split(":")[0])
                 .put("<port>", getDefaultEndpoint().split(":")[1])
                 .build();

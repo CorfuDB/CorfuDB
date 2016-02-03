@@ -5,6 +5,7 @@ import lombok.NonNull;
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.text.DecimalFormat;
 import java.util.UUID;
 
 /**
@@ -13,6 +14,70 @@ import java.util.UUID;
 
 public class Utils
 {
+    /**
+     * A fancy parser which parses suffixes.
+     * @param toParse
+     * @return
+     */
+    public static long parseLong(final String toParse) {
+        if (toParse.matches("[0-9]*[A-Za-z]$"))
+        {
+            long multiplier;
+            char suffix = toParse.toUpperCase().charAt(toParse.length() - 1);
+            switch (suffix)
+            {
+                case 'E':
+                    multiplier = 1_000_000_000_000_000_000L;
+                    break;
+                case 'P':
+                    multiplier = 1_000_000_000_000_000L;
+                    break;
+                case 'T':
+                    multiplier = 1_000_000_000_000L;
+                    break;
+                case 'G':
+                    multiplier = 1_000_000_000L;
+                    break;
+                case 'M':
+                    multiplier = 1_000_000L;
+                    break;
+                case 'K':
+                    multiplier = 1_000L;
+                    break;
+                default:
+                    throw new NumberFormatException("Unknown suffix: '" + suffix + "'!");
+            }
+            return Long.parseLong(toParse.substring(0, toParse.length() - 2)) * multiplier;
+        }
+        else {
+            return Long.parseLong(toParse);
+        }
+    }
+
+
+    /** Convert to byte string representation.
+     * from http://stackoverflow.com/questions/3758606/how-to-convert-byte-size-into-human-readable-format-in-java
+     * @param value         The value to convert.
+     * @return              A string for bytes (i.e, 10GB).
+     */
+    public static String convertToByteStringRepresentation(final long value){
+        final long[] dividers = new long[] { 1_000_000_000_000L, 1_000_000_000, 1_000_000, 1_000, 1 };
+        final String[] units = new String[] { "TB", "GB", "MB", "KB", "B" };
+        if(value < 1)
+            throw new IllegalArgumentException("Invalid file size: " + value);
+        String result = null;
+        for(int i = 0; i < dividers.length; i++){
+            final long divider = dividers[i];
+            if(value >= divider){
+                final double cresult =
+                        divider > 1 ? (double) value / (double) divider : (double) value;
+                result = new DecimalFormat("#,##0.#").format(cresult) + " " + units[i];
+                break;
+            }
+        }
+        return result;
+    }
+
     public static ByteBuffer serialize(Object obj)
     {
         try
@@ -30,6 +95,7 @@ public class Utils
             throw new RuntimeException(e);
         }
     }
+
     public static Object deserialize(ByteBuffer b)
     {
         try
