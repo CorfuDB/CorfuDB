@@ -176,7 +176,7 @@ public class LogUnitServer implements IServer {
      *                  the read() and write(). Any address that cannot be retrieved should be returned as
      *                  unwritten (null).
      */
-    public LogUnitEntry handleRetrieval(Long address) {
+    public synchronized LogUnitEntry handleRetrieval(Long address) {
         log.trace("Retrieve[{}]", address);
         if (fc == null)
         {
@@ -236,7 +236,7 @@ public class LogUnitServer implements IServer {
         }
     }
 
-    public void handleEviction(Long address, LogUnitEntry entry, RemovalCause cause) {
+    public synchronized void handleEviction(Long address, LogUnitEntry entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
         if (entry.buffer != null) {
             if (fc == null) {
