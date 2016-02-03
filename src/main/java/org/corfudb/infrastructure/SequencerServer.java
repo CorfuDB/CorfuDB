@@ -1,17 +1,29 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
 import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
+import org.corfudb.util.Utils;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.FileSystems;
+import java.nio.file.StandardOpenOption;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -34,10 +46,24 @@ public class SequencerServer implements IServer {
 
     AtomicLong globalIndex;
 
+    /** The file channel. */
+    FileChannel fc;
+
     /**
      * A simple map of the most recently issued token for any given stream.
      */
     ConcurrentHashMap<UUID, Long> lastIssuedMap;
+
+    /**
+     * A scheduler, which is used to schedule checkpoints and lease renewal
+     */
+    private final ScheduledExecutorService scheduler =
+            Executors.newScheduledThreadPool(
+                    1,
+                    new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat("Seq-Checkpoint-%d")
+                            .build());
 
     public SequencerServer(Map<String,Object> opts)
     {
@@ -46,11 +72,38 @@ public class SequencerServer implements IServer {
         globalIndex = new AtomicLong();
 
         try {
-           long newIndex = Long.parseLong((String)opts.get("--initial-token"));
+            if (!(Boolean) opts.get("--memory"))
+            {
+                fc = FileChannel.open(FileSystems.getDefault().getPath(opts.get("--log-path")
+                                + File.separator + "sequencer_checkpoint"),
+                        EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
+                                StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+                // schedule checkpointing.
+                scheduler.scheduleAtFixedRate(this::checkpointState,
+                        Utils.parseLong(opts.get("--checkpoint")),
+                        Utils.parseLong(opts.get("--checkpoint")),
+                        TimeUnit.SECONDS);
+            }
+
+           long newIndex = Utils.parseLong(opts.get("--initial-token"));
             if (newIndex == -1)
             {
-                log.warn("Sequencer recovery requested but not implemented, defaulting to 0.");
-                globalIndex.set(0);
+                if (!(Boolean) opts.get("--memory"))
+                {
+                    ByteBuffer b = ByteBuffer.allocate((int)fc.size());
+                    fc.read(b);
+                    if (fc.size() >= 8) {
+                        globalIndex.set(b.getLong(0));
+                    }
+                    else {
+                        log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
+                        globalIndex.set(0);
+                    }
+                }
+                else {
+                    log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
+                    globalIndex.set(0);
+                }
             }
             else
             {
@@ -61,6 +114,24 @@ public class SequencerServer implements IServer {
         catch (Exception ex)
         {
             log.warn("Exception parsing initial token, default to 0.", ex);
+        }
+    }
+
+    /** Checkpoints the state of the sequencer.
+     *
+     */
+    public void checkpointState() {
+        ByteBuffer b = ByteBuffer.allocate(8);
+        long checkpointAddress = globalIndex.get();
+        b.putLong(globalIndex.get());
+        b.flip();
+        try {
+            fc.write(b, 0L);
+            fc.force(true);
+            log.debug("Sequencer state successfully checkpointed at {}", checkpointAddress);
+        } catch (IOException ie)
+        {
+            log.warn("Sequencer checkpoint failed due to exception", ie);
         }
     }
 
@@ -116,5 +187,20 @@ public class SequencerServer implements IServer {
     @Override
     public void reset() {
         globalIndex.set(0L);
+    }
+
+    /**
+     * Shutdown the server.
+     */
+    @Override
+    public void shutdown() {
+        try {
+            scheduler.shutdownNow();
+            checkpointState();
+            fc.close();
+        } catch (IOException ie)
+        {
+            log.warn("Error checkpointing server during shutdown!", ie);
+        }
     }
 }

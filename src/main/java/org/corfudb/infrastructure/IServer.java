@@ -20,4 +20,11 @@ public interface IServer {
      *
      */
     void reset();
+
+    /** Shutdown the server.
+     *
+     */
+    default void shutdown() {
+
+    }
 }

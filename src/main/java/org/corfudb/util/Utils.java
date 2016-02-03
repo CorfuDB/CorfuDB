@@ -19,7 +19,16 @@ public class Utils
      * @param toParse
      * @return
      */
-    public static long parseLong(final String toParse) {
+    public static long parseLong(final Object toParseObj) {
+        if (toParseObj instanceof Long)
+        {
+            return (Long) toParseObj;
+        }
+        if (toParseObj instanceof Integer)
+        {
+            return (Integer) toParseObj;
+        }
+        String toParse = (String) toParseObj;
         if (toParse.matches("[0-9]*[A-Za-z]$"))
         {
             long multiplier;
