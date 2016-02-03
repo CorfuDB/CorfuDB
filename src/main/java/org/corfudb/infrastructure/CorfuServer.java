@@ -26,6 +26,7 @@ import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.util.Map;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -59,22 +60,24 @@ public class CorfuServer {
             "Corfu Server, the server for the Corfu Infrastructure.\n"
             + "\n"
             + "Usage:\n"
-            + "\tcorfu_server (-l <path>|-m) [-s] [-a <address>] [-t <token>] [-c <size>] [-d <level>] <port>\n"
+            + "\tcorfu_server (-l <path>|-m) [-s] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] <port>\n"
             + "\n"
             + "Options:\n"
-            + " -l <path>, --log-path=<path>         Set the path to the storage file for the log unit.\n"
-            + " -s, --single                         Deploy a single-node configuration.\n"
-            + "                                      The server will be bootstrapped with a simple one-unit layout.\n"
-            + " -a <address>, --address=<address>    IP address to advertise to external clients [default: localhost].\n"
-            + " -m, --memory                         Run the unit in-memory (non-persistent).\n"
-            + "                                      Data will be lost when the server exits!\n"
-            + " -c <size>, --max-cache=<size>        The size of the in-memory cache to serve requests from -\n"
-            + "                                      If there is no log, then this is the max size of the log unit\n"
-            + "                                      evicted entries will be auto-trimmed. [default: 1000000000].\n"
-            + " -t <token>, --initial-token=<token>  The first token the sequencer will issue, or -1 to recover\n"
-            + "                                      from the log. [default: -1].\n"
-            + " -d <level>, --log-level=<level>      Set the logging level, valid levels are: \n"
-            + "                                      ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
+            + " -l <path>, --log-path=<path>            Set the path to the storage file for the log unit.\n"
+            + " -s, --single                            Deploy a single-node configuration.\n"
+            + "                                         The server will be bootstrapped with a simple one-unit layout.\n"
+            + " -a <address>, --address=<address>       IP address to advertise to external clients [default: localhost].\n"
+            + " -m, --memory                            Run the unit in-memory (non-persistent).\n"
+            + "                                         Data will be lost when the server exits!\n"
+            + " -c <size>, --max-cache=<size>           The size of the in-memory cache to serve requests from -\n"
+            + "                                         If there is no log, then this is the max size of the log unit\n"
+            + "                                         evicted entries will be auto-trimmed. [default: 1000000000].\n"
+            + " -t <token>, --initial-token=<token>     The first token the sequencer will issue, or -1 to recover\n"
+            + "                                         from the log. [default: -1].\n"
+            + " -k <seconds>, --checkpoint=<seconds>    The rate the sequencer should checkpoint its state to disk,\n"
+            + "                                         in seconds [default: 60].\n"
+            + " -d <level>, --log-level=<level>         Set the logging level, valid levels are: \n"
+            + "                                         ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
             + " -h, --help  Show this screen\n"
             + " --version  Show version\n";
 
@@ -104,6 +107,9 @@ public class CorfuServer {
         System.out.println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
                 .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
         System.out.println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
+        System.out.println(ansi().a("Service directory: ").fg(WHITE).a(
+                (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                        opts.get("--log-path")).reset());
 
         // Pick the correct logging level before outputting error messages.
         Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
@@ -130,6 +136,23 @@ public class CorfuServer {
         }
 
         log.debug("Started with arguments: " + opts);
+
+        // Create the service directory if it does not exist.
+        if (!(Boolean)opts.get("--memory"))
+        {
+            File serviceDir = new File((String)opts.get("--log-path"));
+
+            if (!serviceDir.exists()) {
+                if (serviceDir.mkdirs())
+                {
+                    log.info("Created new service directory at {}.", serviceDir);
+                }
+            }
+            else if (!serviceDir.isDirectory()) {
+                log.error("Service directory {} does not point to a directory. Aborting.", serviceDir);
+                throw new RuntimeException("Service directory must be a directory!");
+            }
+        }
 
         // Now, we start the Netty router, and have it route to the correct port.
         NettyServerRouter router = new NettyServerRouter();

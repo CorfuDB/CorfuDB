@@ -16,6 +16,7 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileSystems;
@@ -85,7 +86,7 @@ public class LogUnitServer implements IServer {
         }
         else {
             try {
-                fc = FileChannel.open(FileSystems.getDefault().getPath((String) opts.get("--log-path")),
+                fc = FileChannel.open(FileSystems.getDefault().getPath((String) opts.get("--log-path") + File.separator + "log"),
                         EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
                                 StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
                 filePointer = new AtomicLong(fc.size());
@@ -248,7 +249,8 @@ public class LogUnitServer implements IServer {
         log.trace("Eviction[{}]: {}", address, cause);
         if (entry.buffer != null) {
             if (fc == null) {
-                log.warn("This is an in-memory log unit, data@{} will be evicted and lost due to {}!", address, cause);
+                log.warn("This is an in-memory log unit, data@{} will be trimmed and lost due to {}!", address, cause);
+                trimRange.add(Range.closed(address, address));
             } else if (!entry.isPersisted) { //don't persist an entry twice.
                 //evict the data by getting the next pointer.
                 try {

@@ -1,14 +1,18 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.io.Files;
 import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
 import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
 import java.util.Collections;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.SequencerServerAssertions.assertThat;
 
 /**
  * Created by mwei on 12/13/15.
@@ -101,6 +105,38 @@ public class SequencerServerTest extends AbstractServerTest {
             assertThat(thisTokenB)
                     .isGreaterThan(checkTokenA2);
         }
+    }
+
+    @Test
+    public void checkSequencerCheckpointingWorks()
+            throws Exception
+    {
+       String serviceDir = Files.createTempDir().getAbsolutePath();
+
+       SequencerServer s1 = new SequencerServer(new ImmutableMap.Builder<String,Object>()
+            .put("--initial-token", "0")
+            .put("--log-path", serviceDir)
+            .put("--memory", false)
+            .put("--checkpoint", 1)
+            .build());
+
+        this.router.setServerUnderTest(s1);
+        sendMessage(new TokenRequestMsg(Collections.singleton(CorfuRuntime.getStreamID("a")), 1));
+        sendMessage(new TokenRequestMsg(Collections.singleton(CorfuRuntime.getStreamID("a")), 1));
+        assertThat(s1)
+                .tokenIsAt(2);
+        Thread.sleep(1400);
+        s1.shutdown();
+
+        SequencerServer s2 = new SequencerServer(new ImmutableMap.Builder<String,Object>()
+                .put("--initial-token", -1)
+                .put("--log-path", serviceDir)
+                .put("--memory", false)
+                .put("--checkpoint", 1)
+                .build());
+        this.router.setServerUnderTest(s2);
+        assertThat(s2)
+                .tokenIsAt(2);
     }
 
 }
