@@ -1,6 +1,8 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.util.serializer.CorfuSerializer;
@@ -44,6 +46,12 @@ public class LogUnitPayloadMsg extends LogUnitMetadataMsg {
 
     public ByteBuf getData()
     {
+        if (data == null)
+        {
+            ByteBuf d = UnpooledByteBufAllocator.DEFAULT.buffer();
+            serializer.serialize(payload, d);
+            data = d;
+        }
         return data.duplicate();
     }
 

@@ -90,7 +90,7 @@ public class LogUnitServer implements IServer {
     {
         this.opts = opts;
 
-        maxCacheSize = Utils.parseLong((String)opts.get("--max-cache"));
+        maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
 
         if ((Boolean)opts.get("--memory")) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). " +
@@ -235,7 +235,7 @@ public class LogUnitServer implements IServer {
                 ByteBuf mBuf = Unpooled.wrappedBuffer(o.slice());
                 o.position(o.position() + metadataMapSize);
                 ByteBuffer dBuf = o.slice();
-                dBuf.limit(size - 36);
+                dBuf.limit(size - metadataMapSize - 24);
                 return new LogUnitEntry(Unpooled.wrappedBuffer(dBuf),
                         LogUnitMetadataMsg.mapFromBuffer(mBuf),
                         false,
