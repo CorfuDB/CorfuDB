@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.io.Files;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -8,6 +9,8 @@ import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 
+import java.io.File;
+import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.Map;
 
@@ -56,9 +59,17 @@ public class LayoutServer implements IServer {
     /** The current phase 2 rank, which should be equal to the epoch. */
     long phase2Rank;
 
+    /** Th layout file, or null if in memory. */
+    File layoutFile;
+
     public LayoutServer(Map<String, Object> opts)
     {
         this.opts = opts;
+
+        if (!(Boolean) opts.get("--memory"))
+        {
+            layoutFile = new File(opts.get("--log-path") + File.separator + "layout");
+        }
 
         if ((Boolean)opts.get("--single"))
         {
@@ -78,11 +89,49 @@ public class LayoutServer implements IServer {
             );
 
             phase1Rank = phase2Rank = 0;
+            saveCurrentLayout();
         }
         else
         {
-            log.warn("Layout server started, but no layout log found. Starting uninitialized layout server.");
-            currentLayout = null;
+            try {
+                if (layoutFile == null) {
+                    log.info("Layout server started, but in-memory mode set without bootstrap. " +
+                            "Starting uninitialized layout server.");
+                    currentLayout = null;
+                }
+                else if (!layoutFile.exists())
+                {
+                    log.warn("Layout server started, but no layout log found. Starting uninitialized layout server.");
+                    currentLayout = null;
+                }
+                else {
+                    String l = Files.toString(layoutFile, Charset.defaultCharset());
+                    currentLayout = Layout.fromJSONString(l);
+                    phase1Rank = phase2Rank = currentLayout.getEpoch();
+                    log.info("Layout server started with layout from disk: {}.", currentLayout);
+                }
+            }
+            catch (Exception e)
+            {
+                log.error("Error reading from layout server", e);
+                currentLayout = null;
+            }
+        }
+    }
+
+    /** Save the current layout to disk, if not in-memory mode.
+     *
+     */
+    public void saveCurrentLayout() {
+        if (layoutFile != null)
+        {
+            try {
+                Files.write(currentLayout.asJSONString().getBytes(), layoutFile);
+                log.info("Layout epoch {} saved to disk.", currentLayout.getEpoch());
+            } catch (Exception e)
+            {
+                log.error("Error saving layout to disk!", e);
+            }
         }
     }
 
@@ -150,6 +199,7 @@ public class LayoutServer implements IServer {
                             ((LayoutRankMsg) msg).getLayout());
                     phase2Rank = ((LayoutRankMsg) msg).getRank();
                     currentLayout =  ((LayoutRankMsg) msg).getLayout();
+                    saveCurrentLayout();
                     r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
                 }
             }

@@ -1,14 +1,19 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.io.Files;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
+import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 
 /**
  * Created by mwei on 12/14/15.
@@ -124,5 +129,55 @@ public class LayoutServerTest extends AbstractServerTest {
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
     }
 
+    @Test
+    public void checkThatLayoutIsPersisted()
+            throws Exception
+    {
+        String serviceDir = Files.createTempDir().getAbsolutePath();
+
+        LayoutServer s1 = new LayoutServer(new ImmutableMap.Builder<String,Object>()
+                .put("--log-path", serviceDir)
+                .put("--memory", false)
+                .put("--single", false)
+                .build());
+
+        this.router.setServerUnderTest(s1);
+        bootstrapServer(getTestLayout());
+        Layout l100 = getTestLayout();
+        l100.setEpoch(100);
+        sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        sendMessage(new LayoutRankMsg(l100, 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        assertThat(s1)
+                .isInEpoch(100);
+        assertThat(s1)
+                .isPhase1Rank(100);
+        assertThat(s1)
+                .isPhase2Rank(100);
+        s1.shutdown();
+
+        LayoutServer s2 = new LayoutServer(new ImmutableMap.Builder<String,Object>()
+                .put("--log-path", serviceDir)
+                .put("--single", false)
+                .put("--memory", false)
+                .build());
+        this.router.setServerUnderTest(s2);
+        assertThat(s2)
+                .isInEpoch(100);
+        assertThat(s2)
+                .isPhase1Rank(100);
+        assertThat(s2)
+                .isPhase2Rank(100);
+
+        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
+        assertThat(((LayoutMsg)getLastMessage()).getLayout().getEpoch())
+                .isEqualTo(100);
+    }
 
 }

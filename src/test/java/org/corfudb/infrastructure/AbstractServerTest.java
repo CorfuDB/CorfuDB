@@ -59,6 +59,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         return new ImmutableMap.Builder<String,Object>()
                         .put("--initial-token", "0")
                         .put("--single", false)
+                        .put("--memory", true)
                         .build();
     }
 }

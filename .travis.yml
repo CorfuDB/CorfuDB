@@ -11,9 +11,10 @@ after_success:
 - .travis_scripts/javadocs.sh
 - .travis_scripts/mvnrepo.sh
 - .travis_scripts/push_deb.sh
+before_cache:
+- rm -rf $HOME/.m2/repository/org/corfudb/corfu
 cache:
   directories:
-  - $HOME/thrift
   - $HOME/.m2
 notifications:
   email:

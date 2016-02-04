@@ -180,7 +180,10 @@ public class Layout implements Cloneable {
         return parser.toJson(this);
     }
 
-
+    /** Get a layout from a JSON string. */
+    public static Layout fromJSONString(String json) {
+        return parser.fromJson(json, Layout.class);
+    }
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, long epoch)
     {
         this.layoutServers = layoutServers;
