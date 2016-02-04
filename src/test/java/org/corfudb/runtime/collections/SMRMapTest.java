@@ -1,6 +1,8 @@
 package org.corfudb.runtime.collections;
 
+import io.netty.util.concurrent.CompleteFuture;
 import lombok.Getter;
+import net.jodah.concurrentunit.Waiter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
@@ -12,6 +14,9 @@ import org.junit.Test;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,6 +47,77 @@ public class SMRMapTest extends AbstractViewTest {
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void loadsFollowedByGets()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        testMap.clear();
+        for (int i = 0; i < 100_000; i++) {
+            assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
+                    .isNull();
+        }
+        for (int i = 0; i < 100_000; i++) {
+            assertThat(testMap.get(Integer.toString(i)))
+                    .isEqualTo(Integer.toString(i));
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void loadsFollowedByGetsConcurrent()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+
+        Waiter r = new Waiter();
+        final int num_threads = 5;
+        final int num_records = 10_000;
+        testMap.clear();
+
+        ExecutorService es = Executors.newFixedThreadPool(num_threads);
+        for (int thread_number = 0; thread_number < num_threads; thread_number++) {
+            final int number = thread_number;
+            Runnable t = () -> {
+                int base = number * num_records;
+                for (int i = base; i < base + num_records; i++) {
+                    r.assertEquals(null, testMap.put(Integer.toString(i), Integer.toString(i)));
+                }
+                r.resume();
+            };
+            es.execute(t);
+        }
+        r.await(20_000, num_threads);
+
+        for (int thread_number = 0; thread_number < num_threads; thread_number++) {
+            final int number = thread_number;
+            Runnable t = () -> {
+                int base = number * num_records;
+                for (int i = base; i < base + num_records; i++) {
+                    r.assertEquals(Integer.toString(i), testMap.get(Integer.toString(i)));
+                }
+                r.resume();
+            };
+            es.execute(t);
+        }
+
+        r.await(20_000, num_threads);
+        es.shutdown();
     }
 
     @Test

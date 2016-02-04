@@ -156,6 +156,12 @@
             <artifactId>byte-buddy</artifactId>
             <version>0.7.8</version>
         </dependency>
+        <dependency>
+            <groupId>net.jodah</groupId>
+            <artifactId>concurrentunit</artifactId>
+            <version>0.4.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
