@@ -183,6 +183,8 @@ public class LogUnitServer implements IServer {
     public void writeEntry(FileHandle fh, long address, LogUnitEntry entry)
         throws IOException
     {
+        if (fh.getKnownAddresses().contains(address)) {throw new IOException("overwrite");}
+        fh.getKnownAddresses().add(Range.singleton(address));
         ByteBuf metadataBuffer = Unpooled.buffer();
         LogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
         int entrySize = entry.getBuffer().writerIndex() + metadataBuffer.writerIndex() + 24;
@@ -218,7 +220,8 @@ public class LogUnitServer implements IServer {
             }
             short flags = o.getShort();
             long addr = o.getLong();
-            fh.knownAddresses.add(Range.singleton(address));
+            if (address == -1) {
+            fh.knownAddresses.add(Range.singleton(addr)); }
             int size = o.getInt();
             if (addr != address)
             {
@@ -258,10 +261,15 @@ public class LogUnitServer implements IServer {
                 FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
                         EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
                                 StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+
                 AtomicLong fp = new AtomicLong();
                 writeHeader(fc, fp, 1, 0);
-                log.info("Created new log file at {}", filePath);
-                return new FileHandle(fp, fc);
+                log.info("Opened new log file at {}", filePath);
+                FileHandle fh = new FileHandle(fp, fc);
+                // The first time we open a file we should read to the end, to load the
+                // map of entries we already have.
+                readEntry(fh, -1);
+                return fh;
             }
             catch (IOException e)
             {
