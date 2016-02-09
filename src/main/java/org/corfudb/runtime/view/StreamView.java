@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * Created by mwei on 12/11/15.
@@ -50,11 +51,34 @@ public class StreamView implements AutoCloseable {
      */
     public long write(Object object)
     {
+        return acquireAndWrite(object, null, null);
+    }
+
+    /** Write an object to this stream, returning the physical address it
+     * was written at.
+     *
+     * Note: While the completion of this operation guarantees that the write
+     * has been persisted, it DOES NOT guarantee that the object has been
+     * written to the stream. For example, another client may have deleted
+     * the stream.
+     *
+     * @param object              The object to write to the stream.
+     * @param acquisitionCallback A function which will be called after the successful acquisition
+     *                            of a token, but before the data is written.
+     * @param deacquisitionCallback A function which will be called after an overwrite error is encountered
+     *                              on a previously acquired token.
+     * @return                    The address this object was written at.
+     */
+    public long acquireAndWrite(Object object, Consumer<Long> acquisitionCallback, Consumer<Long> deacquisitionCallback)
+    {
         while (true) {
             SequencerClient.TokenResponse tokenResponse =
                     runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
             long token = tokenResponse.getToken();
             log.trace("Write[{}]: acquired token = {}", streamID, token);
+            if (acquisitionCallback != null) {
+                acquisitionCallback.accept(token);
+            }
             try {
                 runtime.getAddressSpaceView().write(token, Collections.singleton(streamID),
                         object, tokenResponse.getBackpointerMap());
