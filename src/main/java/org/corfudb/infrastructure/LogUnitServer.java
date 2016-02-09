@@ -61,6 +61,24 @@ public class LogUnitServer implements IServer {
         final AtomicLong filePointer;
         final FileChannel channel;
         final RangeSet<Long> knownAddresses = TreeRangeSet.create();
+        @Getter(lazy=true)
+        private final MappedByteBuffer byteBuffer = getMappedBuffer();
+        public ByteBuffer getMapForRegion(int offset, int size)
+        {
+            ByteBuffer o = getByteBuffer().duplicate();
+            o.position(offset);
+            return o.slice();
+        }
+        private MappedByteBuffer getMappedBuffer() {
+            try {
+                return channel.map(FileChannel.MapMode.READ_WRITE, 0L, Integer.MAX_VALUE);
+            }
+            catch (IOException ie)
+            {
+                log.error("Failed to map buffer for channel.");
+                throw new RuntimeException(ie);
+            }
+        }
     }
 
     /** A map mapping to file channels. */
@@ -195,7 +213,7 @@ public class LogUnitServer implements IServer {
         LogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
         int entrySize = entry.getBuffer().writerIndex() + metadataBuffer.writerIndex() + 24;
         long pos = fh.getFilePointer().getAndAdd(entrySize);
-        MappedByteBuffer o = fh.getChannel().map(FileChannel.MapMode.READ_WRITE, pos, entrySize);
+        ByteBuffer o = fh.getMapForRegion((int)pos, entrySize);
         o.putInt(0x4C450000); // Flags
         o.putLong(address); // the log unit address
         o.putInt(entrySize); // Size
@@ -205,7 +223,6 @@ public class LogUnitServer implements IServer {
         metadataBuffer.release();
         o.putShort(2, (short) 1); // written flag
         o.flip();
-        o.force();
     }
 
     /** Find a log entry in a file.
@@ -216,7 +233,7 @@ public class LogUnitServer implements IServer {
     public LogUnitEntry readEntry(FileHandle fh, long address)
         throws IOException
     {
-        MappedByteBuffer o = fh.getChannel().map(FileChannel.MapMode.READ_ONLY, 64L, fh.getChannel().size());
+        ByteBuffer o = fh.getMapForRegion(64, (int)fh.getChannel().size());
         while (o.hasRemaining())
         {
             short magic = o.getShort();
@@ -232,10 +249,10 @@ public class LogUnitServer implements IServer {
             if (addr != address)
             {
                 o.position(o.position() + size-16); //skip over (size-20 is what we haven't read).
-                log.trace("Read address {}, not match, skipping. (remain={})", addr, o.remaining());
+                log.trace("Read address {}, not match {}, skipping. (remain={})", addr, address, o.remaining());
             }
             else {
-                log.debug("Entry at {} hit, reading.", address);
+                log.debug("Entry at {} hit, reading (size={}).", address, size);
                 if (flags % 2 == 0) {
                     log.error("Read a log entry but the write was torn, aborting!");
                     throw new IOException("Torn write detected!");
