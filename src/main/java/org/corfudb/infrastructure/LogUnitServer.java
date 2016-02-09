@@ -35,6 +35,17 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.LogUnitEntry;
 /**
  * Created by mwei on 12/10/15.
+ *
+ * A Log Unit Server, which is responsible for providing the persistent storage for the Corfu Distributed Shared Log.
+ *
+ * All reads and writes go through a cache. If the sync flag (--sync) is set, the cache is configured in write-through
+ * mode, otherwise the cache is configured in write-back mode. For persistence, every 10,000 log entries are written
+ * to individual files (logs), which are represented as FileHandles. Each FileHandle contains a pointer to the tail
+ * of the file, a memory-mapped file channel, and a set of addresses known to be in the file. To write an entry, the
+ * pointer to the tail is first extended to the length of the entry, and the entry is added to the set of known
+ * addresses. A header is written, which consists of the ASCII characters LE, followed by a set of flags,
+ * the log unit address, the size of the entry, then the metadata size, metadata and finally the entry itself.
+ * When the entry is complete, a written flag is set in the flags field.
  */
 @Slf4j
 public class LogUnitServer implements IServer {
