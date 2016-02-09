@@ -14,6 +14,7 @@ import org.corfudb.util.CFUtils;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -48,9 +49,9 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     public TestClientRouter()
     {
         clientList = new ArrayList<>();
-        handlerMap = new HashMap<>();
-        outstandingRequests = new HashMap<>();
-        serverMap = new HashMap<>();
+        handlerMap = new ConcurrentHashMap<>();
+        outstandingRequests = new ConcurrentHashMap<>();
+        serverMap = new ConcurrentHashMap<>();
         requestID = new AtomicLong();
     }
 
@@ -133,7 +134,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         log.trace("Sent message: {}", message);
         routeMessage(message);
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(100));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(5000));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);

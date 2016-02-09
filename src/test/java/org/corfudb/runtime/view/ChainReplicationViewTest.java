@@ -11,6 +11,7 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
@@ -46,6 +47,40 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getResult().getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canReadWriteToSingleConcurrent()
+            throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        wireRouters();
+
+        //begin tests
+        CorfuRuntime r = getRuntime().connect();
+
+        final int numberThreads = 5;
+        final int numberRecords = 10_000;
+
+        scheduleConcurrently(numberThreads, threadNumber -> {
+            int base = threadNumber * numberRecords;
+            for (int i = base; i < base + numberRecords; i++) {
+                r.getAddressSpaceView().write(i, Collections.singleton(CorfuRuntime.getStreamID("a")),
+                        Integer.toString(i).getBytes(), Collections.emptyMap());
+            }
+        });
+        executeScheduled(numberThreads, 50, TimeUnit.SECONDS);
+
+        scheduleConcurrently(numberThreads, threadNumber -> {
+            int base = threadNumber * numberRecords;
+            for (int i = base; i < base + numberRecords; i++) {
+                assertThat(r.getAddressSpaceView().read(i).getResult().getPayload())
+                        .isEqualTo(Integer.toString(i).getBytes());
+            }
+        });
+        executeScheduled(numberThreads, 50, TimeUnit.SECONDS);
     }
 
     @Test
