@@ -125,6 +125,10 @@ public class AbstractCorfuTest {
                 f.get();
             }
         } catch (ExecutionException ee) {
+            if (ee.getCause() instanceof Error)
+            {
+                throw (Error) ee.getCause();
+            }
             throw (Exception) ee.getCause();
         }
         catch (InterruptedException ie) {

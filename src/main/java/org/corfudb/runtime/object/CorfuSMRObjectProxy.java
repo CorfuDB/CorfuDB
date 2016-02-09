@@ -38,6 +38,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by mwei on 1/7/16.
@@ -50,6 +52,7 @@ public class CorfuSMRObjectProxy<P> {
     Object[] creationArguments;
     Class<?> originalClass;
     Class<?> generatedClass;
+    Map<Long, CompletableFuture<Object>> completableFutureMap;
     Serializers.SerializerType serializer;
     CorfuRuntime runtime;
     long timestamp;
@@ -62,6 +65,7 @@ public class CorfuSMRObjectProxy<P> {
         this.sv = sv;
         this.originalClass = originalClass;
         this.serializer = Serializers.SerializerType.JAVA;
+        this.completableFutureMap = new ConcurrentHashMap<>();
         this.timestamp = -1L;
         if (Arrays.stream(originalClass.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom)) {
             isCorfuObject = true;
@@ -267,16 +271,17 @@ public class CorfuSMRObjectProxy<P> {
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
-                lastResult = superMethod.call();
-                return lastResult;
+                return superMethod.call();
             }
             else if (!TransactionalContext.isInTransaction()){
-                // write the update to the stream
-                long updatePos = writeUpdate(getShortMethodName(method), allArguments);
+                // write the update to the stream and map a future for the completion.
+                long updatePos = writeUpdateAndMapFuture(getShortMethodName(method), allArguments);
                 // read up to this update.
                 sync(obj, updatePos);
-                // Now we can safely call the accessor.
-                return lastResult;
+                // Now we can safely wait on the accessor.
+                Object ret = completableFutureMap.get(updatePos).join();
+                completableFutureMap.remove(updatePos);
+                return ret;
             } else {
                 // in a transaction, we add the update to the TX buffer and apply the update
                 // immediately.
@@ -343,6 +348,14 @@ public class CorfuSMRObjectProxy<P> {
         return sv.write(new SMREntry(getShortMethodName(method), arguments, serializer));
     }
 
+    long writeUpdateAndMapFuture(String method, Object[] arguments)
+    {
+        log.trace("Write update and map future: {} with arguments {}", getShortMethodName(method), arguments);
+        return sv.acquireAndWrite(new SMREntry(getShortMethodName(method), arguments, serializer),
+                t -> completableFutureMap.put(t, new CompletableFuture<>()),
+               completableFutureMap::remove);
+    }
+
     boolean applySMRUpdate(long address, SMREntry entry, P obj)
     {
         log.trace("Apply SMR update: {}", entry);
@@ -351,14 +364,33 @@ public class CorfuSMRObjectProxy<P> {
             Method m = obj.getClass().getMethod(getMethodNameOnlyFromString(entry.getSMRMethod()),
                     getArgumentTypesFromString(entry.getSMRMethod()));
             // Execute the SMR command
-            m.invoke(obj, entry.getSMRArguments());
+            Object ret = m.invoke(obj, entry.getSMRArguments());
             // Update the current timestamp.
             timestamp = address;
+            if (completableFutureMap.containsKey(address))
+            {
+                completableFutureMap.get(address).complete(ret);
+            }
             return true;
         } catch (NoSuchMethodException n) {
             log.error("Couldn't find method {} during apply update", entry.getSMRMethod(), n);
+            if (completableFutureMap.containsKey(address))
+            {
+                completableFutureMap.get(address).completeExceptionally(n);
+            }
         } catch (InvocationTargetException | IllegalAccessException iae) {
             log.error("Couldn't dispatch method {} during apply update", entry.getSMRMethod(), iae);
+            if (completableFutureMap.containsKey(address))
+            {
+                completableFutureMap.get(address).completeExceptionally(iae);
+            }
+        } catch (Exception e)
+        {
+            log.warn("Exception during application of SMR method {}", entry.getSMRMethod());
+            if (completableFutureMap.containsKey(address))
+            {
+                completableFutureMap.get(address).completeExceptionally(e);
+            }
         }
         return false;
     }
