@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 /** All views inherit from AbstractView.
  *
@@ -71,7 +72,22 @@ public abstract class AbstractView {
         while(true) {
             try {
                 return function.apply(runtime.layout.get());
-            } catch (InterruptedException | ExecutionException ex) {
+            }
+            catch (RuntimeException re) {
+                if (re.getCause() instanceof TimeoutException)
+                {
+                    log.warn("Timeout executing remote call, invalidating view and retrying in {}s", runtime.retryRate);
+                    runtime.invalidateLayout();
+                    try {
+                        Thread.sleep(runtime.retryRate * 1000);
+                    } catch (InterruptedException ie) {
+                    }
+                }
+                else {
+                    throw re;
+                }
+            }
+            catch (InterruptedException | ExecutionException ex) {
                 log.warn("Error executing remote call, invalidating view and retrying in {}s", runtime.retryRate, ex);
                 runtime.invalidateLayout();
                 try {

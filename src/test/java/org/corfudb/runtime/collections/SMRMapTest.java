@@ -12,6 +12,7 @@ import org.junit.Test;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,6 +43,65 @@ public class SMRMapTest extends AbstractViewTest {
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void loadsFollowedByGets()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        testMap.clear();
+        for (int i = 0; i < 100_000; i++) {
+            assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
+                    .isNull();
+        }
+        for (int i = 0; i < 100_000; i++) {
+            assertThat(testMap.get(Integer.toString(i)))
+                    .isEqualTo(Integer.toString(i));
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void loadsFollowedByGetsConcurrent()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+
+        final int num_threads = 5;
+        final int num_records = 10_000;
+        testMap.clear();
+
+        scheduleConcurrently(num_threads, threadNumber -> {
+            int base = threadNumber * num_records;
+            for (int i = base; i < base + num_records; i++) {
+                assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
+                        .isEqualTo(null);
+            }
+        });
+        executeScheduled(num_threads, 50, TimeUnit.SECONDS);
+
+        scheduleConcurrently(num_threads, threadNumber -> {
+            int base = threadNumber * num_records;
+            for (int i = base; i < base + num_records; i++) {
+                assertThat(testMap.get(Integer.toString(i)))
+                        .isEqualTo(Integer.toString(i));
+            }
+         });
+        executeScheduled(num_threads, 50, TimeUnit.SECONDS);
     }
 
     @Test

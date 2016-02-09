@@ -60,6 +60,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
                         .put("--initial-token", "0")
                         .put("--single", false)
                         .put("--memory", true)
+                        .put("--sync", false)
                         .build();
     }
 }

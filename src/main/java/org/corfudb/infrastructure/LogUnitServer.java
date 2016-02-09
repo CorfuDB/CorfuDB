@@ -27,10 +27,7 @@ import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -218,7 +215,8 @@ public class LogUnitServer implements IServer {
             }
             short flags = o.getShort();
             long addr = o.getLong();
-            fh.knownAddresses.add(Range.singleton(address));
+            if (address == -1) {
+            fh.knownAddresses.add(Range.singleton(addr)); }
             int size = o.getInt();
             if (addr != address)
             {
@@ -258,10 +256,15 @@ public class LogUnitServer implements IServer {
                 FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
                         EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
                                 StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+
                 AtomicLong fp = new AtomicLong();
                 writeHeader(fc, fp, 1, 0);
-                log.info("Created new log file at {}", filePath);
-                return new FileHandle(fp, fc);
+                log.info("Opened new log file at {}", filePath);
+                FileHandle fh = new FileHandle(fp, fc);
+                // The first time we open a file we should read to the end, to load the
+                // map of entries we already have.
+                readEntry(fh, -1);
+                return fh;
             }
             catch (IOException e)
             {
@@ -346,7 +349,18 @@ public class LogUnitServer implements IServer {
                                 // (probably need a faster way to do this - high watermark?)
                                 FileHandle fh = getChannelForAddress(address);
                                 if (!fh.getKnownAddresses().contains(address)) {
-                                    writeEntry(fh, address, entry);
+                                    fh.getKnownAddresses().add(Range.singleton(address));
+                                    if ((Boolean) opts.get("--sync")) {
+                                        writeEntry(fh, address, entry);
+                                    } else {
+                                        CompletableFuture.runAsync(() -> {
+                                            try {
+                                                writeEntry(fh, address, entry);
+                                            } catch (Exception e) {
+                                                log.error("Disk_write[{}]: Exception", address, e);
+                                            }
+                                        });
+                                    }
                                 } else {
                                     throw new Exception("overwrite");
                                 }
