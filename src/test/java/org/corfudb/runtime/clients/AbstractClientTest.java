@@ -33,6 +33,7 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
                 .put("--memory", true)
                 .put("--single", false)
                 .put("--max-cache", "256M")
+                .put("--sync", false)
                 .build();
     }
 }

@@ -34,6 +34,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .put("--log-path", serviceDir)
                 .put("--memory", false)
                 .put("--single", false)
+                .put("--sync", false)
                 .put("--max-cache", 1000000)
                 .build());
 
@@ -76,6 +77,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .put("--log-path", serviceDir)
                 .put("--single", false)
                 .put("--memory", false)
+                .put("--sync", false)
                 .put("--max-cache", 1000000)
                 .build());
         this.router.setServerUnderTest(s2);

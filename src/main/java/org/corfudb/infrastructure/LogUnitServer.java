@@ -27,10 +27,7 @@ import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -183,8 +180,6 @@ public class LogUnitServer implements IServer {
     public void writeEntry(FileHandle fh, long address, LogUnitEntry entry)
         throws IOException
     {
-        if (fh.getKnownAddresses().contains(address)) {throw new IOException("overwrite");}
-        fh.getKnownAddresses().add(Range.singleton(address));
         ByteBuf metadataBuffer = Unpooled.buffer();
         LogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
         int entrySize = entry.getBuffer().writerIndex() + metadataBuffer.writerIndex() + 24;
@@ -354,7 +349,18 @@ public class LogUnitServer implements IServer {
                                 // (probably need a faster way to do this - high watermark?)
                                 FileHandle fh = getChannelForAddress(address);
                                 if (!fh.getKnownAddresses().contains(address)) {
-                                    writeEntry(fh, address, entry);
+                                    fh.getKnownAddresses().add(Range.singleton(address));
+                                    if ((Boolean) opts.get("--sync")) {
+                                        writeEntry(fh, address, entry);
+                                    } else {
+                                        CompletableFuture.runAsync(() -> {
+                                            try {
+                                                writeEntry(fh, address, entry);
+                                            } catch (Exception e) {
+                                                log.error("Disk_write[{}]: Exception", address, e);
+                                            }
+                                        });
+                                    }
                                 } else {
                                     throw new Exception("overwrite");
                                 }
