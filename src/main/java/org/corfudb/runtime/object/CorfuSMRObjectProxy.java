@@ -88,7 +88,7 @@ public class CorfuSMRObjectProxy<P> {
                     .method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
                     .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
                     .make()
-                    .load(ClassLoader.getSystemClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
+                    .load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
                     .getLoaded();
             proxy.generatedClass = generatedClass;
             return generatedClass;
@@ -118,7 +118,7 @@ public class CorfuSMRObjectProxy<P> {
                     )
                     .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
                     .make()
-                    .load(ClassLoader.getSystemClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
+                    .load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
                     .getLoaded();
             proxy.generatedClass = generatedClass;
             return generatedClass;
