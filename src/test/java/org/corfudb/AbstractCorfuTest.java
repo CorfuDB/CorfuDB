@@ -106,7 +106,15 @@ public class AbstractCorfuTest {
     public void executeScheduled(int maxConcurrency, long timeout, TimeUnit timeUnit)
             throws Exception
     {
-        ExecutorService service  = Executors.newFixedThreadPool(maxConcurrency);
+        AtomicLong threadNum = new AtomicLong();
+        ExecutorService service  = Executors.newFixedThreadPool(maxConcurrency, new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName("test-" + threadNum.getAndIncrement());
+                return t;
+            }
+        });
         List<Future<Object>> finishedSet = service.invokeAll(scheduledThreads, timeout, timeUnit);
         scheduledThreads.clear();
         service.shutdown();
