@@ -28,6 +28,10 @@ public class JSONSerializer implements ISerializer {
         byte[] classNameBytes = new byte[classNameLength];
         b.readBytes(classNameBytes, 0, classNameLength);
         String className = new String(classNameBytes);
+        if (className.equals("null"))
+        {
+            return null;
+        }
         try (ByteBufInputStream bbis = new ByteBufInputStream(b))
         {
             try (InputStreamReader r = new InputStreamReader(bbis)) {
@@ -49,10 +53,11 @@ public class JSONSerializer implements ISerializer {
      */
     @Override
     public void serialize(Object o, ByteBuf b) {
-        String className = o.getClass().getName();
+        String className = o == null ? "null" :  o.getClass().getName();
         byte[] classNameBytes = className.getBytes();
         b.writeShort(classNameBytes.length);
         b.writeBytes(classNameBytes);
+        if (o == null) { return; }
         try (ByteBufOutputStream bbos = new ByteBufOutputStream(b))
         {
             try (OutputStreamWriter osw = new OutputStreamWriter(bbos))
