@@ -4,16 +4,14 @@ import com.google.common.reflect.Reflection;
 import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.bytecode.annotation.NoSuchClassError;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import net.bytebuddy.ByteBuddy;
 import net.bytebuddy.description.annotation.AnnotationDescription;
 import net.bytebuddy.description.method.MethodDescription;
 import net.bytebuddy.description.method.ParameterDescription;
 import net.bytebuddy.description.type.TypeDescription;
+import net.bytebuddy.dynamic.DynamicType;
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.implementation.attribute.AnnotationAppender;
@@ -64,7 +62,7 @@ public class CorfuSMRObjectProxy<P> {
         this.runtime = runtime;
         this.sv = sv;
         this.originalClass = originalClass;
-        this.serializer = Serializers.SerializerType.JAVA;
+        this.serializer = Serializers.SerializerType.JSON;
         this.completableFutureMap = new ConcurrentHashMap<>();
         this.timestamp = -1L;
         if (Arrays.stream(originalClass.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom)) {
@@ -105,20 +103,31 @@ public class CorfuSMRObjectProxy<P> {
         else {
             log.trace("{} is not an ICorfuSMRObject, no ISMRInterfaces and no overlay provided. " +
                     "Instrumenting all methods as mutatorAccessors but respecting annotations", type);
-            Class<? extends T> generatedClass = new ByteBuddy()
-                    .subclass(type)
-                    .method(ElementMatchers.isAnnotatedWith(Mutator.class))
-                    .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()))
-                    .method(ElementMatchers.isAnnotatedWith(Accessor.class))
-                    .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()))
-                    .method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
-                    .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
-                    .method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
-                                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
-                    )
-                    .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
-                    .make()
-                    .load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
+                    DynamicType.Builder<T> bb = new ByteBuddy().subclass(type);
+                    try {
+                                bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class))
+                                         .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()));
+                    } catch (NoSuchMethodError nsme) {
+                        log.trace("Class {} has no mutators", type);
+                    }
+                    try {
+                        bb = bb.method(ElementMatchers.isAnnotatedWith(Accessor.class))
+                                .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()));
+                    } catch (NoSuchMethodError nsme) {
+                        log.trace("Class {} has no accessors", type);
+                    }
+                    try {
+                        bb = bb.method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
+                                .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()));
+                    } catch (NoSuchMethodError nsme)
+                    {
+                        log.trace("Class {} has no mutatoraccessors", type);
+                    }
+                    bb = bb.method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
+                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))))
+                    .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()));
+            Class<? extends T> generatedClass =
+                     bb.make().load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
                     .getLoaded();
             proxy.generatedClass = generatedClass;
             return generatedClass;
