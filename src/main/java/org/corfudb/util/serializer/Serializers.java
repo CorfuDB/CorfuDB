@@ -18,7 +18,8 @@ public class Serializers {
     public enum SerializerType {
         // Supported Serializers
         CORFU(0, CorfuSerializer.class),
-        JAVA(1, JavaSerializer.class)
+        JAVA(1, JavaSerializer.class),
+        JSON(2, JSONSerializer.class)
         ;
 
         public final int type;
