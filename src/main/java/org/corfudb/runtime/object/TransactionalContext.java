@@ -48,7 +48,7 @@ public class TransactionalContext {
                 log.debug("Cloning SMR object {} due to transactional write.", proxy.sv.getStreamID());
 
                 smrObjectClone =
-                        (T) Serializers.getSerializer(proxy.serializer).clone(proxy.smrObject);
+                        (T) Serializers.getSerializer(proxy.serializer).clone(proxy.smrObject, proxy.runtime);
             }
             return (T) smrObjectClone;
         }
@@ -59,7 +59,7 @@ public class TransactionalContext {
                 log.debug("Cloning SMR object {} due to transactional write.", proxy.sv.getStreamID());
 
                 smrObjectClone =
-                        (T) Serializers.getSerializer(proxy.serializer).clone(proxy.smrObject);
+                        (T) Serializers.getSerializer(proxy.serializer).clone(proxy.smrObject, proxy.runtime);
             }
             return (T) smrObjectClone;
         }

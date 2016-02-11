@@ -41,7 +41,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap());
 
-        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
+        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload(r))
                 .isEqualTo("hello world".getBytes());
 
         assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getResult().getMetadataMap()
@@ -76,7 +76,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
             for (int i = base; i < base + numberRecords; i++) {
-                assertThat(r.getAddressSpaceView().read(i).getResult().getPayload())
+                assertThat(r.getAddressSpaceView().read(i).getResult().getPayload(r))
                         .isEqualTo(Integer.toString(i).getBytes());
             }
         });
@@ -119,7 +119,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap());
 
-        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
+        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload(r))
                 .isEqualTo("hello world".getBytes());
 
         assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getResult().getMetadataMap()
@@ -168,7 +168,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap());
 
-        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload())
+        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload(r))
                 .isEqualTo("hello world".getBytes());
 
         assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getResult().getMetadataMap()

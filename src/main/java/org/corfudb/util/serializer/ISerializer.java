@@ -2,6 +2,7 @@ package org.corfudb.util.serializer;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
+import org.corfudb.runtime.CorfuRuntime;
 
 /**
  * This class represents a serializer, which takes an object and reads/writes it to a bytebuf.
@@ -14,7 +15,7 @@ public interface ISerializer {
      * @param b The bytebuf to deserialize.
      * @return  The deserialized object.
      */
-    Object deserialize(ByteBuf b);
+    Object deserialize(ByteBuf b, CorfuRuntime rt);
 
     /** Serialize an object into a given byte buffer.
      *
@@ -28,11 +29,11 @@ public interface ISerializer {
      * @param o The object to clone.
      * @return  The cloned object.
      */
-    default Object clone(Object o)
+    default Object clone(Object o, CorfuRuntime rt)
     {
         ByteBuf b = UnpooledByteBufAllocator.DEFAULT.buffer();
         serialize(o, b);
-        Object out = deserialize(b);
+        Object out = deserialize(b, rt);
         b.release();
         return out;
     }

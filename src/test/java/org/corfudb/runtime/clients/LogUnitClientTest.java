@@ -49,7 +49,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
         assertThat(r.getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.DATA);
-        assertThat(r.getPayload())
+        assertThat(r.getPayload(null))
                 .isEqualTo(testString);
     }
 
@@ -75,7 +75,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
         assertThat(r.getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.DATA);
-        assertThat(r.getPayload())
+        assertThat(r.getPayload(null))
                 .isEqualTo(testString);
     }
 

@@ -6,6 +6,7 @@ import io.netty.buffer.ByteBufOutputStream;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.runtime.CorfuRuntime;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -34,7 +35,7 @@ public class CorfuSerializer implements ISerializer {
      * @return The deserialized object.
      */
     @Override
-    public Object deserialize(ByteBuf b) {
+    public Object deserialize(ByteBuf b, CorfuRuntime rt) {
         byte magic;
         if ((magic = b.readByte()) != CorfuPayloadMagic) {
             b.resetReaderIndex();
@@ -42,7 +43,7 @@ public class CorfuSerializer implements ISerializer {
             b.readBytes(bytes);
             return bytes;
         }
-        return LogEntry.deserialize(b);
+        return LogEntry.deserialize(b, rt);
     }
 
     /**

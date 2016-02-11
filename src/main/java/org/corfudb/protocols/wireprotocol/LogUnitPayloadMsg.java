@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -30,11 +31,11 @@ public class LogUnitPayloadMsg extends LogUnitMetadataMsg {
     @Setter
     ISerializer serializer = defaultSerializer;
 
-    public Object getPayload()
+    public Object getPayload(CorfuRuntime rt)
     {
         Object ret =
                 (payload != null) ? payload :
-                (data == null) ? null : serializer.deserialize(data);
+                (data == null) ? null : serializer.deserialize(data, rt);
         if (data != null)
         {
             data.release();

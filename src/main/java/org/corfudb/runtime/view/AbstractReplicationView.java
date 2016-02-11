@@ -11,6 +11,7 @@ import java.util.*;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
 /** All replication views must inherit from this class.
@@ -58,6 +59,11 @@ public abstract class AbstractReplicationView {
 
         @Getter
         final Object payload;
+
+        public Object getPayload(CorfuRuntime rt)
+        {
+            return getPayload();
+        }
 
         @Getter
         final int sizeEstimate;

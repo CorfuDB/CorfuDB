@@ -10,6 +10,9 @@ import net.bytebuddy.ByteBuddy;
 import net.bytebuddy.description.annotation.AnnotationDescription;
 import net.bytebuddy.description.method.MethodDescription;
 import net.bytebuddy.description.method.ParameterDescription;
+import net.bytebuddy.description.modifier.FieldManifestation;
+import net.bytebuddy.description.modifier.ModifierContributor;
+import net.bytebuddy.description.modifier.Visibility;
 import net.bytebuddy.description.type.TypeDescription;
 import net.bytebuddy.dynamic.DynamicType;
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
@@ -77,6 +80,7 @@ public class CorfuSMRObjectProxy<P> {
             log.trace("Detected ICorfuSMRObject({}), instrumenting methods.", type);
             Class<? extends T> generatedClass = new ByteBuddy()
                     .subclass(type)
+                    .defineField("_corfuStreamID", UUID.class, FieldManifestation.PLAIN)
                     .method(ElementMatchers.named("getSMRObject"))
                     .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
                     .method(ElementMatchers.isAnnotatedWith(Mutator.class))
@@ -103,7 +107,8 @@ public class CorfuSMRObjectProxy<P> {
         else {
             log.trace("{} is not an ICorfuSMRObject, no ISMRInterfaces and no overlay provided. " +
                     "Instrumenting all methods as mutatorAccessors but respecting annotations", type);
-                    DynamicType.Builder<T> bb = new ByteBuddy().subclass(type);
+                    DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
+                            .defineField("_corfuStreamID", UUID.class);
                     try {
                                 bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class))
                                          .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()));
@@ -139,8 +144,12 @@ public class CorfuSMRObjectProxy<P> {
         T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime) {
         try {
             CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type);
-            return getProxyClass(proxy, type, overlay).newInstance();
-        } catch (InstantiationException | IllegalAccessException ie) {
+            T ret = getProxyClass(proxy, type, overlay).newInstance();
+            Field f = ret.getClass().getDeclaredField("_corfuStreamID");
+            f.setAccessible(true);
+            f.set(ret, sv.getStreamID());
+            return ret;
+        } catch (InstantiationException | IllegalAccessException | NoSuchFieldException ie) {
             throw new RuntimeException("Unexpected exception opening object", ie);
         }
     }
@@ -430,8 +439,8 @@ public class CorfuSMRObjectProxy<P> {
     synchronized public void sync(P obj, long maxPos) {
         Arrays.stream(sv.readTo(maxPos))
                 .filter(m -> m.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
-                .filter(m -> m.getResult().getPayload() instanceof SMREntry ||
-                        m.getResult().getPayload() instanceof TXEntry)
-                .forEach(m -> applyUpdate(m.getAddress(), (LogEntry) m.getResult().getPayload(), obj));
+                .filter(m -> m.getResult().getPayload(runtime) instanceof SMREntry ||
+                        m.getResult().getPayload(runtime) instanceof TXEntry)
+                .forEach(m -> applyUpdate(m.getAddress(), (LogEntry) m.getResult().getPayload(runtime), obj));
     }
 }

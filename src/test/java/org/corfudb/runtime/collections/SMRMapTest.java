@@ -70,6 +70,59 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void canContainOtherCorfuObjects()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
+        testMap.clear();
+        testMap.put("z", "e");
+        Map<String,Map<String,String>> testMap2 = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("b"), SMRMap.class);
+        testMap2.put("a", testMap);
+
+        assertThat(testMap2.get("a").get("z"))
+                .isEqualTo("e");
+
+        testMap2.get("a").put("y", "f");
+
+        assertThat(testMap.get("y"))
+                .isEqualTo("f");
+
+        Map<String,String> testMap3 = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
+
+        assertThat(testMap3.get("y"))
+                .isEqualTo("f");
+
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canContainNullObjects()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
+        testMap.clear();
+        testMap.put("z", null);
+        assertThat(testMap.get("z"))
+                .isEqualTo(null);
+        Map<String,String> testMap2 = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
+        assertThat(testMap2.get("z"))
+                .isEqualTo(null);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     public void loadsFollowedByGetsConcurrent()
             throws Exception {
         addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
