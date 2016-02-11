@@ -1,6 +1,8 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
 import com.google.common.util.concurrent.Uninterruptibles;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -8,12 +10,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** A view of an address implemented by chain replication.
  *
@@ -85,7 +89,41 @@ public class ChainReplicationView extends AbstractReplicationView {
         // know where the committed tail is.
         return new ReadResult(address,
                 CFUtils.getUninterruptibly(getLayout()
-                        .getLogUnitClient(getLayout().getLocalAddress(address), numUnits - 1).read(address)));
+                        .getLogUnitClient(address, numUnits - 1).read(getLayout().getLocalAddress(address))));
+    }
+
+    /**
+     * Read a set of addresses, using the replication method given.
+     *
+     * @param addresses The addresses to read from.
+     * @return A map containing the results of the read.
+     */
+    @Override
+    public Map<Long, ReadResult> read(RangeSet<Long> addresses) {
+        // Generate a new range set for every stripe.
+        ConcurrentHashMap<Layout.LayoutStripe, RangeSet<Long>> rangeMap = new ConcurrentHashMap<>();
+        ConcurrentHashMap<Layout.LayoutStripe, Long> eMap = new ConcurrentHashMap<>();
+        Set<Long> total = Utils.discretizeRangeSet(addresses);
+        total.parallelStream()
+                .forEach(l-> {
+            rangeMap.computeIfAbsent(layout.getStripe(l), k -> TreeRangeSet.create())
+                    .add(Range.singleton(layout.getLocalAddress(l)));
+                    eMap.computeIfAbsent(layout.getStripe(l), k->l);
+        });
+        ConcurrentHashMap<Long, ReadResult> resultMap = new ConcurrentHashMap<>();
+        rangeMap.entrySet().parallelStream()
+                .forEach(x -> {
+                                    CFUtils.getUninterruptibly(
+                                            layout.getLogUnitClient(eMap.get(x.getKey()), layout.getSegmentLength(eMap.get(x.getKey()))-1)
+                                    .readRange(x.getValue()))
+                                    .entrySet().parallelStream()
+                                    .forEach(ex ->{
+                                            long globalAddress = layout.getGlobalAddress(x.getKey(),ex.getKey());
+                                        resultMap.put(globalAddress, new ReadResult(globalAddress, ex.getValue()));
+                                            }
+                                    );
+                });
+        return resultMap;
     }
 
 

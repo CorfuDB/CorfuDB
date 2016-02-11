@@ -137,6 +137,24 @@ public class Layout implements Cloneable {
         throw new RuntimeException("Unmapped address!");
     }
 
+    public long getGlobalAddress(LayoutStripe stripe, long localAddress)
+    {
+        for (LayoutSegment ls : segments)
+        {
+            if (ls.getStripes().contains(stripe))
+            {
+                for (int i = 0; i < ls.getNumberOfStripes(); i++)
+                {
+                    if (ls.getStripes().get(i).equals(stripe))
+                    {
+                        return (localAddress * ls.getNumberOfStripes()) + i;
+                    }
+                }
+            }
+        }
+        throw new RuntimeException("Unmapped address!");
+    }
+
     public LayoutStripe getStripe(long globalAddress)
     {
         for (LayoutSegment ls : segments)

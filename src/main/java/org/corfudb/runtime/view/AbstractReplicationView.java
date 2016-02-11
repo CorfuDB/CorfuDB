@@ -130,12 +130,8 @@ public abstract class AbstractReplicationView {
      * @return            A map containing the results of the read.
      */
     public Map<Long, ReadResult> read(RangeSet<Long> addresses) {
-        Map<Long,ReadResult> results = new ConcurrentHashMap<>();
-        Set<Long> total = Collections.newSetFromMap(new ConcurrentHashMap<>());
-        for (Range<Long> r : addresses.asRanges())
-        {
-            total.addAll(Utils.discretizeRange(r));
-        }
+        Map<Long, ReadResult> results = new ConcurrentHashMap<>();
+        Set<Long> total = Utils.discretizeRangeSet(addresses);
         total.parallelStream()
                 .forEach(i -> results.put(i, read(i)));
         return results;

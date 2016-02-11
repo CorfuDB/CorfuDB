@@ -1,16 +1,15 @@
 package org.corfudb.util;
 
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
 import lombok.NonNull;
 
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by crossbach on 5/22/15.
@@ -106,6 +105,21 @@ public class Utils
         }
         return s;
     }
+
+    /** Turn a set of ranges into a discrete set.
+     *
+     * @param ranges    A set of ranges to discretize.
+     * @return          A set containing all the longs in that rangeset.
+     */
+    public static Set<Long> discretizeRangeSet(RangeSet<Long> ranges) {
+        Set<Long> total = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        for (Range<Long> r : ranges.asRanges())
+        {
+            total.addAll(Utils.discretizeRange(r));
+        }
+        return total;
+    }
+
     /** Convert to byte string representation.
      * from http://stackoverflow.com/questions/3758606/how-to-convert-byte-size-into-human-readable-format-in-java
      * @param value         The value to convert.

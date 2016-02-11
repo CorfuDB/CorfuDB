@@ -1,7 +1,11 @@
 package org.corfudb.runtime.view;
 
+import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -9,12 +13,14 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** A view of the address space implemented by Corfu.
  *
@@ -50,7 +56,17 @@ public class AddressSpaceView extends AbstractView {
         readCache = Caffeine.<Long, AbstractReplicationView.ReadResult>newBuilder()
                 .<Long, AbstractReplicationView.ReadResult>weigher((k,v) -> v.result.getSizeEstimate())
                 .maximumWeight(runtime.getMaxCacheSize())
-                .build(this::cacheFetch);
+                .build(new CacheLoader<Long, AbstractReplicationView.ReadResult>() {
+                    @Override
+                    public AbstractReplicationView.ReadResult load(Long aLong) throws Exception {
+                        return cacheFetch(aLong);
+                    }
+
+                    @Override
+                    public Map<Long, AbstractReplicationView.ReadResult> loadAll(Iterable<? extends Long> keys) throws Exception {
+                        return cacheFetch((Iterable)keys);
+                    }
+                });
     }
 
     /**
@@ -93,6 +109,21 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Read the given object from a range of addresses.
+     *
+     * @param addresses An address range to read from.
+     * @return        A result, which be cached.
+     */
+    public Map<Long, AbstractReplicationView.ReadResult> read(RangeSet<Long> addresses)
+    {
+
+        if (!runtime.isCacheDisabled()) {
+            return readCache.getAll(Utils.discretizeRangeSet(addresses));
+        }
+        return this.cacheFetch(Utils.discretizeRangeSet(addresses));
+    }
+
+    /**
      * Fetch an address for insertion into the cache.
      * @param address An address to read from.
      * @return        A result to be cached. If the readresult is empty,
@@ -114,6 +145,35 @@ public class AddressSpaceView extends AbstractView {
         }
         return result;
     }
+
+    /**
+     * Fetch an address for insertion into the cache.
+     * @param addresses An address to read from.
+     * @return        A result to be cached. If the readresult is empty,
+     *                This entry will be scheduled to self invalidate.
+     */
+    private Map<Long, AbstractReplicationView.ReadResult> cacheFetch(Iterable<Long> addresses)
+    {
+        // for each address, figure out which replication group it goes to.
+        Map<AbstractReplicationView, RangeSet<Long>> groupMap = new ConcurrentHashMap<>();
+        return layoutHelper(l -> {
+                    for (Long a : addresses) {
+                        AbstractReplicationView v = AbstractReplicationView
+                                .getReplicationView(l, l.getReplicationMode(a));
+                        groupMap.computeIfAbsent(v, x -> TreeRangeSet.<Long>create())
+                                .add(Range.singleton(a));
+                    }
+                    Map<Long, AbstractReplicationView.ReadResult> result =
+                            new ConcurrentHashMap<Long, AbstractReplicationView.ReadResult>();
+                    for (AbstractReplicationView vk : groupMap.keySet())
+                    {
+                        result.putAll(vk.read(groupMap.get(vk)));
+                    }
+                    return result;
+                }
+        );
+    }
+
 
     /**
      * Explicitly fetch a given address, bypassing the cache.
