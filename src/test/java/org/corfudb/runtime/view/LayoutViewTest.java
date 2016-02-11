@@ -44,7 +44,11 @@ public class LayoutViewTest extends AbstractViewTest {
                         Layout.ReplicationMode.CHAIN_REPLICATION,
                         0L,
                         -1L,
-                        Collections.singletonList(localAddress)
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        Collections.singletonList(localAddress)
+                                )
+                        )
                 )),
                 1L
         );

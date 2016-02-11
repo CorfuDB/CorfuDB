@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.RangeSet;
 import com.google.common.util.concurrent.Uninterruptibles;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -62,7 +63,7 @@ public class ChainReplicationView extends AbstractReplicationView {
                 payloadBytes = b.readableBytes();
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
-                                .write(address, stream, 0L, data, backpointerMap), OverwriteException.class);
+                                .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
             } finally {
                 b.release();
             }
@@ -83,8 +84,10 @@ public class ChainReplicationView extends AbstractReplicationView {
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
         return new ReadResult(address,
-                CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, numUnits - 1).read(address)));
+                CFUtils.getUninterruptibly(getLayout()
+                        .getLogUnitClient(getLayout().getLocalAddress(address), numUnits - 1).read(address)));
     }
+
 
     /**
      * Fill a hole at an address, using the replication method given.

@@ -104,11 +104,15 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                         Layout.ReplicationMode.CHAIN_REPLICATION,
                         0L,
                         -1L,
-                        ImmutableList.<String>builder()
-                            .add(getEndpoint(9000))
-                            .add(getEndpoint(9001))
-                            .add(getEndpoint(9002))
-                        .build()
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        ImmutableList.<String>builder()
+                                                .add(getEndpoint(9000))
+                                                .add(getEndpoint(9001))
+                                                .add(getEndpoint(9002))
+                                                .build()
+                                )
+                        )
                 )),
                 1L
         ));
@@ -153,11 +157,15 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                         Layout.ReplicationMode.CHAIN_REPLICATION,
                         0L,
                         -1L,
-                        ImmutableList.<String>builder()
-                                .add(getEndpoint(9000))
-                                .add(getEndpoint(9001))
-                                .add(getEndpoint(9002))
-                                .build()
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        ImmutableList.<String>builder()
+                                                .add(getEndpoint(9000))
+                                                .add(getEndpoint(9001))
+                                                .add(getEndpoint(9002))
+                                                .build()
+                                )
+                        )
                 )),
                 1L
         ));

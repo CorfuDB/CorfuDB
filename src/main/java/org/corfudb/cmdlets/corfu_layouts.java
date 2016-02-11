@@ -170,11 +170,11 @@ public class corfu_layouts implements ICmdlet {
         if ((Boolean) options.get("--remove"))
         {
             int serverIndex = Integer.parseInt((String) options.get("--segment-index"));
-            log.info("Removing server {} from segment {}", l.getSegments().get(segmentIndex).getLogServers()
+            log.info("Removing server {} from segment {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers()
                     .get(serverIndex), segmentIndex);
-            l.getSegments().get(segmentIndex).getLogServers()
+            l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers()
                     .remove(serverIndex);
-            log.info("New server set is {}", l.getSegments().get(segmentIndex).getLogServers());
+            log.info("New server set is {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers());
         }
 
         // Add a server to the segment.
@@ -185,13 +185,13 @@ public class corfu_layouts implements ICmdlet {
                     null : Integer.parseInt((String) options.get("--segment-index"));
             if (serverIndex == null) {
                 log.info("Adding server {} to end of segment {}", options.get("--endpoint"), segmentIndex);
-                l.getSegments().get(segmentIndex).getLogServers().add((String)options.get("--endpoint"));
+                l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers().add((String) options.get("--endpoint"));
             }
             else {
                 log.info("Adding server {} to segment {} at index {}", options.get("--endpoint"), segmentIndex, serverIndex);
-                l.getSegments().get(segmentIndex).getLogServers().add(serverIndex, (String) options.get("--endpoint"));
+                l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers().add(serverIndex, (String) options.get("--endpoint"));
             }
-            log.info("New server set is {}", l.getSegments().get(segmentIndex).getLogServers());
+            log.info("New server set is {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers());
         }
 
         l.moveServersToEpoch();

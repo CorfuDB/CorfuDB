@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -7,12 +9,15 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.Utils;
+
 
 /** All replication views must inherit from this class.
  *
@@ -118,6 +123,23 @@ public abstract class AbstractReplicationView {
      * @return          The result of the read.
      */
     public abstract ReadResult read(long address);
+
+    /** Read a set of addresses, using the replication method given.
+     *
+     * @param addresses   The addresses to read from.
+     * @return            A map containing the results of the read.
+     */
+    public Map<Long, ReadResult> read(RangeSet<Long> addresses) {
+        Map<Long,ReadResult> results = new ConcurrentHashMap<>();
+        Set<Long> total = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        for (Range<Long> r : addresses.asRanges())
+        {
+            total.addAll(Utils.discretizeRange(r));
+        }
+        total.parallelStream()
+                .forEach(i -> results.put(i, read(i)));
+        return results;
+    }
 
     /** Fill a hole at an address, using the replication method given.
      *

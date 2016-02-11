@@ -46,7 +46,11 @@ public class LayoutClientTest extends AbstractClientTest {
                         Layout.ReplicationMode.CHAIN_REPLICATION,
                         0L,
                         -1L,
-                        Collections.singletonList(localAddress)
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        Collections.singletonList(localAddress)
+                                )
+                        )
                 )),
                 0L
         );
