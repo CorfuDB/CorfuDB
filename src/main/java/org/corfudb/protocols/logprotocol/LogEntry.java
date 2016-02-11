@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ICorfuSerializable;
 
 import java.util.Arrays;
@@ -54,7 +55,7 @@ public class LogEntry implements ICorfuSerializable {
      * should initialize their contents based on the buffer.
      * @param b The remaining buffer.
      */
-    void deserializeBuffer(ByteBuf b) {
+    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         // In the base case, we don't do anything.
     }
 
@@ -64,12 +65,12 @@ public class LogEntry implements ICorfuSerializable {
      * @param b The buffer to deserialize.
      * @return  A LogEntry.
      */
-    public static ICorfuSerializable deserialize(ByteBuf b) {
+    public static ICorfuSerializable deserialize(ByteBuf b, CorfuRuntime rt) {
         try {
             LogEntryType let = typeMap.get(b.readByte());
             LogEntry l = let.entryType.newInstance();
             l.type = let;
-            l.deserializeBuffer(b);
+            l.deserializeBuffer(b, rt);
             return l;
         } catch (InstantiationException | IllegalAccessException ie)
         {

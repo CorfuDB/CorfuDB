@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
+import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.EnumMap;
 
@@ -32,7 +33,7 @@ public interface ILogUnitEntry extends IMetadata {
      *
      * @return  An object representing the deserialized payload.
      */
-    Object getPayload();
+    Object getPayload(CorfuRuntime rt);
 
     /** Get an estimate of how large this entry is in memory.
      *

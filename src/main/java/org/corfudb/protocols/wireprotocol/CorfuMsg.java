@@ -61,13 +61,18 @@ public class CorfuMsg {
         FILL_HOLE(34, LogUnitFillHoleMsg.class, LogUnitServer.class),
         FORCE_GC(35, CorfuMsg.class, LogUnitServer.class),
         GC_INTERVAL(36, LogUnitGCIntervalMsg.class, LogUnitServer.class),
+        FORCE_COMPACT(37, CorfuMsg.class, LogUnitServer.class),
+        GET_CONTIGUOUS_TAIL(38, CorfuUUIDMsg.class, LogUnitServer.class),
+        CONTIGUOUS_TAIL(39, LogUnitTailMsg.class, LogUnitServer.class),
+        READ_RANGE(40, CorfuRangeMsg.class, LogUnitServer.class),
+        READ_RANGE_RESPONSE(41, LogUnitReadRangeResponseMsg.class, LogUnitServer.class),
 
         // Logging Unit Error Codes
-        ERROR_OK(40, CorfuMsg.class, LogUnitServer.class),
-        ERROR_TRIMMED(41, CorfuMsg.class, LogUnitServer.class),
-        ERROR_OVERWRITE(42, CorfuMsg.class, LogUnitServer.class),
-        ERROR_OOS(43, CorfuMsg.class, LogUnitServer.class),
-        ERROR_RANK(44, CorfuMsg.class, LogUnitServer.class)
+        ERROR_OK(50, CorfuMsg.class, LogUnitServer.class),
+        ERROR_TRIMMED(51, CorfuMsg.class, LogUnitServer.class),
+        ERROR_OVERWRITE(52, CorfuMsg.class, LogUnitServer.class),
+        ERROR_OOS(53, CorfuMsg.class, LogUnitServer.class),
+        ERROR_RANK(54, CorfuMsg.class, LogUnitServer.class)
         ;
 
         public final int type;

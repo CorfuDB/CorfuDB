@@ -1,11 +1,15 @@
 package org.corfudb.util;
 
+import com.google.common.collect.Range;
 import lombok.NonNull;
 
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -20,6 +24,9 @@ public class Utils
      * @return
      */
     public static long parseLong(final Object toParseObj) {
+        if (toParseObj == null) {
+            return 0;
+        }
         if (toParseObj instanceof Long)
         {
             return (Long) toParseObj;
@@ -63,7 +70,42 @@ public class Utils
         }
     }
 
+    @SuppressWarnings("unchecked")
+    public static <T> T getOption(Map<String,Object> optionsMap, String option, Class<T> type, T defaultValue)
+    {
+        T obj = (T) optionsMap.get(option);
+        if (type == Long.class)
+        {
+            if (obj == null && defaultValue != null)
+            {
+                return defaultValue;
+            }
+            return (T) (Long)parseLong(obj);
+        }
+        if (obj == null)
+        {
+            return defaultValue;
+        }
+        return obj;
+    }
 
+    public static <T> T getOption(Map<String,Object> optionsMap, String option, Class<T> type) {
+        return getOption(optionsMap, option, type, null);
+    }
+
+    /** Turn a range into a set of discrete longs.
+     *
+     * @param range The range to discretize.
+     * @return      A set containing all the longs in that range.
+     */
+    public static Set<Long> discretizeRange(Range<Long> range) {
+        Set<Long> s = new HashSet<>();
+        for (long l = range.lowerEndpoint(); l <= range.upperEndpoint(); l++)
+        {
+            if (range.contains(l)) {s.add(l);}
+        }
+        return s;
+    }
     /** Convert to byte string representation.
      * from http://stackoverflow.com/questions/3758606/how-to-convert-byte-size-into-human-readable-format-in-java
      * @param value         The value to convert.

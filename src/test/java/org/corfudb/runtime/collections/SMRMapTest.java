@@ -58,14 +58,67 @@ public class SMRMapTest extends AbstractViewTest {
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
-        for (int i = 0; i < 100_000; i++) {
+        for (int i = 0; i < 1_000; i++) {
             assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
                     .isNull();
         }
-        for (int i = 0; i < 100_000; i++) {
+        for (int i = 0; i < 1_000; i++) {
             assertThat(testMap.get(Integer.toString(i)))
                     .isEqualTo(Integer.toString(i));
         }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canContainOtherCorfuObjects()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
+        testMap.clear();
+        testMap.put("z", "e");
+        Map<String,Map<String,String>> testMap2 = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("b"), SMRMap.class);
+        testMap2.put("a", testMap);
+
+        assertThat(testMap2.get("a").get("z"))
+                .isEqualTo("e");
+
+        testMap2.get("a").put("y", "f");
+
+        assertThat(testMap.get("y"))
+                .isEqualTo("f");
+
+        Map<String,String> testMap3 = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
+
+        assertThat(testMap3.get("y"))
+                .isEqualTo("f");
+
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canContainNullObjects()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
+        testMap.clear();
+        testMap.put("z", null);
+        assertThat(testMap.get("z"))
+                .isEqualTo(null);
+        Map<String,String> testMap2 = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
+        assertThat(testMap2.get("z"))
+                .isEqualTo(null);
     }
 
     @Test
@@ -82,7 +135,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 10_000;
+        final int num_records = 1_000;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {

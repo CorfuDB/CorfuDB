@@ -36,7 +36,7 @@ public class TXEntry extends LogEntry {
             this.updates = updates;
         }
 
-        public TXObjectEntry(ByteBuf b)
+        public TXObjectEntry(ByteBuf b, CorfuRuntime rt)
         {
             this.lastTimestamp = b.readLong();
             short numUpdates = b.readShort();
@@ -46,7 +46,7 @@ public class TXEntry extends LogEntry {
                 updates.add(
                         (SMREntry) Serializers
                                 .getSerializer(Serializers.SerializerType.CORFU)
-                                .deserialize(b));
+                                .deserialize(b, rt));
             }
         }
 
@@ -122,15 +122,15 @@ public class TXEntry extends LogEntry {
      * @param b The remaining buffer.
      */
     @Override
-    void deserializeBuffer(ByteBuf b) {
-        super.deserializeBuffer(b);
+    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+        super.deserializeBuffer(b, rt);
         short mapEntries = b.readShort();
         txMap = new HashMap<>();
         for (short i = 0; i < mapEntries; i++) {
             long uuidMSB = b.readLong();
             long uuidLSB = b.readLong();
             UUID id = new UUID(uuidMSB, uuidLSB);
-            TXObjectEntry toe = new TXObjectEntry(b);
+            TXObjectEntry toe = new TXObjectEntry(b, rt);
             txMap.put(id, toe);
         }
     }

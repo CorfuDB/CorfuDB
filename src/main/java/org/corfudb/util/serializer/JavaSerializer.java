@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -21,7 +22,7 @@ public class JavaSerializer implements ISerializer {
      * @return The deserialized object.
      */
     @Override
-    public Object deserialize(ByteBuf b) {
+    public Object deserialize(ByteBuf b, CorfuRuntime rt) {
         try (ByteBufInputStream bbis = new ByteBufInputStream(b))
         {
             try (ObjectInputStream ois = new ObjectInputStream(bbis))

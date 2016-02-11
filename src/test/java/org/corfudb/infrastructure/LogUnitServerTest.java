@@ -28,7 +28,7 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkThatWritesArePersisted()
             throws Exception
     {
-        String serviceDir = Files.createTempDir().getAbsolutePath();
+        String serviceDir = getTempDir();
 
         LogUnitServer s1 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
                 .put("--log-path", serviceDir)
@@ -90,6 +90,111 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .matchesDataAtAddress(0, "0".getBytes())
                 .matchesDataAtAddress(100, "100".getBytes())
                 .matchesDataAtAddress(10000000, "10000000".getBytes());
+    }
+
+    @Test
+    public void checkThatContiguousStreamIsCorrectlyCalculated()
+            throws Exception
+    {
+        LogUnitServer s1 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
+                .put("--memory", true)
+                .put("--single", false)
+                .put("--max-cache", 1000000)
+                .build());
+
+        this.router.setServerUnderTest(s1);
+        LogUnitWriteMsg m = new LogUnitWriteMsg(0L);
+        //write at 0
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        m.setPayload("0".getBytes());
+        sendMessage(m);
+        s1.compactTail();
+        assertThat(s1)
+                .hasContiguousStreamEntryAt(CorfuRuntime.getStreamID("a"), 0L);
+
+        m = new LogUnitWriteMsg(1L);
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("b")));
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        m.setPayload("1".getBytes());
+        sendMessage(m);
+        s1.compactTail();
+        assertThat(s1)
+                .hasContiguousStreamEntryAt(CorfuRuntime.getStreamID("a"), 0L);
+        assertThat(s1)
+                .hasContiguousStreamEntryAt(CorfuRuntime.getStreamID("b"), 1L);
+
+        m = new LogUnitWriteMsg(2L);
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        m.setPayload("10000000".getBytes());
+        sendMessage(m);
+        s1.compactTail();
+        m = new LogUnitWriteMsg(100L);
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        m.setPayload("10000000".getBytes());
+        sendMessage(m);
+        s1.compactTail();
+
+        assertThat(s1)
+                .hasContiguousStreamEntryAt(CorfuRuntime.getStreamID("a"), 0L);
+        assertThat(s1)
+                .hasContiguousStreamEntryAt(CorfuRuntime.getStreamID("b"), 1L);
+        assertThat(s1)
+                .hasContiguousStreamEntryAt(CorfuRuntime.getStreamID("a"), 2L);
+        assertThat(s1)
+                .doestNotHaveContiguousStreamEntryAt(CorfuRuntime.getStreamID("a"), 100L);
+        s1.shutdown();
+    }
+
+    @Test
+    public void checkThatContiguousTailIsCorrectlyCalculated()
+            throws Exception
+    {
+        LogUnitServer s1 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
+                .put("--memory", true)
+                .put("--single", false)
+                .put("--max-cache", 1000000)
+                .build());
+
+        this.router.setServerUnderTest(s1);
+        LogUnitWriteMsg m = new LogUnitWriteMsg(0L);
+        //write at 0
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        m.setPayload("0".getBytes());
+        sendMessage(m);
+        s1.compactTail();
+        assertThat(s1)
+                .hasContiguousTailAt(0L);
+
+        m = new LogUnitWriteMsg(1L);
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        m.setPayload("1".getBytes());
+        sendMessage(m);
+        s1.compactTail();
+        assertThat(s1)
+                .hasContiguousTailAt(1L);
+
+        m = new LogUnitWriteMsg(100L);
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        m.setPayload("10000000".getBytes());
+        sendMessage(m);
+        s1.compactTail();
+        assertThat(s1)
+                .hasContiguousTailAt(1L);
+
+        s1.shutdown();
     }
 }
 

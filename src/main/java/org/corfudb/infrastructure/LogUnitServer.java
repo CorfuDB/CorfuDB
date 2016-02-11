@@ -7,24 +7,27 @@ import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.gson.Gson;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.*;
@@ -33,6 +36,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.LogUnitEntry;
+import org.corfudb.util.serializer.Serializers;
+
 /**
  * Created by mwei on 12/10/15.
  *
@@ -60,7 +65,7 @@ public class LogUnitServer implements IServer {
     class FileHandle {
         final AtomicLong filePointer;
         final FileChannel channel;
-        final RangeSet<Long> knownAddresses = TreeRangeSet.create();
+        final Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         @Getter(lazy=true)
         private final MappedByteBuffer byteBuffer = getMappedBuffer();
         public ByteBuffer getMapForRegion(int offset, int size)
@@ -93,6 +98,37 @@ public class LogUnitServer implements IServer {
     @Getter
     long contiguousHead;
 
+    @Getter
+    long contiguousTail;
+
+    /**
+     * The addresses that this unit has seen, temporarily until they are integrated into the contiguousTail.
+     */
+    Set<Address> seenAddressesTemp;
+
+    @Data
+    class Address implements Comparable<Address> {
+        final long logAddress;
+        final Set<UUID> StreamIDs;
+
+        @Override
+        public int compareTo(Address o) {
+            return Long.compare(logAddress, o.logAddress);
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return Long.hashCode(logAddress);
+        }
+
+        @Override
+        public boolean equals(Object obj)
+        {
+            return obj instanceof Address && logAddress == ((Address)obj).logAddress;
+        }
+    }
+
     /**
      * A range set representing trimmed addresses on the log unit.
      */
@@ -111,6 +147,21 @@ public class LogUnitServer implements IServer {
     LoadingCache<Long, LogUnitReadResponseMsg.LogUnitEntry> dataCache;
 
     long maxCacheSize;
+
+    /** This cache services requests for stream addresses.
+     */
+    LoadingCache<UUID, RangeSet<Long>> streamCache;
+
+    /**
+     * A scheduler, which is used to schedule periodic tasks like garbage collection.
+     */
+    private final ScheduledExecutorService scheduler =
+            Executors.newScheduledThreadPool(
+                    1,
+                    new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat("LogUnit-Maintenance-%d")
+                            .build());
 
     public LogUnitServer(Map<String, Object> opts)
     {
@@ -131,6 +182,11 @@ public class LogUnitServer implements IServer {
         }
 
         reset();
+
+        scheduler.scheduleAtFixedRate(this::compactTail,
+                Utils.getOption(opts, "--compact", Long.class, 60L),
+                Utils.getOption(opts, "--compact", Long.class, 60L),
+                TimeUnit.SECONDS);
 
         gcThread = new Thread(this::runGC);
         gcThread.start();
@@ -165,6 +221,37 @@ public class LogUnitServer implements IServer {
                 throw new RuntimeException("Invalid header magic!");
             }
             return new LogFileHeader(buffer.getInt(), buffer.getLong());
+        }
+    }
+
+    public synchronized void compactTail() {
+        long numEntries = 0;
+        List<Address> setCopy = new ArrayList<>(seenAddressesTemp);
+        Collections.sort(setCopy);
+        for (Address i : setCopy)
+        {
+            if (i.getLogAddress() == contiguousTail + 1)
+            {
+                contiguousTail = i.getLogAddress();
+                seenAddressesTemp.remove(i);
+                numEntries++;
+
+                if (i.getStreamIDs().size() > 0)
+                {
+                    for (UUID stream : i.getStreamIDs())
+                    {
+                        RangeSet<Long> currentSet = streamCache.get(stream);
+                        currentSet.add(Range.singleton(i.getLogAddress()));
+                        streamCache.put(stream, currentSet);
+                    }
+                }
+            }
+            else {
+                break;
+            }
+        }
+        if (numEntries > 0) {
+            log.debug("Completed tail compaction, compacted {} entries, tail is now at {}", numEntries, contiguousTail);
         }
     }
 
@@ -244,7 +331,7 @@ public class LogUnitServer implements IServer {
             short flags = o.getShort();
             long addr = o.getLong();
             if (address == -1) {
-            fh.knownAddresses.add(Range.singleton(addr)); }
+            fh.knownAddresses.add(addr); }
             int size = o.getInt();
             if (addr != address)
             {
@@ -316,6 +403,11 @@ public class LogUnitServer implements IServer {
                 log.trace("Handling read request for address {}", readMsg.getAddress());
                 read(readMsg, ctx, r);
                 break;
+            case READ_RANGE:
+                CorfuRangeMsg rangeReadMsg = (CorfuRangeMsg) msg;
+                log.trace("Handling read request for address ranges {}", rangeReadMsg.getRanges());
+                read(rangeReadMsg, ctx, r);
+                break;
             case GC_INTERVAL:
             {
                 LogUnitGCIntervalMsg m = (LogUnitGCIntervalMsg) msg;
@@ -345,13 +437,31 @@ public class LogUnitServer implements IServer {
                 log.debug("Trim requested at prefix={}", m.getPrefix());
             }
             break;
+            case FORCE_COMPACT:
+            {
+                log.info("Compaction forced by client {}", msg.getClientID());
+                compactTail();
+            }
+            break;
+            case GET_CONTIGUOUS_TAIL:
+                CorfuUUIDMsg m = (CorfuUUIDMsg)msg;
+                if (m.getId() == null)
+                {
+                    r.sendResponse(ctx, m, new LogUnitTailMsg(contiguousTail));
+                }
+                else {
+                    r.sendResponse(ctx, m, new LogUnitTailMsg(contiguousTail, streamCache.get(m.getId())));
+                }
+            break;
         }
     }
 
     @Override
     public void reset() {
         contiguousHead = 0L;
+        contiguousTail = -1L;
         trimRange = TreeRangeSet.create();
+        seenAddressesTemp = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
         if (dataCache != null)
         {
@@ -367,9 +477,10 @@ public class LogUnitServer implements IServer {
                 .writer(new CacheWriter<Long, LogUnitEntry>() {
                     @Override
                     public void write(Long address, LogUnitEntry entry) {
-                        if (dataCache.getIfPresent(address) != null) {
+                        if (dataCache.getIfPresent(address) != null) {// || seenAddresses.contains(address)) {
                             throw new RuntimeException("overwrite");
                         }
+                        seenAddressesTemp.add(new Address(address, entry.getStreams()));
                         if (!entry.isPersisted && prefix != null) { //don't persist an entry twice.
                             //evict the data by getting the next pointer.
                             try {
@@ -377,7 +488,7 @@ public class LogUnitServer implements IServer {
                                 // (probably need a faster way to do this - high watermark?)
                                 FileHandle fh = getChannelForAddress(address);
                                 if (!fh.getKnownAddresses().contains(address)) {
-                                    fh.getKnownAddresses().add(Range.singleton(address));
+                                    fh.getKnownAddresses().add(address);
                                     if ((Boolean) opts.get("--sync")) {
                                         writeEntry(fh, address, entry);
                                     } else {
@@ -406,6 +517,34 @@ public class LogUnitServer implements IServer {
                     }
                 }).build(this::handleRetrieval);
 
+       streamCache = Caffeine.newBuilder()
+                .maximumSize(Utils.getOption(opts, "--stream-cache", Long.class, 5L))
+                .writer(new CacheWriter<UUID, RangeSet<Long>>() {
+                    @Override
+                    public void write(UUID streamID, RangeSet<Long> entry) {
+                        if (prefix != null) {
+                            try {
+                                ByteBuf b = Unpooled.buffer();
+                                Set<Range<Long>> rs = entry.asRanges();
+                                b.writeInt(rs.size());
+                                for (Range<Long> r : rs)
+                                {
+                                    Serializers
+                                            .getSerializer(Serializers.SerializerType.JAVA).serialize(r, b);
+                                }
+                                com.google.common.io.Files.write(b.array(), new File(prefix + File.pathSeparator +
+                                        "stream" + streamID.toString()));
+                            } catch (IOException ie) {
+                                log.error("IOException while writing stream range for stream {}", streamID);
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void delete(UUID streamID, RangeSet<Long> entry, RemovalCause removalCause) {
+                        // never need to delete
+                    }
+                }).build(this::handleStreamRetrieval);
 
         // Hints are always in memory and never persisted.
         /*
@@ -416,6 +555,30 @@ public class LogUnitServer implements IServer {
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
         trimMap = new ConcurrentHashMap<>();
+    }
+
+    @SuppressWarnings("unchecked")
+    public RangeSet<Long> handleStreamRetrieval(UUID stream) {
+        if (prefix != null) {
+            Path p = FileSystems.getDefault().getPath(prefix + File.pathSeparator +
+                    "stream" + stream.toString());
+            try {
+                if (Files.exists(p)) {
+                    ByteBuf b = Unpooled.wrappedBuffer(Files.readAllBytes(p));
+                    RangeSet rs = TreeRangeSet.create();
+                    int ranges = b.readInt();
+                    for (int i = 0; i < ranges; i++)
+                    {
+                        Range r = (Range) Serializers
+                                .getSerializer(Serializers.SerializerType.JAVA).deserialize(b, null);
+                        rs.add(r);
+                    }
+                }
+            } catch (IOException ie) {
+                log.error("IO Exception reading from stream file {}", p);
+            }
+        }
+        return TreeRangeSet.create();
     }
 
     /** Retrieve the LogUnitEntry from disk, given an address.
@@ -454,6 +617,7 @@ public class LogUnitServer implements IServer {
             entry.buffer.release();
         }
     }
+
     /** Service an incoming read request. */
     public void read(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, IServerRouter r)
     {
@@ -476,6 +640,23 @@ public class LogUnitServer implements IServer {
                 r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(e));
             }
         }
+    }
+
+    /** Service an incoming ranged read request. */
+    public void read(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r)
+    {
+        log.trace("ReadRange[{}]", msg.getRanges());
+        Set<Long> total = new HashSet<>();
+        for (Range<Long> range : msg.getRanges().asRanges())
+        {
+            total.addAll(Utils.discretizeRange(range));
+        }
+
+        Map<Long, LogUnitEntry> e = dataCache.getAll(total);
+        Map<Long, LogUnitReadResponseMsg> o = new ConcurrentHashMap<>();
+        e.entrySet().parallelStream()
+                .forEach(rv -> o.put(rv.getKey(), new LogUnitReadResponseMsg(rv.getValue())));
+        r.sendResponse(ctx, msg, new LogUnitReadRangeResponseMsg(o));
     }
 
     /** Service an incoming write request. */
@@ -573,4 +754,11 @@ public class LogUnitServer implements IServer {
         }
     }
 
+    /**
+     * Shutdown the server.
+     */
+    @Override
+    public void shutdown() {
+        scheduler.shutdownNow();
+    }
 }

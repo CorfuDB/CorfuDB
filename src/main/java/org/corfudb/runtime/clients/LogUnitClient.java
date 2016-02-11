@@ -1,8 +1,10 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
@@ -10,10 +12,12 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** A client to a LogUnit.
  *
@@ -51,6 +55,21 @@ public class LogUnitClient implements IClient {
                 break;
             case READ_RESPONSE:
                 router.completeRequest(msg.getRequestID(), new ReadResult((LogUnitReadResponseMsg)msg));
+                break;
+            case READ_RANGE_RESPONSE: {
+                LogUnitReadRangeResponseMsg rmsg = (LogUnitReadRangeResponseMsg) msg;
+                Map<Long, ReadResult> lr = new ConcurrentHashMap<>();
+                rmsg.getResponseMap().entrySet().parallelStream()
+                    .forEach(e -> lr.put(e.getKey(), new ReadResult(e.getValue())));
+                router.completeRequest(msg.getRequestID(), lr);
+            }
+                break;
+            case CONTIGUOUS_TAIL: {
+                LogUnitTailMsg m = (LogUnitTailMsg) msg;
+                router.completeRequest(msg.getRequestID(), new ContiguousTailData(m.getContiguousTail(),
+                        m.getStreamAddresses()));
+            }
+                break;
         }
     }
 
@@ -65,6 +84,11 @@ public class LogUnitClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.FILL_HOLE)
                     .add(CorfuMsg.CorfuMsgType.FORCE_GC)
                     .add(CorfuMsg.CorfuMsgType.GC_INTERVAL)
+                    .add(CorfuMsg.CorfuMsgType.FORCE_COMPACT)
+                    .add(CorfuMsg.CorfuMsgType.CONTIGUOUS_TAIL)
+                    .add(CorfuMsg.CorfuMsgType.GET_CONTIGUOUS_TAIL)
+                    .add(CorfuMsg.CorfuMsgType.READ_RANGE)
+                    .add(CorfuMsg.CorfuMsgType.READ_RANGE_RESPONSE)
 
                     .add(CorfuMsg.CorfuMsgType.ERROR_OK)
                     .add(CorfuMsg.CorfuMsgType.ERROR_TRIMMED)
@@ -153,6 +177,38 @@ public class LogUnitClient implements IClient {
      */
     public void forceGC() {
         router.sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.FORCE_GC));
+    }
+
+    /**
+     * Force the compactor to recalculate the contiguous tail.
+     */
+    public void forceCompact() {
+        router.sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.FORCE_COMPACT));
+    }
+
+    /**
+     * Read a range of addresses.
+     *
+     * @param addresses The addresses to read.
+     */
+    public CompletableFuture<Map<Long,ReadResult>> readRange(RangeSet<Long> addresses) {
+        return router.sendMessageAndGetCompletable(new CorfuRangeMsg(CorfuMsg.CorfuMsgType.READ_RANGE, addresses));
+    }
+
+    @Data
+    class ContiguousTailData {
+        final Long contiguousTail;
+        final RangeSet<Long> range;
+    }
+
+    /** Get the contiguous tail data for a particular stream.
+     *
+     * @param stream    The contiguous tail for a stream.
+     * @return          A ContiguousTailData containing the data for that stream.
+     */
+    public CompletableFuture<ContiguousTailData> getContiguousTail(UUID stream)
+    {
+       return router.sendMessageAndGetCompletable(new CorfuUUIDMsg(CorfuMsg.CorfuMsgType.GET_CONTIGUOUS_TAIL, stream));
     }
 
     /**
