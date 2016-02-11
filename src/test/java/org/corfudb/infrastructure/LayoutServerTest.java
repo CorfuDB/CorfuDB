@@ -133,7 +133,7 @@ public class LayoutServerTest extends AbstractServerTest {
     public void checkThatLayoutIsPersisted()
             throws Exception
     {
-        String serviceDir = Files.createTempDir().getAbsolutePath();
+        String serviceDir = getTempDir();
 
         LayoutServer s1 = new LayoutServer(new ImmutableMap.Builder<String,Object>()
                 .put("--log-path", serviceDir)

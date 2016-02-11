@@ -58,11 +58,11 @@ public class SMRMapTest extends AbstractViewTest {
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
-        for (int i = 0; i < 100_000; i++) {
+        for (int i = 0; i < 1_000; i++) {
             assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
                     .isNull();
         }
-        for (int i = 0; i < 100_000; i++) {
+        for (int i = 0; i < 1_000; i++) {
             assertThat(testMap.get(Integer.toString(i)))
                     .isEqualTo(Integer.toString(i));
         }
@@ -135,7 +135,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 10_000;
+        final int num_records = 1_000;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {

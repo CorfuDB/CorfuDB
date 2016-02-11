@@ -110,7 +110,7 @@ public class SequencerServerTest extends AbstractServerTest {
     public void checkSequencerCheckpointingWorks()
             throws Exception
     {
-       String serviceDir = Files.createTempDir().getAbsolutePath();
+       String serviceDir = getTempDir();
 
        SequencerServer s1 = new SequencerServer(new ImmutableMap.Builder<String,Object>()
             .put("--initial-token", "0")

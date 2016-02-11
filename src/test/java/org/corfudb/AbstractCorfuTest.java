@@ -11,7 +11,10 @@ import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -30,6 +33,7 @@ import static org.fusesource.jansi.Ansi.ansi;
 public class AbstractCorfuTest {
 
     public Set<Callable<Object>> scheduledThreads;
+    public Set<String> temporaryDirectories;
 
     @Rule
     public TestRule watcher = new TestWatcher() {
@@ -53,12 +57,47 @@ public class AbstractCorfuTest {
         scheduledThreads = new HashSet<>();
     }
 
+    @Before
+    public void setupTempDirs() {
+        temporaryDirectories = new HashSet<>();
+    }
+
     @After
     public void cleanupScheduledThreads() {
         assertThat(scheduledThreads)
                 .hasSize(0)
                 .as("Test ended but there are still threads scheduled!");
         scheduledThreads.clear();
+    }
+
+    public static void deleteFolder(File folder) {
+        File[] files = folder.listFiles();
+        if(files!=null) { //some JVMs return null for empty dirs
+            for(File f: files) {
+                if(f.isDirectory()) {
+                    deleteFolder(f);
+                } else {
+                    f.delete();
+                }
+            }
+        }
+        folder.delete();
+    }
+
+    public String getTempDir()
+    {
+        String tempdir = com.google.common.io.Files.createTempDir().getAbsolutePath();
+        temporaryDirectories.add(tempdir);
+        return tempdir;
+    }
+
+    @After
+    public void deleteTempDirs() {
+        for (String s : temporaryDirectories)
+        {
+            File folder = new File(s);
+            deleteFolder(folder);
+        }
     }
 
     /** An interface that defines threads run through the unit testing interface. */
