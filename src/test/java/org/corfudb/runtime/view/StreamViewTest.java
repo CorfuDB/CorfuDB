@@ -11,6 +11,7 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,6 +47,63 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(sv.read())
                 .isEqualTo(null);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canReadWriteFromStreamConcurrent()
+            throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        //begin tests
+        CorfuRuntime r = getRuntime().connect();
+        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+        byte[] testPayload = "hello world".getBytes();
+
+        StreamView sv = r.getStreamsView().get(streamA);
+        scheduleConcurrently(100, i -> sv.write(testPayload));
+        executeScheduled(8, 10, TimeUnit.SECONDS);
+
+        scheduleConcurrently(100, i-> assertThat(sv.read().getResult().getPayload(r))
+                .isEqualTo("hello world".getBytes()));
+        executeScheduled(8, 10, TimeUnit.SECONDS);
+        assertThat(sv.read())
+                .isEqualTo(null);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canReadWriteFromStreamWithoutBackpointers()
+            throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        //begin tests
+        CorfuRuntime r = getRuntime()
+                .setBackpointersDisabled(true)
+                .connect();
+
+        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+        byte[] testPayload = "hello world".getBytes();
+
+        StreamView sv = r.getStreamsView().get(streamA);
+        scheduleConcurrently(100, i -> sv.write(testPayload));
+        executeScheduled(8, 10, TimeUnit.SECONDS);
+
+        scheduleConcurrently(100, i-> assertThat(sv.read().getResult().getPayload(r))
+                .isEqualTo("hello world".getBytes()));
+        executeScheduled(8, 10, TimeUnit.SECONDS);
+        assertThat(sv.read())
+                .isEqualTo(null);
+    }
+
+
 
     @Test
     @SuppressWarnings("unchecked")

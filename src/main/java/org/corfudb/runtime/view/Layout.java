@@ -168,6 +168,18 @@ public class Layout implements Cloneable {
         throw new RuntimeException("Unmapped address!");
     }
 
+    public LayoutSegment getSegment(long globalAddress)
+    {
+        for (LayoutSegment ls : segments)
+        {
+            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1))
+            {
+                return ls;
+            }
+        }
+        throw new RuntimeException("Unmapped address " + Long.toString(globalAddress) + "!");
+    }
+
     /** Get the length of a segment at a particular address.
      *
      * @param address   The address to check.

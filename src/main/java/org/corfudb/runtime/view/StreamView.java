@@ -9,10 +9,8 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.AbstractReplicationView.ReadResult;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -31,11 +29,15 @@ public class StreamView implements AutoCloseable {
     /** A pointer to the log. */
     final AtomicLong logPointer;
 
+    /** A skipList of resolved stream addresses. */
+    NavigableSet<Long> currentBackpointerList;
+
     public StreamView(CorfuRuntime runtime, UUID streamID)
     {
         this.runtime = runtime;
         this.streamID = streamID;
         this.logPointer = new AtomicLong(0);
+        this.currentBackpointerList = new ConcurrentSkipListSet<>();
     }
 
     /** Write an object to this stream, returning the physical address it
@@ -90,6 +92,55 @@ public class StreamView implements AutoCloseable {
         }
     }
 
+    /** Resolve a list of entries, using backpointers, to read.
+     *
+     * @param read  The current address we are reading from.
+     * @return      A list of entries that we have resolved for reading.
+     */
+    public NavigableSet<Long> resolveBackpointersToRead(long read) {
+        long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
+        log.trace("Read[{}]: latest token at {}", streamID, latestToken);
+        if (latestToken < read)
+        {
+            return new ConcurrentSkipListSet<>();
+        }
+        NavigableSet<Long> resolvedBackpointers = new ConcurrentSkipListSet<>();
+        if (!runtime.backpointersDisabled) {
+            resolvedBackpointers.add(latestToken);
+            ReadResult r = runtime.getAddressSpaceView().read(latestToken);
+            long backPointer;
+            while (r.getResult().getResultType() != LogUnitReadResponseMsg.ReadResultType.EMPTY
+                    && r.getResult().getBackpointerMap().containsKey(streamID)) {
+                backPointer = r.getResult().getBackpointerMap().get(streamID);
+                if (backPointer == read) {
+                    resolvedBackpointers.add(backPointer);
+                    break;
+                } else if (backPointer < read) {
+                    break;
+                } else {
+                    resolvedBackpointers.add(backPointer);
+                }
+
+                // following backpointers...
+                log.trace("Following backpointer to {}", backPointer);
+                r = runtime.getAddressSpaceView().read(backPointer);
+            }
+        }
+        else {
+            resolvedBackpointers.add(latestToken);
+        }
+        if (resolvedBackpointers.first() != read) {
+            long backpointerMin = resolvedBackpointers.first();
+            log.trace("Backpointer min is at {} but read is at {}, filling.", backpointerMin, read);
+            while (backpointerMin > read && backpointerMin > 0) {
+                backpointerMin--;
+                resolvedBackpointers.add(backpointerMin);
+            }
+            log.trace("Backpointer resolved to {}.", resolvedBackpointers);
+        }
+        return resolvedBackpointers;
+    }
+
     /** Read the next item from the stream.
      * This method is synchronized to protect against multiple readers.
      *
@@ -100,7 +151,31 @@ public class StreamView implements AutoCloseable {
     {
         while (true)
         {
+            /*
             long thisRead = logPointer.getAndIncrement();
+            if (thisRead == 0L)
+            {
+                //log.trace("Read[{}]: initial learn", streamID);
+                //use backpointers to build
+                //TODO: if this is a contiguous prefix, store in order to do a selective read.
+                //runtime.getAddressSpaceView().readPrefix(streamID);
+            }
+            */
+            Long thisRead = currentBackpointerList.pollFirst();
+            if (thisRead == null) {
+                currentBackpointerList = resolveBackpointersToRead(logPointer.get());
+                log.trace("Backpointer list was empty, it has been filled with {} entries.",
+                        currentBackpointerList.size());
+                if (currentBackpointerList.size() == 0)
+                {
+                    log.trace("No backpointers resolved, nothing to read.");
+                    return null;
+                }
+                thisRead = currentBackpointerList.pollFirst();
+            }
+
+            logPointer.set(thisRead+1);
+
             log.trace("Read[{}]: reading at {}", streamID, thisRead);
             ReadResult r = runtime.getAddressSpaceView().read(thisRead);
             if (r.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY)

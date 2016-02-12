@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
@@ -11,11 +12,13 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -31,6 +34,9 @@ public class AddressSpaceView extends AbstractView {
 
     /** A cache for read results. */
     static LoadingCache<Long, AbstractReplicationView.ReadResult> readCache;
+
+    /** A cache for stream addresses. */
+    static LoadingCache<UUID, Set<Long>> streamAddressCache;
 
     /** Duration before retrying an empty read. */
     @Getter
@@ -64,9 +70,58 @@ public class AddressSpaceView extends AbstractView {
 
                     @Override
                     public Map<Long, AbstractReplicationView.ReadResult> loadAll(Iterable<? extends Long> keys) throws Exception {
-                        return cacheFetch((Iterable)keys);
+                        return cacheFetch((Iterable<Long>) keys);
                     }
                 });
+
+        streamAddressCache = Caffeine.newBuilder()
+                .build(this::getStream);
+    }
+
+    /** Learn about a stream for the first time.
+     *  This method will dump all learned stream entries into the stream.
+     *
+     * @param streamID  The ID of a stream.
+     * @return          The long
+     */
+    private Set<Long> getStream(UUID streamID)
+    {
+        return layoutHelper(l -> {
+            Set<Long> rSet = Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
+                    for (Layout.LayoutSegment s : l.getSegments()) {
+                        AbstractReplicationView v = AbstractReplicationView
+                                .getReplicationView(l, s.getReplicationMode(), s);
+                        Map<Long, AbstractReplicationView.ReadResult> r = v.read(streamID);
+                        if (!runtime.cacheDisabled) {
+                            readCache.putAll(r);
+                        }
+                        rSet.addAll(r.keySet());
+                    }
+            return rSet;
+            });
+    }
+
+    /** Learn about a stream for the first time, bypassing the cache.
+     *  This method will dump all learned stream entries into the stream.
+     *
+     * @param streamID  The ID of a stream.
+     * @return          The long
+     */
+    private Map<Long, AbstractReplicationView.ReadResult> fetchStream(UUID streamID)
+    {
+        return layoutHelper(l -> {
+            Map<Long, AbstractReplicationView.ReadResult> rMap = new ConcurrentHashMap<>();
+            for (Layout.LayoutSegment s : l.getSegments()) {
+                AbstractReplicationView v = AbstractReplicationView
+                        .getReplicationView(l, s.getReplicationMode(), s);
+                Map<Long, AbstractReplicationView.ReadResult> r = v.read(streamID);
+                if (!runtime.cacheDisabled) {
+                    readCache.putAll(r);
+                }
+                rMap.putAll(r);
+            }
+            return rMap;
+        });
     }
 
     /**
@@ -80,7 +135,8 @@ public class AddressSpaceView extends AbstractView {
     public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
     throws OverwriteException
     {
-        int numBytes = layoutHelper(l -> AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address))
+        int numBytes = layoutHelper(l -> AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address),
+                l.getSegment(address))
                    .write(address, stream, data, backpointerMap));
 
         // Insert this write to our local cache.
@@ -124,6 +180,22 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Read the given object from a range of addresses.
+     *
+     * @param  UUID An address range to read from.
+     * @return        A result, which be cached.
+     */
+    public Map<Long, AbstractReplicationView.ReadResult> readPrefix(UUID stream)
+    {
+
+        if (!runtime.isCacheDisabled()) {
+            return readCache.getAll(streamAddressCache.get(stream));
+        }
+        return fetchStream(stream);
+    }
+
+
+    /**
      * Fetch an address for insertion into the cache.
      * @param address An address to read from.
      * @return        A result to be cached. If the readresult is empty,
@@ -159,7 +231,7 @@ public class AddressSpaceView extends AbstractView {
         return layoutHelper(l -> {
                     for (Long a : addresses) {
                         AbstractReplicationView v = AbstractReplicationView
-                                .getReplicationView(l, l.getReplicationMode(a));
+                                .getReplicationView(l, l.getReplicationMode(a), l.getSegment(a));
                         groupMap.computeIfAbsent(v, x -> TreeRangeSet.<Long>create())
                                 .add(Range.singleton(a));
                     }
@@ -183,7 +255,7 @@ public class AddressSpaceView extends AbstractView {
     public AbstractReplicationView.ReadResult fetch(long address)
     {
         return layoutHelper(l -> AbstractReplicationView
-                        .getReplicationView(l, l.getReplicationMode(address))
+                        .getReplicationView(l, l.getReplicationMode(address), l.getSegment(address))
                         .read(address)
         );
     }
@@ -197,9 +269,23 @@ public class AddressSpaceView extends AbstractView {
     {
         layoutHelper(
                 l -> {AbstractReplicationView
-                .getReplicationView(l, l.getReplicationMode(address))
+                .getReplicationView(l, l.getReplicationMode(address), l.getSegment(address))
                 .fillHole(address);
                 return null;}
         );
+    }
+
+    public void compactAll() {
+        layoutHelper( l-> {
+        for (Layout.LayoutSegment s : l.getSegments()) {
+            for (Layout.LayoutStripe ls: s.getStripes())
+            {
+                for (String server : ls.getLogServers()) {
+                    l.getRuntime().getRouter(server).getClient(LogUnitClient.class).forceCompact();
+                }
+            }
+        }
+        return null;
+        });
     }
 }

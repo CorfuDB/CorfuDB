@@ -7,17 +7,22 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import javax.swing.text.Segment;
+import java.util.AbstractMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /** A view of an address implemented by chain replication.
  *
@@ -37,9 +42,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ChainReplicationView extends AbstractReplicationView {
 
-    public ChainReplicationView(Layout l)
+    public ChainReplicationView(Layout l, Layout.LayoutSegment ls)
     {
-        super(l);
+        super(l, ls);
     }
 
     /**
@@ -126,6 +131,35 @@ public class ChainReplicationView extends AbstractReplicationView {
         return resultMap;
     }
 
+    /**
+     * Read a stream prefix, using the replication method given.
+     *
+     * @param UUID the stream to read from.
+     * @return A map containing the results of the read.
+     */
+    @Override
+    public Map<Long, ReadResult> read(UUID stream) {
+        // for each chain, simply query the last one...
+        Set<Map.Entry<Layout.LayoutStripe, Map<Long, LogUnitReadResponseMsg.ReadResult>>> e = segment.getStripes().parallelStream()
+                .map(x -> {
+                    LogUnitClient luc = layout.getRuntime().getRouter(x.getLogServers().get(x.getLogServers().size() - 1))
+                            .getClient(LogUnitClient.class);
+                    return new AbstractMap.SimpleImmutableEntry<>(x, CFUtils.getUninterruptibly(luc.readStream(stream)));
+                })
+                .collect(Collectors.toSet());
+        Map<Long, ReadResult> resultMap = new ConcurrentHashMap<>();
+
+        e.parallelStream()
+                .forEach(x ->
+                {
+                    x.getValue().entrySet().parallelStream()
+                            .forEach(y -> {
+                                long globalAddress = layout.getGlobalAddress(x.getKey(), y.getKey());
+                                resultMap.put(globalAddress, new ReadResult(globalAddress, y.getValue()));
+                            });
+                });
+        return resultMap;
+    }
 
     /**
      * Fill a hole at an address, using the replication method given.

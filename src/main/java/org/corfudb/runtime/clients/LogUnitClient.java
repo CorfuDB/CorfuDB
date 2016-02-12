@@ -63,7 +63,7 @@ public class LogUnitClient implements IClient {
                     .forEach(e -> lr.put(e.getKey(), new ReadResult(e.getValue())));
                 router.completeRequest(msg.getRequestID(), lr);
             }
-                break;
+            break;
             case CONTIGUOUS_TAIL: {
                 LogUnitTailMsg m = (LogUnitTailMsg) msg;
                 router.completeRequest(msg.getRequestID(), new ContiguousTailData(m.getContiguousTail(),
@@ -89,6 +89,7 @@ public class LogUnitClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.GET_CONTIGUOUS_TAIL)
                     .add(CorfuMsg.CorfuMsgType.READ_RANGE)
                     .add(CorfuMsg.CorfuMsgType.READ_RANGE_RESPONSE)
+                    .add(CorfuMsg.CorfuMsgType.STREAM_READ)
 
                     .add(CorfuMsg.CorfuMsgType.ERROR_OK)
                     .add(CorfuMsg.CorfuMsgType.ERROR_TRIMMED)
@@ -195,8 +196,18 @@ public class LogUnitClient implements IClient {
         return router.sendMessageAndGetCompletable(new CorfuRangeMsg(CorfuMsg.CorfuMsgType.READ_RANGE, addresses));
     }
 
+    /**
+     * Read a contiguous stream prefix
+     *
+     * @param addresses The addresses to read.
+     */
+    public CompletableFuture<Map<Long,ReadResult>> readStream(UUID streamID) {
+        return router.sendMessageAndGetCompletable(new CorfuUUIDMsg(CorfuMsg.CorfuMsgType.STREAM_READ, streamID));
+    }
+
+
     @Data
-    class ContiguousTailData {
+    public static class ContiguousTailData {
         final Long contiguousTail;
         final RangeSet<Long> range;
     }

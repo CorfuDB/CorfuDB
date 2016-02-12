@@ -276,8 +276,6 @@ public class LogUnitServer implements IServer {
     /** Read the header for a Corfu log file.
      *
      * @param fc            The filechannel to use.
-     * @param version       The version number to write to the header.
-     * @param flags         Flags, if any to write to the header.
      * @throws IOException
      */
     public LogFileHeader readHeader(FileChannel fc)
@@ -443,15 +441,25 @@ public class LogUnitServer implements IServer {
                 compactTail();
             }
             break;
-            case GET_CONTIGUOUS_TAIL:
-                CorfuUUIDMsg m = (CorfuUUIDMsg)msg;
-                if (m.getId() == null)
-                {
+            case GET_CONTIGUOUS_TAIL: {
+                CorfuUUIDMsg m = (CorfuUUIDMsg) msg;
+                if (m.getId() == null) {
                     r.sendResponse(ctx, m, new LogUnitTailMsg(contiguousTail));
-                }
-                else {
+                } else {
                     r.sendResponse(ctx, m, new LogUnitTailMsg(contiguousTail, streamCache.get(m.getId())));
                 }
+            }
+            break;
+            case STREAM_READ: {
+                CorfuUUIDMsg m = (CorfuUUIDMsg) msg;
+                if (m.getId() == null) {
+                    r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.CorfuMsgType.NACK));
+                } else {
+                    CorfuRangeMsg rm = new CorfuRangeMsg(streamCache.get(m.getId()));
+                    rm.copyBaseFields(m);
+                    read(rm, ctx, r);
+                }
+            }
             break;
         }
     }

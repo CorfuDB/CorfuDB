@@ -29,12 +29,12 @@ import org.corfudb.util.Utils;
 @Slf4j
 public abstract class AbstractReplicationView {
 
-    public static AbstractReplicationView getReplicationView(Layout l, Layout.ReplicationMode mode)
+    public static AbstractReplicationView getReplicationView(Layout l, Layout.ReplicationMode mode, Layout.LayoutSegment ls)
     {
         switch (mode)
         {
             case CHAIN_REPLICATION:
-                return new ChainReplicationView(l);
+                return new ChainReplicationView(l, ls);
             case QUORUM_REPLICATION:
                 log.warn("Quorum replication is not yet supported!");
                 break;
@@ -88,9 +88,13 @@ public abstract class AbstractReplicationView {
     @Getter
     public final Layout layout;
 
-    public AbstractReplicationView(Layout layout)
+    @Getter
+    public final Layout.LayoutSegment segment;
+
+    public AbstractReplicationView(Layout layout, Layout.LayoutSegment ls)
     {
         this.layout = layout;
+        this.segment = ls;
     }
 
     /** Write the given object to an address and streams, using the replication method given.
@@ -137,10 +141,18 @@ public abstract class AbstractReplicationView {
         return results;
     }
 
+    /** Read a contiguous stream prefix, using the replication method given.
+     *
+     * @param stream      The stream to read from.
+     * @return            A map containing the results of the read.
+     */
+    public abstract Map<Long, ReadResult> read(UUID stream);
+
     /** Fill a hole at an address, using the replication method given.
      *
      * @param address   The address to hole fill at.
      */
     public abstract void fillHole(long address)
         throws OverwriteException;
+
 }

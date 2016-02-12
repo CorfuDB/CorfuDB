@@ -234,7 +234,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Override
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        log.info("(server) send Response: {}", outMsg);
+        log.trace("(server) send Response: {}", outMsg);
         CorfuMsg m = simulateSerialization(outMsg);
         IClient handler = handlerMap.get(m.getMsgType());
         handler.handleMessage(m, null);
