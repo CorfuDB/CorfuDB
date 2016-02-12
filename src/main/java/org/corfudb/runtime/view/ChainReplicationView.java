@@ -1,18 +1,28 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
 import com.google.common.util.concurrent.Uninterruptibles;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import javax.swing.text.Segment;
+import java.util.AbstractMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /** A view of an address implemented by chain replication.
  *
@@ -32,9 +42,9 @@ import java.util.UUID;
 @Slf4j
 public class ChainReplicationView extends AbstractReplicationView {
 
-    public ChainReplicationView(Layout l)
+    public ChainReplicationView(Layout l, Layout.LayoutSegment ls)
     {
-        super(l);
+        super(l, ls);
     }
 
     /**
@@ -62,7 +72,7 @@ public class ChainReplicationView extends AbstractReplicationView {
                 payloadBytes = b.readableBytes();
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
-                                .write(address, stream, 0L, data, backpointerMap), OverwriteException.class);
+                                .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
             } finally {
                 b.release();
             }
@@ -83,7 +93,72 @@ public class ChainReplicationView extends AbstractReplicationView {
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
         return new ReadResult(address,
-                CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, numUnits - 1).read(address)));
+                CFUtils.getUninterruptibly(getLayout()
+                        .getLogUnitClient(address, numUnits - 1).read(getLayout().getLocalAddress(address))));
+    }
+
+    /**
+     * Read a set of addresses, using the replication method given.
+     *
+     * @param addresses The addresses to read from.
+     * @return A map containing the results of the read.
+     */
+    @Override
+    public Map<Long, ReadResult> read(RangeSet<Long> addresses) {
+        // Generate a new range set for every stripe.
+        ConcurrentHashMap<Layout.LayoutStripe, RangeSet<Long>> rangeMap = new ConcurrentHashMap<>();
+        ConcurrentHashMap<Layout.LayoutStripe, Long> eMap = new ConcurrentHashMap<>();
+        Set<Long> total = Utils.discretizeRangeSet(addresses);
+        total.parallelStream()
+                .forEach(l-> {
+            rangeMap.computeIfAbsent(layout.getStripe(l), k -> TreeRangeSet.create())
+                    .add(Range.singleton(layout.getLocalAddress(l)));
+                    eMap.computeIfAbsent(layout.getStripe(l), k->l);
+        });
+        ConcurrentHashMap<Long, ReadResult> resultMap = new ConcurrentHashMap<>();
+        rangeMap.entrySet().parallelStream()
+                .forEach(x -> {
+                                    CFUtils.getUninterruptibly(
+                                            layout.getLogUnitClient(eMap.get(x.getKey()), layout.getSegmentLength(eMap.get(x.getKey()))-1)
+                                    .readRange(x.getValue()))
+                                    .entrySet().parallelStream()
+                                    .forEach(ex ->{
+                                            long globalAddress = layout.getGlobalAddress(x.getKey(),ex.getKey());
+                                        resultMap.put(globalAddress, new ReadResult(globalAddress, ex.getValue()));
+                                            }
+                                    );
+                });
+        return resultMap;
+    }
+
+    /**
+     * Read a stream prefix, using the replication method given.
+     *
+     * @param UUID the stream to read from.
+     * @return A map containing the results of the read.
+     */
+    @Override
+    public Map<Long, ReadResult> read(UUID stream) {
+        // for each chain, simply query the last one...
+        Set<Map.Entry<Layout.LayoutStripe, Map<Long, LogUnitReadResponseMsg.ReadResult>>> e = segment.getStripes().parallelStream()
+                .map(x -> {
+                    LogUnitClient luc = layout.getRuntime().getRouter(x.getLogServers().get(x.getLogServers().size() - 1))
+                            .getClient(LogUnitClient.class);
+                    return new AbstractMap.SimpleImmutableEntry<>(x, CFUtils.getUninterruptibly(luc.readStream(stream)));
+                })
+                .collect(Collectors.toSet());
+        Map<Long, ReadResult> resultMap = new ConcurrentHashMap<>();
+
+        e.parallelStream()
+                .forEach(x ->
+                {
+                    x.getValue().entrySet().parallelStream()
+                            .forEach(y -> {
+                                long globalAddress = layout.getGlobalAddress(x.getKey(), y.getKey());
+                                resultMap.put(globalAddress, new ReadResult(globalAddress, y.getValue()));
+                            });
+                });
+        return resultMap;
     }
 
     /**

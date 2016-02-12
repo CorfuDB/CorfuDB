@@ -136,7 +136,7 @@ public class SequencerServer implements IServer {
     }
 
     @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    public synchronized void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         switch (msg.getMsgType())
         {
             case TOKEN_REQ: {

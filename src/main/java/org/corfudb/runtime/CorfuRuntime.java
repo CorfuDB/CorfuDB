@@ -46,6 +46,22 @@ public class CorfuRuntime {
 
     //endregion Address Space Options
 
+
+    /** Whether or not to disable backpointers. */
+    @Getter
+    public boolean backpointersDisabled = false;
+
+    /**
+     * Whether or not to disable backpointers
+     * @param disable   True, if the cache should be disabled, false otherwise.
+     * @return          A CorfuRuntime to support chaining.
+     */
+    public CorfuRuntime setBackpointersDisabled(boolean disable)
+    {
+        this.backpointersDisabled = disable;
+        return this;
+    }
+
     /**
      * Whether or not to disable the cache
      * @param disable   True, if the cache should be disabled, false otherwise.

@@ -135,7 +135,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 1_000;
+        final int num_records = 1000;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -145,7 +145,7 @@ public class SMRMapTest extends AbstractViewTest {
                         .isEqualTo(null);
             }
         });
-        executeScheduled(num_threads, 50, TimeUnit.SECONDS);
+        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
@@ -154,7 +154,7 @@ public class SMRMapTest extends AbstractViewTest {
                         .isEqualTo(Integer.toString(i));
             }
          });
-        executeScheduled(num_threads, 50, TimeUnit.SECONDS);
+        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
     }
 
     @Test

@@ -66,6 +66,7 @@ public class CorfuMsg {
         CONTIGUOUS_TAIL(39, LogUnitTailMsg.class, LogUnitServer.class),
         READ_RANGE(40, CorfuRangeMsg.class, LogUnitServer.class),
         READ_RANGE_RESPONSE(41, LogUnitReadRangeResponseMsg.class, LogUnitServer.class),
+        STREAM_READ(42, CorfuUUIDMsg.class, LogUnitServer.class),
 
         // Logging Unit Error Codes
         ERROR_OK(50, CorfuMsg.class, LogUnitServer.class),

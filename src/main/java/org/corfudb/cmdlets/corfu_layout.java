@@ -190,7 +190,11 @@ public class corfu_layout implements ICmdlet {
                             Layout.ReplicationMode.CHAIN_REPLICATION,
                             0L,
                             -1L,
-                            Collections.singletonList(localAddress)
+                            Collections.singletonList(
+                                    new Layout.LayoutStripe(
+                                            Collections.singletonList(localAddress)
+                                    )
+                            )
                     )),
                     0L
             );

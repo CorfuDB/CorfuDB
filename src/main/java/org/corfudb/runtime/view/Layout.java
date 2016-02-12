@@ -74,8 +74,10 @@ public class Layout implements Cloneable {
                 .forEach(allServers::add);
         segments.stream()
                 .forEach(x -> {
-                    x.getLogServers().stream()
-                            .forEach(allServers::add);
+                    x.getStripes().stream()
+                            .forEach( y ->
+                                y.getLogServers().stream()
+                                    .forEach(allServers::add));
                 });
         return allServers;
     }
@@ -122,6 +124,62 @@ public class Layout implements Cloneable {
         }
     }
 
+    public long getLocalAddress(long globalAddress)
+    {
+        for (LayoutSegment ls : segments)
+        {
+            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1))
+            {
+                // TODO: this does not account for shifting segments.
+                return globalAddress / ls.getNumberOfStripes();
+            }
+        }
+        throw new RuntimeException("Unmapped address!");
+    }
+
+    public long getGlobalAddress(LayoutStripe stripe, long localAddress)
+    {
+        for (LayoutSegment ls : segments)
+        {
+            if (ls.getStripes().contains(stripe))
+            {
+                for (int i = 0; i < ls.getNumberOfStripes(); i++)
+                {
+                    if (ls.getStripes().get(i).equals(stripe))
+                    {
+                        return (localAddress * ls.getNumberOfStripes()) + i;
+                    }
+                }
+            }
+        }
+        throw new RuntimeException("Unmapped address!");
+    }
+
+    public LayoutStripe getStripe(long globalAddress)
+    {
+        for (LayoutSegment ls : segments)
+        {
+            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1))
+            {
+                // TODO: this does not account for shifting segments.
+                return ls.getStripes().get((int)(globalAddress % ls.getNumberOfStripes()));
+            }
+        }
+        throw new RuntimeException("Unmapped address!");
+    }
+
+    public LayoutSegment getSegment(long globalAddress)
+    {
+        for (LayoutSegment ls : segments)
+        {
+            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1))
+            {
+                return ls;
+            }
+        }
+        throw new RuntimeException("Unmapped address " + Long.toString(globalAddress) + "!");
+    }
+
     /** Get the length of a segment at a particular address.
      *
      * @param address   The address to check.
@@ -129,14 +187,7 @@ public class Layout implements Cloneable {
      */
     public int getSegmentLength(long address)
     {
-        for (LayoutSegment ls : segments)
-        {
-            if (ls.start <= address && (ls.end > address || ls.end == -1))
-            {
-                return ls.logServers.size();
-            }
-        }
-        return 0;
+        return getStripe(address).getLogServers().size();
     }
 
     /** Get the replication mode of a segment at a particular address.
@@ -164,14 +215,7 @@ public class Layout implements Cloneable {
      */
     public LogUnitClient getLogUnitClient(long address, int index)
     {
-        for (LayoutSegment ls : segments)
-        {
-            if (ls.start <= address && (ls.end > address || ls.end == -1))
-            {
-                return runtime.getRouter(ls.logServers.get(index)).getClient(LogUnitClient.class);
-            }
-        }
-        return null;
+         return runtime.getRouter(getStripe(address).getLogServers().get(index)).getClient(LogUnitClient.class);
     }
 
     /** Get the layout as a JSON string. */
@@ -275,6 +319,18 @@ public class Layout implements Cloneable {
         /** The address the layout segment ends at. */
         long end;
         /** A list of log servers for this segment. */
-        List<String> logServers;
+        List<LayoutStripe> stripes;
+
+        public int getNumberOfStripes()
+        {
+            return stripes.size();
+        }
+    }
+
+    @Data
+    @Getter
+    @AllArgsConstructor
+    public static class LayoutStripe {
+        final List<String> logServers;
     }
 }

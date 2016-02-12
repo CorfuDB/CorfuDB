@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -7,12 +9,15 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.Utils;
+
 
 /** All replication views must inherit from this class.
  *
@@ -24,12 +29,12 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 @Slf4j
 public abstract class AbstractReplicationView {
 
-    public static AbstractReplicationView getReplicationView(Layout l, Layout.ReplicationMode mode)
+    public static AbstractReplicationView getReplicationView(Layout l, Layout.ReplicationMode mode, Layout.LayoutSegment ls)
     {
         switch (mode)
         {
             case CHAIN_REPLICATION:
-                return new ChainReplicationView(l);
+                return new ChainReplicationView(l, ls);
             case QUORUM_REPLICATION:
                 log.warn("Quorum replication is not yet supported!");
                 break;
@@ -83,9 +88,13 @@ public abstract class AbstractReplicationView {
     @Getter
     public final Layout layout;
 
-    public AbstractReplicationView(Layout layout)
+    @Getter
+    public final Layout.LayoutSegment segment;
+
+    public AbstractReplicationView(Layout layout, Layout.LayoutSegment ls)
     {
         this.layout = layout;
+        this.segment = ls;
     }
 
     /** Write the given object to an address and streams, using the replication method given.
@@ -119,10 +128,31 @@ public abstract class AbstractReplicationView {
      */
     public abstract ReadResult read(long address);
 
+    /** Read a set of addresses, using the replication method given.
+     *
+     * @param addresses   The addresses to read from.
+     * @return            A map containing the results of the read.
+     */
+    public Map<Long, ReadResult> read(RangeSet<Long> addresses) {
+        Map<Long, ReadResult> results = new ConcurrentHashMap<>();
+        Set<Long> total = Utils.discretizeRangeSet(addresses);
+        total.parallelStream()
+                .forEach(i -> results.put(i, read(i)));
+        return results;
+    }
+
+    /** Read a contiguous stream prefix, using the replication method given.
+     *
+     * @param stream      The stream to read from.
+     * @return            A map containing the results of the read.
+     */
+    public abstract Map<Long, ReadResult> read(UUID stream);
+
     /** Fill a hole at an address, using the replication method given.
      *
      * @param address   The address to hole fill at.
      */
     public abstract void fillHole(long address)
         throws OverwriteException;
+
 }

@@ -376,7 +376,7 @@ public class CorfuSMRObjectProxy<P> {
 
     boolean applySMRUpdate(long address, SMREntry entry, P obj)
     {
-        log.trace("Apply SMR update: {}", entry);
+        log.trace("Apply SMR update at {} : {}", address, entry);
         // Look for the uninstrumented method
         try {
             Method m = obj.getClass().getMethod(getMethodNameOnlyFromString(entry.getSMRMethod()),
@@ -437,6 +437,7 @@ public class CorfuSMRObjectProxy<P> {
     }
 
     synchronized public void sync(P obj, long maxPos) {
+        log.trace("Object sync to pos {}", maxPos);
         Arrays.stream(sv.readTo(maxPos))
                 .filter(m -> m.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
                 .filter(m -> m.getResult().getPayload(runtime) instanceof SMREntry ||
