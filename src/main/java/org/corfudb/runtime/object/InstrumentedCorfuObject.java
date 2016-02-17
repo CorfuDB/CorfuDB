@@ -3,10 +3,10 @@ package org.corfudb.runtime.object;
 import java.lang.annotation.*;
 
 /**
- * Created by mwei on 1/7/16.
+ * Created by mwei on 2/17/16.
  */
-@Target(ElementType.METHOD)
+@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
-public @interface MutatorAccessor {
+public @interface InstrumentedCorfuObject {
 }

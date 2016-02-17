@@ -61,6 +61,15 @@ public class CorfuSMRObjectProxy<P> {
     @Getter
     boolean isCorfuObject = false;
 
+    final static AnnotationDescription instrumentedDescription =
+             AnnotationDescription.Builder.ofType(Instrumented.class)
+            .build();
+
+    final static AnnotationDescription instrumentedObjectDescription =
+            AnnotationDescription.Builder.ofType(InstrumentedCorfuObject.class)
+                    .build();
+
+
     public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<?> originalClass) {
         this.runtime = runtime;
         this.sv = sv;
@@ -107,30 +116,52 @@ public class CorfuSMRObjectProxy<P> {
         else {
             log.trace("{} is not an ICorfuSMRObject, no ISMRInterfaces and no overlay provided. " +
                     "Instrumenting all methods as mutatorAccessors but respecting annotations", type);
+
+            // dump all method annotations
+            log.trace("All methods for {}:", type);
+            if (log.isTraceEnabled()) {
+                Method[] ms = type.getMethods();
+                for (Method m : ms) {
+                    log.trace("{}: {}", m.getName(), m.getAnnotations());
+                }
+            }
                     DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
                             .defineField("_corfuStreamID", UUID.class);
                     try {
-                                bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class))
-                                         .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()));
+                                bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class)
+                                .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
+                                                .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()))
+                                                .annotateMethod(instrumentedDescription);
                     } catch (NoSuchMethodError nsme) {
                         log.trace("Class {} has no mutators", type);
                     }
                     try {
-                        bb = bb.method(ElementMatchers.isAnnotatedWith(Accessor.class))
-                                .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()));
+                        bb = bb.method(ElementMatchers.isAnnotatedWith(Accessor.class)
+                                .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
+                                .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()))
+                                .annotateMethod(instrumentedDescription);
                     } catch (NoSuchMethodError nsme) {
                         log.trace("Class {} has no accessors", type);
                     }
                     try {
-                        bb = bb.method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
-                                .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()));
+                        bb = bb.method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)
+                                .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
+                                .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
+                                .annotateMethod(instrumentedDescription);
                     } catch (NoSuchMethodError nsme)
                     {
                         log.trace("Class {} has no mutatoraccessors", type);
                     }
+
                     bb = bb.method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
-                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))))
-                    .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()));
+                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Accessor.class)))
+                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
+                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
+                            .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
+                            .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
+                            .annotateMethod(instrumentedDescription);
+
+                    bb.annotateType(instrumentedObjectDescription);
             Class<? extends T> generatedClass =
                      bb.make().load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
                     .getLoaded();
@@ -252,6 +283,7 @@ public class CorfuSMRObjectProxy<P> {
                                        @AllArguments Object[] allArguments,
                                        @SuperCall Callable superMethod
         ) throws Exception {
+            log.trace("+Mutator {}", method);
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
@@ -259,7 +291,7 @@ public class CorfuSMRObjectProxy<P> {
                             return superMethod.call();
                         }
                         else {
-                            return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+                            return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
                         }
                     }
                     else if (!TransactionalContext.isInTransaction()){
@@ -286,6 +318,7 @@ public class CorfuSMRObjectProxy<P> {
                                         @SuperCall Callable superMethod,
                                         @AllArguments Object[] allArguments,
                                         @This P obj) throws Exception {
+            log.trace("+MutatorAccessor {}", method);
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
@@ -309,7 +342,7 @@ public class CorfuSMRObjectProxy<P> {
                     return superMethod.call();
                 }
                 else {
-                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
                 }
             }
         }
@@ -320,7 +353,9 @@ public class CorfuSMRObjectProxy<P> {
         @RuntimeType
         public Object interceptAccessor(@SuperCall Callable superMethod,
                                         @Origin Method method,
+                                        @AllArguments Object[] arguments,
                                         @This P obj) throws Exception {
+            log.trace("+Accessor {}", method);
             // Linearize this access with respect to other accesses in the system.
             if (!TransactionalContext.isInTransaction()) {
                 sync(obj, Long.MAX_VALUE);
@@ -330,7 +365,7 @@ public class CorfuSMRObjectProxy<P> {
                 return superMethod.call();
             }
             else {
-                return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+                return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), arguments);
             }
         }
     }
@@ -437,7 +472,7 @@ public class CorfuSMRObjectProxy<P> {
     }
 
     synchronized public void sync(P obj, long maxPos) {
-        log.trace("Object sync to pos {}", maxPos);
+        log.trace("Object sync to pos {}", maxPos == Long.MAX_VALUE ? "MAX" : maxPos);
         Arrays.stream(sv.readTo(maxPos))
                 .filter(m -> m.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
                 .filter(m -> m.getResult().getPayload(runtime) instanceof SMREntry ||

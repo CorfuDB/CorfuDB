@@ -81,6 +81,14 @@ public class Utils
             }
             return (T) (Long)parseLong(obj);
         }
+        else if (type == Integer.class)
+        {
+            if (obj == null && defaultValue != null)
+            {
+                return defaultValue;
+            }
+            return (T) (Integer) ((Long)parseLong(obj)).intValue();
+        }
         if (obj == null)
         {
             return defaultValue;

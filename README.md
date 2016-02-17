@@ -168,9 +168,17 @@ How about adding an additional replica so we can tolerate a single log server fa
 
 To add a replica, we use the command:
 ```
-$ corfu_layouts edit_segment 0 -c localhost:9000,localhost:9001  -a -e localhost:9001
+$ corfu_layouts edit_segment 0 0 -c localhost:9000,localhost:9001  -a -e localhost:9001
 ```
 This adds the log unit at localhost:9001 to the only segment in the system. To learn more about segments, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
+
+To scale Corfu, we add additional ``stripes''. To add an additional stripe, start a new ```corfu_server``` on port 9002 and run:
+```
+$ corfu_layouts add_stripe 0 -c localhost:9000,localhost:9001  -a localhost:9002
+```
+
+This adds the logunit at localhost:9002 as an additional stripe in the system. That is, writes to even addresses will now go to
+localhost:9000 and localhost:9001, while writes to odd addresses will go to localhost:9002.
 
 ## Now I want to write a program that uses Corfu!
 
