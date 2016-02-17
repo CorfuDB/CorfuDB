@@ -129,7 +129,8 @@ public class CorfuSMRObjectProxy<P> {
                         log.trace("Class {} has no mutatoraccessors", type);
                     }
                     bb = bb.method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
-                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))))
+                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
+                            .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
                     .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()));
             Class<? extends T> generatedClass =
                      bb.make().load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
@@ -252,6 +253,7 @@ public class CorfuSMRObjectProxy<P> {
                                        @AllArguments Object[] allArguments,
                                        @SuperCall Callable superMethod
         ) throws Exception {
+            log.trace("+Mutator {}", method);
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
@@ -259,7 +261,7 @@ public class CorfuSMRObjectProxy<P> {
                             return superMethod.call();
                         }
                         else {
-                            return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+                            return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
                         }
                     }
                     else if (!TransactionalContext.isInTransaction()){
@@ -286,6 +288,7 @@ public class CorfuSMRObjectProxy<P> {
                                         @SuperCall Callable superMethod,
                                         @AllArguments Object[] allArguments,
                                         @This P obj) throws Exception {
+            log.trace("+MutatorAccessor {}", method);
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
@@ -309,7 +312,7 @@ public class CorfuSMRObjectProxy<P> {
                     return superMethod.call();
                 }
                 else {
-                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
                 }
             }
         }
@@ -320,7 +323,9 @@ public class CorfuSMRObjectProxy<P> {
         @RuntimeType
         public Object interceptAccessor(@SuperCall Callable superMethod,
                                         @Origin Method method,
+                                        @AllArguments Object[] arguments,
                                         @This P obj) throws Exception {
+            log.trace("+Accessor {}", method);
             // Linearize this access with respect to other accesses in the system.
             if (!TransactionalContext.isInTransaction()) {
                 sync(obj, Long.MAX_VALUE);
@@ -330,7 +335,7 @@ public class CorfuSMRObjectProxy<P> {
                 return superMethod.call();
             }
             else {
-                return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null));
+                return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), arguments);
             }
         }
     }
