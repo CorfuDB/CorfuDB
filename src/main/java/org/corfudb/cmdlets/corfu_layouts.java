@@ -10,9 +10,11 @@ import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 import org.docopt.Docopt;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
@@ -32,7 +34,8 @@ public class corfu_layouts implements ICmdlet {
                     + "\tcorfu_layouts query -c <config> [-d <level>]\n"
                     + "\tcorfu_layouts add_layout -c <config> -e <address> [-d <level>]\n"
                     + "\tcorfu_layouts add_sequencer -c <config> -e <address> [-d <level>]\n"
-                    + "\tcorfu_layouts edit_segment <index> -c <config> [-a -e <address> [-s <index>] | -r -s <index>] [-m <mode>] [-d <level>]\n"
+                    + "\tcorfu_layouts edit_segment <index> <stripe> -c <config> [-a -e <address> [-s <index>] | -r -s <index>] [-m <mode>] [-d <level>]\n"
+                    + "\tcorfu_layouts add_stripe <index> -c <config> -e <address> [-d <level>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -a, --add                               Add an endpoint to this segment.\n"
@@ -77,6 +80,10 @@ public class corfu_layouts implements ICmdlet {
             else if ((Boolean)opts.get("edit_segment"))
             {
                 edit_segment(rt, opts);
+            }
+            else if ((Boolean)opts.get("add_stripe"))
+            {
+                add_stripe(rt, opts);
             }
         }
         catch (Exception e)
@@ -141,6 +148,32 @@ public class corfu_layouts implements ICmdlet {
         log.info("Sequencer server at {} added to layout.", options.get("--endpoint"));
     }
 
+    public void add_stripe (CorfuRuntime runtime, Map<String,Object> options)
+            throws NetworkException, QuorumUnreachableException, OutrankedException
+    {
+        checkEndpoint((String) options.get("--endpoint"));
+        Layout l;
+        Layout lPrev = runtime.getLayoutView().getCurrentLayout();
+        try {
+            l = (Layout) lPrev.clone();
+            l.setRuntime(runtime);
+        } catch (CloneNotSupportedException cnse) {
+            throw new RuntimeException(cnse);
+        }
+        // increment the epoch by 1, and try installing the new layout.
+        l.setEpoch(l.getEpoch() + 1);
+        log.info("Updating epoch, old={}, new={}", l.getEpoch()-1, l.getEpoch());
+        ArrayList<String> lus = new ArrayList<>();
+        lus.add(Utils.getOption(options, "--endpoint", String.class));
+        Layout.LayoutStripe ls = new Layout.LayoutStripe(lus);
+        l.getSegments().get(Utils.getOption(options, "<index>", Integer.class)).getStripes()
+                .add(ls);
+
+        l.moveServersToEpoch();
+        runtime.getLayoutView().updateLayout(l, l.getEpoch());
+        log.info("Layout server at {} added to new stripe.", options.get("--endpoint"));
+    }
+
     public void edit_segment (CorfuRuntime runtime, Map<String,Object> options)
             throws NetworkException, QuorumUnreachableException, OutrankedException
     {
@@ -185,11 +218,11 @@ public class corfu_layouts implements ICmdlet {
                     null : Integer.parseInt((String) options.get("--segment-index"));
             if (serverIndex == null) {
                 log.info("Adding server {} to end of segment {}", options.get("--endpoint"), segmentIndex);
-                l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers().add((String) options.get("--endpoint"));
+                l.getSegments().get(segmentIndex).getStripes().get(Utils.getOption(options, "<stripe>", Integer.class)).getLogServers().add((String) options.get("--endpoint"));
             }
             else {
                 log.info("Adding server {} to segment {} at index {}", options.get("--endpoint"), segmentIndex, serverIndex);
-                l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers().add(serverIndex, (String) options.get("--endpoint"));
+                l.getSegments().get(segmentIndex).getStripes().get(Utils.getOption(options, "<stripe>", Integer.class)).getLogServers().add(serverIndex, (String) options.get("--endpoint"));
             }
             log.info("New server set is {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers());
         }
