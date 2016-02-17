@@ -83,6 +83,7 @@ public class JSONSerializer implements ISerializer {
                 Field f = o.getClass().getDeclaredField("_corfuStreamID");
                 f.setAccessible(true);
                 UUID id = (UUID) f.get(o);
+                log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}", SMRClass, id);
                 b.writeLong(id.getMostSignificantBits());
                 b.writeLong(id.getLeastSignificantBits());
             } catch (NoSuchFieldException | IllegalAccessException nsfe)
