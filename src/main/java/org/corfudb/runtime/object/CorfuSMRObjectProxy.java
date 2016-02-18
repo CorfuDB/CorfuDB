@@ -156,6 +156,7 @@ public class CorfuSMRObjectProxy<P> {
                     bb = bb.method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Accessor.class)))
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
+                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(DontInstrument.class)))
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
                             .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
                             .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
