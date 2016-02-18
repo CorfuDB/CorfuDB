@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.TXEntry;
@@ -10,7 +11,8 @@ import org.corfudb.runtime.object.ISMRInterface;
 import org.corfudb.runtime.object.TransactionalContext;
 
 import java.lang.reflect.Field;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -20,6 +22,14 @@ import java.util.function.Supplier;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
+    @Data
+    class ObjectID<T,R> {
+        final UUID streamID;
+        final Class<T> type;
+        final Class<R> overlay;
+    }
+
+    Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
     public ObjectsView(CorfuRuntime runtime) {
         super(runtime);
@@ -86,8 +96,36 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T, R extends ISMRInterface> T open(@NonNull UUID streamID, @NonNull Class<T> type, Class<R> overlay) {
-        StreamView sv = runtime.getStreamsView().get(streamID);
-        return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime);
+        return open(streamID, type, overlay, Collections.emptySet());
+    }
+
+    /** Gets a view of an object in the Corfu instance.
+     *
+     * @param streamID      The stream that the object should be read from.
+     * @param type          The type of the object that should be opened.
+     *                      If the type implements ICorfuSMRObject or implements an interface which implements
+     *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
+     *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
+     *                      all methods are MutatorAccessors.
+     * @param overlay       The ISMRInterface to overlay on top of the object, if provided.
+     * @param options       The options to use for opening the object.
+     * @param <T>           The type of object to return.
+     * @return              Returns a view of the object in a Corfu instance.
+     */
+    @SuppressWarnings("unchecked")
+    public <T, R extends ISMRInterface> T open(@NonNull UUID streamID, @NonNull Class<T> type, Class<R> overlay,
+                                               Set<ObjectOpenOptions> options) {
+        if (options.contains(ObjectOpenOptions.NO_CACHE))
+        {
+            StreamView sv = runtime.getStreamsView().get(streamID);
+            return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime);
+        }
+
+        ObjectID<T,R> oid = new ObjectID(streamID, type, overlay);
+        return (T) objectCache.computeIfAbsent(oid, x -> {
+            StreamView sv = runtime.getStreamsView().get(streamID);
+            return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime);
+        });
     }
 
     /** Creates a copy-on-write copy of an object.
@@ -103,9 +141,12 @@ public class ObjectsView extends AbstractView {
             Field f = obj.getClass().getDeclaredField("_corfuSMRProxy");
             f.setAccessible(true);
             CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) f.get(obj);
-            StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
-                    destination, proxy.getTimestamp());
-            return CorfuSMRObjectProxy.getProxy(proxy.getOriginalClass(), null, sv, runtime);
+            ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
+            return (T) objectCache.computeIfAbsent(oid, x -> {
+                StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
+                        destination, proxy.getTimestamp());
+                return CorfuSMRObjectProxy.getProxy(proxy.getOriginalClass(), null, sv, runtime);
+            });
         } catch (NoSuchFieldException nsfe) {
             throw new RuntimeException("Object given not a corfu object!");
         } catch (IllegalAccessException iae) {

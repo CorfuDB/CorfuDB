@@ -133,7 +133,11 @@ public class CorfuSMRObjectProxy<P> {
             }
                     DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
                             .defineField("_corfuStreamID", UUID.class)
-                            .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class);
+                            .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
+                            .implement(ICorfuSMRObject.class)
+                            .method(ElementMatchers.named("getSMRObject"))
+                            .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()));
+
                     try {
                                 bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class)
                                 .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
@@ -165,6 +169,7 @@ public class CorfuSMRObjectProxy<P> {
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(DontInstrument.class)))
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
+                            .and(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
                             .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
                             .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
                             .annotateMethod(instrumentedDescription);
