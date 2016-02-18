@@ -6,6 +6,8 @@ import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.object.Accessor;
+import org.corfudb.runtime.object.Mutator;
 import org.junit.Test;
 
 import java.util.Map;
@@ -46,4 +48,5 @@ public class ObjectsViewTest extends AbstractViewTest  {
                 .containsEntry("a", "a")
                 .doesNotContainEntry("b", "b");
     }
+
 }

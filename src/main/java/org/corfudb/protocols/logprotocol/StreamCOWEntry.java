@@ -1,15 +1,11 @@
 package org.corfudb.protocols.logprotocol;
 
-import com.google.common.collect.Range;
-import com.google.common.collect.TreeRangeSet;
+
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.serializer.Serializers;
-
-import java.util.Set;
 import java.util.UUID;
 
 /**

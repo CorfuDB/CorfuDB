@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.Reflection;
 import javassist.ClassPool;
 import javassist.CtClass;
@@ -390,6 +391,30 @@ public class CorfuSMRObjectProxy<P> {
         return s.substring(0, s.indexOf("("));
     }
 
+    static Map<String, Class> primitiveTypeMap = ImmutableMap.<String, Class>builder()
+            .put("int", Integer.TYPE)
+            .put("long", Long.TYPE)
+            .put("double", Double.TYPE)
+            .put("float", Float.TYPE)
+            .put("bool", Boolean.TYPE)
+            .put("char", Character.TYPE)
+            .put("byte", Byte.TYPE)
+            .put("void", Void.TYPE)
+            .put("short", Short.TYPE)
+            .put("int[]", int[].class)
+            .put("long[]", long[].class)
+            .put("double[]", double[].class)
+            .put("float[]", float[].class)
+            .put("bool[]", boolean[].class)
+            .put("char[]", char[].class)
+            .put("byte[]", byte[].class)
+            .put("short[]", short[].class)
+            .build();
+
+    public static Class<?> getPrimitiveType(String s) {
+        return primitiveTypeMap.get(s);
+    }
+
     public static Class[] getArgumentTypesFromString(String s) {
         String argList = s.substring(s.indexOf("(") + 1, s.length() - 1);
         return Arrays.stream(argList.split(","))
@@ -398,8 +423,11 @@ public class CorfuSMRObjectProxy<P> {
                     try {
                         return Class.forName(x);
                     } catch (ClassNotFoundException cnfe) {
-                        log.warn("Class {} not found", x);
-                        return null;
+                        Class retVal = getPrimitiveType(x);
+                        if (retVal == null) {
+                            log.warn("Class {} not found", x);
+                        }
+                        return retVal;
                     }
                 })
                 .toArray(Class[]::new);
