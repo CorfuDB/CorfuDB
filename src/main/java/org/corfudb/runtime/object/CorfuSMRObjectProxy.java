@@ -48,14 +48,18 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class CorfuSMRObjectProxy<P> {
 
+    @Getter
     StreamView sv;
     Object smrObject;
     Object[] creationArguments;
-    Class<?> originalClass;
+    @Getter
+    Class<P> originalClass;
     Class<?> generatedClass;
     Map<Long, CompletableFuture<Object>> completableFutureMap;
     Serializers.SerializerType serializer;
     CorfuRuntime runtime;
+
+    @Getter
     long timestamp;
 
     @Getter
@@ -70,7 +74,7 @@ public class CorfuSMRObjectProxy<P> {
                     .build();
 
 
-    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<?> originalClass) {
+    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<P> originalClass) {
         this.runtime = runtime;
         this.sv = sv;
         this.originalClass = originalClass;
@@ -90,6 +94,7 @@ public class CorfuSMRObjectProxy<P> {
             Class<? extends T> generatedClass = new ByteBuddy()
                     .subclass(type)
                     .defineField("_corfuStreamID", UUID.class, FieldManifestation.PLAIN)
+                    .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
                     .method(ElementMatchers.named("getSMRObject"))
                     .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
                     .method(ElementMatchers.isAnnotatedWith(Mutator.class))
@@ -126,7 +131,8 @@ public class CorfuSMRObjectProxy<P> {
                 }
             }
                     DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
-                            .defineField("_corfuStreamID", UUID.class);
+                            .defineField("_corfuStreamID", UUID.class)
+                            .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class);
                     try {
                                 bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class)
                                 .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
@@ -180,6 +186,9 @@ public class CorfuSMRObjectProxy<P> {
             Field f = ret.getClass().getDeclaredField("_corfuStreamID");
             f.setAccessible(true);
             f.set(ret, sv.getStreamID());
+            Field f2 = ret.getClass().getDeclaredField("_corfuSMRProxy");
+            f2.setAccessible(true);
+            f2.set(ret, proxy);
             return ret;
         } catch (InstantiationException | IllegalAccessException | NoSuchFieldException ie) {
             throw new RuntimeException("Unexpected exception opening object", ie);
