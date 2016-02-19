@@ -225,8 +225,8 @@ public class CorfuSMRObjectProxy<P> {
                     smrObject = originalClass.newInstance();
                 } else {
                     Class[] typeList = Arrays.stream(creationArguments)
-                            .map(x -> x.getClass())
-                            .toArray(s -> new Class[s]);
+                            .map(Object::getClass)
+                            .toArray(Class[]::new);
 
                     originalClass
                             .getDeclaredConstructor(typeList)
@@ -259,8 +259,8 @@ public class CorfuSMRObjectProxy<P> {
                                                                 ).newInstance();
                     } else {
                         Class[] typeList = Arrays.stream(creationArguments)
-                                .map(x -> x.getClass())
-                                .toArray(s -> new Class[s]);
+                                .map(Object::getClass)
+                                .toArray(Class[]::new);
 
                         smrObject = ((Class)((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType())
                                 .getDeclaredConstructor(typeList)
@@ -338,7 +338,12 @@ public class CorfuSMRObjectProxy<P> {
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
-                return superMethod.call();
+                if (isCorfuObject) {
+                    return superMethod.call();
+                }
+                else {
+                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
+                }
             }
             else if (!TransactionalContext.isInTransaction()){
                 // write the update to the stream and map a future for the completion.
