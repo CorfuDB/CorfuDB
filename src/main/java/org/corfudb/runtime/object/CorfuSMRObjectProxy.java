@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.Reflection;
 import javassist.ClassPool;
 import javassist.CtClass;
@@ -48,14 +49,18 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class CorfuSMRObjectProxy<P> {
 
+    @Getter
     StreamView sv;
     Object smrObject;
     Object[] creationArguments;
-    Class<?> originalClass;
+    @Getter
+    Class<P> originalClass;
     Class<?> generatedClass;
     Map<Long, CompletableFuture<Object>> completableFutureMap;
     Serializers.SerializerType serializer;
     CorfuRuntime runtime;
+
+    @Getter
     long timestamp;
 
     @Getter
@@ -70,7 +75,7 @@ public class CorfuSMRObjectProxy<P> {
                     .build();
 
 
-    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<?> originalClass) {
+    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<P> originalClass) {
         this.runtime = runtime;
         this.sv = sv;
         this.originalClass = originalClass;
@@ -90,6 +95,7 @@ public class CorfuSMRObjectProxy<P> {
             Class<? extends T> generatedClass = new ByteBuddy()
                     .subclass(type)
                     .defineField("_corfuStreamID", UUID.class, FieldManifestation.PLAIN)
+                    .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
                     .method(ElementMatchers.named("getSMRObject"))
                     .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
                     .method(ElementMatchers.isAnnotatedWith(Mutator.class))
@@ -126,7 +132,12 @@ public class CorfuSMRObjectProxy<P> {
                 }
             }
                     DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
-                            .defineField("_corfuStreamID", UUID.class);
+                            .defineField("_corfuStreamID", UUID.class)
+                            .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
+                            .implement(ICorfuSMRObject.class)
+                            .method(ElementMatchers.named("getSMRObject"))
+                            .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()));
+
                     try {
                                 bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class)
                                 .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
@@ -156,7 +167,9 @@ public class CorfuSMRObjectProxy<P> {
                     bb = bb.method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Accessor.class)))
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
+                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(DontInstrument.class)))
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
+                            .and(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
                             .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
                             .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
                             .annotateMethod(instrumentedDescription);
@@ -179,6 +192,9 @@ public class CorfuSMRObjectProxy<P> {
             Field f = ret.getClass().getDeclaredField("_corfuStreamID");
             f.setAccessible(true);
             f.set(ret, sv.getStreamID());
+            Field f2 = ret.getClass().getDeclaredField("_corfuSMRProxy");
+            f2.setAccessible(true);
+            f2.set(ret, proxy);
             return ret;
         } catch (InstantiationException | IllegalAccessException | NoSuchFieldException ie) {
             throw new RuntimeException("Unexpected exception opening object", ie);
@@ -209,8 +225,8 @@ public class CorfuSMRObjectProxy<P> {
                     smrObject = originalClass.newInstance();
                 } else {
                     Class[] typeList = Arrays.stream(creationArguments)
-                            .map(x -> x.getClass())
-                            .toArray(s -> new Class[s]);
+                            .map(Object::getClass)
+                            .toArray(Class[]::new);
 
                     originalClass
                             .getDeclaredConstructor(typeList)
@@ -243,8 +259,8 @@ public class CorfuSMRObjectProxy<P> {
                                                                 ).newInstance();
                     } else {
                         Class[] typeList = Arrays.stream(creationArguments)
-                                .map(x -> x.getClass())
-                                .toArray(s -> new Class[s]);
+                                .map(Object::getClass)
+                                .toArray(Class[]::new);
 
                         smrObject = ((Class)((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType())
                                 .getDeclaredConstructor(typeList)
@@ -322,7 +338,12 @@ public class CorfuSMRObjectProxy<P> {
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
-                return superMethod.call();
+                if (isCorfuObject) {
+                    return superMethod.call();
+                }
+                else {
+                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
+                }
             }
             else if (!TransactionalContext.isInTransaction()){
                 // write the update to the stream and map a future for the completion.
@@ -380,6 +401,30 @@ public class CorfuSMRObjectProxy<P> {
         return s.substring(0, s.indexOf("("));
     }
 
+    static Map<String, Class> primitiveTypeMap = ImmutableMap.<String, Class>builder()
+            .put("int", Integer.TYPE)
+            .put("long", Long.TYPE)
+            .put("double", Double.TYPE)
+            .put("float", Float.TYPE)
+            .put("bool", Boolean.TYPE)
+            .put("char", Character.TYPE)
+            .put("byte", Byte.TYPE)
+            .put("void", Void.TYPE)
+            .put("short", Short.TYPE)
+            .put("int[]", int[].class)
+            .put("long[]", long[].class)
+            .put("double[]", double[].class)
+            .put("float[]", float[].class)
+            .put("bool[]", boolean[].class)
+            .put("char[]", char[].class)
+            .put("byte[]", byte[].class)
+            .put("short[]", short[].class)
+            .build();
+
+    public static Class<?> getPrimitiveType(String s) {
+        return primitiveTypeMap.get(s);
+    }
+
     public static Class[] getArgumentTypesFromString(String s) {
         String argList = s.substring(s.indexOf("(") + 1, s.length() - 1);
         return Arrays.stream(argList.split(","))
@@ -388,8 +433,11 @@ public class CorfuSMRObjectProxy<P> {
                     try {
                         return Class.forName(x);
                     } catch (ClassNotFoundException cnfe) {
-                        log.warn("Class {} not found", x);
-                        return null;
+                        Class retVal = getPrimitiveType(x);
+                        if (retVal == null) {
+                            log.warn("Class {} not found", x);
+                        }
+                        return retVal;
                     }
                 })
                 .toArray(Class[]::new);

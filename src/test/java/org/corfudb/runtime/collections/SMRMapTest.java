@@ -7,8 +7,10 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.junit.Test;
 
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -278,7 +280,8 @@ public class SMRMapTest extends AbstractViewTest {
                 .isEqualTo("b");
         CompletableFuture cf = CompletableFuture.runAsync(() -> {
             Map<String,String> testMap2 = getRuntime().getObjectsView()
-                    .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class);
+                    .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class, null,
+                            EnumSet.of(ObjectOpenOptions.NO_CACHE));
             testMap2.put("a", "f");
         });
         cf.join();

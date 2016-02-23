@@ -1,7 +1,10 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -10,6 +13,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.AbstractReplicationView.ReadResult;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -26,18 +30,52 @@ public class StreamView implements AutoCloseable {
     @Getter
     final UUID streamID;
 
-    /** A pointer to the log. */
-    final AtomicLong logPointer;
+    public long getLogPointer() {
+        return getCurrentContext().logPointer.get();
+    }
 
-    /** A skipList of resolved stream addresses. */
-    NavigableSet<Long> currentBackpointerList;
+    @ToString
+    class StreamContext implements Comparable<StreamContext> {
+
+        /** The id (stream ID) of this context. */
+        final UUID contextID;
+
+        /** The maximum address that we should follow to, or
+         *  Long.MAX_VALUE, if this is the final context.
+         */
+        final long maxAddress;
+
+        /** A skipList of resolved stream addresses. */
+        NavigableSet<Long> currentBackpointerList
+                = new ConcurrentSkipListSet<>();
+
+        /** A pointer to the log. */
+        final AtomicLong logPointer;
+
+        public StreamContext(UUID contextID, long maxAddress) {
+            this.contextID = contextID;
+            this.maxAddress = maxAddress;
+            this.logPointer = new AtomicLong(0);
+        }
+
+        @Override
+        public int compareTo(StreamContext o) {
+            return Long.compare(this.maxAddress, o.maxAddress);
+        }
+    }
+
+    final NavigableSet<StreamContext> streamContexts;
+
+    public StreamContext getCurrentContext() {
+        return streamContexts.first();
+    }
 
     public StreamView(CorfuRuntime runtime, UUID streamID)
     {
         this.runtime = runtime;
         this.streamID = streamID;
-        this.logPointer = new AtomicLong(0);
-        this.currentBackpointerList = new ConcurrentSkipListSet<>();
+        this.streamContexts = new ConcurrentSkipListSet<>();
+        this.streamContexts.add(new StreamContext(streamID, Long.MAX_VALUE));
     }
 
     /** Write an object to this stream, returning the physical address it
@@ -161,20 +199,28 @@ public class StreamView implements AutoCloseable {
                 //runtime.getAddressSpaceView().readPrefix(streamID);
             }
             */
-            Long thisRead = currentBackpointerList.pollFirst();
+
+            // Pop the context if it has changed.
+            if (getCurrentContext().logPointer.get() > getCurrentContext().maxAddress) {
+                StreamContext last = streamContexts.pollFirst();
+                log.trace("Completed context {}@{}, removing.", last.contextID, last.maxAddress);
+            }
+
+            Long thisRead = getCurrentContext().currentBackpointerList.pollFirst();
             if (thisRead == null) {
-                currentBackpointerList = resolveBackpointersToRead(logPointer.get());
+                getCurrentContext().currentBackpointerList =
+                        resolveBackpointersToRead(getCurrentContext().logPointer.get());
                 log.trace("Backpointer list was empty, it has been filled with {} entries.",
-                        currentBackpointerList.size());
-                if (currentBackpointerList.size() == 0)
+                        getCurrentContext().currentBackpointerList.size());
+                if (getCurrentContext().currentBackpointerList.size() == 0)
                 {
                     log.trace("No backpointers resolved, nothing to read.");
                     return null;
                 }
-                thisRead = currentBackpointerList.pollFirst();
+                thisRead = getCurrentContext().currentBackpointerList.pollFirst();
             }
 
-            logPointer.set(thisRead+1);
+            getCurrentContext().logPointer.set(thisRead+1);
 
             log.trace("Read[{}]: reading at {}", streamID, thisRead);
             ReadResult r = runtime.getAddressSpaceView().read(thisRead);
@@ -185,7 +231,7 @@ public class StreamView implements AutoCloseable {
                 log.trace("Read[{}]: latest token at {}", streamID, latestToken);
                 if (latestToken < thisRead)
                 {
-                    logPointer.decrementAndGet();
+                    getCurrentContext().logPointer.decrementAndGet();
                     return null;
                 }
                 log.debug("Read[{}]: hole detected at {} (token at {}), attempting fill.", streamID, thisRead, latestToken);
@@ -198,10 +244,20 @@ public class StreamView implements AutoCloseable {
                 log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getResult().getResultType());
             }
             Set<UUID> streams = (Set<UUID>) r.getResult().getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
-            if (streams != null && streams.contains(streamID))
+            if (streams != null && streams.contains(getCurrentContext().contextID))
             {
                 log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
-                return r;
+                Object res = r.getResult().getPayload(runtime);
+                if (res instanceof StreamCOWEntry) {
+                    StreamCOWEntry ce = (StreamCOWEntry) res;
+                    log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
+                            ce.getFollowUntil());
+                    streamContexts.add(new StreamContext(ce.getOriginalStream(), ce.getFollowUntil()));
+                    //reset the pointer to 0
+                }
+                else {
+                    return r;
+                }
             }
         }
     }
@@ -213,7 +269,7 @@ public class StreamView implements AutoCloseable {
             log.trace("Linearization point set to {}", latestToken);
         }
         ArrayList<ReadResult> al = new ArrayList<ReadResult>();
-        while (logPointer.get() <= latestToken)
+        while (getCurrentContext().logPointer.get() <= latestToken)
         {
             ReadResult r = read();
             if (r == null) {

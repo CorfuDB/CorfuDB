@@ -118,4 +118,22 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         });
         executeScheduled(num_threads, 50, TimeUnit.SECONDS);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canWrapObjectWithPrimitiveTypes()
+            throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        //begin tests
+        CorfuRuntime r = getRuntime().connect();
+        TestClassWithPrimitives test = r.getObjectsView().open("test", TestClassWithPrimitives.class);
+        test.setPrimitive("hello world".getBytes());
+        assertThat(test.getPrimitive())
+                .isEqualTo("hello world".getBytes());
+    }
 }

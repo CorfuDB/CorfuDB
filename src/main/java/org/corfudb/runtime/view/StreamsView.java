@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -32,6 +33,33 @@ public class StreamsView {
         return new StreamView(runtime, stream);
     }
 
+    /** Make a copy-on-write copy of a stream.
+     *
+     * @param source    The UUID of the stream to make a copy of.
+     * @param dest      The UUID of the destination stream. It must not exist.
+     * @return          A view
+     */
+    public StreamView copy(UUID source, UUID destination, long timestamp) {
+        boolean written = false;
+        while (!written) {
+            SequencerClient.TokenResponse tokenResponse =
+                    runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
+            if (!tokenResponse.getBackpointerMap().isEmpty()) {
+                // TODO: need to perform a scan to really make sure
+                throw new RuntimeException("Stream already exists!");
+            }
+            StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
+            try {
+                runtime.getAddressSpaceView().write(tokenResponse.getToken(), Collections.singleton(destination),
+                        entry, tokenResponse.getBackpointerMap());
+                written = true;
+            } catch (OverwriteException oe) {
+                log.debug("hole fill during COW entry write, retrying...");
+            }
+        }
+        return new StreamView(runtime, destination);
+    }
+
     /** Write an object to multiple streams, retuning the physical address it
      * was written at.
      *
@@ -60,4 +88,5 @@ public class StreamsView {
             }
         }
     }
+
 }

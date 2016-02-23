@@ -26,7 +26,8 @@ public class LogEntry implements ICorfuSerializable {
         NOP(0, LogEntry.class),
         SMR(1, SMREntry.class),
         TX(2, TXEntry.class),
-        STREAM_HINT(3, StreamHintEntry.class)
+        STREAM_HINT(3, StreamHintEntry.class),
+        STREAM_COW(4, StreamCOWEntry.class)
         ;
 
         public final int type;
