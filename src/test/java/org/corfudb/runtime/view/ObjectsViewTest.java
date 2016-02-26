@@ -82,4 +82,29 @@ public class ObjectsViewTest extends AbstractViewTest  {
         CorfuRuntime r = getRuntime().connect();
         r.getObjectsView().TXAbort();
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canRunLambdaTransaction()
+            throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        //begin tests
+        CorfuRuntime r = getRuntime().connect();
+        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
+
+        assertThat(r.getObjectsView().executeTX(() -> {
+           smrMap.put("a", "b");
+            assertThat(smrMap)
+                    .containsEntry("a","b");
+            return true;
+        })).isTrue();
+
+        assertThat(smrMap)
+                .containsEntry("a", "b");
+    }
 }
