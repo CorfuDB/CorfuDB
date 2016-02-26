@@ -19,7 +19,8 @@ public class Serializers {
         // Supported Serializers
         CORFU(0, CorfuSerializer.class),
         JAVA(1, JavaSerializer.class),
-        JSON(2, JSONSerializer.class)
+        JSON(2, JSONSerializer.class),
+        PRIMITIVE(3, PrimitiveSerializer.class)
         ;
 
         public final int type;

@@ -9,6 +9,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
 import org.corfudb.runtime.object.ISMRInterface;
 import org.corfudb.runtime.object.TransactionalContext;
+import org.corfudb.util.serializer.Serializers;
 
 import java.lang.reflect.Field;
 import java.util.*;
@@ -47,7 +48,7 @@ public class ObjectsView extends AbstractView {
      * @return              Returns a view of the object in a Corfu instance.
      */
     public <T> T open(@NonNull UUID streamID, @NonNull Class<T> type) {
-        return open(streamID, type, null);
+        return open(streamID, type, Serializers.SerializerType.JSON);
     }
 
     /** Gets a view of an object in the Corfu instance.
@@ -63,6 +64,38 @@ public class ObjectsView extends AbstractView {
      */
     public <T> T open(@NonNull String streamName, @NonNull Class<T> type) {
         return open(CorfuRuntime.getStreamID(streamName), type);
+    }
+
+    /** Gets a view of an object in the Corfu instance using a specific serializer.
+     *
+     * @param streamName    The stream that the object should be read from.
+     * @param type          The type of the object that should be opened.
+     *                      If the type implements ICorfuSMRObject or implements an interface which implements
+     *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
+     *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
+     *                      all methods are MutatorAccessors.
+     * @param serializer    The type of serializer to use.
+     * @param <T>           The type of object to return.
+     * @return              Returns a view of the object in a Corfu instance.
+     */
+    public <T> T open(@NonNull String streamName, @NonNull Class<T> type, Serializers.SerializerType serializer) {
+        return open(CorfuRuntime.getStreamID(streamName), type, null, Collections.emptySet(), serializer);
+    }
+
+    /** Gets a view of an object in the Corfu instance using a specific serializer.
+     *
+     * @param streamID     The stream that the object should be read from.
+     * @param type          The type of the object that should be opened.
+     *                      If the type implements ICorfuSMRObject or implements an interface which implements
+     *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
+     *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
+     *                      all methods are MutatorAccessors.
+     * @param serializer    The type of serializer to use.
+     * @param <T>           The type of object to return.
+     * @return              Returns a view of the object in a Corfu instance.
+     */
+    public <T> T open(@NonNull UUID streamID, @NonNull Class<T> type, Serializers.SerializerType serializer) {
+        return open(streamID, type, null, Collections.emptySet(), serializer);
     }
 
     /** Gets a view of an object in the Corfu instance.
@@ -96,7 +129,7 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T, R extends ISMRInterface> T open(@NonNull UUID streamID, @NonNull Class<T> type, Class<R> overlay) {
-        return open(streamID, type, overlay, Collections.emptySet());
+        return open(streamID, type, overlay, Collections.emptySet(), Serializers.SerializerType.JSON);
     }
 
     /** Gets a view of an object in the Corfu instance.
@@ -114,17 +147,17 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T, R extends ISMRInterface> T open(@NonNull UUID streamID, @NonNull Class<T> type, Class<R> overlay,
-                                               Set<ObjectOpenOptions> options) {
+                                               Set<ObjectOpenOptions> options, Serializers.SerializerType serializer) {
         if (options.contains(ObjectOpenOptions.NO_CACHE))
         {
             StreamView sv = runtime.getStreamsView().get(streamID);
-            return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime);
+            return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime, serializer);
         }
 
         ObjectID<T,R> oid = new ObjectID(streamID, type, overlay);
         return (T) objectCache.computeIfAbsent(oid, x -> {
             StreamView sv = runtime.getStreamsView().get(streamID);
-            return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime);
+            return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime, serializer);
         });
     }
 
@@ -145,7 +178,7 @@ public class ObjectsView extends AbstractView {
             return (T) objectCache.computeIfAbsent(oid, x -> {
                 StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
                         destination, proxy.getTimestamp());
-                return CorfuSMRObjectProxy.getProxy(proxy.getOriginalClass(), null, sv, runtime);
+                return CorfuSMRObjectProxy.getProxy(proxy.getOriginalClass(), null, sv, runtime, proxy.getSerializer());
             });
         } catch (NoSuchFieldException nsfe) {
             throw new RuntimeException("Object given not a corfu object!");

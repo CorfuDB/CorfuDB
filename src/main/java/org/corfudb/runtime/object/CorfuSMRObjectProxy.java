@@ -57,6 +57,7 @@ public class CorfuSMRObjectProxy<P> {
     Class<P> originalClass;
     Class<?> generatedClass;
     Map<Long, CompletableFuture<Object>> completableFutureMap;
+    @Getter
     Serializers.SerializerType serializer;
     CorfuRuntime runtime;
 
@@ -75,12 +76,12 @@ public class CorfuSMRObjectProxy<P> {
                     .build();
 
 
-    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<P> originalClass) {
+    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<P> originalClass, Serializers.SerializerType serializer) {
         this.runtime = runtime;
         this.sv = sv;
         this.originalClass = originalClass;
-        this.serializer = Serializers.SerializerType.JSON;
         this.completableFutureMap = new ConcurrentHashMap<>();
+        this.serializer = serializer;
         this.timestamp = -1L;
         if (Arrays.stream(originalClass.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom)) {
             isCorfuObject = true;
@@ -185,9 +186,10 @@ public class CorfuSMRObjectProxy<P> {
     }
 
     public static <T,R extends ISMRInterface>
-        T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime) {
+        T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime,
+                   Serializers.SerializerType serializer) {
         try {
-            CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type);
+            CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
             T ret = getProxyClass(proxy, type, overlay).newInstance();
             Field f = ret.getClass().getDeclaredField("_corfuStreamID");
             f.setAccessible(true);
@@ -355,6 +357,20 @@ public class CorfuSMRObjectProxy<P> {
                 completableFutureMap.remove(updatePos);
                 return ret;
             } else {
+                // If this is the first access in this transaction, we should sync it first.
+                if (!TransactionalContext.getCurrentContext().isFirstReadTimestampSet())
+                {
+                    // Synchronize the object if and only if it is the first object in the TXN.
+                    log.trace("Object {} is the first access in txn {}, syncing.", sv.getStreamID(),
+                            TransactionalContext.getCurrentContext().getTransactionID());
+                    sync(obj, Long.MAX_VALUE);
+                    log.trace("Set first read timestamp to {}", sv.getLogPointer());
+                    TransactionalContext.getCurrentContext().setFirstReadTimestamp(sv.getLogPointer());
+                }
+                else {
+                    // Otherwise we should make sure we're sync'd up to the TX
+                    sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
+                }
                 // in a transaction, we add the update to the TX buffer and apply the update
                 // immediately.
                 TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
@@ -380,6 +396,19 @@ public class CorfuSMRObjectProxy<P> {
             // Linearize this access with respect to other accesses in the system.
             if (!TransactionalContext.isInTransaction()) {
                 sync(obj, Long.MAX_VALUE);
+            }
+            else if (!TransactionalContext.getCurrentContext().isFirstReadTimestampSet())
+            {
+                // Synchronize the object if and only if it is the first object in the TXN.
+                log.trace("Object {} is the first access in txn {}, syncing.", sv.getStreamID(),
+                        TransactionalContext.getCurrentContext().getTransactionID());
+                sync(obj, Long.MAX_VALUE);
+                log.trace("Set first read timestamp to {}", sv.getLogPointer());
+                TransactionalContext.getCurrentContext().setFirstReadTimestamp(sv.getLogPointer());
+            }
+            else {
+                // Otherwise we should make sure we're sync'd up to the TX
+                sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
             }
             // Now we can safely call the accessor.
             if (isCorfuObject) {
