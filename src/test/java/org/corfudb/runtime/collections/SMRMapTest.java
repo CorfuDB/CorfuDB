@@ -8,6 +8,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.EnumSet;
@@ -161,6 +162,30 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void collectionsStreamInterface()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+
+        testMap.put("a", "b");
+        getRuntime().getObjectsView().TXBegin();
+        if (testMap.values().stream().anyMatch(x -> x.equals("c"))) {
+            throw new Exception("test");
+        }
+        testMap.compute("b", (k, v) -> "c");
+        getRuntime().getObjectsView().TXEnd();
+        assertThat(testMap)
+                .containsEntry("b", "c");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     public void canUpdateSingleObjectTransacationally()
             throws Exception {
         addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
@@ -171,7 +196,31 @@ public class SMRMapTest extends AbstractViewTest {
         getRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
-        //testMap.clear();  //TODO: handle the state where the mutator is used (sync at TXBegin?).
+        getRuntime().getObjectsView().TXBegin();
+        assertThat(testMap.put("a","a"))
+                .isNull();
+        assertThat(testMap.put("a","b"))
+                .isEqualTo("a");
+        assertThat(testMap.get("a"))
+                .isEqualTo("b");
+        getRuntime().getObjectsView().TXEnd();
+        assertThat(testMap.get("a"))
+                .isEqualTo("b");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void mutatorFollowedByATransaction()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        testMap.clear();
         getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a","a"))
                 .isNull();
@@ -281,7 +330,7 @@ public class SMRMapTest extends AbstractViewTest {
         CompletableFuture cf = CompletableFuture.runAsync(() -> {
             Map<String,String> testMap2 = getRuntime().getObjectsView()
                     .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class, null,
-                            EnumSet.of(ObjectOpenOptions.NO_CACHE));
+                            EnumSet.of(ObjectOpenOptions.NO_CACHE), Serializers.SerializerType.JSON);
             testMap2.put("a", "f");
         });
         cf.join();

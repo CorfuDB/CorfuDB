@@ -7,12 +7,11 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -136,4 +135,26 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         assertThat(test.getPrimitive())
                 .isEqualTo("hello world".getBytes());
     }
+
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canUsePrimitiveSerializer()
+            throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        //begin tests
+        CorfuRuntime r = getRuntime().connect();
+        TestClassWithPrimitives test = r.getObjectsView().open(CorfuRuntime.getStreamID("test")
+                , TestClassWithPrimitives.class, null,
+                Collections.emptySet(), Serializers.SerializerType.PRIMITIVE);
+        test.setPrimitive("hello world".getBytes());
+        assertThat(test.getPrimitive())
+                .isEqualTo("hello world".getBytes());
+    }
+
 }

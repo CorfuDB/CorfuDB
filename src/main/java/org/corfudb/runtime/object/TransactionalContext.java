@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.RecvByteBufAllocator;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
@@ -22,6 +23,21 @@ public class TransactionalContext {
 
     @Getter
     UUID transactionID;
+
+    /** The timestamp of the first read in the system.
+     * @return The timestamp of the first read object, which may be null.
+     */
+    @Getter
+    @Setter
+    Long firstReadTimestamp;
+
+    /** Check if the first read timestamp has been set.
+     * @return  Return true, if the timestamp has been set, false otherwise.
+     */
+    public boolean isFirstReadTimestampSet()
+    {
+        return false;
+    }
 
     @SuppressWarnings("unchecked")
     class TransactionalObjectData<T> {
