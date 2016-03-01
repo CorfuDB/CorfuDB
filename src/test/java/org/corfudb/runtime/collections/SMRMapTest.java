@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -207,6 +208,69 @@ public class SMRMapTest extends AbstractViewTest {
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void multipleTXesAreApplied()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        IntStream.range(0, 10).asLongStream()
+                .forEach(l -> {
+                    try {
+                        assertThat(testMap)
+                                .hasSize((int)l);
+                        getRuntime().getObjectsView().TXBegin();
+                        assertThat(testMap.put(Long.toString(l), Long.toString(l)))
+                                .isNull();
+                        assertThat(testMap)
+                                .hasSize((int)l + 1);
+                        getRuntime().getObjectsView().TXEnd();
+                        assertThat(testMap)
+                                .hasSize((int)l + 1);
+                    } catch (TransactionAbortedException tae) {
+                        throw new RuntimeException(tae);
+                    }
+        });
+
+        assertThat(testMap)
+                .hasSize(10);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void multipleTXesAreAppliedWOAccessors()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        IntStream.range(0, 10).asLongStream()
+                .forEach(l -> {
+                    try {
+                        getRuntime().getObjectsView().TXBegin();
+                        assertThat(testMap.put(Long.toString(l), Long.toString(l)))
+                                .isNull();
+                        getRuntime().getObjectsView().TXEnd();
+                    } catch (TransactionAbortedException tae) {
+                        throw new RuntimeException(tae);
+                    }
+                });
+
+        assertThat(testMap)
+                .hasSize(10);
+    }
+
 
     @Test
     @SuppressWarnings("unchecked")
