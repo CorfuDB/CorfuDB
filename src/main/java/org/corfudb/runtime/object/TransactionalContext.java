@@ -31,6 +31,14 @@ public class TransactionalContext {
     @Setter
     Long firstReadTimestamp;
 
+    /** Whether or not the tx is doing a first sync and therefore writes should not be
+     * redirected.
+     * @return Whether or not the TX is in sync.
+     */
+    @Getter
+    @Setter
+    boolean inSyncMode;
+
     /** Check if the first read timestamp has been set.
      * @return  Return true, if the timestamp has been set, false otherwise.
      */

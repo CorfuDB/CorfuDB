@@ -270,13 +270,14 @@ public class CorfuSMRObjectProxy<P> {
                     }
                 }
             }
-            if (TransactionalContext.isInTransaction())
+            if (TransactionalContext.isInTransaction()
+                    && !TransactionalContext.getCurrentContext().isInSyncMode())
             {
                 String name = new Exception().getStackTrace()[6].getMethodName();
                 if (name.equals("interceptAccessor")) {
                     return TransactionalContext.getCurrentContext().getObjectRead(CorfuSMRObjectProxy.this);
                 }
-                else if (name.equals("interceptMutatorAccessor")){
+                else if (name.equals("interceptMutator")){
                     return TransactionalContext.getCurrentContext().getObjectWrite(CorfuSMRObjectProxy.this);
                 }
                 else {
@@ -358,19 +359,7 @@ public class CorfuSMRObjectProxy<P> {
                 return ret;
             } else {
                 // If this is the first access in this transaction, we should sync it first.
-                if (!TransactionalContext.getCurrentContext().isFirstReadTimestampSet())
-                {
-                    // Synchronize the object if and only if it is the first object in the TXN.
-                    log.trace("Object {} is the first access in txn {}, syncing.", sv.getStreamID(),
-                            TransactionalContext.getCurrentContext().getTransactionID());
-                    sync(obj, Long.MAX_VALUE);
-                    log.trace("Set first read timestamp to {}", sv.getLogPointer());
-                    TransactionalContext.getCurrentContext().setFirstReadTimestamp(sv.getLogPointer());
-                }
-                else {
-                    // Otherwise we should make sure we're sync'd up to the TX
-                    sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
-                }
+                doTransactionalSync(obj);
                 // in a transaction, we add the update to the TX buffer and apply the update
                 // immediately.
                 TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
@@ -397,18 +386,8 @@ public class CorfuSMRObjectProxy<P> {
             if (!TransactionalContext.isInTransaction()) {
                 sync(obj, Long.MAX_VALUE);
             }
-            else if (!TransactionalContext.getCurrentContext().isFirstReadTimestampSet())
-            {
-                // Synchronize the object if and only if it is the first object in the TXN.
-                log.trace("Object {} is the first access in txn {}, syncing.", sv.getStreamID(),
-                        TransactionalContext.getCurrentContext().getTransactionID());
-                sync(obj, Long.MAX_VALUE);
-                log.trace("Set first read timestamp to {}", sv.getLogPointer());
-                TransactionalContext.getCurrentContext().setFirstReadTimestamp(sv.getLogPointer());
-            }
             else {
-                // Otherwise we should make sure we're sync'd up to the TX
-                sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
+                doTransactionalSync(obj);
             }
             // Now we can safely call the accessor.
             if (isCorfuObject) {
@@ -418,6 +397,24 @@ public class CorfuSMRObjectProxy<P> {
                 return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), arguments);
             }
         }
+    }
+
+    public void doTransactionalSync(P obj) {
+        TransactionalContext.getCurrentContext().setInSyncMode(true);
+        if (!TransactionalContext.getCurrentContext().isFirstReadTimestampSet())
+        {
+            // Synchronize the object if and only if it is the first object in the TXN.
+            log.trace("Object {} is the first access in txn {}, syncing.", sv.getStreamID(),
+                    TransactionalContext.getCurrentContext().getTransactionID());
+            sync(obj, Long.MAX_VALUE);
+            log.trace("Set first read timestamp to {}", sv.getLogPointer());
+            TransactionalContext.getCurrentContext().setFirstReadTimestamp(sv.getLogPointer());
+        }
+        else {
+            // Otherwise we should make sure we're sync'd up to the TX
+            sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
+        }
+        TransactionalContext.getCurrentContext().setInSyncMode(false);
     }
 
     public static String getShortMethodName(String longName)
