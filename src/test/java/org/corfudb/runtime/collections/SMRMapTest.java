@@ -1,6 +1,10 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.reflect.TypeToken;
+import lombok.Data;
 import lombok.Getter;
+import lombok.ToString;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
@@ -400,5 +404,69 @@ public class SMRMapTest extends AbstractViewTest {
         cf.join();
         assertThatThrownBy(() -> getRuntime().getObjectsView().TXEnd())
                 .isInstanceOf(TransactionAbortedException.class);
+    }
+
+    @Data
+    @ToString
+    static class TestObject {
+        final String testString;
+        final int testInt;
+        final Map<String, Object> deepMap;
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void smrMapCanContainCustomObjects()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,TestObject> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(),
+                SMRMap.class);
+        testMap.put("A", new TestObject("A", 2, ImmutableMap.of("A", "B")));
+        assertThat(testMap.get("A").getTestString())
+                .isEqualTo("A");
+        assertThat(testMap.get("A").getTestInt())
+                .isEqualTo(2);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void smrMapCanContainCustomObjectsInsideTXes()
+            throws Exception {
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
+        getRuntime().connect();
+
+        Map<String,TestObject> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(),
+                SMRMap.class);
+
+        IntStream.range(0, 10)
+                .forEach(l -> {
+                    try {
+                        getRuntime().getObjectsView().TXBegin();
+                        testMap.put(Integer.toString(l), new TestObject(Integer.toString(l), l, ImmutableMap.of(
+                                Integer.toString(l),l)));
+                        if (l > 0) {
+                            assertThat(testMap.get(Integer.toString(l-1)).getTestInt())
+                                    .isEqualTo(l-1);
+                        }
+                        getRuntime().getObjectsView().TXEnd();
+                    } catch (TransactionAbortedException tae) {
+                        throw new RuntimeException(tae);
+                    }
+                });
+
+        assertThat(testMap.get("3").getTestString())
+                .isEqualTo("3");
+        assertThat(testMap.get("3").getTestInt())
+                .isEqualTo(3);
     }
 }

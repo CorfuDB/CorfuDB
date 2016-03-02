@@ -1,6 +1,7 @@
 package org.corfudb.util.serializer;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
@@ -17,8 +18,8 @@ import java.util.UUID;
 @Slf4j
 public class JSONSerializer implements ISerializer {
 
-    private static final Gson gson = new Gson();
-
+    private static final Gson gson = new GsonBuilder()
+                                            .create();
     /**
      * Deserialize an object from a given byte buffer.
      *
@@ -101,7 +102,7 @@ public class JSONSerializer implements ISerializer {
             {
                 try (OutputStreamWriter osw = new OutputStreamWriter(bbos))
                 {
-                    gson.toJson(o, osw);
+                    gson.toJson(o, o.getClass(), osw);
                 }
             }
             catch (IOException ie)
