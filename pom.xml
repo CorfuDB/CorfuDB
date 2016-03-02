@@ -156,6 +156,16 @@
             <artifactId>byte-buddy</artifactId>
             <version>1.2.1</version>
         </dependency>
+        <dependency>
+            <groupId>com.esotericsoftware</groupId>
+            <artifactId>kryo</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>de.javakaffee</groupId>
+            <artifactId>kryo-serializers</artifactId>
+            <version>0.37</version>
+        </dependency>
     </dependencies>
 
     <build>
