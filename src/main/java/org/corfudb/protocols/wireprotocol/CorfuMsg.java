@@ -25,6 +25,9 @@ public class CorfuMsg {
     /** The epoch of this request/response */
     long epoch;
 
+    /** The underlying ByteBuf, if present. */
+    ByteBuf buf;
+
     @RequiredArgsConstructor
     @AllArgsConstructor
     public enum CorfuMsgType {
@@ -137,7 +140,15 @@ public class CorfuMsg {
         msg.epoch = epoch;
         msg.msgType = message;
         msg.fromBuffer(buffer);
+        msg.buf = buffer;
         return msg;
+    }
+
+    /** Release the underlying buffer, if present. */
+    public void release() {
+        if (buf != null) {
+            buf.release();
+        }
     }
 
     /** Constructor which generates a message based only the message type.

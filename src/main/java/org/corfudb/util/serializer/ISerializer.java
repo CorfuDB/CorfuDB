@@ -6,7 +6,6 @@ import de.javakaffee.kryoserializers.guava.ImmutableMapSerializer;
 import de.javakaffee.kryoserializers.guava.ImmutableMultimapSerializer;
 import de.javakaffee.kryoserializers.guava.ImmutableSetSerializer;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.UnpooledByteBufAllocator;
 import org.corfudb.runtime.CorfuRuntime;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
