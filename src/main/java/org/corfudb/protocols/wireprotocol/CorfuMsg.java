@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import lombok.*;
 import org.corfudb.infrastructure.*;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.function.Function;
@@ -16,6 +17,10 @@ import java.util.stream.Collectors;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CorfuMsg {
+
+    /** Marker field value, should equal 0xCC */
+    final static byte markerField = (byte) 0xCC;
+
     /** The unique id of the client making the request */
     long clientID;
 
@@ -95,12 +100,13 @@ public class CorfuMsg {
     CorfuMsgType msgType;
 
         /* The wire format of the NettyCorfuMessage message is below:
-        | client ID(8) | request ID(8) |  epoch(8)   |  type(1)  |
+        markerField(1) | client ID(8) | request ID(8) |  epoch(8)   |  type(1)  |
 */
     /** Serialize the message into the given bytebuffer.
      * @param buffer    The buffer to serialize to.
      * */
     public void serialize(ByteBuf buffer) {
+        buffer.writeByte(markerField);
         buffer.writeLong(clientID);
         buffer.writeLong(requestID);
         buffer.writeLong(epoch);
@@ -128,13 +134,24 @@ public class CorfuMsg {
      * @param buffer    The buffer to deserialize.
      * @return          The corresponding message.
      */
-    @SneakyThrows
     public static CorfuMsg deserialize(ByteBuf buffer) {
+        byte marker = buffer.readByte();
+        if (marker != markerField) {
+            throw new RuntimeException("Attempt to deserialize a message which is not a CorfuMsg, "
+            + "Marker = " + marker + " but expected 0xcc");
+        }
         long clientID = buffer.readLong();
         long requestID = buffer.readLong();
         long epoch = buffer.readLong();
         CorfuMsgType message = typeMap.get(buffer.readByte());
-        CorfuMsg msg = message.messageType.getConstructor().newInstance();
+        CorfuMsg msg;
+        try {
+            msg = message.messageType.getConstructor().newInstance();
+        } catch (NoSuchMethodException nsme) {
+            throw new RuntimeException("Unrecognized message type " + message.toString());
+        } catch (InstantiationException | IllegalAccessException | InvocationTargetException ite) {
+            throw new RuntimeException("Error deserializing message type " + message.toString());
+        }
         msg.clientID = clientID;
         msg.requestID = requestID;
         msg.epoch = epoch;
