@@ -14,6 +14,7 @@ import org.corfudb.util.serializer.ICorfuSerializable;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 1/11/16.
@@ -112,7 +113,10 @@ public class TXEntry extends LogEntry {
      */
     public Set<UUID> getAffectedStreams()
     {
-        return txMap.keySet();
+        return txMap.entrySet().stream()
+                .filter(e -> e.getValue().getUpdates().size() != 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
     }
 
     /**
