@@ -89,7 +89,22 @@ public class TXEntry extends LogEntry {
                 // We need to now check if this object changed since the tx proposer
                 // put it in the log. This is a relatively simple check if backpointers
                 // are available, but requires a scan if not.
-                // Currently backpointers aren't available so we must scan.
+                if (this.getEntry() != null && this.getEntry().getBackpointerMap() != null) {
+                    if (this.getEntry().getBackpointerMap().containsKey(e.getKey()))
+                    {
+                        if (this.getEntry().getBackpointerMap().get(e.getKey()) >
+                                e.getValue().getLastTimestamp())
+                        {
+                            log.debug("TX aborted due to mutation [via backpointer] on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
+                                    this.getEntry().getBackpointerMap().get(e.getKey()), timestamp, e.getValue().getLastTimestamp());
+                            return true;
+                        }
+                        return false;
+                    }
+                    // Hmm, this object was not in the backpointer set. This means
+                    // we need to do a manual scan.
+                }
+                // Backpointers not available, so we do a scan.
                 for (long i = e.getValue().getLastTimestamp() + 1; i < timestamp; i++)
                 {
                     ILogUnitEntry rr = runtime.getAddressSpaceView().read(i).getResult();

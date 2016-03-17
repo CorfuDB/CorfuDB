@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.*;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Arrays;
@@ -77,7 +78,12 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
         private final ByteBuf buffer = msg.getData();
 
         public Object getPayload(CorfuRuntime rt) {
-            return msg.getPayload(rt);
+            Object o = msg.getPayload(rt);
+            if (o instanceof LogEntry)
+            {
+                ((LogEntry) o).setEntry(this);
+            }
+            return o;
         }
 
         @Getter(lazy=true)
