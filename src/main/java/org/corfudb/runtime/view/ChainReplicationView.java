@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.AutoCloseableByteBuf;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.CorfuSerializer;
@@ -61,21 +62,19 @@ public class ChainReplicationView extends AbstractReplicationView {
         int payloadBytes = 0;
         // To reduce the overhead of serialization, we serialize only the first time we write, saving
         // when we go down the chain.
-        ByteBuf b = ByteBufAllocator.DEFAULT.directBuffer();
-        Serializers.getSerializer(Serializers.SerializerType.CORFU)
-                .serialize(data, b);
-        payloadBytes = b.readableBytes();
-        try {
-            for (int i = 0; i < numUnits; i++)
-            {
-                log.trace("Write[{}]: chain {}/{}", address, i+1, numUnits);
-                // In chain replication, we write synchronously to every unit in the chain.
-                    CFUtils.getUninterruptibly(
-                            getLayout().getLogUnitClient(address, i)
-                                    .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
-            }
-        } finally {
-            b.release();
+        try (AutoCloseableByteBuf b =
+                     new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
+            Serializers.getSerializer(Serializers.SerializerType.CORFU)
+                    .serialize(data, b);
+            payloadBytes = b.readableBytes();
+                for (int i = 0; i < numUnits; i++)
+                {
+                    log.trace("Write[{}]: chain {}/{}", address, i+1, numUnits);
+                    // In chain replication, we write synchronously to every unit in the chain.
+                        CFUtils.getUninterruptibly(
+                                getLayout().getLogUnitClient(address, i)
+                                        .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
+                }
         }
         return payloadBytes;
     }
