@@ -1,10 +1,8 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
-import lombok.ToString;
+import lombok.*;
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ICorfuSerializable;
 
@@ -43,6 +41,11 @@ public class LogEntry implements ICorfuSerializable {
     /** The type of log entry */
     @Getter
     LogEntryType type;
+
+    /** An underlying log entry, if present. */
+    @Getter
+    @Setter
+    ILogUnitEntry entry;
 
     /** Constructor for generating LogEntries.
      *

@@ -10,6 +10,7 @@ import com.google.common.collect.TreeRangeSet;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -146,6 +147,10 @@ public class AddressSpaceView extends AbstractView {
                             data, numBytes);
             cachedEntry.setBackpointerMap(backpointerMap);
             cachedEntry.setStreams(stream);
+            if (data instanceof LogEntry)
+            {
+                ((LogEntry) data).setEntry(cachedEntry);
+            }
             readCache.put(address, new AbstractReplicationView.ReadResult(address, cachedEntry));
         }
     }
