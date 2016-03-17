@@ -59,23 +59,23 @@ public class ChainReplicationView extends AbstractReplicationView {
     throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         int payloadBytes = 0;
-        for (int i = 0; i < numUnits; i++)
-        {
-            log.trace("Write[{}]: chain {}/{}", address, i+1, numUnits);
-            // In chain replication, we write synchronously to every unit in the chain.
-            // To reduce the overhead of serialization, we serialize only the first time we write, saving
-            // when we go down the chain.
-            ByteBuf b = ByteBufAllocator.DEFAULT.directBuffer();
-            try {
-                Serializers.getSerializer(Serializers.SerializerType.CORFU)
-                        .serialize(data, b);
-                payloadBytes = b.readableBytes();
-                CFUtils.getUninterruptibly(
-                        getLayout().getLogUnitClient(address, i)
-                                .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
-            } finally {
-                b.release();
+        // To reduce the overhead of serialization, we serialize only the first time we write, saving
+        // when we go down the chain.
+        ByteBuf b = ByteBufAllocator.DEFAULT.directBuffer();
+        Serializers.getSerializer(Serializers.SerializerType.CORFU)
+                .serialize(data, b);
+        payloadBytes = b.readableBytes();
+        try {
+            for (int i = 0; i < numUnits; i++)
+            {
+                log.trace("Write[{}]: chain {}/{}", address, i+1, numUnits);
+                // In chain replication, we write synchronously to every unit in the chain.
+                    CFUtils.getUninterruptibly(
+                            getLayout().getLogUnitClient(address, i)
+                                    .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
             }
+        } finally {
+            b.release();
         }
         return payloadBytes;
     }
