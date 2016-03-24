@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.*;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -18,11 +19,11 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class CorfuMsg {
 
-    /** Marker field value, should equal 0xCC */
-    final static byte markerField = (byte) 0xCC;
+    /** Marker field value, should equal 0xC0FC0FC0 */
+    final static int markerField = 0xC0FC0FC0;
 
     /** The unique id of the client making the request */
-    long clientID;
+    UUID clientID;
 
     /** The request id of this request/response */
     long requestID;
@@ -106,8 +107,14 @@ public class CorfuMsg {
      * @param buffer    The buffer to serialize to.
      * */
     public void serialize(ByteBuf buffer) {
-        buffer.writeByte(markerField);
-        buffer.writeLong(clientID);
+        buffer.writeInt(markerField);
+        if (clientID == null) {
+            buffer.writeLong(0L);
+            buffer.writeLong(0L);
+        } else {
+            buffer.writeLong(clientID.getMostSignificantBits());
+            buffer.writeLong(clientID.getLeastSignificantBits());
+        }
         buffer.writeLong(requestID);
         buffer.writeLong(epoch);
         buffer.writeByte(msgType.asByte());
@@ -135,12 +142,12 @@ public class CorfuMsg {
      * @return          The corresponding message.
      */
     public static CorfuMsg deserialize(ByteBuf buffer) {
-        byte marker = buffer.readByte();
+        int marker = buffer.readInt();
         if (marker != markerField) {
             throw new RuntimeException("Attempt to deserialize a message which is not a CorfuMsg, "
-            + "Marker = " + marker + " but expected 0xcc");
+            + "Marker = " + marker + " but expected 0xC0FC0FC0");
         }
-        long clientID = buffer.readLong();
+        UUID clientID = new UUID(buffer.readLong(), buffer.readLong());
         long requestID = buffer.readLong();
         long epoch = buffer.readLong();
         CorfuMsgType message = typeMap.get(buffer.readByte());

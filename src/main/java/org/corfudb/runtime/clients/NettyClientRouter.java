@@ -53,7 +53,7 @@ implements IClientRouter {
     /** The id of this client. */
     @Getter
     @Setter
-    public long clientID;
+    public UUID clientID;
 
     /** The current request ID. */
     @Getter
@@ -88,7 +88,7 @@ implements IClientRouter {
         this.host = host;
         this.port = port;
 
-        clientID = random.nextLong();
+        clientID = UUID.randomUUID();
         handlerMap = new ConcurrentHashMap<>();
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
