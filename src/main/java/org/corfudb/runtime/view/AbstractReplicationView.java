@@ -5,6 +5,7 @@ import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
@@ -45,15 +46,6 @@ public abstract class AbstractReplicationView {
 
     @ToString
     @RequiredArgsConstructor
-    public static class ReadResult {
-        @Getter
-        final long address;
-        @Getter
-        final ILogUnitEntry result;
-    }
-
-    @ToString
-    @RequiredArgsConstructor
     public static class CachedLogUnitEntry implements ILogUnitEntry
     {
         @Getter
@@ -65,10 +57,12 @@ public abstract class AbstractReplicationView {
         @Getter
         final Object payload;
 
-        public Object getPayload(CorfuRuntime rt)
-        {
-            return getPayload();
-        }
+        @Getter
+        final Long address;
+
+        final CorfuRuntime runtime;
+
+        public ILogUnitEntry setRuntime(CorfuRuntime runtime) {return this;}
 
         @Getter
         final int sizeEstimate;
@@ -126,15 +120,15 @@ public abstract class AbstractReplicationView {
      * @param address   The address to read from.
      * @return          The result of the read.
      */
-    public abstract ReadResult read(long address);
+    public abstract ILogUnitEntry read(long address);
 
     /** Read a set of addresses, using the replication method given.
      *
      * @param addresses   The addresses to read from.
      * @return            A map containing the results of the read.
      */
-    public Map<Long, ReadResult> read(RangeSet<Long> addresses) {
-        Map<Long, ReadResult> results = new ConcurrentHashMap<>();
+    public Map<Long, ILogUnitEntry> read(RangeSet<Long> addresses) {
+        Map<Long, ILogUnitEntry> results = new ConcurrentHashMap<>();
         Set<Long> total = Utils.discretizeRangeSet(addresses);
         total.parallelStream()
                 .forEach(i -> results.put(i, read(i)));
@@ -146,7 +140,7 @@ public abstract class AbstractReplicationView {
      * @param stream      The stream to read from.
      * @return            A map containing the results of the read.
      */
-    public abstract Map<Long, ReadResult> read(UUID stream);
+    public abstract Map<Long, ILogUnitEntry> read(UUID stream);
 
     /** Fill a hole at an address, using the replication method given.
      *

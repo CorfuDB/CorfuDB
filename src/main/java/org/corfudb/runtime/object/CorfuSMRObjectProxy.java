@@ -530,8 +530,7 @@ public class CorfuSMRObjectProxy<P> {
             TXEntry txEntry = (TXEntry) entry;
             log.trace("Apply TX update: {}", txEntry);
             // First, determine if the TX is abort.
-            // Use backpointers if we have them.
-            if (txEntry.isAborted(runtime, address)){
+            if (txEntry.isAborted()){
                 return false;
             }
 
@@ -548,9 +547,9 @@ public class CorfuSMRObjectProxy<P> {
     synchronized public void sync(P obj, long maxPos) {
         log.trace("Object sync to pos {}", maxPos == Long.MAX_VALUE ? "MAX" : maxPos);
         Arrays.stream(sv.readTo(maxPos))
-                .filter(m -> m.getResult().getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
-                .filter(m -> m.getResult().getPayload(runtime) instanceof SMREntry ||
-                        m.getResult().getPayload(runtime) instanceof TXEntry)
-                .forEach(m -> applyUpdate(m.getAddress(), (LogEntry) m.getResult().getPayload(runtime), obj));
+                .filter(m -> m.getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
+                .filter(m -> m.getPayload() instanceof SMREntry ||
+                        m.getPayload() instanceof TXEntry)
+                .forEach(m -> applyUpdate(m.getAddress(), (LogEntry) m.getPayload(), obj));
     }
 }

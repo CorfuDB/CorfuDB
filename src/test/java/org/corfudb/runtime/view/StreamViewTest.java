@@ -41,7 +41,7 @@ public class StreamViewTest extends AbstractViewTest {
         StreamView sv = r.getStreamsView().get(streamA);
         sv.write(testPayload);
 
-        assertThat(sv.read().getResult().getPayload(r))
+        assertThat(sv.read().getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(sv.read())
@@ -67,7 +67,7 @@ public class StreamViewTest extends AbstractViewTest {
         scheduleConcurrently(100, i -> sv.write(testPayload));
         executeScheduled(8, 10, TimeUnit.SECONDS);
 
-        scheduleConcurrently(100, i-> assertThat(sv.read().getResult().getPayload(r))
+        scheduleConcurrently(100, i-> assertThat(sv.read().getPayload())
                 .isEqualTo("hello world".getBytes()));
         executeScheduled(8, 10, TimeUnit.SECONDS);
         assertThat(sv.read())
@@ -96,7 +96,7 @@ public class StreamViewTest extends AbstractViewTest {
         scheduleConcurrently(100, i -> sv.write(testPayload));
         executeScheduled(8, 10, TimeUnit.SECONDS);
 
-        scheduleConcurrently(100, i-> assertThat(sv.read().getResult().getPayload(r))
+        scheduleConcurrently(100, i-> assertThat(sv.read().getPayload())
                 .isEqualTo("hello world".getBytes()));
         executeScheduled(8, 10, TimeUnit.SECONDS);
         assertThat(sv.read())
@@ -124,7 +124,7 @@ public class StreamViewTest extends AbstractViewTest {
         StreamView sv = r.getStreamsView().get(streamA);
         sv.write(testPayload);
 
-        assertThat(sv.read().getResult().getPayload(r))
+        assertThat(sv.read().getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(sv.read())
@@ -153,7 +153,7 @@ public class StreamViewTest extends AbstractViewTest {
         StreamView sv = r.getStreamsView().get(streamA);
         sv.write(testPayload);
 
-        assertThat(sv.read().getResult().getPayload(r))
+        assertThat(sv.read().getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(sv.read())
@@ -182,7 +182,7 @@ public class StreamViewTest extends AbstractViewTest {
         StreamView sv = r.getStreamsView().get(streamA);
         sv.write(testPayload);
 
-        assertThat(sv.read().getResult().getPayload(r))
+        assertThat(sv.read().getPayload())
                 .isEqualTo("hello world".getBytes());
 
         assertThat(sv.read())

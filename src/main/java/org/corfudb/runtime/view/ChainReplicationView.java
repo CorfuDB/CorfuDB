@@ -5,6 +5,7 @@ import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -81,14 +82,14 @@ public class ChainReplicationView extends AbstractReplicationView {
      * @return The result of the read.
      */
     @Override
-    public ReadResult read(long address) {
+    public ILogUnitEntry read(long address) {
         int numUnits = getLayout().getSegmentLength(address);
         log.trace("Read[{}]: chain {}/{}", address, numUnits, numUnits);
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
-        return new ReadResult(address,
-                CFUtils.getUninterruptibly(getLayout()
-                        .getLogUnitClient(address, numUnits - 1).read(getLayout().getLocalAddress(address))));
+        return CFUtils.getUninterruptibly(getLayout()
+                        .getLogUnitClient(address, numUnits - 1).read(getLayout().getLocalAddress(address)))
+                            .setAddress(address);
     }
 
     /**
@@ -98,7 +99,7 @@ public class ChainReplicationView extends AbstractReplicationView {
      * @return A map containing the results of the read.
      */
     @Override
-    public Map<Long, ReadResult> read(RangeSet<Long> addresses) {
+    public Map<Long, ILogUnitEntry> read(RangeSet<Long> addresses) {
         // Generate a new range set for every stripe.
         ConcurrentHashMap<Layout.LayoutStripe, RangeSet<Long>> rangeMap = new ConcurrentHashMap<>();
         ConcurrentHashMap<Layout.LayoutStripe, Long> eMap = new ConcurrentHashMap<>();
@@ -109,7 +110,7 @@ public class ChainReplicationView extends AbstractReplicationView {
                     .add(Range.singleton(layout.getLocalAddress(l)));
                     eMap.computeIfAbsent(layout.getStripe(l), k->l);
         });
-        ConcurrentHashMap<Long, ReadResult> resultMap = new ConcurrentHashMap<>();
+        ConcurrentHashMap<Long, ILogUnitEntry> resultMap = new ConcurrentHashMap<>();
         rangeMap.entrySet().parallelStream()
                 .forEach(x -> {
                                     CFUtils.getUninterruptibly(
@@ -118,9 +119,9 @@ public class ChainReplicationView extends AbstractReplicationView {
                                     .entrySet().parallelStream()
                                     .forEach(ex ->{
                                             long globalAddress = layout.getGlobalAddress(x.getKey(),ex.getKey());
-                                        resultMap.put(globalAddress, new ReadResult(globalAddress, ex.getValue()));
-                                            }
-                                    );
+                                            ex.getValue().setAddress(globalAddress);
+                                            resultMap.put(globalAddress, ex.getValue());
+                                    });
                 });
         return resultMap;
     }
@@ -128,11 +129,11 @@ public class ChainReplicationView extends AbstractReplicationView {
     /**
      * Read a stream prefix, using the replication method given.
      *
-     * @param UUID the stream to read from.
+     * @param stream the stream to read from.
      * @return A map containing the results of the read.
      */
     @Override
-    public Map<Long, ReadResult> read(UUID stream) {
+    public Map<Long, ILogUnitEntry> read(UUID stream) {
         // for each chain, simply query the last one...
         Set<Map.Entry<Layout.LayoutStripe, Map<Long, LogUnitReadResponseMsg.ReadResult>>> e = segment.getStripes().parallelStream()
                 .map(x -> {
@@ -141,7 +142,7 @@ public class ChainReplicationView extends AbstractReplicationView {
                     return new AbstractMap.SimpleImmutableEntry<>(x, CFUtils.getUninterruptibly(luc.readStream(stream)));
                 })
                 .collect(Collectors.toSet());
-        Map<Long, ReadResult> resultMap = new ConcurrentHashMap<>();
+        Map<Long, ILogUnitEntry> resultMap = new ConcurrentHashMap<>();
 
         e.parallelStream()
                 .forEach(x ->
@@ -149,7 +150,8 @@ public class ChainReplicationView extends AbstractReplicationView {
                     x.getValue().entrySet().parallelStream()
                             .forEach(y -> {
                                 long globalAddress = layout.getGlobalAddress(x.getKey(), y.getKey());
-                                resultMap.put(globalAddress, new ReadResult(globalAddress, y.getValue()));
+                                y.getValue().setAddress(globalAddress);
+                                resultMap.put(globalAddress, y.getValue());
                             });
                 });
         return resultMap;

@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -38,12 +39,12 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         getRuntime().setCacheDisabled(false).connect();
 
         getRuntime().getAddressSpaceView().setEmptyDuration(Duration.ofNanos(100));
-        assertThat(getRuntime().getAddressSpaceView().read(0).getResult().getResultType())
+        assertThat(getRuntime().getAddressSpaceView().read(0).getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.EMPTY);
         getRuntime().getLayoutView().getLayout().getLogUnitClient(0, 0).fillHole(0);
         try {Thread.sleep(100);} catch (InterruptedException e) {// don't do anything
         }
-        assertThat(getRuntime().getAddressSpaceView().read(0).getResult().getResultType())
+        assertThat(getRuntime().getAddressSpaceView().read(0).getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.FILLED_HOLE);
     }
 
@@ -88,10 +89,10 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap());
 
-        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload(r))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getResult().getMetadataMap()
+        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
 
@@ -154,7 +155,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap());
 
-        assertThat(r.getAddressSpaceView().read(0L).getResult().getPayload(r))
+        assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
 
@@ -166,13 +167,13 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         RangeSet<Long> rs = TreeRangeSet.create();
         rs.add(Range.closed(0L, 3L));
-        Map<Long, AbstractReplicationView.ReadResult> m = r.getAddressSpaceView().read(rs);
+        Map<Long, ILogUnitEntry> m = r.getAddressSpaceView().read(rs);
 
-        assertThat(m.get(0L).getResult().getPayload(null))
+        assertThat(m.get(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
-        assertThat(m.get(1L).getResult().getPayload(null))
+        assertThat(m.get(1L).getPayload())
                 .isEqualTo("1".getBytes());
-        assertThat(m.get(3L).getResult().getPayload(null))
+        assertThat(m.get(3L).getPayload())
                 .isEqualTo("3".getBytes());
     }
 
@@ -234,7 +235,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         r.getAddressSpaceView().compactAll();
 
-       Map<Long, AbstractReplicationView.ReadResult>  aAddresses = r.getAddressSpaceView().readPrefix(streamA);
+       Map<Long, ILogUnitEntry>  aAddresses = r.getAddressSpaceView().readPrefix(streamA);
         assertThat(aAddresses.keySet())
                 .contains(0L)
                 .contains(1L)

@@ -19,15 +19,17 @@ import java.util.stream.Collectors;
 /**
  * Created by mwei on 1/11/16.
  */
-@ToString
+@ToString(exclude="aborted")
 @NoArgsConstructor
 @Slf4j
 public class TXEntry extends LogEntry {
 
     @ToString
     public static class TXObjectEntry implements ICorfuSerializable {
+
         @Getter
         long lastTimestamp;
+
         @Getter
         List<SMREntry> updates;
 
@@ -65,6 +67,10 @@ public class TXEntry extends LogEntry {
     @Getter
     Map<UUID, TXObjectEntry> txMap;
 
+    @Getter(lazy=true)
+    private final transient boolean aborted = checkAbort();
+
+
     public TXEntry(@NonNull Map<UUID,TXObjectEntry> txMap)
     {
         this.type = LogEntryType.TX;
@@ -72,56 +78,53 @@ public class TXEntry extends LogEntry {
     }
 
 
-    /** Given a runtime and the timestamp of this entry, check
-     * if the TX was aborted.
-     * @param runtime       The runtime to use to check.
-     * @param timestamp     The timestamp to use to check.
-     * @return              True, if the TXEntry decision is abort.
-     *                      False otherwise.
-     */
-    public boolean isAborted(CorfuRuntime runtime, long timestamp) {
-        for (Map.Entry<UUID, TXEntry.TXObjectEntry> e : txMap.entrySet())
-        {
-            // If the last timestamp was MIN_VALUE, the object was never read from
-            // This is the case if only pure mutators were used.
-            if (e.getValue().getLastTimestamp() != Long.MIN_VALUE)
-            {
+    public boolean checkAbort() {
+        long timestamp = this.getEntry().getAddress();
+        for (Map.Entry<UUID, TXEntry.TXObjectEntry> e : txMap.entrySet()) {
+            for (long i = e.getValue().getLastTimestamp() + 1; i < timestamp; i++) {
                 // We need to now check if this object changed since the tx proposer
                 // put it in the log. This is a relatively simple check if backpointers
                 // are available, but requires a scan if not.
-                if (this.getEntry() != null && this.getEntry().getBackpointerMap() != null) {
-                    if (this.getEntry().getBackpointerMap().containsKey(e.getKey()))
-                    {
-                        if (this.getEntry().getBackpointerMap().get(e.getKey()) >
+
+                if (getEntry() != null && getEntry().hasBackpointer(e.getKey())) {
+                    ILogUnitEntry backpointedEntry = this.getEntry();
+                    while (
+                            backpointedEntry.getAddress() >
+                                e.getValue().getLastTimestamp()  &&
+                            backpointedEntry.getBackpointer(e.getKey()) >
                                 e.getValue().getLastTimestamp())
-                        {
-                            log.debug("TX aborted due to mutation [via backpointer] on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
-                                    this.getEntry().getBackpointerMap().get(e.getKey()), timestamp, e.getValue().getLastTimestamp());
+                    {
+                        if (!backpointedEntry.getAddress().equals(getEntry().getAddress()) && //not self!
+                                backpointedEntry.isLogEntry() && backpointedEntry.getLogEntry().isMutation()) {
+                            log.debug("TX aborted due to mutation [via backpointer]: " +
+                                    "on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
+                                    backpointedEntry.getBackpointer(e.getKey()), timestamp,
+                                    e.getValue().getLastTimestamp());
                             return true;
                         }
-                        return false;
+
+                        backpointedEntry = runtime.getAddressSpaceView()
+                                .read(backpointedEntry.getBackpointer(e.getKey()));
                     }
-                    // Hmm, this object was not in the backpointer set. This means
-                    // we need to do a manual scan.
                 }
                 // Backpointers not available, so we do a scan.
-                for (long i = e.getValue().getLastTimestamp() + 1; i < timestamp; i++)
-                {
-                    ILogUnitEntry rr = runtime.getAddressSpaceView().read(i).getResult();
-                    if (rr.getResultType() ==
-                            LogUnitReadResponseMsg.ReadResultType.DATA &&
-                            ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
-                                    .contains(e.getKey()) && e.getValue().getLastTimestamp() != i)
-                    {
-                        log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
-                                i, timestamp, e.getValue().getLastTimestamp());
-                        return true;
-                    }
+
+                ILogUnitEntry rr = runtime.getAddressSpaceView().read(i);
+                if (rr.getResultType() ==
+                        LogUnitReadResponseMsg.ReadResultType.DATA &&
+                        ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
+                                .contains(e.getKey()) && e.getValue().getLastTimestamp() != i &&
+                        rr.getPayload() instanceof LogEntry &&
+                        ((LogEntry)rr.getPayload()).isMutation()) {
+                    log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
+                            i, timestamp, e.getValue().getLastTimestamp());
+                    return true;
                 }
             }
         }
         return false;
     }
+
     /** Get the set of streams which will be affected by this
      * TX entry.
      * @return  The set of streams affected by this TX entry.
@@ -164,5 +167,17 @@ public class TXEntry extends LogEntry {
                     b.writeLong(x.getKey().getLeastSignificantBits());
                     x.getValue().serialize(b);
                 });
+    }
+
+    /**
+     * Returns whether the entry changes the contents of the stream.
+     * For example, an aborted transaction does not change the content of the stream.
+     *
+     * @return True, if the entry changes the contents of the stream,
+     * False otherwise.
+     */
+    @Override
+    public boolean isMutation() {
+        return !isAborted();
     }
 }

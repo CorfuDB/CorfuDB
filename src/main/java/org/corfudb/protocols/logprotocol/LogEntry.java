@@ -47,6 +47,10 @@ public class LogEntry implements ICorfuSerializable {
     @Setter
     ILogUnitEntry entry;
 
+    /** The runtime to use */
+    @Setter
+    protected CorfuRuntime runtime;
+
     /** Constructor for generating LogEntries.
      *
      * @param type  The type of log entry to instantiate.
@@ -75,6 +79,7 @@ public class LogEntry implements ICorfuSerializable {
             LogEntryType let = typeMap.get(b.readByte());
             LogEntry l = let.entryType.newInstance();
             l.type = let;
+            l.runtime = rt;
             l.deserializeBuffer(b, rt);
             return l;
         } catch (InstantiationException | IllegalAccessException ie)
@@ -92,4 +97,11 @@ public class LogEntry implements ICorfuSerializable {
         b.writeByte(type.asByte());
     }
 
+    /**
+     * Returns whether the entry changes the contents of the stream.
+     * For example, an aborted transaction does not change the content of the stream.
+     * @return  True, if the entry changes the contents of the stream,
+     *          False otherwise.
+     */
+    public boolean isMutation() { return true; }
 }

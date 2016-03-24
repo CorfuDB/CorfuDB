@@ -2,9 +2,11 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.EnumMap;
+import java.util.UUID;
 
 /**
  * Created by mwei on 2/1/16.
@@ -33,7 +35,29 @@ public interface ILogUnitEntry extends IMetadata {
      *
      * @return  An object representing the deserialized payload.
      */
-    Object getPayload(CorfuRuntime rt);
+    Object getPayload();
+
+    /** Gets the address for this entry
+     *
+     * @return The global log address for this entry, or null if it is not known.
+     */
+    Long getAddress();
+
+    /** Set the runtime used for deserialization. */
+    ILogUnitEntry setRuntime(CorfuRuntime runtime);
+
+    /** Return whether or not this entry is a log entry. */
+    default boolean isLogEntry() { return getPayload() instanceof LogEntry;}
+
+    /** Return the payload as a log entry. */
+    default LogEntry getLogEntry() { return (LogEntry) getPayload(); }
+
+    /** Return if there is backpointer for a particular stream. */
+    default boolean hasBackpointer(UUID streamID) { return getBackpointerMap() != null
+            && getBackpointerMap().containsKey(streamID); }
+
+    /** Return the backpointer for a particular stream. */
+    default Long getBackpointer(UUID streamID) { return getBackpointerMap().get(streamID); }
 
     /** Get an estimate of how large this entry is in memory.
      *
