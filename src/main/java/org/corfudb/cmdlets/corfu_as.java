@@ -80,7 +80,7 @@ public class corfu_as implements ICmdlet {
             throws Exception
     {
         ILogUnitEntry r = runtime.getAddressSpaceView()
-                .read(Long.parseLong((String) opts.get("--log-address"))).getResult();
+                .read(Long.parseLong((String) opts.get("--log-address")));
         switch (r.getResultType())
         {
             case EMPTY:

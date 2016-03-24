@@ -199,7 +199,7 @@ public class LogUnitClient implements IClient {
     /**
      * Read a contiguous stream prefix
      *
-     * @param addresses The addresses to read.
+     * @param streamID The stream to read.
      */
     public CompletableFuture<Map<Long,ReadResult>> readStream(UUID streamID) {
         return router.sendMessageAndGetCompletable(new CorfuUUIDMsg(CorfuMsg.CorfuMsgType.STREAM_READ, streamID));

@@ -38,21 +38,21 @@ public class StreamsViewTest extends AbstractViewTest {
         StreamView sv = r.getStreamsView().get(streamA);
         sv.write(testPayload);
 
-        assertThat(sv.read().getResult().getPayload(r))
+        assertThat(sv.read().getPayload())
                 .isEqualTo(testPayload);
         assertThat(sv.read())
                 .isEqualTo(null);
 
         StreamView svCopy = r.getStreamsView().copy(streamA, streamACopy, sv.getLogPointer()-1L);
 
-        assertThat(svCopy.read().getResult().getPayload(r))
+        assertThat(svCopy.read().getPayload())
                 .isEqualTo(testPayload);
         assertThat(svCopy.read())
                 .isEqualTo(null);
 
         svCopy.write(testPayloadCopy);
 
-        assertThat(svCopy.read().getResult().getPayload(r))
+        assertThat(svCopy.read().getPayload())
                 .isEqualTo(testPayloadCopy);
         assertThat(svCopy.read())
                 .isEqualTo(null);

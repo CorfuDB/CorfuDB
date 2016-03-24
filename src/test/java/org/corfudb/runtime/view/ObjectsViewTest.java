@@ -4,12 +4,15 @@ import lombok.Getter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.Accessor;
 import org.corfudb.runtime.object.Mutator;
 import org.junit.Test;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -29,14 +32,9 @@ public class ObjectsViewTest extends AbstractViewTest  {
     @SuppressWarnings("unchecked")
     public void canCopyObject()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
         //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
+
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
         smrMap.put("a", "a");
         Map<String, String> smrMapCopy = r.getObjectsView().copy(smrMap, "map a copy");
@@ -55,14 +53,9 @@ public class ObjectsViewTest extends AbstractViewTest  {
     @SuppressWarnings("unchecked")
     public void cannotCopyNonCorfuObject()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
         //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
+
         assertThatThrownBy(() -> {
             r.getObjectsView().copy(new HashMap<String,String>(), CorfuRuntime.getStreamID("test"));
         }).isInstanceOf(RuntimeException.class);
@@ -72,29 +65,50 @@ public class ObjectsViewTest extends AbstractViewTest  {
     @SuppressWarnings("unchecked")
     public void canAbortNoTransaction()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
         //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
         r.getObjectsView().TXAbort();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void abortedTransactionDoesNotConflict()
+            throws Exception {
+        //begin tests
+        CorfuRuntime r = getDefaultRuntime();
+
+        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
+        smrMap.put("a", "b");
+
+        //generate an aborted TX
+        r.getObjectsView().TXBegin();
+        String b = smrMap.get("a");
+        smrMap.put("b", b);
+        StreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("map a"));
+        ILogUnitEntry rr = sv.read();
+        sv.write(rr.getPayload());
+        assertThatThrownBy(() -> {
+            r.getObjectsView().TXEnd();
+        }).isInstanceOf(TransactionAbortedException.class);
+
+        //this TX should not conflict
+        assertThat(smrMap)
+                .doesNotContainKey("b");
+        r.getObjectsView().TXBegin();
+        b = smrMap.get("a");
+        smrMap.put("b", b);
+        r.getObjectsView().TXEnd();
+
+        assertThat(smrMap)
+                .containsEntry("b", "b");
     }
 
     @Test
     @SuppressWarnings("unchecked")
     public void canRunLambdaTransaction()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
         //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
 
         assertThat(r.getObjectsView().executeTX(() -> {

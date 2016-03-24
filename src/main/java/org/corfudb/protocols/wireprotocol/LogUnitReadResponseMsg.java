@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.*;
+import lombok.experimental.Accessors;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -58,6 +59,7 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
         }
     }
 
+    @Accessors(chain=true)
     public static class ReadResult implements ILogUnitEntry {
 
         /** The backing message for this read result. */
@@ -77,8 +79,15 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
         @Getter(lazy=true)
         private final ByteBuf buffer = msg.getData();
 
-        public Object getPayload(CorfuRuntime rt) {
-            Object o = msg.getPayload(rt);
+        @Setter
+        @Getter
+        Long address = null;
+
+        @Setter
+        private CorfuRuntime runtime;
+
+        public Object getPayload() {
+            Object o = msg.getPayload(runtime);
             if (o instanceof LogEntry)
             {
                 ((LogEntry) o).setEntry(this);

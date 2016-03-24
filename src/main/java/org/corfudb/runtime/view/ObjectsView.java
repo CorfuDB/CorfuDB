@@ -140,6 +140,43 @@ public class ObjectsView extends AbstractView {
      *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
      *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
      *                      all methods are MutatorAccessors.
+     * @param options       The options to use for opening the object.
+     * @param <T>           The type of object to return.
+     * @return              Returns a view of the object in a Corfu instance.
+     */
+    @SuppressWarnings("unchecked")
+    public <T, R extends ISMRInterface> T open(@NonNull UUID streamID, @NonNull Class<T> type,
+                                               Set<ObjectOpenOptions> options) {
+        return open(streamID, type, null, options, Serializers.SerializerType.JSON);
+    }
+
+    /** Gets a view of an object in the Corfu instance.
+     *
+     * @param streamID      The stream that the object should be read from.
+     * @param type          The type of the object that should be opened.
+     *                      If the type implements ICorfuSMRObject or implements an interface which implements
+     *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
+     *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
+     *                      all methods are MutatorAccessors.
+     * @param options       The options to use for opening the object.
+     * @param <T>           The type of object to return.
+     * @return              Returns a view of the object in a Corfu instance.
+     */
+    @SuppressWarnings("unchecked")
+    public <T, R extends ISMRInterface> T open(@NonNull String streamID, @NonNull Class<T> type,
+                                               Set<ObjectOpenOptions> options) {
+        return open(CorfuRuntime.getStreamID(streamID), type, null, options, Serializers.SerializerType.JSON);
+    }
+
+
+    /** Gets a view of an object in the Corfu instance.
+     *
+     * @param streamID      The stream that the object should be read from.
+     * @param type          The type of the object that should be opened.
+     *                      If the type implements ICorfuSMRObject or implements an interface which implements
+     *                      ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
+     *                      Otherwise, the entire object will be wrapped around SMR and it will be assumed that
+     *                      all methods are MutatorAccessors.
      * @param overlay       The ISMRInterface to overlay on top of the object, if provided.
      * @param options       The options to use for opening the object.
      * @param <T>           The type of object to return.
@@ -250,7 +287,7 @@ public class ObjectsView extends AbstractView {
             TransactionalContext.removeContext();
             log.trace("TX entry {} written at address {}", entry, address);
             //now check if the TX will be an abort...
-            if (entry.isAborted(runtime, address))
+            if (entry.isAborted())
             {
                 throw new TransactionAbortedException();
             }
