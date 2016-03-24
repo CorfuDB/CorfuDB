@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.CFUtils;
 
 import java.time.Duration;
@@ -125,7 +126,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
         // Set the message fields.
-        message.setClientID(0);
+        message.setClientID(CorfuRuntime.getStreamID("testclient"));
         message.setRequestID(thisRequest);
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
