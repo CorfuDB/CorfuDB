@@ -294,6 +294,7 @@ implements IClientRouter {
         if ((cf = (CompletableFuture<T>) outstandingRequests.get(requestID)) != null)
         {
             cf.complete(completion);
+            outstandingRequests.remove(requestID);
         }
         else
         {
@@ -312,6 +313,7 @@ implements IClientRouter {
         if ((cf = outstandingRequests.get(requestID)) != null)
         {
             cf.completeExceptionally(cause);
+            outstandingRequests.remove(requestID);
         }
         else
         {
@@ -341,12 +343,8 @@ implements IClientRouter {
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), epoch, msg);
 
-            CompletableFuture cf;
             /* If this message was pending a completion, complete it with an error. */
-            if ((cf =outstandingRequests.get(msg.getRequestID())) != null)
-            {
-                cf.completeExceptionally(new WrongEpochException(msg.getEpoch()));
-            }
+            completeExceptionally(msg.getRequestID(), new WrongEpochException(msg.getEpoch()));
             return false;
         }
         return true;
