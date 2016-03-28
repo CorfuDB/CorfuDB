@@ -1,5 +1,9 @@
 package org.corfudb.runtime.view;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import jdk.nashorn.internal.codegen.CompilerConstants;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -9,11 +13,14 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
 import org.corfudb.runtime.object.ISMRInterface;
 import org.corfudb.runtime.object.TransactionalContext;
+import org.corfudb.util.LambdaUtils;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -30,7 +37,19 @@ public class ObjectsView extends AbstractView {
         final Class<R> overlay;
     }
 
+    @Data
+    class CallSiteData {
+
+        TransactionStrategy getNextStrategy() {
+            return TransactionStrategy.OPTIMISTIC;
+        }
+    }
+
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
+
+    LoadingCache<StackTraceElement, CallSiteData> callSiteDataCache = Caffeine.newBuilder()
+                                                                        .maximumSize(10000)
+                                                                        .build(stackTraceElement -> new CallSiteData());
 
     public ObjectsView(CorfuRuntime runtime) {
         super(runtime);
@@ -237,13 +256,54 @@ public class ObjectsView extends AbstractView {
     }
 
     /** Begins a transaction on the current thread.
+     *  Automatically selects the correct transaction strategy.
      *  Modifications to objects will not be visible
      *  to other threads or clients until TXEnd is called.
      */
     public void TXBegin() {
+        TXBegin(TransactionStrategy.AUTOMATIC);
+    }
+
+    /** Determine the call site for the transaction.
+     *
+     * @return  The call site where TXBegin(); was called.
+     */
+    public StackTraceElement getCallSite()
+    {
+        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        for (int i = 1; i < st.length ; i++)
+        {
+            if (!st[i].getClassName().equals(this.getClass().getName()))
+            {
+                return st[i];
+            }
+        }
+        throw new RuntimeException("Couldn't get call site!");
+    }
+
+    /** Begins a transaction on the current thread.
+     *  Modifications to objects will not be visible
+     *  to other threads or clients until TXEnd is called.
+     */
+    public void TXBegin(TransactionStrategy strategy) {
+
+        if (strategy == TransactionStrategy.AUTOMATIC)
+        {
+            StackTraceElement st = getCallSite();
+            log.trace("Determined call site to be {}", st);
+            CallSiteData csd = callSiteDataCache.get(st);
+            strategy = csd.getNextStrategy();
+            log.trace("Selecting transaction strategy {} based on call site.", strategy);
+        }
+
+
         TransactionalContext context = TransactionalContext.newContext();
+        context.setStrategy(strategy);
+        context.setStartTime(System.currentTimeMillis());
+
         log.trace("Entering transactional context {}.", context.getTransactionID());
     }
+
 
     /** Aborts a transaction on the current thread.
      * Modifications to objects in the current transactional
@@ -281,7 +341,16 @@ public class ObjectsView extends AbstractView {
             log.warn("Attempted to end a transaction, but no transaction active!");
         }
         else {
-            log.trace("Exiting (committing) transactional context {}.", context.getTransactionID());
+            long totalTime = System.currentTimeMillis() - context.getStartTime();
+            log.trace("Exiting (committing) transactional context {} (time={} ms).",
+                    context.getTransactionID(), totalTime);
+            if (context.hasNoWriteSet())
+            {
+                log.trace("Transactional context {} was read-only, exiting context without commit.",
+                        context.getTransactionID());
+                TransactionalContext.removeContext();
+                return;
+            }
             TXEntry entry = context.getEntry();
             long address = runtime.getStreamsView().write(entry.getAffectedStreams(), entry);
             TransactionalContext.removeContext();
@@ -301,13 +370,57 @@ public class ObjectsView extends AbstractView {
      * @return                                  The return value of the function.
      * @throws TransactionAbortedException      If the transaction could not be executed successfully.
      */
+    @SuppressWarnings("unchecked")
     public <T> T executeTX(Supplier<T> txFunction)
         throws TransactionAbortedException
     {
-        TXBegin();
-        T result = txFunction.get();
-        TXEnd();
-        return result;
+        return (T) executeTX(txFunction, TransactionStrategy.AUTOMATIC, null);
     }
 
+    /** Executes the supplied function transactionally.
+     *
+     * @param txFunction                        The function to execute transactionally.
+     * @param <T>                               The return type of the function to execute.
+     * @return                                  The return value of the function.
+     * @throws TransactionAbortedException      If the transaction could not be executed successfully.
+     */
+    @SuppressWarnings("unchecked")
+    public <T, R> R executeTX(Function<T, R> txFunction, T arg0)
+            throws TransactionAbortedException
+    {
+        return (R) executeTX(txFunction, TransactionStrategy.AUTOMATIC, arg0);
+    }
+
+    /** Executes the supplied function transactionally.
+     *
+     * @param txFunction                        The function to execute transactionally.
+     * @return                                  The return value of the function.
+     * @throws TransactionAbortedException      If the transaction could not be executed successfully.
+     */
+    public Object executeTX(Object txFunction, TransactionStrategy strategy, Object... arguments)
+            throws TransactionAbortedException
+    {
+        if (strategy == TransactionStrategy.AUTOMATIC)
+        {
+            strategy = findTransactionStrategyForLambda(txFunction);
+            log.trace("Automatically determined transaction strategy={}", strategy);
+        }
+
+        switch (strategy) {
+            case OPTIMISTIC:
+                TXBegin();
+                Object result = LambdaUtils.executeUnknownLambda(txFunction, arguments);
+                TXEnd();
+                return result;
+        }
+
+        throw new UnsupportedOperationException("Unsupported transaction strategy " + strategy.toString());
+    }
+
+
+    public <T> TransactionStrategy findTransactionStrategyForLambda(Object txFunction) {
+        //log.info("TXtype={}, TXLength={}", txFunction.getClass(), Utils.getByteCodeOf(txFunction.getClass()).length);
+        //System.out.print(Utils.printByteCode(Utils.getByteCodeOf(txFunction.getClass())));
+        return TransactionStrategy.OPTIMISTIC;
+    }
 }
