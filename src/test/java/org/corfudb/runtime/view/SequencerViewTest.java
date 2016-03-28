@@ -21,24 +21,14 @@ public class SequencerViewTest extends AbstractViewTest {
 
     @Test
     public void canAcquireFirstToken() {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
         assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
                 .isEqualTo(0);
     }
 
     @Test
     public void tokensAreIncrementing() {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
         assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
                 .isEqualTo(0);
         assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
@@ -47,12 +37,7 @@ public class SequencerViewTest extends AbstractViewTest {
 
     @Test
     public void checkTokenWorks() {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
         assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
                 .isEqualTo(0);
         assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 0).getToken())
@@ -61,12 +46,7 @@ public class SequencerViewTest extends AbstractViewTest {
 
     @Test
     public void checkStreamTokensWork() {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
 
@@ -84,21 +64,16 @@ public class SequencerViewTest extends AbstractViewTest {
 
     @Test
     public void checkBackPointersWork() {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
 
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 1).getBackpointerMap())
-                .isEmpty();
+                .containsEntry(streamA, -1L);
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 0).getBackpointerMap())
                 .isEmpty();
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 1).getBackpointerMap())
-                .isEmpty();
+                .containsEntry(streamB, -1L);
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 0).getBackpointerMap())
                 .isEmpty();
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 1).getBackpointerMap())
