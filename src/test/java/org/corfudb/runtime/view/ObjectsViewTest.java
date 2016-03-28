@@ -121,4 +121,26 @@ public class ObjectsViewTest extends AbstractViewTest  {
         assertThat(smrMap)
                 .containsEntry("a", "b");
     }
+
+    public static boolean referenceTX(Map<String,String> smrMap) {
+        smrMap.put("a", "b");
+        assertThat(smrMap)
+                .containsEntry("a","b");
+        return true;
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canRunLambdaReferenceTransaction()
+            throws Exception {
+        //begin tests
+        CorfuRuntime r = getDefaultRuntime();
+        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
+
+        assertThat(r.getObjectsView().executeTX(ObjectsViewTest::referenceTX, smrMap))
+                .isEqualTo(true);
+
+        assertThat(smrMap)
+                .containsEntry("a", "b");
+    }
 }

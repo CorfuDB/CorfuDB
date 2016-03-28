@@ -331,7 +331,7 @@ implements IClientRouter {
     public boolean validateEpochAndClientID(CorfuMsg msg, ChannelHandlerContext ctx)
     {
         // Check if the message is intended for us. If not, drop the message.
-        if (msg.getClientID() != clientID)
+        if (!msg.getClientID().equals(clientID))
         {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!", msg.getClientID(), clientID);
             return false;
@@ -352,7 +352,6 @@ implements IClientRouter {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, CorfuMsg m) throws Exception {
-        boolean routed = false;
         try {
             // We get the handler for this message from the map
             IClient handler = handlerMap.get(m.getMsgType());
@@ -367,18 +366,12 @@ implements IClientRouter {
                     // Route the message to the handler.
                     log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), m);
                     handler.handleMessage(m, ctx);
-                    routed = true;
                 }
             }
         }
         catch (Exception e)
         {
             log.error("Exception during read!" , e);
-        }
-        finally {
-            if (!routed) {
-                m.release();
-            }
         }
     }
 

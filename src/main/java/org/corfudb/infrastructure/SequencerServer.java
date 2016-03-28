@@ -54,6 +54,8 @@ public class SequencerServer implements IServer {
      */
     ConcurrentHashMap<UUID, Long> lastIssuedMap;
 
+
+
     /**
      * A scheduler, which is used to schedule checkpoints and lease renewal
      */
@@ -148,7 +150,7 @@ public class SequencerServer implements IServer {
                     for (UUID id : req.getStreamIDs()) {
                         Long lastIssued = lastIssuedMap.get(id);
                         if (lastIssued != null) {hit = true;}
-                        max = Math.max(max, lastIssued == null ? Long.MIN_VALUE: lastIssued);
+                        max = Math.max(max, lastIssued == null ? Long.MIN_VALUE : lastIssued);
                     }
                     if (!hit) {
                         max = -1L; //no token ever issued

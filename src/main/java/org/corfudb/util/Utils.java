@@ -2,9 +2,21 @@ package org.corfudb.util;
 
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
+import jdk.internal.org.objectweb.asm.ClassReader;
+import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.InsnList;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
+import jdk.internal.org.objectweb.asm.util.Printer;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.NonNull;
+import net.bytebuddy.agent.ByteBuddyAgent;
+import net.bytebuddy.description.type.TypeDescription;
+import net.bytebuddy.dynamic.ClassFileLocator;
 
 import java.io.*;
+import java.lang.instrument.Instrumentation;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
@@ -17,6 +29,48 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class Utils
 {
+    private static final Instrumentation instrumentation = ByteBuddyAgent.install();
+
+    public static byte[] getByteCodeOf(Class<?> c) {
+        try {
+            ClassFileLocator locator = ClassFileLocator.AgentBased.of(instrumentation, c);
+            TypeDescription.ForLoadedType desc = new TypeDescription.ForLoadedType(c);
+            ClassFileLocator.Resolution resolution = locator.locate(desc.getName());
+            return resolution.resolve();
+        }
+        catch (IOException ie)
+        {
+            throw new RuntimeException("Couldn't get byte code " + ie.toString(), ie);
+        }
+    }
+
+    public static String printByteCode(byte[] bytes) {
+        ClassReader cr = new ClassReader(bytes);
+        ClassNode cn = new ClassNode();
+        cr.accept(cn, 0);
+        final List<MethodNode> methods = cn.methods;
+        StringBuilder sb = new StringBuilder();
+        for(MethodNode m: methods){
+            InsnList inList = m.instructions;
+            sb.append(m.name).append("\n");
+            for(int i = 0; i< inList.size(); i++){
+                sb.append(insnToString(inList.get(i))).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    public static String insnToString(AbstractInsnNode insn){
+        insn.accept(mp);
+        StringWriter sw = new StringWriter();
+        printer.print(new PrintWriter(sw));
+        printer.getText().clear();
+        return sw.toString();
+    }
+
+    private static Printer printer = new Textifier();
+    private static TraceMethodVisitor mp = new TraceMethodVisitor(printer);
+
     /**
      * A fancy parser which parses suffixes.
      * @param toParse

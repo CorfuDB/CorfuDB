@@ -8,6 +8,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
+import org.corfudb.runtime.view.TransactionStrategy;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
@@ -38,6 +39,28 @@ public class TransactionalContext {
     @Getter
     @Setter
     boolean inSyncMode;
+
+    /** The transaction strategy to employ for this transaction. */
+    @Getter
+    @Setter
+    TransactionStrategy strategy;
+
+    /** The start time of the context. */
+    @Getter
+    @Setter
+    long startTime;
+
+    /** Check if there was nothing to write.
+     *
+     * @return Return true, if there was no write set.
+     */
+    public boolean hasNoWriteSet() {
+        for (TransactionalObjectData od : objectMap.values())
+        {
+            if (od.bufferedWrites.size() > 0) return false;
+        }
+        return true;
+    }
 
     /** Check if the first read timestamp has been set.
      * @return  Return true, if the timestamp has been set, false otherwise.
