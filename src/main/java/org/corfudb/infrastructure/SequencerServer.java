@@ -169,6 +169,7 @@ public class SequencerServer implements IServer {
                         lastIssuedMap.compute(id, (k, v) ->{
                                 if (v == null)
                                 {
+                                    mb.put(k, -1L);
                                     return thisIssue + req.getNumTokens() -1;
                                 }
                                 mb.put(k, v);

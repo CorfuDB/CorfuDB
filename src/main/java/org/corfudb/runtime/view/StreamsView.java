@@ -44,8 +44,12 @@ public class StreamsView {
         while (!written) {
             SequencerClient.TokenResponse tokenResponse =
                     runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
-            if (!tokenResponse.getBackpointerMap().isEmpty()) {
-                // TODO: need to perform a scan to really make sure
+            if (!tokenResponse.getBackpointerMap().get(destination).equals(-1L)) {
+                try {
+                    runtime.getAddressSpaceView().fillHole(tokenResponse.getToken());
+                } catch (OverwriteException oe) {
+                    log.trace("Attempted to hole fill due to already-existing stream but hole filled by other party");
+                }
                 throw new RuntimeException("Stream already exists!");
             }
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);

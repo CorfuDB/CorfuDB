@@ -143,19 +143,30 @@ public class StreamView implements AutoCloseable {
             return new ConcurrentSkipListSet<>();
         }
         NavigableSet<Long> resolvedBackpointers = new ConcurrentSkipListSet<>();
+        boolean hitStreamStart = false;
+        boolean hitBeforeRead = false;
         if (!runtime.backpointersDisabled) {
             resolvedBackpointers.add(latestToken);
             ILogUnitEntry r = runtime.getAddressSpaceView().read(latestToken);
-            long backPointer;
+            long backPointer = latestToken;
             while (r.getResultType() != LogUnitReadResponseMsg.ReadResultType.EMPTY
                     && r.getBackpointerMap().containsKey(streamID)) {
+                long prevRead = backPointer;
                 backPointer = r.getBackpointerMap().get(streamID);
+                log.trace("Read backPointer to {} at {}", backPointer, prevRead);
                 if (backPointer == read) {
                     resolvedBackpointers.add(backPointer);
                     break;
-                } else if (backPointer < read - 1) {
+                } else if (backPointer == -1L) {
+                    log.trace("Hit stream start at {}, ending", prevRead);
+                    hitStreamStart = true;
+                    break;
+                }
+                  else if (backPointer < read - 1) {
+                    hitBeforeRead = true;
                     break;
                 } else if (backPointer < getCurrentContext().logPointer.get()) {
+                    hitBeforeRead = true;
                     break;
                 }
                   else {
@@ -170,7 +181,7 @@ public class StreamView implements AutoCloseable {
         else {
             resolvedBackpointers.add(latestToken);
         }
-        if (resolvedBackpointers.first() != read) {
+        if (!hitStreamStart && !hitBeforeRead && resolvedBackpointers.first() != read) {
             long backpointerMin = resolvedBackpointers.first();
             log.trace("Backpointer min is at {} but read is at {}, filling.", backpointerMin, read);
             while (backpointerMin > read && backpointerMin > 0) {
