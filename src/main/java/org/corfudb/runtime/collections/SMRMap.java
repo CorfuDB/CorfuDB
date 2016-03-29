@@ -143,7 +143,7 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       or value prevents it from being stored in this map
      */
     @Override
-    @MutatorAccessor
+    @MutatorAccessor(name="put")
     public V put(K key, V value) {
         return getSMRObject().put(key, value);
     }
@@ -179,7 +179,7 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @MutatorAccessor
+    @MutatorAccessor(name="remove")
     public V remove(Object key) {
         return getSMRObject().remove(key);
     }
@@ -204,7 +204,7 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       the specified map prevents it from being stored in this map
      */
     @Override
-    @Mutator
+    @Mutator(name="putAll")
     public void putAll(Map<? extends K, ? extends V> m) {
         getSMRObject().putAll(m);
     }
@@ -217,7 +217,7 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       is not supported by this map
      */
     @Override
-    @Mutator
+    @Mutator(name="clear")
     public void clear() {
         getSMRObject().clear();
     }

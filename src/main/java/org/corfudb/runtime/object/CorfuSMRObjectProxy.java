@@ -37,6 +37,7 @@ import org.corfudb.runtime.view.AbstractReplicationView;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.serializer.Serializers;
 
+import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
@@ -61,6 +62,8 @@ public class CorfuSMRObjectProxy<P> {
     @Getter
     Serializers.SerializerType serializer;
     CorfuRuntime runtime;
+    @Getter
+    Map<String, Method> methodHashTable;
 
     @Getter
     long timestamp;
@@ -87,6 +90,36 @@ public class CorfuSMRObjectProxy<P> {
         if (Arrays.stream(originalClass.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom)) {
             isCorfuObject = true;
         }
+        this.methodHashTable = new ConcurrentHashMap<>();
+    }
+
+    @SuppressWarnings("unchecked")
+    public Method findCorrespondingProxyMethod(Method m, Class proxyClass)
+    {
+        try {
+            return proxyClass.getDeclaredMethod(m.getName(), m.getParameterTypes());
+        } catch (NoSuchMethodException nsme)
+        {
+            log.warn("Couldn't find corresponding proxy method for method {}", m.getName());
+            throw new RuntimeException("Inconsistent state resolving proxy!");
+        }
+    }
+
+    public void calculateMethodHashTable(Class proxyClass) {
+        Arrays.stream(originalClass.getDeclaredMethods())
+                .forEach(x -> {
+                    for (Annotation a : x.getDeclaredAnnotations())
+                    {
+                        if (a instanceof Mutator)
+                        {
+                            methodHashTable.put(((Mutator)a).name(), findCorrespondingProxyMethod(x, proxyClass));
+                        }
+                        else if (a instanceof MutatorAccessor)
+                        {
+                            methodHashTable.put(((MutatorAccessor)a).name(), findCorrespondingProxyMethod(x, proxyClass));
+                        }
+                    }
+                });
     }
 
     public static <T,R extends ISMRInterface> Class<? extends T>
@@ -192,6 +225,7 @@ public class CorfuSMRObjectProxy<P> {
         try {
             CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
             T ret = getProxyClass(proxy, type, overlay).newInstance();
+            proxy.calculateMethodHashTable(ret.getClass());
             Field f = ret.getClass().getDeclaredField("_corfuStreamID");
             f.setAccessible(true);
             f.set(ret, sv.getStreamID());
@@ -293,16 +327,16 @@ public class CorfuSMRObjectProxy<P> {
         /**
          * In the case of a pure mutator, we don't even need to ever call the underlying
          * mutator, since it will be applied during the upcall.
-         * @param method        The method which was called.
+         * @param Mmethod        The method which was called.
          * @return              The return value (which should be void).
          * @throws Exception
          */
         @RuntimeType
-        public Object interceptMutator(@Origin String method,
-                                       @Origin Method Mmethod,
+        public Object interceptMutator(@Origin Method Mmethod,
                                        @AllArguments Object[] allArguments,
                                        @SuperCall Callable superMethod
         ) throws Exception {
+            String method = getSMRMethodName(Mmethod);
             log.trace("+Mutator {}", method);
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
@@ -315,13 +349,13 @@ public class CorfuSMRObjectProxy<P> {
                         }
                     }
                     else if (!TransactionalContext.isInTransaction()){
-                        writeUpdate(getShortMethodName(method), allArguments);
+                        writeUpdate(method, allArguments);
                     }
                     else {
                         // in a transaction, we add the update to the TX buffer and apply the update
                         // immediately.
                         TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
-                                getShortMethodName(method), allArguments, serializer);
+                                method, allArguments, serializer);
                     }
             return null;
         }
@@ -333,11 +367,11 @@ public class CorfuSMRObjectProxy<P> {
 
         @RuntimeType
         public Object interceptMutatorAccessor(
-                                        @Origin String method,
                                         @Origin Method Mmethod,
                                         @SuperCall Callable superMethod,
                                         @AllArguments Object[] allArguments,
                                         @This P obj) throws Exception {
+            String method = getSMRMethodName(Mmethod);
             log.trace("+MutatorAccessor {}", method);
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
@@ -351,7 +385,7 @@ public class CorfuSMRObjectProxy<P> {
             }
             else if (!TransactionalContext.isInTransaction()){
                 // write the update to the stream and map a future for the completion.
-                long updatePos = writeUpdateAndMapFuture(getShortMethodName(method), allArguments);
+                long updatePos = writeUpdateAndMapFuture(method, allArguments);
                 // read up to this update.
                 sync(obj, updatePos);
                 // Now we can safely wait on the accessor.
@@ -364,7 +398,7 @@ public class CorfuSMRObjectProxy<P> {
                 // in a transaction, we add the update to the TX buffer and apply the update
                 // immediately.
                 TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
-                        getShortMethodName(method), allArguments, serializer);
+                        method, allArguments, serializer);
                 if (isCorfuObject) {
                     return superMethod.call();
                 }
@@ -459,16 +493,37 @@ public class CorfuSMRObjectProxy<P> {
                 .toArray(Class[]::new);
     }
 
+    public String getSMRMethodName(Method method) {
+        for (Annotation a : method.getDeclaredAnnotations())
+        {
+            if (a instanceof Mutator)
+            {
+                if (!((Mutator) a).name().equals(""))
+                {
+                    return ((Mutator) a).name();
+                }
+            }
+            else if (a instanceof MutatorAccessor)
+            {
+                if (!((MutatorAccessor) a).name().equals(""))
+                {
+                    return ((MutatorAccessor) a).name();
+                }
+            }
+        }
+        return getShortMethodName(method.toString());
+    }
+
     long writeUpdate(String method, Object[] arguments)
     {
-        log.trace("Write update: {} with arguments {}", getShortMethodName(method), arguments);
-        return sv.write(new SMREntry(getShortMethodName(method), arguments, serializer));
+        log.trace("Write update: {} with arguments {}", method, arguments);
+        return sv.write(new SMREntry(method, arguments, serializer));
     }
 
     long writeUpdateAndMapFuture(String method, Object[] arguments)
     {
-        log.trace("Write update and map future: {} with arguments {}", getShortMethodName(method), arguments);
-        return sv.acquireAndWrite(new SMREntry(getShortMethodName(method), arguments, serializer),
+        log.trace("Write update and map future: {} with arguments {}", method, arguments);
+        return sv.acquireAndWrite(new SMREntry(method, arguments, serializer),
                 t -> completableFutureMap.put(t, new CompletableFuture<>()),
                completableFutureMap::remove);
     }
@@ -478,8 +533,19 @@ public class CorfuSMRObjectProxy<P> {
         log.trace("Apply SMR update at {} : {}", address, entry);
         // Look for the uninstrumented method
         try {
-            Method m = obj.getClass().getMethod(getMethodNameOnlyFromString(entry.getSMRMethod()),
-                    getArgumentTypesFromString(entry.getSMRMethod()));
+            // Find the method by using the method name hash table.
+            Method m = methodHashTable.computeIfAbsent(entry.getSMRMethod(),
+                    s -> {
+                        try {
+                        return obj.getClass().getMethod(getMethodNameOnlyFromString(entry.getSMRMethod()),
+                            getArgumentTypesFromString(entry.getSMRMethod()));
+                        }
+                        catch (NoSuchMethodException nsme)
+                        {
+                            return null;
+                        }});
+
+            if (m == null) { throw new NoSuchMethodException(entry.getSMRMethod()); }
             // Execute the SMR command
             Object ret = m.invoke(obj, entry.getSMRArguments());
             // Update the current timestamp.
