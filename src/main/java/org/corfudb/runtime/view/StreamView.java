@@ -287,12 +287,10 @@ public class StreamView implements AutoCloseable {
         while (getCurrentContext().logPointer.get() <= latestToken)
         {
             ILogUnitEntry r = read();
-            if (r == null) {
-                log.warn("ReadTo[{}]: Read returned null when it should not have!", streamID);
-                throw new RuntimeException("Unexpected stream state, aborting.");
-            }
-            else {
+            if (r != null) {
                 al.add(r);
+            } else {
+                break;
             }
         }
         return al.toArray(new ILogUnitEntry[al.size()]);

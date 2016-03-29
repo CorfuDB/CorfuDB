@@ -15,7 +15,7 @@ import java.util.*;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString
+@ToString(callSuper=true)
 public class LogUnitWriteMsg extends LogUnitPayloadMsg {
 
 

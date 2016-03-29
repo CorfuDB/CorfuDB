@@ -4,12 +4,14 @@ import lombok.Getter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.Accessor;
 import org.corfudb.runtime.object.Mutator;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.EnumSet;
@@ -90,6 +92,59 @@ public class ObjectsViewTest extends AbstractViewTest  {
         assertThatThrownBy(() -> {
             r.getObjectsView().TXEnd();
         }).isInstanceOf(TransactionAbortedException.class);
+
+        //this TX should not conflict
+        assertThat(smrMap)
+                .doesNotContainKey("b");
+        r.getObjectsView().TXBegin();
+        b = smrMap.get("a");
+        smrMap.put("b", b);
+        r.getObjectsView().TXEnd();
+
+        assertThat(smrMap)
+                .containsEntry("b", "b");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void unrelatedStreamDoesNotConflict()
+            throws Exception {
+        //begin tests
+        CorfuRuntime r = getDefaultRuntime();
+
+        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
+        StreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
+        smrMap.put("a", "b");
+        streamB.write(new SMREntry("hi", new Object[]{"hello"}, Serializers.SerializerType.PRIMITIVE));
+
+        //this TX should not conflict
+        assertThat(smrMap)
+                .doesNotContainKey("b");
+        r.getObjectsView().TXBegin();
+        String b = smrMap.get("a");
+        smrMap.put("b", b);
+        r.getObjectsView().TXEnd();
+
+        assertThat(smrMap)
+                .containsEntry("b", "b");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void unrelatedTransactionDoesNotConflict()
+            throws Exception {
+        //begin tests
+        CorfuRuntime r = getDefaultRuntime();
+
+        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
+        Map<String, String> smrMapB = r.getObjectsView().open("map b", SMRMap.class);
+
+        smrMap.put("a", "b");
+
+        r.getObjectsView().TXBegin();
+        String b = smrMap.get("a");
+        smrMapB.put("b", b);
+        r.getObjectsView().TXEnd();
 
         //this TX should not conflict
         assertThat(smrMap)

@@ -44,7 +44,7 @@ public abstract class AbstractReplicationView {
         throw new RuntimeException("Unsupported replication mode.");
     }
 
-    @ToString
+    @ToString(exclude={"runtime"})
     @RequiredArgsConstructor
     public static class CachedLogUnitEntry implements ILogUnitEntry
     {

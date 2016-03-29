@@ -30,6 +30,7 @@ import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.UnprocessedException;
 import org.corfudb.runtime.view.AbstractReplicationView;
@@ -399,21 +400,10 @@ public class CorfuSMRObjectProxy<P> {
         }
     }
 
-    public void doTransactionalSync(P obj) {
+    public synchronized void doTransactionalSync(P obj) {
         TransactionalContext.getCurrentContext().setInSyncMode(true);
-        if (!TransactionalContext.getCurrentContext().isFirstReadTimestampSet())
-        {
-            // Synchronize the object if and only if it is the first object in the TXN.
-            log.trace("Object {} is the first access in txn {}, syncing.", sv.getStreamID(),
-                    TransactionalContext.getCurrentContext().getTransactionID());
-            sync(obj, Long.MAX_VALUE);
-            log.trace("Set first read timestamp to {}", sv.getLogPointer());
-            TransactionalContext.getCurrentContext().setFirstReadTimestamp(sv.getLogPointer());
-        }
-        else {
-            // Otherwise we should make sure we're sync'd up to the TX
-            sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
-        }
+        // Otherwise we should make sure we're sync'd up to the TX
+        sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
         TransactionalContext.getCurrentContext().setInSyncMode(false);
     }
 
@@ -494,6 +484,7 @@ public class CorfuSMRObjectProxy<P> {
             Object ret = m.invoke(obj, entry.getSMRArguments());
             // Update the current timestamp.
             timestamp = address;
+            log.trace("Timestamp for [{}] updated to {}",sv.getStreamID(), address);
             if (completableFutureMap.containsKey(address))
             {
                 completableFutureMap.get(address).complete(ret);
@@ -528,7 +519,7 @@ public class CorfuSMRObjectProxy<P> {
         } else if (entry instanceof TXEntry)
         {
             TXEntry txEntry = (TXEntry) entry;
-            log.trace("Apply TX update: {}", txEntry);
+            log.trace("Apply TX update at {}: {}", address, txEntry);
             // First, determine if the TX is abort.
             if (txEntry.isAborted()){
                 return false;
@@ -545,7 +536,7 @@ public class CorfuSMRObjectProxy<P> {
     }
 
     synchronized public void sync(P obj, long maxPos) {
-        log.trace("Object sync to pos {}", maxPos == Long.MAX_VALUE ? "MAX" : maxPos);
+        log.trace("Object[{}] sync to pos {}", sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos);
         Arrays.stream(sv.readTo(maxPos))
                 .filter(m -> m.getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
                 .filter(m -> m.getPayload() instanceof SMREntry ||

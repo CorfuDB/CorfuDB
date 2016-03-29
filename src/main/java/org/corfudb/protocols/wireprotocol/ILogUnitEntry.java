@@ -59,6 +59,9 @@ public interface ILogUnitEntry extends IMetadata {
     /** Return the backpointer for a particular stream. */
     default Long getBackpointer(UUID streamID) { return getBackpointerMap().get(streamID); }
 
+    /** Return if this is the first entry in a particular stream. */
+    default boolean isFirstEntry(UUID streamID) { return getBackpointer(streamID) == -1L; }
+
     /** Get an estimate of how large this entry is in memory.
      *
      * @return  An estimate on the size of this object, in bytes.

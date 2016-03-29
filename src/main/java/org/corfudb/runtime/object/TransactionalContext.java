@@ -8,6 +8,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.TransactionStrategy;
 import org.corfudb.util.serializer.Serializers;
 
@@ -28,9 +30,8 @@ public class TransactionalContext {
     /** The timestamp of the first read in the system.
      * @return The timestamp of the first read object, which may be null.
      */
-    @Getter
-    @Setter
-    Long firstReadTimestamp;
+    @Getter(lazy=true)
+    private final long firstReadTimestamp = fetchFirstTimestamp();
 
     /** Whether or not the tx is doing a first sync and therefore writes should not be
      * redirected.
@@ -50,6 +51,10 @@ public class TransactionalContext {
     @Setter
     long startTime;
 
+    /** The runtime used to create this transaction. */
+    @Getter
+    CorfuRuntime runtime;
+
     /** Check if there was nothing to write.
      *
      * @return Return true, if there was no write set.
@@ -62,12 +67,14 @@ public class TransactionalContext {
         return true;
     }
 
-    /** Check if the first read timestamp has been set.
-     * @return  Return true, if the timestamp has been set, false otherwise.
+    /** Get the first timestamp for this transaction.
+     *
+     * @return  The first timestamp to be used for this transaction.
      */
-    public boolean isFirstReadTimestampSet()
-    {
-        return false;
+    public synchronized long fetchFirstTimestamp() {
+        long token = runtime.getSequencerView().nextToken(Collections.emptySet(), 0).getToken();
+        log.trace("Set first read timestamp for tx {} to {}", transactionID, token);
+        return token;
     }
 
     @SuppressWarnings("unchecked")
@@ -114,9 +121,10 @@ public class TransactionalContext {
 
     Map<CorfuSMRObjectProxy, TransactionalObjectData> objectMap;
 
-    public TransactionalContext() {
+    public TransactionalContext(CorfuRuntime runtime) {
         transactionID = UUID.randomUUID();
         objectMap = new HashMap<>();
+        this.runtime = runtime;
     }
 
     /** Open an object for reading. The implementation will avoid creating a copy of the object
@@ -219,8 +227,8 @@ public class TransactionalContext {
         return getTransactionStack().peekFirst() != null;
     }
 
-    public static TransactionalContext newContext() {
-        TransactionalContext context = new TransactionalContext();
+    public static TransactionalContext newContext(CorfuRuntime runtime) {
+        TransactionalContext context = new TransactionalContext(runtime);
         getTransactionStack().addFirst(context);
         return context;
     }

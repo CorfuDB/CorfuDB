@@ -297,7 +297,7 @@ public class ObjectsView extends AbstractView {
         }
 
 
-        TransactionalContext context = TransactionalContext.newContext();
+        TransactionalContext context = TransactionalContext.newContext(runtime);
         context.setStrategy(strategy);
         context.setStartTime(System.currentTimeMillis());
 

@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
@@ -12,7 +13,7 @@ import org.corfudb.util.serializer.ISerializer;
 /**
  * Created by mwei on 9/17/15.
  */
-
+@ToString
 public class LogUnitPayloadMsg extends LogUnitMetadataMsg {
 
     /** The default serializer to use */
