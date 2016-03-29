@@ -21,7 +21,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Override
     public IServer getDefaultServer() {
-        return new LayoutServer(defaultOptionsMap());
+        return new LogUnitServer(defaultOptionsMap());
     }
 
     @Test
