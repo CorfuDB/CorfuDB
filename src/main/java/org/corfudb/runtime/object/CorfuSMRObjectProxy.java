@@ -373,6 +373,8 @@ public class CorfuSMRObjectProxy<P> {
                                         @This P obj) throws Exception {
             String method = getSMRMethodName(Mmethod);
             log.trace("+MutatorAccessor {}", method);
+            // here we have to determine whether or not it is safe to return NULL.
+
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
@@ -420,11 +422,24 @@ public class CorfuSMRObjectProxy<P> {
             // Linearize this access with respect to other accesses in the system.
             if (!TransactionalContext.isInTransaction()) {
                 sync(obj, Long.MAX_VALUE);
+                return doUnderlyingCall(superMethod, method, arguments);
             }
             else {
                 doTransactionalSync(obj);
+                Object ret = doUnderlyingCall(superMethod, method, arguments);
+                // If the object was written to (due to transactional clone), the read set is not resolvable.
+                if (!TransactionalContext.getCurrentContext().isObjectCloned(CorfuSMRObjectProxy.this))
+                {
+                    // Store the read set with the context.
+                    TransactionalContext.getCurrentContext().addReadSet(CorfuSMRObjectProxy.this,
+                            getSMRMethodName(method), ret);
+                }
+                return ret;
             }
-            // Now we can safely call the accessor.
+        }
+
+        private Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
+        throws Exception {
             if (isCorfuObject) {
                 return superMethod.call();
             }

@@ -270,7 +270,7 @@ public class ObjectsView extends AbstractView {
      */
     public StackTraceElement getCallSite()
     {
-        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        StackTraceElement[] st = new Exception().getStackTrace();
         for (int i = 1; i < st.length ; i++)
         {
             if (!st[i].getClassName().equals(this.getClass().getName()))

@@ -469,4 +469,16 @@ public class SMRMapTest extends AbstractViewTest {
         assertThat(testMap.get("3").getTestInt())
                 .isEqualTo(3);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void unusedMutatorAccessor()
+            throws Exception {
+        CorfuRuntime r = getDefaultRuntime();
+
+        Map<String,String> testMap = getRuntime().getObjectsView()
+                .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
+
+        testMap.put("a", "z");
+    }
 }
