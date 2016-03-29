@@ -21,7 +21,13 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Override
     public IServer getDefaultServer() {
-        return new LayoutServer(defaultOptionsMap());
+        return new LogUnitServer(new ImmutableMap.Builder<String,Object>()
+                .put("--log-path", getTempDir())
+                .put("--memory", false)
+                .put("--single", false)
+                .put("--sync", true)
+                .put("--max-cache", 1000000)
+                .build());
     }
 
     @Test
