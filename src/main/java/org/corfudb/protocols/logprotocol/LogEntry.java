@@ -8,13 +8,14 @@ import org.corfudb.util.serializer.ICorfuSerializable;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 1/8/16.
  */
-@ToString
+@ToString(exclude={"runtime","entry"})
 @NoArgsConstructor
 public class LogEntry implements ICorfuSerializable {
 
@@ -103,5 +104,5 @@ public class LogEntry implements ICorfuSerializable {
      * @return  True, if the entry changes the contents of the stream,
      *          False otherwise.
      */
-    public boolean isMutation() { return true; }
+    public boolean isMutation(UUID stream) { return true; }
 }

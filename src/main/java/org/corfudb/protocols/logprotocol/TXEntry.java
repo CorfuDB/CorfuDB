@@ -81,43 +81,51 @@ public class TXEntry extends LogEntry {
     public boolean checkAbort() {
         long timestamp = this.getEntry().getAddress();
         for (Map.Entry<UUID, TXEntry.TXObjectEntry> e : txMap.entrySet()) {
-            for (long i = e.getValue().getLastTimestamp() + 1; i < timestamp; i++) {
-                // We need to now check if this object changed since the tx proposer
-                // put it in the log. This is a relatively simple check if backpointers
-                // are available, but requires a scan if not.
 
-                if (getEntry() != null && getEntry().hasBackpointer(e.getKey())) {
-                    ILogUnitEntry backpointedEntry = this.getEntry();
-                    while (
-                            backpointedEntry.getAddress() >
-                                e.getValue().getLastTimestamp()  &&
-                            backpointedEntry.getBackpointer(e.getKey()) >
-                                e.getValue().getLastTimestamp())
-                    {
-                        if (!backpointedEntry.getAddress().equals(getEntry().getAddress()) && //not self!
-                                backpointedEntry.isLogEntry() && backpointedEntry.getLogEntry().isMutation()) {
-                            log.debug("TX aborted due to mutation [via backpointer]: " +
-                                    "on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
-                                    backpointedEntry.getBackpointer(e.getKey()), timestamp,
-                                    e.getValue().getLastTimestamp());
-                            return true;
-                        }
+            // We need to now check if this object changed since the tx proposer
+            // put it in the log. This is a relatively simple check if backpointers
+            // are available, but requires a scan if not.
 
-                        backpointedEntry = runtime.getAddressSpaceView()
-                                .read(backpointedEntry.getBackpointer(e.getKey()));
+            final UUID stream = e.getKey();
+            final TXObjectEntry objectEntry = e.getValue();
+
+            if (getEntry() != null && getEntry().hasBackpointer(stream)) {
+                ILogUnitEntry backpointedEntry = getEntry();
+                if (backpointedEntry.isFirstEntry(stream)) { return false; }
+
+                while (
+                        backpointedEntry.getAddress() > objectEntry.getLastTimestamp()  &&
+                        !backpointedEntry.isFirstEntry(stream))
+                {
+                    if (!backpointedEntry.getAddress().equals(getEntry().getAddress()) && //not self!
+                            backpointedEntry.isLogEntry() && backpointedEntry.getLogEntry().isMutation(stream)) {
+                        log.debug("TX aborted due to mutation [via backpointer]: " +
+                                        "on stream {} at {}, tx is at {}, object read at {}, aborting entry was {}",
+                                stream,
+                                backpointedEntry.getAddress(),
+                                timestamp,
+                                objectEntry.getLastTimestamp(),
+                                backpointedEntry);
+                        return true;
                     }
-                }
-                // Backpointers not available, so we do a scan.
 
+                    backpointedEntry = runtime.getAddressSpaceView()
+                            .read(backpointedEntry.getBackpointer(stream));
+                }
+                return false;
+            }
+
+            for (long i = objectEntry.getLastTimestamp() + 1; i < timestamp; i++) {
+                // Backpointers not available, so we do a scan.
                 ILogUnitEntry rr = runtime.getAddressSpaceView().read(i);
                 if (rr.getResultType() ==
                         LogUnitReadResponseMsg.ReadResultType.DATA &&
                         ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
-                                .contains(e.getKey()) && e.getValue().getLastTimestamp() != i &&
+                                .contains(stream) && objectEntry.getLastTimestamp() != i &&
                         rr.getPayload() instanceof LogEntry &&
-                        ((LogEntry)rr.getPayload()).isMutation()) {
-                    log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", e.getKey(),
-                            i, timestamp, e.getValue().getLastTimestamp());
+                        ((LogEntry)rr.getPayload()).isMutation(stream)) {
+                    log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", stream,
+                            i, timestamp, objectEntry.getLastTimestamp());
                     return true;
                 }
             }
@@ -177,7 +185,7 @@ public class TXEntry extends LogEntry {
      * False otherwise.
      */
     @Override
-    public boolean isMutation() {
-        return !isAborted();
+    public boolean isMutation(UUID stream) {
+        return !isAborted() && getAffectedStreams().contains(stream);
     }
 }

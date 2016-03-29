@@ -37,4 +37,10 @@ public interface ICorfuSMRObject<T> {
         return TransactionalContext.isInTransaction();
     }
 
+    /** Get the stream ID of the object.
+     *
+     * @return          The stream ID of the object.
+     */
+    default UUID getStreamID() { throw new UnprocessedException(); }
+
 }
