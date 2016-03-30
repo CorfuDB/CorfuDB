@@ -61,6 +61,7 @@ public class CorfuSMRObjectProxy<P> {
     Map<Long, CompletableFuture<Object>> completableFutureMap;
     @Getter
     Serializers.SerializerType serializer;
+    @Getter
     CorfuRuntime runtime;
     @Getter
     Map<String, Method> methodHashTable;
@@ -70,6 +71,10 @@ public class CorfuSMRObjectProxy<P> {
 
     @Getter
     boolean isCorfuObject = false;
+
+    public UUID getStreamID() {
+        return sv.getStreamID();
+    }
 
     final static AnnotationDescription instrumentedDescription =
              AnnotationDescription.Builder.ofType(Instrumented.class)
@@ -129,10 +134,15 @@ public class CorfuSMRObjectProxy<P> {
             log.trace("Detected ICorfuSMRObject({}), instrumenting methods.", type);
             Class<? extends T> generatedClass = new ByteBuddy()
                     .subclass(type)
-                    .defineField("_corfuStreamID", UUID.class, FieldManifestation.PLAIN)
+                   // .defineField("_corfuStreamID", UUID.class, FieldManifestation.PLAIN)
                     .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
+                    .defineField("_corfuStreamID", UUID.class)
                     .method(ElementMatchers.named("getSMRObject"))
                     .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
+                    .method(ElementMatchers.named("getRuntime"))
+                    .intercept(MethodDelegation.to(proxy, "getRuntime"))
+                    .method(ElementMatchers.named("getStreamID"))
+                    .intercept(MethodDelegation.to(proxy, "getStreamID"))
                     .method(ElementMatchers.isAnnotatedWith(Mutator.class))
                     .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()))
                     .method(ElementMatchers.isAnnotatedWith(Accessor.class))
@@ -171,7 +181,11 @@ public class CorfuSMRObjectProxy<P> {
                             .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
                             .implement(ICorfuSMRObject.class)
                             .method(ElementMatchers.named("getSMRObject"))
-                            .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()));
+                            .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
+                            .method(ElementMatchers.named("getStreamID"))
+                            .intercept(MethodDelegation.to(proxy, "getStreamID"))
+                            .method(ElementMatchers.named("getRuntime"))
+                            .intercept(MethodDelegation.to(proxy, "getRuntime"));
 
                     try {
                                 bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class)
@@ -373,17 +387,11 @@ public class CorfuSMRObjectProxy<P> {
                                         @This P obj) throws Exception {
             String method = getSMRMethodName(Mmethod);
             log.trace("+MutatorAccessor {}", method);
-            // here we have to determine whether or not it is safe to return NULL.
 
             StackTraceElement[] stack = new Exception().getStackTrace();
             if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
             {
-                if (isCorfuObject) {
-                    return superMethod.call();
-                }
-                else {
-                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
-                }
+                return doUnderlyingCall(superMethod, Mmethod, allArguments);
             }
             else if (!TransactionalContext.isInTransaction()){
                 // write the update to the stream and map a future for the completion.
@@ -401,12 +409,17 @@ public class CorfuSMRObjectProxy<P> {
                 // immediately.
                 TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
                         method, allArguments, serializer);
-                if (isCorfuObject) {
-                    return superMethod.call();
-                }
-                else {
-                    return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
-                }
+                return doUnderlyingCall(superMethod, Mmethod, allArguments);
+            }
+        }
+
+        private Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
+                throws Exception {
+            if (isCorfuObject) {
+                return superMethod.call();
+            }
+            else {
+                return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), arguments);
             }
         }
     }

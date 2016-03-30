@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
@@ -51,6 +52,17 @@ public class SMRMapTest extends AbstractViewTest {
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canGetID()
+            throws Exception {
+        CorfuRuntime r = getDefaultRuntime();
+        UUID id = UUID.randomUUID();
+        ICorfuSMRObject testMap = getRuntime().getObjectsView().open(id, SMRMap.class);
+        assertThat(id)
+                .isEqualTo(testMap.getStreamID());
     }
 
     @Test
