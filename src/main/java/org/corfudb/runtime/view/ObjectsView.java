@@ -11,6 +11,7 @@ import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.object.ISMRInterface;
 import org.corfudb.runtime.object.TransactionalContext;
 import org.corfudb.util.LambdaUtils;
@@ -226,21 +227,13 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
-        try {
-            Field f = obj.getClass().getDeclaredField("_corfuSMRProxy");
-            f.setAccessible(true);
-            CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) f.get(obj);
+        CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject)obj).getProxy();
             ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
             return (T) objectCache.computeIfAbsent(oid, x -> {
                 StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
                         destination, proxy.getTimestamp());
                 return CorfuSMRObjectProxy.getProxy(proxy.getOriginalClass(), null, sv, runtime, proxy.getSerializer());
             });
-        } catch (NoSuchFieldException nsfe) {
-            throw new RuntimeException("Object given not a corfu object!");
-        } catch (IllegalAccessException iae) {
-            throw new RuntimeException("Illegal access: misconfiguration?");
-        }
     }
 
     /** Creates a copy-on-write copy of an object.

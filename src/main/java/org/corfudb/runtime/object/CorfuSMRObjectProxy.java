@@ -35,6 +35,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.UnprocessedException;
 import org.corfudb.runtime.view.AbstractReplicationView;
 import org.corfudb.runtime.view.StreamView;
+import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.annotation.Annotation;
@@ -68,6 +69,11 @@ public class CorfuSMRObjectProxy<P> {
 
     @Getter
     long timestamp;
+
+    public CorfuSMRObjectProxy getProxy()
+    {
+        return this;
+    }
 
     @Getter
     boolean isCorfuObject = false;
@@ -134,21 +140,22 @@ public class CorfuSMRObjectProxy<P> {
             log.trace("Detected ICorfuSMRObject({}), instrumenting methods.", type);
             Class<? extends T> generatedClass = new ByteBuddy()
                     .subclass(type)
-                   // .defineField("_corfuStreamID", UUID.class, FieldManifestation.PLAIN)
-                    .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
-                    .defineField("_corfuStreamID", UUID.class)
                     .method(ElementMatchers.named("getSMRObject"))
-                    .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
+                    .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")))
                     .method(ElementMatchers.named("getRuntime"))
                     .intercept(MethodDelegation.to(proxy, "getRuntime"))
                     .method(ElementMatchers.named("getStreamID"))
                     .intercept(MethodDelegation.to(proxy, "getStreamID"))
+                    .method(ElementMatchers.named("getProxy"))
+                    .intercept(MethodDelegation.to(proxy, "getProxy").filter(ElementMatchers.named("getProxy")))
                     .method(ElementMatchers.isAnnotatedWith(Mutator.class))
-                    .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()))
+                    .intercept(MethodDelegation.to(proxy, "mutator").filter(ElementMatchers.named("interceptMutator")))
                     .method(ElementMatchers.isAnnotatedWith(Accessor.class))
-                    .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()))
+                    .intercept(MethodDelegation.to(proxy, "accessor").filter(ElementMatchers.named("interceptAccessor")))
                     .method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
-                    .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
+                    .intercept(MethodDelegation.to(proxy, "maccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
+                    .method(ElementMatchers.isAnnotatedWith(TransactionalMethod.class))
+                    .intercept(MethodDelegation.to(proxy, "handleTX").filter(ElementMatchers.named("handleTransactionalMethod")))
                     .make()
                     .load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
                     .getLoaded();
@@ -177,20 +184,20 @@ public class CorfuSMRObjectProxy<P> {
                 }
             }
                     DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
-                            .defineField("_corfuStreamID", UUID.class)
-                            .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
                             .implement(ICorfuSMRObject.class)
                             .method(ElementMatchers.named("getSMRObject"))
-                            .intercept(MethodDelegation.to(proxy.getSMRObjectInterceptor()))
+                            .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")))
                             .method(ElementMatchers.named("getStreamID"))
                             .intercept(MethodDelegation.to(proxy, "getStreamID"))
+                            .method(ElementMatchers.named("getProxy"))
+                            .intercept(MethodDelegation.to(proxy, "getProxy").filter(ElementMatchers.named("getProxy")))
                             .method(ElementMatchers.named("getRuntime"))
                             .intercept(MethodDelegation.to(proxy, "getRuntime"));
 
                     try {
                                 bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class)
                                 .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
-                                                .intercept(MethodDelegation.to(proxy.getMutatorInterceptor()))
+                                                .intercept(MethodDelegation.to(proxy, "mutator").filter(ElementMatchers.named("interceptMutator")))
                                                 .annotateMethod(instrumentedDescription);
                     } catch (NoSuchMethodError nsme) {
                         log.trace("Class {} has no mutators", type);
@@ -198,7 +205,7 @@ public class CorfuSMRObjectProxy<P> {
                     try {
                         bb = bb.method(ElementMatchers.isAnnotatedWith(Accessor.class)
                                 .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
-                                .intercept(MethodDelegation.to(proxy.getAccessorInterceptor()))
+                                .intercept(MethodDelegation.to(proxy, "accessor").filter(ElementMatchers.named("interceptAccessor")))
                                 .annotateMethod(instrumentedDescription);
                     } catch (NoSuchMethodError nsme) {
                         log.trace("Class {} has no accessors", type);
@@ -206,7 +213,7 @@ public class CorfuSMRObjectProxy<P> {
                     try {
                         bb = bb.method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)
                                 .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
-                                .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
+                                .intercept(MethodDelegation.to(proxy, "maccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
                                 .annotateMethod(instrumentedDescription);
                     } catch (NoSuchMethodError nsme)
                     {
@@ -220,7 +227,7 @@ public class CorfuSMRObjectProxy<P> {
                             .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
                             .and(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
                             .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
-                            .intercept(MethodDelegation.to(proxy.getMutatorAccessorInterceptor()))
+                            .intercept(MethodDelegation.to(proxy, "accessor").filter(ElementMatchers.named("interceptAccessor")))
                             .annotateMethod(instrumentedDescription);
 
                     bb.annotateType(instrumentedObjectDescription);
@@ -240,225 +247,191 @@ public class CorfuSMRObjectProxy<P> {
             CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
             T ret = getProxyClass(proxy, type, overlay).newInstance();
             proxy.calculateMethodHashTable(ret.getClass());
-            Field f = ret.getClass().getDeclaredField("_corfuStreamID");
-            f.setAccessible(true);
-            f.set(ret, sv.getStreamID());
-            Field f2 = ret.getClass().getDeclaredField("_corfuSMRProxy");
-            f2.setAccessible(true);
-            f2.set(ret, proxy);
             return ret;
-        } catch (InstantiationException | IllegalAccessException | NoSuchFieldException ie) {
+        } catch (InstantiationException | IllegalAccessException ie) {
             throw new RuntimeException("Unexpected exception opening object", ie);
         }
     }
 
-    @Getter(lazy=true)
-    private final SMRObjectInterceptor SMRObjectInterceptor = new SMRObjectInterceptor();
+    @RuntimeType
+    public Object handleTransactionalMethod(@SuperCall Callable originalCall,
+                                            @Origin Method method,
+                                            @AllArguments Object[] arguments)
+            throws Exception
+    {
+        runtime.getObjectsView().TXBegin();
+        Object res = originalCall.call();
+        runtime.getObjectsView().TXEnd();
+        return res;
+    }
 
-    @Getter(lazy=true)
     @SuppressWarnings("unchecked")
-    private final AccessorInterceptor AccessorInterceptor = new AccessorInterceptor();
+    @RuntimeType
+    public Object interceptGetSMRObject(@This ICorfuSMRObject obj) throws Exception {
+        if (obj == null && smrObject == null)
+        {
+            log.trace("SMR object not yet set, generating one.");
+            if (creationArguments == null) {
+                smrObject = originalClass.newInstance();
+            } else {
+                Class[] typeList = Arrays.stream(creationArguments)
+                        .map(Object::getClass)
+                        .toArray(Class[]::new);
 
-    @Getter(lazy=true)
-    private final MutatorInterceptor MutatorInterceptor = new MutatorInterceptor();
+                originalClass
+                        .getDeclaredConstructor(typeList)
+                        .newInstance(creationArguments);
+            }
+        }
+        if (smrObject == null) {
+            // We don't have an SMR object yet, so we'll need to create one.
+            log.trace("SMR object not yet set, generating one.");
+            // Is initialObject implemented? If it is, we use that implementation.
+            try {
+                smrObject = obj.initialObject(creationArguments);
+                log.trace("SMR object generated using initial object.");
+            } catch (UnprocessedException ue) {
+                //it is not, so we search the type hierarchy and call a default constructor.
+                Type[] ptA =  originalClass.getGenericInterfaces();
+                ParameterizedType pt = null;
+                for (Type p : ptA)
+                {
+                    if (((ParameterizedType)p).getRawType().toString()
+                            .endsWith("org.corfudb.runtime.object.ICorfuSMRObject"))
+                    {
+                        pt = (ParameterizedType) p;
+                    }
+                }
 
-    @Getter(lazy=true)
-    private final MutatorAccessorInterceptor MutatorAccessorInterceptor = new MutatorAccessorInterceptor();
-
-    public class SMRObjectInterceptor {
-        @SuppressWarnings("unchecked")
-        @RuntimeType
-        public Object interceptGetSMRObject(@This ICorfuSMRObject obj) throws Exception {
-            if (obj == null && smrObject == null)
-            {
-                log.trace("SMR object not yet set, generating one.");
+                log.trace("Determined SMR type to be {}", pt.getActualTypeArguments()[0].getTypeName());
                 if (creationArguments == null) {
-                    smrObject = originalClass.newInstance();
+                    smrObject = ((Class) ((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType()
+                    ).newInstance();
                 } else {
                     Class[] typeList = Arrays.stream(creationArguments)
                             .map(Object::getClass)
                             .toArray(Class[]::new);
 
-                    originalClass
+                    smrObject = ((Class)((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType())
                             .getDeclaredConstructor(typeList)
                             .newInstance(creationArguments);
                 }
             }
-            if (smrObject == null) {
-                // We don't have an SMR object yet, so we'll need to create one.
-                log.trace("SMR object not yet set, generating one.");
-                // Is initialObject implemented? If it is, we use that implementation.
-                try {
-                    smrObject = obj.initialObject(creationArguments);
-                    log.trace("SMR object generated using initial object.");
-                } catch (UnprocessedException ue) {
-                    //it is not, so we search the type hierarchy and call a default constructor.
-                    Type[] ptA =  originalClass.getGenericInterfaces();
-                    ParameterizedType pt = null;
-                    for (Type p : ptA)
-                    {
-                        if (((ParameterizedType)p).getRawType().toString()
-                                .endsWith("org.corfudb.runtime.object.ICorfuSMRObject"))
-                        {
-                            pt = (ParameterizedType) p;
-                        }
-                    }
-
-                    log.trace("Determined SMR type to be {}", pt.getActualTypeArguments()[0].getTypeName());
-                    if (creationArguments == null) {
-                        smrObject = ((Class) ((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType()
-                                                                ).newInstance();
-                    } else {
-                        Class[] typeList = Arrays.stream(creationArguments)
-                                .map(Object::getClass)
-                                .toArray(Class[]::new);
-
-                        smrObject = ((Class)((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType())
-                                .getDeclaredConstructor(typeList)
-                                .newInstance(creationArguments);
-                    }
-                }
-            }
-            if (TransactionalContext.isInTransaction()
-                    && !TransactionalContext.getCurrentContext().isInSyncMode())
-            {
-                String name = new Exception().getStackTrace()[6].getMethodName();
-                if (name.equals("interceptAccessor")) {
-                    return TransactionalContext.getCurrentContext().getObjectRead(CorfuSMRObjectProxy.this);
-                }
-                else if (name.equals("interceptMutator")){
-                    return TransactionalContext.getCurrentContext().getObjectWrite(CorfuSMRObjectProxy.this);
-                }
-                else {
-                    return TransactionalContext.getCurrentContext().getObjectReadWrite(CorfuSMRObjectProxy.this);
-                }
-            }
-            return smrObject;
         }
+        if (TransactionalContext.isInTransaction()
+                && !TransactionalContext.getCurrentContext().isInSyncMode())
+        {
+            String name = new Exception().getStackTrace()[6].getMethodName();
+            if (name.equals("interceptAccessor")) {
+                return TransactionalContext.getCurrentContext().getObjectRead(this);
+            }
+            else if (name.equals("interceptMutator")){
+                return TransactionalContext.getCurrentContext().getObjectWrite(this);
+            }
+            else {
+                return TransactionalContext.getCurrentContext().getObjectReadWrite(this);
+            }
+        }
+        return smrObject;
     }
 
-    public class MutatorInterceptor {
-        /**
-         * In the case of a pure mutator, we don't even need to ever call the underlying
-         * mutator, since it will be applied during the upcall.
-         * @param Mmethod        The method which was called.
-         * @return              The return value (which should be void).
-         * @throws Exception
-         */
-        @RuntimeType
-        public Object interceptMutator(@Origin Method Mmethod,
-                                       @AllArguments Object[] allArguments,
-                                       @SuperCall Callable superMethod
-        ) throws Exception {
-            String method = getSMRMethodName(Mmethod);
-            log.trace("+Mutator {}", method);
-            StackTraceElement[] stack = new Exception().getStackTrace();
-            if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
-            {
-                        if (isCorfuObject) {
-                            return superMethod.call();
-                        }
-                        else {
-                            return Mmethod.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), allArguments);
-                        }
-                    }
-                    else if (!TransactionalContext.isInTransaction()){
-                        writeUpdate(method, allArguments);
-                    }
-                    else {
-                        // in a transaction, we add the update to the TX buffer and apply the update
-                        // immediately.
-                        TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
-                                method, allArguments, serializer);
-                    }
-            return null;
-        }
-    }
-
-    public class MutatorAccessorInterceptor {
-
-        Object lastResult = null;
-
-        @RuntimeType
-        public Object interceptMutatorAccessor(
-                                        @Origin Method Mmethod,
-                                        @SuperCall Callable superMethod,
-                                        @AllArguments Object[] allArguments,
-                                        @This P obj) throws Exception {
-            String method = getSMRMethodName(Mmethod);
-            log.trace("+MutatorAccessor {}", method);
-
-            StackTraceElement[] stack = new Exception().getStackTrace();
-            if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
-            {
-                return doUnderlyingCall(superMethod, Mmethod, allArguments);
-            }
-            else if (!TransactionalContext.isInTransaction()){
-                // write the update to the stream and map a future for the completion.
-                long updatePos = writeUpdateAndMapFuture(method, allArguments);
-                // read up to this update.
-                sync(obj, updatePos);
-                // Now we can safely wait on the accessor.
-                Object ret = completableFutureMap.get(updatePos).join();
-                completableFutureMap.remove(updatePos);
-                return ret;
-            } else {
-                // If this is the first access in this transaction, we should sync it first.
-                doTransactionalSync(obj);
-                // in a transaction, we add the update to the TX buffer and apply the update
-                // immediately.
-                TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
-                        method, allArguments, serializer);
-                return doUnderlyingCall(superMethod, Mmethod, allArguments);
-            }
-        }
-
-        private synchronized Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
-                throws Exception {
+    @RuntimeType
+    public Object interceptMutator(@Origin Method Mmethod,
+                                   @AllArguments Object[] allArguments,
+                                   @SuperCall Callable superMethod
+    ) throws Exception {
+        String method = getSMRMethodName(Mmethod);
+        log.trace("+Mutator {}", method);
+        StackTraceElement[] stack = new Exception().getStackTrace();
+        if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
+        {
             if (isCorfuObject) {
                 return superMethod.call();
             }
             else {
-                return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), arguments);
+                return Mmethod.invoke(interceptGetSMRObject(null), allArguments);
             }
+        }
+        else if (!TransactionalContext.isInTransaction()){
+            writeUpdate(method, allArguments);
+        }
+        else {
+            // in a transaction, we add the update to the TX buffer and apply the update
+            // immediately.
+            TransactionalContext.getCurrentContext().bufferObjectUpdate(this,
+                    method, allArguments, serializer);
+        }
+        return null;
+    }
+
+
+    @RuntimeType
+    public Object interceptMutatorAccessor(
+            @Origin Method Mmethod,
+            @SuperCall Callable superMethod,
+            @AllArguments Object[] allArguments,
+            @This P obj) throws Exception {
+        String method = getSMRMethodName(Mmethod);
+        log.trace("+MutatorAccessor {}", method);
+
+        StackTraceElement[] stack = new Exception().getStackTrace();
+        if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
+        {
+            return doUnderlyingCall(superMethod, Mmethod, allArguments);
+        }
+        else if (!TransactionalContext.isInTransaction()){
+            // write the update to the stream and map a future for the completion.
+            long updatePos = writeUpdateAndMapFuture(method, allArguments);
+            // read up to this update.
+            sync(obj, updatePos);
+            // Now we can safely wait on the accessor.
+            Object ret = completableFutureMap.get(updatePos).join();
+            completableFutureMap.remove(updatePos);
+            return ret;
+        } else {
+            // If this is the first access in this transaction, we should sync it first.
+            doTransactionalSync(obj);
+            // in a transaction, we add the update to the TX buffer and apply the update
+            // immediately.
+            TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
+                    method, allArguments, serializer);
+            return doUnderlyingCall(superMethod, Mmethod, allArguments);
         }
     }
 
-    public class AccessorInterceptor {
 
-        @RuntimeType
-        public Object interceptAccessor(@SuperCall Callable superMethod,
-                                        @Origin Method method,
-                                        @AllArguments Object[] arguments,
-                                        @This P obj) throws Exception {
-            log.trace("+Accessor {}", method);
-            // Linearize this access with respect to other accesses in the system.
-            if (!TransactionalContext.isInTransaction()) {
-                sync(obj, Long.MAX_VALUE);
-                return doUnderlyingCall(superMethod, method, arguments);
-            }
-            else {
-                doTransactionalSync(obj);
-                Object ret = doUnderlyingCall(superMethod, method, arguments);
-                // If the object was written to (due to transactional clone), the read set is not resolvable.
-                if (!TransactionalContext.getCurrentContext().isObjectCloned(CorfuSMRObjectProxy.this))
-                {
-                    // Store the read set with the context.
-                    TransactionalContext.getCurrentContext().addReadSet(CorfuSMRObjectProxy.this,
-                            getSMRMethodName(method), ret);
-                }
-                return ret;
-            }
+    @RuntimeType
+    public Object interceptAccessor(@SuperCall Callable superMethod,
+                                    @Origin Method method,
+                                    @AllArguments Object[] arguments,
+                                    @This P obj) throws Exception {
+        log.trace("+Accessor {}", method);
+        // Linearize this access with respect to other accesses in the system.
+        if (!TransactionalContext.isInTransaction()) {
+            sync(obj, Long.MAX_VALUE);
+            return doUnderlyingCall(superMethod, method, arguments);
         }
+        else {
+            doTransactionalSync(obj);
+            Object ret = doUnderlyingCall(superMethod, method, arguments);
+            // If the object was written to (due to transactional clone), the read set is not resolvable.
+            if (!TransactionalContext.getCurrentContext().isObjectCloned(this))
+            {
+                // Store the read set with the context.
+                TransactionalContext.getCurrentContext().addReadSet(this,
+                        getSMRMethodName(method), ret);
+            }
+            return ret;
+        }
+    }
 
-        private synchronized Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
-        throws Exception {
-            if (isCorfuObject) {
-                return superMethod.call();
-            }
-            else {
-                return method.invoke(getSMRObjectInterceptor().interceptGetSMRObject(null), arguments);
-            }
+    private synchronized Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
+            throws Exception {
+        if (isCorfuObject) {
+            return superMethod.call();
+        }
+        else {
+            return method.invoke(interceptGetSMRObject(null), arguments);
         }
     }
 
@@ -467,58 +440,6 @@ public class CorfuSMRObjectProxy<P> {
         // Otherwise we should make sure we're sync'd up to the TX
         sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
         TransactionalContext.getCurrentContext().setInSyncMode(false);
-    }
-
-    public static String getShortMethodName(String longName)
-    {
-        int packageIndex = longName.substring(0, longName.indexOf("(")).lastIndexOf(".");
-        return longName.substring(packageIndex + 1);
-    }
-
-    public static String getMethodNameOnlyFromString(String s) {
-        return s.substring(0, s.indexOf("("));
-    }
-
-    static Map<String, Class> primitiveTypeMap = ImmutableMap.<String, Class>builder()
-            .put("int", Integer.TYPE)
-            .put("long", Long.TYPE)
-            .put("double", Double.TYPE)
-            .put("float", Float.TYPE)
-            .put("bool", Boolean.TYPE)
-            .put("char", Character.TYPE)
-            .put("byte", Byte.TYPE)
-            .put("void", Void.TYPE)
-            .put("short", Short.TYPE)
-            .put("int[]", int[].class)
-            .put("long[]", long[].class)
-            .put("double[]", double[].class)
-            .put("float[]", float[].class)
-            .put("bool[]", boolean[].class)
-            .put("char[]", char[].class)
-            .put("byte[]", byte[].class)
-            .put("short[]", short[].class)
-            .build();
-
-    public static Class<?> getPrimitiveType(String s) {
-        return primitiveTypeMap.get(s);
-    }
-
-    public static Class[] getArgumentTypesFromString(String s) {
-        String argList = s.substring(s.indexOf("(") + 1, s.length() - 1);
-        return Arrays.stream(argList.split(","))
-                .filter(x -> !x.equals(""))
-                .map(x -> {
-                    try {
-                        return Class.forName(x);
-                    } catch (ClassNotFoundException cnfe) {
-                        Class retVal = getPrimitiveType(x);
-                        if (retVal == null) {
-                            log.warn("Class {} not found", x);
-                        }
-                        return retVal;
-                    }
-                })
-                .toArray(Class[]::new);
     }
 
     public String getSMRMethodName(Method method) {
@@ -539,7 +460,7 @@ public class CorfuSMRObjectProxy<P> {
                 }
             }
         }
-        return getShortMethodName(method.toString());
+        return ReflectionUtils.getShortMethodName(method.toString());
     }
 
     long writeUpdate(String method, Object[] arguments)
@@ -565,8 +486,8 @@ public class CorfuSMRObjectProxy<P> {
             Method m = methodHashTable.computeIfAbsent(entry.getSMRMethod(),
                     s -> {
                         try {
-                        return obj.getClass().getMethod(getMethodNameOnlyFromString(entry.getSMRMethod()),
-                            getArgumentTypesFromString(entry.getSMRMethod()));
+                        return obj.getClass().getMethod(ReflectionUtils.getMethodNameOnlyFromString(entry.getSMRMethod()),
+                                ReflectionUtils.getArgumentTypesFromString(entry.getSMRMethod()));
                         }
                         catch (NoSuchMethodException nsme)
                         {
