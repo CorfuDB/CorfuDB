@@ -3,9 +3,9 @@ package org.corfudb.runtime.collections;
 import org.corfudb.runtime.object.DontInstrument;
 import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.object.StaticMappingObject;
+import org.corfudb.runtime.object.TransactionalMethod;
 
 import java.util.*;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 /**
@@ -13,7 +13,16 @@ import java.util.stream.Collectors;
  */
 public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject> {
 
-    final int numBuckets = 10;
+    final int numBuckets;
+
+    public FGMap(int numBuckets)
+    {
+        this.numBuckets = numBuckets;
+    }
+
+    public FGMap() {
+        this.numBuckets = 10;
+    }
 
     @DontInstrument
     @SuppressWarnings("unchecked")
@@ -48,14 +57,11 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      * @return the number of key-value mappings in this map
      */
     @Override
-    @DontInstrument
+    @TransactionalMethod
     public int size() {
-        getRuntime().getObjectsView().TXBegin();
-        int size = getAllPartitionMaps().stream()
+        return getAllPartitionMaps().stream()
                 .mapToInt(Map::size)
                 .sum();
-        getRuntime().getObjectsView().TXEnd();
-        return size;
     }
 
     /**
