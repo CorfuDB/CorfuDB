@@ -70,6 +70,11 @@ public class CorfuSMRObjectProxy<P> {
     @Getter
     long timestamp;
 
+    public CorfuSMRObjectProxy getProxy()
+    {
+        return this;
+    }
+
     @Getter
     boolean isCorfuObject = false;
 
@@ -135,13 +140,14 @@ public class CorfuSMRObjectProxy<P> {
             log.trace("Detected ICorfuSMRObject({}), instrumenting methods.", type);
             Class<? extends T> generatedClass = new ByteBuddy()
                     .subclass(type)
-                    .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
                     .method(ElementMatchers.named("getSMRObject"))
                     .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")))
                     .method(ElementMatchers.named("getRuntime"))
                     .intercept(MethodDelegation.to(proxy, "getRuntime"))
                     .method(ElementMatchers.named("getStreamID"))
                     .intercept(MethodDelegation.to(proxy, "getStreamID"))
+                    .method(ElementMatchers.named("getProxy"))
+                    .intercept(MethodDelegation.to(proxy, "getProxy").filter(ElementMatchers.named("getProxy")))
                     .method(ElementMatchers.isAnnotatedWith(Mutator.class))
                     .intercept(MethodDelegation.to(proxy, "mutator").filter(ElementMatchers.named("interceptMutator")))
                     .method(ElementMatchers.isAnnotatedWith(Accessor.class))
@@ -178,12 +184,13 @@ public class CorfuSMRObjectProxy<P> {
                 }
             }
                     DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
-                            .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
                             .implement(ICorfuSMRObject.class)
                             .method(ElementMatchers.named("getSMRObject"))
                             .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")))
                             .method(ElementMatchers.named("getStreamID"))
                             .intercept(MethodDelegation.to(proxy, "getStreamID"))
+                            .method(ElementMatchers.named("getProxy"))
+                            .intercept(MethodDelegation.to(proxy, "getProxy").filter(ElementMatchers.named("getProxy")))
                             .method(ElementMatchers.named("getRuntime"))
                             .intercept(MethodDelegation.to(proxy, "getRuntime"));
 
@@ -240,11 +247,8 @@ public class CorfuSMRObjectProxy<P> {
             CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
             T ret = getProxyClass(proxy, type, overlay).newInstance();
             proxy.calculateMethodHashTable(ret.getClass());
-            Field f2 = ret.getClass().getDeclaredField("_corfuSMRProxy");
-            f2.setAccessible(true);
-            f2.set(ret, proxy);
             return ret;
-        } catch (InstantiationException | IllegalAccessException | NoSuchFieldException ie) {
+        } catch (InstantiationException | IllegalAccessException ie) {
             throw new RuntimeException("Unexpected exception opening object", ie);
         }
     }

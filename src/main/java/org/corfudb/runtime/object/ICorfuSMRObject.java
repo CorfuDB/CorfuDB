@@ -49,4 +49,10 @@ public interface ICorfuSMRObject<T> {
      * @return          The runtime of the object.
      */
     default CorfuRuntime getRuntime() { throw new UnprocessedException(); }
+
+    /** Get the underlying proxy.
+     *
+     * @return          The underlying proxy for this object.
+     */
+    default CorfuSMRObjectProxy getProxy() { throw new UnprocessedException(); }
 }
