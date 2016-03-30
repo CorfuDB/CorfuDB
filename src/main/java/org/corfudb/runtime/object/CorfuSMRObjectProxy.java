@@ -50,54 +50,24 @@ import java.util.concurrent.ConcurrentHashMap;
  * Created by mwei on 1/7/16.
  */
 @Slf4j
-public class CorfuSMRObjectProxy<P> {
+public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
-    @Getter
-    StreamView sv;
     Object smrObject;
+
     Object[] creationArguments;
-    @Getter
-    Class<P> originalClass;
-    Class<?> generatedClass;
+
     Map<Long, CompletableFuture<Object>> completableFutureMap;
-    @Getter
-    Serializers.SerializerType serializer;
-    @Getter
-    CorfuRuntime runtime;
+
     @Getter
     Map<String, Method> methodHashTable;
 
     @Getter
-    long timestamp;
-
-    public CorfuSMRObjectProxy getProxy()
-    {
-        return this;
-    }
-
-    @Getter
     boolean isCorfuObject = false;
 
-    public UUID getStreamID() {
-        return sv.getStreamID();
-    }
-
-    final static AnnotationDescription instrumentedDescription =
-             AnnotationDescription.Builder.ofType(Instrumented.class)
-            .build();
-
-    final static AnnotationDescription instrumentedObjectDescription =
-            AnnotationDescription.Builder.ofType(InstrumentedCorfuObject.class)
-                    .build();
-
-
-    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv, Class<P> originalClass, Serializers.SerializerType serializer) {
-        this.runtime = runtime;
-        this.sv = sv;
-        this.originalClass = originalClass;
+    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv,
+                               Class<P> originalClass, Serializers.SerializerType serializer) {
+        super(runtime, sv, originalClass, serializer);
         this.completableFutureMap = new ConcurrentHashMap<>();
-        this.serializer = serializer;
-        this.timestamp = -1L;
         if (Arrays.stream(originalClass.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom)) {
             isCorfuObject = true;
         }
@@ -131,138 +101,6 @@ public class CorfuSMRObjectProxy<P> {
                         }
                     }
                 });
-    }
-
-    public static <T,R extends ISMRInterface> Class<? extends T>
-    getProxyClass(CorfuSMRObjectProxy proxy, Class<T> type, Class<R> overlay) {
-        if (Arrays.stream(type.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom))
-        {
-            log.trace("Detected ICorfuSMRObject({}), instrumenting methods.", type);
-            Class<? extends T> generatedClass = new ByteBuddy()
-                    .subclass(type)
-                    .method(ElementMatchers.named("getSMRObject"))
-                    .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")))
-                    .method(ElementMatchers.named("getRuntime"))
-                    .intercept(MethodDelegation.to(proxy, "getRuntime"))
-                    .method(ElementMatchers.named("getStreamID"))
-                    .intercept(MethodDelegation.to(proxy, "getStreamID"))
-                    .method(ElementMatchers.named("getProxy"))
-                    .intercept(MethodDelegation.to(proxy, "getProxy").filter(ElementMatchers.named("getProxy")))
-                    .method(ElementMatchers.isAnnotatedWith(Mutator.class))
-                    .intercept(MethodDelegation.to(proxy, "mutator").filter(ElementMatchers.named("interceptMutator")))
-                    .method(ElementMatchers.isAnnotatedWith(Accessor.class))
-                    .intercept(MethodDelegation.to(proxy, "accessor").filter(ElementMatchers.named("interceptAccessor")))
-                    .method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class))
-                    .intercept(MethodDelegation.to(proxy, "maccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
-                    .method(ElementMatchers.isAnnotatedWith(TransactionalMethod.class))
-                    .intercept(MethodDelegation.to(proxy, "handleTX").filter(ElementMatchers.named("handleTransactionalMethod")))
-                    .make()
-                    .load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
-                    .getLoaded();
-            proxy.generatedClass = generatedClass;
-            return generatedClass;
-        }
-        else if (overlay != null) {
-            log.trace("Detected Overlay({}), instrumenting methods", overlay);
-        }
-        else if (Arrays.stream(type.getInterfaces()).anyMatch(ISMRInterface.class::isAssignableFrom)){
-            ISMRInterface[] iface = Arrays.stream(type.getInterfaces())
-                    .filter(ISMRInterface.class::isAssignableFrom)
-                    .toArray(ISMRInterface[]::new);
-            log.trace("Detected ISMRInterfaces({}), instrumenting methods", iface);
-        }
-        else {
-            log.trace("{} is not an ICorfuSMRObject, no ISMRInterfaces and no overlay provided. " +
-                    "Instrumenting all methods as mutatorAccessors but respecting annotations", type);
-
-            // dump all method annotations
-            log.trace("All methods for {}:", type);
-            if (log.isTraceEnabled()) {
-                Method[] ms = type.getMethods();
-                for (Method m : ms) {
-                    log.trace("{}: {}", m.getName(), m.getAnnotations());
-                }
-            }
-                    DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
-                            .implement(ICorfuSMRObject.class)
-                            .method(ElementMatchers.named("getSMRObject"))
-                            .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")))
-                            .method(ElementMatchers.named("getStreamID"))
-                            .intercept(MethodDelegation.to(proxy, "getStreamID"))
-                            .method(ElementMatchers.named("getProxy"))
-                            .intercept(MethodDelegation.to(proxy, "getProxy").filter(ElementMatchers.named("getProxy")))
-                            .method(ElementMatchers.named("getRuntime"))
-                            .intercept(MethodDelegation.to(proxy, "getRuntime"));
-
-                    try {
-                                bb = bb.method(ElementMatchers.isAnnotatedWith(Mutator.class)
-                                .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
-                                                .intercept(MethodDelegation.to(proxy, "mutator").filter(ElementMatchers.named("interceptMutator")))
-                                                .annotateMethod(instrumentedDescription);
-                    } catch (NoSuchMethodError nsme) {
-                        log.trace("Class {} has no mutators", type);
-                    }
-                    try {
-                        bb = bb.method(ElementMatchers.isAnnotatedWith(Accessor.class)
-                                .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
-                                .intercept(MethodDelegation.to(proxy, "accessor").filter(ElementMatchers.named("interceptAccessor")))
-                                .annotateMethod(instrumentedDescription);
-                    } catch (NoSuchMethodError nsme) {
-                        log.trace("Class {} has no accessors", type);
-                    }
-                    try {
-                        bb = bb.method(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)
-                                .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
-                                .intercept(MethodDelegation.to(proxy, "maccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
-                                .annotateMethod(instrumentedDescription);
-                    } catch (NoSuchMethodError nsme)
-                    {
-                        log.trace("Class {} has no mutatoraccessors", type);
-                    }
-
-                    bb = bb.method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
-                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Accessor.class)))
-                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
-                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(DontInstrument.class)))
-                            .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
-                            .and(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
-                            .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
-                            .intercept(MethodDelegation.to(proxy, "accessor").filter(ElementMatchers.named("interceptAccessor")))
-                            .annotateMethod(instrumentedDescription);
-
-                    bb.annotateType(instrumentedObjectDescription);
-            Class<? extends T> generatedClass =
-                     bb.make().load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
-                    .getLoaded();
-            proxy.generatedClass = generatedClass;
-            return generatedClass;
-        }
-        throw new UnsupportedOperationException("Not yet implemented.");
-    }
-
-    public static <T,R extends ISMRInterface>
-        T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime,
-                   Serializers.SerializerType serializer) {
-        try {
-            CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
-            T ret = getProxyClass(proxy, type, overlay).newInstance();
-            proxy.calculateMethodHashTable(ret.getClass());
-            return ret;
-        } catch (InstantiationException | IllegalAccessException ie) {
-            throw new RuntimeException("Unexpected exception opening object", ie);
-        }
-    }
-
-    @RuntimeType
-    public Object handleTransactionalMethod(@SuperCall Callable originalCall,
-                                            @Origin Method method,
-                                            @AllArguments Object[] arguments)
-            throws Exception
-    {
-        runtime.getObjectsView().TXBegin();
-        Object res = originalCall.call();
-        runtime.getObjectsView().TXEnd();
-        return res;
     }
 
     @SuppressWarnings("unchecked")
@@ -550,6 +388,7 @@ public class CorfuSMRObjectProxy<P> {
         return false;
     }
 
+    @Override
     synchronized public void sync(P obj, long maxPos) {
         log.trace("Object[{}] sync to pos {}", sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos);
         Arrays.stream(sv.readTo(maxPos))

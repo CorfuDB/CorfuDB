@@ -7,6 +7,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuObject;
 import org.corfudb.runtime.object.ICorfuSMRObject;
 
 import java.io.*;
@@ -37,7 +38,7 @@ public class JSONSerializer implements ISerializer {
         {
             return null;
         }
-        else if (className.equals("CorfuSMRObject"))
+        else if (className.equals("CorfuObject"))
         {
             int SMRClassNameLength = b.readShort();
             byte[] SMRClassNameBytes = new byte[SMRClassNameLength];
@@ -74,14 +75,14 @@ public class JSONSerializer implements ISerializer {
         if (className.contains("$ByteBuddy$"))
         {
             String SMRClass = className.split("\\$")[0];
-            className = "CorfuSMRObject";
+            className = "CorfuObject";
             byte[] classNameBytes = className.getBytes();
             b.writeShort(classNameBytes.length);
             b.writeBytes(classNameBytes);
             byte[] SMRClassNameBytes = SMRClass.getBytes();
             b.writeShort(SMRClassNameBytes.length);
             b.writeBytes(SMRClassNameBytes);
-            UUID id = ((ICorfuSMRObject)o).getStreamID();
+            UUID id = ((ICorfuObject)o).getStreamID();
             log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}", SMRClass, id);
             b.writeLong(id.getMostSignificantBits());
             b.writeLong(id.getLeastSignificantBits());

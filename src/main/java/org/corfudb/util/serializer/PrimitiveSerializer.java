@@ -64,7 +64,7 @@ public class PrimitiveSerializer implements ISerializer {
         CORFU_SMR(15, Object.class, null, (o, b) -> {
             String className = o.getClass().toString();
             String SMRClass = className.split("\\$")[0];
-            className = "CorfuSMRObject";
+            className = "CorfuObject";
             byte[] classNameBytes = className.getBytes();
             b.writeShort(classNameBytes.length);
             b.writeBytes(classNameBytes);
