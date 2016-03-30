@@ -7,6 +7,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuSMRObject;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -80,18 +81,10 @@ public class JSONSerializer implements ISerializer {
             byte[] SMRClassNameBytes = SMRClass.getBytes();
             b.writeShort(SMRClassNameBytes.length);
             b.writeBytes(SMRClassNameBytes);
-            try {
-                Field f = o.getClass().getDeclaredField("_corfuStreamID");
-                f.setAccessible(true);
-                UUID id = (UUID) f.get(o);
-                log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}", SMRClass, id);
-                b.writeLong(id.getMostSignificantBits());
-                b.writeLong(id.getLeastSignificantBits());
-            } catch (NoSuchFieldException | IllegalAccessException nsfe)
-            {
-                log.error("Error serializing fields");
-                throw new RuntimeException(nsfe);
-            }
+            UUID id = ((ICorfuSMRObject)o).getStreamID();
+            log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}", SMRClass, id);
+            b.writeLong(id.getMostSignificantBits());
+            b.writeLong(id.getLeastSignificantBits());
         }
         else {
             byte[] classNameBytes = className.getBytes();

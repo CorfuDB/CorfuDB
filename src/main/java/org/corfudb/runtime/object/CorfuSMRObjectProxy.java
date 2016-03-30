@@ -135,9 +135,7 @@ public class CorfuSMRObjectProxy<P> {
             log.trace("Detected ICorfuSMRObject({}), instrumenting methods.", type);
             Class<? extends T> generatedClass = new ByteBuddy()
                     .subclass(type)
-                   // .defineField("_corfuStreamID", UUID.class, FieldManifestation.PLAIN)
                     .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
-                    .defineField("_corfuStreamID", UUID.class)
                     .method(ElementMatchers.named("getSMRObject"))
                     .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")))
                     .method(ElementMatchers.named("getRuntime"))
@@ -180,7 +178,6 @@ public class CorfuSMRObjectProxy<P> {
                 }
             }
                     DynamicType.Builder<T> bb = new ByteBuddy().subclass(type)
-                            .defineField("_corfuStreamID", UUID.class)
                             .defineField("_corfuSMRProxy", CorfuSMRObjectProxy.class)
                             .implement(ICorfuSMRObject.class)
                             .method(ElementMatchers.named("getSMRObject"))
@@ -243,9 +240,6 @@ public class CorfuSMRObjectProxy<P> {
             CorfuSMRObjectProxy<T> proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
             T ret = getProxyClass(proxy, type, overlay).newInstance();
             proxy.calculateMethodHashTable(ret.getClass());
-            Field f = ret.getClass().getDeclaredField("_corfuStreamID");
-            f.setAccessible(true);
-            f.set(ret, sv.getStreamID());
             Field f2 = ret.getClass().getDeclaredField("_corfuSMRProxy");
             f2.setAccessible(true);
             f2.set(ret, proxy);
