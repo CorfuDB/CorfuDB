@@ -89,7 +89,7 @@ public class FGMapTest extends AbstractViewTest {
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
 
         final int num_threads = 5;
-        final int num_records = 1000;
+        final int num_records = 20;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {
