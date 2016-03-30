@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -492,5 +493,36 @@ public class SMRMapTest extends AbstractViewTest {
                 .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
 
         testMap.put("a", "z");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void concurrentAbortTest()
+            throws Exception {
+        getDefaultRuntime();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+
+        final int num_threads = 5;
+        final int num_records = 20;
+        AtomicInteger aborts = new AtomicInteger();
+        testMap.clear();
+
+        scheduleConcurrently(num_threads, threadNumber -> {
+            int base = threadNumber * num_records;
+            for (int i = base; i < base + num_records; i++) {
+                try {
+                    getRuntime().getObjectsView().TXBegin();
+                    assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
+                            .isEqualTo(null);
+                    getRuntime().getObjectsView().TXEnd();
+                } catch (TransactionAbortedException tae) {
+                    aborts.incrementAndGet();
+                }
+            }
+        });
+        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+
+        calculateAbortRate(aborts.get(), num_records*num_threads);
     }
 }

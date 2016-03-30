@@ -35,11 +35,17 @@ public class AbstractCorfuTest {
     public Set<Callable<Object>> scheduledThreads;
     public Set<String> temporaryDirectories;
 
+    public String testStatus = "";
+
     @Rule
     public TestRule watcher = new TestWatcher() {
         @Override
         protected void succeeded(Description description) {
-            System.out.print(ansi().a("[").fg(Ansi.Color.GREEN).a("PASS").reset().a("]").newline());
+            if (!testStatus.equals(""))
+            {
+                testStatus = " [" + testStatus + "]";
+            }
+            System.out.print(ansi().a("[").fg(Ansi.Color.GREEN).a("PASS").reset().a("]" + testStatus).newline());
         }
 
         @Override
@@ -51,6 +57,10 @@ public class AbstractCorfuTest {
             System.out.print(String.format("%-60s", description.getMethodName()));
         }
     };
+
+    @Before public void clearTestStatus() {
+        testStatus = "";
+    }
 
     @Before
     public void setupScheduledThreads() {
@@ -98,6 +108,11 @@ public class AbstractCorfuTest {
             File folder = new File(s);
             deleteFolder(folder);
         }
+    }
+
+    public void calculateAbortRate(int aborts, int transactions)
+    {
+        testStatus += "Aborts=" + String.format("%.2f",((float)aborts/transactions)*100.0f) + "%";
     }
 
     /** An interface that defines threads run through the unit testing interface. */

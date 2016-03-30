@@ -94,6 +94,7 @@ public class TXEntry extends LogEntry {
                 if (backpointedEntry.isFirstEntry(stream)) { return false; }
 
                 while (
+                        backpointedEntry.hasBackpointer(stream) &&
                         backpointedEntry.getAddress() > objectEntry.getLastTimestamp()  &&
                         !backpointedEntry.isFirstEntry(stream))
                 {

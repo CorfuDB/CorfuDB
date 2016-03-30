@@ -413,7 +413,7 @@ public class CorfuSMRObjectProxy<P> {
             }
         }
 
-        private Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
+        private synchronized Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
                 throws Exception {
             if (isCorfuObject) {
                 return superMethod.call();
@@ -451,7 +451,7 @@ public class CorfuSMRObjectProxy<P> {
             }
         }
 
-        private Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
+        private synchronized Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
         throws Exception {
             if (isCorfuObject) {
                 return superMethod.call();
