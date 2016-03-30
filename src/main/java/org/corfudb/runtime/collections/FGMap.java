@@ -1,20 +1,44 @@
 package org.corfudb.runtime.collections;
 
-
-import org.corfudb.runtime.object.Accessor;
+import org.corfudb.runtime.object.DontInstrument;
 import org.corfudb.runtime.object.ICorfuSMRObject;
-import org.corfudb.runtime.object.Mutator;
-import org.corfudb.runtime.object.MutatorAccessor;
+import org.corfudb.runtime.object.StaticMappingObject;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 /**
- * Created by mwei on 1/7/16.
+ * Created by mwei on 3/29/16.
  */
-public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
+public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject> {
+
+    final int numBuckets = 10;
+
+    @DontInstrument
+    @SuppressWarnings("unchecked")
+    Map<K,V> getPartitionMap(int partition)
+    {
+        return  getRuntime().getObjectsView().open(
+                new UUID(getStreamID().getMostSignificantBits(),
+                getStreamID().getLeastSignificantBits() + (partition+1)), SMRMap.class);
+    }
+
+    @DontInstrument
+    Map<K,V> getPartition(Object key)
+    {
+        return getPartitionMap(key.hashCode() % numBuckets);
+    }
+
+    @DontInstrument
+    Set<Map<K,V>> getAllPartitionMaps() {
+        Set<Map<K,V>> mapSet = new HashSet<>();
+        for (int i = 0; i < numBuckets; i++)
+        {
+            mapSet.add(getPartitionMap(i));
+        }
+        return mapSet;
+    }
 
     /**
      * Returns the number of key-value mappings in this map.  If the
@@ -24,9 +48,14 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      * @return the number of key-value mappings in this map
      */
     @Override
-    @Accessor
+    @DontInstrument
     public int size() {
-        return getSMRObject().size();
+        getRuntime().getObjectsView().TXBegin();
+        int size = getAllPartitionMaps().stream()
+                .mapToInt(Map::size)
+                .sum();
+        getRuntime().getObjectsView().TXEnd();
+        return size;
     }
 
     /**
@@ -35,9 +64,13 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      * @return <tt>true</tt> if this map contains no key-value mappings
      */
     @Override
-    @Accessor
+    @DontInstrument
     public boolean isEmpty() {
-        return getSMRObject().isEmpty();
+        getRuntime().getObjectsView().TXBegin();
+        boolean isEmpty = getAllPartitionMaps().stream()
+                .allMatch(Map::isEmpty);
+        getRuntime().getObjectsView().TXEnd();
+        return isEmpty;
     }
 
     /**
@@ -58,9 +91,10 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @Accessor
+    @DontInstrument
     public boolean containsKey(Object key) {
-        return getSMRObject().containsKey(key);
+        return getPartition(key)
+                .containsKey(key);
     }
 
     /**
@@ -82,9 +116,13 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @Accessor
+    @DontInstrument
     public boolean containsValue(Object value) {
-        return getSMRObject().containsValue(value);
+        getRuntime().getObjectsView().TXBegin();
+        boolean isEmpty = getAllPartitionMaps().stream()
+                .anyMatch(x -> x.containsValue(value));
+        getRuntime().getObjectsView().TXEnd();
+        return isEmpty;
     }
 
     /**
@@ -113,9 +151,9 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @Accessor
+    @DontInstrument
     public V get(Object key) {
-        return getSMRObject().get(key);
+        return getPartition(key).get(key);
     }
 
     /**
@@ -143,9 +181,9 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       or value prevents it from being stored in this map
      */
     @Override
-    @MutatorAccessor(name="put")
+    @DontInstrument
     public V put(K key, V value) {
-        return getSMRObject().put(key, value);
+        return getPartition(key).put(key, value);
     }
 
     /**
@@ -179,9 +217,9 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @MutatorAccessor(name="remove")
+    @DontInstrument
     public V remove(Object key) {
-        return getSMRObject().remove(key);
+        return getPartition(key).remove(key);
     }
 
     /**
@@ -204,9 +242,12 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       the specified map prevents it from being stored in this map
      */
     @Override
-    @Mutator(name="putAll")
+    @DontInstrument
     public void putAll(Map<? extends K, ? extends V> m) {
-        getSMRObject().putAll(m);
+        getRuntime().getObjectsView().TXBegin();
+        m.entrySet().stream()
+                .forEach(e -> getPartition(e.getKey()).put(e.getKey(), e.getValue()));
+        getRuntime().getObjectsView().TXEnd();
     }
 
     /**
@@ -217,9 +258,12 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       is not supported by this map
      */
     @Override
-    @Mutator(name="clear")
+    @DontInstrument
     public void clear() {
-        getSMRObject().clear();
+        getRuntime().getObjectsView().TXBegin();
+        getAllPartitionMaps().stream()
+                .forEach(Map::clear);
+        getRuntime().getObjectsView().TXEnd();
     }
 
     /**
@@ -238,9 +282,15 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      * @return a set view of the keys contained in this map
      */
     @Override
-    @Accessor
+    @DontInstrument
     public Set<K> keySet() {
-        return getSMRObject().keySet();
+        getRuntime().getObjectsView().TXBegin();
+        Set<K> set = getAllPartitionMaps().stream()
+                .map(Map::keySet)
+                .flatMap(Set::stream)
+                .collect(Collectors.toSet());
+        getRuntime().getObjectsView().TXEnd();
+        return set;
     }
 
     /**
@@ -259,9 +309,14 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      * @return a collection view of the values contained in this map
      */
     @Override
-    @Accessor
+    @DontInstrument
     public Collection<V> values() {
-        return getSMRObject().values();
+        Collection<V> set = getAllPartitionMaps().stream()
+                .map(Map::values)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toSet());
+        getRuntime().getObjectsView().TXEnd();
+        return set;
     }
 
     /**
@@ -281,8 +336,14 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      * @return a set view of the mappings contained in this map
      */
     @Override
-    @Accessor
+    @DontInstrument
     public Set<Entry<K, V>> entrySet() {
-        return getSMRObject().entrySet();
+        getRuntime().getObjectsView().TXBegin();
+        Set<Entry<K,V>> set = getAllPartitionMaps().stream()
+                .map(Map::entrySet)
+                .flatMap(Set::stream)
+                .collect(Collectors.toSet());
+        getRuntime().getObjectsView().TXEnd();
+        return set;
     }
 }

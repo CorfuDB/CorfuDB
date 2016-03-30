@@ -92,6 +92,10 @@ public class TransactionalContext {
             this.readTimestamp = Long.MIN_VALUE;
         }
 
+        public boolean objectIsCloned() {
+            return smrObjectClone != null;
+        }
+
         public T readObject() {
                 readTimestamp = proxy.timestamp;
                 return (T) (smrObjectClone == null ? proxy.smrObject : smrObjectClone);
@@ -169,6 +173,29 @@ public class TransactionalContext {
                 .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
                 .readWriteObject();
     }
+
+    /** Check if the object is cloned.
+     * @param proxy     The SMR Object proxy to get an object for writing.
+     * @param <T>       The type of object to get for writing.
+     * @return          An object for writing.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> boolean isObjectCloned(CorfuSMRObjectProxy<T> proxy)
+    {
+        return  objectMap.containsKey(proxy) && objectMap.get(proxy).objectIsCloned();
+    }
+
+    /** Add to the read set
+     * @param proxy     The SMR Object proxy to get an object for writing.
+     * @param <T>       The type of object to get for writing.
+     * @return          An object for writing.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> void addReadSet(CorfuSMRObjectProxy<T> proxy, String SMRMethod, Object result)
+    {
+
+    }
+
 
     /** Buffer away an object update, adding it to the write set that will be generated
      * in the resulting TXEntry.

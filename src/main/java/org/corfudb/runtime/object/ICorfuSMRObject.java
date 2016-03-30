@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnprocessedException;
 
 import java.lang.annotation.Inherited;
@@ -43,4 +44,9 @@ public interface ICorfuSMRObject<T> {
      */
     default UUID getStreamID() { throw new UnprocessedException(); }
 
+    /** Get the current runtime.
+     *
+     * @return          The runtime of the object.
+     */
+    default CorfuRuntime getRuntime() { throw new UnprocessedException(); }
 }

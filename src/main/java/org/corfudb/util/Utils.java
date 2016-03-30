@@ -52,9 +52,9 @@ public class Utils
         StringBuilder sb = new StringBuilder();
         for(MethodNode m: methods){
             InsnList inList = m.instructions;
-            sb.append(m.name).append("\n");
+            sb.append(m.name);
             for(int i = 0; i< inList.size(); i++){
-                sb.append(insnToString(inList.get(i))).append("\n");
+                sb.append(insnToString(inList.get(i)));
             }
         }
         return sb.toString();
