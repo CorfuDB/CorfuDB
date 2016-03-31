@@ -378,10 +378,10 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                 return false;
             }
 
-            // The TX has committed, apply updates for this object.
-            txEntry.getTxMap().get(sv.getStreamID())
-                    .getUpdates().stream()
-                    .forEach(x -> applySMRUpdate(address, x, obj));
+
+                txEntry.getTxMap().get(sv.getStreamID())
+                        .getUpdates().stream()
+                        .forEach(x -> applySMRUpdate(address, x, obj));
 
             return true;
         }

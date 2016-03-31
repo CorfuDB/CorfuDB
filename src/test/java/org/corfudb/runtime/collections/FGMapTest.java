@@ -82,6 +82,53 @@ public class FGMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void canClear()
+            throws Exception {
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        testMap.clear();
+        assertThat(testMap)
+                .isEmpty();
+
+        for (int i = 0; i < 100; i++)
+        {
+            testMap.put(Integer.toString(i), Integer.toString(i));
+        }
+
+        assertThat(testMap)
+                .hasSize(100);
+
+        testMap.clear();
+        assertThat(testMap)
+                .isEmpty();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canClearInTX()
+            throws Exception {
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        testMap.clear();
+        assertThat(testMap)
+                .isEmpty();
+
+        getRuntime().getObjectsView().TXBegin();
+        for (int i = 0; i < 100; i++)
+        {
+            testMap.put(Integer.toString(i), Integer.toString(i));
+        }
+        testMap.clear();
+        assertThat(testMap)
+                .isEmpty();
+        getRuntime().getObjectsView().TXEnd();
+
+        assertThat(testMap)
+                .hasSize(0);
+
+
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     public void loadsFollowedByGetsConcurrent()
             throws Exception {
         getDefaultRuntime();

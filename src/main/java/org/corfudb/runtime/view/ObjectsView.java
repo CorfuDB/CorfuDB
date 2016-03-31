@@ -341,14 +341,21 @@ public class ObjectsView extends AbstractView {
                 TransactionalContext.removeContext();
                 return;
             }
-            TXEntry entry = context.getEntry();
-            long address = runtime.getStreamsView().write(entry.getAffectedStreams(), entry);
-            TransactionalContext.removeContext();
-            log.trace("TX entry {} written at address {}", entry, address);
-            //now check if the TX will be an abort...
-            if (entry.isAborted())
-            {
-                throw new TransactionAbortedException();
+
+            if (TransactionalContext.getTransactionStack().size() > 1) {
+                TransactionalContext.removeContext();
+                log.trace("Transaction {} within context {}, writing to context.", context.getTransactionID(),
+                        TransactionalContext.getCurrentContext().getTransactionID());
+                TransactionalContext.getCurrentContext().addTransaction(context);
+            } else {
+                TXEntry entry = context.getEntry();
+                long address = runtime.getStreamsView().write(entry.getAffectedStreams(), entry);
+                TransactionalContext.removeContext();
+                log.trace("TX entry {} written at address {}", entry, address);
+                //now check if the TX will be an abort...
+                if (entry.isAborted()) {
+                    throw new TransactionAbortedException();
+                }
             }
         }
     }

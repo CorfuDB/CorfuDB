@@ -14,6 +14,7 @@ import org.corfudb.runtime.view.TransactionStrategy;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 1/11/16.
@@ -123,6 +124,7 @@ public class TransactionalContext {
         }
     }
 
+    @Getter
     Map<CorfuSMRObjectProxy, TransactionalObjectData> objectMap;
 
     public TransactionalContext(CorfuRuntime runtime) {
@@ -196,6 +198,23 @@ public class TransactionalContext {
 
     }
 
+    /** Commit a transaction into this transaction by merging the read/write sets.
+     *
+     * @param tc        The transaction to merge.
+     */
+    @SuppressWarnings("unchecked")
+    public void addTransaction(TransactionalContext tc) {
+        tc.getObjectMap().entrySet().stream()
+                .forEach(e -> {
+                    if (objectMap.containsKey(e.getKey())) {
+                        objectMap.get(e.getKey())
+                                .bufferedWrites.addAll(e.getValue().bufferedWrites);
+                    }
+                    else {
+                        objectMap.put(e.getKey(), e.getValue());
+                    }
+                });
+    }
 
     /** Buffer away an object update, adding it to the write set that will be generated
      * in the resulting TXEntry.
