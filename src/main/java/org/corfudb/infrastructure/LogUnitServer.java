@@ -24,6 +24,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -65,6 +66,7 @@ public class LogUnitServer implements IServer {
     class FileHandle {
         final AtomicLong filePointer;
         final FileChannel channel;
+        final FileLock lock;
         final Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         @Getter(lazy=true)
         private final MappedByteBuffer byteBuffer = getMappedBuffer();
@@ -370,10 +372,12 @@ public class LogUnitServer implements IServer {
                         EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
                                 StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
 
+                FileLock fl = fc.lock();
+
                 AtomicLong fp = new AtomicLong();
                 writeHeader(fc, fp, 1, 0);
                 log.info("Opened new log file at {}", filePath);
-                FileHandle fh = new FileHandle(fp, fc);
+                FileHandle fh = new FileHandle(fp, fc, fl);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 readEntry(fh, -1);
@@ -768,5 +772,16 @@ public class LogUnitServer implements IServer {
     @Override
     public void shutdown() {
         scheduler.shutdownNow();
+        // Clean up any file locks.
+        if (channelMap != null) {
+            channelMap.entrySet().parallelStream()
+                    .forEach(f -> {
+                        try {
+                            f.getValue().getLock().release();
+                        } catch (IOException ie) {
+                            log.warn("Error releasing lock for channel {}", f.getKey());
+                        }
+                    });
+        }
     }
 }
