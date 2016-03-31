@@ -1,9 +1,11 @@
 package org.corfudb.runtime.collections;
 
 import org.corfudb.runtime.object.*;
+import sun.misc.CRC16;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.zip.CRC32;
 
 /**
  * Created by mwei on 3/29/16.
@@ -31,9 +33,29 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
                 getStreamID().getLeastSignificantBits() + (partition+1)), SMRMap.class);
     }
 
+    /** Get a new partition.
+     *
+     * In order to avoid collisions due to imperfect hashCode() distribution,
+     * we apply the Luby-Rakoff transform to randomize the distribution with
+     * CRC32 and CRC16.
+     * @param key
+     * @return
+     */
     Map<K,V> getPartition(Object key)
     {
-        return getPartitionMap(key.hashCode() % numBuckets);
+        int baseMSB = key.hashCode() >> 16;
+        int baseLSB = key.hashCode() & 0xFFFF;
+
+        CRC16 cMSB = new CRC16();
+        cMSB.update((byte) (baseMSB & 0xFF));
+        cMSB.update((byte) (baseMSB >> 8));
+        int hashCode1 = cMSB.value & 0xFFFF;
+
+        CRC32 cDbl = new CRC32();
+        cDbl.update(hashCode1 ^ baseLSB);
+        int hashCode2 = (int) cDbl.getValue();
+        int hashCode = ((hashCode2 ^ baseMSB) << 16) | (hashCode1 ^ baseLSB);
+        return getPartitionMap(Math.abs(hashCode % numBuckets));
     }
 
     Set<Map<K,V>> getAllPartitionMaps() {
