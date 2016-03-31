@@ -79,7 +79,7 @@ public class TXEntry extends LogEntry {
 
 
     public boolean checkAbort() {
-        long timestamp = this.getEntry().getAddress();
+        long timestamp = getEntry().getAddress();
         for (Map.Entry<UUID, TXEntry.TXObjectEntry> e : txMap.entrySet()) {
 
             // We need to now check if this object changed since the tx proposer

@@ -1,9 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.object.DontInstrument;
-import org.corfudb.runtime.object.ICorfuSMRObject;
-import org.corfudb.runtime.object.StaticMappingObject;
-import org.corfudb.runtime.object.TransactionalMethod;
+import org.corfudb.runtime.object.*;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -11,7 +8,9 @@ import java.util.stream.Collectors;
 /**
  * Created by mwei on 3/29/16.
  */
-public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject> {
+@CorfuObject(constructorType=ConstructorType.PERSISTED,
+        objectType=ObjectType.STATELESS)
+public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
 
     final int numBuckets;
 
@@ -24,7 +23,6 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
         this.numBuckets = 10;
     }
 
-    @DontInstrument
     @SuppressWarnings("unchecked")
     Map<K,V> getPartitionMap(int partition)
     {
@@ -33,13 +31,11 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
                 getStreamID().getLeastSignificantBits() + (partition+1)), SMRMap.class);
     }
 
-    @DontInstrument
     Map<K,V> getPartition(Object key)
     {
         return getPartitionMap(key.hashCode() % numBuckets);
     }
 
-    @DontInstrument
     Set<Map<K,V>> getAllPartitionMaps() {
         Set<Map<K,V>> mapSet = new HashSet<>();
         for (int i = 0; i < numBuckets; i++)
@@ -57,7 +53,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      * @return the number of key-value mappings in this map
      */
     @Override
-    @TransactionalMethod
+    @TransactionalMethod(readOnly=true)
     public int size() {
         return getAllPartitionMaps().stream()
                 .mapToInt(Map::size)
@@ -70,13 +66,10 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      * @return <tt>true</tt> if this map contains no key-value mappings
      */
     @Override
-    @DontInstrument
+    @TransactionalMethod(readOnly=true)
     public boolean isEmpty() {
-        getRuntime().getObjectsView().TXBegin();
-        boolean isEmpty = getAllPartitionMaps().stream()
+        return getAllPartitionMaps().stream()
                 .allMatch(Map::isEmpty);
-        getRuntime().getObjectsView().TXEnd();
-        return isEmpty;
     }
 
     /**
@@ -97,7 +90,6 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @DontInstrument
     public boolean containsKey(Object key) {
         return getPartition(key)
                 .containsKey(key);
@@ -122,13 +114,10 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @DontInstrument
+    @TransactionalMethod(readOnly=true)
     public boolean containsValue(Object value) {
-        getRuntime().getObjectsView().TXBegin();
-        boolean isEmpty = getAllPartitionMaps().stream()
+        return getAllPartitionMaps().stream()
                 .anyMatch(x -> x.containsValue(value));
-        getRuntime().getObjectsView().TXEnd();
-        return isEmpty;
     }
 
     /**
@@ -157,7 +146,6 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @DontInstrument
     public V get(Object key) {
         return getPartition(key).get(key);
     }
@@ -187,7 +175,6 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      *                                       or value prevents it from being stored in this map
      */
     @Override
-    @DontInstrument
     public V put(K key, V value) {
         return getPartition(key).put(key, value);
     }
@@ -223,7 +210,6 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @DontInstrument
     public V remove(Object key) {
         return getPartition(key).remove(key);
     }
@@ -248,12 +234,10 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      *                                       the specified map prevents it from being stored in this map
      */
     @Override
-    @DontInstrument
+    @TransactionalMethod
     public void putAll(Map<? extends K, ? extends V> m) {
-        getRuntime().getObjectsView().TXBegin();
         m.entrySet().stream()
                 .forEach(e -> getPartition(e.getKey()).put(e.getKey(), e.getValue()));
-        getRuntime().getObjectsView().TXEnd();
     }
 
     /**
@@ -264,12 +248,10 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      *                                       is not supported by this map
      */
     @Override
-    @DontInstrument
+    @TransactionalMethod
     public void clear() {
-        getRuntime().getObjectsView().TXBegin();
         getAllPartitionMaps().stream()
                 .forEach(Map::clear);
-        getRuntime().getObjectsView().TXEnd();
     }
 
     /**
@@ -288,15 +270,12 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      * @return a set view of the keys contained in this map
      */
     @Override
-    @DontInstrument
+    @TransactionalMethod(readOnly=true)
     public Set<K> keySet() {
-        getRuntime().getObjectsView().TXBegin();
-        Set<K> set = getAllPartitionMaps().stream()
+        return getAllPartitionMaps().stream()
                 .map(Map::keySet)
                 .flatMap(Set::stream)
                 .collect(Collectors.toSet());
-        getRuntime().getObjectsView().TXEnd();
-        return set;
     }
 
     /**
@@ -315,14 +294,12 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      * @return a collection view of the values contained in this map
      */
     @Override
-    @DontInstrument
+    @TransactionalMethod(readOnly=true)
     public Collection<V> values() {
-        Collection<V> set = getAllPartitionMaps().stream()
+        return getAllPartitionMaps().stream()
                 .map(Map::values)
                 .flatMap(Collection::stream)
                 .collect(Collectors.toSet());
-        getRuntime().getObjectsView().TXEnd();
-        return set;
     }
 
     /**
@@ -342,14 +319,11 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuSMRObject<StaticMappingObject
      * @return a set view of the mappings contained in this map
      */
     @Override
-    @DontInstrument
+    @TransactionalMethod(readOnly=true)
     public Set<Entry<K, V>> entrySet() {
-        getRuntime().getObjectsView().TXBegin();
-        Set<Entry<K,V>> set = getAllPartitionMaps().stream()
+        return getAllPartitionMaps().stream()
                 .map(Map::entrySet)
                 .flatMap(Set::stream)
                 .collect(Collectors.toSet());
-        getRuntime().getObjectsView().TXEnd();
-        return set;
     }
 }

@@ -10,10 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuSMRObjectProxy;
-import org.corfudb.runtime.object.ICorfuSMRObject;
-import org.corfudb.runtime.object.ISMRInterface;
-import org.corfudb.runtime.object.TransactionalContext;
+import org.corfudb.runtime.object.*;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
@@ -208,13 +205,13 @@ public class ObjectsView extends AbstractView {
         if (options.contains(ObjectOpenOptions.NO_CACHE))
         {
             StreamView sv = runtime.getStreamsView().get(streamID);
-            return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime, serializer);
+            return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer);
         }
 
         ObjectID<T,R> oid = new ObjectID(streamID, type, overlay);
         return (T) objectCache.computeIfAbsent(oid, x -> {
             StreamView sv = runtime.getStreamsView().get(streamID);
-            return CorfuSMRObjectProxy.getProxy(type, overlay, sv, runtime, serializer);
+            return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer);
         });
     }
 
@@ -232,7 +229,7 @@ public class ObjectsView extends AbstractView {
             return (T) objectCache.computeIfAbsent(oid, x -> {
                 StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
                         destination, proxy.getTimestamp());
-                return CorfuSMRObjectProxy.getProxy(proxy.getOriginalClass(), null, sv, runtime, proxy.getSerializer());
+                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime, proxy.getSerializer());
             });
     }
 
@@ -344,14 +341,21 @@ public class ObjectsView extends AbstractView {
                 TransactionalContext.removeContext();
                 return;
             }
-            TXEntry entry = context.getEntry();
-            long address = runtime.getStreamsView().write(entry.getAffectedStreams(), entry);
-            TransactionalContext.removeContext();
-            log.trace("TX entry {} written at address {}", entry, address);
-            //now check if the TX will be an abort...
-            if (entry.isAborted())
-            {
-                throw new TransactionAbortedException();
+
+            if (TransactionalContext.getTransactionStack().size() > 1) {
+                TransactionalContext.removeContext();
+                log.trace("Transaction {} within context {}, writing to context.", context.getTransactionID(),
+                        TransactionalContext.getCurrentContext().getTransactionID());
+                TransactionalContext.getCurrentContext().addTransaction(context);
+            } else {
+                TXEntry entry = context.getEntry();
+                long address = runtime.getStreamsView().write(entry.getAffectedStreams(), entry);
+                TransactionalContext.removeContext();
+                log.trace("TX entry {} written at address {}", entry, address);
+                //now check if the TX will be an abort...
+                if (entry.isAborted()) {
+                    throw new TransactionAbortedException();
+                }
             }
         }
     }

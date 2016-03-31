@@ -12,7 +12,7 @@ import java.util.UUID;
 /**
  * Created by mwei on 1/7/16.
  */
-public interface ICorfuSMRObject<T> {
+public interface ICorfuSMRObject<T> extends ICorfuObject {
 
     // These calls are dynamically overridden by the proxy, and should not be
     // implemented by client classes.
@@ -30,29 +30,4 @@ public interface ICorfuSMRObject<T> {
      */
     default T getSMRObject() { throw new UnprocessedException(); }
 
-    /** Returns whether the object is in a transaction. During this time, speculative
-     * updates may be applied until either the commit or abort hook is called.
-     * @return          True, if the object is in a transaction. False, otherwise.
-     */
-    default boolean isInTransaction() {
-        return TransactionalContext.isInTransaction();
-    }
-
-    /** Get the stream ID of the object.
-     *
-     * @return          The stream ID of the object.
-     */
-    default UUID getStreamID() { throw new UnprocessedException(); }
-
-    /** Get the current runtime.
-     *
-     * @return          The runtime of the object.
-     */
-    default CorfuRuntime getRuntime() { throw new UnprocessedException(); }
-
-    /** Get the underlying proxy.
-     *
-     * @return          The underlying proxy for this object.
-     */
-    default CorfuSMRObjectProxy getProxy() { throw new UnprocessedException(); }
 }
