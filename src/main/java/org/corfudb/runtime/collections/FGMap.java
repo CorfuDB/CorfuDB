@@ -36,7 +36,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
     /** Get a new partition.
      *
      * In order to avoid collisions due to imperfect hashCode() distribution,
-     * we apply the Luby-Rakoff transform to randomize the distribution with
+     * we apply the Luby-Rackoff transform to randomize the distribution with
      * CRC32 and CRC16.
      * @param key
      * @return
