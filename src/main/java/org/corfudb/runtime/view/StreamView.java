@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Created by mwei on 12/11/15.
@@ -109,7 +110,8 @@ public class StreamView implements AutoCloseable {
      *                              on a previously acquired token.
      * @return                    The address this object was written at.
      */
-    public long acquireAndWrite(Object object, Consumer<Long> acquisitionCallback, Consumer<Long> deacquisitionCallback)
+    public long acquireAndWrite(Object object, Function<SequencerClient.TokenResponse, Boolean> acquisitionCallback,
+                                Function<SequencerClient.TokenResponse, Boolean> deacquisitionCallback)
     {
         while (true) {
             SequencerClient.TokenResponse tokenResponse =
@@ -117,7 +119,15 @@ public class StreamView implements AutoCloseable {
             long token = tokenResponse.getToken();
             log.trace("Write[{}]: acquired token = {}", streamID, token);
             if (acquisitionCallback != null) {
-                acquisitionCallback.accept(token);
+                if (!acquisitionCallback.apply(tokenResponse)) {
+                    log.trace("Acquisition rejected token, hole filling acquired address.");
+                    try {
+                        runtime.getAddressSpaceView().fillHole(token);
+                    } catch (OverwriteException oe) {
+                        log.trace("Hole fill completed by remote client.");
+                    }
+                    return -1L;
+                }
             }
             try {
                 runtime.getAddressSpaceView().write(token, Collections.singleton(streamID),
@@ -125,9 +135,20 @@ public class StreamView implements AutoCloseable {
                 return token;
             } catch (OverwriteException oe)
             {
+                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                    log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                    return -1L;}
                 log.debug("Overwrite occurred at {}, retrying.", token);
             }
         }
+    }
+
+    /** Returns the last issued token for this stream.
+     *
+     * @return  The last issued token for this stream.
+     */
+    public long check() {
+        return runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
     }
 
     /** Resolve a list of entries, using backpointers, to read.

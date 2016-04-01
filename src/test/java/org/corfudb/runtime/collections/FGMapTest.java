@@ -6,8 +6,10 @@ import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.junit.Test;
 
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -123,9 +125,29 @@ public class FGMapTest extends AbstractViewTest {
 
         assertThat(testMap)
                 .hasSize(0);
-
-
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canVaryBucketCount()
+            throws Exception {
+        FGMap<String,String> testMap = getDefaultRuntime().getObjectsView().open("hello", FGMap.class, 101);
+        testMap.clear();
+        assertThat(testMap)
+                .isEmpty();
+        for (int i = 0; i < 100; i++)
+        {
+            testMap.put(Integer.toString(i), Integer.toString(i));
+        }
+
+        FGMap<String,String> testMap2 = getRuntime().getObjectsView().open("hello", FGMap.class,
+                EnumSet.of(ObjectOpenOptions.NO_CACHE));
+        assertThat(testMap2)
+                .hasSize(100);
+        assertThat(testMap2.getNumBuckets())
+                .isEqualTo(101);
+    }
+
 
     @Test
     @SuppressWarnings("unchecked")

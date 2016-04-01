@@ -311,8 +311,8 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     {
         log.trace("Write update and map future: {} with arguments {}", method, arguments);
         return sv.acquireAndWrite(new SMREntry(method, arguments, serializer),
-                t -> completableFutureMap.put(t, new CompletableFuture<>()),
-               completableFutureMap::remove);
+                t -> {completableFutureMap.put(t.getToken(), new CompletableFuture<>()); return true;},
+               t -> {completableFutureMap.remove(t.getToken()); return true;});
     }
 
     boolean applySMRUpdate(long address, SMREntry entry, P obj)
