@@ -112,7 +112,17 @@ public class AbstractCorfuTest {
 
     public void calculateAbortRate(int aborts, int transactions)
     {
+        if (!testStatus.equals("")) { testStatus += ";";}
         testStatus += "Aborts=" + String.format("%.2f",((float)aborts/transactions)*100.0f) + "%";
+    }
+
+    public void calculateRequestsPerSecond(String name, int totalRequests, long startTime)
+    {
+        long endTime = System.currentTimeMillis();
+        float timeInSeconds = ((float)(endTime-startTime)) / 1000.0F;
+        float rps = (float)totalRequests/timeInSeconds;
+        if (!testStatus.equals("")) { testStatus += ";";}
+        testStatus += name + "=" + String.format("%.0f", rps);
     }
 
     /** An interface that defines threads run through the unit testing interface. */
