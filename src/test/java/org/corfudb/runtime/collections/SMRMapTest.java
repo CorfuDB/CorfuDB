@@ -504,7 +504,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 20;
+        final int num_records = 0;
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();
 

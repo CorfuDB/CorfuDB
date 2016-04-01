@@ -8,10 +8,15 @@ import net.bytebuddy.dynamic.DynamicType;
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.matcher.ElementMatchers;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.StreamView;
+import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.Serializers;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
@@ -163,7 +168,7 @@ public class CorfuProxyBuilder {
 
     public static <T,R extends ISMRInterface>
     T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime,
-               Serializers.SerializerType serializer) {
+               Serializers.SerializerType serializer, Object... constructorArgs) {
         try {
             CorfuObjectProxy<T> proxy;
 
@@ -176,11 +181,48 @@ public class CorfuProxyBuilder {
                 {
                     proxy = new CorfuObjectProxy<>(runtime, sv, type, serializer);
                 }
+
+                if (annotation.constructorType() == ConstructorType.PERSISTED) {
+                    // we need to either persist the constructor, or load from the saved args...
+                    long token = sv.check();
+                    boolean readConstructor = true;
+                    if (token == -1L) {
+                        log.debug("There appears to be no constructor for {}, writing one.", sv.getStreamID());
+                        // "default" is the SMRMethod name we use because it is also a Java reserved keyword.
+                        long streamStart = sv.acquireAndWrite(new SMREntry("default", constructorArgs, serializer),
+                                t -> t.getBackpointerMap().get(sv.getStreamID()) == -1L,
+                                t -> false);
+                        readConstructor = streamStart == -1L;
+                    }
+                    if (readConstructor) {
+                        log.debug("There appears to be an existing constructor for {}, reading it...", sv.getStreamID());
+                        // The "default" entry should be the first entry in the stream.
+                        // TODO: handle garbage collected streams.
+                        ILogUnitEntry entry = sv.read();
+                        while (entry != null) {
+                            if (entry.getPayload() instanceof SMREntry &&
+                                    ((SMREntry) entry.getPayload()).getSMRMethod().equals("default"))
+                            {
+                                log.trace("Setting contructor arguments to {}", ((SMREntry) entry.getPayload())
+                                        .getSMRArguments());
+                                constructorArgs = ((SMREntry) entry.getPayload()).getSMRArguments();
+                                break;
+                            }
+                            entry = sv.read();
+                        }
+                    }
+                }
             } else {
                 proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
             }
-            //read the first entry from the streamview (constructor) if present.
-            T ret = getProxyClass(proxy, type, overlay).newInstance();
+            T ret;
+            if (constructorArgs == null || constructorArgs.length == 0) {
+                ret = getProxyClass(proxy, type, overlay).newInstance();
+            }
+            else {
+                ret = ReflectionUtils.newInstanceFromUnknownArgumentTypes(getProxyClass(proxy, type, overlay),
+                        constructorArgs);
+            }
             if (proxy instanceof CorfuSMRObjectProxy) {
                 ((CorfuSMRObjectProxy)proxy).calculateMethodHashTable(ret.getClass());
             }

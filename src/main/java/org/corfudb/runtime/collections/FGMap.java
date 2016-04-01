@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import lombok.Getter;
 import org.corfudb.runtime.object.*;
 import sun.misc.CRC16;
 
@@ -14,7 +15,8 @@ import java.util.zip.CRC32;
         objectType=ObjectType.STATELESS)
 public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
 
-    final int numBuckets;
+    @Getter
+    public final int numBuckets;
 
     public FGMap(int numBuckets)
     {

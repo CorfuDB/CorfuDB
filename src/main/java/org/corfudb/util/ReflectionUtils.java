@@ -3,6 +3,8 @@ package org.corfudb.util;
 import com.google.common.collect.ImmutableMap;
 import lombok.extern.slf4j.Slf4j;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -61,5 +63,38 @@ public class ReflectionUtils {
                     }
                 })
                 .toArray(Class[]::new);
+    }
+
+    public static Class[] getArgumentTypesFromArgumentList(Object[] args) {
+        return Arrays.stream(args)
+                .map(Object::getClass)
+                .toArray(Class[]::new);
+    }
+
+    public static <T> T newInstanceFromUnknownArgumentTypes(Class<T> cls, Object[] args) {
+        try {
+            return cls.getConstructor(getArgumentTypesFromArgumentList(args)).newInstance(args);
+        }
+        catch (InstantiationException | InvocationTargetException | IllegalAccessException ie) {
+            throw new RuntimeException(ie);
+        }
+        catch (NoSuchMethodException nsme) {
+            // Now we need to find a matching primitive type.
+            // We can maybe cheat by running through all the constructors until we get what we want
+            // due to autoboxing
+            Constructor[] ctors = Arrays.stream(cls.getConstructors())
+                                            .filter(c -> c.getParameterTypes().length == args.length)
+                                            .toArray(Constructor[]::new);
+            for (Constructor<?> ctor : ctors)
+            {
+                try {
+                    return (T) ctor.newInstance(args);
+                } catch (Exception e) {
+                    // silently drop exceptions since we are brute forcing here...
+                }
+            }
+
+            throw new RuntimeException("Couldn't find a matching ctor");
+        }
     }
 }
