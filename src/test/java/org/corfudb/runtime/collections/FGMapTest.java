@@ -218,6 +218,30 @@ public class FGMapTest extends AbstractViewTest {
         calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
         calculateAbortRate(aborts.get(), num_records*num_threads);
+    }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    public void checkClearCalls()
+            throws Exception {
+        getDefaultRuntime();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class, 20);
+
+        final int num_threads = 5;
+        final int num_records = 100;
+
+        scheduleConcurrently(num_threads, threadNumber -> {
+            int base = threadNumber * num_records;
+            for (int i = base; i < base + num_records; i++) {
+                testMap.clear();
+                assertThat(testMap)
+                        .isEmpty();
+            }
+        });
+
+        long startTime = System.currentTimeMillis();
+        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("OPS", num_records * num_threads, startTime);
     }
 }

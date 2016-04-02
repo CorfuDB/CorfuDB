@@ -55,6 +55,7 @@ public class AbstractCorfuTest {
 
         protected void starting(Description description) {
             System.out.print(String.format("%-60s", description.getMethodName()));
+            System.out.flush();
         }
     };
 

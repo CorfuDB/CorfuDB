@@ -28,20 +28,20 @@ public class TXEntry extends LogEntry {
     public static class TXObjectEntry implements ICorfuSerializable {
 
         @Getter
-        long lastTimestamp;
-
-        @Getter
         List<SMREntry> updates;
 
-        public TXObjectEntry(long lastTimestamp, List<SMREntry> updates)
+        @Getter
+        boolean read;
+
+        public TXObjectEntry(List<SMREntry> updates, boolean read)
         {
-            this.lastTimestamp = lastTimestamp;
             this.updates = updates;
+            this.read = read;
         }
 
         public TXObjectEntry(ByteBuf b, CorfuRuntime rt)
         {
-            this.lastTimestamp = b.readLong();
+            read = b.readBoolean();
             short numUpdates = b.readShort();
             updates = new ArrayList<>();
             for (short i = 0; i< numUpdates; i++)
@@ -55,7 +55,7 @@ public class TXEntry extends LogEntry {
 
         @Override
         public void serialize(ByteBuf b) {
-            b.writeLong(lastTimestamp);
+            b.writeBoolean(read);
             b.writeShort(updates.size());
             updates.stream()
                     .forEach(x -> Serializers
@@ -67,71 +67,70 @@ public class TXEntry extends LogEntry {
     @Getter
     Map<UUID, TXObjectEntry> txMap;
 
+    @Getter
+    long readTimestamp;
+
     @Getter(lazy=true)
     private final transient boolean aborted = checkAbort();
 
 
-    public TXEntry(@NonNull Map<UUID,TXObjectEntry> txMap)
+    public TXEntry(@NonNull Map<UUID,TXObjectEntry> txMap, long readTimestamp)
     {
         this.type = LogEntryType.TX;
         this.txMap = txMap;
+        this.readTimestamp = readTimestamp;
     }
 
 
-    public boolean checkAbort() {
-        long timestamp = getEntry().getAddress();
-        for (Map.Entry<UUID, TXEntry.TXObjectEntry> e : txMap.entrySet()) {
+    public boolean checkIfStreamAborts(UUID stream) {
+        if (getEntry() != null && getEntry().hasBackpointer(stream)) {
+            ILogUnitEntry backpointedEntry = getEntry();
+            if (backpointedEntry.isFirstEntry(stream)) { return false; }
 
-            // We need to now check if this object changed since the tx proposer
-            // put it in the log. This is a relatively simple check if backpointers
-            // are available, but requires a scan if not.
-
-            final UUID stream = e.getKey();
-            final TXObjectEntry objectEntry = e.getValue();
-
-            if (getEntry() != null && getEntry().hasBackpointer(stream)) {
-                ILogUnitEntry backpointedEntry = getEntry();
-                if (backpointedEntry.isFirstEntry(stream)) { return false; }
-
-                while (
-                        backpointedEntry.hasBackpointer(stream) &&
-                        backpointedEntry.getAddress() > objectEntry.getLastTimestamp()  &&
-                        !backpointedEntry.isFirstEntry(stream))
-                {
-                    if (!backpointedEntry.getAddress().equals(getEntry().getAddress()) && //not self!
-                            backpointedEntry.isLogEntry() && backpointedEntry.getLogEntry().isMutation(stream)) {
-                        log.debug("TX aborted due to mutation [via backpointer]: " +
-                                        "on stream {} at {}, tx is at {}, object read at {}, aborting entry was {}",
-                                stream,
-                                backpointedEntry.getAddress(),
-                                timestamp,
-                                objectEntry.getLastTimestamp(),
-                                backpointedEntry);
-                        return true;
-                    }
-
-                    backpointedEntry = runtime.getAddressSpaceView()
-                            .read(backpointedEntry.getBackpointer(stream));
-                }
-                return false;
-            }
-
-            for (long i = objectEntry.getLastTimestamp() + 1; i < timestamp; i++) {
-                // Backpointers not available, so we do a scan.
-                ILogUnitEntry rr = runtime.getAddressSpaceView().read(i);
-                if (rr.getResultType() ==
-                        LogUnitReadResponseMsg.ReadResultType.DATA &&
-                        ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
-                                .contains(stream) && objectEntry.getLastTimestamp() != i &&
-                        rr.getPayload() instanceof LogEntry &&
-                        ((LogEntry)rr.getPayload()).isMutation(stream)) {
-                    log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", stream,
-                            i, timestamp, objectEntry.getLastTimestamp());
+            while (
+                    backpointedEntry.hasBackpointer(stream) &&
+                            backpointedEntry.getAddress() > readTimestamp  &&
+                            !backpointedEntry.isFirstEntry(stream))
+            {
+                if (!backpointedEntry.getAddress().equals(getEntry().getAddress()) && //not self!
+                        backpointedEntry.isLogEntry() && backpointedEntry.getLogEntry().isMutation(stream)) {
+                    log.debug("TX aborted due to mutation [via backpointer]: " +
+                                    "on stream {} at {}, tx is at {}, object read at {}, aborting entry was {}",
+                            stream,
+                            backpointedEntry.getAddress(),
+                            entry.getAddress(),
+                            readTimestamp,
+                            backpointedEntry);
                     return true;
                 }
+
+                backpointedEntry = runtime.getAddressSpaceView()
+                        .read(backpointedEntry.getBackpointer(stream));
+            }
+            return false;
+        }
+
+        for (long i = readTimestamp + 1; i < entry.getAddress(); i++) {
+            // Backpointers not available, so we do a scan.
+            ILogUnitEntry rr = runtime.getAddressSpaceView().read(i);
+            if (rr.getResultType() ==
+                    LogUnitReadResponseMsg.ReadResultType.DATA &&
+                    ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
+                            .contains(stream) && readTimestamp != i &&
+                    rr.getPayload() instanceof LogEntry &&
+                    ((LogEntry)rr.getPayload()).isMutation(stream)) {
+                log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", stream,
+                        i, entry.getAddress(), readTimestamp);
+                return true;
             }
         }
         return false;
+    }
+
+    public boolean checkAbort() {
+        return txMap.entrySet().stream()
+                .filter(e -> e.getValue().isRead())
+                .anyMatch(e -> checkIfStreamAborts(e.getKey()));
     }
 
     /** Get the set of streams which will be affected by this
@@ -155,6 +154,7 @@ public class TXEntry extends LogEntry {
     @Override
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
+        readTimestamp = b.readLong();
         short mapEntries = b.readShort();
         txMap = new HashMap<>();
         for (short i = 0; i < mapEntries; i++) {
@@ -169,6 +169,7 @@ public class TXEntry extends LogEntry {
     @Override
     public void serialize(ByteBuf b) {
         super.serialize(b);
+        b.writeLong(readTimestamp);
         b.writeShort(txMap.size());
         txMap.entrySet().stream()
                 .forEach(x -> {

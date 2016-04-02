@@ -406,7 +406,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
         assertThat(testMap.put("a","z"));
         getRuntime().getObjectsView().TXBegin();
-        testMap.clear();
         assertThat(testMap.put("a","a"))
                 .isEqualTo("z");
         assertThat(testMap.put("a","b"))
