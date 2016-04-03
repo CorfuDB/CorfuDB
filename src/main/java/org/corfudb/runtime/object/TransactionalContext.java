@@ -86,7 +86,7 @@ public class TransactionalContext {
     class TransactionalObjectData<T> {
 
         CorfuSMRObjectProxy<T> proxy;
-        Object smrObjectClone;
+        T smrObjectClone;
         long readTimestamp;
         List<SMREntry> bufferedWrites;
         boolean objectIsRead;
@@ -103,6 +103,14 @@ public class TransactionalContext {
             return smrObjectClone != null;
         }
 
+        T cloneAndGetObject() {
+            if (smrObjectClone == null) {
+                log.debug("Cloning SMR object {} due to transactional write.", proxy.sv.getStreamID());
+                smrObjectClone = (T) Serializers.getSerializer(proxy.serializer).clone(proxy.smrObject, proxy.runtime);
+            }
+            return smrObjectClone;
+        }
+
         public T readObject() {
                 if (bufferedWrites.isEmpty()) { objectIsRead = true; }
                 readTimestamp = proxy.timestamp;
@@ -110,25 +118,13 @@ public class TransactionalContext {
         }
 
         public T writeObject() {
-            if (smrObjectClone == null) {
-                log.debug("Cloning SMR object {} due to transactional write.", proxy.sv.getStreamID());
-
-                smrObjectClone =
-                        (T) Serializers.getSerializer(proxy.serializer).clone(proxy.smrObject, proxy.runtime);
-            }
-            return (T) smrObjectClone;
+            return cloneAndGetObject();
         }
 
         public T readWriteObject() {
             if (bufferedWrites.isEmpty()) { objectIsRead = true; }
             readTimestamp = proxy.timestamp;
-            if (smrObjectClone == null) {
-                log.debug("Cloning SMR object {} due to transactional write.", proxy.sv.getStreamID());
-
-                smrObjectClone =
-                        (T) Serializers.getSerializer(proxy.serializer).clone(proxy.smrObject, proxy.runtime);
-            }
-            return (T) smrObjectClone;
+            return cloneAndGetObject();
         }
     }
 

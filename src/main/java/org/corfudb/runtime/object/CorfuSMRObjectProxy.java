@@ -1,10 +1,5 @@
 package org.corfudb.runtime.object;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.reflect.Reflection;
-import javassist.ClassPool;
-import javassist.CtClass;
-import javassist.bytecode.annotation.NoSuchClassError;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import net.bytebuddy.ByteBuddy;
@@ -30,10 +25,7 @@ import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.UnprocessedException;
-import org.corfudb.runtime.view.AbstractReplicationView;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.Serializers;
@@ -103,9 +95,9 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                 });
     }
 
-    @SuppressWarnings("unchecked")
-    @RuntimeType
-    public Object interceptGetSMRObject(@This ICorfuSMRObject obj) throws Exception {
+
+    public void constructSMRObject(ICorfuSMRObject obj)
+    throws Exception{
         if (obj == null && smrObject == null)
         {
             log.trace("SMR object not yet set, generating one.");
@@ -121,6 +113,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                         .newInstance(creationArguments);
             }
         }
+
         if (smrObject == null) {
             // We don't have an SMR object yet, so we'll need to create one.
             log.trace("SMR object not yet set, generating one.");
@@ -156,22 +149,34 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                 }
             }
         }
-        if (TransactionalContext.isInTransaction()
-                && !TransactionalContext.getCurrentContext().isInSyncMode())
-        {
-            String name = new Exception().getStackTrace()[6].getMethodName();
-            if (name.equals("interceptAccessor")) {
+    }
+
+    public Object findTransactionalSMRObject()
+    {
+        for (StackTraceElement ste : new Exception().getStackTrace()) {
+            if (ste.getMethodName().equals("interceptAccessor")) {
                 return TransactionalContext.getCurrentContext().getObjectRead(this);
-            }
-            else if (name.equals("interceptMutator")){
+            } else if (ste.getMethodName().equals("interceptMutator")) {
                 return TransactionalContext.getCurrentContext().getObjectWrite(this);
-            }
-            else {
+            } else if (ste.getMethodName().equals("interceptMutatorAccessor")) {
                 return TransactionalContext.getCurrentContext().getObjectReadWrite(this);
             }
         }
+        return TransactionalContext.getCurrentContext().getObjectReadWrite(this);
+    }
+    @SuppressWarnings("unchecked")
+    @RuntimeType
+    public Object interceptGetSMRObject(@This ICorfuSMRObject obj) throws Exception {
+        constructSMRObject(obj);
+
+        if (TransactionalContext.isInTransaction()
+                && !TransactionalContext.getCurrentContext().isInSyncMode())
+        {
+            return findTransactionalSMRObject();
+        }
         return smrObject;
     }
+
 
     @RuntimeType
     public Object interceptMutator(@Origin Method Mmethod,
@@ -179,7 +184,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                                    @SuperCall Callable superMethod
     ) throws Exception {
         String method = getSMRMethodName(Mmethod);
-        log.trace("+Mutator {}", method);
+        log.trace("+Mutator {} {}", TransactionalContext.isInTransaction() ? "tx" : "", method);
         StackTraceElement[] stack = new Exception().getStackTrace();
         if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
         {
@@ -210,7 +215,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             @AllArguments Object[] allArguments,
             @This P obj) throws Exception {
         String method = getSMRMethodName(Mmethod);
-        log.trace("+MutatorAccessor {}", method);
+        log.trace("+MutatorAccessor {} {}", TransactionalContext.isInTransaction() ? "tx" : "", method);
 
         StackTraceElement[] stack = new Exception().getStackTrace();
         if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
@@ -243,7 +248,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                                     @Origin Method method,
                                     @AllArguments Object[] arguments,
                                     @This P obj) throws Exception {
-        log.trace("+Accessor {}", method);
+        log.trace("+Accessor {} {}", TransactionalContext.isInTransaction() ? "tx" : "", method);
         // Linearize this access with respect to other accesses in the system.
         if (!TransactionalContext.isInTransaction()) {
             sync(obj, Long.MAX_VALUE);
@@ -265,12 +270,11 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
     private synchronized Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
             throws Exception {
-        if (isCorfuObject) {
-            return superMethod.call();
-        }
-        else {
-            return method.invoke(interceptGetSMRObject(null), arguments);
-        }
+            if (isCorfuObject) {
+                return superMethod.call();
+            } else {
+                return method.invoke(interceptGetSMRObject(null), arguments);
+            }
     }
 
     public synchronized void doTransactionalSync(P obj) {
