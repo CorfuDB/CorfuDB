@@ -197,7 +197,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             // in a transaction, we add the update to the TX buffer and apply the update
             // immediately.
             TransactionalContext.getCurrentContext().bufferObjectUpdate(this,
-                    method, allArguments, serializer);
+                    method, allArguments, serializer, true);
         }
         return null;
     }
@@ -232,7 +232,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             // in a transaction, we add the update to the TX buffer and apply the update
             // immediately.
             TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
-                    method, allArguments, serializer);
+                    method, allArguments, serializer, false);
             return doUnderlyingCall(superMethod, Mmethod, allArguments);
         }
     }

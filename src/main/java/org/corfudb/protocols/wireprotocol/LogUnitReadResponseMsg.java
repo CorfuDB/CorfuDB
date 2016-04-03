@@ -59,6 +59,7 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
         }
     }
 
+    @ToString(exclude="runtime")
     @Accessors(chain=true)
     public static class ReadResult implements ILogUnitEntry {
 

@@ -158,7 +158,7 @@ public class FGMapTest extends AbstractViewTest {
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
 
         final int num_threads = 5;
-        final int num_records = 20;
+        final int num_records = 500;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -168,7 +168,10 @@ public class FGMapTest extends AbstractViewTest {
                         .isEqualTo(null);
             }
         });
+
+        long startTime = System.currentTimeMillis();
         executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("WPS", num_records * num_threads, startTime);
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
@@ -177,7 +180,10 @@ public class FGMapTest extends AbstractViewTest {
                         .isEqualTo(Integer.toString(i));
             }
         });
+
+        startTime = System.currentTimeMillis();
         executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
     @Test
@@ -206,8 +212,36 @@ public class FGMapTest extends AbstractViewTest {
                 }
             }
         });
+
+        long startTime = System.currentTimeMillis();
         executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
         calculateAbortRate(aborts.get(), num_records*num_threads);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void checkClearCalls()
+            throws Exception {
+        getDefaultRuntime();
+
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class, 20);
+
+        final int num_threads = 5;
+        final int num_records = 100;
+
+        scheduleConcurrently(num_threads, threadNumber -> {
+            int base = threadNumber * num_records;
+            for (int i = base; i < base + num_records; i++) {
+                testMap.clear();
+                assertThat(testMap)
+                        .isEmpty();
+            }
+        });
+
+        long startTime = System.currentTimeMillis();
+        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("OPS", num_records * num_threads, startTime);
     }
 }

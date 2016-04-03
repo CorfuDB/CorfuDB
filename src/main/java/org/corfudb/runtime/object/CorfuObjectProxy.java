@@ -12,6 +12,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.serializer.Serializers;
 
@@ -67,9 +68,15 @@ public class CorfuObjectProxy<P> {
                                             @AllArguments Object[] arguments)
             throws Exception
     {
-        runtime.getObjectsView().TXBegin();
-        Object res = originalCall.call();
-        runtime.getObjectsView().TXEnd();
+        Object res;
+        try {
+            runtime.getObjectsView().TXBegin();
+            res = originalCall.call();
+            runtime.getObjectsView().TXEnd();
+        } catch (TransactionAbortedException tae) {
+            log.debug("Transactional method aborted due to {}, retrying.", tae);
+            res = handleTransactionalMethod(originalCall, method, arguments);
+        }
         return res;
     }
 

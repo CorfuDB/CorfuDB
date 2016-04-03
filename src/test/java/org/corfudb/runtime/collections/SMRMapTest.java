@@ -156,7 +156,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 1000;
+        final int num_records = 500;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -166,7 +166,10 @@ public class SMRMapTest extends AbstractViewTest {
                         .isEqualTo(null);
             }
         });
+
+        long startTime = System.currentTimeMillis();
         executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("WPS", num_records * num_threads, startTime);
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
@@ -175,7 +178,10 @@ public class SMRMapTest extends AbstractViewTest {
                         .isEqualTo(Integer.toString(i));
             }
          });
+
+        startTime = System.currentTimeMillis();
         executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
     @Test
@@ -347,7 +353,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .setCacheDisabled(false);
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
-        //testMap.clear();
         getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a","a"))
                 .isNull();
@@ -401,7 +406,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
         assertThat(testMap.put("a","z"));
         getRuntime().getObjectsView().TXBegin();
-        testMap.clear();
         assertThat(testMap.put("a","a"))
                 .isEqualTo("z");
         assertThat(testMap.put("a","b"))
@@ -504,7 +508,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 0;
+        final int num_records = 100;
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();
 
@@ -521,7 +525,10 @@ public class SMRMapTest extends AbstractViewTest {
                 }
             }
         });
+
+        long startTime = System.currentTimeMillis();
         executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
         calculateAbortRate(aborts.get(), num_records*num_threads);
     }

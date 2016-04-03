@@ -34,6 +34,9 @@ public class TransactionalContext {
     @Getter(lazy=true)
     private final long firstReadTimestamp = fetchFirstTimestamp();
 
+    @Getter
+    private boolean firstReadTimestampSet = false;
+
     /** Whether or not the tx is doing a first sync and therefore writes should not be
      * redirected.
      * @return Whether or not the TX is in sync.
@@ -73,6 +76,7 @@ public class TransactionalContext {
      * @return  The first timestamp to be used for this transaction.
      */
     public synchronized long fetchFirstTimestamp() {
+        firstReadTimestampSet = true;
         long token = runtime.getSequencerView().nextToken(Collections.emptySet(), 0).getToken();
         log.trace("Set first read timestamp for tx {} to {}", transactionID, token);
         return token;
@@ -85,12 +89,14 @@ public class TransactionalContext {
         Object smrObjectClone;
         long readTimestamp;
         List<SMREntry> bufferedWrites;
+        boolean objectIsRead;
 
         public TransactionalObjectData(CorfuSMRObjectProxy<T> proxy)
         {
             this.proxy = proxy;
             this.bufferedWrites = new ArrayList<>();
             this.readTimestamp = Long.MIN_VALUE;
+            this.objectIsRead = false;
         }
 
         public boolean objectIsCloned() {
@@ -98,6 +104,7 @@ public class TransactionalContext {
         }
 
         public T readObject() {
+                if (bufferedWrites.isEmpty()) { objectIsRead = true; }
                 readTimestamp = proxy.timestamp;
                 return (T) (smrObjectClone == null ? proxy.smrObject : smrObjectClone);
         }
@@ -113,6 +120,7 @@ public class TransactionalContext {
         }
 
         public T readWriteObject() {
+            if (bufferedWrites.isEmpty()) { objectIsRead = true; }
             readTimestamp = proxy.timestamp;
             if (smrObjectClone == null) {
                 log.debug("Cloning SMR object {} due to transactional write.", proxy.sv.getStreamID());
@@ -227,11 +235,22 @@ public class TransactionalContext {
      */
     @SuppressWarnings("unchecked")
     public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
-                                   Object[] SMRArguments, Serializers.SerializerType serializer)
+                                   Object[] SMRArguments, Serializers.SerializerType serializer, boolean writeOnly)
     {
         objectMap
-                .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
-                .bufferedWrites.add(new SMREntry(SMRMethod, SMRArguments, serializer));
+                .compute(proxy, (k,v) ->
+                {
+                    TransactionalObjectData<T> data = v;
+                    if (v == null) {
+                         data = new TransactionalObjectData<>(proxy);
+                    }
+
+                    if (!writeOnly) {
+                        data.objectIsRead = true;
+                    }
+                    data.bufferedWrites.add(new SMREntry(SMRMethod, SMRArguments, serializer));
+                    return data;
+                });
     }
 
     /** Compute and write a TXEntry for this transaction to insert into the log.
@@ -243,8 +262,8 @@ public class TransactionalContext {
         Map<UUID, TXEntry.TXObjectEntry> entryMap = new HashMap<>();
         objectMap.entrySet().stream()
                 .forEach(x -> entryMap.put(x.getKey().sv.getStreamID(),
-                        new TXEntry.TXObjectEntry(x.getKey().timestamp, x.getValue().bufferedWrites)));
-        return new TXEntry(entryMap);
+                        new TXEntry.TXObjectEntry(x.getValue().bufferedWrites, x.getValue().objectIsRead)));
+        return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L);
     }
 
     /** Returns the transaction stack for the calling thread.
