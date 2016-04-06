@@ -35,6 +35,10 @@ public class StreamView implements AutoCloseable {
         return getCurrentContext().logPointer.get();
     }
 
+    public void setLogPointer(long pos) {
+        getCurrentContext().logPointer.set(pos);
+    }
+
     @ToString
     class StreamContext implements Comparable<StreamContext> {
 
@@ -300,15 +304,18 @@ public class StreamView implements AutoCloseable {
 
     public synchronized ILogUnitEntry[] readTo(long pos) {
         long latestToken = pos;
+        boolean max = false;
         if (pos == Long.MAX_VALUE) {
+            max = true;
             latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
             log.trace("Linearization point set to {}", latestToken);
         }
-        ArrayList<ILogUnitEntry> al = new ArrayList<ILogUnitEntry>();
+        ArrayList<ILogUnitEntry> al = new ArrayList<>();
+        log.debug("Stream[{}] pointer[{}], readTo {}", streamID, getCurrentContext().logPointer.get(), pos);
         while (getCurrentContext().logPointer.get() <= latestToken)
         {
             ILogUnitEntry r = read();
-            if (r != null) {
+            if (r != null && (max || r.getAddress() <= pos)) {
                 al.add(r);
             } else {
                 break;

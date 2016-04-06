@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnprocessedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import java.util.UUID;
 

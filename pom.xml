@@ -107,7 +107,7 @@
             <dependency>
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
-                <version>1.16.6</version>
+                <version>1.16.8</version>
                 <scope>provided</scope>
             </dependency>
         <dependency>
@@ -213,6 +213,18 @@
                             </compilerArgs>
                             <fork>true</fork>
                         </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>2.6</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
             <plugin>

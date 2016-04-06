@@ -12,6 +12,8 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.ObjectExistsException;
+import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.Serializers;
@@ -19,6 +21,7 @@ import org.corfudb.util.serializer.Serializers;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Set;
 
 /**
  * Created by mwei on 3/30/16.
@@ -168,7 +171,7 @@ public class CorfuProxyBuilder {
 
     public static <T,R extends ISMRInterface>
     T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime,
-               Serializers.SerializerType serializer, Object... constructorArgs) {
+               Serializers.SerializerType serializer, Set<ObjectOpenOptions> options, Object... constructorArgs) {
         try {
             CorfuObjectProxy<T> proxy;
 
@@ -195,6 +198,10 @@ public class CorfuProxyBuilder {
                         readConstructor = streamStart == -1L;
                     }
                     if (readConstructor) {
+                        if (options.contains(ObjectOpenOptions.CREATE_ONLY))
+                        {
+                            throw new ObjectExistsException(token);
+                        }
                         log.debug("There appears to be an existing constructor for {}, reading it...", sv.getStreamID());
                         // The "default" entry should be the first entry in the stream.
                         // TODO: handle garbage collected streams.

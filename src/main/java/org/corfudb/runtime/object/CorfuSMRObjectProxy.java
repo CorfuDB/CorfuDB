@@ -2,41 +2,30 @@ package org.corfudb.runtime.object;
 
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.description.annotation.AnnotationDescription;
-import net.bytebuddy.description.method.MethodDescription;
-import net.bytebuddy.description.method.ParameterDescription;
-import net.bytebuddy.description.modifier.FieldManifestation;
-import net.bytebuddy.description.modifier.ModifierContributor;
-import net.bytebuddy.description.modifier.Visibility;
-import net.bytebuddy.description.type.TypeDescription;
-import net.bytebuddy.dynamic.DynamicType;
-import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
-import net.bytebuddy.implementation.MethodDelegation;
-import net.bytebuddy.implementation.attribute.AnnotationAppender;
-import net.bytebuddy.implementation.attribute.MethodAttributeAppender;
-import net.bytebuddy.implementation.attribute.TypeAttributeAppender;
 import net.bytebuddy.implementation.bind.annotation.*;
-import net.bytebuddy.jar.asm.MethodVisitor;
-import net.bytebuddy.matcher.ElementMatchers;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
-import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.logprotocol.TXLambdaReferenceEntry;
+import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnprocessedException;
+import org.corfudb.runtime.object.transactions.LambdaTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamView;
+import org.corfudb.util.LockUtils;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.annotation.Annotation;
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Created by mwei on 1/7/16.
@@ -44,14 +33,19 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
-    Object smrObject;
+    @Getter
+    P smrObject;
 
+    @Getter
     Object[] creationArguments;
 
     Map<Long, CompletableFuture<Object>> completableFutureMap;
 
     @Getter
     Map<String, Method> methodHashTable;
+
+    @Getter
+    ReadWriteLock rwLock;
 
     @Getter
     boolean isCorfuObject = false;
@@ -64,6 +58,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             isCorfuObject = true;
         }
         this.methodHashTable = new ConcurrentHashMap<>();
+        this.rwLock = new ReentrantReadWriteLock();
     }
 
     @SuppressWarnings("unchecked")
@@ -96,32 +91,28 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     }
 
 
-    public void constructSMRObject(ICorfuSMRObject obj)
+    public P constructSMRObject(ICorfuSMRObject<P> obj)
     throws Exception{
-        if (obj == null && smrObject == null)
+        if (obj == null && !isCorfuObject)
         {
-            log.trace("SMR object not yet set, generating one.");
             if (creationArguments == null) {
-                smrObject = originalClass.newInstance();
+                return originalClass.newInstance();
             } else {
                 Class[] typeList = Arrays.stream(creationArguments)
                         .map(Object::getClass)
                         .toArray(Class[]::new);
 
-                originalClass
+                return originalClass
                         .getDeclaredConstructor(typeList)
                         .newInstance(creationArguments);
             }
         }
 
-        if (smrObject == null) {
-            // We don't have an SMR object yet, so we'll need to create one.
-            log.trace("SMR object not yet set, generating one.");
-            // Is initialObject implemented? If it is, we use that implementation.
-            try {
-                smrObject = obj.initialObject(creationArguments);
-                log.trace("SMR object generated using initial object.");
-            } catch (UnprocessedException ue) {
+        // Is initialObject implemented? If it is, we use that implementation.
+        try {
+            if (obj == null) { throw new UnprocessedException();}
+            return obj.initialObject(creationArguments);
+        } catch (UnprocessedException ue) {
                 //it is not, so we search the type hierarchy and call a default constructor.
                 Type[] ptA =  originalClass.getGenericInterfaces();
                 ParameterizedType pt = null;
@@ -136,19 +127,18 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
                 log.trace("Determined SMR type to be {}", pt.getActualTypeArguments()[0].getTypeName());
                 if (creationArguments == null) {
-                    smrObject = ((Class) ((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType()
+                    return (P) ((Class) ((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType()
                     ).newInstance();
                 } else {
                     Class[] typeList = Arrays.stream(creationArguments)
                             .map(Object::getClass)
                             .toArray(Class[]::new);
 
-                    smrObject = ((Class)((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType())
+                    return (P) ((Class)((ParameterizedType)pt.getActualTypeArguments()[0]).getRawType())
                             .getDeclaredConstructor(typeList)
                             .newInstance(creationArguments);
                 }
             }
-        }
     }
 
     public Object findTransactionalSMRObject()
@@ -164,10 +154,13 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         }
         return TransactionalContext.getCurrentContext().getObjectReadWrite(this);
     }
+
     @SuppressWarnings("unchecked")
     @RuntimeType
-    public Object interceptGetSMRObject(@This ICorfuSMRObject obj) throws Exception {
-        constructSMRObject(obj);
+    public Object interceptGetSMRObject(@This ICorfuSMRObject<P> obj) throws Exception {
+        if (smrObject == null) {
+            smrObject = constructSMRObject(obj);
+        }
 
         if (TransactionalContext.isInTransaction()
                 && !TransactionalContext.getCurrentContext().isInSyncMode())
@@ -183,27 +176,34 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                                    @AllArguments Object[] allArguments,
                                    @SuperCall Callable superMethod
     ) throws Exception {
-        String method = getSMRMethodName(Mmethod);
-        log.trace("+Mutator {} {}", TransactionalContext.isInTransaction() ? "tx" : "", method);
-        StackTraceElement[] stack = new Exception().getStackTrace();
-        if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
-        {
-            if (isCorfuObject) {
-                return superMethod.call();
+            String method = getSMRMethodName(Mmethod);
+            log.debug("Object[{}]: +Mutator {} {}", getStreamID(),
+                    TransactionalContext.isInTransaction() ? "tx" : "", method);
+            StackTraceElement[] stack = new Exception().getStackTrace();
+            if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+                if (isCorfuObject) {
+                    return superMethod.call();
+                } else {
+                    return Mmethod.invoke(interceptGetSMRObject(null), allArguments);
+                }
+            } else if (!TransactionalContext.isInTransaction()) {
+                writeUpdate(method, allArguments);
+            } else {
+                // in a transaction, we add the update to the TX buffer and apply the update
+                // immediately.
+                if (Mmethod.isAnnotationPresent(Mutator.class)) {
+                    // if the mutation is a reset, the SMR clone can
+                    // be a new instance
+                    Mutator m = Mmethod.getAnnotation(Mutator.class);
+                    if (m.reset()) {
+                        TransactionalContext.getCurrentContext()
+                                .resetObject(this);
+                    }
+                }
+                TransactionalContext.getCurrentContext().bufferObjectUpdate(this,
+                        method, allArguments, serializer, true);
+                doUnderlyingCall(superMethod, Mmethod, allArguments);
             }
-            else {
-                return Mmethod.invoke(interceptGetSMRObject(null), allArguments);
-            }
-        }
-        else if (!TransactionalContext.isInTransaction()){
-            writeUpdate(method, allArguments);
-        }
-        else {
-            // in a transaction, we add the update to the TX buffer and apply the update
-            // immediately.
-            TransactionalContext.getCurrentContext().bufferObjectUpdate(this,
-                    method, allArguments, serializer, true);
-        }
         return null;
     }
 
@@ -214,32 +214,31 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             @SuperCall Callable superMethod,
             @AllArguments Object[] allArguments,
             @This P obj) throws Exception {
-        String method = getSMRMethodName(Mmethod);
-        log.trace("+MutatorAccessor {} {}", TransactionalContext.isInTransaction() ? "tx" : "", method);
+            String method = getSMRMethodName(Mmethod);
+            log.debug("Object[{}] +MutatorAccessor {} {}", getStreamID(),
+                    TransactionalContext.isInTransaction() ? "tx" : "", method);
 
-        StackTraceElement[] stack = new Exception().getStackTrace();
-        if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy"))
-        {
-            return doUnderlyingCall(superMethod, Mmethod, allArguments);
-        }
-        else if (!TransactionalContext.isInTransaction()){
-            // write the update to the stream and map a future for the completion.
-            long updatePos = writeUpdateAndMapFuture(method, allArguments);
-            // read up to this update.
-            sync(obj, updatePos);
-            // Now we can safely wait on the accessor.
-            Object ret = completableFutureMap.get(updatePos).join();
-            completableFutureMap.remove(updatePos);
-            return ret;
-        } else {
-            // If this is the first access in this transaction, we should sync it first.
-            doTransactionalSync(obj);
-            // in a transaction, we add the update to the TX buffer and apply the update
-            // immediately.
-            TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
-                    method, allArguments, serializer, false);
-            return doUnderlyingCall(superMethod, Mmethod, allArguments);
-        }
+            StackTraceElement[] stack = new Exception().getStackTrace();
+            if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+                return doUnderlyingCall(superMethod, Mmethod, allArguments);
+            } else if (!TransactionalContext.isInTransaction()) {
+                // write the update to the stream and map a future for the completion.
+                long updatePos = writeUpdateAndMapFuture(method, allArguments);
+                // read up to this update.
+                sync(obj, updatePos);
+                // Now we can safely wait on the accessor.
+                Object ret = completableFutureMap.get(updatePos).join();
+                completableFutureMap.remove(updatePos);
+                return ret;
+            } else {
+                // If this is the first access in this transaction, we should sync it first.
+                doTransactionalSync(obj);
+                // in a transaction, we add the update to the TX buffer and apply the update
+                // immediately.
+                TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
+                        method, allArguments, serializer, false);
+                return doUnderlyingCall(superMethod, Mmethod, allArguments);
+            }
     }
 
 
@@ -248,24 +247,22 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                                     @Origin Method method,
                                     @AllArguments Object[] arguments,
                                     @This P obj) throws Exception {
-        log.trace("+Accessor {} {}", TransactionalContext.isInTransaction() ? "tx" : "", method);
-        // Linearize this access with respect to other accesses in the system.
-        if (!TransactionalContext.isInTransaction()) {
-            sync(obj, Long.MAX_VALUE);
-            return doUnderlyingCall(superMethod, method, arguments);
-        }
-        else {
-            doTransactionalSync(obj);
-            Object ret = doUnderlyingCall(superMethod, method, arguments);
-            // If the object was written to (due to transactional clone), the read set is not resolvable.
-            if (!TransactionalContext.getCurrentContext().isObjectCloned(this))
-            {
-                // Store the read set with the context.
-                TransactionalContext.getCurrentContext().addReadSet(this,
-                        getSMRMethodName(method), ret);
+            log.trace("Object[{}] +Accessor {} {}", getStreamID(), TransactionalContext.isInTransaction() ? "tx" : "", method);
+            // Linearize this access with respect to other accesses in the system.
+            if (!TransactionalContext.isInTransaction()) {
+                sync(obj, Long.MAX_VALUE);
+                return doUnderlyingCall(superMethod, method, arguments);
+            } else {
+                doTransactionalSync(obj);
+                Object ret = doUnderlyingCall(superMethod, method, arguments);
+                // If the object was written to (due to transactional clone), the read set is not resolvable.
+                if (!TransactionalContext.getCurrentContext().isObjectCloned(this)) {
+                    // Store the read set with the context.
+                    TransactionalContext.getCurrentContext().addReadSet(this,
+                            getSMRMethodName(method), ret);
+                }
+                return ret;
             }
-            return ret;
-        }
     }
 
     private synchronized Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
@@ -278,10 +275,12 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     }
 
     public synchronized void doTransactionalSync(P obj) {
-        TransactionalContext.getCurrentContext().setInSyncMode(true);
-        // Otherwise we should make sure we're sync'd up to the TX
-        sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
-        TransactionalContext.getCurrentContext().setInSyncMode(false);
+        if (TransactionalContext.isInOptimisticTransaction()) {
+            TransactionalContext.getCurrentContext().setInSyncMode(true);
+            // Otherwise we should make sure we're sync'd up to the TX
+            sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
+            TransactionalContext.getCurrentContext().setInSyncMode(false);
+        }
     }
 
     public String getSMRMethodName(Method method) {
@@ -381,24 +380,46 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             if (txEntry.isAborted()){
                 return false;
             }
-
-
                 txEntry.getTxMap().get(sv.getStreamID())
                         .getUpdates().stream()
                         .forEach(x -> applySMRUpdate(address, x, obj));
 
+            return true;
+        } else if (entry instanceof TXLambdaReferenceEntry) {
+                log.debug("Apply TXLambdaRef {} at {}", ((TXLambdaReferenceEntry) entry).getMethod().toString(), address);
+            try (TXLambdaReferenceEntry.LambdaLock ll = TXLambdaReferenceEntry.getLockForTXAddress(address)) {
+                // unlock the sync lock :::
+                // TODO: fixme this is ugly
+                rwLock.writeLock().unlock();
+                try {
+                    ll.getLock().lock();
+                    // check if the timestamp has moved past this lambda ref (due to another thread applying the same TX)
+                    log.info("Object[{}]: execute TXLambdaRef@{}", getStreamID(), address);
+                    if (timestamp < address) {
+                        TransactionalContext.newContext(new LambdaTransactionalContext(runtime, address));
+                        ((TXLambdaReferenceEntry) entry).invoke();
+                        TransactionalContext.removeContext();
+                    }
+                } finally {
+                    rwLock.writeLock().lock();
+                }
+            }
             return true;
         }
         return false;
     }
 
     @Override
-    synchronized public void sync(P obj, long maxPos) {
-        log.trace("Object[{}] sync to pos {}", sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos);
-        Arrays.stream(sv.readTo(maxPos))
-                .filter(m -> m.getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
-                .filter(m -> m.getPayload() instanceof SMREntry ||
-                        m.getPayload() instanceof TXEntry)
-                .forEach(m -> applyUpdate(m.getAddress(), (LogEntry) m.getPayload(), obj));
+    public void sync(P obj, long maxPos) {
+        try (LockUtils.AutoCloseRWLock writeLock = new LockUtils.AutoCloseRWLock(rwLock).writeLock()) {
+            ILogUnitEntry[] entries = sv.readTo(maxPos);
+            log.trace("Object[{}] sync to pos {}, read {} entries",
+                    sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos, entries.length);
+            Arrays.stream(entries)
+                    .filter(m -> m.getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
+                    .filter(m -> m.getPayload() instanceof SMREntry ||
+                            m.getPayload() instanceof TXEntry || m.getPayload() instanceof TXLambdaReferenceEntry)
+                    .forEach(m -> applyUpdate(m.getAddress(), (LogEntry) m.getPayload(), obj));
+        }
     }
 }

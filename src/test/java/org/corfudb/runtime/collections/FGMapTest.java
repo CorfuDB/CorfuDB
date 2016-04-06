@@ -41,6 +41,17 @@ public class FGMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void createOnlyThrowsException()
+            throws Exception {
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().openOptions("map", FGMap.class,
+                EnumSet.of(ObjectOpenOptions.CREATE_ONLY));
+        Map<String,String> testMap2 = getDefaultRuntime().getObjectsView().openOptions("map", FGMap.class,
+                EnumSet.of(ObjectOpenOptions.CREATE_ONLY));
+    }
+
+
+    @Test
+    @SuppressWarnings("unchecked")
     public void sizeIsCorrect()
             throws Exception {
         Map<String,String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
@@ -99,6 +110,7 @@ public class FGMapTest extends AbstractViewTest {
         assertThat(testMap)
                 .hasSize(100);
 
+        testMap.put("a" , "b");
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
@@ -135,6 +147,7 @@ public class FGMapTest extends AbstractViewTest {
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
+
         for (int i = 0; i < 100; i++)
         {
             testMap.put(Integer.toString(i), Integer.toString(i));

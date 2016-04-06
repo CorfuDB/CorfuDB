@@ -3,23 +3,24 @@ package org.corfudb.runtime.object;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import net.bytebuddy.implementation.bind.annotation.AllArguments;
-import net.bytebuddy.implementation.bind.annotation.Origin;
-import net.bytebuddy.implementation.bind.annotation.RuntimeType;
-import net.bytebuddy.implementation.bind.annotation.SuperCall;
+import net.bytebuddy.implementation.bind.annotation.*;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
+import org.corfudb.protocols.logprotocol.TXLambdaReferenceEntry;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -46,6 +47,7 @@ public class CorfuObjectProxy<P> {
 
     /** The current timestamp of this proxy. */
     @Getter
+    @Setter
     long timestamp;
 
     /** The generated proxy class that this proxy wraps around. */
@@ -63,21 +65,78 @@ public class CorfuObjectProxy<P> {
     }
 
     @RuntimeType
+    @SuppressWarnings("unchecked")
     public Object handleTransactionalMethod(@SuperCall Callable originalCall,
                                             @Origin Method method,
-                                            @AllArguments Object[] arguments)
+                                            @AllArguments Object[] arguments,
+                                            @This ICorfuObject obj)
             throws Exception
     {
-        Object res;
-        try {
-            runtime.getObjectsView().TXBegin();
-            res = originalCall.call();
-            runtime.getObjectsView().TXEnd();
-        } catch (TransactionAbortedException tae) {
-            log.debug("Transactional method aborted due to {}, retrying.", tae);
-            res = handleTransactionalMethod(originalCall, method, arguments);
+        if (TransactionalContext.isInOptimisticTransaction()) {
+            // TODO: in an optimistic TX, insert a Lambda TXn entry instead of converting everything
+            // into a writeset
+            log.debug("Optimistic TXn, flatten TX into write set.");
+            return originalCall.call();
         }
-        return res;
+        // TODO: can we get rid of this origin based call?
+        boolean invoked = Arrays.stream(new Exception().getStackTrace())
+                .map(StackTraceElement::getClassName)
+                .anyMatch(e -> e.endsWith("TXLambdaReferenceEntry"));
+
+        // If we were called from TXLambdaReferenceEntry::invoke...
+        if (invoked) {
+            log.debug("Redirect to original TX call");
+            return originalCall.call();
+        }
+        Object res;
+        TransactionalMethod tm = method.getAnnotation(TransactionalMethod.class);
+        if (false) {
+            // 1) Find the annotated streams function
+            // case A: takes no arguments.
+            Method m = originalClass.getDeclaredMethod(tm.modifiedStreamsFunction());
+            m.setAccessible(true);
+            Set<UUID> affectedStreams = (Set<UUID>) m.invoke(obj);
+            // write the transaction to the log
+            log.trace("TX Method: {}, Affected streams: {}", method.getName(), affectedStreams);
+            TXLambdaReferenceEntry tlre = new TXLambdaReferenceEntry(method, obj,
+                    arguments, Serializers.SerializerType.JSON);
+            // if the TX returns something, we need to join on a completable future.
+            if (!method.getReturnType().getName().equals("void")) {
+                CompletableFuture cf = new CompletableFuture();
+                long txAddr = runtime.getStreamsView().acquireAndWrite(affectedStreams, tlre, t -> {
+                    runtime.getObjectsView().getTxFuturesMap().put(t.getToken(), cf);
+                    return true;
+                }, t -> {
+                    runtime.getObjectsView().getTxFuturesMap().remove(t.getToken());
+                    return true;
+                });
+                log.debug("Wrote TX to log@{}", txAddr);
+            // pick the first affected object and sync.
+                ICorfuObject cobj = (ICorfuObject) runtime.getObjectsView().getObjectCache().entrySet().stream()
+                        .filter(x -> affectedStreams.contains(x.getKey().getStreamID()))
+                        .findFirst().get().getValue();
+                cobj.getProxy().sync(cobj, txAddr);
+                return cf.join();
+            }
+            else {
+                // TX doesn't return anything, so we can blindly write to the log.
+                long txAddr = runtime.getStreamsView().write(affectedStreams, tlre);
+                log.debug("Wrote TX to log@{}", txAddr);
+                return null;
+            }
+
+        }
+        else {
+            try {
+                runtime.getObjectsView().TXBegin();
+                res = originalCall.call();
+                runtime.getObjectsView().TXEnd();
+            } catch (TransactionAbortedException tae) {
+                log.debug("Transactional method aborted due to {}, retrying.", tae);
+                res = handleTransactionalMethod(originalCall, method, arguments, obj);
+            }
+            return res;
+        }
     }
 
     synchronized public void sync(P obj, long maxPos) {

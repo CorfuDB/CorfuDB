@@ -1,22 +1,23 @@
 package org.corfudb.runtime.view;
 
-import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
-import jdk.nashorn.internal.codegen.CompilerConstants;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.OptimisticTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.LambdaUtils;
-import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 
-import java.lang.reflect.Field;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -29,7 +30,7 @@ import java.util.function.Supplier;
 public class ObjectsView extends AbstractView {
 
     @Data
-    class ObjectID<T,R> {
+    public class ObjectID<T,R> {
         final UUID streamID;
         final Class<T> type;
         final Class<R> overlay;
@@ -43,6 +44,10 @@ public class ObjectsView extends AbstractView {
         }
     }
 
+    @Getter
+    Map<Long, CompletableFuture> txFuturesMap = new ConcurrentHashMap<>();
+
+    @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
     LoadingCache<StackTraceElement, CallSiteData> callSiteDataCache = Caffeine.newBuilder()
@@ -82,7 +87,6 @@ public class ObjectsView extends AbstractView {
     public <T> T open(@NonNull String streamName, @NonNull Class<T> type, Object... args) {
         return open(CorfuRuntime.getStreamID(streamName), type, args);
     }
-
     /** Gets a view of an object in the Corfu instance using a specific serializer.
      *
      * @param streamName    The stream that the object should be read from.
@@ -96,7 +100,7 @@ public class ObjectsView extends AbstractView {
      * @return              Returns a view of the object in a Corfu instance.
      */
     public <T> T open(@NonNull String streamName, @NonNull Class<T> type, Serializers.SerializerType serializer) {
-        return open(CorfuRuntime.getStreamID(streamName), type, null, Collections.emptySet(), serializer);
+        return open_internal(CorfuRuntime.getStreamID(streamName), type, null, Collections.emptySet(), serializer);
     }
 
     /** Gets a view of an object in the Corfu instance using a specific serializer.
@@ -112,7 +116,7 @@ public class ObjectsView extends AbstractView {
      * @return              Returns a view of the object in a Corfu instance.
      */
     public <T> T open(@NonNull UUID streamID, @NonNull Class<T> type, Serializers.SerializerType serializer) {
-        return open(streamID, type, null, Collections.emptySet(), serializer);
+        return open_internal(streamID, type, null, Collections.emptySet(), serializer);
     }
 
     /** Gets a view of an object in the Corfu instance.
@@ -164,7 +168,7 @@ public class ObjectsView extends AbstractView {
     @SuppressWarnings("unchecked")
     public <T, R extends ISMRInterface> T open(@NonNull UUID streamID, @NonNull Class<T> type,
                                                Set<ObjectOpenOptions> options) {
-        return open(streamID, type, null, options, Serializers.SerializerType.JSON);
+        return open_internal(streamID, type, null, options, Serializers.SerializerType.JSON);
     }
 
     /** Gets a view of an object in the Corfu instance.
@@ -182,7 +186,7 @@ public class ObjectsView extends AbstractView {
     @SuppressWarnings("unchecked")
     public <T, R extends ISMRInterface> T open(@NonNull String streamID, @NonNull Class<T> type,
                                                Set<ObjectOpenOptions> options) {
-        return open(CorfuRuntime.getStreamID(streamID), type, null, options, Serializers.SerializerType.JSON);
+        return open_internal(CorfuRuntime.getStreamID(streamID), type, null, options, Serializers.SerializerType.JSON);
     }
 
 
@@ -226,13 +230,13 @@ public class ObjectsView extends AbstractView {
         if (options.contains(ObjectOpenOptions.NO_CACHE))
         {
             StreamView sv = runtime.getStreamsView().get(streamID);
-            return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer, args);
+            return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer, options, args);
         }
 
         ObjectID<T,R> oid = new ObjectID(streamID, type, overlay);
         return (T) objectCache.computeIfAbsent(oid, x -> {
             StreamView sv = runtime.getStreamsView().get(streamID);
-            return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer, args);
+            return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer, options, args);
         });
     }
 
@@ -250,7 +254,8 @@ public class ObjectsView extends AbstractView {
             return (T) objectCache.computeIfAbsent(oid, x -> {
                 StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
                         destination, proxy.getTimestamp());
-                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime, proxy.getSerializer());
+                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
+                        proxy.getSerializer(), Collections.emptySet());
             });
     }
 
@@ -308,7 +313,7 @@ public class ObjectsView extends AbstractView {
         }
 
 
-        TransactionalContext context = TransactionalContext.newContext(runtime);
+        AbstractTransactionalContext context = TransactionalContext.newContext(runtime);
         context.setStrategy(strategy);
         context.setStartTime(System.currentTimeMillis());
 
@@ -321,7 +326,7 @@ public class ObjectsView extends AbstractView {
      * context will be discarded.
      */
     public void TXAbort() {
-        TransactionalContext context = TransactionalContext.removeContext();
+        AbstractTransactionalContext context = TransactionalContext.removeContext();
         if (context == null)
         {
             log.warn("Attempted to abort a transaction, but no transaction active!");
@@ -346,7 +351,7 @@ public class ObjectsView extends AbstractView {
     public void TXEnd()
         throws TransactionAbortedException
     {
-        TransactionalContext context = TransactionalContext.getCurrentContext();
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         if (context == null)
         {
             log.warn("Attempted to end a transaction, but no transaction active!");
@@ -369,7 +374,7 @@ public class ObjectsView extends AbstractView {
                         TransactionalContext.getCurrentContext().getTransactionID());
                 TransactionalContext.getCurrentContext().addTransaction(context);
             } else {
-                TXEntry entry = context.getEntry();
+                TXEntry entry = ((OptimisticTransactionalContext)context).getEntry();
                 long address = runtime.getStreamsView().write(entry.getAffectedStreams(), entry);
                 TransactionalContext.removeContext();
                 log.trace("TX entry {} written at address {}", entry, address);

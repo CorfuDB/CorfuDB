@@ -5,8 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Created by mwei on 3/29/16.
@@ -48,7 +51,7 @@ public class ReflectionUtils {
     }
 
     public static Class[] getArgumentTypesFromString(String s) {
-        String argList = s.substring(s.indexOf("(") + 1, s.length() - 1);
+        String argList = s.contains("(") ? s.substring(s.indexOf("(") + 1, s.length() - 1) : s;
         return Arrays.stream(argList.split(","))
                 .filter(x -> !x.equals(""))
                 .map(x -> {
@@ -95,6 +98,30 @@ public class ReflectionUtils {
             }
 
             throw new RuntimeException("Couldn't find a matching ctor");
+        }
+    }
+
+    private static Pattern methodExtractor = Pattern.compile("([^.\\s]*)\\((.*)\\)$");
+    public static Method getMethodFromToString(String methodString) {
+        Class<?> cls = getClassFromMethodToString(methodString);
+        Matcher m = methodExtractor.matcher(methodString);
+        m.find();
+        try {
+            return cls.getDeclaredMethod(m.group(1), getArgumentTypesFromString(m.group(2)));
+        } catch (NoSuchMethodException nsme) {
+            throw new RuntimeException(nsme);
+        }
+    }
+
+    private static Pattern classExtractor = Pattern.compile("(\\S*)\\.(.*)\\(.*$");
+    public static Class getClassFromMethodToString(String methodString) {
+        Matcher m = classExtractor.matcher(methodString);
+        m.find();
+        String className = m.group(1);
+        try {
+             return Class.forName(className);
+        } catch (ClassNotFoundException cnfe) {
+            throw new RuntimeException(cnfe);
         }
     }
 }
