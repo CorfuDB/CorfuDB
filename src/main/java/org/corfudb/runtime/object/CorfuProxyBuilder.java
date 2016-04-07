@@ -12,6 +12,8 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.ObjectExistsException;
+import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.Serializers;
@@ -19,6 +21,7 @@ import org.corfudb.util.serializer.Serializers;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Set;
 
 /**
  * Created by mwei on 3/30/16.
@@ -168,7 +171,7 @@ public class CorfuProxyBuilder {
 
     public static <T,R extends ISMRInterface>
     T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime,
-               Serializers.SerializerType serializer, Object... constructorArgs) {
+               Serializers.SerializerType serializer, Set<ObjectOpenOptions> options, Object... constructorArgs) {
         try {
             CorfuObjectProxy<T> proxy;
 
@@ -176,6 +179,12 @@ public class CorfuProxyBuilder {
                 CorfuObject annotation = type.getAnnotation(CorfuObject.class);
                 if (annotation.objectType() == ObjectType.SMR) {
                     proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
+                    if (annotation.stateSource().equals(StateSource.SELF)) {
+                        ((CorfuSMRObjectProxy) proxy).setSelfState(true);
+                    }
+                    else {
+                        ((CorfuSMRObjectProxy) proxy).setStateClass(annotation.stateType());
+                    }
                 }
                 else
                 {
@@ -193,8 +202,15 @@ public class CorfuProxyBuilder {
                                 t -> t.getBackpointerMap().get(sv.getStreamID()) == -1L,
                                 t -> false);
                         readConstructor = streamStart == -1L;
+                        if (annotation.objectType() == ObjectType.SMR) {
+                            ((CorfuSMRObjectProxy)proxy).setCreationArguments(constructorArgs);
+                        }
                     }
                     if (readConstructor) {
+                        if (options.contains(ObjectOpenOptions.CREATE_ONLY))
+                        {
+                            throw new ObjectExistsException(token);
+                        }
                         log.debug("There appears to be an existing constructor for {}, reading it...", sv.getStreamID());
                         // The "default" entry should be the first entry in the stream.
                         // TODO: handle garbage collected streams.
@@ -206,6 +222,9 @@ public class CorfuProxyBuilder {
                                 log.trace("Setting contructor arguments to {}", ((SMREntry) entry.getPayload())
                                         .getSMRArguments());
                                 constructorArgs = ((SMREntry) entry.getPayload()).getSMRArguments();
+                                if (annotation.objectType() == ObjectType.SMR) {
+                                    ((CorfuSMRObjectProxy)proxy).setCreationArguments(constructorArgs);
+                                }
                                 break;
                             }
                             entry = sv.read();
@@ -225,6 +244,13 @@ public class CorfuProxyBuilder {
             }
             if (proxy instanceof CorfuSMRObjectProxy) {
                 ((CorfuSMRObjectProxy)proxy).calculateMethodHashTable(ret.getClass());
+            }
+            if (type.isAnnotationPresent(CorfuObject.class)) {
+                CorfuObject annotation = type.getAnnotation(CorfuObject.class);
+                if (annotation.objectType().equals(ObjectType.SMR) &&
+                        annotation.stateSource().equals(StateSource.SELF)) {
+                    ((CorfuSMRObjectProxy)proxy).setUnderlyingObject(ret);
+                }
             }
             return ret;
         } catch (InstantiationException | IllegalAccessException ie) {

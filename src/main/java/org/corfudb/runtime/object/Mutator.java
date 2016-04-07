@@ -10,4 +10,5 @@ import java.lang.annotation.*;
 @Inherited
 public @interface Mutator {
     String name() default "";
+    boolean reset() default false;
 }

@@ -9,6 +9,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Created by mwei on 12/11/15.
@@ -36,7 +37,7 @@ public class StreamsView {
     /** Make a copy-on-write copy of a stream.
      *
      * @param source    The UUID of the stream to make a copy of.
-     * @param dest      The UUID of the destination stream. It must not exist.
+     * @param destination      The UUID of the destination stream. It must not exist.
      * @return          A view
      */
     public StreamView copy(UUID source, UUID destination, long timestamp) {
@@ -77,20 +78,52 @@ public class StreamsView {
      */
     public long write(Set<UUID> streamIDs, Object object)
     {
+        return acquireAndWrite(streamIDs, object, t -> true, t -> true);
+    }
+
+    /** Write an object to multiple streams, retuning the physical address it
+     * was written at.
+     *
+     * Note: While the completion of this operation guarantees that the write
+     * has been persisted, it DOES NOT guarantee that the object has been
+     * written to the stream. For example, another client may have deleted
+     * the stream.
+     *
+     * @param object    The object to write to the stream.
+     * @return          The address this
+     */
+    public long acquireAndWrite(Set<UUID> streamIDs, Object object,
+                                Function<SequencerClient.TokenResponse, Boolean> acquisitionCallback,
+                                Function<SequencerClient.TokenResponse, Boolean> deacquisitionCallback)
+    {
         while (true) {
-            SequencerClient.TokenResponse tokenResponse =
+            SequencerClient.TokenResponse token =
                     runtime.getSequencerView().nextToken(streamIDs, 1);
-            long token = tokenResponse.getToken();
-            log.trace("Write: acquired token = {}", token);
+            log.trace("Write: acquired token = {}", token.getToken());
+            if (acquisitionCallback != null) {
+                if (!acquisitionCallback.apply(token)) {
+                    log.trace("Acquisition rejected token, hole filling acquired address.");
+                    try {
+                        runtime.getAddressSpaceView().fillHole(token.getToken());
+                    } catch (OverwriteException oe) {
+                        log.trace("Hole fill completed by remote client.");
+                    }
+                    return -1L;
+                }
+            }
             try {
-                runtime.getAddressSpaceView().write(token, streamIDs,
-                        object, tokenResponse.getBackpointerMap());
-                return token;
+                runtime.getAddressSpaceView().write(token.getToken(), streamIDs,
+                        object, token.getBackpointerMap());
+                return token.getToken();
             } catch (OverwriteException oe)
             {
+                if (deacquisitionCallback != null && !deacquisitionCallback.apply(token)) {
+                    log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                    return -1L;}
                 log.debug("Overwrite occurred at {}, retrying.", token);
             }
         }
     }
+
 
 }

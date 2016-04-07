@@ -11,5 +11,6 @@ import java.lang.annotation.*;
 public @interface CorfuObject {
     ConstructorType constructorType() default ConstructorType.RUNTIME;
     ObjectType objectType() default ObjectType.STATELESS;
-    Class underlyingType() default StaticMappingObject.class;
+    StateSource stateSource() default StateSource.SELF;
+    Class stateType() default StaticMappingObject.class;
 }

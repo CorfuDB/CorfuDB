@@ -13,4 +13,5 @@ import java.util.function.Function;
 @Inherited
 public @interface TransactionalMethod {
     boolean readOnly() default false;
+    String modifiedStreamsFunction() default "";
 }

@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.runtime.exceptions.ObjectExistsException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 3/29/16.
@@ -38,6 +40,26 @@ public class FGMapTest extends AbstractViewTest {
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
     }
+
+    /*
+    @Test
+    @SuppressWarnings("unchecked")
+    public void createOnlyThrowsException()
+            throws Exception {
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().build()
+                                                        .setType(FGMap.class)
+                                                        .setStreamName("map")
+                                                        .addOption(ObjectOpenOptions.CREATE_ONLY)
+                                                        .open();
+        assertThatThrownBy(() -> getDefaultRuntime().getObjectsView().build()
+                                                        .setType(FGMap.class)
+                                                        .setStreamName("map")
+                                                        .addOption(ObjectOpenOptions.CREATE_ONLY)
+                                                        .open())
+                .isInstanceOf(ObjectExistsException.class);
+
+    }
+    */
 
     @Test
     @SuppressWarnings("unchecked")
@@ -99,6 +121,7 @@ public class FGMapTest extends AbstractViewTest {
         assertThat(testMap)
                 .hasSize(100);
 
+        testMap.put("a" , "b");
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
@@ -135,6 +158,7 @@ public class FGMapTest extends AbstractViewTest {
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
+
         for (int i = 0; i < 100; i++)
         {
             testMap.put(Integer.toString(i), Integer.toString(i));

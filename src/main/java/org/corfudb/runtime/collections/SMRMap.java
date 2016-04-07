@@ -217,7 +217,7 @@ public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
      *                                       is not supported by this map
      */
     @Override
-    @Mutator(name="clear")
+    @Mutator(name="clear", reset=true)
     public void clear() {
         getSMRObject().clear();
     }

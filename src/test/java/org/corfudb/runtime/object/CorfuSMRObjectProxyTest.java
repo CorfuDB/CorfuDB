@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -149,9 +150,11 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
 
         //begin tests
         CorfuRuntime r = getRuntime().connect();
-        TestClassWithPrimitives test = r.getObjectsView().open(CorfuRuntime.getStreamID("test")
-                , TestClassWithPrimitives.class, null,
-                Collections.emptySet(), Serializers.SerializerType.PRIMITIVE);
+        TestClassWithPrimitives test = r.getObjectsView().build()
+                                                            .setType(TestClassWithPrimitives.class)
+                                                            .setStreamName("test")
+                                                            .setSerializer(Serializers.SerializerType.PRIMITIVE)
+                                                            .open();
         test.setPrimitive("hello world".getBytes());
         assertThat(test.getPrimitive())
                 .isEqualTo("hello world".getBytes());

@@ -6,6 +6,7 @@ import sun.misc.CRC16;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.zip.CRC32;
 
 /**
@@ -27,12 +28,20 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
         this.numBuckets = 10;
     }
 
+    UUID getStreamID(int partition)
+    {
+            return new UUID(getStreamID().getMostSignificantBits(),
+                    getStreamID().getLeastSignificantBits() + (partition+1));
+    }
+
     @SuppressWarnings("unchecked")
     Map<K,V> getPartitionMap(int partition)
     {
-        return  getRuntime().getObjectsView().open(
-                new UUID(getStreamID().getMostSignificantBits(),
-                getStreamID().getLeastSignificantBits() + (partition+1)), SMRMap.class);
+        return getRuntime().getObjectsView()
+                .build()
+                .setType(SMRMap.class)
+                .setStreamID(getStreamID(partition))
+                .open();
     }
 
     /** Get a new partition.
@@ -43,7 +52,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      * @param key
      * @return
      */
-    Map<K,V> getPartition(Object key)
+    int getPartitionNumber(Object key)
     {
         int baseMSB = key.hashCode() >> 16;
         int baseLSB = key.hashCode() & 0xFFFF;
@@ -57,16 +66,23 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
         cDbl.update(hashCode1 ^ baseLSB);
         int hashCode2 = (int) cDbl.getValue();
         int hashCode = ((hashCode2 ^ baseMSB) << 16) | (hashCode1 ^ baseLSB);
-        return getPartitionMap(Math.abs(hashCode % numBuckets));
+        return Math.abs(hashCode % numBuckets);
+    }
+
+    Map<K,V> getPartition(Object key) {
+        return getPartitionMap(getPartitionNumber(key));
     }
 
     Set<Map<K,V>> getAllPartitionMaps() {
-        Set<Map<K,V>> mapSet = new HashSet<>();
-        for (int i = 0; i < numBuckets; i++)
-        {
-            mapSet.add(getPartitionMap(i));
-        }
-        return mapSet;
+        return IntStream.range(0, numBuckets)
+                .mapToObj(this::getPartitionMap)
+                .collect(Collectors.toSet());
+    }
+
+    Set<UUID> getAllStreamIDs(){
+        return IntStream.range(0, numBuckets)
+                .mapToObj(this::getStreamID)
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -258,10 +274,23 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      *                                       the specified map prevents it from being stored in this map
      */
     @Override
-    @TransactionalMethod
+    @TransactionalMethod(modifiedStreamsFunction="putAllGetStreams")
     public void putAll(Map<? extends K, ? extends V> m) {
         m.entrySet().stream()
                 .forEach(e -> getPartition(e.getKey()).put(e.getKey(), e.getValue()));
+    }
+
+    /** Get the set of streams which will be touched by this
+     * put all operation
+     * @param m The map used for the putAll operation
+     * @return  A set of stream IDs
+     */
+    Set<UUID> putAllGetStreams(Map<? extends K, ? extends V> m) {
+            return m.keySet().stream()
+                    .map(this::getPartitionNumber)
+                    .distinct()
+                    .map(this::getStreamID)
+                    .collect(Collectors.toSet());
     }
 
     /**
@@ -272,7 +301,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      *                                       is not supported by this map
      */
     @Override
-    @TransactionalMethod
+    @TransactionalMethod(modifiedStreamsFunction="getAllStreamIDs")
     public void clear() {
         getAllPartitionMaps().stream()
                 .forEach(Map::clear);
