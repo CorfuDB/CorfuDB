@@ -28,12 +28,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingle()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
