@@ -10,6 +10,8 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 3/29/16.
@@ -76,7 +78,7 @@ public class ReflectionUtils {
 
     public static <T> T newInstanceFromUnknownArgumentTypes(Class<T> cls, Object[] args) {
         try {
-            return cls.getConstructor(getArgumentTypesFromArgumentList(args)).newInstance(args);
+            return cls.getDeclaredConstructor(getArgumentTypesFromArgumentList(args)).newInstance(args);
         }
         catch (InstantiationException | InvocationTargetException | IllegalAccessException ie) {
             throw new RuntimeException(ie);
@@ -85,7 +87,7 @@ public class ReflectionUtils {
             // Now we need to find a matching primitive type.
             // We can maybe cheat by running through all the constructors until we get what we want
             // due to autoboxing
-            Constructor[] ctors = Arrays.stream(cls.getConstructors())
+            Constructor[] ctors = Arrays.stream(cls.getDeclaredConstructors())
                                             .filter(c -> c.getParameterTypes().length == args.length)
                                             .toArray(Constructor[]::new);
             for (Constructor<?> ctor : ctors)
@@ -97,7 +99,17 @@ public class ReflectionUtils {
                 }
             }
 
-            throw new RuntimeException("Couldn't find a matching ctor");
+            String argTypes = Arrays.stream(args)
+                                .map(Object::getClass)
+                                .map(Object::toString)
+                                .collect(Collectors.joining(", "));
+
+            String availableCtors = Arrays.stream(ctors)
+                                        .map(Constructor::toString)
+                                        .collect(Collectors.joining(", "));
+
+            throw new RuntimeException("Couldn't find a matching ctor for " +
+                    argTypes + "; available ctors are " + availableCtors);
         }
     }
 

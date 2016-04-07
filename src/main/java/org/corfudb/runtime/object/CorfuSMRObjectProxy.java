@@ -33,11 +33,21 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 @Slf4j
 public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
-    @Getter
     P smrObject;
 
+    public P getSmrObject() {
+        if (selfState) {
+            return (P) underlyingObject;
+        }
+        return smrObject;
+    }
+
+    @Setter
+    Object underlyingObject;
+
     @Getter
-    Object[] creationArguments;
+    @Setter
+    Object[] creationArguments = new Object[0];
 
     Map<Long, CompletableFuture<Object>> completableFutureMap;
 
@@ -49,6 +59,12 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
     @Getter
     boolean isCorfuObject = false;
+
+    @Setter
+    Class stateClass;
+
+    @Setter
+    boolean selfState = false;
 
     public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv,
                                Class<P> originalClass, Serializers.SerializerType serializer) {
@@ -108,6 +124,11 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             }
         }
 
+        if (stateClass != null)
+        {
+            return (P) ReflectionUtils.newInstanceFromUnknownArgumentTypes(stateClass, creationArguments);
+        }
+
         // Is initialObject implemented? If it is, we use that implementation.
         try {
             if (obj == null) { throw new UnprocessedException();}
@@ -158,7 +179,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     @SuppressWarnings("unchecked")
     @RuntimeType
     public Object interceptGetSMRObject(@This ICorfuSMRObject<P> obj) throws Exception {
-        if (smrObject == null) {
+        if (smrObject == null && !selfState) {
             smrObject = constructSMRObject(obj);
         }
 
@@ -167,6 +188,11 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         {
             return findTransactionalSMRObject();
         }
+
+        if (selfState) {
+            return underlyingObject;
+        }
+
         return smrObject;
     }
 

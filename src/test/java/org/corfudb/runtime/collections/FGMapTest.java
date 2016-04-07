@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.runtime.exceptions.ObjectExistsException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 3/29/16.
@@ -39,16 +41,25 @@ public class FGMapTest extends AbstractViewTest {
                 .isEqualTo("b");
     }
 
+    /*
     @Test
     @SuppressWarnings("unchecked")
     public void createOnlyThrowsException()
             throws Exception {
-        Map<String,String> testMap = getDefaultRuntime().getObjectsView().openOptions("map", FGMap.class,
-                EnumSet.of(ObjectOpenOptions.CREATE_ONLY));
-        Map<String,String> testMap2 = getDefaultRuntime().getObjectsView().openOptions("map", FGMap.class,
-                EnumSet.of(ObjectOpenOptions.CREATE_ONLY));
-    }
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().build()
+                                                        .setType(FGMap.class)
+                                                        .setStreamName("map")
+                                                        .addOption(ObjectOpenOptions.CREATE_ONLY)
+                                                        .open();
+        assertThatThrownBy(() -> getDefaultRuntime().getObjectsView().build()
+                                                        .setType(FGMap.class)
+                                                        .setStreamName("map")
+                                                        .addOption(ObjectOpenOptions.CREATE_ONLY)
+                                                        .open())
+                .isInstanceOf(ObjectExistsException.class);
 
+    }
+    */
 
     @Test
     @SuppressWarnings("unchecked")

@@ -179,6 +179,12 @@ public class CorfuProxyBuilder {
                 CorfuObject annotation = type.getAnnotation(CorfuObject.class);
                 if (annotation.objectType() == ObjectType.SMR) {
                     proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
+                    if (annotation.stateSource().equals(StateSource.SELF)) {
+                        ((CorfuSMRObjectProxy) proxy).setSelfState(true);
+                    }
+                    else {
+                        ((CorfuSMRObjectProxy) proxy).setStateClass(annotation.stateType());
+                    }
                 }
                 else
                 {
@@ -196,6 +202,9 @@ public class CorfuProxyBuilder {
                                 t -> t.getBackpointerMap().get(sv.getStreamID()) == -1L,
                                 t -> false);
                         readConstructor = streamStart == -1L;
+                        if (annotation.objectType() == ObjectType.SMR) {
+                            ((CorfuSMRObjectProxy)proxy).setCreationArguments(constructorArgs);
+                        }
                     }
                     if (readConstructor) {
                         if (options.contains(ObjectOpenOptions.CREATE_ONLY))
@@ -213,6 +222,9 @@ public class CorfuProxyBuilder {
                                 log.trace("Setting contructor arguments to {}", ((SMREntry) entry.getPayload())
                                         .getSMRArguments());
                                 constructorArgs = ((SMREntry) entry.getPayload()).getSMRArguments();
+                                if (annotation.objectType() == ObjectType.SMR) {
+                                    ((CorfuSMRObjectProxy)proxy).setCreationArguments(constructorArgs);
+                                }
                                 break;
                             }
                             entry = sv.read();
@@ -232,6 +244,13 @@ public class CorfuProxyBuilder {
             }
             if (proxy instanceof CorfuSMRObjectProxy) {
                 ((CorfuSMRObjectProxy)proxy).calculateMethodHashTable(ret.getClass());
+            }
+            if (type.isAnnotationPresent(CorfuObject.class)) {
+                CorfuObject annotation = type.getAnnotation(CorfuObject.class);
+                if (annotation.objectType().equals(ObjectType.SMR) &&
+                        annotation.stateSource().equals(StateSource.SELF)) {
+                    ((CorfuSMRObjectProxy)proxy).setUnderlyingObject(ret);
+                }
             }
             return ret;
         } catch (InstantiationException | IllegalAccessException ie) {

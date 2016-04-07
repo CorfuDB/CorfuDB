@@ -37,7 +37,11 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
     @SuppressWarnings("unchecked")
     Map<K,V> getPartitionMap(int partition)
     {
-        return getRuntime().getObjectsView().open(getStreamID(partition), SMRMap.class);
+        return getRuntime().getObjectsView()
+                .build()
+                .setType(SMRMap.class)
+                .setStreamID(getStreamID(partition))
+                .open();
     }
 
     /** Get a new partition.
