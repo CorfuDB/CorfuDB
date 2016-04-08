@@ -4,8 +4,8 @@ dist: trusty
 jdk:
 - oraclejdk8
 before_install:
-- openssl aes-256-cbc -K $encrypted_026743b97986_key -iv $encrypted_026743b97986_iv
-  -in private.key.enc -out private.key -d
+- if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; then openssl aes-256-cbc -K $encrypted_026743b97986_key -iv $encrypted_026743b97986_iv
+  -in private.key.enc -out private.key -d fi
 - .travis_scripts/setup_env.sh
 after_success:
 - mvn jacoco:report coveralls:report
