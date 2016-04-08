@@ -23,22 +23,28 @@ public class PutIfAbsentMapTest extends AbstractViewTest {
     @Getter
     final String defaultConfigurationString = getDefaultEndpoint();
 
-    public static class PutIfAbsentMap<K,V> implements ICorfuSMRObject<HashMap<K, V>> {
+    @CorfuObject(objectType = ObjectType.SMR,
+                stateSource = StateSource.SELF
+                )
+
+    public static class PutIfAbsentMap<K,V> implements ICorfuSMRObject {
+
+        HashMap<K,V> map = new HashMap<>();
 
         @MutatorAccessor
         public V put(K key, V value) {
-            return getSMRObject().put(key, value);
+            return map.put(key, value);
         }
 
         @Accessor
         public V get(K key) {
-            return getSMRObject().get(key);
+            return map.get(key);
         }
 
         @MutatorAccessor
         public boolean putIfAbsent(K key, V value) {
-            if (getSMRObject().get(key) == null) {
-                getSMRObject().put(key, value);
+            if (map.get(key) == null) {
+                map.put(key, value);
                 return true;
             }
             return false;
