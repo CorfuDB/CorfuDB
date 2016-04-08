@@ -250,7 +250,8 @@ public class FGMapTest extends AbstractViewTest {
             throws Exception {
         getDefaultRuntime();
 
-        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class, 20);
+        Map<String,String> testMap = getRuntime().getObjectsView()
+                .open(UUID.randomUUID(), FGMap.class, 20);
 
         final int num_threads = 5;
         final int num_records = 100;
