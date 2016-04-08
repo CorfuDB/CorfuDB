@@ -66,7 +66,7 @@ public class LayoutServer implements IServer {
     {
         this.opts = opts;
 
-        if (!(Boolean) opts.get("--memory"))
+        if (opts.get("--log-path") != null)
         {
             layoutFile = new File(opts.get("--log-path") + File.separator + "layout");
         }
