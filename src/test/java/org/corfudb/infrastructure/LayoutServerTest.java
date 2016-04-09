@@ -5,12 +5,14 @@ import com.google.common.io.Files;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
-import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
-import org.corfudb.runtime.CorfuRuntime;
+import com.google.common.collect.ImmutableMap;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
@@ -23,6 +25,49 @@ public class LayoutServerTest extends AbstractServerTest {
     @Override
     public IServer getDefaultServer() {
         return new LayoutServer(defaultOptionsMap());
+    }
+
+    @Test
+    public void memoryLayoutServerReadsLayout()
+    throws Exception {
+
+        String serviceDir = getTempDir();
+
+        Layout l = new Layout(
+                Collections.singletonList("a"),
+                new LinkedList<>(),
+                Collections.singletonList(new Layout.LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        Collections.singletonList("a")
+                                )
+                        )
+                )),
+                0L
+        );
+
+        l.getSequencers().add("test200");
+        l.getSequencers().add("test201");
+
+        Files.write(l.asJSONString().getBytes(), new File(serviceDir, "layout"));
+
+        LayoutServer ls = new LayoutServer(new ImmutableMap.Builder<String,Object>()
+                .put("--initial-token", "0")
+                .put("--single", false)
+                .put("--memory", true)
+                .put("--log-path", serviceDir)
+                .put("--sync", false)
+                .build());
+
+        setServer(ls);
+
+        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
+
+        assertThat((getLastMessage().getMsgType()))
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
     }
 
     @Test
@@ -145,7 +190,7 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--single", false)
                 .build());
 
-        this.router.setServerUnderTest(s1);
+        setServer(s1);
         bootstrapServer(getTestLayout());
         Layout l100 = getTestLayout();
         l100.setEpoch(100);
