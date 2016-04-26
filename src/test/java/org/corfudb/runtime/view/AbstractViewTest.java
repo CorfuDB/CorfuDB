@@ -104,7 +104,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.setGetRouterFunction(routerMap::get);
     }
 
-    public abstract String getDefaultConfigurationString();
+    public String getDefaultConfigurationString() {return getDefaultEndpoint();}
 
     public String getDefaultEndpoint()
     {
