@@ -248,6 +248,9 @@ public class ObjectsView extends AbstractView {
                 if (entry.isAborted()) {
                     throw new TransactionAbortedException();
                 }
+                //otherwise fire the handlers.
+                TransactionalContext.getCompletionMethods().parallelStream()
+                        .forEach(x -> x.handle(context));
             }
         }
     }
