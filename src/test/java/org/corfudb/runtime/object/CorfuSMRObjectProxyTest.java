@@ -14,6 +14,7 @@ import org.junit.Test;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -153,6 +154,26 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         test.setPrimitive("hello world".getBytes());
         assertThat(test.getPrimitive())
                 .isEqualTo("hello world".getBytes());
+    }
+
+    @Test
+    public void postHandlersFire() throws Exception {
+        CorfuRuntime r = getDefaultRuntime();
+
+        Map<String,String> test = r.getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamName("test")
+                .open();
+
+        ICorfuSMRObject cObj = (ICorfuSMRObject) test;
+        final AtomicInteger ai = new AtomicInteger(0);
+        cObj.registerPostHandler((String method, Object[] args, Object state) -> {
+            ai.incrementAndGet();
+        });
+        test.put("a", "b");
+        test.get("a");
+        assertThat(ai.get())
+                .isEqualTo(1);
     }
 
 }

@@ -8,6 +8,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * Created by mwei on 1/7/16.
@@ -29,5 +30,14 @@ public interface ICorfuSMRObject<T> extends ICorfuObject {
      * @return          The current state of the SMR object.
      */
     default T getSMRObject() { throw new UnprocessedException(); }
+
+    @FunctionalInterface
+    interface SMRHandlerMethod {
+        void handle(String method, Object[] args, Object state);
+    }
+
+    default void registerPostHandler(SMRHandlerMethod postHandler) {
+        throw new UnprocessedException();
+    }
 
 }
