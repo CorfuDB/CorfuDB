@@ -19,7 +19,7 @@ public class CmdletRouter {
         }
 
         //Parse the cmdlet name. Sometimes it could be executed as ./<cmdlet>
-        String cmdletName = args[0].substring(args[0].lastIndexOf(File.separatorChar)+1);
+        String cmdletName = args[1].substring(args[1].lastIndexOf(File.separatorChar)+1);
 
         try {
             // Get the class for the cmdlet.
@@ -35,7 +35,7 @@ public class CmdletRouter {
             {
                 try {
                     // Execute with the arguments other than the name of the cmdlet itself.
-                    ((ICmdlet)cmdlet.getConstructor().newInstance()).main(Arrays.copyOfRange(args, 1, args.length));
+                    ((ICmdlet)cmdlet.getConstructor().newInstance()).main(Arrays.copyOfRange(args, 2, args.length));
                 } catch (Exception e)
                 {
                     // Let the user know if an exception occurs.
