@@ -153,27 +153,23 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "env": self._GetEnvironment(hosttype)
         })
 
-        #echiu: comment this command out?
-        # cmds = ["cd /root/nsx/controller/ccp",
-             #   "yes | mk-build-deps --install debian/control",
-             #   # lttng-tools fails postinst due to some issue with upstart
-             #   # inside chroot.
-             #   "rm -f /etc/init/lttng-sessiond.conf",
-             #   "apt-get install --force-yes --yes -f",
-             #   "invoke-rc.d lttng-sessiond stop"
-             #  ]
-        cmd = " ; ".join(cmds)
+        cmd = DebianHelper.apt_install(["oracle-java8-jdk"])
         commands.append({
-            "desc": "Install build deps with mk-build-deps",
+            "desc": "Install java8 jdk",
             "root": "%(buildroot)",
-            "log": "gobuild_install_builddeps.log",
+            "log": "java8_jdk_apt_install.log",
             "command": ChrootHelper.chroot_cmd(cmd, chroot_dir),
             "env": self._GetEnvironment(hosttype)
         })
 
-        # FILL IN BUILD COMMANDS HERE
-        # Use mvn from /build/toolchain/noarch/apache-maven-3.3.3/bin/mvn
-        cmd = "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean install"
+        cmds = [
+            "cd /root/corfudb",
+            "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean install",
+            "mkdir -p /tmp/%s" % (DIST),
+            "cp /root/corfudb/target/*.deb /tmp/%s" % (DIST)
+        ]
+        cmd = " && ".join(cmds)
+
         commands.append({
             "desc": "Running mvn clean install",
             "root": "%(buildroot)",
@@ -183,18 +179,17 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
         })
 
 
-        #echiu: Comment this out until mvn command works.
-        #publish_dir = os.path.join(BUILDROOT, "publish", DIST)
-        #cmds = ["mkdir -p %s" % publish_dir,
-        #        "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dir)]
-        #cmd = " && ".join(cmds)
-        #commands.append({
-        #    "desc": "Copy build collateral to publish directory",
-        #    "root": BUILDROOT,
-        #    "log": "gobuild_publish.log",
-        #    "command": cmd,
-        #    "env": self._GetEnvironment(hosttype)
-        #})
+        publish_dir = os.path.join(BUILDROOT, "publish", DIST)
+        cmds = ["mkdir -p %s" % publish_dir,
+                "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dir)]
+        cmd = " && ".join(cmds)
+        commands.append({
+            "desc": "Copy build collateral to publish directory",
+            "root": BUILDROOT,
+            "log": "gobuild_publish.log",
+            "command": cmd,
+            "env": self._GetEnvironment(hosttype)
+        })
         return commands
 
     def GetComponentDependencies(self):
@@ -203,8 +198,6 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "branch": specs.nsx_corfudb.NSX_BUILDENV_BRANCH,
             "change": specs.nsx_corfudb.NSX_BUILDENV_CLN,
             "buildtype": specs.nsx_corfudb.NSX_BUILDENV_BUILDTYPE,
-            "files": specs.nsx_corfu.NSX_BUILDENV_FILES
+            "files": specs.nsx_corfudb.NSX_BUILDENV_FILES
         }
-        return helpers.get_repo_commit.update_component_commits(comps,
-                                                                self.options)
-
+        return comps
