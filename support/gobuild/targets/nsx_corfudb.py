@@ -5,6 +5,7 @@ NSX-CorfuDB (CorfuDB) gobuild target
 """
 
 import os
+import re
 import helpers.make
 import helpers.target
 import helpers.env
@@ -164,6 +165,8 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
 
         cmds = [
             "cd /root/corfudb",
+            #Hack: inserting build number into pom.xml
+            "sed -i s/-SNAPSHOT/.%s/g pom.xml" % (BUILDNUMBER),
             "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean install",
             "mkdir -p /tmp/%s" % (DIST),
             "cp /root/corfudb/target/*.deb /tmp/%s" % (DIST)
@@ -178,7 +181,6 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "env": self._GetEnvironment(hosttype)
         })
 
-
         publish_dir = os.path.join(BUILDROOT, "publish", DIST)
         cmds = ["mkdir -p %s" % publish_dir,
                 "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dir)]
@@ -191,6 +193,14 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "env": self._GetEnvironment(hosttype)
         })
         return commands
+
+    #Hack: reading the version and build number from pom.xml
+    def GetBuildProductVersion(self, hosttype):
+        vfile_path = "%s/corfudb/pom.xml" % self.options.get('buildroot')
+        pom = open(vfile_path)
+        s = re.search(r'<version>(\S*)</version>', pom.read())
+        pom.close()
+        return s.group(1)
 
     def GetComponentDependencies(self):
         comps = {}
