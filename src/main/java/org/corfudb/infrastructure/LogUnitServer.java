@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
@@ -681,8 +682,11 @@ public class LogUnitServer implements IServer {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_TRIMMED));
         }
         else {
-            LogUnitEntry e = new LogUnitEntry(msg.getData(), msg.getMetadataMap(), false);
-            e.getBuffer().retain();
+            // The payload in the message is a view of a larger buffer allocated
+            // by netty, thus direct memory can leak. Copy the view and release the
+            // underlying buffer
+            LogUnitEntry e = new LogUnitEntry(msg.getData().copy(), msg.getMetadataMap(), false);
+            msg.getData().release();
             try {
                 dataCache.put(msg.getAddress(), e);
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OK));
@@ -783,5 +787,10 @@ public class LogUnitServer implements IServer {
                         }
                     });
         }
+    }
+
+    @VisibleForTesting
+    LoadingCache<Long, LogUnitReadResponseMsg.LogUnitEntry> getDataCache(){
+        return dataCache;
     }
 }
