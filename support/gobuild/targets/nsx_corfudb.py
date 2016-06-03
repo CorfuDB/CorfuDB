@@ -167,23 +167,28 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "cd /root/corfudb",
             #Hack: inserting build number into pom.xml
             "sed -i s/-SNAPSHOT/.%s/g pom.xml" % (BUILDNUMBER),
-            "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean install",
+            "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean deploy",
+            "mkdir -p /tmp/mvn",
             "mkdir -p /tmp/%s" % (DIST),
+            "cp -r /root/corfudb/target/mvn-repo/* /tmp/mvn",
             "cp /root/corfudb/target/*.deb /tmp/%s" % (DIST)
         ]
         cmd = " && ".join(cmds)
 
         commands.append({
-            "desc": "Running mvn clean install",
+            "desc": "Running mvn clean deploy",
             "root": "%(buildroot)",
-            "log": "mvn_clean_install.log",
+            "log": "mvn_clean_deploy.log",
             "command": ChrootHelper.chroot_cmd(cmd, chroot_dir),
             "env": self._GetEnvironment(hosttype)
         })
 
-        publish_dir = os.path.join(BUILDROOT, "publish", DIST)
-        cmds = ["mkdir -p %s" % publish_dir,
-                "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dir)]
+        publish_dir = os.path.join(BUILDROOT, "publish")
+        publish_dist_dir = "%s/%s" % (publish_dir, DIST)
+        cmds = ["mkdir -p %s" % publish_dist_dir,
+                "mkdir -p %s/mvn" % publish_dir,
+                "cp -r %s/tmp/mvn %s" % (chroot_dir, publish_dir),
+                "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dist_dir)]
         cmd = " && ".join(cmds)
         commands.append({
             "desc": "Copy build collateral to publish directory",
