@@ -1,9 +1,13 @@
 package org.corfudb.infrastructure;
 
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
@@ -28,6 +32,32 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .put("--sync", true)
                 .put("--max-cache", 1000000)
                 .build());
+    }
+
+    @Test
+    public void checkHeapLeak() throws Exception {
+
+        LogUnitServer s1 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
+                .put("--memory", true)
+                .put("--single", false)
+                .put("--max-cache", 1000000)
+                .build());
+
+        this.router.setServerUnderTest(s1);
+        long address = 0L;
+        LogUnitWriteMsg m = new LogUnitWriteMsg(address);
+        //write at 0
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        byte[] payload = "0".getBytes();
+        m.setPayload(payload);
+        sendMessage(m);
+
+        LoadingCache<Long, LogUnitReadResponseMsg.LogUnitEntry> dataCache = s1.getDataCache();
+        // Make sure that extra bytes are truncated from the payload byte buf
+        assertThat(dataCache.get(address).getBuffer().capacity()).isEqualTo(payload.length);
+
     }
 
     @Test
