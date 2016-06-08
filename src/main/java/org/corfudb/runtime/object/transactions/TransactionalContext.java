@@ -21,6 +21,18 @@ public class TransactionalContext {
     private static final ThreadLocal<Deque<AbstractTransactionalContext>> threadStack = ThreadLocal.withInitial(
             LinkedList<AbstractTransactionalContext>::new);
 
+    @FunctionalInterface
+    public interface TXCompletionMethod {
+        void handle(AbstractTransactionalContext context);
+    }
+
+    @Getter
+    private static final LinkedHashSet<TXCompletionMethod> completionMethods = new LinkedHashSet<>();
+
+    public static void addCompletionMethod(TXCompletionMethod completionMethod) {
+        completionMethods.add(completionMethod);
+    }
+
     /** Returns the transaction stack for the calling thread.
      *
      * @return      The transaction stack for the calling thread.
