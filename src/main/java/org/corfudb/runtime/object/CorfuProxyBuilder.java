@@ -68,7 +68,9 @@ public class CorfuProxyBuilder {
 
         bb = bb.implement(ICorfuSMRObject.class)
                 .method(ElementMatchers.named("getSMRObject"))
-                .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")));
+                .intercept(MethodDelegation.to(proxy, "getSMRObject").filter(ElementMatchers.named("interceptGetSMRObject")))
+                .method(ElementMatchers.named("registerPostHandler"))
+                .intercept(MethodDelegation.to(proxy, "registerPostHandler").filter(ElementMatchers.named("registerPostHandler")));
         return bb;
     }
 

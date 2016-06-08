@@ -66,6 +66,8 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     @Setter
     boolean selfState = false;
 
+    ICorfuSMRObject.SMRHandlerMethod postHandler;
+
     public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv,
                                Class<P> originalClass, Serializers.SerializerType serializer) {
         super(runtime, sv, originalClass, serializer);
@@ -194,6 +196,12 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         }
 
         return smrObject;
+    }
+
+    @SuppressWarnings("unchecked")
+    @RuntimeType
+    public void registerPostHandler(ICorfuSMRObject.SMRHandlerMethod method) throws Exception {
+        this.postHandler = method;
     }
 
 
@@ -370,6 +378,9 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             if (completableFutureMap.containsKey(address))
             {
                 completableFutureMap.get(address).complete(ret);
+            }
+            if (postHandler != null) {
+                postHandler.handle(entry.getSMRMethod(), entry.getSMRArguments(), obj);
             }
             return true;
         } catch (NoSuchMethodException n) {
