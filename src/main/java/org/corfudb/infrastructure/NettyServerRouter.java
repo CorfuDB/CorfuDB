@@ -98,7 +98,6 @@ implements IServerRouter {
      */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        boolean handled = false;
         try {
             // The incoming message should have been transformed to a CorfuMsg earlier in the pipeline.
             CorfuMsg m = ((CorfuMsg) msg);
@@ -115,19 +114,12 @@ implements IServerRouter {
                     // Route the message to the handler.
                     log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
                     handler.handleMessage(m, ctx, this);
-                    handled = true;
                 }
             }
         }
         catch (Exception e)
         {
             log.error("Exception during read!" , e);
-        }
-        finally {
-            if (!handled && msg != null)
-            {
-                ((CorfuMsg) msg).release();
-            }
         }
     }
 
