@@ -166,7 +166,8 @@ public class LayoutServer implements IServer {
             break;
             case LAYOUT_BOOTSTRAP:
                 // We are already bootstrapped, bootstrap again is not allowed.
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.NACK));
+                log.warn("Got a request to bootstrap a server which is already bootstrapped, rejecting!");
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP));
             break;
             case LAYOUT_PREPARE:
             {
