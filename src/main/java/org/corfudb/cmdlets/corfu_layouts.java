@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
@@ -102,7 +103,7 @@ public class corfu_layouts implements ICmdlet {
     }
 
     public void add_layout (CorfuRuntime runtime, Map<String,Object> options)
-            throws NetworkException, QuorumUnreachableException, OutrankedException
+            throws NetworkException, QuorumUnreachableException, OutrankedException, AlreadyBootstrappedException
     {
         checkEndpoint((String) options.get("--endpoint"));
         Layout l;

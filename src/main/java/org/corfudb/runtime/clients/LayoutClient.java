@@ -7,6 +7,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
@@ -51,6 +52,11 @@ public class LayoutClient implements IClient {
             case LAYOUT_PROPOSE_REJECT:
                 router.completeExceptionally(msg.getRequestID(),
                         new OutrankedException(((LayoutRankMsg)msg).getRank()));
+                break;
+            case LAYOUT_ALREADY_BOOTSTRAP:
+                router.completeExceptionally(msg.getRequestID(),
+                        new AlreadyBootstrappedException());
+                break;
         }
     }
 
@@ -65,6 +71,7 @@ public class LayoutClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.LAYOUT_NOBOOTSTRAP)
                     .add(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_REJECT)
                     .add(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT)
+                    .add(CorfuMsg.CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP)
                     .build();
 
     /**

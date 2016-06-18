@@ -97,7 +97,7 @@ public class LayoutServerTest extends AbstractServerTest {
         sendMessage(new LayoutMsg(testLayout, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
         sendMessage(new LayoutMsg(testLayout, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.NACK);
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP);
     }
 
     Layout getTestLayout() {

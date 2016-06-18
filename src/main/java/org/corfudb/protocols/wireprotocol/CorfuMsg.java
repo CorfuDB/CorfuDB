@@ -82,7 +82,10 @@ public class CorfuMsg {
         ERROR_TRIMMED(51, CorfuMsg.class, LogUnitServer.class),
         ERROR_OVERWRITE(52, CorfuMsg.class, LogUnitServer.class),
         ERROR_OOS(53, CorfuMsg.class, LogUnitServer.class),
-        ERROR_RANK(54, CorfuMsg.class, LogUnitServer.class)
+        ERROR_RANK(54, CorfuMsg.class, LogUnitServer.class),
+
+        // EXTRA CODES
+        LAYOUT_ALREADY_BOOTSTRAP(60, CorfuMsg.class, LayoutServer.class)
         ;
 
         public final int type;

@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.IServer;
 import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
@@ -81,8 +82,8 @@ public class LayoutClientTest extends AbstractClientTest {
     {
         assertThat(client.bootstrapLayout(getTestLayout()).get())
                 .isEqualTo(true);
-        assertThat(client.bootstrapLayout(getTestLayout()).get())
-                .isEqualTo(false);
+        assertThatThrownBy(() -> client.bootstrapLayout(getTestLayout()).get())
+                .hasCauseInstanceOf(AlreadyBootstrappedException.class);
     }
 
     @Test
