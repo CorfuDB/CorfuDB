@@ -158,7 +158,7 @@ public class CorfuProxyBuilder {
                     .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
                     .and(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
                     .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
-                    .intercept(MethodDelegation.to(proxy, "accessor").filter(ElementMatchers.named("interceptAccessor")))
+                    .intercept(MethodDelegation.to(proxy, "mutatorAccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
                     .annotateMethod(instrumentedDescription);
 
             bb.annotateType(instrumentedObjectDescription);

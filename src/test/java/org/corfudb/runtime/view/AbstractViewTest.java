@@ -96,6 +96,12 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return getRuntime().connect();
     }
 
+    public CorfuRuntime wireExistingRuntimeToTest(CorfuRuntime runtime) {
+        runtime.layoutServers.add(getDefaultEndpoint());
+        runtime.setGetRouterFunction(routerMap::get);
+        return runtime;
+    }
+
     public AbstractViewTest()
     {
         runtime = new CorfuRuntime();

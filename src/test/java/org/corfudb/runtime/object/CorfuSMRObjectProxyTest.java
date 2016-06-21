@@ -48,6 +48,36 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     }
 
     @Test
+    public void canOpenObjectWithTwoRuntimes()
+        throws Exception
+    {
+        getDefaultRuntime();
+
+        TestClass testClass = getRuntime().getObjectsView()
+                .build()
+                .setStreamName("test")
+                .setType(TestClass.class)
+                .open();
+
+        testClass.set(52);
+        assertThat(testClass.get())
+                .isEqualTo(52);
+
+        CorfuRuntime runtime2 = new CorfuRuntime();
+        wireExistingRuntimeToTest(runtime2);
+        runtime2.connect();
+
+        TestClass testClass2 = runtime2.getObjectsView()
+                .build()
+                .setStreamName("test")
+                .setType(TestClass.class)
+                .open();
+
+        assertThat(testClass2.get())
+                .isEqualTo(52);
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     public void multipleWritesConsistencyTest()
             throws Exception {
