@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.IServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
 import java.time.Duration;
@@ -42,6 +43,14 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Setter
     public long epoch;
 
+    @Getter
+    @Setter
+    public long serverEpoch;
+
+    @Getter
+    @Setter
+    public UUID clientID;
+
     /** The optional address for this router, if set. */
     @Getter
     @Setter
@@ -54,6 +63,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         outstandingRequests = new ConcurrentHashMap<>();
         serverMap = new ConcurrentHashMap<>();
         requestID = new AtomicLong();
+        clientID = CorfuRuntime.getStreamID("testClient");
     }
 
     public void addServer(IServer server)
@@ -126,7 +136,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
         // Set the message fields.
-        message.setClientID(CorfuRuntime.getStreamID("testclient"));
+        message.setClientID(clientID);
         message.setRequestID(thisRequest);
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
@@ -152,6 +162,10 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
      */
     @Override
     public void sendMessage(ChannelHandlerContext ctx, CorfuMsg message) {
+        // Get the next request ID.
+        final long thisRequest = requestID.getAndIncrement();
+        message.setClientID(clientID);
+        message.setRequestID(thisRequest);
         routeMessage(message);
     }
 
@@ -169,6 +183,34 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         log.trace("Sent response: {}", outMsg);
     }
 
+    /** Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
+     * the server is in the wrong epoch. Ignored if the message type is reset (which
+     * is valid in any epoch).
+     * @param msg   The incoming message to validate.
+     * @param ctx   The context of the channel handler.
+     * @return      True, if the epoch is correct, but false otherwise.
+     */
+    public boolean validateEpochAndClientID(CorfuMsg msg, ChannelHandlerContext ctx)
+    {
+        // Check if the message is intended for us. If not, drop the message.
+        if (!msg.getClientID().equals(clientID))
+        {
+            log.warn("Incoming message intended for client {}, our id is {}, dropping!", msg.getClientID(), clientID);
+            return false;
+        }
+        // Check if the message is in the right epoch.
+        if (!msg.getMsgType().ignoreEpoch  && msg.getEpoch() != epoch)
+        {
+            CorfuMsg m = new CorfuMsg();
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
+                    msg.getEpoch(), epoch, msg);
+
+            /* If this message was pending a completion, complete it with an error. */
+            completeExceptionally(msg.getRequestID(), new WrongEpochException(epoch));
+            return false;
+        }
+        return true;
+    }
 
     /** Complete a given outstanding request with a completion value.
      *
@@ -235,9 +277,12 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Override
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
+        outMsg.setEpoch(serverEpoch);
         log.trace("(server) send Response: {}", outMsg);
         CorfuMsg m = simulateSerialization(outMsg);
-        IClient handler = handlerMap.get(m.getMsgType());
-        handler.handleMessage(m, null);
+        if (validateEpochAndClientID(m, ctx)) {
+            IClient handler = handlerMap.get(m.getMsgType());
+            handler.handleMessage(m, null);
+        }
     }
 }

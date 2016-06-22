@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableMap;
+import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.IServer;
 import org.junit.Before;
@@ -13,6 +14,7 @@ import java.util.Set;
  */
 public abstract class AbstractClientTest extends AbstractCorfuTest {
 
+    @Getter
     TestClientRouter router;
 
     @Before

@@ -32,7 +32,7 @@ implements IServerRouter {
     /** The epoch of this router. This is managed by the base server implementation. */
     @Getter
     @Setter
-    long epoch;
+    long serverEpoch;
 
     public NettyServerRouter()
     {
@@ -66,7 +66,7 @@ implements IServerRouter {
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg)
     {
         outMsg.copyBaseFields(inMsg);
-        outMsg.setEpoch(epoch);
+        outMsg.setEpoch(serverEpoch);
         ctx.writeAndFlush(outMsg);
         log.trace("Sent response: {}", outMsg);
     }
@@ -80,12 +80,12 @@ implements IServerRouter {
      */
     public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx)
     {
-        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != epoch)
+        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverEpoch)
         {
             sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
-                    getEpoch()));
+                    getServerEpoch()));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), epoch, msg);
+                    msg.getEpoch(), serverEpoch, msg);
             return false;
         }
         return true;

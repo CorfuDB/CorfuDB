@@ -10,8 +10,8 @@ public interface IServerRouter {
     void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg);
 
     /** Get the current epoch. */
-    long getEpoch();
+    long getServerEpoch();
 
     /** Set the current epoch. */
-    void setEpoch(long newEpoch);
+    void setServerEpoch(long newEpoch);
 }

@@ -29,7 +29,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     public void canReadWriteToSingle()
     throws Exception {
         // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
+                getServerRouterForEndpoint(getEndpoint(9000))));
         addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
         wireRouters();
 
@@ -54,7 +55,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     public void canReadWriteToSingleConcurrent()
             throws Exception {
         // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
+                getServerRouterForEndpoint(getEndpoint(9000))));
         addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
         wireRouters();
 
@@ -89,11 +91,15 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     throws Exception
     {
         // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
+                getServerRouterForEndpoint(getEndpoint(9000))));
         addServerForTest(getEndpoint(9000), new LogUnitServer(defaultOptionsMap()));
         addServerForTest(getEndpoint(9001), new LogUnitServer(defaultOptionsMap()));
         addServerForTest(getEndpoint(9002), new LogUnitServer(defaultOptionsMap()));
         wireRouters();
+
+        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
+        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
@@ -137,7 +143,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
             throws Exception
     {
         // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getEndpoint(9000),
+                new LayoutServer(defaultOptionsMap(), getServerRouterForEndpoint(getEndpoint(9000))));
 
         LogUnitServer l9000 = new LogUnitServer(defaultOptionsMap());
         LogUnitServer l9001 = new LogUnitServer(defaultOptionsMap());
@@ -147,6 +154,9 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         addServerForTest(getEndpoint(9001), l9001);
         addServerForTest(getEndpoint(9002), l9002);
         wireRouters();
+
+        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
+        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();

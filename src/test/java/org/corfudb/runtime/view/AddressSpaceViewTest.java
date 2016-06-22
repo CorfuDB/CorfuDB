@@ -30,13 +30,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
     @Test
     public void cacheMissTimesOut() {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().setCacheDisabled(false).connect();
+        getDefaultRuntime().setCacheDisabled(false).connect();
 
         getRuntime().getAddressSpaceView().setEmptyDuration(Duration.ofNanos(100));
         assertThat(getRuntime().getAddressSpaceView().read(0).getResultType())
@@ -54,7 +48,8 @@ public class AddressSpaceViewTest extends AbstractViewTest {
             throws Exception
     {
         // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
+                getServerRouterForEndpoint(getEndpoint(9000))));
 
         LogUnitServer l9000 = new LogUnitServer(defaultOptionsMap());
         LogUnitServer l9001 = new LogUnitServer(defaultOptionsMap());
@@ -64,6 +59,9 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         addServerForTest(getEndpoint(9001), l9001);
         addServerForTest(getEndpoint(9002), l9002);
         wireRouters();
+
+        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
+        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
@@ -120,7 +118,8 @@ public class AddressSpaceViewTest extends AbstractViewTest {
             throws Exception
     {
         // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
+                getServerRouterForEndpoint(getEndpoint(9000))));
 
         LogUnitServer l9000 = new LogUnitServer(defaultOptionsMap());
         LogUnitServer l9001 = new LogUnitServer(defaultOptionsMap());
@@ -130,6 +129,9 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         addServerForTest(getEndpoint(9001), l9001);
         addServerForTest(getEndpoint(9002), l9002);
         wireRouters();
+
+        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
+        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
@@ -184,7 +186,8 @@ public class AddressSpaceViewTest extends AbstractViewTest {
             throws Exception
     {
         // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap()
+                , getServerRouterForEndpoint(getEndpoint(9000))));
 
         LogUnitServer l9000 = new LogUnitServer(defaultOptionsMap());
         LogUnitServer l9001 = new LogUnitServer(defaultOptionsMap());
@@ -194,6 +197,9 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         addServerForTest(getEndpoint(9001), l9001);
         addServerForTest(getEndpoint(9002), l9002);
         wireRouters();
+
+        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
+        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();

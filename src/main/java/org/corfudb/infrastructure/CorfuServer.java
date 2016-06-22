@@ -162,7 +162,7 @@ public class CorfuServer {
 
         // Add each role to the router.
         router.addServer(new SequencerServer(opts));
-        router.addServer(new LayoutServer(opts));
+        router.addServer(new LayoutServer(opts, router));
         router.addServer(new LogUnitServer(opts));
 
         // Create the event loops responsible for servicing inbound messages.

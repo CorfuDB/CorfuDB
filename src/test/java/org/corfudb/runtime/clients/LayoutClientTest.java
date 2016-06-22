@@ -25,7 +25,7 @@ public class LayoutClientTest extends AbstractClientTest {
     @Override
     Set<IServer> getServersForTest() {
         return new ImmutableSet.Builder<IServer>()
-                .add(new LayoutServer(defaultOptionsMap()))
+                .add(new LayoutServer(defaultOptionsMap(), getRouter()))
                 .build();
     }
 
@@ -84,6 +84,19 @@ public class LayoutClientTest extends AbstractClientTest {
                 .isEqualTo(true);
         assertThatThrownBy(() -> client.bootstrapLayout(getTestLayout()).get())
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
+    }
+
+    @Test
+    public void canGetNewLayoutInDifferentEpoch()
+            throws Exception
+    {
+        Layout l = getTestLayout();
+        l.setEpoch(42L);
+        assertThat(client.bootstrapLayout(l).get())
+                .isEqualTo(true);
+
+        assertThat(client.getLayout().get().getEpoch())
+                .isEqualTo(42L);
     }
 
     @Test

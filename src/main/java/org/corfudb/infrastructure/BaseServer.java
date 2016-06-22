@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
@@ -11,11 +12,11 @@ import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
 @Slf4j
 public class BaseServer implements IServer {
 
-    IServerRouter router;
+    IServerRouter serverRouter;
 
     public BaseServer(IServerRouter router)
     {
-        this.router = router;
+        this.serverRouter = router;
     }
 
     @Override
@@ -27,18 +28,18 @@ public class BaseServer implements IServer {
                 break;
             case SET_EPOCH:
                 CorfuSetEpochMsg csem = (CorfuSetEpochMsg) msg;
-                if (csem.getNewEpoch() >= router.getEpoch())
+                if (csem.getNewEpoch() >= serverRouter.getServerEpoch())
                 {
                     log.info("Received SET_EPOCH, moving to new epoch {}", csem.getNewEpoch());
-                    router.setEpoch(csem.getNewEpoch());
-                    router.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+                    serverRouter.setServerEpoch(csem.getNewEpoch());
+                    serverRouter.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
                 }
                 else
                 {
                     log.debug("Rejected SET_EPOCH currrent={}, requested={}",
-                            router.getEpoch(), csem.getNewEpoch());
-                    router.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
-                            router.getEpoch()));
+                            serverRouter.getServerEpoch(), csem.getNewEpoch());
+                    serverRouter.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
+                            serverRouter.getServerEpoch()));
                 }
         }
     }

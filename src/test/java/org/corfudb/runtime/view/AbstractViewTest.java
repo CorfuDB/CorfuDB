@@ -3,10 +3,7 @@ package org.corfudb.runtime.view;
 import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.IServer;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.infrastructure.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -50,8 +47,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     {
         serverMap.keySet().stream()
                 .map(address -> {
-                    TestClientRouter r = new TestClientRouter();
-                    r.setAddress(address);
+                    TestClientRouter r = getTestRouterForEndpoint(address);
                     r.addClient(new LayoutClient())
                             .addClient(new SequencerClient())
                             .addClient(new LogUnitClient())
@@ -88,7 +84,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     public CorfuRuntime getDefaultRuntime() {
         // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        routerMap.put(getDefaultEndpoint(), new TestClientRouter());
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
+                routerMap.get(getDefaultEndpoint())));
         addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
         addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
         wireRouters();
@@ -108,6 +106,17 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         routerMap = new HashMap<>();
         serverMap = new HashMap<>();
         runtime.setGetRouterFunction(routerMap::get);
+    }
+
+    public TestClientRouter getTestRouterForEndpoint(String endpoint) {
+        return routerMap.computeIfAbsent(endpoint, x -> {
+           TestClientRouter c = new TestClientRouter();
+           c.setAddress(x);
+            return c;
+        });
+    }
+    public IServerRouter getServerRouterForEndpoint(String endpoint) {
+        return routerMap.computeIfAbsent(endpoint, x -> new TestClientRouter());
     }
 
     public String getDefaultConfigurationString() {return getDefaultEndpoint();}
