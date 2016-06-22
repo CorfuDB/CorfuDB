@@ -29,7 +29,7 @@ public class CorfuRuntime {
     public Map<String, IClientRouter> nodeRouters;
 
     /** A completable future containing a layout, when completed. */
-    public CompletableFuture<Layout> layout;
+    public volatile CompletableFuture<Layout> layout;
 
     /** The rate in seconds to retry accessing a layout, in case of a failure. */
     public int retryRate;
@@ -202,7 +202,7 @@ public class CorfuRuntime {
      *
      * @return  A completable future containing a layout.
      */
-    public CompletableFuture<Layout> fetchLayout() {
+    private CompletableFuture<Layout> fetchLayout() {
         return CompletableFuture.<Layout>supplyAsync(() -> {
             while (true) {
                 // Iterate through the layout servers, attempting to connect to one
@@ -211,9 +211,15 @@ public class CorfuRuntime {
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
-                        layout = router.getClient(LayoutClient.class).getLayout();
-                        Layout l = layout.get(); // wait for layout to complete
+                        CompletableFuture<Layout> layoutFuture = router.getClient(LayoutClient.class).getLayout();
+                        // Wait for layout
+                        Layout l = layoutFuture.get();
                         l.setRuntime(this);
+                        // this.layout should only be assigned to the new layout future once it has been
+                        // completely constructed and initialized. For example, assigning this.layout = l
+                        // before setting the layout's runtime can result in other threads trying to access a layout
+                        // with  a null runtime.
+                        layout = layoutFuture;
                         l.getAllServers().stream()
                                 .map(getRouterFunction)
                                 .forEach(x -> x.setEpoch(l.getEpoch()));
