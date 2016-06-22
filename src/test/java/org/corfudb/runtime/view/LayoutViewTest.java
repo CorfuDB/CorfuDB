@@ -20,7 +20,8 @@ public class LayoutViewTest extends AbstractViewTest {
 
     @Test
     public void canGetLayout() {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
+                getServerRouterForEndpoint(getDefaultEndpoint())));
         wireRouters();
 
         CorfuRuntime r = getRuntime().connect();
@@ -32,7 +33,8 @@ public class LayoutViewTest extends AbstractViewTest {
     @Test
     public void canSetLayout()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
+                getServerRouterForEndpoint(getDefaultEndpoint())));
         wireRouters();
 
         CorfuRuntime r = getRuntime().connect();

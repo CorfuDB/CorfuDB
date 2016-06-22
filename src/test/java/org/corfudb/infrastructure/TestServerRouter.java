@@ -14,13 +14,17 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class TestServerRouter implements IServerRouter {
 
-    @Setter
     IServer serverUnderTest;
+
+    void setServerUnderTest(IServer server) {
+        serverUnderTest = server;
+    }
+
     AtomicLong requestCounter;
 
     @Getter
     @Setter
-    long epoch;
+    long serverEpoch;
 
     @Getter
     public List<CorfuMsg> responseMessages;
@@ -38,11 +42,13 @@ public class TestServerRouter implements IServerRouter {
 
     @Override
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
+        outMsg.setEpoch(serverEpoch);
         this.responseMessages.add(outMsg);
     }
 
     public void sendServerMessage(CorfuMsg msg)
     {
+        msg.setEpoch(serverEpoch);
         msg.setRequestID(requestCounter.getAndIncrement());
         serverUnderTest.handleMessage(msg, null, this);
     }

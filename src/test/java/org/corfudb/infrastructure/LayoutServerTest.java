@@ -24,7 +24,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
     @Override
     public IServer getDefaultServer() {
-        return new LayoutServer(defaultOptionsMap());
+        return new LayoutServer(defaultOptionsMap(), getRouter());
     }
 
     @Test
@@ -60,7 +60,7 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--memory", true)
                 .put("--log-path", serviceDir)
                 .put("--sync", false)
-                .build());
+                .build(), getRouter());
 
         setServer(ls);
 
@@ -188,7 +188,7 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--log-path", serviceDir)
                 .put("--memory", false)
                 .put("--single", false)
-                .build());
+                .build(), getRouter());
 
         setServer(s1);
         bootstrapServer(getTestLayout());
@@ -213,7 +213,7 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--log-path", serviceDir)
                 .put("--single", false)
                 .put("--memory", false)
-                .build());
+                .build(), getRouter());
         this.router.setServerUnderTest(s2);
         assertThat(s2)
                 .isInEpoch(100);

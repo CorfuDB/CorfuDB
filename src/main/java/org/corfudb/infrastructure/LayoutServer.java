@@ -2,6 +2,8 @@ package org.corfudb.infrastructure;
 
 import com.google.common.io.Files;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
@@ -59,12 +61,17 @@ public class LayoutServer implements IServer {
     /** The current phase 2 rank, which should be equal to the epoch. */
     long phase2Rank;
 
+    /** The server router. */
+    @Getter
+    IServerRouter serverRouter;
+
     /** Th layout file, or null if in memory. */
     File layoutFile;
 
-    public LayoutServer(Map<String, Object> opts)
+    public LayoutServer(Map<String, Object> opts, IServerRouter serverRouter)
     {
         this.opts = opts;
+        this.serverRouter = serverRouter;
 
         if (opts.get("--log-path") != null)
         {
@@ -112,6 +119,7 @@ public class LayoutServer implements IServer {
                     String l = Files.toString(layoutFile, Charset.defaultCharset());
                     currentLayout = Layout.fromJSONString(l);
                     phase1Rank = phase2Rank = currentLayout.getEpoch();
+                    getServerRouter().setServerEpoch(currentLayout.getEpoch());
                     log.info("Layout server started with layout from disk: {}.", currentLayout);
                 }
             }
@@ -147,8 +155,10 @@ public class LayoutServer implements IServer {
             if (msg.getMsgType().equals(CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP))
             {
                 log.info("Bootstrap with new layout={}", ((LayoutMsg)msg).getLayout());
+
                 currentLayout = ((LayoutMsg)msg).getLayout();
                 saveCurrentLayout();
+                getServerRouter().setServerEpoch(currentLayout.getEpoch());
                 //send a response that the bootstrap was successful.
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
             }
@@ -206,6 +216,7 @@ public class LayoutServer implements IServer {
                     phase2Rank = ((LayoutRankMsg) msg).getRank();
                     currentLayout =  ((LayoutRankMsg) msg).getLayout();
                     saveCurrentLayout();
+                    serverRouter.setServerEpoch(currentLayout.getEpoch());
                     r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
                 }
             }

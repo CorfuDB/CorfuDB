@@ -22,14 +22,9 @@ public class StreamsViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canCopyStream()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
 
         //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime().connect();
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         UUID streamACopy = CorfuRuntime.getStreamID("stream A copy");
         byte[] testPayload = "hello world".getBytes();

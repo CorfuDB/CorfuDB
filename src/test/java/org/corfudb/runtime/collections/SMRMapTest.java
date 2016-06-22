@@ -38,12 +38,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingle()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
@@ -70,12 +65,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void loadsFollowedByGets()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
@@ -93,12 +83,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canContainOtherCorfuObjects()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
         testMap.clear();
@@ -125,12 +110,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canContainNullObjects()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
         testMap.clear();
@@ -146,12 +126,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void loadsFollowedByGetsConcurrent()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
@@ -188,12 +163,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void collectionsStreamInterface()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
@@ -212,12 +182,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canUpdateSingleObjectTransacationally()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         getRuntime().getObjectsView().TXBegin();
@@ -236,12 +201,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void multipleTXesAreApplied()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         IntStream.range(0, 10).asLongStream()
@@ -270,12 +230,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void multipleTXesAreAppliedWOAccessors()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         IntStream.range(0, 10).asLongStream()
@@ -299,12 +254,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void mutatorFollowedByATransaction()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
@@ -324,12 +274,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void objectViewCorrectlyReportsInsideTX()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
         assertThat(getRuntime().getObjectsView().TXActive())
                 .isFalse();
         getRuntime().getObjectsView().TXBegin();
@@ -344,12 +289,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canUpdateSingleObjectTransacationallyWhenCached()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect()
+        getDefaultRuntime().connect()
                 .setCacheDisabled(false);
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
@@ -370,12 +310,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void abortedTransactionsCannotBeReadOnSingleObject ()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         getRuntime().getObjectsView().TXBegin();
@@ -395,12 +330,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void modificationDuringTransactionCausesAbort ()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView()
                 .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
@@ -435,12 +365,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void smrMapCanContainCustomObjects()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,TestObject> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(),
                 SMRMap.class);
@@ -455,12 +380,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void smrMapCanContainCustomObjectsInsideTXes()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,TestObject> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(),
                 SMRMap.class);

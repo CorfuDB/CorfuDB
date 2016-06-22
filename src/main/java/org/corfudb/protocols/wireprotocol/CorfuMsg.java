@@ -42,7 +42,7 @@ public class CorfuMsg {
         PONG(1, CorfuMsg.class, BaseServer.class, true),
         RESET(2, CorfuResetMsg.class, BaseServer.class),
         SET_EPOCH(3, CorfuSetEpochMsg.class, BaseServer.class, true),
-        ACK(4, CorfuMsg.class, BaseServer.class),
+        ACK(4, CorfuMsg.class, BaseServer.class, true),
         WRONG_EPOCH(5, CorfuSetEpochMsg.class, BaseServer.class),
         NACK(6, CorfuMsg.class, BaseServer.class),
 

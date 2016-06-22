@@ -51,12 +51,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void multipleWritesConsistencyTest()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
@@ -79,12 +74,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void multipleWritesConsistencyTestConcurrent()
             throws Exception {
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
-        getRuntime().connect();
+        getDefaultRuntime().connect();
 
 
         Map<String,String> testMap = getRuntime().getObjectsView().open(
@@ -119,14 +109,8 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canWrapObjectWithPrimitiveTypes()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
         //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime().connect();
         TestClassWithPrimitives test = r.getObjectsView().open("test", TestClassWithPrimitives.class);
         test.setPrimitive("hello world".getBytes());
         assertThat(test.getPrimitive())
@@ -138,14 +122,8 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canUsePrimitiveSerializer()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
         //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime().connect();
         TestClassWithPrimitives test = r.getObjectsView().build()
                                                             .setType(TestClassWithPrimitives.class)
                                                             .setStreamName("test")
