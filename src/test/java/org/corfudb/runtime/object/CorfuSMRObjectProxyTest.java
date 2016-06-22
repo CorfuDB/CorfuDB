@@ -133,6 +133,23 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                 .isEqualTo("hello world".getBytes());
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canUseAnnotations()
+            throws Exception {
+        CorfuRuntime r = getDefaultRuntime();
+        TestClassUsingAnnotation test = r.getObjectsView().build()
+                                            .setStreamName("test")
+                                            .setType(TestClassUsingAnnotation.class)
+                                            .open();
+
+        assertThat(test.testFn1())
+                .isTrue();
+
+        assertThat(test.testIncrement())
+                .isTrue();
+    }
+
 
     @Test
     @SuppressWarnings("unchecked")
