@@ -136,60 +136,70 @@ implements IClientRouter {
 
     public void start()
     {
-        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-            final AtomicInteger threadNum = new AtomicInteger(0);
+        while (true) {
+            try {
+                workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+                    final AtomicInteger threadNum = new AtomicInteger(0);
 
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("worker-" + threadNum.getAndIncrement());
-                t.setDaemon(true);
-                return t;
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread t = new Thread(r);
+                        t.setName("worker-" + threadNum.getAndIncrement());
+                        t.setDaemon(true);
+                        return t;
+                    }
+                });
+
+                ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+
+                    final AtomicInteger threadNum = new AtomicInteger(0);
+
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread t = new Thread(r);
+                        t.setName(this.getClass().getName() + "event-" + threadNum.getAndIncrement());
+                        t.setDaemon(true);
+                        return t;
+                    }
+                });
+
+
+                Bootstrap b = new Bootstrap();
+                b.group(workerGroup);
+                b.channel(NioSocketChannel.class);
+                b.option(ChannelOption.SO_KEEPALIVE, true);
+                b.option(ChannelOption.TCP_NODELAY, true);
+                NettyClientRouter router = this;
+                b.handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    public void initChannel(SocketChannel ch) throws Exception {
+                        ch.pipeline().addLast(new LengthFieldPrepender(4));
+                        ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+                        ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
+                        ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
+                        ch.pipeline().addLast(ee, router);
+                    }
+                });
+
+                try {
+                    ChannelFuture cf = b.connect(host, port);
+                    cf.syncUninterruptibly();
+                    if (!cf.awaitUninterruptibly(5000)) {
+                        throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
+                    }
+                    channel = cf.channel();
+                } catch (Exception e) {
+                    throw new NetworkException(e.getClass().getSimpleName() +
+                            " connecting to endpoint", host + ":" + port, e);
+                }
+                return;
             }
-        });
-
-        ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-
-            final AtomicInteger threadNum = new AtomicInteger(0);
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName(this.getClass().getName() + "event-" + threadNum.getAndIncrement());
-                t.setDaemon(true);
-                return t;
+            catch (Exception ex) {
+                log.warn("Exception occurred during connection to endpoint, retrying in 5s", ex);
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException ie) {}
             }
-        });
-
-
-        Bootstrap b = new Bootstrap();
-        b.group(workerGroup);
-        b.channel(NioSocketChannel.class);
-        b.option(ChannelOption.SO_KEEPALIVE, true);
-        b.option(ChannelOption.TCP_NODELAY, true);
-        NettyClientRouter router = this;
-        b.handler(new ChannelInitializer<SocketChannel>() {
-            @Override
-            public void initChannel(SocketChannel ch) throws Exception {
-                ch.pipeline().addLast(new LengthFieldPrepender(4));
-                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
-                ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
-                ch.pipeline().addLast(ee, router);
-            }
-        });
-
-        try {
-            ChannelFuture cf = b.connect(host, port);
-            cf.syncUninterruptibly();
-            if (!cf.awaitUninterruptibly(5000)) {
-                throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
-            }
-            channel = cf.channel();
-        } catch (Exception e)
-        {
-            throw new NetworkException(e.getClass().getSimpleName() +
-                    " connecting to endpoint", host + ":" + port, e);
         }
     }
 

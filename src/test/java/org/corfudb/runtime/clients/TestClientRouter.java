@@ -51,6 +51,11 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Setter
     public UUID clientID;
 
+    /** Drop all messages, simulating a failed link. */
+    @Getter
+    @Setter
+    public boolean dropAllMessagesClientToServer;
+
     /** The optional address for this router, if set. */
     @Getter
     @Setter
@@ -64,6 +69,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         serverMap = new ConcurrentHashMap<>();
         requestID = new AtomicLong();
         clientID = CorfuRuntime.getStreamID("testClient");
+        dropAllMessagesClientToServer = false;
     }
 
     public void addServer(IServer server)
@@ -142,8 +148,10 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
         // Write the message out to the channel.
-        log.trace("Sent message: {}", message);
-        routeMessage(message);
+        if (!dropAllMessagesClientToServer) {
+            log.trace("Sent message: {}", message);
+            routeMessage(message);
+        }
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
         final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(5000));
         cfTimeout.exceptionally(e -> {
@@ -166,7 +174,9 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         final long thisRequest = requestID.getAndIncrement();
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
-        routeMessage(message);
+        if (!dropAllMessagesClientToServer) {
+            routeMessage(message);
+        }
     }
 
     /**
@@ -179,8 +189,10 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Override
     public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        ctx.writeAndFlush(outMsg);
-        log.trace("Sent response: {}", outMsg);
+        if (!dropAllMessagesClientToServer) {
+            ctx.writeAndFlush(outMsg);
+            log.trace("Sent response: {}", outMsg);
+        }
     }
 
     /** Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
