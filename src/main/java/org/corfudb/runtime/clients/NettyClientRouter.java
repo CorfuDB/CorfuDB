@@ -83,6 +83,9 @@ implements IClientRouter {
     /** The event executor group for this router. */
     public EventExecutorGroup ee;
 
+    /** Whether or not this router is shutdown. */
+    volatile public boolean shutdown;
+
     public NettyClientRouter(String host, Integer port)
     {
         this.host = host;
@@ -93,6 +96,7 @@ implements IClientRouter {
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
+        shutdown = true;
 
         addClient(new BaseClient());
     }
@@ -136,6 +140,7 @@ implements IClientRouter {
 
     public void start()
     {
+        shutdown = false;
         workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
             final AtomicInteger threadNum = new AtomicInteger(0);
 
@@ -180,12 +185,7 @@ implements IClientRouter {
         });
 
         try {
-            ChannelFuture cf = b.connect(host, port);
-            cf.syncUninterruptibly();
-            if (!cf.awaitUninterruptibly(5000)) {
-                throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
-            }
-            channel = cf.channel();
+            connectChannel(b);
         } catch (Exception e)
         {
             throw new NetworkException(e.getClass().getSimpleName() +
@@ -193,11 +193,35 @@ implements IClientRouter {
         }
     }
 
+    void connectChannel(Bootstrap b) {
+        ChannelFuture cf = b.connect(host, port);
+        cf.syncUninterruptibly();
+        if (!cf.awaitUninterruptibly(5000)) {
+            throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
+        }
+        channel = cf.channel();
+        channel.closeFuture().addListener((r) -> {
+            if (!shutdown) {
+                log.warn("Disconnected, reconnecting...");
+                while (true) {
+                    try {
+                        connectChannel(b);
+                        return;
+                    } catch (Exception ex) {
+                        log.warn("Exception while reconnecting, retry in 1s");
+                        Thread.sleep(1000);
+                    }
+                }
+            }
+        });
+    }
+
     /**
      * Stops routing requests.
      */
     @Override
     public void stop() {
+        shutdown = true;
         channel.disconnect();
     }
 
