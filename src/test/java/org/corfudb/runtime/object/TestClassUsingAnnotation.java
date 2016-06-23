@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Created by mwei on 6/22/16.
  */
 @CorfuObject(objectType= ObjectType.SMR,
-        constructorType= ConstructorType.PERSISTED,
+        constructorType= ConstructorType.RUNTIME,
         stateSource = StateSource.SELF
 )
 public class TestClassUsingAnnotation {
@@ -17,15 +17,19 @@ public class TestClassUsingAnnotation {
         a1 = new AtomicInteger();
     }
 
-    boolean testFn1() {
+    public boolean testFn1() {
         return true;
     }
 
-    boolean testIncrement() {
+    public boolean testIncrement() {
         return a1.incrementAndGet() != 0;
     }
 
-    void reset() {
+    public int getValue() {
+        return a1.get();
+    }
+
+    public void reset() {
         a1.set(0);
     }
 }
