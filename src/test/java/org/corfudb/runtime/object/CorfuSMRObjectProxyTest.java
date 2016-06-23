@@ -162,8 +162,24 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
 
         assertThat(test.testIncrement())
                 .isTrue();
-    }
 
+        assertThat(test.getValue())
+                .isNotZero();
+
+        // clear the cache, forcing a new object to be built.
+        r.getObjectsView().getObjectCache().clear();
+
+        TestClassUsingAnnotation test2 = r.getObjectsView().build()
+                .setStreamName("test")
+                .setType(TestClassUsingAnnotation.class)
+                .open();
+
+        assertThat(test)
+                .isNotSameAs(test2);
+
+        assertThat(test2.getValue())
+                .isNotZero();
+    }
 
     @Test
     @SuppressWarnings("unchecked")

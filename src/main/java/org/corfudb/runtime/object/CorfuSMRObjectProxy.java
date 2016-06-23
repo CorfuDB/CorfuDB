@@ -301,7 +301,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
     private synchronized Object doUnderlyingCall(Callable superMethod, Method method, Object[] arguments)
             throws Exception {
-            if (isCorfuObject) {
+            if (isCorfuObject || selfState) {
                 return superMethod.call();
             } else {
                 return method.invoke(interceptGetSMRObject(null), arguments);

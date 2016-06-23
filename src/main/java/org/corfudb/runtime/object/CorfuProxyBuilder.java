@@ -98,7 +98,26 @@ public class CorfuProxyBuilder {
 
             b = instrumentCorfuObjectMethods(proxy, b);
             if (corfuAnnotation.objectType() == ObjectType.SMR) {
+                // Make all methods public, so we can instrument them.
+                Method[] ms = type.getDeclaredMethods();
+                for (Method m : ms) {
+                    if (m.getModifiers() == 0) {
+                        log.warn("Method {} is not public, please mark it as public if you wish to call it via SMR");
+                    }
+                }
+
                 b = instrumentSMRMethods(proxy, b);
+
+                // default methods to MutatorAccessors
+                b = b.method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
+                        .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Accessor.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(DontInstrument.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
+                        .intercept(MethodDelegation.to(proxy, "mutatorAccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
+                        .annotateMethod(instrumentedDescription);
             }
 
             Class<? extends T> generatedClass = b.make()
@@ -119,6 +138,7 @@ public class CorfuProxyBuilder {
 
             b = instrumentCorfuObjectMethods(proxy, b);
             b = instrumentSMRMethods(proxy, b);
+
 
             Class<? extends T> generatedClass = b.make()
                     .load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
