@@ -102,11 +102,15 @@ public class CorfuRuntime {
         // Generate a new router, start it and add it to the table.
         NettyClientRouter router = new NettyClientRouter(host, port);
         log.debug("Connecting to new router {}:{}", host, port);
-        router.addClient(new LayoutClient())
-                .addClient(new SequencerClient())
-                .addClient(new LogUnitClient())
-                .start();
-        nodeRouters.put(address, router);
+        try {
+            router.addClient(new LayoutClient())
+                    .addClient(new SequencerClient())
+                    .addClient(new LogUnitClient())
+                    .start();
+            nodeRouters.put(address, router);
+        } catch (Exception e) {
+            log.warn("Error connecting to router", e);
+        }
         return router;
     };
 
