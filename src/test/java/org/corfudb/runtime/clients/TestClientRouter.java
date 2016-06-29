@@ -319,6 +319,8 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         oBuf.resetReaderIndex();
         return CorfuMsg.deserialize(oBuf);
     }
+
+
     @Override
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);

@@ -31,21 +31,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         String serviceDir = getTempDir();
 
-        Layout l = new Layout(
-                Collections.singletonList("a"),
-                new LinkedList<>(),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList("a")
-                                )
-                        )
-                )),
-                0L
-        );
+        Layout l = TestLayoutBuilder.single(9000);
 
         l.getSequencers().add("test200");
         l.getSequencers().add("test201");

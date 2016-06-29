@@ -1,8 +1,8 @@
 package org.corfudb.runtime.clients;
 
-import lombok.experimental.Accessors;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -17,7 +17,12 @@ public class TestClientRule {
 
     // actions
     private boolean drop = false;
+    private boolean dropEven = false;
+    private boolean dropOdd = false;
     private Consumer<CorfuMsg> transformer = null;
+
+    // state
+    private AtomicInteger timesMatched = new AtomicInteger();
 
     /** Always evaluate this rule. */
     public TestClientRule always() {
@@ -40,6 +45,23 @@ public class TestClientRule {
         return this;
     }
 
+    /** Drop this message on even matches (first match is even) */
+    public TestClientRule dropEven() {
+        this.dropEven = true;
+        return this;
+    }
+
+    /** Drop this message on odd matches */
+    public TestClientRule dropOdd() {
+        this.dropOdd = true;
+        return this;
+    }
+
+    /** Provide a custom matcher.
+     *
+     * @param matcher   A function that takes a CorfuMsg and returns true if the
+     *                  message matches.
+     */
     public TestClientRule matches(Function<CorfuMsg, Boolean> matcher) {
         this.matcher = matcher;
         return this;
@@ -51,7 +73,10 @@ public class TestClientRule {
     boolean evaluate(CorfuMsg message, TestClientRouter router) {
         if (message == null) return false;
         if (match(message)) {
+            int matchNumber = timesMatched.getAndIncrement();
             if (drop) return false;
+            if (dropOdd && matchNumber % 2 != 0) return false;
+            if (dropEven && matchNumber % 2 == 0) return false;
             if (transformer != null) {
                 transformer.accept(message);
                 return true;
