@@ -24,7 +24,8 @@ public class SequencerServerTest extends AbstractServerTest {
 
     @Override
     public AbstractServer getDefaultServer() {
-        return new SequencerServer(defaultOptionsMap());
+        return new
+                SequencerServer(new ServerConfigBuilder().build());
     }
 
     @Test

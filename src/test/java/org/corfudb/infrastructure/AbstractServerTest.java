@@ -56,14 +56,4 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     {
         router.sendServerMessage(message);
     }
-
-    public Map<String,Object> defaultOptionsMap()
-    {
-        return new ImmutableMap.Builder<String,Object>()
-                        .put("--initial-token", "0")
-                        .put("--single", false)
-                        .put("--memory", true)
-                        .put("--sync", false)
-                        .build();
-    }
 }

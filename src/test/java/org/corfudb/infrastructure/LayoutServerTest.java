@@ -22,7 +22,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
     @Override
     public AbstractServer getDefaultServer() {
-        return new LayoutServer(defaultOptionsMap(), getRouter());
+        return new LayoutServer(new ServerConfigBuilder().build(), getRouter());
     }
 
     @Test
