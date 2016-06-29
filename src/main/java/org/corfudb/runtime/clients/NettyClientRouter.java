@@ -59,6 +59,21 @@ implements IClientRouter {
     @Getter
     public AtomicLong requestID;
 
+    /** New connection timeout (milliseconds) */
+    @Getter
+    @Setter
+    public long timeoutConnect;
+
+    /** Sync call response timeout (milliseconds) */
+    @Getter
+    @Setter
+    public long timeoutResponse;
+
+    /** Retry interval after timeout (milliseconds) */
+    @Getter
+    @Setter
+    public long timeoutRetry;
+
     /** A random instance */
     public static final Random random = new Random();
 
@@ -92,6 +107,9 @@ implements IClientRouter {
         this.port = port;
 
         clientID = UUID.randomUUID();
+        timeoutConnect = 500;
+        timeoutResponse = 5000;
+        timeoutRetry = 1000;
         handlerMap = new ConcurrentHashMap<>();
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
@@ -196,7 +214,7 @@ implements IClientRouter {
     void connectChannel(Bootstrap b) {
         ChannelFuture cf = b.connect(host, port);
         cf.syncUninterruptibly();
-        if (!cf.awaitUninterruptibly(5000)) {
+        if (!cf.awaitUninterruptibly(timeoutConnect)) {
             throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
         }
         channel = cf.channel();
@@ -209,7 +227,7 @@ implements IClientRouter {
                         return;
                     } catch (Exception ex) {
                         log.warn("Exception while reconnecting, retry in 1s");
-                        Thread.sleep(1000);
+                        Thread.sleep(timeoutRetry);
                     }
                 }
             }
@@ -253,7 +271,7 @@ implements IClientRouter {
         }
         log.trace("Sent message: {}", message);
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(5));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);
