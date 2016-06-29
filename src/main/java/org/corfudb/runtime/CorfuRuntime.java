@@ -5,6 +5,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.view.*;
+import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Version;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -138,6 +140,15 @@ public class CorfuRuntime {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
+        log.debug("Corfu runtime version {} initialized.", getVersionString());
+    }
+
+    public static String getVersionString() {
+        if (Version.getVersionString().contains("SNAPSHOT") || Version.getVersionString().contains("source"))
+        {
+            return Version.getVersionString() + "(" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")";
+        }
+        return Version.getVersionString();
     }
 
     /** Parse a configuration string and get a CorfuRuntime.
