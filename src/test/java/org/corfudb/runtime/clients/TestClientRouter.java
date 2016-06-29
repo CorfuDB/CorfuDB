@@ -6,7 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.IServer;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -35,7 +35,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     public Map<Long, CompletableFuture> outstandingRequests;
 
     /** The list of test server handlers attached to this router. */
-    public Map<CorfuMsg.CorfuMsgType, IServer> serverMap;
+    public Map<CorfuMsg.CorfuMsgType, AbstractServer> serverMap;
 
     public AtomicLong requestID;
 
@@ -72,7 +72,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         dropAllMessagesClientToServer = false;
     }
 
-    public void addServer(IServer server)
+    public void addServer(AbstractServer server)
     {
         // Iterate through all types of CorfuMsgType, registering the handler
         Arrays.<CorfuMsg.CorfuMsgType>stream(CorfuMsg.CorfuMsgType.values())

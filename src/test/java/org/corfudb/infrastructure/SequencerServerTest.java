@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.io.Files;
 import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
 import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -24,7 +23,7 @@ public class SequencerServerTest extends AbstractServerTest {
     }
 
     @Override
-    public IServer getDefaultServer() {
+    public AbstractServer getDefaultServer() {
         return new SequencerServer(defaultOptionsMap());
     }
 
@@ -112,12 +111,12 @@ public class SequencerServerTest extends AbstractServerTest {
     {
        String serviceDir = getTempDir();
 
-       SequencerServer s1 = new SequencerServer(new ImmutableMap.Builder<String,Object>()
-            .put("--initial-token", "0")
-            .put("--log-path", serviceDir)
-            .put("--memory", false)
-            .put("--checkpoint", 1)
-            .build());
+       SequencerServer s1 = new SequencerServer(new ServerConfigBuilder()
+               .setLogPath(serviceDir)
+               .setMemory(false)
+               .setInitialToken(0)
+               .setCheckpoint(1)
+               .build());
 
         this.router.setServerUnderTest(s1);
         sendMessage(new TokenRequestMsg(Collections.singleton(CorfuRuntime.getStreamID("a")), 1));
@@ -127,11 +126,11 @@ public class SequencerServerTest extends AbstractServerTest {
         Thread.sleep(1400);
         s1.shutdown();
 
-        SequencerServer s2 = new SequencerServer(new ImmutableMap.Builder<String,Object>()
-                .put("--initial-token", -1)
-                .put("--log-path", serviceDir)
-                .put("--memory", false)
-                .put("--checkpoint", 1)
+        SequencerServer s2 = new SequencerServer(new ServerConfigBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .setInitialToken(-1)
+                .setCheckpoint(1)
                 .build());
         this.router.setServerUnderTest(s2);
         assertThat(s2)

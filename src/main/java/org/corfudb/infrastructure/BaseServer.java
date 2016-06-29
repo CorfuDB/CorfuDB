@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
@@ -10,7 +9,7 @@ import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-public class BaseServer implements IServer {
+public class BaseServer extends AbstractServer {
 
     IServerRouter serverRouter;
 
@@ -21,6 +20,7 @@ public class BaseServer implements IServer {
 
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (isShutdown()) return;
         switch (msg.getMsgType())
         {
             case PING:

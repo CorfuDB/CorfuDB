@@ -9,9 +9,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.gson.Gson;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.*;
@@ -55,7 +53,7 @@ import org.corfudb.util.serializer.Serializers;
  * When the entry is complete, a written flag is set in the flags field.
  */
 @Slf4j
-public class LogUnitServer implements IServer {
+public class LogUnitServer extends AbstractServer {
 
     /** The options map. */
     Map<String,Object> opts;
@@ -394,6 +392,7 @@ public class LogUnitServer implements IServer {
 
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (isShutdown()) return;
         switch(msg.getMsgType())
         {
             case WRITE:

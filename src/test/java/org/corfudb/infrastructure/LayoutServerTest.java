@@ -5,12 +5,10 @@ import com.google.common.io.Files;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
-import com.google.common.collect.ImmutableMap;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.util.Collections;
 import java.util.LinkedList;
 
@@ -23,7 +21,7 @@ import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 public class LayoutServerTest extends AbstractServerTest {
 
     @Override
-    public IServer getDefaultServer() {
+    public AbstractServer getDefaultServer() {
         return new LayoutServer(defaultOptionsMap(), getRouter());
     }
 
@@ -54,12 +52,8 @@ public class LayoutServerTest extends AbstractServerTest {
 
         Files.write(l.asJSONString().getBytes(), new File(serviceDir, "layout"));
 
-        LayoutServer ls = new LayoutServer(new ImmutableMap.Builder<String,Object>()
-                .put("--initial-token", "0")
-                .put("--single", false)
-                .put("--memory", true)
-                .put("--log-path", serviceDir)
-                .put("--sync", false)
+        LayoutServer ls = new LayoutServer(new ServerConfigBuilder()
+                .setLogPath(serviceDir)
                 .build(), getRouter());
 
         setServer(ls);
@@ -184,10 +178,10 @@ public class LayoutServerTest extends AbstractServerTest {
     {
         String serviceDir = getTempDir();
 
-        LayoutServer s1 = new LayoutServer(new ImmutableMap.Builder<String,Object>()
-                .put("--log-path", serviceDir)
-                .put("--memory", false)
-                .put("--single", false)
+        LayoutServer s1 = new LayoutServer(new ServerConfigBuilder()
+                .setSingle(false)
+                .setMemory(false)
+                .setLogPath(serviceDir)
                 .build(), getRouter());
 
         setServer(s1);
@@ -209,10 +203,10 @@ public class LayoutServerTest extends AbstractServerTest {
                 .isPhase2Rank(100);
         s1.shutdown();
 
-        LayoutServer s2 = new LayoutServer(new ImmutableMap.Builder<String,Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
+        LayoutServer s2 = new LayoutServer(new ServerConfigBuilder()
+                .setSingle(false)
+                .setMemory(false)
+                .setLogPath(serviceDir)
                 .build(), getRouter());
         this.router.setServerUnderTest(s2);
         assertThat(s2)

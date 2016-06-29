@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import com.google.common.io.Files;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
@@ -47,7 +46,7 @@ import java.util.Map;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-public class LayoutServer implements IServer {
+public class LayoutServer extends AbstractServer {
 
     /** The options map. */
     Map<String,Object> opts;
@@ -65,8 +64,9 @@ public class LayoutServer implements IServer {
     @Getter
     IServerRouter serverRouter;
 
-    /** Th layout file, or null if in memory. */
+    /** The layout file, or null if in memory. */
     File layoutFile;
+
 
     public LayoutServer(Map<String, Object> opts, IServerRouter serverRouter)
     {
@@ -149,6 +149,7 @@ public class LayoutServer implements IServer {
 
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (isShutdown()) return;
         // This server has not been bootstrapped yet, ignore ALL requests except for LAYOUT_BOOTSTRAP
         if (currentLayout == null)
         {

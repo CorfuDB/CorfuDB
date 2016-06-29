@@ -3,7 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.IServer;
+import org.corfudb.infrastructure.AbstractServer;
 import org.junit.Before;
 
 import java.util.Map;
@@ -25,7 +25,7 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
         getClientsForTest().stream().forEach(router::addClient);
     }
 
-    abstract Set<IServer> getServersForTest();
+    abstract Set<AbstractServer> getServersForTest();
     abstract Set<IClient> getClientsForTest();
 
     public Map<String,Object> defaultOptionsMap()
