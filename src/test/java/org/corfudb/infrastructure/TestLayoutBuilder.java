@@ -82,7 +82,7 @@ public class TestLayoutBuilder {
             return layoutBuilder;
         }
 
-        public Layout.LayoutSegment build() {
+        private Layout.LayoutSegment build() {
             List<Layout.LayoutStripe> allStripes = stripes.stream()
                     .map(TestStripeBuilder::build)
                     .collect(Collectors.toList());
@@ -110,7 +110,7 @@ public class TestLayoutBuilder {
             return segmentBuilder;
         }
 
-        public Layout.LayoutStripe build() {
+        private Layout.LayoutStripe build() {
             return new Layout.LayoutStripe(logUnits);
         }
     }

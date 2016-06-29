@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -38,25 +39,6 @@ public class LayoutClientTest extends AbstractClientTest {
                 .build();
     }
 
-    Layout getTestLayout() {
-        String localAddress = "localhost:9999";
-        return new Layout(
-                Collections.singletonList(localAddress),
-                Collections.singletonList(localAddress),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList(localAddress)
-                                )
-                        )
-                )),
-                0L
-        );
-    }
-
     @Test
     public void nonBootstrappedServerThrowsException()
     {
@@ -69,20 +51,20 @@ public class LayoutClientTest extends AbstractClientTest {
     public void bootstrapServerInstallsNewLayout()
             throws Exception
     {
-        assertThat(client.bootstrapLayout(getTestLayout()).get())
+        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
         assertThat(client.getLayout().get().asJSONString())
-                .isEqualTo(getTestLayout().asJSONString());
+                .isEqualTo(TestLayoutBuilder.single(9000).asJSONString());
     }
 
     @Test
     public void cannotBootstrapServerTwice()
             throws Exception
     {
-        assertThat(client.bootstrapLayout(getTestLayout()).get())
+        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
-        assertThatThrownBy(() -> client.bootstrapLayout(getTestLayout()).get())
+        assertThatThrownBy(() -> client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
     }
 
@@ -90,7 +72,7 @@ public class LayoutClientTest extends AbstractClientTest {
     public void canGetNewLayoutInDifferentEpoch()
             throws Exception
     {
-        Layout l = getTestLayout();
+        Layout l = TestLayoutBuilder.single(9000);
         l.setEpoch(42L);
         assertThat(client.bootstrapLayout(l).get())
                 .isEqualTo(true);
@@ -103,7 +85,7 @@ public class LayoutClientTest extends AbstractClientTest {
     public void prepareRejectsLowerRanks()
             throws Exception
     {
-        assertThat(client.bootstrapLayout(getTestLayout()).get())
+        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
         assertThat(client.prepare(10L).get())
@@ -122,17 +104,17 @@ public class LayoutClientTest extends AbstractClientTest {
     public void proposeRejectsLowerRanks()
             throws Exception
     {
-        assertThat(client.bootstrapLayout(getTestLayout()).get())
+        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
         assertThat(client.prepare(10L).get())
                 .isEqualTo(true);
 
         assertThatThrownBy(() -> {
-            client.propose(5L, getTestLayout()).get();
+            client.propose(5L, TestLayoutBuilder.single(9000)).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
-        assertThat(client.propose(10L, getTestLayout()).get())
+        assertThat(client.propose(10L, TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
     }
 
@@ -140,20 +122,20 @@ public class LayoutClientTest extends AbstractClientTest {
     public void proposeRejectsAlreadyProposed()
             throws Exception
     {
-        assertThat(client.bootstrapLayout(getTestLayout()).get())
+        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
         assertThat(client.prepare(10L).get())
                 .isEqualTo(true);
 
-        client.propose(10L, getTestLayout()).get();
+        client.propose(10L, TestLayoutBuilder.single(9000)).get();
 
         assertThatThrownBy(() -> {
-            client.propose(5L, getTestLayout()).get();
+            client.propose(5L, TestLayoutBuilder.single(9000)).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
         assertThatThrownBy(() -> {
-            client.propose(10L, getTestLayout()).get();
+            client.propose(10L, TestLayoutBuilder.single(9000)).get();
         }).hasCauseInstanceOf(OutrankedException.class);
     }
 
@@ -161,7 +143,7 @@ public class LayoutClientTest extends AbstractClientTest {
     public void commitReturnsAck()
             throws Exception
     {
-        assertThat(client.bootstrapLayout(getTestLayout()).get())
+        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
         assertThat(client.prepare(10L).get())

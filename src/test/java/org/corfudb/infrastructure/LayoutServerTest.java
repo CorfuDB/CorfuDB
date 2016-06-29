@@ -61,7 +61,7 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void bootstrapServerInstallsNewLayout()
     {
-        Layout testLayout = getTestLayout();
+        Layout testLayout = TestLayoutBuilder.single(9000);
         sendMessage(new LayoutMsg(testLayout, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
         sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
         assertThat(getLastMessage().getMsgType())
@@ -73,31 +73,13 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void cannotBootstrapServerTwice()
     {
-        Layout testLayout = getTestLayout();
+        Layout testLayout = TestLayoutBuilder.single(9000);
         sendMessage(new LayoutMsg(testLayout, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
         sendMessage(new LayoutMsg(testLayout, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP);
     }
 
-    Layout getTestLayout() {
-        String localAddress = "localhost:9999";
-        return new Layout(
-                Collections.singletonList(localAddress),
-                Collections.singletonList(localAddress),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList(localAddress)
-                                )
-                        )
-                )),
-                0L
-        );
-    }
 
     void bootstrapServer(Layout l)
     {
@@ -107,7 +89,7 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void prepareRejectsLowerRanks()
     {
-        bootstrapServer(getTestLayout());
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
@@ -119,11 +101,11 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void proposeRejectsLowerRanks()
     {
-        bootstrapServer(getTestLayout());
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(getTestLayout(), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT);
     }
@@ -131,14 +113,14 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void proposeRejectsAlreadyProposed()
     {
-        bootstrapServer(getTestLayout());
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 10, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(getTestLayout(), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(getTestLayout(), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT);
     }
@@ -146,11 +128,11 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void commitReturnsAck()
     {
-        bootstrapServer(getTestLayout());
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(getTestLayout(), 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
         sendMessage(new LayoutRankMsg(null, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
@@ -171,8 +153,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .build(), getRouter());
 
         setServer(s1);
-        bootstrapServer(getTestLayout());
-        Layout l100 = getTestLayout();
+        bootstrapServer(TestLayoutBuilder.single(9000));
+        Layout l100 = TestLayoutBuilder.single(9000);
         l100.setEpoch(100);
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())

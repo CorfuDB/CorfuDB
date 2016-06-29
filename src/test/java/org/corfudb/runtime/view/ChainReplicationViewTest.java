@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import lombok.Getter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
@@ -103,25 +104,19 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
-        setLayout(new Layout(
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        ImmutableList.<String>builder()
-                                                .add(getEndpoint(9000))
-                                                .add(getEndpoint(9001))
-                                                .add(getEndpoint(9002))
-                                                .build()
-                                )
-                        )
-                )),
-                1L
-        ));
+        setLayout(new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                    .buildSegment()
+                        .buildStripe()
+                            .addLogUnit(9000)
+                            .addLogUnit(9001)
+                            .addLogUnit(9002)
+                        .addToSegment()
+                    .addToLayout()
+                .build()
+        );
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
