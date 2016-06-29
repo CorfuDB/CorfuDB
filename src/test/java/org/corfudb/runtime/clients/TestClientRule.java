@@ -4,6 +4,7 @@ import lombok.experimental.Accessors;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Created by mwei on 6/29/16.
@@ -12,6 +13,7 @@ public class TestClientRule {
 
     // conditions
     private boolean always = false;
+    private Function<CorfuMsg, Boolean> matcher = null;
 
     // actions
     private boolean drop = false;
@@ -38,6 +40,10 @@ public class TestClientRule {
         return this;
     }
 
+    public TestClientRule matches(Function<CorfuMsg, Boolean> matcher) {
+        this.matcher = matcher;
+        return this;
+    }
 
     /** Package-Private Operations For The Router */
 
@@ -56,7 +62,6 @@ public class TestClientRule {
 
     /** Returns whether or not the rule matches the given message. */
     boolean match(CorfuMsg message) {
-        if (always) return true;
-        return false;
+        return always || matcher.apply(message);
     }
 }
