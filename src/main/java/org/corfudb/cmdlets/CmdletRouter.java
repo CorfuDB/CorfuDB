@@ -3,11 +3,14 @@ package org.corfudb.cmdlets;
 import java.io.File;
 import java.util.Arrays;
 
+import static java.lang.System.exit;
+
 /**
  * Routes symlink-files to the proper cmdlet.
  * Symlinks are in the bin directory.
  * They symlink to the script in scripts/cmdlet.sh
  * This script passes the name of the symlink as the first argument to this script.
+ *
  * Created by mwei on 12/10/15.
  */
 public class CmdletRouter {
@@ -32,13 +35,16 @@ public class CmdletRouter {
                 try {
                     // Execute with the arguments other than the name of the cmdlet itself.
                     ((ICmdlet) cmdlet.getConstructor().newInstance()).main(Arrays.copyOfRange(args, 1, args.length));
+                    exit(0);
                 } catch (Exception e) {
                     // Let the user know if an exception occurs.
                     System.out.println(e.getClass().getSimpleName() + " exception: " + e.getMessage());
+                    exit(1);
                 }
             }
         } catch (ClassNotFoundException cnfe) {
             System.out.println("No cmdlet named " + cmdletName + " available!");
+            exit(64);
         }
     }
 }

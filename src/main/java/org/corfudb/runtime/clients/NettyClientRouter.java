@@ -66,6 +66,24 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Setter
     public UUID clientID;
     /**
+     * New connection timeout (milliseconds)
+     */
+    @Getter
+    @Setter
+    public long timeoutConnect;
+    /**
+     * Sync call response timeout (milliseconds)
+     */
+    @Getter
+    @Setter
+    public long timeoutResponse;
+    /**
+     * Retry interval after timeout (milliseconds)
+     */
+    @Getter
+    @Setter
+    public long timeoutRetry;
+    /**
      * The current request ID.
      */
     @Getter
@@ -112,12 +130,22 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     @Getter
     Integer port;
+    /**
+     * Are we connected?
+     */
+    @Getter
+    Boolean connected_p;
 
     public NettyClientRouter(String host, Integer port) {
         this.host = host;
         this.port = port;
 
         clientID = UUID.randomUUID();
+        connected_p = false;
+        timeoutConnect = 500;
+        timeoutResponse = 5000;
+        timeoutRetry = 1000;
+
         handlerMap = new ConcurrentHashMap<>();
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
@@ -165,6 +193,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     public void start() {
+        start(-1);
+    }
+
+    public void start(long c) {
         shutdown = false;
         workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
             final AtomicInteger threadNum = new AtomicInteger(0);
@@ -210,34 +242,40 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         });
 
         try {
-            connectChannel(b);
+            connectChannel(b, c);
         } catch (Exception e) {
             throw new NetworkException(e.getClass().getSimpleName() +
                     " connecting to endpoint", host + ":" + port, e);
         }
     }
 
-    void connectChannel(Bootstrap b) {
+    void connectChannel(Bootstrap b, long c) {
         ChannelFuture cf = b.connect(host, port);
         cf.syncUninterruptibly();
-        if (!cf.awaitUninterruptibly(5000)) {
-            throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
+        if (!cf.awaitUninterruptibly(timeoutConnect)) {
+            throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
         }
         channel = cf.channel();
         channel.closeFuture().addListener((r) -> {
+            connected_p = false;
+            outstandingRequests.forEach((ReqID, reqCF) -> {
+                reqCF.completeExceptionally(new NetworkException("Disconnected", host + ":" + port));
+                outstandingRequests.remove(ReqID);
+            });
             if (!shutdown) {
-                log.warn("Disconnected, reconnecting...");
+                log.trace("Disconnected, reconnecting...");
                 while (true) {
                     try {
-                        connectChannel(b);
+                        connectChannel(b, c);
                         return;
                     } catch (Exception ex) {
-                        log.warn("Exception while reconnecting, retry in 1s");
-                        Thread.sleep(1000);
+                        log.trace("Exception while reconnecting, retry in {} ms", timeoutRetry);
+                        Thread.sleep(timeoutRetry);
                     }
                 }
             }
         });
+        connected_p = true; // QQQ SLF verify!
     }
 
     /**
@@ -259,30 +297,35 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * or a timeout in the case there is no response.
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
-        // Get the next request ID.
-        final long thisRequest = requestID.getAndIncrement();
-        // Set the message fields.
-        message.setClientID(clientID);
-        message.setRequestID(thisRequest);
-        message.setEpoch(epoch);
-        // Generate a future and put it in the completion table.
-        final CompletableFuture<T> cf = new CompletableFuture<>();
-        outstandingRequests.put(thisRequest, cf);
-        // Write the message out to the channel.
-        if (ctx == null) {
-            channel.writeAndFlush(message);
+        if (!connected_p) {
+            log.trace("Disconnected endpoint " + host + ":" + port);
+            throw new NetworkException("Disconnected endpoint", host + ":" + port);
         } else {
-            ctx.writeAndFlush(message);
+            // Get the next request ID.
+            final long thisRequest = requestID.getAndIncrement();
+            // Set the message fields.
+            message.setClientID(clientID);
+            message.setRequestID(thisRequest);
+            message.setEpoch(epoch);
+            // Generate a future and put it in the completion table.
+            final CompletableFuture<T> cf = new CompletableFuture<>();
+            outstandingRequests.put(thisRequest, cf);
+            // Write the message out to the channel.
+            if (ctx == null) {
+                channel.writeAndFlush(message);
+            } else {
+                ctx.writeAndFlush(message);
+            }
+            log.trace("Sent message: {}", message);
+            // Generate a timeout future, which will complete exceptionally if the main future is not completed.
+            final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(timeoutResponse));
+            cfTimeout.exceptionally(e -> {
+                outstandingRequests.remove(thisRequest);
+                log.debug("Remove request {} due to timeout!", thisRequest);
+                return null;
+            });
+            return cfTimeout;
         }
-        log.trace("Sent message: {}", message);
-        // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(5));
-        cfTimeout.exceptionally(e -> {
-            outstandingRequests.remove(thisRequest);
-            log.debug("Remove request {} due to timeout!", thisRequest);
-            return null;
-        });
-        return cfTimeout;
     }
 
     /**

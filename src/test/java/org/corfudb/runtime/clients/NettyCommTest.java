@@ -61,8 +61,17 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .isTrue();
             d.shutdownServer();
             d.bootstrapServer();
-            // First ping may fail due to connection loss.
-            r.getClient(BaseClient.class).pingSync();
+            // We are now racing with the server's startup.  Immediate attempts
+            // to ping the server will fail immediately due to client-side
+            // rejection because the TCP session isn't yet connected.  Retry
+            // for up to 60 seconds before giving up: TravisCI can be truly
+            // unpredictably slow.
+            int sleep_incr = 10;
+            for (int i = 0; i < 60000; i += sleep_incr) {
+                if (r.getClient(BaseClient.class).pingSync() == true)
+                    break;
+                Thread.sleep(sleep_incr);
+            }
             assertThat(r.getClient(BaseClient.class).pingSync())
                     .isTrue();
         });
