@@ -263,16 +263,19 @@ implements IClientRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
         // Write the message out to the channel.
+        System.out.print("<");
         if (ctx == null) {
             channel.writeAndFlush(message);
         }
         else {
             ctx.writeAndFlush(message);
         }
+        System.out.print(">");
         log.trace("Sent message: {}", message);
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
         final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
+            System.out.print("t");
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);
             return null;

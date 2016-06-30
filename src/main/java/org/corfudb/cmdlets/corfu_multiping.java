@@ -67,12 +67,16 @@ public class corfu_multiping implements ICmdlet {
         while (true) {
             ping_one_round();
             just_sleep_dammit(1000);
+            // just_sleep_dammit(2);
             // This kind of check may not see flapping that happens during
             // intervals of less than this loop's polling interval.
             for (int j = 0; j < num; j++) {
                 if (last_up[j] != up[j]) {
-                    System.out.println("Host " + hosts[j] + " port " + ports[j] + ": " +
-                                       last_up[j] + " -> " + up[j]);
+                    // System.out.println("Host " + hosts[j] + " port " + ports[j] + ": " +
+                    //                    last_up[j] + " -> " + up[j]);
+                    log.info("Host " + hosts[j] + " port " + ports[j] + ": " +
+                            last_up[j] + " -> " + up[j]);
+
                     last_up[j] = up[j];
                 }
             }
@@ -108,9 +112,9 @@ public class corfu_multiping implements ICmdlet {
                 NettyClientRouter r = new NettyClientRouter(hosts[nth], ports[nth]);
                 r.start();
                 routers[nth] = r;
-                routers[nth].setTimeoutConnect(1000);
+                routers[nth].setTimeoutConnect(500);
                 routers[nth].setTimeoutRetry(250);
-                routers[nth].setTimeoutResponse(3*1000);
+                routers[nth].setTimeoutResponse(2*1000);
             }
             CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
             cf.exceptionally(e -> {
