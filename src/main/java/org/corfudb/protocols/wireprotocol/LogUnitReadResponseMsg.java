@@ -3,6 +3,7 @@ package org.corfudb.protocols.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import lombok.*;
 import lombok.experimental.Accessors;
+import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -39,25 +40,6 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
     public static Map<Byte, ReadResultType> readResultTypeMap =
             Arrays.<ReadResultType>stream(ReadResultType.values())
                     .collect(Collectors.toMap(ReadResultType::asByte, Function.identity()));
-
-    @Data
-    @RequiredArgsConstructor
-    @AllArgsConstructor
-    public static class LogUnitEntry implements IMetadata {
-        public final ByteBuf buffer;
-        public final EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap;
-        public final boolean isHole;
-        public boolean isPersisted;
-
-        /** Generate a new log unit entry which is a hole */
-        public LogUnitEntry()
-        {
-            buffer = null;
-            metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
-            isHole = true;
-            isPersisted = false;
-        }
-    }
 
     @ToString(exclude="runtime")
     @Accessors(chain=true)
@@ -119,7 +101,7 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
         this.result = result;
     }
 
-    public LogUnitReadResponseMsg(LogUnitEntry entry)
+    public LogUnitReadResponseMsg(LogUnitServer.LogUnitEntry entry)
     {
         this.msgType = CorfuMsgType.READ_RESPONSE;
         this.result = ReadResultType.DATA;
