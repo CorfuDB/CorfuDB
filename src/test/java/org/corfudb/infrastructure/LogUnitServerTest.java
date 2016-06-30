@@ -54,7 +54,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         m.setPayload(payload);
         sendMessage(m);
 
-        LoadingCache<Long, LogUnitReadResponseMsg.LogUnitEntry> dataCache = s1.getDataCache();
+        LoadingCache<Long, LogUnitServer.LogUnitEntry> dataCache = s1.getDataCache();
         // Make sure that extra bytes are truncated from the payload byte buf
         assertThat(dataCache.get(address).getBuffer().capacity()).isEqualTo(payload.length);
 

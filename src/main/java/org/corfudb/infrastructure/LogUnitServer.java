@@ -9,9 +9,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.gson.Gson;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.*;
@@ -25,7 +23,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -37,7 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.LogUnitEntry;
 import org.corfudb.util.serializer.Serializers;
 
 /**
@@ -67,7 +63,6 @@ public class LogUnitServer implements IServer {
     class FileHandle {
         final AtomicLong filePointer;
         final FileChannel channel;
-        final FileLock lock;
         final Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         @Getter(lazy=true)
         private final MappedByteBuffer byteBuffer = getMappedBuffer();
@@ -86,6 +81,27 @@ public class LogUnitServer implements IServer {
                 log.error("Failed to map buffer for channel.");
                 throw new RuntimeException(ie);
             }
+        }
+    }
+
+    @Data
+    @RequiredArgsConstructor
+    @AllArgsConstructor
+    public static class LogUnitEntry implements IMetadata {
+        public final long address;
+        public final ByteBuf buffer;
+        public final EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap;
+        public final boolean isHole;
+        public boolean isPersisted;
+
+        /** Generate a new log unit entry which is a hole */
+        public LogUnitEntry(long address)
+        {
+            this.address = address;
+            buffer = null;
+            this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+            this.isHole = true;
+            this.isPersisted = false;
         }
     }
 
@@ -147,7 +163,7 @@ public class LogUnitServer implements IServer {
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
      */
-    LoadingCache<Long, LogUnitReadResponseMsg.LogUnitEntry> dataCache;
+    LoadingCache<Long, LogUnitEntry> dataCache;
 
     long maxCacheSize;
 
@@ -350,7 +366,7 @@ public class LogUnitServer implements IServer {
                 o.position(o.position() + metadataMapSize);
                 ByteBuffer dBuf = o.slice();
                 dBuf.limit(size - metadataMapSize - 24);
-                return new LogUnitEntry(Unpooled.wrappedBuffer(dBuf),
+                return new LogUnitEntry(address, Unpooled.wrappedBuffer(dBuf),
                         LogUnitMetadataMsg.mapFromBuffer(mBuf),
                         false,
                         true);
@@ -373,12 +389,10 @@ public class LogUnitServer implements IServer {
                         EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
                                 StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
 
-                FileLock fl = fc.lock();
-
                 AtomicLong fp = new AtomicLong();
                 writeHeader(fc, fp, 1, 0);
                 log.info("Opened new log file at {}", filePath);
-                FileHandle fh = new FileHandle(fp, fc, fl);
+                FileHandle fh = new FileHandle(fp, fc);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 readEntry(fh, -1);
@@ -428,7 +442,7 @@ public class LogUnitServer implements IServer {
             {
                 LogUnitFillHoleMsg m = (LogUnitFillHoleMsg) msg;
                 log.debug("Hole fill requested at {}", m.getAddress());
-                dataCache.get(m.getAddress(), (address) -> new LogUnitEntry());
+                dataCache.get(m.getAddress(), (address) -> new LogUnitEntry(address));
                 r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
             }
             break;
@@ -675,9 +689,10 @@ public class LogUnitServer implements IServer {
     /** Service an incoming write request. */
     public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, IServerRouter r)
     {
-        log.trace("Write[{}]", msg.getAddress());
+        long address = msg.getAddress();
+        log.trace("Write[{}]", address);
         //TODO: locking of trimRange.
-        if (trimRange.contains (msg.getAddress()))
+        if (trimRange.contains (address))
         {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_TRIMMED));
         }
@@ -685,10 +700,10 @@ public class LogUnitServer implements IServer {
             // The payload in the message is a view of a larger buffer allocated
             // by netty, thus direct memory can leak. Copy the view and release the
             // underlying buffer
-            LogUnitEntry e = new LogUnitEntry(msg.getData().copy(), msg.getMetadataMap(), false);
+            LogUnitEntry e = new LogUnitEntry(address, msg.getData().copy(), msg.getMetadataMap(), false);
             msg.getData().release();
             try {
-                dataCache.put(msg.getAddress(), e);
+                dataCache.put(e.getAddress(), e);
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OK));
             } catch (Exception ex)
             {
@@ -776,21 +791,10 @@ public class LogUnitServer implements IServer {
     @Override
     public void shutdown() {
         scheduler.shutdownNow();
-        // Clean up any file locks.
-        if (channelMap != null) {
-            channelMap.entrySet().parallelStream()
-                    .forEach(f -> {
-                        try {
-                            f.getValue().getLock().release();
-                        } catch (IOException ie) {
-                            log.warn("Error releasing lock for channel {}", f.getKey());
-                        }
-                    });
-        }
     }
 
     @VisibleForTesting
-    LoadingCache<Long, LogUnitReadResponseMsg.LogUnitEntry> getDataCache(){
+    LoadingCache<Long, LogUnitEntry> getDataCache(){
         return dataCache;
     }
 }
