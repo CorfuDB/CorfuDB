@@ -8,12 +8,14 @@ import org.junit.Before;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Created by mwei on 12/12/15.
  */
 public abstract class AbstractServerTest extends AbstractCorfuTest {
 
+    public static final UUID testClientId = UUID.nameUUIDFromBytes("TEST_CLIENT".getBytes());
     @Getter
     TestServerRouter router;
 
@@ -53,6 +55,11 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
 
     public void sendMessage(CorfuMsg message)
     {
+        sendMessage(testClientId, message);
+    }
+
+    public void sendMessage(UUID clientId, CorfuMsg message) {
+        message.setClientID(clientId);
         router.sendServerMessage(message);
     }
 

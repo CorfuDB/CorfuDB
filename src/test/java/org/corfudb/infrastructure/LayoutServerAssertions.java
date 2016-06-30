@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import org.assertj.core.api.AbstractAssert;
 import org.corfudb.protocols.wireprotocol.LogUnitPayloadMsg;
+import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 1/7/16.
@@ -44,10 +45,10 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
         return this;
     }
 
-    public LayoutServerAssertions isPhase1Rank(long phase1Rank) {
+    public LayoutServerAssertions isPhase1Rank(Rank phase1Rank) {
         isNotNull();
 
-        if (actual.currentLayout.getEpoch() != phase1Rank)
+        if (actual.phase1Rank.compareTo(phase1Rank) != 0)
         {
             failWithMessage("Expected server to be in phase1Rank <%d> but it was in phase1Rank <%d>", phase1Rank,
                     actual.phase1Rank);
@@ -56,15 +57,26 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
         return this;
     }
 
-    public LayoutServerAssertions isPhase2Rank(long phase2Rank) {
+    public LayoutServerAssertions isPhase2Rank(Rank phase2Rank) {
         isNotNull();
 
-        if (actual.currentLayout.getEpoch() != phase2Rank)
+        if (actual.phase2Rank.compareTo(phase2Rank) != 0)
         {
             failWithMessage("Expected server to be in phase2Rank <%d> but it was in phase2Rank <%d>", phase2Rank,
                     actual.phase2Rank);
         }
 
+        return this;
+    }
+
+    public LayoutServerAssertions isProposedLayout(Layout layout) {
+        isNotNull();
+        if(!actual.proposedLayout.asJSONString().equals(layout.asJSONString()))
+        {
+             failWithMessage("Expected server to have proposedLayout  <%s> but it is <%s>", layout,
+                    actual.proposedLayout);
+
+        }
         return this;
     }
 }
