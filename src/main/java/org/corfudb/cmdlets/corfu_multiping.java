@@ -64,8 +64,10 @@ public class corfu_multiping implements ICmdlet {
             up[i] = last_up[i] = false;
         }
 
+        int c = 0;
         while (true) {
-            ping_one_round();
+            log.info("Main top, c = " + c);
+            ping_one_round(c);
             just_sleep_dammit(1000);
             // just_sleep_dammit(2);
             // This kind of check may not see flapping that happens during
@@ -80,6 +82,7 @@ public class corfu_multiping implements ICmdlet {
                     last_up[j] = up[j];
                 }
             }
+            c++;
         }
         // notreached
     }
@@ -90,13 +93,13 @@ public class corfu_multiping implements ICmdlet {
         } catch (InterruptedException ie) {}
     }
 
-    private void ping_one_round() {
+    private void ping_one_round(long c) {
         for (int i = 0; i < num; i++) {
-            ping_host_once(i);
+            ping_host_once(c, i);
         }
     }
 
-    private void ping_host_once(int nth) {
+    private void ping_host_once(long c, int nth) {
         // This mutable data stuff gives me the heebie-jeebies.....
         //
         // It would be very nice to avoid recreating a new router & new connection
@@ -112,18 +115,19 @@ public class corfu_multiping implements ICmdlet {
                 NettyClientRouter r = new NettyClientRouter(hosts[nth], ports[nth]);
                 r.start();
                 routers[nth] = r;
-                routers[nth].setTimeoutConnect(500);
-                routers[nth].setTimeoutRetry(250);
-                routers[nth].setTimeoutResponse(2*1000);
+                routers[nth].setTimeoutConnect(50);
+                routers[nth].setTimeoutRetry(700);
+                routers[nth].setTimeoutResponse(4500);
             }
             CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
             cf.exceptionally(e -> {
+                log.info(hosts[nth] + " port " + ports[nth] + " c " + c + " exception " + e);
                 up[nth] = false;
                 // routers[nth] = null;
                 return false;
             });
             cf.thenAccept((x) -> {
-                // System.out.println(hosts[nth] + " port " + ports[nth] + " gave result " + x);
+                log.info(hosts[nth] + " port " + ports[nth] + " c " + c + " " + x);
                 if (x == true) {
                     up[nth] = true;
                 } else {

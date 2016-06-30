@@ -226,7 +226,7 @@ implements IClientRouter {
                         connectChannel(b);
                         return;
                     } catch (Exception ex) {
-                        log.warn("Exception while reconnecting, retry in 1s");
+                        log.warn("Exception while reconnecting, retry in {} ms", timeoutRetry);
                         Thread.sleep(timeoutRetry);
                     }
                 }
