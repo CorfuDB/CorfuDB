@@ -5,6 +5,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Created by mwei on 6/29/16.
@@ -20,6 +21,7 @@ public class TestClientRule {
     private boolean dropEven = false;
     private boolean dropOdd = false;
     private Consumer<CorfuMsg> transformer = null;
+    private Function<CorfuMsg, CorfuMsg> injectBefore = null;
 
     // state
     private AtomicInteger timesMatched = new AtomicInteger();
@@ -57,6 +59,16 @@ public class TestClientRule {
         return this;
     }
 
+    /** Supply a message to be injected before this message is delivered.
+     *
+     * @param injectBefore A function which takes the CorfuMsg the rule is being
+     *                     applied to and returns a CorfuMsg to be injected.
+     */
+    public TestClientRule injectBefore(Function<CorfuMsg,CorfuMsg> injectBefore) {
+        this.injectBefore = injectBefore;
+        return this;
+    }
+
     /** Provide a custom matcher.
      *
      * @param matcher   A function that takes a CorfuMsg and returns true if the
@@ -70,17 +82,18 @@ public class TestClientRule {
     /** Package-Private Operations For The Router */
 
     /** Evaluate this rule on a given message and router. */
-    boolean evaluate(CorfuMsg message, TestClientRouter router) {
+    boolean evaluate(CorfuMsg message, TestClientRouter router, boolean isServer) {
         if (message == null) return false;
         if (match(message)) {
             int matchNumber = timesMatched.getAndIncrement();
             if (drop) return false;
             if (dropOdd && matchNumber % 2 != 0) return false;
             if (dropEven && matchNumber % 2 == 0) return false;
-            if (transformer != null) {
-                transformer.accept(message);
-                return true;
-            }
+            if (transformer != null) transformer.accept(message);
+            if (injectBefore != null && !isServer)
+                router.sendMessage(null, injectBefore.apply(message));
+            if (injectBefore != null && isServer)
+                router.sendResponse(null, injectBefore.apply(message), injectBefore.apply(message));
         }
         return true;
     }
