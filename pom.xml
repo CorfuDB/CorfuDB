@@ -3,10 +3,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.corfudb</groupId>
-    <artifactId>corfudb</artifactId>
+    <artifactId>corfu</artifactId>
     <version>0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
-    <name>CorfuDB</name>
+    <name>corfu</name>
     <url>http://www.corfudb.org</url>
     <description>A cloud scale-consistency platform</description>
 
@@ -78,7 +78,7 @@
                     </configuration>
                 </plugin>
             </plugins>
-        </reporting>
+    </reporting>
 
     <dependencies>
         <dependency>
@@ -93,78 +93,6 @@
             <version>1.7.6</version>
         </dependency>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>1.7.6</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libthrift</artifactId>
-            <version>0.9.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-            <version>1.15</version>
-        </dependency>
-        <dependency>
-            <groupId>org.glassfish</groupId>
-            <artifactId>javax.json</artifactId>
-            <version>1.0.4</version>
-        </dependency>
-        <dependency>
-            <groupId>org.reflections</groupId>
-            <artifactId>reflections</artifactId>
-            <version>0.9.9</version>
-        </dependency>
-        <dependency>
-            <groupId>gnu.getopt</groupId>
-            <artifactId>java-getopt</artifactId>
-            <version>1.0.13</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-pool</groupId>
-            <artifactId>commons-pool</artifactId>
-            <version>1.6</version>
-        </dependency>
-        <dependency>
-            <groupId>redis.clients</groupId>
-            <artifactId>jedis</artifactId>
-            <version>2.6.0</version>
-            <type>jar</type>
-            <scope>compile</scope>
-        </dependency>
-	<dependency>
-	    <groupId>org.rocksdb</groupId>
-	    <artifactId>rocksdbjni</artifactId>
-	    <version>3.6.2</version>
-	</dependency>
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-core</artifactId>
-            <version>3.1.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.thetransactioncompany</groupId>
-            <artifactId>jsonrpc2-client</artifactId>
-            <version>1.14.4</version>
-        </dependency>
-        <dependency>
-            <groupId>com.esotericsoftware</groupId>
-            <artifactId>kryo</artifactId>
-            <version>3.0.3</version>
-        </dependency>
-        <dependency>
-            <groupId>com.googlecode.concurrentlinkedhashmap</groupId>
-            <artifactId>concurrentlinkedhashmap-lru</artifactId>
-            <version>1.4.2</version>
-        </dependency>
-        <dependency>
-            <groupId>com.boundary</groupId>
-            <artifactId>high-scale-lib</artifactId>
-            <version>1.0.6</version>
-        </dependency>
-        <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>3.0.0</version>
@@ -176,101 +104,82 @@
             <version>0.2.0</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.apache.jmeter</groupId>
-            <artifactId>ApacheJMeter_core</artifactId>
-            <version>2.13</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <artifactId>commons-math3</artifactId>
-                    <groupId>commons-math3</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>commons-pool2</artifactId>
-                    <groupId>commons-pool2</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
             <dependency>
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
-                <version>1.16.4</version>
+                <version>1.16.8</version>
                 <scope>provided</scope>
             </dependency>
         <dependency>
-            <groupId>org.apache.jmeter</groupId>
-            <artifactId>ApacheJMeter_java</artifactId>
-            <version>2.13</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <artifactId>commons-math3</artifactId>
-                    <groupId>commons-math3</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>commons-pool2</artifactId>
-                    <groupId>commons-pool2</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.jmeter</groupId>
-            <artifactId>ApacheJMeter_functions</artifactId>
-            <version>2.13</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <artifactId>commons-math3</artifactId>
-                    <groupId>commons-math3</groupId>
-                </exclusion>
-                <exclusion>
-                    <artifactId>commons-pool2</artifactId>
-                    <groupId>commons-pool2</groupId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
-            <version>1.3.2</version>
+            <version>2.2.3</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>18.0</version>
+            <version>19.0</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.0.31.Final</version>
+            <version>4.0.37.Final</version>
             <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.offbytwo</groupId>
+            <artifactId>docopt</artifactId>
+            <version>0.6.0.20150202</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.1.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.fusesource.jansi</groupId>
+            <artifactId>jansi</artifactId>
+            <version>1.11</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.javassist</groupId>
+            <artifactId>javassist</artifactId>
+            <version>3.20.0-GA</version>
         </dependency>
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
-            <version>0.7-rc2</version>
+            <version>1.4.4</version>
+        </dependency>
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy-agent</artifactId>
+            <version>1.4.4</version>
+        </dependency>
+        <dependency>
+            <groupId>com.esotericsoftware</groupId>
+            <artifactId>kryo</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>findbugs-maven-plugin</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>de.javakaffee</groupId>
+            <artifactId>kryo-serializers</artifactId>
+            <version>0.37</version>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <version>1.9.1</version>
-                <executions>
-                    <execution>
-                        <phase>generate-sources</phase>
-                        <goals><goal>add-source</goal></goals>
-                        <configuration>
-                            <sources>
-                                <source>${project.build.directory}/generated-sources/thrift</source>
-                            </sources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <!-- Make a folder `target/libs/` with all the dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -285,7 +194,6 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${project.build.directory}/libs/</outputDirectory>
-                            <excludeArtifactIds>jdk.tools-1.8.jar</excludeArtifactIds>
                         </configuration>
                     </execution>
                 </executions>
@@ -293,14 +201,30 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.1</version>
-                <configuration>
-                    <compilerVersion>1.8</compilerVersion>
-                    <source>1.8</source>
-                    <target>1.8</target>
-                    <showDeprecation>true</showDeprecation>
-                    <encoding>${project.build.sourceEncoding}</encoding>
-                </configuration>
+                <version>3.3</version>
+                        <configuration>
+                            <compilerVersion>1.8</compilerVersion>
+                            <source>1.8</source>
+                            <target>1.8</target>
+                            <encoding>${project.build.sourceEncoding}</encoding>
+                            <showDeprecation>true</showDeprecation>
+                            <compilerArgs>
+                                <arg>-XDignore.symbol.file</arg>
+                            </compilerArgs>
+                            <fork>true</fork>
+                        </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>2.6</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
             <plugin>
@@ -358,32 +282,9 @@
             </configuration>
             </plugin>
             <plugin>
-                <groupId>org.apache.thrift.tools</groupId>
-                <artifactId>maven-thrift-plugin</artifactId>
-                <version>0.1.11</version>
-                <configuration>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>thrift-sources</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>compile</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>thrift-test-sources</id>
-                        <phase>generate-test-sources</phase>
-                        <goals>
-                            <goal>testCompile</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
                 <artifactId>jdeb</artifactId>
                 <groupId>org.vafer</groupId>
-                <version>1.3</version>
+                <version>1.4</version>
                 <executions>
                     <execution>
                       <phase>package</phase>
@@ -392,12 +293,21 @@
                       </goals>
                       <configuration>
                         <dataSet>
+                            <data>
+                                <src>src/deb/init.d/corfu-server</src>
+                                <type>file</type>
+                                <mapper>
+                                    <type>perm</type>
+                                    <prefix>/etc/init.d</prefix>
+                                    <filemode>755</filemode>
+                                </mapper>
+                            </data>
                           <data>
                             <src>${project.build.directory}/${project.build.finalName}-shaded.jar</src>
                             <type>file</type>
                             <mapper>
                               <type>perm</type>
-                              <prefix>/usr/share/corfudb/lib</prefix>
+                              <prefix>/usr/share/corfu/lib</prefix>
                             </mapper>
                           </data>
                           <data>
@@ -405,10 +315,20 @@
                             <type>directory</type>
                             <mapper>
                                 <type>perm</type>
-                                <prefix>/usr/share/corfudb/bin</prefix>
+                                <prefix>/usr/share/corfu/bin</prefix>
                                 <filemode>755</filemode>
                             </mapper>
                            </data>
+                            <data>
+                                <src>scripts</src>
+                                <type>directory</type>
+                                <mapper>
+                                    <type>perm</type>
+                                    <prefix>/usr/share/corfu/scripts</prefix>
+                                    <filemode>755</filemode>
+                                </mapper>
+                            </data>
+                            <!--
                            <data>
                                <type>link</type>
                                <linkName>/usr/bin/corfuDBLaunch</linkName>
@@ -429,177 +349,17 @@
                                    <filemode>755</filemode>
                                 </mapper>
                             </data>
+                            -->
+                        </dataSet>
+                      </configuration>
+                  </execution>
+                </executions>
+            </plugin>
 
-                        </dataSet>
-                      </configuration>
-                  </execution>
-                  <execution>
-                      <id>deb-sequencer-package</id>
-                      <phase>package</phase>
-                      <goals>
-                        <goal>jdeb</goal>
-                      </goals>
-                      <configuration>
-                          <deb>${project.build.directory}/${project.build.finalName}-sequencer.deb</deb>
-                          <controlDir>src/deb/control_sequencer</controlDir>
-                          <dataSet>
-                          <data>
-                              <src>conf/sequencer.yml</src>
-                            <type>file</type>
-                            <mapper>
-                              <type>perm</type>
-                              <prefix>/etc/corfudb</prefix>
-                            </mapper>
-                            </data>
-                            <data>
-                                <src>src/deb/init.d/CorfuDB-sequencer</src>
-                                <type>file</type>
-                                <mapper>
-                                    <type>perm</type>
-                                    <prefix>/etc/init.d</prefix>
-                                    <filemode>755</filemode>
-                                </mapper>
-                            </data>
-                        </dataSet>
-                      </configuration>
-                  </execution>
-                  <execution>
-                      <id>deb-logunit-package</id>
-                      <phase>package</phase>
-                      <goals>
-                        <goal>jdeb</goal>
-                      </goals>
-                      <configuration>
-                          <deb>${project.build.directory}/${project.build.finalName}-logunit.deb</deb>
-                          <controlDir>src/deb/control_logunit</controlDir>
-                          <dataSet>
-                          <data>
-                              <src>conf/logunit.yml</src>
-                            <type>file</type>
-                            <mapper>
-                              <type>perm</type>
-                              <prefix>/etc/corfudb</prefix>
-                            </mapper>
-                            </data>
-                            <data>
-                                <src>src/deb/init.d/CorfuDB-logunit</src>
-                                <type>file</type>
-                                <mapper>
-                                    <type>perm</type>
-                                    <prefix>/etc/init.d</prefix>
-                                    <filemode>755</filemode>
-                                </mapper>
-                            </data>
-                        </dataSet>
-                      </configuration>
-                    </execution>
-                  <execution>
-                      <id>deb-configmaster-package</id>
-                      <phase>package</phase>
-                      <goals>
-                        <goal>jdeb</goal>
-                      </goals>
-                      <configuration>
-                          <deb>${project.build.directory}/${project.build.finalName}-configmaster.deb</deb>
-                          <controlDir>src/deb/control_configmaster</controlDir>
-                          <dataSet>
-                          <data>
-                              <src>conf/configmaster.yml</src>
-                            <type>file</type>
-                            <mapper>
-                              <type>perm</type>
-                              <prefix>/etc/corfudb</prefix>
-                            </mapper>
-                            </data>
-                            <data>
-                                <src>src/deb/init.d/CorfuDB-configmaster</src>
-                                <type>file</type>
-                                <mapper>
-                                    <type>perm</type>
-                                    <prefix>/etc/init.d</prefix>
-                                    <filemode>755</filemode>
-                                </mapper>
-                            </data>
-                        </dataSet>
-                      </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>com.github.maven-nar</groupId>
-                <artifactId>nar-maven-plugin</artifactId>
-                <version>3.2.2</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <javah>
-                        <includes>
-                            <include>**/InMemoryStream.class</include>
-                        </includes>
-                        <excludes>
-                        </excludes>
-                    </javah>
-                    <c>
-                        <sourceDirectory>src/main/c</sourceDirectory>
-                    </c>
-                    <libraries>
-                        <library>
-                            <!-- this should actually be jni, but due to nar bug using jnilib instead of dynlib on mac os X, it is set to shared-->
-                            <type>shared</type>
-                            <narSystemPackage>org.corfudb.client.view</narSystemPackage>
-                        </library>
-                    </libraries>
-                </configuration>
-            </plugin>
-            <!-- Temporarily disable frontend.
-            <plugin>
-                <groupId>com.github.eirslett</groupId>
-                <artifactId>frontend-maven-plugin</artifactId>
-                <version>0.0.23</version>
-                <configuration>
-                    <workingDirectory>src/main/frontend</workingDirectory>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>install node and npm</id>
-                        <goals>
-                            <goal>install-node-and-npm</goal>
-                        </goals>
-                        <configuration>
-                            <nodeVersion>v0.12.0</nodeVersion>
-                            <npmVersion>2.3.0</npmVersion>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>npm install</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
-                        <configuration>
-                            <arguments>install</arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>bower install</id>
-                        <goals>
-                            <goal>bower</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>gulp build</id>
-                        <goals>
-                            <goal>gulp</goal>
-                        </goals>
-                        <configuration>
-                            <arguments>build</arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            -->
             <plugin>
                 <groupId>org.eluder.coveralls</groupId>
                 <artifactId>coveralls-maven-plugin</artifactId>
-                <version>4.0.0</version>
+                <version>4.1.0</version>
                 <configuration>
                     <jacocoReports>
                     </jacocoReports>
@@ -609,11 +369,6 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.7.5.201505241946</version>
-                <configuration>
-                    <excludes>
-                        <excludes>**/thrift/**/*.class</excludes>
-                    </excludes>
-                </configuration>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -641,142 +396,6 @@
                             <goal>integration-test</goal>
                             <goal>verify</goal>
                         </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>com.bazaarvoice.maven.plugins</groupId>
-                <artifactId>process-exec-maven-plugin</artifactId>
-                <version>0.7</version>
-                <executions>
-                    <!--Start process 1, eg., a dropwizard app dependency-->
-                    <execution>
-                        <id>redis-process</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>start</goal>
-                        </goals>
-                        <configuration>
-                            <name>redis</name>
-                            <waitForInterrupt>false</waitForInterrupt>
-                            <waitAfterLaunch>5</waitAfterLaunch>
-                            <arguments>
-                                <argument>redis-server</argument>
-                                <argument>--port 12900</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                    <!--Stop all processes in reverse order-->
-                    <execution>
-                        <id>stop-all</id>
-                        <phase>post-integration-test</phase>
-                        <goals>
-                            <goal>stop-all</goal>
-                        </goals>
-                    </execution>
-		    <execution>
-                        <id>configmaster-process-2</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>start</goal>
-                        </goals>
-                        <configuration>
-                            <name>configmaster-2</name>
-                            <waitForInterrupt>false</waitForInterrupt>
-                            <waitAfterLaunch>5</waitAfterLaunch>
-                            <arguments>
-                                <argument>java</argument>
-                                <argument>-cp</argument>
-                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
-                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
-                                <argument>${basedir}/conf/it_configmaster_2.yml</argument>
-                            </arguments>
-                            <processLogFile>${project.build.directory}/it_configmaster_2.log</processLogFile>
-                            <healthcheckUrl>http://localhost:12701/corfu</healthcheckUrl>
-                        </configuration>
-                    </execution>
-		    <execution>
-                        <id>rockslogunit-process</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>start</goal>
-                        </goals>
-                        <configuration>
-                            <name>rockslogunit</name>
-                            <waitForInterrupt>false</waitForInterrupt>
-                            <waitAfterLaunch>5</waitAfterLaunch>
-                            <arguments>
-                                <argument>java</argument>
-                                <argument>-cp</argument>
-                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
-                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
-                                <argument>${basedir}/conf/rockslogunit.yml</argument>
-                            </arguments>
-                            <processLogFile>${project.build.directory}/rockslogunit.log</processLogFile>
-                        </configuration>
-                    </execution>
-		    <execution>
-                        <id>sequencer-process-1</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>start</goal>
-                        </goals>
-                        <configuration>
-                            <name>sequencer-1</name>
-                            <waitForInterrupt>false</waitForInterrupt>
-                            <waitAfterLaunch>5</waitAfterLaunch>
-                            <arguments>
-                                <argument>java</argument>
-                                <argument>-cp</argument>
-                                <argument>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</argument>
-                                <argument>org.corfudb.infrastructure.ConfigParser</argument>
-                                <argument>${basedir}/conf/it_sequencer_1.yml</argument>
-                            </arguments>
-                            <processLogFile>${project.build.directory}/it_sequencer_1.log</processLogFile>
-                        </configuration>
-		    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>default</id>
-                        <phase>post-integration-test</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-			    <tasks>
-				<delete dir="${project.build.directory}/testFile"/>
-				<delete dir="${project.build.directory}/rocksTestFile"/>
-			    </tasks>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>com.lazerycode.jmeter</groupId>
-                <artifactId>jmeter-maven-plugin</artifactId>
-                <version>1.10.1</version>
-                <executions>
-                    <execution>
-                        <id>jmeter-tests</id>
-                        <phase>integration-test</phase>
-                        <goals>
-                            <goal>jmeter</goal>
-                        </goals>
-                        <configuration>
-                            <testFilesIncluded>
-                                <jMeterTestFile>nettystreamingsequencer.jmx</jMeterTestFile>
-                                <jMeterTestFile>nettylogunit.jmx</jMeterTestFile>
-                            </testFilesIncluded>
-                            <overrideRootLogLevel>debug</overrideRootLogLevel>
-                            <propertiesJMeter>
-                                <jmeterengine.force.system.exit>true</jmeterengine.force.system.exit>
-                            </propertiesJMeter>
-                            <skipTests>${skipTests}</skipTests>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -819,7 +438,15 @@
         <resource>
             <directory>target/generated-sources/resources</directory>
         </resource>
+        <resource>
+            <directory>src/main/resources</directory>
+        </resource>
     </resources>
+    <testResources>
+        <testResource>
+            <directory>src/test/resources</directory>
+        </testResource>
+    </testResources>
 
     </build>
 </project>

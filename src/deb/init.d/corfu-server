@@ -1,0 +1,76 @@
+#! /usr/bin/env bash
+
+### BEGIN INIT INFO
+# Provides:             corfu_server
+# Required-Start:       $remote_fs $syslog
+# Required-Stop:        $remote_fs $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:
+# Short-Description:    Corfu Infrastructure Server
+### END INIT INFO
+
+umask 022
+
+ROLENAME="Corfu Infrastructure Server"
+PIDFILE=/var/run/corfu.pid
+PREFIX=/usr/local/bin
+PORT=9000
+OPTS="-l /var/corfu $PORT"
+LOGFILE="/var/log/corfu.$PORT.log"
+. /lib/lsb/init-functions
+
+export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
+
+case "$1" in
+    start)
+        log_daemon_msg "Starting $ROLENAME on port $PORT"
+        if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
+        --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS > $LOGFILE 2>&1"; then
+            log_end_msg 0
+        else
+            log_end_msg 1
+        fi
+        ;;
+    stop)
+        log_daemon_msg "Stopping $ROLENAME on port $PORT"
+        if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
+            log_end_msg 0
+        else
+            log_end_msg 1
+        fi
+        ;;
+    restart)
+        log_daemon_msg "Restarting $ROLENAME on port $PORT"
+        set +e
+        start-stop-daemon --stop --quiet --retry 30 --pidfile $PIDFILE
+        RET="$?"
+        set -e
+        case $RET in
+            0)
+                if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
+                --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS > $LOGFILE 2>&1"; then
+                    log_end_msg 0
+                else
+                    log_end_msg 1
+                fi
+                ;;
+            1)
+                log_progress_msg "(not running)"
+                log_end_msg 0
+                ;;
+            *)
+                log_progress_msg "(failed to stop)"
+                log_end_msg 1
+                ;;
+            esac
+        ;;
+    status)
+        status_of_proc -p $PIDFILE ${JAVA_HOME}/bin/java "Corfu Infrastructure Server" && exit 0 || exit $?
+        ;;
+    *)
+        log_action_msg "Usage $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

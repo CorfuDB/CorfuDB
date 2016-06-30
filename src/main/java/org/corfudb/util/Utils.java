@@ -1,11 +1,27 @@
 package org.corfudb.util;
 
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import jdk.internal.org.objectweb.asm.ClassReader;
+import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.InsnList;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
+import jdk.internal.org.objectweb.asm.util.Printer;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.NonNull;
+import net.bytebuddy.agent.ByteBuddyAgent;
+import net.bytebuddy.description.type.TypeDescription;
+import net.bytebuddy.dynamic.ClassFileLocator;
 
 import java.io.*;
+import java.lang.instrument.Instrumentation;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.UUID;
+import java.text.DecimalFormat;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by crossbach on 5/22/15.
@@ -13,6 +29,182 @@ import java.util.UUID;
 
 public class Utils
 {
+    private static final Instrumentation instrumentation = ByteBuddyAgent.install();
+
+    public static byte[] getByteCodeOf(Class<?> c) {
+        try {
+            ClassFileLocator locator = ClassFileLocator.AgentBased.of(instrumentation, c);
+            TypeDescription.ForLoadedType desc = new TypeDescription.ForLoadedType(c);
+            ClassFileLocator.Resolution resolution = locator.locate(desc.getName());
+            return resolution.resolve();
+        }
+        catch (IOException ie)
+        {
+            throw new RuntimeException("Couldn't get byte code " + ie.toString(), ie);
+        }
+    }
+
+    public static String printByteCode(byte[] bytes) {
+        ClassReader cr = new ClassReader(bytes);
+        ClassNode cn = new ClassNode();
+        cr.accept(cn, 0);
+        final List<MethodNode> methods = cn.methods;
+        StringBuilder sb = new StringBuilder();
+        for(MethodNode m: methods){
+            InsnList inList = m.instructions;
+            sb.append(m.name);
+            for(int i = 0; i< inList.size(); i++){
+                sb.append(insnToString(inList.get(i)));
+            }
+        }
+        return sb.toString();
+    }
+
+    public static String insnToString(AbstractInsnNode insn){
+        insn.accept(mp);
+        StringWriter sw = new StringWriter();
+        printer.print(new PrintWriter(sw));
+        printer.getText().clear();
+        return sw.toString();
+    }
+
+    private static Printer printer = new Textifier();
+    private static TraceMethodVisitor mp = new TraceMethodVisitor(printer);
+
+    /**
+     * A fancy parser which parses suffixes.
+     * @param toParse
+     * @return
+     */
+    public static long parseLong(final Object toParseObj) {
+        if (toParseObj == null) {
+            return 0;
+        }
+        if (toParseObj instanceof Long)
+        {
+            return (Long) toParseObj;
+        }
+        if (toParseObj instanceof Integer)
+        {
+            return (Integer) toParseObj;
+        }
+        String toParse = (String) toParseObj;
+        if (toParse.matches("[0-9]*[A-Za-z]$"))
+        {
+            long multiplier;
+            char suffix = toParse.toUpperCase().charAt(toParse.length() - 1);
+            switch (suffix)
+            {
+                case 'E':
+                    multiplier = 1_000_000_000_000_000_000L;
+                    break;
+                case 'P':
+                    multiplier = 1_000_000_000_000_000L;
+                    break;
+                case 'T':
+                    multiplier = 1_000_000_000_000L;
+                    break;
+                case 'G':
+                    multiplier = 1_000_000_000L;
+                    break;
+                case 'M':
+                    multiplier = 1_000_000L;
+                    break;
+                case 'K':
+                    multiplier = 1_000L;
+                    break;
+                default:
+                    throw new NumberFormatException("Unknown suffix: '" + suffix + "'!");
+            }
+            return Long.parseLong(toParse.substring(0, toParse.length() - 2)) * multiplier;
+        }
+        else {
+            return Long.parseLong(toParse);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T getOption(Map<String,Object> optionsMap, String option, Class<T> type, T defaultValue)
+    {
+        T obj = (T) optionsMap.get(option);
+        if (type == Long.class)
+        {
+            if (obj == null && defaultValue != null)
+            {
+                return defaultValue;
+            }
+            return (T) (Long)parseLong(obj);
+        }
+        else if (type == Integer.class)
+        {
+            if (obj == null && defaultValue != null)
+            {
+                return defaultValue;
+            }
+            return (T) (Integer) ((Long)parseLong(obj)).intValue();
+        }
+        if (obj == null)
+        {
+            return defaultValue;
+        }
+        return obj;
+    }
+
+    public static <T> T getOption(Map<String,Object> optionsMap, String option, Class<T> type) {
+        return getOption(optionsMap, option, type, null);
+    }
+
+    /** Turn a range into a set of discrete longs.
+     *
+     * @param range The range to discretize.
+     * @return      A set containing all the longs in that range.
+     */
+    public static Set<Long> discretizeRange(Range<Long> range) {
+        Set<Long> s = new HashSet<>();
+        for (long l = range.lowerEndpoint(); l <= range.upperEndpoint(); l++)
+        {
+            if (range.contains(l)) {s.add(l);}
+        }
+        return s;
+    }
+
+    /** Turn a set of ranges into a discrete set.
+     *
+     * @param ranges    A set of ranges to discretize.
+     * @return          A set containing all the longs in that rangeset.
+     */
+    public static Set<Long> discretizeRangeSet(RangeSet<Long> ranges) {
+        Set<Long> total = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        for (Range<Long> r : ranges.asRanges())
+        {
+            total.addAll(Utils.discretizeRange(r));
+        }
+        return total;
+    }
+
+    /** Convert to byte string representation.
+     * from http://stackoverflow.com/questions/3758606/how-to-convert-byte-size-into-human-readable-format-in-java
+     * @param value         The value to convert.
+     * @return              A string for bytes (i.e, 10GB).
+     */
+    public static String convertToByteStringRepresentation(final long value){
+        final long[] dividers = new long[] { 1_000_000_000_000L, 1_000_000_000, 1_000_000, 1_000, 1 };
+        final String[] units = new String[] { "TB", "GB", "MB", "KB", "B" };
+        if(value < 1)
+            throw new IllegalArgumentException("Invalid file size: " + value);
+        String result = null;
+        for(int i = 0; i < dividers.length; i++){
+            final long divider = dividers[i];
+            if(value >= divider){
+                final double cresult =
+                        divider > 1 ? (double) value / (double) divider : (double) value;
+                result = new DecimalFormat("#,##0.#").format(cresult) + " " + units[i];
+                break;
+            }
+        }
+        return result;
+    }
+
     public static ByteBuffer serialize(Object obj)
     {
         try
@@ -30,6 +222,7 @@ public class Utils
             throw new RuntimeException(e);
         }
     }
+
     public static Object deserialize(ByteBuffer b)
     {
         try
@@ -131,28 +324,6 @@ public class Utils
 
     public static UUID nextDeterministicUUID(UUID uuid, long seed) {
         return simpleUUIDHash(uuid, seed);
-    }
-
-    /** Converts a thrift UUID (represented as 2 64 bit integers) to a standard java.util.UUID
-     *
-     * @param thriftUUID    The thrift UUID to convert
-     * @return              The java.util.UUID representation of the UUID.
-     */
-    public static UUID fromThriftUUID(@NonNull org.corfudb.infrastructure.thrift.UUID thriftUUID)
-    {
-        return new UUID(thriftUUID.getMsb(), thriftUUID.getLsb());
-    }
-
-    /** Converts a java.util.UUID to a thrift ID (represented by 2 64 bit integers).
-     *
-     * @param javaUUID      The Java UUID to convert
-     * @return              The thrift representation of the UUID.
-     */
-    public static org.corfudb.infrastructure.thrift.UUID toThriftUUID(@NonNull UUID javaUUID){
-        org.corfudb.infrastructure.thrift.UUID thriftUUID = new org.corfudb.infrastructure.thrift.UUID();
-        thriftUUID.setMsb(javaUUID.getMostSignificantBits());
-        thriftUUID.setLsb(javaUUID.getLeastSignificantBits());
-        return thriftUUID;
     }
 
 }
