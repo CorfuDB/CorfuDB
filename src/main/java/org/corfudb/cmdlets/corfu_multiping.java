@@ -58,6 +58,8 @@ public class corfu_multiping implements ICmdlet {
         for (int i = 0; i < aps.size(); i++) {
             hosts[i] = aps.get(i).split(":")[0];
             ports[i] = Integer.parseInt(aps.get(i).split(":")[1]);
+            // Don't call $router.start() now because we'll get an exception
+            // if that server isn't running & responding to pings right now.
             routers[i] = null;
             up[i] = last_up[i] = false;
         }
@@ -103,13 +105,17 @@ public class corfu_multiping implements ICmdlet {
         CompletableFuture.runAsync(() -> {
             if (routers[nth] == null) {
                 // System.out.println(hosts[nth] + " port " + ports[nth] + " new router.");
-                routers[nth] = new NettyClientRouter(hosts[nth], ports[nth]);
-                routers[nth].start();
+                NettyClientRouter r = new NettyClientRouter(hosts[nth], ports[nth]);
+                r.start();
+                routers[nth] = r;
+                routers[nth].setTimeoutConnect(1000);
+                routers[nth].setTimeoutRetry(250);
+                routers[nth].setTimeoutResponse(3*1000);
             }
             CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
             cf.exceptionally(e -> {
                 up[nth] = false;
-                routers[nth] = null;
+                // routers[nth] = null;
                 return false;
             });
             cf.thenAccept((x) -> {
@@ -118,7 +124,7 @@ public class corfu_multiping implements ICmdlet {
                     up[nth] = true;
                 } else {
                     up[nth] = false;
-                    routers[nth] = null;
+                    // routers[nth] = null;
                 }
                 return;
             });
