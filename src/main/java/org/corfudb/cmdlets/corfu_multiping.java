@@ -23,7 +23,12 @@ import static org.fusesource.jansi.Ansi.Color.*;
 @Slf4j
 public class corfu_multiping implements ICmdlet {
 
-    Boolean up[] = new Boolean[99];
+    int num;
+    String hosts[] = new String[99];
+    Integer ports[] = new Integer[99];
+    NettyClientRouter routers[] = new NettyClientRouter[99];
+    Boolean up[]      = new Boolean[99];
+    Boolean last_up[] = new Boolean[99];
 
     private static final String USAGE =
             "corfu_multiping, pings a Corfu Server to check for connectivity to multiple servers.\n"
@@ -49,27 +54,28 @@ public class corfu_multiping implements ICmdlet {
 
         // Parse host address and port
         ArrayList<String> aps = (ArrayList<String>) opts.get("<address>:<port>");
-        String hosts[] = new String[99];
-        Integer ports[] = new Integer[99];
-        NettyClientRouter routers[] = new NettyClientRouter[99];
-
+        num = aps.size();
         for (int i = 0; i < aps.size(); i++) {
             hosts[i] = aps.get(i).split(":")[0];
             ports[i] = Integer.parseInt(aps.get(i).split(":")[1]);
-            System.out.println(ansi().a("PING ").fg(WHITE).a(hosts[i] + ":" + ports[i]).reset().a("\n"));
-            routers[i] = new NettyClientRouter(hosts[i], ports[i]);
-            System.out.println("Yo, eh?");
-            routers[i].start();
-            System.out.println("Yo, started.");
-            up[i] = false;
+            routers[i] = null;
+            up[i] = last_up[i] = false;
         }
 
-        for (int i = 0; i < 5; i++) {
-            ping_one_round(hosts[0], ports[0], routers[0]);
+        while (true) {
+            ping_one_round();
             just_sleep_dammit(1000);
+            // This kind of check may not see flapping that happens during
+            // intervals of less than this loop's polling interval.
+            for (int j = 0; j < num; j++) {
+                if (last_up[j] != up[j]) {
+                    System.out.println("Host " + hosts[j] + " port " + ports[j] + ": " +
+                                       last_up[j] + " -> " + up[j]);
+                    last_up[j] = up[j];
+                }
+            }
         }
-        java.lang.System.exit(8);
-
+        // notreached
     }
 
     private void just_sleep_dammit(long i) {
@@ -78,32 +84,43 @@ public class corfu_multiping implements ICmdlet {
         } catch (InterruptedException ie) {}
     }
 
-    private void ping_one_round(String host, Integer port, NettyClientRouter router) {
+    private void ping_one_round() {
+        for (int i = 0; i < num; i++) {
+            ping_host_once(i);
+        }
+    }
+
+    private void ping_host_once(int nth) {
+        // This mutable data stuff gives me the heebie-jeebies.....
+        //
+        // It would be very nice to avoid recreating a new router & new connection
+        // each time we want to send a single PING msg.  But these CompletableFuture
+        // things may (may not?) run in different threads, and being racy
+        // How the hell do I know that this is safe?  I don't know, period.
+        // So I'll close my eyes and assume that anything bad that might happen
+        // is happening in a try/catch thingie and nothing explosive leaks out.
+
         CompletableFuture.runAsync(() -> {
-            CompletableFuture<Boolean> cf = router.getClient(BaseClient.class).ping();
-            // if an exception occurs, print it out.
+            if (routers[nth] == null) {
+                // System.out.println(hosts[nth] + " port " + ports[nth] + " new router.");
+                routers[nth] = new NettyClientRouter(hosts[nth], ports[nth]);
+                routers[nth].start();
+            }
+            CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
             cf.exceptionally(e -> {
-                if (e instanceof CompletionException) {
-                    System.out.println(ansi().fg(RED).a("ERROR ").reset().a("pinging ")
-                            .fg(WHITE).a(host + ":" + port).reset()
-                            .a(": seq=" + -1 + " error=" +
-                                    ((CompletionException) e).getCause().getClass().getSimpleName()));
-                } else {
-                    System.out.println(ansi().fg(RED).a("ERROR ").reset().a("pinging ")
-                            .fg(WHITE).a(host + ":" + port).reset()
-                            .a(": seq=" + -1 + " error=" +
-                                    (e).getClass().getSimpleName()));
-                }
-                return null;
+                up[nth] = false;
+                routers[nth] = null;
+                return false;
             });
-            // when the ping completes, print the time to screen.
             cf.thenAccept((x) -> {
-                long end = System.nanoTime();
-                log.trace("Ping[{}] ended at {}", -1, end);
-                long duration = -2;
-                String ms = String.format("%.3f", (float) duration / 1000000L);
-                System.out.println(ansi().a("PONG from ").fg(WHITE).a(host + ":" + port).reset()
-                        .a(": seq=" + -1 + " time=" + ms + "ms"));
+                // System.out.println(hosts[nth] + " port " + ports[nth] + " gave result " + x);
+                if (x == true) {
+                    up[nth] = true;
+                } else {
+                    up[nth] = false;
+                    routers[nth] = null;
+                }
+                return;
             });
         });
 
