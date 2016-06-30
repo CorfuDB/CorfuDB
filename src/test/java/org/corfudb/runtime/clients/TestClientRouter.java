@@ -163,7 +163,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         outstandingRequests.put(thisRequest, cf);
         // Evaluate rules.
         if (clientToServerRules.stream()
-                .map(x -> x.evaluate(message, this))
+                .map(x -> x.evaluate(message, this, false))
                 .allMatch(x -> x)) {
             // Write the message out to the channel.
             if (!dropAllMessagesClientToServer) {
@@ -196,7 +196,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         message.setRequestID(thisRequest);
         // Evaluate rules.
         if (clientToServerRules.stream()
-                .map(x -> x.evaluate(message, this))
+                .map(x -> x.evaluate(message, this, false))
                 .allMatch(x -> x)) {
             // Write the message out to the channel.
             if (!dropAllMessagesClientToServer) {
@@ -218,7 +218,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         outMsg.copyBaseFields(inMsg);
         // Evaluate rules.
         if (clientToServerRules.stream()
-                .map(x -> x.evaluate(outMsg, this))
+                .map(x -> x.evaluate(outMsg, this, false))
                 .allMatch(x -> x)) {
             // Write the message out to the channel.
             if (!dropAllMessagesClientToServer) {
@@ -328,7 +328,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         log.trace("(server) send Response: {}", outMsg);
         CorfuMsg m = simulateSerialization(outMsg);
         if (serverToClientRules.stream()
-                .map(x -> x.evaluate(outMsg, this))
+                .map(x -> x.evaluate(outMsg, this, true))
                 .allMatch(x -> x)) {
             if (validateEpochAndClientID(m, ctx)) {
                 IClient handler = handlerMap.get(m.getMsgType());
