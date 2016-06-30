@@ -1,12 +1,11 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.*;
-import org.corfudb.infrastructure.IServer;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.util.Utils;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -26,8 +25,8 @@ public class LogUnitClientTest extends AbstractClientTest {
     LogUnitClient client;
 
     @Override
-    Set<IServer> getServersForTest() {
-        return new ImmutableSet.Builder<IServer>()
+    Set<AbstractServer> getServersForTest() {
+        return new ImmutableSet.Builder<AbstractServer>()
                 .add(new LogUnitServer(defaultOptionsMap()))
                 .build();
     }

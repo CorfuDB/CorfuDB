@@ -54,7 +54,7 @@ import static com.google.common.io.Files.*;
  */
 //TODO Finer grained synchronization needed for this class.
 @Slf4j
-public class LayoutServer implements IServer {
+public class LayoutServer extends AbstractServer {
 
     /** The options map. */
     Map<String,Object> opts;
@@ -75,7 +75,7 @@ public class LayoutServer implements IServer {
     @Getter
     IServerRouter serverRouter;
 
-    /** Th layout file, or null if in memory. */
+    /** The layout file, or null if in memory. */
     File layoutFile;
 
     /** Persistent storage for phase1 data in paxos */
@@ -145,6 +145,7 @@ public class LayoutServer implements IServer {
             currentLayout = layout;
         } catch (Exception e)
         {
+            e.printStackTrace();
             log.error("Error saving layout to disk!", e);
         }
     }
@@ -301,6 +302,7 @@ public class LayoutServer implements IServer {
     //TODO need to figure out how to send back the last accepted value.
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (isShutdown()) return;
         // This server has not been bootstrapped yet, ignore ALL requests except for LAYOUT_BOOTSTRAP
         if (currentLayout == null)
         {
@@ -309,8 +311,6 @@ public class LayoutServer implements IServer {
                 log.info("Bootstrap with new layout={}", ((LayoutMsg)msg).getLayout());
 
                 saveCurrentLayout(((LayoutMsg)msg).getLayout());
-                System.out.println(getServerRouter());
-                System.out.println(currentLayout);
                 getServerRouter().setServerEpoch(currentLayout.getEpoch());
                 //send a response that the bootstrap was successful.
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));

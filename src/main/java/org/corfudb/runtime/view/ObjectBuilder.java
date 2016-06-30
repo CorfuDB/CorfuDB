@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -50,10 +51,16 @@ public class ObjectBuilder<T> {
         return this;
     }
 
+    @Setter(AccessLevel.NONE)
     Object[] arguments = new Object[0];
 
     public ObjectBuilder<T> setArguments(Object... arguments)
     {
+        this.arguments = arguments;
+        return this;
+    }
+
+    public ObjectBuilder<T> setArgumentsArray(Object[] arguments) {
         this.arguments = arguments;
         return this;
     }

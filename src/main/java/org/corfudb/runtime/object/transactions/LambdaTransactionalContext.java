@@ -54,8 +54,12 @@ public class LambdaTransactionalContext extends AbstractTransactionalContext {
             log.debug("Proxied object at {}, lambda tx at {}, creating clone to service TXN",
                     originalProxy.getTimestamp(), firstReadTimestamp);
             ICorfuSMRObject<P> obj = (ICorfuSMRObject<P>)
-                    runtime.getObjectsView().open(originalProxy.getStreamID(), originalProxy.getOriginalClass(),
-                            null, EnumSet.of(ObjectOpenOptions.NO_CACHE), originalProxy.getCreationArguments());
+                    runtime.getObjectsView().build()
+                            .setOptions(EnumSet.of(ObjectOpenOptions.NO_CACHE))
+                            .setStreamID(originalProxy.getStreamID())
+                            .setType(originalProxy.getOriginalClass())
+                            .setArgumentsArray(originalProxy.getCreationArguments())
+                            .open();
             cloneProxy = (CorfuSMRObjectProxy<P>) obj.getProxy();
             cloneProxy.sync(obj.getSMRObject(), firstReadTimestamp - 1L);
             originalProxy.getRwLock().writeLock().unlock();

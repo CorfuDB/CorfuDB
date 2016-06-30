@@ -71,10 +71,10 @@ public class ObjectsView extends AbstractView {
      */
     @Deprecated
     public <T> T open(@NonNull UUID streamID, @NonNull Class<T> type, Object... args) {
-        return new ObjectBuilder<T>(runtime)
+        return build()
                 .setType(type)
                 .setStreamID(streamID)
-                .setArguments(args)
+                .setArgumentsArray(args)
                 .open();
     }
 
@@ -94,7 +94,7 @@ public class ObjectsView extends AbstractView {
         return new ObjectBuilder<T>(runtime)
                 .setType(type)
                 .setStreamName(streamName)
-                .setArguments(args)
+                .setArgumentsArray(args)
                 .open();
     }
 

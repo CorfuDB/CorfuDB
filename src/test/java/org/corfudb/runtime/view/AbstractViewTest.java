@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 12/22/15.
@@ -28,7 +27,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     Map<String, TestClientRouter> routerMap;
 
-    Map<String, Set<IServer>> serverMap;
+    Map<String, Set<AbstractServer>> serverMap;
 
     @Before
     public void resetTests()
@@ -60,22 +59,22 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .forEach(r -> routerMap.put(r.getAddress(), r));
     }
 
-    public void addServerForTest(String address, IServer server) {
+    public void addServerForTest(String address, AbstractServer server) {
         serverMap.compute(address, (k, v) -> {
-            Set<IServer> out = v;
+            Set<AbstractServer> out = v;
             if (v == null) {
-                out = new HashSet<IServer>();
+                out = new HashSet<AbstractServer>();
             }
             out.add(server);
             return out;
         });
     }
 
-    public void removeServerForTest(String address, IServer server) {
+    public void removeServerForTest(String address, AbstractServer server) {
         serverMap.compute(address, (k, v) -> {
-            Set<IServer> out = v;
+            Set<AbstractServer> out = v;
             if (v == null) {
-                out = new HashSet<IServer>();
+                out = new HashSet<AbstractServer>();
             }
             out.remove(server);
             return out;

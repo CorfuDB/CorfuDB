@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
@@ -37,10 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-public class SequencerServer implements IServer {
-
-    /** The options map */
-    Map<String,Object> opts;
+public class SequencerServer extends AbstractServer {
 
     @Getter
     long epoch;
@@ -70,7 +66,6 @@ public class SequencerServer implements IServer {
 
     public SequencerServer(Map<String,Object> opts)
     {
-        this.opts = opts;
         lastIssuedMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
 

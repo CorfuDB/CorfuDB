@@ -2,15 +2,9 @@ package org.corfudb.infrastructure;
 
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.io.Files;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -24,24 +18,14 @@ import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
 public class LogUnitServerTest extends AbstractServerTest {
 
     @Override
-    public IServer getDefaultServer() {
-        return new LogUnitServer(new ImmutableMap.Builder<String,Object>()
-                .put("--log-path", getTempDir())
-                .put("--memory", false)
-                .put("--single", false)
-                .put("--sync", true)
-                .put("--max-cache", 1000000)
-                .build());
+    public AbstractServer getDefaultServer() {
+        return new LogUnitServer(new ServerConfigBuilder().build());
     }
 
     @Test
     public void checkHeapLeak() throws Exception {
 
-        LogUnitServer s1 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
-                .put("--memory", true)
-                .put("--single", false)
-                .put("--max-cache", 1000000)
-                .build());
+        LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder().build());
 
         this.router.setServerUnderTest(s1);
         long address = 0L;
@@ -66,12 +50,10 @@ public class LogUnitServerTest extends AbstractServerTest {
     {
         String serviceDir = getTempDir();
 
-        LogUnitServer s1 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
-                .put("--log-path", serviceDir)
-                .put("--memory", false)
-                .put("--single", false)
-                .put("--sync", true)
-                .put("--max-cache", 1000000)
+        LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .setSync(true)
                 .build());
 
         this.router.setServerUnderTest(s1);
@@ -109,12 +91,10 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         s1.shutdown();
 
-        LogUnitServer s2 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
-                .put("--sync", true)
-                .put("--max-cache", 1000000)
+        LogUnitServer s2 = new LogUnitServer(new ServerConfigBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .setSync(true)
                 .build());
         this.router.setServerUnderTest(s2);
 
@@ -132,10 +112,9 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkThatContiguousStreamIsCorrectlyCalculated()
             throws Exception
     {
-        LogUnitServer s1 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
-                .put("--memory", true)
-                .put("--single", false)
-                .put("--max-cache", 1000000)
+        LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder()
+                .setMemory(false)
+                .setSync(true)
                 .build());
 
         this.router.setServerUnderTest(s1);
@@ -192,10 +171,9 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkThatContiguousTailIsCorrectlyCalculated()
             throws Exception
     {
-        LogUnitServer s1 = new LogUnitServer(new ImmutableMap.Builder<String,Object>()
-                .put("--memory", true)
-                .put("--single", false)
-                .put("--max-cache", 1000000)
+        LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder()
+                .setMemory(false)
+                .setSync(true)
                 .build());
 
         this.router.setServerUnderTest(s1);

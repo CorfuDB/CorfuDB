@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.TestClientRouter;
@@ -45,22 +46,16 @@ public class LayoutViewTest extends AbstractViewTest {
         wireRouters();
 
         CorfuRuntime r = getRuntime().connect();
-        String localAddress = "localhost:9000";
-        Layout l = new Layout(
-                Collections.singletonList(localAddress),
-                Collections.singletonList(localAddress),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList(localAddress)
-                                )
-                        )
-                )),
-                1L
-        );
+        Layout l = new TestLayoutBuilder()
+                        .setEpoch(1L)
+                        .addLayoutServer(9000)
+                        .addSequencer(9000)
+                        .buildSegment()
+                            .buildStripe()
+                                .addLogUnit(9000)
+                                .addToSegment()
+                            .addToLayout()
+                        .build();
 
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
@@ -93,27 +88,17 @@ public class LayoutViewTest extends AbstractViewTest {
         addServerForTest(getEndpoint(9001), failingServer);
         wireRouters();
 
-        String localAddress = "localhost:9000";
-        String failingAddress = "localhost:9001";
-        List<String> layoutServers = new ArrayList<>();
-        layoutServers.add(localAddress);
-        layoutServers.add(failingAddress);
-
-        Layout l = new Layout(
-                layoutServers,
-                Collections.singletonList(localAddress),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList(localAddress)
-                                )
-                        )
-                )),
-                1L
-        );
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(9000)
+                .addLayoutServer(9001)
+                .addSequencer(9000)
+                    .buildSegment()
+                        .buildStripe()
+                            .addLogUnit(9000)
+                        .addToSegment()
+                    .addToLayout()
+                .build();
 
         // Bootstrap with this layout.
         getTestRouterForEndpoint(getEndpoint(9000L)).getClient(LayoutClient.class)

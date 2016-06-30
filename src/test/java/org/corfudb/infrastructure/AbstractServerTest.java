@@ -23,12 +23,12 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         router = new TestServerRouter();
     }
 
-    public void setServer(IServer server)
+    public void setServer(AbstractServer server)
     {
         router.setServerUnderTest(server);
     }
 
-    public abstract IServer getDefaultServer();
+    public abstract AbstractServer getDefaultServer();
 
     @Before
     public void resetTest()
@@ -44,6 +44,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
 
     public CorfuMsg getLastMessage()
     {
+        if (router.getResponseMessages().size() == 0) return null;
         return router.getResponseMessages().get(router.getResponseMessages().size()-1);
     }
 
@@ -61,15 +62,5 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     public void sendMessage(UUID clientId, CorfuMsg message) {
         message.setClientID(clientId);
         router.sendServerMessage(message);
-    }
-
-    public Map<String,Object> defaultOptionsMap()
-    {
-        return new ImmutableMap.Builder<String,Object>()
-                        .put("--initial-token", "0")
-                        .put("--single", false)
-                        .put("--memory", true)
-                        .put("--sync", false)
-                        .build();
     }
 }

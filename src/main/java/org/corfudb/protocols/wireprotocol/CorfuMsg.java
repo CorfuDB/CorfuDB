@@ -90,7 +90,7 @@ public class CorfuMsg {
 
         public final int type;
         public final Class<? extends CorfuMsg> messageType;
-        public final Class<? extends IServer> handler;
+        public final Class<? extends AbstractServer> handler;
         public Boolean ignoreEpoch = false;
 
         public byte asByte() { return (byte)type; }
