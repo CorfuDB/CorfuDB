@@ -138,7 +138,10 @@ public class TXLambdaReferenceEntry extends LogEntry {
         if (!b.readBoolean()) {
             UUID streamID = new UUID(b.readLong(), b. readLong());
             Class<ICorfuObject> c = ReflectionUtils.getClassFromMethodToString(methodName);
-            transactionalObject = rt.getObjectsView().open(streamID, c);
+            transactionalObject = rt.getObjectsView().build()
+                                        .setStreamID(streamID)
+                                        .setType(c)
+                                        .open();
         }
 
         method = ReflectionUtils.getMethodFromToString(methodName);

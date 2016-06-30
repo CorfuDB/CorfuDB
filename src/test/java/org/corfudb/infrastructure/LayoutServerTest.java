@@ -5,12 +5,10 @@ import com.google.common.io.Files;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
-import com.google.common.collect.ImmutableMap;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.util.Collections;
 import java.util.LinkedList;
 
@@ -23,8 +21,8 @@ import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 public class LayoutServerTest extends AbstractServerTest {
 
     @Override
-    public IServer getDefaultServer() {
-        return new LayoutServer(defaultOptionsMap(), getRouter());
+    public AbstractServer getDefaultServer() {
+        return new LayoutServer(new ServerConfigBuilder().build(), getRouter());
     }
 
     @Test
@@ -33,33 +31,15 @@ public class LayoutServerTest extends AbstractServerTest {
 
         String serviceDir = getTempDir();
 
-        Layout l = new Layout(
-                Collections.singletonList("a"),
-                new LinkedList<>(),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList("a")
-                                )
-                        )
-                )),
-                0L
-        );
+        Layout l = TestLayoutBuilder.single(9000);
 
         l.getSequencers().add("test200");
         l.getSequencers().add("test201");
 
         Files.write(l.asJSONString().getBytes(), new File(serviceDir, "layout"));
 
-        LayoutServer ls = new LayoutServer(new ImmutableMap.Builder<String,Object>()
-                .put("--initial-token", "0")
-                .put("--single", false)
-                .put("--memory", true)
-                .put("--log-path", serviceDir)
-                .put("--sync", false)
+        LayoutServer ls = new LayoutServer(new ServerConfigBuilder()
+                .setLogPath(serviceDir)
                 .build(), getRouter());
 
         setServer(ls);
@@ -81,7 +61,7 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void bootstrapServerInstallsNewLayout()
     {
-        Layout testLayout = getTestLayout();
+        Layout testLayout = TestLayoutBuilder.single(9000);
         sendMessage(new LayoutMsg(testLayout, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
         sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
         assertThat(getLastMessage().getMsgType())
@@ -93,31 +73,13 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void cannotBootstrapServerTwice()
     {
-        Layout testLayout = getTestLayout();
+        Layout testLayout = TestLayoutBuilder.single(9000);
         sendMessage(new LayoutMsg(testLayout, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
         sendMessage(new LayoutMsg(testLayout, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP);
     }
 
-    Layout getTestLayout() {
-        String localAddress = "localhost:9999";
-        return new Layout(
-                Collections.singletonList(localAddress),
-                Collections.singletonList(localAddress),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList(localAddress)
-                                )
-                        )
-                )),
-                0L
-        );
-    }
 
     void bootstrapServer(Layout l)
     {
@@ -127,7 +89,7 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void prepareRejectsLowerRanks()
     {
-        bootstrapServer(getTestLayout());
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
@@ -139,11 +101,11 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void proposeRejectsLowerRanks()
     {
-        bootstrapServer(getTestLayout());
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(getTestLayout(), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT);
     }
@@ -151,14 +113,14 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void proposeRejectsAlreadyProposed()
     {
-        bootstrapServer(getTestLayout());
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 10, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(getTestLayout(), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(getTestLayout(), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT);
     }
@@ -166,11 +128,11 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void commitReturnsAck()
     {
-        bootstrapServer(getTestLayout());
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(getTestLayout(), 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
         sendMessage(new LayoutRankMsg(null, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
@@ -184,15 +146,15 @@ public class LayoutServerTest extends AbstractServerTest {
     {
         String serviceDir = getTempDir();
 
-        LayoutServer s1 = new LayoutServer(new ImmutableMap.Builder<String,Object>()
-                .put("--log-path", serviceDir)
-                .put("--memory", false)
-                .put("--single", false)
+        LayoutServer s1 = new LayoutServer(new ServerConfigBuilder()
+                .setSingle(false)
+                .setMemory(false)
+                .setLogPath(serviceDir)
                 .build(), getRouter());
 
         setServer(s1);
-        bootstrapServer(getTestLayout());
-        Layout l100 = getTestLayout();
+        bootstrapServer(TestLayoutBuilder.single(9000));
+        Layout l100 = TestLayoutBuilder.single(9000);
         l100.setEpoch(100);
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
@@ -209,10 +171,10 @@ public class LayoutServerTest extends AbstractServerTest {
                 .isPhase2Rank(100);
         s1.shutdown();
 
-        LayoutServer s2 = new LayoutServer(new ImmutableMap.Builder<String,Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
+        LayoutServer s2 = new LayoutServer(new ServerConfigBuilder()
+                .setSingle(false)
+                .setMemory(false)
+                .setLogPath(serviceDir)
                 .build(), getRouter());
         this.router.setServerUnderTest(s2);
         assertThat(s2)

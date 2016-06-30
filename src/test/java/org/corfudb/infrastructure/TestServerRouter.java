@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class TestServerRouter implements IServerRouter {
 
-    IServer serverUnderTest;
+    AbstractServer serverUnderTest;
 
-    void setServerUnderTest(IServer server) {
+    void setServerUnderTest(AbstractServer server) {
         serverUnderTest = server;
     }
 

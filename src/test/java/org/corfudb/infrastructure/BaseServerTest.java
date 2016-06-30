@@ -20,7 +20,7 @@ public class BaseServerTest extends AbstractServerTest {
     }
 
     @Override
-    public IServer getDefaultServer() {
+    public AbstractServer getDefaultServer() {
         return null;
     }
 
@@ -30,5 +30,13 @@ public class BaseServerTest extends AbstractServerTest {
         sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
         assertThat(getLastMessage().getMsgType())
             .isEqualTo(CorfuMsg.CorfuMsgType.PONG);
+    }
+
+    @Test
+    public void shutdownServerDoesNotRespond() {
+        server.shutdown();
+        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
+        assertThat(getLastMessage())
+                .isNull();
     }
 }

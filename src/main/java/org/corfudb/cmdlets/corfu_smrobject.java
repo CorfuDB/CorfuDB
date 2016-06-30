@@ -54,7 +54,11 @@ public class corfu_smrobject implements ICmdlet {
             throw new RuntimeException(cnfe);
         }
 
-        Object o = rt.getObjectsView().open(getUUIDfromString((String) opts.get("--stream-id")), cls);
+        Object o = rt.getObjectsView().build()
+                    .setStreamName((String) opts.get("--stream-id"))
+                    .setType(cls)
+                    .open();
+
         // Use reflection to find the method...
         Method m;
         try {

@@ -51,7 +51,7 @@ import org.corfudb.util.serializer.Serializers;
  * When the entry is complete, a written flag is set in the flags field.
  */
 @Slf4j
-public class LogUnitServer implements IServer {
+public class LogUnitServer extends AbstractServer {
 
     /** The options map. */
     Map<String,Object> opts;
@@ -408,6 +408,7 @@ public class LogUnitServer implements IServer {
 
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (isShutdown()) return;
         switch(msg.getMsgType())
         {
             case WRITE:

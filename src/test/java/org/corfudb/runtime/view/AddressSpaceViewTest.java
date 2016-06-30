@@ -2,10 +2,7 @@ package org.corfudb.runtime.view;
 
 import com.google.common.collect.*;
 import lombok.Getter;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.LogUnitServerAssertions;
-import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
@@ -65,21 +62,22 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
-        setLayout(new Layout(
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        ImmutableList.<Layout.LayoutStripe>builder()
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9000))))
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9001))))
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9002))))
-                                .build()
-                )),
-                1L
-        ));
+        setLayout(new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                    .buildSegment()
+                        .buildStripe()
+                            .addLogUnit(9000)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9001)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9002)
+                            .addToSegment()
+                    .addToLayout()
+                .build());
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -135,21 +133,22 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
-        setLayout(new Layout(
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        ImmutableList.<Layout.LayoutStripe>builder()
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9000))))
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9001))))
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9002))))
-                                .build()
-                )),
-                1L
-        ));
+        setLayout(new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                    .buildSegment()
+                        .buildStripe()
+                            .addLogUnit(9000)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9001)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9002)
+                            .addToSegment()
+                    .addToLayout()
+                .build());
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -203,21 +202,22 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
-        setLayout(new Layout(
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        ImmutableList.<Layout.LayoutStripe>builder()
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9000))))
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9001))))
-                                .add(new Layout.LayoutStripe(Collections.singletonList(getEndpoint(9002))))
-                                .build()
-                )),
-                1L
-        ));
+        setLayout(new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                    .buildSegment()
+                        .buildStripe()
+                            .addLogUnit(9000)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9001)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9002)
+                            .addToSegment()
+                    .addToLayout()
+                .build());
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());

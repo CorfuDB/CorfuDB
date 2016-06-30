@@ -45,7 +45,10 @@ public class JSONSerializer implements ISerializer {
             b.readBytes(SMRClassNameBytes, 0, SMRClassNameLength);
             String SMRClassName = new String(SMRClassNameBytes);
             try {
-                return rt.getObjectsView().open(new UUID(b.readLong(), b.readLong()), Class.forName(SMRClassName));
+                return rt.getObjectsView().build()
+                    .setStreamID(new UUID(b.readLong(), b.readLong()))
+                    .setType(Class.forName(SMRClassName))
+                     .open();
             } catch (ClassNotFoundException cnfe) {
                 log.error("Exception during deserialization!", cnfe);
                 throw new RuntimeException(cnfe);

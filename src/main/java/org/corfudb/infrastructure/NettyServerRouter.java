@@ -25,7 +25,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
 implements IServerRouter {
 
     /** This map stores the mapping from message type to netty server handler. */
-    Map<CorfuMsg.CorfuMsgType, IServer> handlerMap;
+    Map<CorfuMsg.CorfuMsgType, AbstractServer> handlerMap;
 
     BaseServer baseServer;
 
@@ -45,7 +45,7 @@ implements IServerRouter {
      *
      * @param server The server to add.
      */
-    public void addServer(IServer server) {
+    public void addServer(AbstractServer server) {
         // Iterate through all types of CorfuMsgType, registering the handler
         Arrays.<CorfuMsg.CorfuMsgType>stream(CorfuMsg.CorfuMsgType.values())
                 .forEach(x -> {
@@ -102,7 +102,7 @@ implements IServerRouter {
             // The incoming message should have been transformed to a CorfuMsg earlier in the pipeline.
             CorfuMsg m = ((CorfuMsg) msg);
             // We get the handler for this message from the map
-            IServer handler = handlerMap.get(m.getMsgType());
+            AbstractServer handler = handlerMap.get(m.getMsgType());
             if (handler == null)
             {
                 // The message was unregistered, we are dropping it.
