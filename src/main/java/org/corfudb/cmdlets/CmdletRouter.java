@@ -4,6 +4,8 @@ import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.util.Arrays;
 
+import static java.lang.System.exit;
+
 /** Routes symlink-files to the proper cmdlet.
  *  Symlinks are in the bin directory.
  *  They symlink to the script in scripts/cmdlet.sh
@@ -36,16 +38,19 @@ public class CmdletRouter {
                 try {
                     // Execute with the arguments other than the name of the cmdlet itself.
                     ((ICmdlet)cmdlet.getConstructor().newInstance()).main(Arrays.copyOfRange(args, 1, args.length));
+                    exit(0);
                 } catch (Exception e)
                 {
                     // Let the user know if an exception occurs.
                     System.out.println(e.getClass().getSimpleName() + " exception: " + e.getMessage());
+                    exit(1);
                 }
             }
         }
         catch (ClassNotFoundException cnfe)
         {
             System.out.println("No cmdlet named " + cmdletName + " available!");
+            exit(64);
         }
     }
 }

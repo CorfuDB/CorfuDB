@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 
 /** A client router which multiplexes operations over the Netty transport.
  *
@@ -45,6 +46,9 @@ implements IClientRouter {
     @Getter
     Integer port;
 
+    /** Are we connected? */
+    Boolean connected_p;
+
     /** The epoch this router is in. */
     @Getter
     @Setter
@@ -58,6 +62,21 @@ implements IClientRouter {
     /** The current request ID. */
     @Getter
     public AtomicLong requestID;
+
+    /** New connection timeout (milliseconds) */
+    @Getter
+    @Setter
+    public long timeoutConnect;
+
+    /** Sync call response timeout (milliseconds) */
+    @Getter
+    @Setter
+    public long timeoutResponse;
+
+    /** Retry interval after timeout (milliseconds) */
+    @Getter
+    @Setter
+    public long timeoutRetry;
 
     /** A random instance */
     public static final Random random = new Random();
@@ -91,7 +110,11 @@ implements IClientRouter {
         this.host = host;
         this.port = port;
 
+        connected_p = false;
         clientID = UUID.randomUUID();
+        timeoutConnect = 500;
+        timeoutResponse = 5000;
+        timeoutRetry = 1000;
         handlerMap = new ConcurrentHashMap<>();
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
@@ -138,7 +161,12 @@ implements IClientRouter {
                                 .findFirst().get();
     }
 
-    public void start()
+    public void start() {
+        start(-1);
+    }
+
+
+    public void start(long c)
     {
         shutdown = false;
         workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
@@ -185,7 +213,7 @@ implements IClientRouter {
         });
 
         try {
-            connectChannel(b);
+            connectChannel(b, c);
         } catch (Exception e)
         {
             throw new NetworkException(e.getClass().getSimpleName() +
@@ -193,27 +221,34 @@ implements IClientRouter {
         }
     }
 
-    void connectChannel(Bootstrap b) {
+    void connectChannel(Bootstrap b, long c) {
         ChannelFuture cf = b.connect(host, port);
         cf.syncUninterruptibly();
-        if (!cf.awaitUninterruptibly(5000)) {
-            throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
+        if (!cf.awaitUninterruptibly(timeoutConnect)) {
+            throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
         }
         channel = cf.channel();
         channel.closeFuture().addListener((r) -> {
+            connected_p = false;
+            // TODO: what concurrency/thread safety things are wrong here?
+            outstandingRequests.forEach((ReqID, reqCF) -> {
+                reqCF.completeExceptionally(new NetworkException("Disconnected", host + ":" + port));
+                outstandingRequests.remove(ReqID);
+            });
+
             if (!shutdown) {
-                log.warn("Disconnected, reconnecting...");
                 while (true) {
                     try {
-                        connectChannel(b);
+                        connectChannel(b, c);
                         return;
                     } catch (Exception ex) {
-                        log.warn("Exception while reconnecting, retry in 1s");
-                        Thread.sleep(1000);
+                        log.trace(c + " Exception while reconnecting, retry in {} ms", timeoutRetry);
+                        Thread.sleep(timeoutRetry);
                     }
                 }
             }
         });
+        connected_p = true;
     }
 
     /**
@@ -233,7 +268,19 @@ implements IClientRouter {
      * @return              A completable future which will be fulfilled by the reply,
      *                      or a timeout in the case there is no response.
      */
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message)
+    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
+        if (! connected_p) {
+            // SLF: Returning a null here may break a lot of callers' code: there's a
+            //      frequent convention that our return value is immediately used to set
+            //      callback behavior on success and/or exception.  Those callback calls
+            //      almost always assume that null isn't an option.
+            return null;
+        } else {
+            return sendMessageAndGetCompletable2(ctx, message);
+        }
+    }
+
+    <T> CompletableFuture<T> sendMessageAndGetCompletable2(ChannelHandlerContext ctx, CorfuMsg message)
     {
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
@@ -253,7 +300,7 @@ implements IClientRouter {
         }
         log.trace("Sent message: {}", message);
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofSeconds(5));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);
@@ -322,7 +369,7 @@ implements IClientRouter {
         }
         else
         {
-            log.warn("Attempted to complete request {}, but request not outstanding!", requestID);
+            log.trace("Attempted to complete request {}, but request not outstanding!", requestID);
         }
     }
 
@@ -341,7 +388,7 @@ implements IClientRouter {
         }
         else
         {
-            log.warn("Attempted to exceptionally complete request {}, but request not outstanding!", requestID);
+            log.trace("Attempted to exceptionally complete request {}, but request not outstanding!", requestID);
         }
     }
 
