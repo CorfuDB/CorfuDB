@@ -66,6 +66,8 @@ public class NettyCommTest extends AbstractCorfuTest {
             d.bootstrapServer();
             // First ping may fail due to connection loss.
             r.getClient(BaseClient.class).pingSync();
+            System.out.println("Sleeping...."); Thread.sleep(500); System.out.println("Sleeping...."); Thread.sleep(500); System.out.println("Sleeping...."); Thread.sleep(500);  System.out.println("Done Sleeping");
+            r.getClient(BaseClient.class).pingSync();
             assertThat(r.getClient(BaseClient.class).pingSync())
                     .isTrue();
         });

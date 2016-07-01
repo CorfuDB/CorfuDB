@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 
 /** A client router which multiplexes operations over the Netty transport.
  *
@@ -44,6 +45,9 @@ implements IClientRouter {
     /** The port that this router is routing requests for. */
     @Getter
     Integer port;
+
+    /** Are we connected? */
+    Boolean connected_p;
 
     /** The epoch this router is in. */
     @Getter
@@ -106,6 +110,7 @@ implements IClientRouter {
         this.host = host;
         this.port = port;
 
+        connected_p = false;
         clientID = UUID.randomUUID();
         timeoutConnect = 500;
         timeoutResponse = 5000;
@@ -217,19 +222,27 @@ implements IClientRouter {
     }
 
     void connectChannel(Bootstrap b, long c) {
-        log.info(c + " connectChannel top");
+        System.out.println(c + " connectChannel top");
         ChannelFuture cf = b.connect(host, port);
-        log.info(c + " connectChannel 1");
+        System.out.println(c + " connectChannel 1");
         cf.syncUninterruptibly();
-        log.info(c + " connectChannel 2");
+        System.out.println(c + " connectChannel 2");
         if (!cf.awaitUninterruptibly(timeoutConnect)) {
             throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
         }
-        log.info(c + " connectChannel 3");
+        System.out.println(c + " connectChannel 3");
         channel = cf.channel();
         channel.closeFuture().addListener((r) -> {
+            connected_p = false;
+            // TODO: what concurrency/thread safety things are wrong here?
+            outstandingRequests.forEach((ReqID, reqCF) -> {
+                System.out.println("Exceptionally twiddle " + ReqID);
+                reqCF.completeExceptionally(new NetworkException("Disconnected", host + ":" + port));
+                outstandingRequests.remove(ReqID);
+            });
+
             if (!shutdown) {
-                log.warn(c + " Disconnected, reconnecting...");
+                System.out.println(c + " Disconnected, reconnecting...");
                 while (true) {
                     try {
                         connectChannel(b, c);
@@ -241,7 +254,8 @@ implements IClientRouter {
                 }
             }
         });
-        log.info(c + " connectChannel bottom");
+        connected_p = true;
+        System.out.println(c + " connectChannel bottom");
     }
 
     /**
@@ -261,7 +275,16 @@ implements IClientRouter {
      * @return              A completable future which will be fulfilled by the reply,
      *                      or a timeout in the case there is no response.
      */
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message)
+    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
+        if (! connected_p) {
+            System.out.println("Nope, not connected.");
+            return null; // TODO: this is going to break lots and lots of code.
+        } else {
+            return sendMessageAndGetCompletable2(ctx, message);
+        }
+    }
+
+    <T> CompletableFuture<T> sendMessageAndGetCompletable2(ChannelHandlerContext ctx, CorfuMsg message)
     {
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
