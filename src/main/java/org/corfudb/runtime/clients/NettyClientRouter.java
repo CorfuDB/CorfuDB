@@ -222,40 +222,33 @@ implements IClientRouter {
     }
 
     void connectChannel(Bootstrap b, long c) {
-        System.out.println(c + " connectChannel top");
         ChannelFuture cf = b.connect(host, port);
-        System.out.println(c + " connectChannel 1");
         cf.syncUninterruptibly();
-        System.out.println(c + " connectChannel 2");
         if (!cf.awaitUninterruptibly(timeoutConnect)) {
             throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
         }
-        System.out.println(c + " connectChannel 3");
         channel = cf.channel();
         channel.closeFuture().addListener((r) -> {
             connected_p = false;
             // TODO: what concurrency/thread safety things are wrong here?
             outstandingRequests.forEach((ReqID, reqCF) -> {
-                System.out.println("Exceptionally twiddle " + ReqID);
                 reqCF.completeExceptionally(new NetworkException("Disconnected", host + ":" + port));
                 outstandingRequests.remove(ReqID);
             });
 
             if (!shutdown) {
-                System.out.println(c + " Disconnected, reconnecting...");
                 while (true) {
                     try {
                         connectChannel(b, c);
                         return;
                     } catch (Exception ex) {
-                        log.warn(c + " Exception while reconnecting, retry in {} ms", timeoutRetry);
+                        log.trace(c + " Exception while reconnecting, retry in {} ms", timeoutRetry);
                         Thread.sleep(timeoutRetry);
                     }
                 }
             }
         });
         connected_p = true;
-        System.out.println(c + " connectChannel bottom");
     }
 
     /**
@@ -277,8 +270,11 @@ implements IClientRouter {
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
         if (! connected_p) {
-            System.out.println("Nope, not connected.");
-            return null; // TODO: this is going to break lots and lots of code.
+            // SLF: Returning a null here may break a lot of callers' code: there's a
+            //      frequent convention that our return value is immediately used to set
+            //      callback behavior on success and/or exception.  Those callback calls
+            //      almost always assume that null isn't an option.
+            return null;
         } else {
             return sendMessageAndGetCompletable2(ctx, message);
         }
@@ -296,19 +292,16 @@ implements IClientRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
         // Write the message out to the channel.
-        System.out.print("<");
         if (ctx == null) {
             channel.writeAndFlush(message);
         }
         else {
             ctx.writeAndFlush(message);
         }
-        System.out.print(">");
         log.trace("Sent message: {}", message);
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
         final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
-            System.out.print("t");
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);
             return null;
@@ -376,7 +369,7 @@ implements IClientRouter {
         }
         else
         {
-            log.warn("Attempted to complete request {}, but request not outstanding!", requestID);
+            log.trace("Attempted to complete request {}, but request not outstanding!", requestID);
         }
     }
 
@@ -395,7 +388,7 @@ implements IClientRouter {
         }
         else
         {
-            log.warn("Attempted to exceptionally complete request {}, but request not outstanding!", requestID);
+            log.trace("Attempted to exceptionally complete request {}, but request not outstanding!", requestID);
         }
     }
 

@@ -66,31 +66,20 @@ public class corfu_multiping implements ICmdlet {
 
         int c = 0;
         while (true) {
-            log.info("Main top, c = " + c);
             ping_one_round(c);
-            just_sleep_dammit(1000);
-            // just_sleep_dammit(2);
-            // This kind of check may not see flapping that happens during
+            sleep_wrapper(1000);
+            // We may not see flapping that happens during
             // intervals of less than this loop's polling interval.
             for (int j = 0; j < num; j++) {
                 if (last_up[j] != up[j]) {
-                    // System.out.println("Host " + hosts[j] + " port " + ports[j] + ": " +
-                    //                    last_up[j] + " -> " + up[j]);
                     log.info("Host " + hosts[j] + " port " + ports[j] + ": " +
-                            last_up[j] + " -> " + up[j]);
-
+                             last_up[j] + " -> " + up[j]);
                     last_up[j] = up[j];
                 }
             }
             c++;
         }
         // notreached
-    }
-
-    private void just_sleep_dammit(long i) {
-        try {
-            java.lang.Thread.sleep(i);
-        } catch (InterruptedException ie) {}
     }
 
     private void ping_one_round(long c) {
@@ -101,23 +90,14 @@ public class corfu_multiping implements ICmdlet {
 
     private void ping_host_once(long c, int nth) {
         // This mutable data stuff gives me the heebie-jeebies.....
-        //
-        // It would be very nice to avoid recreating a new router & new connection
-        // each time we want to send a single PING msg.  But these CompletableFuture
-        // things may (may not?) run in different threads, and being racy
-        // How the hell do I know that this is safe?  I don't know, period.
-        // So I'll close my eyes and assume that anything bad that might happen
-        // is happening in a try/catch thingie and nothing explosive leaks out.
-
         CompletableFuture.runAsync(() -> {
             if (routers[nth] == null) {
-                // System.out.println(hosts[nth] + " port " + ports[nth] + " new router.");
                 NettyClientRouter r = new NettyClientRouter(hosts[nth], ports[nth]);
                 r.start(c);
                 routers[nth] = r;
                 routers[nth].setTimeoutConnect(50);
-                routers[nth].setTimeoutRetry(700);
-                routers[nth].setTimeoutResponse(4500);
+                routers[nth].setTimeoutRetry(200);
+                routers[nth].setTimeoutResponse(1000);
             }
             // sendMessageAndGetCompleteable(), which is just a couple layers down from
             // the ping() here, appears be silent & do nothing if the router is not yet
@@ -125,23 +105,33 @@ public class corfu_multiping implements ICmdlet {
             // that we aren't connected *now* is to wait for the entire TimeoutResponse
             // interval and then get our timeout exception there.  Whee!
             CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
-            cf.exceptionally(e -> {
-                log.info(hosts[nth] + " port " + ports[nth] + " c " + c + " exception " + e);
+            if (cf == null) {
+                // We are disconnected.  There is no point in registering async
+                // actions for the future.
                 up[nth] = false;
-                // routers[nth] = null;
+                return;
+            }
+            cf.exceptionally(e -> {
+                log.trace(hosts[nth] + " port " + ports[nth] + " c " + c + " exception " + e);
+                up[nth] = false;
                 return false;
             });
             cf.thenAccept((x) -> {
-                log.info(hosts[nth] + " port " + ports[nth] + " c " + c + " " + x);
+                log.trace(hosts[nth] + " port " + ports[nth] + " c " + c + " " + x);
                 if (x == true) {
                     up[nth] = true;
                 } else {
                     up[nth] = false;
-                    // routers[nth] = null;
                 }
                 return;
             });
         });
 
+    }
+
+    private void sleep_wrapper(long i) {
+        try {
+            java.lang.Thread.sleep(i);
+        } catch (InterruptedException ie) {}
     }
 }
