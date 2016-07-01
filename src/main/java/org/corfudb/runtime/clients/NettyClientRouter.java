@@ -156,7 +156,12 @@ implements IClientRouter {
                                 .findFirst().get();
     }
 
-    public void start()
+    public void start() {
+        start(-1);
+    }
+
+
+    public void start(long c)
     {
         shutdown = false;
         workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
@@ -203,7 +208,7 @@ implements IClientRouter {
         });
 
         try {
-            connectChannel(b);
+            connectChannel(b, c);
         } catch (Exception e)
         {
             throw new NetworkException(e.getClass().getSimpleName() +
@@ -211,27 +216,32 @@ implements IClientRouter {
         }
     }
 
-    void connectChannel(Bootstrap b) {
+    void connectChannel(Bootstrap b, long c) {
+        log.info(c + " connectChannel top");
         ChannelFuture cf = b.connect(host, port);
+        log.info(c + " connectChannel 1");
         cf.syncUninterruptibly();
+        log.info(c + " connectChannel 2");
         if (!cf.awaitUninterruptibly(timeoutConnect)) {
-            throw new NetworkException("Timeout connecting to endpoint", host + ":" + port);
+            throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
         }
+        log.info(c + " connectChannel 3");
         channel = cf.channel();
         channel.closeFuture().addListener((r) -> {
             if (!shutdown) {
-                log.warn("Disconnected, reconnecting...");
+                log.warn(c + " Disconnected, reconnecting...");
                 while (true) {
                     try {
-                        connectChannel(b);
+                        connectChannel(b, c);
                         return;
                     } catch (Exception ex) {
-                        log.warn("Exception while reconnecting, retry in {} ms", timeoutRetry);
+                        log.warn(c + " Exception while reconnecting, retry in {} ms", timeoutRetry);
                         Thread.sleep(timeoutRetry);
                     }
                 }
             }
         });
+        log.info(c + " connectChannel bottom");
     }
 
     /**

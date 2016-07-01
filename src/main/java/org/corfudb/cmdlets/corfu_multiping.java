@@ -113,12 +113,17 @@ public class corfu_multiping implements ICmdlet {
             if (routers[nth] == null) {
                 // System.out.println(hosts[nth] + " port " + ports[nth] + " new router.");
                 NettyClientRouter r = new NettyClientRouter(hosts[nth], ports[nth]);
-                r.start();
+                r.start(c);
                 routers[nth] = r;
                 routers[nth].setTimeoutConnect(50);
                 routers[nth].setTimeoutRetry(700);
                 routers[nth].setTimeoutResponse(4500);
             }
+            // sendMessageAndGetCompleteable(), which is just a couple layers down from
+            // the ping() here, appears be silent & do nothing if the router is not yet
+            // connected to the remote TCP server.  The only indication that we'll get
+            // that we aren't connected *now* is to wait for the entire TimeoutResponse
+            // interval and then get our timeout exception there.  Whee!
             CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
             cf.exceptionally(e -> {
                 log.info(hosts[nth] + " port " + ports[nth] + " c " + c + " exception " + e);
