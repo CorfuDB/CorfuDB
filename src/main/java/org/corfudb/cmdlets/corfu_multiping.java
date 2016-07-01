@@ -24,11 +24,11 @@ import static org.fusesource.jansi.Ansi.Color.*;
 public class corfu_multiping implements ICmdlet {
 
     int num;
-    String hosts[] = new String[99];
-    Integer ports[] = new Integer[99];
-    NettyClientRouter routers[] = new NettyClientRouter[99];
-    Boolean up[]      = new Boolean[99];
-    Boolean last_up[] = new Boolean[99];
+    String hosts[];
+    Integer ports[];
+    NettyClientRouter routers[];
+    Boolean up[];
+    Boolean last_up[];
 
     private static final String USAGE =
             "corfu_multiping, pings a Corfu Server to check for connectivity to multiple servers.\n"
@@ -55,6 +55,12 @@ public class corfu_multiping implements ICmdlet {
         // Parse host address and port
         ArrayList<String> aps = (ArrayList<String>) opts.get("<address>:<port>");
         num = aps.size();
+        hosts = new String[num];
+        ports = new Integer[num];
+        routers = new NettyClientRouter[num];
+        up = new Boolean[num];
+        last_up = new Boolean[num];
+
         for (int i = 0; i < aps.size(); i++) {
             hosts[i] = aps.get(i).split(":")[0];
             ports[i] = Integer.parseInt(aps.get(i).split(":")[1]);
@@ -99,11 +105,6 @@ public class corfu_multiping implements ICmdlet {
                 routers[nth].setTimeoutRetry(200);
                 routers[nth].setTimeoutResponse(1000);
             }
-            // sendMessageAndGetCompleteable(), which is just a couple layers down from
-            // the ping() here, appears be silent & do nothing if the router is not yet
-            // connected to the remote TCP server.  The only indication that we'll get
-            // that we aren't connected *now* is to wait for the entire TimeoutResponse
-            // interval and then get our timeout exception there.  Whee!
             CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
             if (cf == null) {
                 // We are disconnected.  There is no point in registering async
