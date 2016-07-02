@@ -3,9 +3,17 @@ package org.corfudb.runtime.view;
 import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.*;
+import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.IServerRouter;
+import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Before;
@@ -29,9 +37,15 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     Map<String, Set<AbstractServer>> serverMap;
 
+    public AbstractViewTest() {
+        runtime = new CorfuRuntime();
+        routerMap = new HashMap<>();
+        serverMap = new HashMap<>();
+        runtime.setGetRouterFunction(routerMap::get);
+    }
+
     @Before
-    public void resetTests()
-    {
+    public void resetTests() {
         routerMap.clear();
         serverMap.clear();
         runtime.parseConfigurationString(getDefaultConfigurationString())
@@ -39,11 +53,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.getAddressSpaceView().resetCaches();
     }
 
-    /** Wire all registered servers to the correct router.
-     *  This function must be called prior to running the actual test logic.
+    /**
+     * Wire all registered servers to the correct router.
+     * This function must be called prior to running the actual test logic.
      */
-    public void wireRouters()
-    {
+    public void wireRouters() {
         serverMap.keySet().stream()
                 .map(address -> {
                     TestClientRouter r = getTestRouterForEndpoint(address);
@@ -99,40 +113,32 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return runtime;
     }
 
-    public AbstractViewTest()
-    {
-        runtime = new CorfuRuntime();
-        routerMap = new HashMap<>();
-        serverMap = new HashMap<>();
-        runtime.setGetRouterFunction(routerMap::get);
-    }
-
     public TestClientRouter getTestRouterForEndpoint(String endpoint) {
         return routerMap.computeIfAbsent(endpoint, x -> {
-           TestClientRouter c = new TestClientRouter();
-           c.setAddress(x);
+            TestClientRouter c = new TestClientRouter();
+            c.setAddress(x);
             return c;
         });
     }
+
     public IServerRouter getServerRouterForEndpoint(String endpoint) {
         return routerMap.computeIfAbsent(endpoint, x -> new TestClientRouter());
     }
 
-    public String getDefaultConfigurationString() {return getDefaultEndpoint();}
+    public String getDefaultConfigurationString() {
+        return getDefaultEndpoint();
+    }
 
-    public String getDefaultEndpoint()
-    {
+    public String getDefaultEndpoint() {
         return "localhost:9000";
     }
 
-    public String getEndpoint(long port)
-    {
+    public String getEndpoint(long port) {
         return "localhost:" + port;
     }
 
-    public Map<String,Object> defaultOptionsMap()
-    {
-        return new ImmutableMap.Builder<String,Object>()
+    public Map<String, Object> defaultOptionsMap() {
+        return new ImmutableMap.Builder<String, Object>()
                 .put("--initial-token", "0")
                 .put("--memory", true)
                 .put("--single", true)
@@ -143,8 +149,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     }
 
     public void setLayout(Layout l)
-            throws QuorumUnreachableException, OutrankedException
-    {
+            throws QuorumUnreachableException, OutrankedException {
         getRuntime().getLayoutView().updateLayout(l, l.epoch);
         getRuntime().invalidateLayout();
         assertThat(getRuntime().getLayoutView().getLayout().epoch)

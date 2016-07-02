@@ -20,8 +20,7 @@ public class LogUnitReadRangeResponseMsg extends CorfuMsg {
 
     Map<Long, LogUnitReadResponseMsg> responseMap;
 
-    public LogUnitReadRangeResponseMsg(Map<Long, LogUnitReadResponseMsg> map)
-    {
+    public LogUnitReadRangeResponseMsg(Map<Long, LogUnitReadResponseMsg> map) {
         this.msgType = CorfuMsgType.READ_RANGE_RESPONSE;
         this.responseMap = map;
     }
@@ -35,8 +34,7 @@ public class LogUnitReadRangeResponseMsg extends CorfuMsg {
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
         buffer.writeInt(responseMap.size());
-        for (Map.Entry<Long,LogUnitReadResponseMsg> e : responseMap.entrySet())
-        {
+        for (Map.Entry<Long, LogUnitReadResponseMsg> e : responseMap.entrySet()) {
             buffer.writeLong(e.getKey());
             e.getValue().serialize(buffer);
         }
@@ -54,10 +52,9 @@ public class LogUnitReadRangeResponseMsg extends CorfuMsg {
         super.fromBuffer(buffer);
         int size = buffer.readInt();
         responseMap = new HashMap<>();
-        for (int i = 0; i < size; i++)
-        {
+        for (int i = 0; i < size; i++) {
             long address = buffer.readLong();
-            LogUnitReadResponseMsg m = (LogUnitReadResponseMsg)(CorfuMsg.deserialize(buffer));
+            LogUnitReadResponseMsg m = (LogUnitReadResponseMsg) (CorfuMsg.deserialize(buffer));
             responseMap.put(address, m);
         }
     }

@@ -6,15 +6,13 @@ import lombok.experimental.Accessors;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 6/29/16.
  */
-@Accessors(chain=true)
+@Accessors(chain = true)
 public class TestLayoutBuilder {
 
     List<String> sequencerServers;
@@ -35,6 +33,18 @@ public class TestLayoutBuilder {
         return "localhost:" + port;
     }
 
+    public static Layout single(int port) {
+        return new TestLayoutBuilder()
+                .addLayoutServer(port)
+                .addSequencer(port)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(port)
+                .addToSegment()
+                .addToLayout()
+                .build();
+    }
+
     public TestLayoutBuilder addSequencer(int port) {
         sequencerServers.add(getEndpoint(port));
         return this;
@@ -45,7 +55,27 @@ public class TestLayoutBuilder {
         return this;
     }
 
-    @Accessors(chain=true)
+    private TestLayoutBuilder addSegment(TestSegmentBuilder builder) {
+        segments.add(builder);
+        return this;
+    }
+
+    public TestSegmentBuilder buildSegment() {
+        return new TestSegmentBuilder(this);
+    }
+
+    public Layout build() {
+        List<Layout.LayoutSegment> segmentList = segments.stream()
+                .map(TestSegmentBuilder::build)
+                .collect(Collectors.toList());
+
+        return new Layout(layoutServers,
+                sequencerServers,
+                segmentList,
+                epoch);
+    }
+
+    @Accessors(chain = true)
     public static class TestSegmentBuilder {
 
         TestLayoutBuilder layoutBuilder;
@@ -71,8 +101,7 @@ public class TestLayoutBuilder {
             return new TestStripeBuilder(this);
         }
 
-        private TestSegmentBuilder addStripe(TestStripeBuilder stripeBuilder)
-        {
+        private TestSegmentBuilder addStripe(TestStripeBuilder stripeBuilder) {
             stripes.add(stripeBuilder);
             return this;
         }
@@ -113,37 +142,5 @@ public class TestLayoutBuilder {
         private Layout.LayoutStripe build() {
             return new Layout.LayoutStripe(logUnits);
         }
-    }
-
-    private TestLayoutBuilder addSegment(TestSegmentBuilder builder) {
-        segments.add(builder);
-        return this;
-    }
-
-    public TestSegmentBuilder buildSegment() {
-        return new TestSegmentBuilder(this);
-    }
-
-    public static Layout single(int port) {
-        return new TestLayoutBuilder()
-                .addLayoutServer(port)
-                .addSequencer(port)
-                .buildSegment()
-                    .buildStripe()
-                        .addLogUnit(port)
-                        .addToSegment()
-                    .addToLayout()
-                .build();
-    }
-
-    public Layout build() {
-        List<Layout.LayoutSegment> segmentList = segments.stream()
-                    .map(TestSegmentBuilder::build)
-                    .collect(Collectors.toList());
-
-        return new Layout(layoutServers,
-                sequencerServers,
-                segmentList,
-                epoch);
     }
 }

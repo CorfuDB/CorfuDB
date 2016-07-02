@@ -23,13 +23,11 @@ public class CorfuRangeMsg extends CorfuMsg {
 
     RangeSet<Long> ranges;
 
-    public CorfuRangeMsg(RangeSet<Long> ranges)
-    {
+    public CorfuRangeMsg(RangeSet<Long> ranges) {
         this.ranges = ranges;
     }
 
-    public CorfuRangeMsg(CorfuMsg.CorfuMsgType type, RangeSet<Long> ranges)
-    {
+    public CorfuRangeMsg(CorfuMsg.CorfuMsgType type, RangeSet<Long> ranges) {
         this.msgType = type;
         this.ranges = ranges;
     }
@@ -44,8 +42,7 @@ public class CorfuRangeMsg extends CorfuMsg {
         super.serialize(buffer);
         Set<Range<Long>> ranges = this.ranges.asRanges();
         buffer.writeInt(ranges.size());
-        for (Range i : ranges)
-        {
+        for (Range i : ranges) {
             Serializers.getSerializer(Serializers.SerializerType.JAVA).serialize(i, buffer);
         }
     }
@@ -62,8 +59,7 @@ public class CorfuRangeMsg extends CorfuMsg {
         super.fromBuffer(buffer);
         this.ranges = TreeRangeSet.create();
         int ranges = buffer.readInt();
-        for (int i = 0; i < ranges; i++)
-        {
+        for (int i = 0; i < ranges; i++) {
             Range r = (Range) Serializers.getSerializer(Serializers.SerializerType.JAVA).deserialize(buffer, null);
             this.ranges.add(r);
         }

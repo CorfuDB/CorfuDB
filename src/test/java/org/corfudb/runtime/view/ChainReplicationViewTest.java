@@ -28,7 +28,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingle()
-    throws Exception {
+            throws Exception {
         // default layout is chain replication.
         addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
                 getServerRouterForEndpoint(getEndpoint(9000))));
@@ -46,7 +46,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getMetadataMap()
+        assertThat((Set<UUID>) r.getAddressSpaceView().read(0L).getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
     }
@@ -89,8 +89,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWriteToMultiple()
-    throws Exception
-    {
+            throws Exception {
         // default layout is chain replication.
         addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
                 getServerRouterForEndpoint(getEndpoint(9000))));
@@ -108,13 +107,13 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                 .setEpoch(1L)
                 .addLayoutServer(9000)
                 .addSequencer(9000)
-                    .buildSegment()
-                        .buildStripe()
-                            .addLogUnit(9000)
-                            .addLogUnit(9001)
-                            .addLogUnit(9002)
-                        .addToSegment()
-                    .addToLayout()
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addLogUnit(9001)
+                .addLogUnit(9002)
+                .addToSegment()
+                .addToLayout()
                 .build()
         );
 
@@ -127,7 +126,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getMetadataMap()
+        assertThat((Set<UUID>) r.getAddressSpaceView().read(0L).getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
     }
@@ -135,8 +134,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     @Test
     @SuppressWarnings("unchecked")
     public void ensureAllUnitsContainData()
-            throws Exception
-    {
+            throws Exception {
         // default layout is chain replication.
         addServerForTest(getEndpoint(9000),
                 new LayoutServer(defaultOptionsMap(), getServerRouterForEndpoint(getEndpoint(9000))));
@@ -184,16 +182,16 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getMetadataMap()
+        assertThat((Set<UUID>) r.getAddressSpaceView().read(0L).getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
 
         // Ensure that the data was written to each logunit.
         assertThat(l9000)
-            .matchesDataAtAddress(0, testPayload);
+                .matchesDataAtAddress(0, testPayload);
         assertThat(l9001)
-            .matchesDataAtAddress(0, testPayload);
+                .matchesDataAtAddress(0, testPayload);
         assertThat(l9002)
-            .matchesDataAtAddress(0, testPayload);
+                .matchesDataAtAddress(0, testPayload);
     }
 }

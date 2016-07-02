@@ -2,8 +2,6 @@ package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.experimental.Accessors;
 
 import java.util.Map;
@@ -19,7 +17,7 @@ public class ServerConfigBuilder {
     boolean single = false;
     boolean memory = true;
     String logPath = "";
-    boolean sync  = false;
+    boolean sync = false;
     int maxCache = 1000000;
     int checkpoint = 100;
 
@@ -28,7 +26,7 @@ public class ServerConfigBuilder {
     }
 
     public Map<String, Object> build() {
-        return new ImmutableMap.Builder<String,Object>()
+        return new ImmutableMap.Builder<String, Object>()
                 .put("--initial-token", initialToken)
                 .put("--single", single)
                 .put("--memory", memory)

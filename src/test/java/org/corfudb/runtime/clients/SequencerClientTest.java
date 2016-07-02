@@ -35,7 +35,7 @@ public class SequencerClientTest extends AbstractClientTest {
 
     @Test
     public void canGetAToken()
-    throws Exception {
+            throws Exception {
         client.nextToken(Collections.<UUID>emptySet(), 1).get();
     }
 

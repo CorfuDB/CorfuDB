@@ -12,14 +12,33 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.*;
+import lombok.val;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuRangeMsg;
+import org.corfudb.protocols.wireprotocol.CorfuUUIDMsg;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogUnitFillHoleMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitGCIntervalMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitMetadataMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitReadRangeResponseMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitReadRequestMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
+import org.corfudb.protocols.wireprotocol.LogUnitTailMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitTrimMsg;
+import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
+import org.corfudb.util.serializer.Serializers;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -28,19 +47,30 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
-import org.corfudb.util.serializer.Serializers;
-
 /**
  * Created by mwei on 12/10/15.
- *
+ * <p>
  * A Log Unit Server, which is responsible for providing the persistent storage for the Corfu Distributed Shared Log.
- *
+ * <p>
  * All reads and writes go through a cache. If the sync flag (--sync) is set, the cache is configured in write-through
  * mode, otherwise the cache is configured in write-back mode. For persistence, every 10,000 log entries are written
  * to individual files (logs), which are represented as FileHandles. Each FileHandle contains a pointer to the tail
@@ -53,124 +83,6 @@ import org.corfudb.util.serializer.Serializers;
 @Slf4j
 public class LogUnitServer extends AbstractServer {
 
-    /** The options map. */
-    Map<String,Object> opts;
-
-    /** The log file prefix, which can be null if the server is in memory. */
-    String prefix;
-
-    @Data
-    class FileHandle {
-        final AtomicLong filePointer;
-        final FileChannel channel;
-        final Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
-        @Getter(lazy=true)
-        private final MappedByteBuffer byteBuffer = getMappedBuffer();
-        public ByteBuffer getMapForRegion(int offset, int size)
-        {
-            ByteBuffer o = getByteBuffer().duplicate();
-            o.position(offset);
-            return o.slice();
-        }
-        private MappedByteBuffer getMappedBuffer() {
-            try {
-                return channel.map(FileChannel.MapMode.READ_WRITE, 0L, Integer.MAX_VALUE);
-            }
-            catch (IOException ie)
-            {
-                log.error("Failed to map buffer for channel.");
-                throw new RuntimeException(ie);
-            }
-        }
-    }
-
-    @Data
-    @RequiredArgsConstructor
-    @AllArgsConstructor
-    public static class LogUnitEntry implements IMetadata {
-        public final long address;
-        public final ByteBuf buffer;
-        public final EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap;
-        public final boolean isHole;
-        public boolean isPersisted;
-
-        /** Generate a new log unit entry which is a hole */
-        public LogUnitEntry(long address)
-        {
-            this.address = address;
-            buffer = null;
-            this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
-            this.isHole = true;
-            this.isPersisted = false;
-        }
-    }
-
-    /** A map mapping to file channels. */
-    Map<Long, FileHandle> channelMap;
-
-    /** The garbage collection thread. */
-    Thread gcThread;
-
-    /**
-     * The contiguous head of the log (that is, the lowest address which has NOT been trimmed yet).
-     */
-    @Getter
-    long contiguousHead;
-
-    @Getter
-    long contiguousTail;
-
-    /**
-     * The addresses that this unit has seen, temporarily until they are integrated into the contiguousTail.
-     */
-    Set<Address> seenAddressesTemp;
-
-    @Data
-    class Address implements Comparable<Address> {
-        final long logAddress;
-        final Set<UUID> StreamIDs;
-
-        @Override
-        public int compareTo(Address o) {
-            return Long.compare(logAddress, o.logAddress);
-        }
-
-        @Override
-        public int hashCode()
-        {
-            return Long.hashCode(logAddress);
-        }
-
-        @Override
-        public boolean equals(Object obj)
-        {
-            return obj instanceof Address && logAddress == ((Address)obj).logAddress;
-        }
-    }
-
-    /**
-     * A range set representing trimmed addresses on the log unit.
-     */
-    RangeSet<Long> trimRange;
-
-    ConcurrentHashMap<UUID, Long> trimMap;
-
-    IntervalAndSentinelRetry gcRetry;
-
-    AtomicBoolean running = new AtomicBoolean(true);
-
-    /**
-     * This cache services requests for data at various addresses. In a memory implementation,
-     * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
-     */
-    LoadingCache<Long, LogUnitEntry> dataCache;
-
-    long maxCacheSize;
-
-    /** This cache services requests for stream addresses.
-     */
-    LoadingCache<UUID, RangeSet<Long>> streamCache;
-
     /**
      * A scheduler, which is used to schedule periodic tasks like garbage collection.
      */
@@ -181,21 +93,63 @@ public class LogUnitServer extends AbstractServer {
                             .setDaemon(true)
                             .setNameFormat("LogUnit-Maintenance-%d")
                             .build());
+    /**
+     * The options map.
+     */
+    Map<String, Object> opts;
+    /**
+     * The log file prefix, which can be null if the server is in memory.
+     */
+    String prefix;
+    /**
+     * A map mapping to file channels.
+     */
+    Map<Long, FileHandle> channelMap;
+    /**
+     * The garbage collection thread.
+     */
+    Thread gcThread;
+    /**
+     * The contiguous head of the log (that is, the lowest address which has NOT been trimmed yet).
+     */
+    @Getter
+    long contiguousHead;
+    @Getter
+    long contiguousTail;
+    /**
+     * The addresses that this unit has seen, temporarily until they are integrated into the contiguousTail.
+     */
+    Set<Address> seenAddressesTemp;
+    /**
+     * A range set representing trimmed addresses on the log unit.
+     */
+    RangeSet<Long> trimRange;
+    ConcurrentHashMap<UUID, Long> trimMap;
+    IntervalAndSentinelRetry gcRetry;
+    AtomicBoolean running = new AtomicBoolean(true);
+    /**
+     * This cache services requests for data at various addresses. In a memory implementation,
+     * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
+     */
+    LoadingCache<Long, LogUnitEntry> dataCache;
+    long maxCacheSize;
+    /**
+     * This cache services requests for stream addresses.
+     */
+    LoadingCache<UUID, RangeSet<Long>> streamCache;
 
-    public LogUnitServer(Map<String, Object> opts)
-    {
+    public LogUnitServer(Map<String, Object> opts) {
         this.opts = opts;
 
         maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
 
-        if ((Boolean)opts.get("--memory")) {
+        if ((Boolean) opts.get("--memory")) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). " +
                     "This should be run for testing purposes only. " +
                     "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
                     "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
             reset();
-        }
-        else {
+        } else {
             channelMap = new ConcurrentHashMap<>();
             prefix = opts.get("--log-path") + File.separator + "log";
         }
@@ -211,61 +165,24 @@ public class LogUnitServer extends AbstractServer {
         gcThread.start();
     }
 
-    @Data
-    static class LogFileHeader {
-        static final String magic = "CORFULOG";
-        final int version;
-        final long flags;
-        ByteBuffer getBuffer()
-        {
-            ByteBuffer b = ByteBuffer.allocate(64);
-            // 0: "CORFULOG" header(8)
-            b.put(magic.getBytes(Charset.forName("UTF-8")),0, 8);
-            // 8: Version number(4)
-            b.putInt(version);
-            // 12: Flags (8)
-            b.putLong(flags);
-            // 20: Reserved (54)
-            b.position(64);
-            b.flip();
-            return b;
-        }
-        static LogFileHeader fromBuffer(ByteBuffer buffer)
-        {
-            byte[] bMagic = new byte[8];
-            buffer.get(bMagic, 0, 8);
-            if (!new String(bMagic).equals(magic))
-            {
-                log.warn("Encountered invalid magic, expected {}, got {}", magic, new String(bMagic));
-                throw new RuntimeException("Invalid header magic!");
-            }
-            return new LogFileHeader(buffer.getInt(), buffer.getLong());
-        }
-    }
-
     public synchronized void compactTail() {
         long numEntries = 0;
         List<Address> setCopy = new ArrayList<>(seenAddressesTemp);
         Collections.sort(setCopy);
-        for (Address i : setCopy)
-        {
-            if (i.getLogAddress() == contiguousTail + 1)
-            {
+        for (Address i : setCopy) {
+            if (i.getLogAddress() == contiguousTail + 1) {
                 contiguousTail = i.getLogAddress();
                 seenAddressesTemp.remove(i);
                 numEntries++;
 
-                if (i.getStreamIDs().size() > 0)
-                {
-                    for (UUID stream : i.getStreamIDs())
-                    {
+                if (i.getStreamIDs().size() > 0) {
+                    for (UUID stream : i.getStreamIDs()) {
                         RangeSet<Long> currentSet = streamCache.get(stream);
                         currentSet.add(Range.singleton(i.getLogAddress()));
                         streamCache.put(stream, currentSet);
                     }
                 }
-            }
-            else {
+            } else {
                 break;
             }
         }
@@ -274,17 +191,17 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    /** Write the header for a Corfu log file.
+    /**
+     * Write the header for a Corfu log file.
      *
-     * @param fc            The filechannel to use.
-     * @param pointer       The pointer to increment to the start position.
-     * @param version       The version number to write to the header.
-     * @param flags         Flags, if any to write to the header.
+     * @param fc      The filechannel to use.
+     * @param pointer The pointer to increment to the start position.
+     * @param version The version number to write to the header.
+     * @param flags   Flags, if any to write to the header.
      * @throws IOException
      */
     public void writeHeader(FileChannel fc, AtomicLong pointer, int version, long flags)
-            throws IOException
-    {
+            throws IOException {
         LogFileHeader lfg = new LogFileHeader(version, flags);
         ByteBuffer b = lfg.getBuffer();
         pointer.getAndAdd(b.remaining());
@@ -292,32 +209,32 @@ public class LogUnitServer extends AbstractServer {
         fc.force(true);
     }
 
-    /** Read the header for a Corfu log file.
+    /**
+     * Read the header for a Corfu log file.
      *
-     * @param fc            The filechannel to use.
+     * @param fc The filechannel to use.
      * @throws IOException
      */
     public LogFileHeader readHeader(FileChannel fc)
-            throws IOException
-    {
+            throws IOException {
         ByteBuffer b = fc.map(FileChannel.MapMode.READ_ONLY, 0, 64);
         return LogFileHeader.fromBuffer(b);
     }
 
-    /** Write a log entry to a file.
+    /**
+     * Write a log entry to a file.
      *
-     * @param fh            The file handle to use.
-     * @param address       The address of the entry.
-     * @param entry         The LogUnitEntry to write.
+     * @param fh      The file handle to use.
+     * @param address The address of the entry.
+     * @param entry   The LogUnitEntry to write.
      */
     public void writeEntry(FileHandle fh, long address, LogUnitEntry entry)
-        throws IOException
-    {
+            throws IOException {
         ByteBuf metadataBuffer = Unpooled.buffer();
         LogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
         int entrySize = entry.getBuffer().writerIndex() + metadataBuffer.writerIndex() + 24;
         long pos = fh.getFilePointer().getAndAdd(entrySize);
-        ByteBuffer o = fh.getMapForRegion((int)pos, entrySize);
+        ByteBuffer o = fh.getMapForRegion((int) pos, entrySize);
         o.putInt(0x4C450000); // Flags
         o.putLong(address); // the log unit address
         o.putInt(entrySize); // Size
@@ -329,33 +246,31 @@ public class LogUnitServer extends AbstractServer {
         o.flip();
     }
 
-    /** Find a log entry in a file.
-     * @param fh            The file handle to use.
-     * @param address       The address of the entry.
-     * @return              The log unit entry at that address, or NULL if there was no entry.
+    /**
+     * Find a log entry in a file.
+     *
+     * @param fh      The file handle to use.
+     * @param address The address of the entry.
+     * @return The log unit entry at that address, or NULL if there was no entry.
      */
     public LogUnitEntry readEntry(FileHandle fh, long address)
-        throws IOException
-    {
-        ByteBuffer o = fh.getMapForRegion(64, (int)fh.getChannel().size());
-        while (o.hasRemaining())
-        {
+            throws IOException {
+        ByteBuffer o = fh.getMapForRegion(64, (int) fh.getChannel().size());
+        while (o.hasRemaining()) {
             short magic = o.getShort();
-            if (magic != 0x4C45)
-            {
+            if (magic != 0x4C45) {
                 return null;
             }
             short flags = o.getShort();
             long addr = o.getLong();
             if (address == -1) {
-            fh.knownAddresses.add(addr); }
-            int size = o.getInt();
-            if (addr != address)
-            {
-                o.position(o.position() + size-16); //skip over (size-20 is what we haven't read).
-                log.trace("Read address {}, not match {}, skipping. (remain={})", addr, address, o.remaining());
+                fh.knownAddresses.add(addr);
             }
-            else {
+            int size = o.getInt();
+            if (addr != address) {
+                o.position(o.position() + size - 16); //skip over (size-20 is what we haven't read).
+                log.trace("Read address {}, not match {}, skipping. (remain={})", addr, address, o.remaining());
+            } else {
                 log.debug("Entry at {} hit, reading (size={}).", address, size);
                 if (flags % 2 == 0) {
                     log.error("Read a log entry but the write was torn, aborting!");
@@ -375,14 +290,15 @@ public class LogUnitServer extends AbstractServer {
         return null;
     }
 
-    /** Gets the file channel for a particular address, creating it
+    /**
+     * Gets the file channel for a particular address, creating it
      * if is not present in the map.
-     * @param address   The address to open.
-     * @return          The FileChannel for that address.
+     *
+     * @param address The address to open.
+     * @return The FileChannel for that address.
      */
-    public FileHandle getChannelForAddress(long address)
-    {
-        return channelMap.computeIfAbsent(address/10000, a -> {
+    public FileHandle getChannelForAddress(long address) {
+        return channelMap.computeIfAbsent(address / 10000, a -> {
             String filePath = prefix + a.toString();
             try {
                 FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
@@ -397,9 +313,7 @@ public class LogUnitServer extends AbstractServer {
                 // map of entries we already have.
                 readEntry(fh, -1);
                 return fh;
-            }
-            catch (IOException e)
-            {
+            } catch (IOException e) {
                 log.error("Error opening file {}", a, e);
                 throw new RuntimeException(e);
             }
@@ -409,8 +323,7 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (isShutdown()) return;
-        switch(msg.getMsgType())
-        {
+        switch (msg.getMsgType()) {
             case WRITE:
                 LogUnitWriteMsg writeMsg = (LogUnitWriteMsg) msg;
                 log.trace("Handling write request for address {}", writeMsg.getAddress());
@@ -426,37 +339,32 @@ public class LogUnitServer extends AbstractServer {
                 log.trace("Handling read request for address ranges {}", rangeReadMsg.getRanges());
                 read(rangeReadMsg, ctx, r);
                 break;
-            case GC_INTERVAL:
-            {
+            case GC_INTERVAL: {
                 LogUnitGCIntervalMsg m = (LogUnitGCIntervalMsg) msg;
                 log.info("Garbage collection interval set to {}", m.getInterval());
                 gcRetry.setRetryInterval(m.getInterval());
             }
             break;
-            case FORCE_GC:
-            {
+            case FORCE_GC: {
                 log.info("GC forced by client {}", msg.getClientID());
                 gcThread.interrupt();
             }
             break;
-            case FILL_HOLE:
-            {
+            case FILL_HOLE: {
                 LogUnitFillHoleMsg m = (LogUnitFillHoleMsg) msg;
                 log.debug("Hole fill requested at {}", m.getAddress());
                 dataCache.get(m.getAddress(), (address) -> new LogUnitEntry(address));
                 r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
             }
             break;
-            case TRIM:
-            {
+            case TRIM: {
                 LogUnitTrimMsg m = (LogUnitTrimMsg) msg;
                 trimMap.compute(m.getStreamID(), (key, prev) ->
                         prev == null ? m.getPrefix() : Math.max(prev, m.getPrefix()));
                 log.debug("Trim requested at prefix={}", m.getPrefix());
             }
             break;
-            case FORCE_COMPACT:
-            {
+            case FORCE_COMPACT: {
                 log.info("Compaction forced by client {}", msg.getClientID());
                 compactTail();
             }
@@ -491,8 +399,7 @@ public class LogUnitServer extends AbstractServer {
         trimRange = TreeRangeSet.create();
         seenAddressesTemp = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-        if (dataCache != null)
-        {
+        if (dataCache != null) {
             /** Free all references */
             dataCache.asMap().values().parallelStream()
                     .map(m -> m.buffer.release());
@@ -545,7 +452,7 @@ public class LogUnitServer extends AbstractServer {
                     }
                 }).build(this::handleRetrieval);
 
-       streamCache = Caffeine.newBuilder()
+        streamCache = Caffeine.newBuilder()
                 .maximumSize(Utils.getOption(opts, "--stream-cache", Long.class, 5L))
                 .writer(new CacheWriter<UUID, RangeSet<Long>>() {
                     @Override
@@ -555,8 +462,7 @@ public class LogUnitServer extends AbstractServer {
                                 ByteBuf b = Unpooled.buffer();
                                 Set<Range<Long>> rs = entry.asRanges();
                                 b.writeInt(rs.size());
-                                for (Range<Long> r : rs)
-                                {
+                                for (Range<Long> r : rs) {
                                     Serializers
                                             .getSerializer(Serializers.SerializerType.JAVA).serialize(r, b);
                                 }
@@ -595,8 +501,7 @@ public class LogUnitServer extends AbstractServer {
                     ByteBuf b = Unpooled.wrappedBuffer(Files.readAllBytes(p));
                     RangeSet rs = TreeRangeSet.create();
                     int ranges = b.readInt();
-                    for (int i = 0; i < ranges; i++)
-                    {
+                    for (int i = 0; i < ranges; i++) {
                         Range r = (Range) Serializers
                                 .getSerializer(Serializers.SerializerType.JAVA).deserialize(b, null);
                         rs.add(r);
@@ -609,18 +514,18 @@ public class LogUnitServer extends AbstractServer {
         return TreeRangeSet.create();
     }
 
-    /** Retrieve the LogUnitEntry from disk, given an address.
+    /**
+     * Retrieve the LogUnitEntry from disk, given an address.
      *
-     * @param address   The address to retrieve the entry from.
-     * @return          The log unit entry to retrieve into the cache.
-     *                  This function should not care about trimmed addresses, as that is handled in
-     *                  the read() and write(). Any address that cannot be retrieved should be returned as
-     *                  unwritten (null).
+     * @param address The address to retrieve the entry from.
+     * @return The log unit entry to retrieve into the cache.
+     * This function should not care about trimmed addresses, as that is handled in
+     * the read() and write(). Any address that cannot be retrieved should be returned as
+     * unwritten (null).
      */
     public synchronized LogUnitEntry handleRetrieval(Long address) {
         log.trace("Retrieve[{}]", address);
-        if (prefix == null)
-        {
+        if (prefix == null) {
             log.trace("This is an in-memory log unit, but a load was requested.");
             return null;
         }
@@ -628,8 +533,7 @@ public class LogUnitServer extends AbstractServer {
         try {
             log.info("Got header {}", readHeader(fh.getChannel()));
             return readEntry(getChannelForAddress(address), address);
-        } catch (Exception e)
-        {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
@@ -646,23 +550,18 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    /** Service an incoming read request. */
-    public void read(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, IServerRouter r)
-    {
+    /**
+     * Service an incoming read request.
+     */
+    public void read(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("Read[{}]", msg.getAddress());
-        if (trimRange.contains (msg.getAddress()))
-        {
+        if (trimRange.contains(msg.getAddress())) {
             r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.TRIMMED));
-        }
-        else
-        {
+        } else {
             LogUnitEntry e = dataCache.get(msg.getAddress());
-            if (e == null)
-            {
+            if (e == null) {
                 r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
-            }
-            else if (e.isHole)
-            {
+            } else if (e.isHole) {
                 r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.FILLED_HOLE));
             } else {
                 r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(e));
@@ -670,13 +569,13 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    /** Service an incoming ranged read request. */
-    public void read(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r)
-    {
+    /**
+     * Service an incoming ranged read request.
+     */
+    public void read(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("ReadRange[{}]", msg.getRanges());
         Set<Long> total = new HashSet<>();
-        for (Range<Long> range : msg.getRanges().asRanges())
-        {
+        for (Range<Long> range : msg.getRanges().asRanges()) {
             total.addAll(Utils.discretizeRange(range));
         }
 
@@ -687,17 +586,16 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, new LogUnitReadRangeResponseMsg(o));
     }
 
-    /** Service an incoming write request. */
-    public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, IServerRouter r)
-    {
+    /**
+     * Service an incoming write request.
+     */
+    public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         long address = msg.getAddress();
         log.trace("Write[{}]", address);
         //TODO: locking of trimRange.
-        if (trimRange.contains (address))
-        {
+        if (trimRange.contains(address)) {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_TRIMMED));
-        }
-        else {
+        } else {
             // The payload in the message is a view of a larger buffer allocated
             // by netty, thus direct memory can leak. Copy the view and release the
             // underlying buffer
@@ -706,16 +604,14 @@ public class LogUnitServer extends AbstractServer {
             try {
                 dataCache.put(e.getAddress(), e);
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OK));
-            } catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE));
                 e.getBuffer().release();
             }
         }
     }
 
-    public void runGC()
-    {
+    public void runGC() {
         Thread.currentThread().setName("LogUnit-GC");
         val retry = IRetry.build(IntervalAndSentinelRetry.class, this::handleGC)
                 .setOptions(x -> x.setSentinelReference(running))
@@ -727,8 +623,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @SuppressWarnings("unchecked")
-    public boolean handleGC()
-    {
+    public boolean handleGC() {
         log.info("Garbage collector starting...");
         long freedEntries = 0;
 
@@ -737,17 +632,14 @@ public class LogUnitServer extends AbstractServer {
         /* Pick a non-compacted region or just scan the cache */
         Map<Long, LogUnitEntry> map = dataCache.asMap();
         SortedSet<Long> addresses = new TreeSet<>(map.keySet());
-        for (long address : addresses)
-        {
+        for (long address : addresses) {
             LogUnitEntry buffer = dataCache.getIfPresent(address);
-            if (buffer != null)
-            {
+            if (buffer != null) {
                 Set<UUID> streams = buffer.getStreams();
                 // this is a normal entry
                 if (streams.size() > 0) {
                     boolean trimmable = true;
-                    for (java.util.UUID stream : streams)
-                    {
+                    for (java.util.UUID stream : streams) {
                         Long trimMark = trimMap.getOrDefault(stream, null);
                         // if the stream has not been trimmed, or has not been trimmed to this point
                         if (trimMark == null || address > trimMark) {
@@ -761,8 +653,7 @@ public class LogUnitServer extends AbstractServer {
                         trimEntry(address, streams, buffer);
                         freedEntries++;
                     }
-                }
-                else {
+                } else {
                     //this is an entry which belongs in all streams
                 }
             }
@@ -772,16 +663,14 @@ public class LogUnitServer extends AbstractServer {
         return true;
     }
 
-    public void trimEntry(long address, Set<java.util.UUID> streams, LogUnitEntry entry)
-    {
+    public void trimEntry(long address, Set<java.util.UUID> streams, LogUnitEntry entry) {
         // Add this entry to the trimmed range map.
         trimRange.add(Range.closed(address, address));
         // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
         // assuming the entry is back by disk
         dataCache.invalidate(address);
         //and free any references the buffer might have
-        if (entry.getBuffer() != null)
-        {
+        if (entry.getBuffer() != null) {
             entry.getBuffer().release();
         }
     }
@@ -795,7 +684,105 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    LoadingCache<Long, LogUnitEntry> getDataCache(){
+    LoadingCache<Long, LogUnitEntry> getDataCache() {
         return dataCache;
+    }
+
+    @Data
+    @RequiredArgsConstructor
+    @AllArgsConstructor
+    public static class LogUnitEntry implements IMetadata {
+        public final long address;
+        public final ByteBuf buffer;
+        public final EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap;
+        public final boolean isHole;
+        public boolean isPersisted;
+
+        /**
+         * Generate a new log unit entry which is a hole
+         */
+        public LogUnitEntry(long address) {
+            this.address = address;
+            buffer = null;
+            this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+            this.isHole = true;
+            this.isPersisted = false;
+        }
+    }
+
+    @Data
+    static class LogFileHeader {
+        static final String magic = "CORFULOG";
+        final int version;
+        final long flags;
+
+        static LogFileHeader fromBuffer(ByteBuffer buffer) {
+            byte[] bMagic = new byte[8];
+            buffer.get(bMagic, 0, 8);
+            if (!new String(bMagic).equals(magic)) {
+                log.warn("Encountered invalid magic, expected {}, got {}", magic, new String(bMagic));
+                throw new RuntimeException("Invalid header magic!");
+            }
+            return new LogFileHeader(buffer.getInt(), buffer.getLong());
+        }
+
+        ByteBuffer getBuffer() {
+            ByteBuffer b = ByteBuffer.allocate(64);
+            // 0: "CORFULOG" header(8)
+            b.put(magic.getBytes(Charset.forName("UTF-8")), 0, 8);
+            // 8: Version number(4)
+            b.putInt(version);
+            // 12: Flags (8)
+            b.putLong(flags);
+            // 20: Reserved (54)
+            b.position(64);
+            b.flip();
+            return b;
+        }
+    }
+
+    @Data
+    class FileHandle {
+        final AtomicLong filePointer;
+        final FileChannel channel;
+        final Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        @Getter(lazy = true)
+        private final MappedByteBuffer byteBuffer = getMappedBuffer();
+
+        public ByteBuffer getMapForRegion(int offset, int size) {
+            ByteBuffer o = getByteBuffer().duplicate();
+            o.position(offset);
+            return o.slice();
+        }
+
+        private MappedByteBuffer getMappedBuffer() {
+            try {
+                return channel.map(FileChannel.MapMode.READ_WRITE, 0L, Integer.MAX_VALUE);
+            } catch (IOException ie) {
+                log.error("Failed to map buffer for channel.");
+                throw new RuntimeException(ie);
+            }
+        }
+    }
+
+    @Data
+    class Address implements Comparable<Address> {
+        final long logAddress;
+        final Set<UUID> StreamIDs;
+
+        @Override
+        public int compareTo(Address o) {
+            return Long.compare(logAddress, o.logAddress);
+        }
+
+        @Override
+        public int hashCode() {
+            return Long.hashCode(logAddress);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return obj instanceof Address && logAddress == ((Address) obj).logAddress;
+        }
     }
 }

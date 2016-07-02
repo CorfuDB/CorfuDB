@@ -17,8 +17,7 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<CorfuMsg> {
                           ByteBuf byteBuf) throws Exception {
         try {
             corfuMsg.serialize(byteBuf);
-        } catch (Exception e)
-        {
+        } catch (Exception e) {
             log.error("Error during serialization!", e);
         }
     }

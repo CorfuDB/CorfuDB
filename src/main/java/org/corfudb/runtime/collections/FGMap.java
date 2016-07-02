@@ -1,10 +1,17 @@
 package org.corfudb.runtime.collections;
 
 import lombok.Getter;
-import org.corfudb.runtime.object.*;
+import org.corfudb.runtime.object.ConstructorType;
+import org.corfudb.runtime.object.CorfuObject;
+import org.corfudb.runtime.object.ICorfuObject;
+import org.corfudb.runtime.object.ObjectType;
+import org.corfudb.runtime.object.TransactionalMethod;
 import sun.misc.CRC16;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.zip.CRC32;
@@ -12,15 +19,14 @@ import java.util.zip.CRC32;
 /**
  * Created by mwei on 3/29/16.
  */
-@CorfuObject(constructorType=ConstructorType.PERSISTED,
-        objectType=ObjectType.STATELESS)
-public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
+@CorfuObject(constructorType = ConstructorType.PERSISTED,
+        objectType = ObjectType.STATELESS)
+public class FGMap<K, V> implements Map<K, V>, ICorfuObject {
 
     @Getter
     public final int numBuckets;
 
-    public FGMap(int numBuckets)
-    {
+    public FGMap(int numBuckets) {
         this.numBuckets = numBuckets;
     }
 
@@ -28,15 +34,13 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
         this.numBuckets = 10;
     }
 
-    UUID getStreamID(int partition)
-    {
-            return new UUID(getStreamID().getMostSignificantBits(),
-                    getStreamID().getLeastSignificantBits() + (partition+1));
+    UUID getStreamID(int partition) {
+        return new UUID(getStreamID().getMostSignificantBits(),
+                getStreamID().getLeastSignificantBits() + (partition + 1));
     }
 
     @SuppressWarnings("unchecked")
-    Map<K,V> getPartitionMap(int partition)
-    {
+    Map<K, V> getPartitionMap(int partition) {
         return getRuntime().getObjectsView()
                 .build()
                 .setType(SMRMap.class)
@@ -44,16 +48,17 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
                 .open();
     }
 
-    /** Get a new partition.
-     *
+    /**
+     * Get a new partition.
+     * <p>
      * In order to avoid collisions due to imperfect hashCode() distribution,
      * we apply the Luby-Rackoff transform to randomize the distribution with
      * CRC32 and CRC16.
+     *
      * @param key
      * @return
      */
-    int getPartitionNumber(Object key)
-    {
+    int getPartitionNumber(Object key) {
         int baseMSB = key.hashCode() >> 16;
         int baseLSB = key.hashCode() & 0xFFFF;
 
@@ -69,17 +74,17 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
         return Math.abs(hashCode % numBuckets);
     }
 
-    Map<K,V> getPartition(Object key) {
+    Map<K, V> getPartition(Object key) {
         return getPartitionMap(getPartitionNumber(key));
     }
 
-    Set<Map<K,V>> getAllPartitionMaps() {
+    Set<Map<K, V>> getAllPartitionMaps() {
         return IntStream.range(0, numBuckets)
                 .mapToObj(this::getPartitionMap)
                 .collect(Collectors.toSet());
     }
 
-    Set<UUID> getAllStreamIDs(){
+    Set<UUID> getAllStreamIDs() {
         return IntStream.range(0, numBuckets)
                 .mapToObj(this::getStreamID)
                 .collect(Collectors.toSet());
@@ -93,7 +98,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      * @return the number of key-value mappings in this map
      */
     @Override
-    @TransactionalMethod(readOnly=true)
+    @TransactionalMethod(readOnly = true)
     public int size() {
         return getAllPartitionMaps().stream()
                 .mapToInt(Map::size)
@@ -106,7 +111,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      * @return <tt>true</tt> if this map contains no key-value mappings
      */
     @Override
-    @TransactionalMethod(readOnly=true)
+    @TransactionalMethod(readOnly = true)
     public boolean isEmpty() {
         return getAllPartitionMaps().stream()
                 .allMatch(Map::isEmpty);
@@ -154,7 +159,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @TransactionalMethod(readOnly=true)
+    @TransactionalMethod(readOnly = true)
     public boolean containsValue(Object value) {
         return getAllPartitionMaps().stream()
                 .anyMatch(x -> x.containsValue(value));
@@ -274,23 +279,25 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      *                                       the specified map prevents it from being stored in this map
      */
     @Override
-    @TransactionalMethod(modifiedStreamsFunction="putAllGetStreams")
+    @TransactionalMethod(modifiedStreamsFunction = "putAllGetStreams")
     public void putAll(Map<? extends K, ? extends V> m) {
         m.entrySet().stream()
                 .forEach(e -> getPartition(e.getKey()).put(e.getKey(), e.getValue()));
     }
 
-    /** Get the set of streams which will be touched by this
+    /**
+     * Get the set of streams which will be touched by this
      * put all operation
+     *
      * @param m The map used for the putAll operation
-     * @return  A set of stream IDs
+     * @return A set of stream IDs
      */
     Set<UUID> putAllGetStreams(Map<? extends K, ? extends V> m) {
-            return m.keySet().stream()
-                    .map(this::getPartitionNumber)
-                    .distinct()
-                    .map(this::getStreamID)
-                    .collect(Collectors.toSet());
+        return m.keySet().stream()
+                .map(this::getPartitionNumber)
+                .distinct()
+                .map(this::getStreamID)
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -301,7 +308,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      *                                       is not supported by this map
      */
     @Override
-    @TransactionalMethod(modifiedStreamsFunction="getAllStreamIDs")
+    @TransactionalMethod(modifiedStreamsFunction = "getAllStreamIDs")
     public void clear() {
         getAllPartitionMaps().stream()
                 .forEach(Map::clear);
@@ -323,7 +330,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      * @return a set view of the keys contained in this map
      */
     @Override
-    @TransactionalMethod(readOnly=true)
+    @TransactionalMethod(readOnly = true)
     public Set<K> keySet() {
         return getAllPartitionMaps().stream()
                 .map(Map::keySet)
@@ -347,7 +354,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      * @return a collection view of the values contained in this map
      */
     @Override
-    @TransactionalMethod(readOnly=true)
+    @TransactionalMethod(readOnly = true)
     public Collection<V> values() {
         return getAllPartitionMaps().stream()
                 .map(Map::values)
@@ -372,7 +379,7 @@ public class FGMap<K,V> implements Map<K,V>, ICorfuObject {
      * @return a set view of the mappings contained in this map
      */
     @Override
-    @TransactionalMethod(readOnly=true)
+    @TransactionalMethod(readOnly = true)
     public Set<Entry<K, V>> entrySet() {
         return getAllPartitionMaps().stream()
                 .map(Map::entrySet)

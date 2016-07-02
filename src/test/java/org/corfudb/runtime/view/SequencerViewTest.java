@@ -1,8 +1,6 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 

@@ -1,6 +1,10 @@
 package org.corfudb.runtime.object;
 
-import java.lang.annotation.*;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * Created by mwei on 1/7/16.
@@ -8,6 +12,6 @@ import java.lang.annotation.*;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
-public @interface MutatorAccessor{
+public @interface MutatorAccessor {
     String name() default "";
 }

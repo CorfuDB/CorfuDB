@@ -6,7 +6,7 @@ package org.corfudb.runtime.object;
 public class TestClass {
     int testInt;
 
-    public void set(int toSet){
+    public void set(int toSet) {
         testInt = toSet;
     }
 

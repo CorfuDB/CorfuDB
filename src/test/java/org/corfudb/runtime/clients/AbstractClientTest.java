@@ -18,19 +18,18 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     TestClientRouter router;
 
     @Before
-    public void resetTest()
-    {
+    public void resetTest() {
         router = new TestClientRouter();
         getServersForTest().stream().forEach(router::addServer);
         getClientsForTest().stream().forEach(router::addClient);
     }
 
     abstract Set<AbstractServer> getServersForTest();
+
     abstract Set<IClient> getClientsForTest();
 
-    public Map<String,Object> defaultOptionsMap()
-    {
-        return new ImmutableMap.Builder<String,Object>()
+    public Map<String, Object> defaultOptionsMap() {
+        return new ImmutableMap.Builder<String, Object>()
                 .put("--initial-token", "0")
                 .put("--memory", true)
                 .put("--single", false)

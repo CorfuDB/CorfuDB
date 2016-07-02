@@ -13,85 +13,46 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ICorfuSerializable;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 1/11/16.
  */
-@ToString(exclude="aborted")
+@ToString(exclude = "aborted")
 @NoArgsConstructor
 @Slf4j
 public class TXEntry extends LogEntry {
 
-    @ToString
-    public static class TXObjectEntry implements ICorfuSerializable {
-
-        @Getter
-        List<SMREntry> updates;
-
-        @Getter
-        boolean read;
-
-        public TXObjectEntry(List<SMREntry> updates, boolean read)
-        {
-            this.updates = updates;
-            this.read = read;
-        }
-
-        public TXObjectEntry(ByteBuf b, CorfuRuntime rt)
-        {
-            read = b.readBoolean();
-            short numUpdates = b.readShort();
-            updates = new ArrayList<>();
-            for (short i = 0; i< numUpdates; i++)
-            {
-                updates.add(
-                        (SMREntry) Serializers
-                                .getSerializer(Serializers.SerializerType.CORFU)
-                                .deserialize(b, rt));
-            }
-        }
-
-        @Override
-        public void serialize(ByteBuf b) {
-            b.writeBoolean(read);
-            b.writeShort(updates.size());
-            updates.stream()
-                    .forEach(x -> Serializers
-                            .getSerializer(Serializers.SerializerType.CORFU)
-                            .serialize(x, b));
-        }
-    }
-
     @Getter
     Map<UUID, TXObjectEntry> txMap;
-
     @Getter
     long readTimestamp;
-
-    @Getter(lazy=true)
+    @Getter(lazy = true)
     private final transient boolean aborted = checkAbort();
 
-
-    public TXEntry(@NonNull Map<UUID,TXObjectEntry> txMap, long readTimestamp)
-    {
+    public TXEntry(@NonNull Map<UUID, TXObjectEntry> txMap, long readTimestamp) {
         this.type = LogEntryType.TX;
         this.txMap = txMap;
         this.readTimestamp = readTimestamp;
     }
 
-
     public boolean checkIfStreamAborts(UUID stream) {
         if (getEntry() != null && getEntry().hasBackpointer(stream)) {
             ILogUnitEntry backpointedEntry = getEntry();
-            if (backpointedEntry.isFirstEntry(stream)) { return false; }
+            if (backpointedEntry.isFirstEntry(stream)) {
+                return false;
+            }
 
             while (
                     backpointedEntry.hasBackpointer(stream) &&
-                            backpointedEntry.getAddress() > readTimestamp  &&
-                            !backpointedEntry.isFirstEntry(stream))
-            {
+                            backpointedEntry.getAddress() > readTimestamp &&
+                            !backpointedEntry.isFirstEntry(stream)) {
                 if (!backpointedEntry.getAddress().equals(getEntry().getAddress()) && //not self!
                         backpointedEntry.isLogEntry() && backpointedEntry.getLogEntry().isMutation(stream)) {
                     log.debug("TX aborted due to mutation [via backpointer]: " +
@@ -118,7 +79,7 @@ public class TXEntry extends LogEntry {
                     ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
                             .contains(stream) && readTimestamp != i &&
                     rr.getPayload() instanceof LogEntry &&
-                    ((LogEntry)rr.getPayload()).isMutation(stream)) {
+                    ((LogEntry) rr.getPayload()).isMutation(stream)) {
                 log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", stream,
                         i, entry.getAddress(), readTimestamp);
                 return true;
@@ -133,12 +94,13 @@ public class TXEntry extends LogEntry {
                 .anyMatch(e -> checkIfStreamAborts(e.getKey()));
     }
 
-    /** Get the set of streams which will be affected by this
+    /**
+     * Get the set of streams which will be affected by this
      * TX entry.
-     * @return  The set of streams affected by this TX entry.
+     *
+     * @return The set of streams affected by this TX entry.
      */
-    public Set<UUID> getAffectedStreams()
-    {
+    public Set<UUID> getAffectedStreams() {
         return txMap.entrySet().stream()
                 .filter(e -> e.getValue().getUpdates().size() != 0)
                 .map(Map.Entry::getKey)
@@ -189,5 +151,42 @@ public class TXEntry extends LogEntry {
     @Override
     public boolean isMutation(UUID stream) {
         return !isAborted() && getAffectedStreams().contains(stream);
+    }
+
+    @ToString
+    public static class TXObjectEntry implements ICorfuSerializable {
+
+        @Getter
+        List<SMREntry> updates;
+
+        @Getter
+        boolean read;
+
+        public TXObjectEntry(List<SMREntry> updates, boolean read) {
+            this.updates = updates;
+            this.read = read;
+        }
+
+        public TXObjectEntry(ByteBuf b, CorfuRuntime rt) {
+            read = b.readBoolean();
+            short numUpdates = b.readShort();
+            updates = new ArrayList<>();
+            for (short i = 0; i < numUpdates; i++) {
+                updates.add(
+                        (SMREntry) Serializers
+                                .getSerializer(Serializers.SerializerType.CORFU)
+                                .deserialize(b, rt));
+            }
+        }
+
+        @Override
+        public void serialize(ByteBuf b) {
+            b.writeBoolean(read);
+            b.writeShort(updates.size());
+            updates.stream()
+                    .forEach(x -> Serializers
+                            .getSerializer(Serializers.SerializerType.CORFU)
+                            .serialize(x, b));
+        }
     }
 }

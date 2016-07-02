@@ -1,23 +1,16 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.Accessor;
-import org.corfudb.runtime.object.Mutator;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,10 +18,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Created by mwei on 2/18/16.
  */
-public class ObjectsViewTest extends AbstractViewTest  {
+public class ObjectsViewTest extends AbstractViewTest {
 
     @Getter
     final String defaultConfigurationString = getDefaultEndpoint();
+
+    public static boolean referenceTX(Map<String, String> smrMap) {
+        smrMap.put("a", "b");
+        assertThat(smrMap)
+                .containsEntry("a", "b");
+        return true;
+    }
 
     @Test
     @SuppressWarnings("unchecked")
@@ -59,7 +59,7 @@ public class ObjectsViewTest extends AbstractViewTest  {
         CorfuRuntime r = getDefaultRuntime();
 
         assertThatThrownBy(() -> {
-            r.getObjectsView().copy(new HashMap<String,String>(), CorfuRuntime.getStreamID("test"));
+            r.getObjectsView().copy(new HashMap<String, String>(), CorfuRuntime.getStreamID("test"));
         }).isInstanceOf(RuntimeException.class);
     }
 
@@ -167,21 +167,14 @@ public class ObjectsViewTest extends AbstractViewTest  {
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
 
         assertThat(r.getObjectsView().executeTX(() -> {
-           smrMap.put("a", "b");
+            smrMap.put("a", "b");
             assertThat(smrMap)
-                    .containsEntry("a","b");
+                    .containsEntry("a", "b");
             return true;
         })).isTrue();
 
         assertThat(smrMap)
                 .containsEntry("a", "b");
-    }
-
-    public static boolean referenceTX(Map<String,String> smrMap) {
-        smrMap.put("a", "b");
-        assertThat(smrMap)
-                .containsEntry("a","b");
-        return true;
     }
 
     @Test

@@ -5,8 +5,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Created by mwei on 6/22/16.
  */
-@CorfuObject(objectType= ObjectType.SMR,
-        constructorType= ConstructorType.RUNTIME,
+@CorfuObject(objectType = ObjectType.SMR,
+        constructorType = ConstructorType.RUNTIME,
         stateSource = StateSource.SELF
 )
 public class TestClassUsingAnnotation {

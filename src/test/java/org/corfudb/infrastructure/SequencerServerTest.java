@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
 import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -17,8 +16,7 @@ import static org.corfudb.infrastructure.SequencerServerAssertions.assertThat;
  */
 public class SequencerServerTest extends AbstractServerTest {
 
-    public SequencerServerTest()
-    {
+    public SequencerServerTest() {
         super();
     }
 
@@ -29,22 +27,18 @@ public class SequencerServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void responseForEachRequest()
-    {
-        for (int i = 0; i < 100; i++)
-        {
+    public void responseForEachRequest() {
+        for (int i = 0; i < 100; i++) {
             sendMessage(new TokenRequestMsg(Collections.<UUID>emptySet(), 1));
             assertThat(getResponseMessages().size())
-                    .isEqualTo(i+1);
+                    .isEqualTo(i + 1);
         }
     }
 
     @Test
-    public void tokensAreIncreasing()
-    {
+    public void tokensAreIncreasing() {
         long lastToken = -1;
-        for (int i = 0; i < 100; i++)
-        {
+        for (int i = 0; i < 100; i++) {
             sendMessage(new TokenRequestMsg(Collections.<UUID>emptySet(), 1));
             long thisToken = getLastMessageAs(TokenResponseMsg.class).getToken();
             assertThat(thisToken)
@@ -54,10 +48,8 @@ public class SequencerServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void checkTokenPositionWorks()
-    {
-        for (int i = 0; i < 100; i++)
-        {
+    public void checkTokenPositionWorks() {
+        for (int i = 0; i < 100; i++) {
             sendMessage(new TokenRequestMsg(Collections.<UUID>emptySet(), 1));
             long thisToken = getLastMessageAs(TokenResponseMsg.class).getToken();
 
@@ -70,13 +62,11 @@ public class SequencerServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void perStreamCheckTokenPositionWorks()
-    {
+    public void perStreamCheckTokenPositionWorks() {
         UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
 
-        for (int i = 0; i < 100; i++)
-        {
+        for (int i = 0; i < 100; i++) {
             sendMessage(new TokenRequestMsg(Collections.singleton(streamA), 1));
             long thisTokenA = getLastMessageAs(TokenResponseMsg.class).getToken();
 
@@ -108,16 +98,15 @@ public class SequencerServerTest extends AbstractServerTest {
 
     @Test
     public void checkSequencerCheckpointingWorks()
-            throws Exception
-    {
-       String serviceDir = getTempDir();
+            throws Exception {
+        String serviceDir = getTempDir();
 
-       SequencerServer s1 = new SequencerServer(new ServerConfigBuilder()
-               .setLogPath(serviceDir)
-               .setMemory(false)
-               .setInitialToken(0)
-               .setCheckpoint(1)
-               .build());
+        SequencerServer s1 = new SequencerServer(new ServerConfigBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .setInitialToken(0)
+                .setCheckpoint(1)
+                .build());
 
         this.router.setServerUnderTest(s1);
         sendMessage(new TokenRequestMsg(Collections.singleton(CorfuRuntime.getStreamID("a")), 1));

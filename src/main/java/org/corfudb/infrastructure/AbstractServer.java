@@ -17,21 +17,23 @@ public abstract class AbstractServer {
     public AbstractServer() {
         shutdown = false;
     }
-    /** Handle a incoming Netty message.
+
+    /**
+     * Handle a incoming Netty message.
      *
-     * @param msg   An incoming message.
-     * @param ctx   The channel handler context.
-     * @param r     The router that took in the message.
+     * @param msg An incoming message.
+     * @param ctx The channel handler context.
+     * @param r   The router that took in the message.
      */
     public abstract void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r);
 
-    /** Reset the server.
-     *
+    /**
+     * Reset the server.
      */
     public abstract void reset();
 
-    /** Shutdown the server.
-     *
+    /**
+     * Shutdown the server.
      */
     public void shutdown() {
         setShutdown(true);
