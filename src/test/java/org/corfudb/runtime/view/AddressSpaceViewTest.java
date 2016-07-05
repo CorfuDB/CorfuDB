@@ -1,8 +1,13 @@
 package org.corfudb.runtime.view;
 
-import com.google.common.collect.*;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
 import lombok.Getter;
-import org.corfudb.infrastructure.*;
+import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.LogUnitServerAssertions;
+import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
@@ -33,7 +38,9 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         assertThat(getRuntime().getAddressSpaceView().read(0).getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.EMPTY);
         getRuntime().getLayoutView().getLayout().getLogUnitClient(0, 0).fillHole(0);
-        try {Thread.sleep(100);} catch (InterruptedException e) {// don't do anything
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {// don't do anything
         }
         assertThat(getRuntime().getAddressSpaceView().read(0).getResultType())
                 .isEqualTo(LogUnitReadResponseMsg.ReadResultType.FILLED_HOLE);
@@ -42,8 +49,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @Test
     @SuppressWarnings("unchecked")
     public void ensureStripingWorks()
-            throws Exception
-    {
+            throws Exception {
         // default layout is chain replication.
         addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
                 getServerRouterForEndpoint(getEndpoint(9000))));
@@ -66,17 +72,17 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .setEpoch(1L)
                 .addLayoutServer(9000)
                 .addSequencer(9000)
-                    .buildSegment()
-                        .buildStripe()
-                            .addLogUnit(9000)
-                            .addToSegment()
-                        .buildStripe()
-                            .addLogUnit(9001)
-                            .addToSegment()
-                        .buildStripe()
-                            .addLogUnit(9002)
-                            .addToSegment()
-                    .addToLayout()
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(9001)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(9002)
+                .addToSegment()
+                .addToLayout()
                 .build());
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
@@ -88,7 +94,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         assertThat(r.getAddressSpaceView().read(0L).getPayload())
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>)r.getAddressSpaceView().read(0L).getMetadataMap()
+        assertThat((Set<UUID>) r.getAddressSpaceView().read(0L).getMetadataMap()
                 .get(IMetadata.LogUnitMetadataType.STREAM))
                 .contains(streamA);
 
@@ -113,8 +119,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @Test
     @SuppressWarnings("unchecked")
     public void ensureStripingReadAllWorks()
-            throws Exception
-    {
+            throws Exception {
         // default layout is chain replication.
         addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
                 getServerRouterForEndpoint(getEndpoint(9000))));
@@ -137,17 +142,17 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .setEpoch(1L)
                 .addLayoutServer(9000)
                 .addSequencer(9000)
-                    .buildSegment()
-                        .buildStripe()
-                            .addLogUnit(9000)
-                            .addToSegment()
-                        .buildStripe()
-                            .addLogUnit(9001)
-                            .addToSegment()
-                        .buildStripe()
-                            .addLogUnit(9002)
-                            .addToSegment()
-                    .addToLayout()
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(9001)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(9002)
+                .addToSegment()
+                .addToLayout()
                 .build());
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
@@ -182,8 +187,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @Test
     @SuppressWarnings("unchecked")
     public void ensureStripingStreamReadAllWorks()
-            throws Exception
-    {
+            throws Exception {
         // default layout is chain replication.
         addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap()
                 , getServerRouterForEndpoint(getEndpoint(9000))));
@@ -206,17 +210,17 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .setEpoch(1L)
                 .addLayoutServer(9000)
                 .addSequencer(9000)
-                    .buildSegment()
-                        .buildStripe()
-                            .addLogUnit(9000)
-                            .addToSegment()
-                        .buildStripe()
-                            .addLogUnit(9001)
-                            .addToSegment()
-                        .buildStripe()
-                            .addLogUnit(9002)
-                            .addToSegment()
-                    .addToLayout()
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(9001)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(9002)
+                .addToSegment()
+                .addToLayout()
                 .build());
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
@@ -241,7 +245,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         r.getAddressSpaceView().compactAll();
 
-       Map<Long, ILogUnitEntry>  aAddresses = r.getAddressSpaceView().readPrefix(streamA);
+        Map<Long, ILogUnitEntry> aAddresses = r.getAddressSpaceView().readPrefix(streamA);
         assertThat(aAddresses.keySet())
                 .contains(0L)
                 .contains(1L)

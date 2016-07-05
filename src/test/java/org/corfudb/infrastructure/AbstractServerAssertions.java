@@ -7,13 +7,11 @@ import org.assertj.core.api.AbstractAssert;
  */
 public class AbstractServerAssertions extends AbstractAssert<AbstractServerAssertions, AbstractServer> {
 
-    public AbstractServerAssertions(AbstractServer actual)
-    {
+    public AbstractServerAssertions(AbstractServer actual) {
         super(actual, AbstractServerAssertions.class);
     }
 
-    public static AbstractServerAssertions assertThat(AbstractServer actual)
-    {
+    public static AbstractServerAssertions assertThat(AbstractServer actual) {
         return new AbstractServerAssertions(actual);
     }
 

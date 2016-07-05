@@ -21,36 +21,40 @@ public interface ISerializer {
             Kryo kryo = new Kryo();
             // Use an instantiator that does not require no-args
             kryo.setInstantiatorStrategy(new Kryo.DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
-            ImmutableListSerializer.registerSerializers( kryo );
-            ImmutableSetSerializer.registerSerializers( kryo );
-            ImmutableMapSerializer.registerSerializers( kryo );
-            ImmutableMultimapSerializer.registerSerializers( kryo );
+            ImmutableListSerializer.registerSerializers(kryo);
+            ImmutableSetSerializer.registerSerializers(kryo);
+            ImmutableMapSerializer.registerSerializers(kryo);
+            ImmutableMultimapSerializer.registerSerializers(kryo);
             // configure kryo instance, customize settings
             return kryo;
-        };
+        }
+
+        ;
     };
 
-    /** Deserialize an object from a given byte buffer.
+    /**
+     * Deserialize an object from a given byte buffer.
      *
      * @param b The bytebuf to deserialize.
-     * @return  The deserialized object.
+     * @return The deserialized object.
      */
     Object deserialize(ByteBuf b, CorfuRuntime rt);
 
-    /** Serialize an object into a given byte buffer.
+    /**
+     * Serialize an object into a given byte buffer.
      *
      * @param o The object to serialize.
      * @param b The bytebuf to serialize it into.
      */
     void serialize(Object o, ByteBuf b);
 
-    /** Clone an object through serialization.
+    /**
+     * Clone an object through serialization.
      *
      * @param o The object to clone.
-     * @return  The cloned object.
+     * @return The cloned object.
      */
-    default Object clone(Object o, CorfuRuntime rt)
-    {
+    default Object clone(Object o, CorfuRuntime rt) {
         return kryos.get().copy(o);
     }
 }

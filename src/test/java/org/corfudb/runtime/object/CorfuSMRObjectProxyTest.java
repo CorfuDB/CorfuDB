@@ -1,18 +1,14 @@
 package org.corfudb.runtime.object;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-import java.util.*;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -31,17 +27,17 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
             throws Exception {
         getDefaultRuntime();
 
-        Map<String,String> testMap = getRuntime().getObjectsView().open(
+        Map<String, String> testMap = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
         testMap.clear();
-        assertThat(testMap.put("a","a"))
+        assertThat(testMap.put("a", "a"))
                 .isNull();
-        assertThat(testMap.put("a","b"))
+        assertThat(testMap.put("a", "b"))
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
 
-        Map<String,String> testMap2 = getRuntime().getObjectsView().open(
+        Map<String, String> testMap2 = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
         assertThat(testMap2.get("a"))
                 .isEqualTo("b");
@@ -49,8 +45,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
 
     @Test
     public void canOpenObjectWithTwoRuntimes()
-        throws Exception
-    {
+            throws Exception {
         getDefaultRuntime();
 
         TestClass testClass = getRuntime().getObjectsView()
@@ -83,7 +78,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
             throws Exception {
         getDefaultRuntime().connect();
 
-        Map<String,String> testMap = getRuntime().getObjectsView().open(
+        Map<String, String> testMap = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
         testMap.clear();
 
@@ -92,7 +87,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                     .isNull();
         }
 
-        Map<String,String> testMap2 = getRuntime().getObjectsView().open(
+        Map<String, String> testMap2 = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
         for (int i = 0; i < 10_000; i++) {
             assertThat(testMap2.get(Integer.toString(i)))
@@ -107,7 +102,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         getDefaultRuntime().connect();
 
 
-        Map<String,String> testMap = getRuntime().getObjectsView().open(
+        Map<String, String> testMap = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
         testMap.clear();
         int num_threads = 5;
@@ -122,7 +117,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         });
         executeScheduled(num_threads, 50, TimeUnit.SECONDS);
 
-        Map<String,String> testMap2 = getRuntime().getObjectsView().open(
+        Map<String, String> testMap2 = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -153,9 +148,9 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
             throws Exception {
         CorfuRuntime r = getDefaultRuntime();
         TestClassUsingAnnotation test = r.getObjectsView().build()
-                                            .setStreamName("test")
-                                            .setType(TestClassUsingAnnotation.class)
-                                            .open();
+                .setStreamName("test")
+                .setType(TestClassUsingAnnotation.class)
+                .open();
 
         assertThat(test.testFn1())
                 .isTrue();
@@ -188,10 +183,10 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         //begin tests
         CorfuRuntime r = getDefaultRuntime().connect();
         TestClassWithPrimitives test = r.getObjectsView().build()
-                                                            .setType(TestClassWithPrimitives.class)
-                                                            .setStreamName("test")
-                                                            .setSerializer(Serializers.SerializerType.PRIMITIVE)
-                                                            .open();
+                .setType(TestClassWithPrimitives.class)
+                .setStreamName("test")
+                .setSerializer(Serializers.SerializerType.PRIMITIVE)
+                .open();
         test.setPrimitive("hello world".getBytes());
         assertThat(test.getPrimitive())
                 .isEqualTo("hello world".getBytes());
@@ -201,7 +196,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     public void postHandlersFire() throws Exception {
         CorfuRuntime r = getDefaultRuntime();
 
-        Map<String,String> test = r.getObjectsView().build()
+        Map<String, String> test = r.getObjectsView().build()
                 .setType(SMRMap.class)
                 .setStreamName("test")
                 .open();

@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.google.common.collect.ImmutableMap;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
@@ -46,8 +44,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Test
     public void checkThatWritesArePersisted()
-            throws Exception
-    {
+            throws Exception {
         String serviceDir = getTempDir();
 
         LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder()
@@ -110,8 +107,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Test
     public void checkThatContiguousStreamIsCorrectlyCalculated()
-            throws Exception
-    {
+            throws Exception {
         LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder()
                 .setMemory(false)
                 .setSync(true)
@@ -169,8 +165,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Test
     public void checkThatContiguousTailIsCorrectlyCalculated()
-            throws Exception
-    {
+            throws Exception {
         LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder()
                 .setMemory(false)
                 .setSync(true)

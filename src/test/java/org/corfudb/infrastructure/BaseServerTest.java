@@ -25,11 +25,10 @@ public class BaseServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void testPing()
-    {
+    public void testPing() {
         sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
         assertThat(getLastMessage().getMsgType())
-            .isEqualTo(CorfuMsg.CorfuMsgType.PONG);
+                .isEqualTo(CorfuMsg.CorfuMsgType.PONG);
     }
 
     @Test

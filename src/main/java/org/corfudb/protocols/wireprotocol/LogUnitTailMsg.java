@@ -2,19 +2,14 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
-import com.google.common.collect.TreeRangeMap;
 import com.google.common.collect.TreeRangeSet;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.Serializers;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 /**
@@ -53,8 +48,7 @@ public class LogUnitTailMsg extends CorfuMsg {
         buffer.writeLong(contiguousTail);
         Set<Range<Long>> ranges = streamAddresses.asRanges();
         buffer.writeInt(ranges.size());
-        for (Range i : ranges)
-        {
+        for (Range i : ranges) {
             Serializers.getSerializer(Serializers.SerializerType.JAVA).serialize(i, buffer);
         }
     }
@@ -72,8 +66,7 @@ public class LogUnitTailMsg extends CorfuMsg {
         contiguousTail = buffer.readLong();
         streamAddresses = TreeRangeSet.create();
         int ranges = buffer.readInt();
-        for (int i = 0; i < ranges; i++)
-        {
+        for (int i = 0; i < ranges; i++) {
             Range r = (Range) Serializers.getSerializer(Serializers.SerializerType.JAVA).deserialize(buffer, null);
             streamAddresses.add(r);
         }

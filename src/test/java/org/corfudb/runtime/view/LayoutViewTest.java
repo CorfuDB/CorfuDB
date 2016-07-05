@@ -11,9 +11,6 @@ import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,15 +44,15 @@ public class LayoutViewTest extends AbstractViewTest {
 
         CorfuRuntime r = getRuntime().connect();
         Layout l = new TestLayoutBuilder()
-                        .setEpoch(1L)
-                        .addLayoutServer(9000)
-                        .addSequencer(9000)
-                        .buildSegment()
-                            .buildStripe()
-                                .addLogUnit(9000)
-                                .addToSegment()
-                            .addToLayout()
-                        .build();
+                .setEpoch(1L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .addToLayout()
+                .build();
 
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
@@ -67,7 +64,7 @@ public class LayoutViewTest extends AbstractViewTest {
     public void canTolerateLayoutServerFailure()
             throws Exception {
         // No Bootstrap Option Map
-        Map<String, Object> noBootstrap = new ImmutableMap.Builder<String,Object>()
+        Map<String, Object> noBootstrap = new ImmutableMap.Builder<String, Object>()
                 .put("--initial-token", "0")
                 .put("--memory", true)
                 .put("--single", false)
@@ -93,11 +90,11 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addLayoutServer(9000)
                 .addLayoutServer(9001)
                 .addSequencer(9000)
-                    .buildSegment()
-                        .buildStripe()
-                            .addLogUnit(9000)
-                        .addToSegment()
-                    .addToLayout()
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .addToLayout()
                 .build();
 
         // Bootstrap with this layout.

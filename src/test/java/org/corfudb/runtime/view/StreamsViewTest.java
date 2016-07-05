@@ -1,9 +1,6 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
@@ -38,7 +35,7 @@ public class StreamsViewTest extends AbstractViewTest {
         assertThat(sv.read())
                 .isEqualTo(null);
 
-        StreamView svCopy = r.getStreamsView().copy(streamA, streamACopy, sv.getLogPointer()-1L);
+        StreamView svCopy = r.getStreamsView().copy(streamA, streamACopy, sv.getLogPointer() - 1L);
 
         assertThat(svCopy.read().getPayload())
                 .isEqualTo(testPayload);

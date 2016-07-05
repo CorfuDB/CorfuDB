@@ -1,13 +1,11 @@
 package org.corfudb.protocols.wireprotocol;
 
-import com.google.common.collect.TreeRangeSet;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -21,13 +19,11 @@ public class CorfuUUIDMsg extends CorfuMsg {
 
     UUID id;
 
-    public CorfuUUIDMsg(UUID id)
-    {
+    public CorfuUUIDMsg(UUID id) {
         this.id = id;
     }
 
-    public CorfuUUIDMsg(CorfuMsgType msgType, UUID id)
-    {
+    public CorfuUUIDMsg(CorfuMsgType msgType, UUID id) {
         this.msgType = msgType;
         this.id = id;
     }
@@ -41,12 +37,9 @@ public class CorfuUUIDMsg extends CorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        if (id == null)
-        {
+        if (id == null) {
             buffer.writeByte(1);
-        }
-        else
-        {
+        } else {
             buffer.writeByte(0);
             buffer.writeLong(id.getMostSignificantBits());
             buffer.writeLong(id.getLeastSignificantBits());
@@ -63,8 +56,9 @@ public class CorfuUUIDMsg extends CorfuMsg {
     @SuppressWarnings("unchecked")
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
-        if (buffer.readByte() == 1) {id = null;}
-        else {
+        if (buffer.readByte() == 1) {
+            id = null;
+        } else {
             id = new UUID(buffer.readLong(), buffer.readLong());
         }
     }
