@@ -5,6 +5,7 @@ import org.apache.tools.ant.taskdefs.Sleep;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.retry.IRetry;
 import org.docopt.Docopt;
 
 import java.time.Duration;
@@ -105,29 +106,30 @@ public class corfu_multiping implements ICmdlet {
                 routers[nth].setTimeoutRetry(200);
                 routers[nth].setTimeoutResponse(1000);
             }
-            CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
-            if (cf == null) {
-                // We are disconnected.  There is no point in registering async
-                // actions for the future.
+            try {
+               CompletableFuture<Boolean> cf = routers[nth].getClient(BaseClient.class).ping();
+                cf.exceptionally(e -> {
+                    log.trace(hosts[nth] + " port " + ports[nth] + " c " + c + " exception " + e);
+                    up[nth] = false;
+                    return false;
+                });
+                cf.thenAccept((x) -> {
+                    log.trace(hosts[nth] + " port " + ports[nth] + " c " + c + " " + x);
+                    if (x == true) {
+                        up[nth] = true;
+                    } else {
+                        up[nth] = false;
+                    }
+                    return;
+                });
+
+            } catch (Exception e) {
+                log.trace("Ping failed due to exception", e);
                 up[nth] = false;
                 return;
             }
-            cf.exceptionally(e -> {
-                log.trace(hosts[nth] + " port " + ports[nth] + " c " + c + " exception " + e);
-                up[nth] = false;
-                return false;
-            });
-            cf.thenAccept((x) -> {
-                log.trace(hosts[nth] + " port " + ports[nth] + " c " + c + " " + x);
-                if (x == true) {
-                    up[nth] = true;
-                } else {
-                    up[nth] = false;
-                }
-                return;
-            });
+            return;
         });
-
     }
 
     private void sleep_wrapper(long i) {

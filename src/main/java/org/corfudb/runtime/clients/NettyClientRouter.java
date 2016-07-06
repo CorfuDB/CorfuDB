@@ -270,43 +270,35 @@ implements IClientRouter {
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
         if (! connected_p) {
-            // SLF: Returning a null here may break a lot of callers' code: there's a
-            //      frequent convention that our return value is immediately used to set
-            //      callback behavior on success and/or exception.  Those callback calls
-            //      almost always assume that null isn't an option.
-            return null;
+            log.trace("Disconnected endpoint " + host + ":" + port);
+            throw new NetworkException("Disconnected endpoint", host + ":" + port);
         } else {
-            return sendMessageAndGetCompletable2(ctx, message);
+            // Get the next request ID.
+            final long thisRequest = requestID.getAndIncrement();
+            // Set the message fields.
+            message.setClientID(clientID);
+            message.setRequestID(thisRequest);
+            message.setEpoch(epoch);
+            // Generate a future and put it in the completion table.
+            final CompletableFuture<T> cf = new CompletableFuture<>();
+            outstandingRequests.put(thisRequest, cf);
+            // Write the message out to the channel.
+            if (ctx == null) {
+                channel.writeAndFlush(message);
+            }
+            else {
+                ctx.writeAndFlush(message);
+            }
+            log.trace("Sent message: {}", message);
+            // Generate a timeout future, which will complete exceptionally if the main future is not completed.
+            final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
+            cfTimeout.exceptionally(e -> {
+                outstandingRequests.remove(thisRequest);
+                log.debug("Remove request {} due to timeout!", thisRequest);
+                return null;
+            });
+            return cfTimeout;
         }
-    }
-
-    <T> CompletableFuture<T> sendMessageAndGetCompletable2(ChannelHandlerContext ctx, CorfuMsg message)
-    {
-        // Get the next request ID.
-        final long thisRequest = requestID.getAndIncrement();
-        // Set the message fields.
-        message.setClientID(clientID);
-        message.setRequestID(thisRequest);
-        message.setEpoch(epoch);
-        // Generate a future and put it in the completion table.
-        final CompletableFuture<T> cf = new CompletableFuture<>();
-        outstandingRequests.put(thisRequest, cf);
-        // Write the message out to the channel.
-        if (ctx == null) {
-            channel.writeAndFlush(message);
-        }
-        else {
-            ctx.writeAndFlush(message);
-        }
-        log.trace("Sent message: {}", message);
-        // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
-        cfTimeout.exceptionally(e -> {
-            outstandingRequests.remove(thisRequest);
-            log.debug("Remove request {} due to timeout!", thisRequest);
-            return null;
-        });
-        return cfTimeout;
     }
 
     /** Send a one way message, without adding a completable future.
