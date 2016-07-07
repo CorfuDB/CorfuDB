@@ -228,6 +228,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         b.group(workerGroup);
         b.channel(NioSocketChannel.class);
         b.option(ChannelOption.SO_KEEPALIVE, true);
+        b.option(ChannelOption.SO_REUSEADDR, true);
         b.option(ChannelOption.TCP_NODELAY, true);
         NettyClientRouter router = this;
         b.handler(new ChannelInitializer<SocketChannel>() {
