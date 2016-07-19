@@ -29,8 +29,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             runtimeRouterMap = new ConcurrentHashMap<>();
 
     public AbstractViewTest() {
+        // Force all new CorfuRuntimes to override the getRouterFn
+        CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = new CorfuRuntime(getDefaultEndpoint());
-        runtime.setGetRouterFunction(x -> getRouterFunction(runtime, x));
     }
 
     private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
@@ -148,7 +149,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     public CorfuRuntime wireExistingRuntimeToTest(CorfuRuntime runtime) {
         runtime.layoutServers.add(getDefaultEndpoint());
-        runtime.setGetRouterFunction(x -> getRouterFunction(runtime, x));
         return runtime;
     }
 
