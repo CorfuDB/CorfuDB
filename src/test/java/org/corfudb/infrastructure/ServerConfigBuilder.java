@@ -20,7 +20,7 @@ public class ServerConfigBuilder {
     boolean sync = false;
     int maxCache = 1000000;
     int checkpoint = 100;
-    String address = "localhost";
+    String address = "test";
     int port = 9000;
 
     public ServerConfigBuilder() {
@@ -48,4 +48,6 @@ public class ServerConfigBuilder {
     public static Map<String,Object> defaultConfig(int port) {
         return new ServerConfigBuilder().setPort(port).build();
     }
+
+
 }
