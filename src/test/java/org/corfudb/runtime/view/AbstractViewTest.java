@@ -35,7 +35,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
-        if (!endpoint.startsWith("localhost:")) {
+        if (!endpoint.startsWith("test:")) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
         }
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
@@ -89,7 +89,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         void addToTest(int port, AbstractViewTest test) {
 
-            if (test.testServerMap.putIfAbsent("localhost:" + port, this) != null) {
+            if (test.testServerMap.putIfAbsent("test:" + port, this) != null) {
                 throw new RuntimeException("Server already registered at port " + port);
             }
 
@@ -111,7 +111,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
 
     public TestServer getServer(int port) {
-        return testServerMap.get("localhost:" + port);
+        return testServerMap.get("test:" + port);
     }
 
     public LogUnitServer getLogUnit(int port) {
@@ -182,10 +182,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     }
 
     public String getDefaultEndpoint() {
-        return "localhost:9000";
+        return "test:9000";
     }
 
     public String getEndpoint(long port) {
-        return "localhost:" + port;
+        return "test:" + port;
     }
 }
