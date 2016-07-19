@@ -23,6 +23,7 @@ public class LayoutServerTest extends AbstractServerTest {
     public AbstractServer getDefaultServer() {
         String serviceDir = getTempDir();
         return new LayoutServer(new ServerConfigBuilder()
+                .setSingle(false)
                 .setLogPath(serviceDir)
                 .build(), getRouter());
     }
@@ -174,7 +175,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .setMemory(false)
                 .setLogPath(serviceDir)
                 .build(), getRouter());
-        this.router.setServerUnderTest(s2);
+        this.router.reset();
+        this.router.addServer(s2);
         assertThat(s2)
                 .isInEpoch(100);
         assertThat(s2)
@@ -224,7 +226,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--single", false)
                 .put("--memory", false)
                 .build(), getRouter());
-        this.router.setServerUnderTest(s2);
+        this.router.reset();
+        this.router.addServer(s2);
         assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
@@ -239,7 +242,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--single", false)
                 .put("--memory", false)
                 .build(), getRouter());
-        this.router.setServerUnderTest(s3);
+        this.router.reset();
+        this.router.addServer(s3);
         assertThat(s3).isInEpoch(100);
         assertThat(s3).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         assertThat(s3).isPhase2Rank(new Rank(100L, AbstractServerTest.testClientId));
@@ -280,7 +284,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--single", false)
                 .put("--memory", false)
                 .build(), getRouter());
-        this.router.setServerUnderTest(s2);
+        this.router.reset();
+        this.router.addServer(s2);
         assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
@@ -332,7 +337,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--single", false)
                 .put("--memory", false)
                 .build(), getRouter());
-        this.router.setServerUnderTest(s2);
+        this.router.reset();
+        this.router.addServer(s2);
         assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
@@ -355,7 +361,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--single", false)
                 .put("--memory", false)
                 .build(), getRouter());
-        this.router.setServerUnderTest(s3);
+        this.router.reset();
+        this.router.addServer(s3);
         // the epoch should have changed by now.
         assertThat(s3).isInEpoch(100);
         assertThat(s3).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
@@ -415,7 +422,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .put("--single", false)
                 .put("--memory", false)
                 .build(), getRouter());
-        this.router.setServerUnderTest(s2);
+        this.router.reset();
+        this.router.addServer(s2);
         assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
         //duplicate message to be rejected
