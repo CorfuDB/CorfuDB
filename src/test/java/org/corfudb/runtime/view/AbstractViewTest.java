@@ -1,27 +1,17 @@
 package org.corfudb.runtime.view;
 
-import com.google.common.collect.ImmutableMap;
+import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.IServerRouter;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.infrastructure.*;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.clients.TestClientRouter;
-import org.corfudb.runtime.exceptions.OutrankedException;
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.clients.*;
 import org.junit.Before;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,97 +23,159 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     @Getter
     CorfuRuntime runtime;
 
-    Map<String, TestClientRouter> routerMap;
+    final Map<String, TestServer> testServerMap = new ConcurrentHashMap<>();
 
-    Map<String, Set<AbstractServer>> serverMap;
+    final Map<CorfuRuntime, Map<String, TestClientRouter>>
+            runtimeRouterMap = new ConcurrentHashMap<>();
 
     public AbstractViewTest() {
-        runtime = new CorfuRuntime();
-        routerMap = new HashMap<>();
-        serverMap = new HashMap<>();
-        runtime.setGetRouterFunction(routerMap::get);
+        runtime = new CorfuRuntime(getDefaultEndpoint());
+        runtime.setGetRouterFunction(x -> getRouterFunction(runtime, x));
+    }
+
+    private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
+        runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
+        if (!endpoint.startsWith("localhost:")) {
+            throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
+        }
+        return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
+                x -> {
+                    TestClientRouter tcn =
+                            new TestClientRouter(testServerMap.get(endpoint).getServerRouter());
+                    tcn.addClient(new BaseClient())
+                            .addClient(new SequencerClient())
+                            .addClient(new LayoutClient())
+                            .addClient(new LogUnitClient());
+                    return tcn;
+                }
+        );
     }
 
     @Before
     public void resetTests() {
-        routerMap.clear();
-        serverMap.clear();
+        testServerMap.clear();
         runtime.parseConfigurationString(getDefaultConfigurationString())
                 .setCacheDisabled(true); // Disable cache during unit tests to fully stress the system.
         runtime.getAddressSpaceView().resetCaches();
     }
 
-    /**
-     * Wire all registered servers to the correct router.
-     * This function must be called prior to running the actual test logic.
-     */
-    public void wireRouters() {
-        serverMap.keySet().stream()
-                .map(address -> {
-                    TestClientRouter r = getTestRouterForEndpoint(address);
-                    r.addClient(new LayoutClient())
-                            .addClient(new SequencerClient())
-                            .addClient(new LogUnitClient())
-                            .addClient(new BaseClient())
-                            .start();
-                    serverMap.get(address).stream()
-                            .forEach(r::addServer);
-                    return r;
-                })
-                .forEach(r -> routerMap.put(r.getAddress(), r));
+    @Data
+    static class TestServer {
+        BaseServer baseServer;
+        SequencerServer sequencerServer;
+        LayoutServer layoutServer;
+        LogUnitServer logUnitServer;
+        TestServerRouter serverRouter;
+        int port;
+
+        TestServer(Map<String, Object> optsMap)
+        {
+            serverRouter = new TestServerRouter();
+            baseServer = new BaseServer(serverRouter);
+            sequencerServer = new SequencerServer(optsMap);
+            layoutServer = new LayoutServer(optsMap, serverRouter);
+            logUnitServer = new LogUnitServer(optsMap);
+
+            serverRouter.addServer(baseServer);
+            serverRouter.addServer(sequencerServer);
+            serverRouter.addServer(layoutServer);
+            serverRouter.addServer(logUnitServer);
+        }
+
+        TestServer(int port)
+        {
+            this(ServerConfigBuilder.defaultConfig(port));
+        }
+
+        void addToTest(int port, AbstractViewTest test) {
+
+            if (test.testServerMap.putIfAbsent("localhost:" + port, this) != null) {
+                throw new RuntimeException("Server already registered at port " + port);
+            }
+
+        }
     }
 
-    public void addServerForTest(String address, AbstractServer server) {
-        serverMap.compute(address, (k, v) -> {
-            Set<AbstractServer> out = v;
-            if (v == null) {
-                out = new HashSet<AbstractServer>();
-            }
-            out.add(server);
-            return out;
-        });
+
+    public void addServer(int port, Map<String, Object> config) {
+        new TestServer(config).addToTest(port, this);
     }
 
-    public void removeServerForTest(String address, AbstractServer server) {
-        serverMap.compute(address, (k, v) -> {
-            Set<AbstractServer> out = v;
-            if (v == null) {
-                out = new HashSet<AbstractServer>();
-            }
-            out.remove(server);
-            return out;
-        });
+    public void addServer(int port) {
+        new TestServer(new ServerConfigBuilder().setSingle(false).setPort(port).build()).addToTest(port, this);
+    }
+
+    public void addSingleServer(int port) {
+        new TestServer(port).addToTest(port, this);
+    }
+
+
+    public TestServer getServer(int port) {
+        return testServerMap.get("localhost:" + port);
+    }
+
+    public LogUnitServer getLogUnit(int port) {
+        return getServer(port).getLogUnitServer();
+    }
+
+    public SequencerServer getSequencer(int port) {
+        return getServer(port).getSequencerServer();
+    }
+
+    public LayoutServer getLayoutServer(int port) {
+        return getServer(port).getLayoutServer();
+    }
+
+    public BaseServer getBaseServer(int port) {
+        return getServer(port).getBaseServer();
+    }
+
+    public void bootstrapAllServers(Layout l)
+    {
+        testServerMap.entrySet().parallelStream()
+                .forEach(e -> {
+                    e.getValue().layoutServer.reset();
+                    e.getValue().layoutServer
+                            .handleMessage(new LayoutMsg(l, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP),
+                                    null, e.getValue().serverRouter);
+                });
     }
 
     public CorfuRuntime getDefaultRuntime() {
-        // default layout is chain replication.
-        routerMap.put(getDefaultEndpoint(), new TestClientRouter());
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
-                routerMap.get(getDefaultEndpoint())));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
-        wireRouters();
-
+        addSingleServer(9000);
         return getRuntime().connect();
     }
 
     public CorfuRuntime wireExistingRuntimeToTest(CorfuRuntime runtime) {
         runtime.layoutServers.add(getDefaultEndpoint());
-        runtime.setGetRouterFunction(routerMap::get);
+        runtime.setGetRouterFunction(x -> getRouterFunction(runtime, x));
         return runtime;
     }
 
-    public TestClientRouter getTestRouterForEndpoint(String endpoint) {
-        return routerMap.computeIfAbsent(endpoint, x -> {
-            TestClientRouter c = new TestClientRouter();
-            c.setAddress(x);
-            return c;
-        });
+    public void clearClientRules() {
+        clearClientRules(getRuntime());
     }
 
-    public IServerRouter getServerRouterForEndpoint(String endpoint) {
-        return routerMap.computeIfAbsent(endpoint, x -> new TestClientRouter());
+    public void clearClientRules(CorfuRuntime r) {
+        runtimeRouterMap.get(r).values().forEach(x -> x.rules.clear());
     }
+
+    public void addClientRule(TestRule rule) {
+        addClientRule(getRuntime(), rule);
+    }
+
+    public void addClientRule(CorfuRuntime r, TestRule rule) {
+        runtimeRouterMap.get(r).values().forEach(x -> x.rules.add(rule));
+    }
+
+    public void clearServerRules(int port) {
+        getServer(port).getServerRouter().rules.clear();
+    }
+
+    public void addServerRule(int port, TestRule rule) {
+        getServer(port).getServerRouter().rules.add(rule);
+    }
+
 
     public String getDefaultConfigurationString() {
         return getDefaultEndpoint();
@@ -135,24 +187,5 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     public String getEndpoint(long port) {
         return "localhost:" + port;
-    }
-
-    public Map<String, Object> defaultOptionsMap() {
-        return new ImmutableMap.Builder<String, Object>()
-                .put("--initial-token", "0")
-                .put("--memory", true)
-                .put("--single", true)
-                .put("--max-cache", "256M")
-                .put("--address", getDefaultEndpoint().split(":")[0])
-                .put("<port>", getDefaultEndpoint().split(":")[1])
-                .build();
-    }
-
-    public void setLayout(Layout l)
-            throws QuorumUnreachableException, OutrankedException {
-        getRuntime().getLayoutView().updateLayout(l, l.epoch);
-        getRuntime().invalidateLayout();
-        assertThat(getRuntime().getLayoutView().getLayout().epoch)
-                .isEqualTo(l.epoch);
     }
 }
