@@ -108,7 +108,8 @@ public class SequencerServerTest extends AbstractServerTest {
                 .setCheckpoint(1)
                 .build());
 
-        this.router.setServerUnderTest(s1);
+        this.router.reset();
+        this.router.addServer(s1);
         sendMessage(new TokenRequestMsg(Collections.singleton(CorfuRuntime.getStreamID("a")), 1));
         sendMessage(new TokenRequestMsg(Collections.singleton(CorfuRuntime.getStreamID("a")), 1));
         assertThat(s1)
@@ -122,7 +123,8 @@ public class SequencerServerTest extends AbstractServerTest {
                 .setInitialToken(-1)
                 .setCheckpoint(1)
                 .build());
-        this.router.setServerUnderTest(s2);
+        this.router.reset();
+        this.router.addServer(s2);
         assertThat(s2)
                 .tokenIsAt(2);
     }

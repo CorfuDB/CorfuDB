@@ -30,10 +30,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     public void canReadWriteToSingle()
             throws Exception {
         // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
-                getServerRouterForEndpoint(getEndpoint(9000))));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        wireRouters();
+        addSingleServer(9000);
 
         //begin tests
         CorfuRuntime r = getRuntime().connect();
@@ -55,11 +52,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingleConcurrent()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
-                getServerRouterForEndpoint(getEndpoint(9000))));
-        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
-        wireRouters();
+
+        addSingleServer(9000);
 
         //begin tests
         CorfuRuntime r = getRuntime().connect();
@@ -90,32 +84,28 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteToMultiple()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
-                getServerRouterForEndpoint(getEndpoint(9000))));
-        addServerForTest(getEndpoint(9000), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getEndpoint(9001), new LogUnitServer(defaultOptionsMap()));
-        addServerForTest(getEndpoint(9002), new LogUnitServer(defaultOptionsMap()));
-        wireRouters();
 
-        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
-        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
+        addServer(9000);
+        addServer(9001);
+        addServer(9002);
 
-        //configure the layout accordingly
-        CorfuRuntime r = getRuntime().connect();
-        setLayout(new TestLayoutBuilder()
-                .setEpoch(1L)
+        bootstrapAllServers(new TestLayoutBuilder()
                 .addLayoutServer(9000)
                 .addSequencer(9000)
                 .buildSegment()
-                .buildStripe()
-                .addLogUnit(9000)
-                .addLogUnit(9001)
-                .addLogUnit(9002)
-                .addToSegment()
+                    .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
+                    .buildStripe()
+                        .addLogUnit(9000)
+                        .addLogUnit(9001)
+                        .addLogUnit(9002)
+                    .addToSegment()
                 .addToLayout()
-                .build()
-        );
+                .build());
+
+
+        //configure the layout accordingly
+        CorfuRuntime r = getRuntime().connect();
+
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -135,43 +125,26 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureAllUnitsContainData()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getEndpoint(9000),
-                new LayoutServer(defaultOptionsMap(), getServerRouterForEndpoint(getEndpoint(9000))));
 
-        LogUnitServer l9000 = new LogUnitServer(defaultOptionsMap());
-        LogUnitServer l9001 = new LogUnitServer(defaultOptionsMap());
-        LogUnitServer l9002 = new LogUnitServer(defaultOptionsMap());
+        addServer(9000);
+        addServer(9001);
+        addServer(9002);
 
-        addServerForTest(getEndpoint(9000), l9000);
-        addServerForTest(getEndpoint(9001), l9001);
-        addServerForTest(getEndpoint(9002), l9002);
-        wireRouters();
-
-        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
-        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
+        bootstrapAllServers(new TestLayoutBuilder()
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                .buildSegment()
+                    .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
+                    .buildStripe()
+                        .addLogUnit(9000)
+                        .addLogUnit(9001)
+                        .addLogUnit(9002)
+                    .addToSegment()
+                .addToLayout()
+                .build());
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
-        setLayout(new Layout(
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(getEndpoint(9000)),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        ImmutableList.<String>builder()
-                                                .add(getEndpoint(9000))
-                                                .add(getEndpoint(9001))
-                                                .add(getEndpoint(9002))
-                                                .build()
-                                )
-                        )
-                )),
-                1L
-        ));
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -187,11 +160,11 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                 .contains(streamA);
 
         // Ensure that the data was written to each logunit.
-        assertThat(l9000)
+        assertThat(getLogUnit(9000))
                 .matchesDataAtAddress(0, testPayload);
-        assertThat(l9001)
+        assertThat(getLogUnit(9001))
                 .matchesDataAtAddress(0, testPayload);
-        assertThat(l9002)
+        assertThat(getLogUnit(9002))
                 .matchesDataAtAddress(0, testPayload);
     }
 }

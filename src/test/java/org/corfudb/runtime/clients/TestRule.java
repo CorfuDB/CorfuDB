@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -9,7 +10,7 @@ import java.util.function.Function;
 /**
  * Created by mwei on 6/29/16.
  */
-public class TestClientRule {
+public class TestRule {
 
     // conditions
     private boolean always = false;
@@ -28,7 +29,7 @@ public class TestClientRule {
     /**
      * Always evaluate this rule.
      */
-    public TestClientRule always() {
+    public TestRule always() {
         this.always = true;
         return this;
     }
@@ -38,7 +39,7 @@ public class TestClientRule {
      *
      * @param transformation A function which transforms the supplied message.
      */
-    public TestClientRule transform(Consumer<CorfuMsg> transformation) {
+    public TestRule transform(Consumer<CorfuMsg> transformation) {
         transformer = transformation;
         return this;
     }
@@ -46,7 +47,7 @@ public class TestClientRule {
     /**
      * Drop this message.
      */
-    public TestClientRule drop() {
+    public TestRule drop() {
         this.drop = true;
         return this;
     }
@@ -54,7 +55,7 @@ public class TestClientRule {
     /**
      * Drop this message on even matches (first match is even)
      */
-    public TestClientRule dropEven() {
+    public TestRule dropEven() {
         this.dropEven = true;
         return this;
     }
@@ -62,7 +63,7 @@ public class TestClientRule {
     /**
      * Drop this message on odd matches
      */
-    public TestClientRule dropOdd() {
+    public TestRule dropOdd() {
         this.dropOdd = true;
         return this;
     }
@@ -73,7 +74,7 @@ public class TestClientRule {
      * @param injectBefore A function which takes the CorfuMsg the rule is being
      *                     applied to and returns a CorfuMsg to be injected.
      */
-    public TestClientRule injectBefore(Function<CorfuMsg, CorfuMsg> injectBefore) {
+    public TestRule injectBefore(Function<CorfuMsg, CorfuMsg> injectBefore) {
         this.injectBefore = injectBefore;
         return this;
     }
@@ -84,17 +85,15 @@ public class TestClientRule {
      * @param matcher A function that takes a CorfuMsg and returns true if the
      *                message matches.
      */
-    public TestClientRule matches(Function<CorfuMsg, Boolean> matcher) {
+    public TestRule matches(Function<CorfuMsg, Boolean> matcher) {
         this.matcher = matcher;
         return this;
     }
 
-    /** Package-Private Operations For The Router */
-
     /**
      * Evaluate this rule on a given message and router.
      */
-    boolean evaluate(CorfuMsg message, TestClientRouter router, boolean isServer) {
+    public boolean evaluate(CorfuMsg message, Object router) {
         if (message == null) return false;
         if (match(message)) {
             int matchNumber = timesMatched.getAndIncrement();
@@ -102,10 +101,10 @@ public class TestClientRule {
             if (dropOdd && matchNumber % 2 != 0) return false;
             if (dropEven && matchNumber % 2 == 0) return false;
             if (transformer != null) transformer.accept(message);
-            if (injectBefore != null && !isServer)
-                router.sendMessage(null, injectBefore.apply(message));
-            if (injectBefore != null && isServer)
-                router.sendResponse(null, injectBefore.apply(message), injectBefore.apply(message));
+            if (injectBefore != null && router instanceof IClientRouter)
+                ((IClientRouter)router).sendMessage(null, injectBefore.apply(message));
+            if (injectBefore != null && router instanceof IServerRouter)
+                ((IServerRouter)router).sendResponse(null, injectBefore.apply(message), injectBefore.apply(message));
         }
         return true;
     }

@@ -4,10 +4,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 import lombok.Getter;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.LogUnitServerAssertions;
-import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
@@ -50,40 +47,29 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingWorks()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
-                getServerRouterForEndpoint(getEndpoint(9000))));
-
-        LogUnitServer l9000 = new LogUnitServer(defaultOptionsMap());
-        LogUnitServer l9001 = new LogUnitServer(defaultOptionsMap());
-        LogUnitServer l9002 = new LogUnitServer(defaultOptionsMap());
-
-        addServerForTest(getEndpoint(9000), l9000);
-        addServerForTest(getEndpoint(9001), l9001);
-        addServerForTest(getEndpoint(9002), l9002);
-        wireRouters();
-
-        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
-        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
+        addServer(9000, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9001, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9002, new ServerConfigBuilder().setSingle(false).build());
 
         //configure the layout accordingly
-        CorfuRuntime r = getRuntime().connect();
-        setLayout(new TestLayoutBuilder()
+        bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
                 .addLayoutServer(9000)
                 .addSequencer(9000)
-                .buildSegment()
-                .buildStripe()
-                .addLogUnit(9000)
-                .addToSegment()
-                .buildStripe()
-                .addLogUnit(9001)
-                .addToSegment()
-                .buildStripe()
-                .addLogUnit(9002)
-                .addToSegment()
-                .addToLayout()
+                    .buildSegment()
+                        .buildStripe()
+                            .addLogUnit(9000)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9001)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9002)
+                            .addToSegment()
+                    .addToLayout()
                 .build());
+
+        CorfuRuntime r = getRuntime().connect();
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -99,20 +85,20 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .contains(streamA);
 
         // Ensure that the data was written to each logunit.
-        LogUnitServerAssertions.assertThat(l9000)
+        LogUnitServerAssertions.assertThat(getLogUnit(9000))
                 .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(l9001)
+        LogUnitServerAssertions.assertThat(getLogUnit(9001))
                 .isEmptyAtAddress(0);
-        LogUnitServerAssertions.assertThat(l9002)
+        LogUnitServerAssertions.assertThat(getLogUnit(9002))
                 .isEmptyAtAddress(0);
 
         r.getAddressSpaceView().write(1, Collections.singleton(streamA),
                 "1".getBytes(), Collections.emptyMap());
-        LogUnitServerAssertions.assertThat(l9000)
+        LogUnitServerAssertions.assertThat(getLogUnit(9000))
                 .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(l9001)
+        LogUnitServerAssertions.assertThat(getLogUnit(9001))
                 .matchesDataAtAddress(0, "1".getBytes());
-        LogUnitServerAssertions.assertThat(l9002)
+        LogUnitServerAssertions.assertThat(getLogUnit(9002))
                 .isEmptyAtAddress(0);
     }
 
@@ -120,40 +106,29 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingReadAllWorks()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap(),
-                getServerRouterForEndpoint(getEndpoint(9000))));
+        addServer(9000, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9001, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9002, new ServerConfigBuilder().setSingle(false).build());
 
-        LogUnitServer l9000 = new LogUnitServer(defaultOptionsMap());
-        LogUnitServer l9001 = new LogUnitServer(defaultOptionsMap());
-        LogUnitServer l9002 = new LogUnitServer(defaultOptionsMap());
-
-        addServerForTest(getEndpoint(9000), l9000);
-        addServerForTest(getEndpoint(9001), l9001);
-        addServerForTest(getEndpoint(9002), l9002);
-        wireRouters();
-
-        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
-        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
-
-        //configure the layout accordingly
-        CorfuRuntime r = getRuntime().connect();
-        setLayout(new TestLayoutBuilder()
+        bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
                 .addLayoutServer(9000)
                 .addSequencer(9000)
-                .buildSegment()
-                .buildStripe()
-                .addLogUnit(9000)
-                .addToSegment()
-                .buildStripe()
-                .addLogUnit(9001)
-                .addToSegment()
-                .buildStripe()
-                .addLogUnit(9002)
-                .addToSegment()
-                .addToLayout()
+                    .buildSegment()
+                        .buildStripe()
+                            .addLogUnit(9000)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9001)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9002)
+                            .addToSegment()
+                    .addToLayout()
                 .build());
+
+        //configure the layout accordingly
+        CorfuRuntime r = getRuntime().connect();
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -188,40 +163,29 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingStreamReadAllWorks()
             throws Exception {
-        // default layout is chain replication.
-        addServerForTest(getEndpoint(9000), new LayoutServer(defaultOptionsMap()
-                , getServerRouterForEndpoint(getEndpoint(9000))));
+        addServer(9000, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9001, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9002, new ServerConfigBuilder().setSingle(false).build());
 
-        LogUnitServer l9000 = new LogUnitServer(defaultOptionsMap());
-        LogUnitServer l9001 = new LogUnitServer(defaultOptionsMap());
-        LogUnitServer l9002 = new LogUnitServer(defaultOptionsMap());
-
-        addServerForTest(getEndpoint(9000), l9000);
-        addServerForTest(getEndpoint(9001), l9001);
-        addServerForTest(getEndpoint(9002), l9002);
-        wireRouters();
-
-        getServerRouterForEndpoint(getEndpoint(9001)).setServerEpoch(1L);
-        getServerRouterForEndpoint(getEndpoint(9002)).setServerEpoch(1L);
-
-        //configure the layout accordingly
-        CorfuRuntime r = getRuntime().connect();
-        setLayout(new TestLayoutBuilder()
+        bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
                 .addLayoutServer(9000)
                 .addSequencer(9000)
-                .buildSegment()
-                .buildStripe()
-                .addLogUnit(9000)
-                .addToSegment()
-                .buildStripe()
-                .addLogUnit(9001)
-                .addToSegment()
-                .buildStripe()
-                .addLogUnit(9002)
-                .addToSegment()
-                .addToLayout()
+                    .buildSegment()
+                        .buildStripe()
+                            .addLogUnit(9000)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9001)
+                            .addToSegment()
+                        .buildStripe()
+                            .addLogUnit(9002)
+                            .addToSegment()
+                    .addToLayout()
                 .build());
+
+        //configure the layout accordingly
+        CorfuRuntime r = getRuntime().connect();
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());

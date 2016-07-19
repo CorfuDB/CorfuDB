@@ -6,8 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.IServerRouter;
+import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -15,7 +14,6 @@ import org.corfudb.util.CFUtils;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -28,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Created by mwei on 12/13/15.
  */
 @Slf4j
-public class TestClientRouter implements IClientRouter, IServerRouter {
+public class TestClientRouter implements IClientRouter {
 
     /**
      * The clients registered to this router.
@@ -45,11 +43,6 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
      */
     public Map<Long, CompletableFuture> outstandingRequests;
 
-    /**
-     * The list of test server handlers attached to this router.
-     */
-    public Map<CorfuMsg.CorfuMsgType, AbstractServer> serverMap;
-
     public AtomicLong requestID;
 
     @Getter
@@ -64,16 +57,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Setter
     public UUID clientID;
 
-    /**
-     * Drop all messages, simulating a failed link.
-     */
-    @Getter
-    @Setter
-    public boolean dropAllMessagesClientToServer;
-
-    public List<TestClientRule> clientToServerRules;
-
-    public List<TestClientRule> serverToClientRules;
+    public List<TestRule> rules;
 
     /**
      * The optional address for this router, if set.
@@ -82,40 +66,36 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Setter
     public String address;
 
-    public TestClientRouter() {
+    /** The server router endpoint this client should route to. */
+    TestServerRouter serverRouter;
+
+    /** A mock channel context for this connection. */
+    TestChannelContext channelContext;
+
+    public TestClientRouter(TestServerRouter serverRouter) {
         clientList = new ArrayList<>();
         handlerMap = new ConcurrentHashMap<>();
         outstandingRequests = new ConcurrentHashMap<>();
-        serverMap = new ConcurrentHashMap<>();
         requestID = new AtomicLong();
         clientID = CorfuRuntime.getStreamID("testClient");
-        dropAllMessagesClientToServer = false;
-        serverToClientRules = new ArrayList<>();
-        clientToServerRules = new ArrayList<>();
+        rules = new ArrayList<>();
+        this.serverRouter = serverRouter;
+        channelContext = new TestChannelContext(this::handleMessage);
     }
 
-    public void addServerToClientRule(TestClientRule rule) {
-        serverToClientRules.add(rule);
+    private void handleMessage(Object o) {
+        if (o instanceof CorfuMsg) {
+            CorfuMsg m = (CorfuMsg) o;
+            if (validateEpochAndClientID(m, channelContext)) {
+                IClient handler = handlerMap.get(m.getMsgType());
+                handler.handleMessage(m, null);
+            }
+        }
     }
 
-    public void addClientToServerRule(TestClientRule rule) {
-        clientToServerRules.add(rule);
-    }
-
-    public void addServer(AbstractServer server) {
-        // Iterate through all types of CorfuMsgType, registering the handler
-        Arrays.<CorfuMsg.CorfuMsgType>stream(CorfuMsg.CorfuMsgType.values())
-                .forEach(x -> {
-                    if (x.handler.isInstance(server)) {
-                        serverMap.put(x, server);
-                        log.trace("Registered {} to handle messages of type {}", server, x);
-                    }
-                });
-    }
-
-    void routeMessage(CorfuMsg message) {
+    private void routeMessage(CorfuMsg message) {
         CorfuMsg m = simulateSerialization(message);
-        serverMap.get(message.getMsgType()).handleMessage(m, null, this);
+        serverRouter.sendServerMessage(m, channelContext);
     }
 
     /**
@@ -175,16 +155,13 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
         // Evaluate rules.
-        if (clientToServerRules.stream()
-                .map(x -> x.evaluate(message, this, false))
+        if (rules.stream()
+                .map(x -> x.evaluate(message, this))
                 .allMatch(x -> x)) {
-            // Write the message out to the channel.
-            if (!dropAllMessagesClientToServer) {
+            // Write the message out to the channel
                 log.trace("Sent message: {}", message);
                 routeMessage(message);
-            }
         }
-
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
         final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(5000));
         cfTimeout.exceptionally(e -> {
@@ -208,14 +185,11 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
         // Evaluate rules.
-        if (clientToServerRules.stream()
-                .map(x -> x.evaluate(message, this, false))
+        if (rules.stream()
+                .map(x -> x.evaluate(message, this))
                 .allMatch(x -> x)) {
             // Write the message out to the channel.
-            if (!dropAllMessagesClientToServer) {
-                log.trace("Sent message: {}", message);
                 routeMessage(message);
-            }
         }
     }
 
@@ -229,15 +203,12 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
     @Override
     public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        // Evaluate rules.
-        if (clientToServerRules.stream()
-                .map(x -> x.evaluate(outMsg, this, false))
+        if (rules.stream()
+                .map(x -> x.evaluate(outMsg, this))
                 .allMatch(x -> x)) {
             // Write the message out to the channel.
-            if (!dropAllMessagesClientToServer) {
                 ctx.writeAndFlush(outMsg);
                 log.trace("Sent response: {}", outMsg);
-            }
         }
     }
 
@@ -314,7 +285,7 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
      */
     @Override
     public void stop() {
-        serverMap.clear();
+        //TODO - pause pipeline
     }
 
     public CorfuMsg simulateSerialization(CorfuMsg message) {
@@ -325,20 +296,4 @@ public class TestClientRouter implements IClientRouter, IServerRouter {
         return CorfuMsg.deserialize(oBuf);
     }
 
-
-    @Override
-    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
-        outMsg.copyBaseFields(inMsg);
-        outMsg.setEpoch(serverEpoch);
-        log.trace("(server) send Response: {}", outMsg);
-        CorfuMsg m = simulateSerialization(outMsg);
-        if (serverToClientRules.stream()
-                .map(x -> x.evaluate(outMsg, this, true))
-                .allMatch(x -> x)) {
-            if (validateEpochAndClientID(m, ctx)) {
-                IClient handler = handlerMap.get(m.getMsgType());
-                handler.handleMessage(m, null);
-            }
-        }
-    }
 }

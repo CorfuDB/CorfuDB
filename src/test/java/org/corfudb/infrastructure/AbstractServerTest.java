@@ -7,6 +7,7 @@ import org.junit.Before;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by mwei on 12/12/15.
@@ -14,15 +15,20 @@ import java.util.UUID;
 public abstract class AbstractServerTest extends AbstractCorfuTest {
 
     public static final UUID testClientId = UUID.nameUUIDFromBytes("TEST_CLIENT".getBytes());
+
     @Getter
     TestServerRouter router;
 
+    AtomicInteger requestCounter;
+
     public AbstractServerTest() {
         router = new TestServerRouter();
+        requestCounter = new AtomicInteger();
     }
 
     public void setServer(AbstractServer server) {
-        router.setServerUnderTest(server);
+        router.reset();
+        router.addServer(server);
     }
 
     public abstract AbstractServer getDefaultServer();
@@ -30,7 +36,8 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     @Before
     public void resetTest() {
         router.reset();
-        router.setServerUnderTest(getDefaultServer());
+        router.addServer(getDefaultServer());
+        requestCounter.set(0);
     }
 
     public List<CorfuMsg> getResponseMessages() {
@@ -53,6 +60,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
 
     public void sendMessage(UUID clientId, CorfuMsg message) {
         message.setClientID(clientId);
+        message.setRequestID(requestCounter.getAndIncrement());
         router.sendServerMessage(message);
     }
 }

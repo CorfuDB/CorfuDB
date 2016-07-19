@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.TestServerRouter;
 import org.junit.Before;
 
 import java.util.Map;
@@ -17,10 +18,14 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     @Getter
     TestClientRouter router;
 
+    @Getter
+    TestServerRouter serverRouter;
+
     @Before
     public void resetTest() {
-        router = new TestClientRouter();
-        getServersForTest().stream().forEach(router::addServer);
+        serverRouter = new TestServerRouter();
+        router = new TestClientRouter(serverRouter);
+        getServersForTest().stream().forEach(serverRouter::addServer);
         getClientsForTest().stream().forEach(router::addClient);
     }
 
