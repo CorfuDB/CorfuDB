@@ -58,8 +58,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         assertThat(testClass.get())
                 .isEqualTo(52);
 
-        CorfuRuntime runtime2 = new CorfuRuntime();
-        wireExistingRuntimeToTest(runtime2);
+        CorfuRuntime runtime2 = new CorfuRuntime(getDefaultEndpoint());
         runtime2.connect();
 
         TestClass testClass2 = runtime2.getObjectsView()
