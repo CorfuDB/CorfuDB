@@ -12,10 +12,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by mwei on 1/6/16.
  */
 public class LayoutViewTest extends AbstractViewTest {
-
-    @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
-
     @Test
     public void canGetLayout() {
         CorfuRuntime r = getDefaultRuntime().connect();
@@ -33,9 +29,9 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addLayoutServer(9000)
                 .addSequencer(9000)
                 .buildSegment()
-                .buildStripe()
-                .addLogUnit(9000)
-                .addToSegment()
+                    .buildStripe()
+                        .addLogUnit(9000)
+                    .addToSegment()
                 .addToLayout()
                 .build();
 
@@ -57,9 +53,9 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addLayoutServer(9001)
                 .addSequencer(9000)
                 .buildSegment()
-                .buildStripe()
-                .addLogUnit(9000)
-                .addToSegment()
+                    .buildStripe()
+                        .addLogUnit(9000)
+                    .addToSegment()
                 .addToLayout()
                 .build());
 

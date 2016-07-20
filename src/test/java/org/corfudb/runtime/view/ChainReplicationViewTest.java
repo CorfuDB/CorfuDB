@@ -22,18 +22,12 @@ import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
  */
 public class ChainReplicationViewTest extends AbstractViewTest {
 
-    @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
 
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingle()
             throws Exception {
-        // default layout is chain replication.
-        addSingleServer(9000);
-
-        //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
@@ -52,11 +46,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingleConcurrent()
             throws Exception {
-
-        addSingleServer(9000);
-
-        //begin tests
-        CorfuRuntime r = getRuntime().connect();
+        CorfuRuntime r = getDefaultRuntime();
 
         final int numberThreads = 5;
         final int numberRecords = 10_000;

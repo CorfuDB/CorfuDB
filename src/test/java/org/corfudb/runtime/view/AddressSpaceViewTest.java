@@ -24,9 +24,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class AddressSpaceViewTest extends AbstractViewTest {
 
-    @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
-
     @Test
     public void cacheMissTimesOut() {
         getDefaultRuntime().setCacheDisabled(false).connect();
@@ -47,9 +44,9 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingWorks()
             throws Exception {
-        addServer(9000, new ServerConfigBuilder().setSingle(false).build());
-        addServer(9001, new ServerConfigBuilder().setSingle(false).build());
-        addServer(9002, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9000);
+        addServer(9001);
+        addServer(9002);
 
         //configure the layout accordingly
         bootstrapAllServers(new TestLayoutBuilder()
@@ -163,9 +160,9 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingStreamReadAllWorks()
             throws Exception {
-        addServer(9000, new ServerConfigBuilder().setSingle(false).build());
-        addServer(9001, new ServerConfigBuilder().setSingle(false).build());
-        addServer(9002, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9000);
+        addServer(9001);
+        addServer(9002);
 
         bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
