@@ -96,6 +96,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     }
 
     public CorfuRuntime getDefaultRuntime() {
+        return getDefaultRuntime(false);
+    }
+
+    public CorfuRuntime getDefaultRuntime(boolean enableTransactionLogging) {
         // default layout is chain replication.
         routerMap.put(getDefaultEndpoint(), new TestClientRouter());
         addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap(),
@@ -104,7 +108,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
         wireRouters();
 
-        return getRuntime().connect();
+        return getRuntime().setTransactionLogging(enableTransactionLogging).connect();
     }
 
     public CorfuRuntime wireExistingRuntimeToTest(CorfuRuntime runtime) {
