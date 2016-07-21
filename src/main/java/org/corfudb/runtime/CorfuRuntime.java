@@ -180,6 +180,11 @@ public class CorfuRuntime {
         return this;
     }
 
+    public CorfuRuntime setTransactionLogging(boolean enable) {
+        this.getObjectsView().setTransactionLogging(enable);
+        return this;
+    }
+
     /**
      * Parse a configuration string and get a CorfuRuntime.
      *
@@ -192,17 +197,6 @@ public class CorfuRuntime {
                 .splitAsStream(configurationString)
                 .map(String::trim)
                 .collect(Collectors.toList());
-        return this;
-    }
-
-    /**
-     * Add a layout server to the list of servers known by the CorfuRuntime.
-     *
-     * @param layoutServer A layout server to use.
-     * @return A CorfuRuntime, to support the builder pattern.
-     */
-    public CorfuRuntime addLayoutServer(String layoutServer) {
-        layoutServers.add(layoutServer);
         return this;
     }
 

@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -19,6 +20,7 @@ import org.corfudb.util.LambdaUtils;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,8 +34,15 @@ import java.util.function.Supplier;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
+    static public UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
+
+    @Getter
+    @Setter
+    boolean transactionLogging = false;
+
     @Getter
     Map<Long, CompletableFuture> txFuturesMap = new ConcurrentHashMap<>();
+
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
     LoadingCache<StackTraceElement, CallSiteData> callSiteDataCache = Caffeine.newBuilder()
@@ -228,7 +237,12 @@ public class ObjectsView extends AbstractView {
                 TransactionalContext.getCurrentContext().addTransaction(context);
             } else {
                 TXEntry entry = ((OptimisticTransactionalContext) context).getEntry();
-                long address = runtime.getStreamsView().write(entry.getAffectedStreams(), entry);
+                Set<UUID> affectedStreams = entry.getAffectedStreams();
+                if(transactionLogging) {
+                    affectedStreams.add(TRANSACTION_STREAM_ID);
+                    log.trace("TX entry {} will be writted to transaction stream : {}", entry, TRANSACTION_STREAM_ID);
+                }
+                long address = runtime.getStreamsView().write(affectedStreams, entry);
                 TransactionalContext.removeContext();
                 log.trace("TX entry {} written at address {}", entry, address);
                 //now check if the TX will be an abort...

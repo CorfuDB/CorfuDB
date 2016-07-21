@@ -1,7 +1,9 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
@@ -76,8 +78,8 @@ public class ObjectsViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void abortedTransactionDoesNotConflict()
             throws Exception {
-        //begin tests
-        CorfuRuntime r = getDefaultRuntime();
+        //Enbale transaction logging
+        CorfuRuntime r = getDefaultRuntime(true);
 
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
         smrMap.put("a", "b");
@@ -103,6 +105,18 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         assertThat(smrMap)
                 .containsEntry("b", "b");
+
+        // The transaction stream should have two transaction entries, one for the first
+        // failed transaction and the other for successful transaction
+        StreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
+        ILogUnitEntry[] txns = txStream.readTo(5);
+        assertThat(txns.length).isEqualTo(2);
+        assertThat(txns[0].getLogEntry().getType()).isEqualTo(LogEntry.LogEntryType.TX);
+        assertThat(txns[1].getLogEntry().getType()).isEqualTo(LogEntry.LogEntryType.TX);
+        TXEntry tx1 = (TXEntry)txns[0].getLogEntry();
+        TXEntry tx2 = (TXEntry)txns[1].getLogEntry();
+        assertThat(tx1.isAborted()).isEqualTo(true);
+        assertThat(tx2.isAborted()).isEqualTo(false);
     }
 
     @Test

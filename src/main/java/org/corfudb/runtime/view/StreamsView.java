@@ -33,6 +33,7 @@ public class StreamsView {
      * @return A view
      */
     public StreamView get(UUID stream) {
+        // Todo(Maithem): we should have a mechanism for proper exclusion of a set of ids reserved by the system
         return new StreamView(runtime, stream);
     }
 
