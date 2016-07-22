@@ -67,7 +67,7 @@ public class LayoutClient implements IClient {
                 break;
             case LAYOUT_PREPARE_REJECT:
                 router.completeExceptionally(msg.getRequestID(),
-                        new OutrankedException(((LayoutRankMsg) msg).getRank()));
+                        new OutrankedException(((LayoutRankMsg) msg).getRank(), ((LayoutRankMsg) msg).getLayout()));
                 break;
             case LAYOUT_PROPOSE_REJECT:
                 router.completeExceptionally(msg.getRequestID(),
@@ -142,6 +142,11 @@ public class LayoutClient implements IClient {
      */
     public CompletableFuture<Boolean> committed(long rank, Layout layout)
     {
+        /*
+        LayoutRankMsg m = new LayoutRankMsg(layout, rank, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED);
+        m.setEpoch(layout == null ? 0 : layout.getEpoch());
+        return router.sendMessageAndGetCompletable(m);
+        */
         return router.sendMessageAndGetCompletable(
                 new LayoutRankMsg(layout, rank, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED)
         );

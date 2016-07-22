@@ -124,7 +124,7 @@ public class BaseClient implements IClient {
      * @param r     A reference to the router
      * @return      Always True, since the ACK message was successful.
      */
-    private static Object handleNack(CorfuSetEpochMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+    private static Object handleNack(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         return false;
     }
 

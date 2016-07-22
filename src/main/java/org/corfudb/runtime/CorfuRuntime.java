@@ -141,6 +141,27 @@ public class CorfuRuntime {
     }
 
     /**
+     * Stop all routers associated with this runtime & disconnect them.
+     */
+    public void stop() {
+        for (IClientRouter r: nodeRouters.values()) {
+            if (r.getClass() == NettyClientRouter.class) {
+                /*
+                int handlers = ((NettyClientRouter) r).handlerMap.size();
+                System.out.println("handlers " + handlers);
+                int clients = ((NettyClientRouter) r).clientList.size();
+                System.out.println("clients " + clients);
+                int outstandings = ((NettyClientRouter) r).outstandingRequests.size();
+                System.out.println("outstandings " + outstandings);
+                // (NettyClientRouter) r).context.channel().close();
+                */
+            }
+            r.stop();
+        }
+        nodeRouters = new ConcurrentHashMap<>();
+    }
+
+    /**
      * Parse a configuration string and get a CorfuRuntime.
      *
      * @param configurationString The configuration string to parse.
@@ -206,6 +227,17 @@ public class CorfuRuntime {
                 .splitAsStream(configurationString)
                 .map(String::trim)
                 .collect(Collectors.toList());
+        return this;
+    }
+
+    /**
+     * Add a layout server to the list of servers known by the CorfuRuntime.
+     *
+     * @param layoutServer A layout server to use.
+     * @return A CorfuRuntime, to support the builder pattern.
+     */
+    public CorfuRuntime addLayoutServer(String layoutServer) {
+        layoutServers.add(layoutServer);
         return this;
     }
 

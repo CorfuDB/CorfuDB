@@ -136,6 +136,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Getter
     Boolean connected_p;
 
+    public NettyClientRouter(String endpoint) {
+        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]));
+    }
+
     public NettyClientRouter(String host, Integer port) {
         this.host = host;
         this.port = port;
@@ -276,7 +280,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 }
             }
         });
-        connected_p = true; // QQQ SLF verify!
+        connected_p = true;
     }
 
     /**
@@ -308,6 +312,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             message.setClientID(clientID);
             message.setRequestID(thisRequest);
             message.setEpoch(epoch);
+
             // Generate a future and put it in the completion table.
             final CompletableFuture<T> cf = new CompletableFuture<>();
             outstandingRequests.put(thisRequest, cf);
@@ -422,10 +427,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
         // Check if the message is in the right epoch.
         if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != epoch) {
-            CorfuMsg m = new CorfuMsg();
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), epoch, msg);
-
             /* If this message was pending a completion, complete it with an error. */
             completeExceptionally(msg.getRequestID(), new WrongEpochException(msg.getEpoch()));
             return false;

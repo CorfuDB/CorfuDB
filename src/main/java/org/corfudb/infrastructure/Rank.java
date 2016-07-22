@@ -30,9 +30,16 @@ public class Rank implements Comparable<Rank> {
      */
     @Override
     public int compareTo(Rank other) {
+        /*
+        ** I spent a fair amount of time trying to figure out what prepare
+        ** with a duplicate rank would sometime succeed.  Here is why.
+        ** TODO: uncomment this code once its purpose is understood.
+        ** The LayoutServerTest.checkPhase1AndPhase2MessagesFromMultipleClients test is broken until this hack is reverted.
+
         if (rank.compareTo(other.getRank()) == 0) {
             return clientId.compareTo(other.clientId);
         }
+        */
         return rank.compareTo(other.getRank());
     }
 }
