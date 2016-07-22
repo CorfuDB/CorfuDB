@@ -1,5 +1,6 @@
 org.corfudb.cmdlets
 org.corfudb.infrastructure
+org.corfudb.infrastructure.log
 org.corfudb.protocols.logprotocol
 org.corfudb.protocols.wireprotocol
 org.corfudb.runtime
