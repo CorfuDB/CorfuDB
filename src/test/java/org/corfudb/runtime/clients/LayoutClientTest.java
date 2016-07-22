@@ -140,7 +140,9 @@ public class LayoutClientTest extends AbstractClientTest {
         assertThat(client.prepare(10L).get().isAccepted())
                 .isEqualTo(true);
 
-        assertThat(client.committed(10L, TestLayoutBuilder.single(9000)).get())
+        Layout layout = TestLayoutBuilder.single(9000);
+        layout.setEpoch(777);
+        assertThat(client.committed(10L, layout).get())
                 .isEqualTo(true);
     }
 

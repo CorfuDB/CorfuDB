@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Utils;
 import org.docopt.Docopt;
 
 import java.util.Map;
@@ -35,7 +36,7 @@ public class corfu_ping implements ICmdlet {
 
 
     @Override
-    public void main(String[] args) {
+    public String[] main2(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -95,5 +96,6 @@ public class corfu_ping implements ICmdlet {
             } catch (InterruptedException ie) {
             }
         }
+        // return cmdlet.err("FIXME 5");
     }
 }

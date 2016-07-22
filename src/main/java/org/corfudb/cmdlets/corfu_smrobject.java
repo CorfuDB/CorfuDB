@@ -2,6 +2,7 @@ package org.corfudb.cmdlets;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Utils;
 import org.docopt.Docopt;
 
 import java.lang.reflect.InvocationTargetException;
@@ -19,6 +20,8 @@ import static org.fusesource.jansi.Ansi.ansi;
  */
 public class corfu_smrobject implements ICmdlet {
 
+    static private CorfuRuntime rt = null;
+
     private static final String USAGE =
             "corfu_smrobject, interact with SMR objects in Corfu.\n"
                     + "\n"
@@ -35,7 +38,15 @@ public class corfu_smrobject implements ICmdlet {
                     + " --version                                      Show version\n";
 
     @Override
-    public void main(String[] args) {
+    public String[] main2(String[] args) {
+        if (args != null && args.length > 0 && args[0].contentEquals("reset")) {
+            if (rt != null) {
+                rt.stop();
+            }
+            rt = null;
+            return cmdlet.ok();
+        }
+
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -44,7 +55,30 @@ public class corfu_smrobject implements ICmdlet {
         configureBase(opts);
 
         // Get a org.corfudb.runtime instance from the options.
-        CorfuRuntime rt = configureRuntime(opts);
+        if (rt == null) {
+            rt = configureRuntime(opts);
+        }
+
+        String argz = ((String) opts.get("<args>"));
+        int arity;
+        String[] splitz = null;
+
+        if (argz == null) {
+            arity = 0;
+        } else {
+            splitz = argz.split(",");
+            if (argz.charAt(argz.length() - 1) == ',') {
+                arity = splitz.length + 1;
+                String[] new_splitz = new String[arity];
+                for (int i = 0; i < arity - 1; i++) {
+                    new_splitz[i] = splitz[i];
+                }
+                new_splitz[arity - 1] = "";
+                splitz = new_splitz;
+            } else {
+                arity = splitz.length;
+            }
+        }
 
         // Attempt to open the object
         Class<?> cls;
@@ -64,36 +98,30 @@ public class corfu_smrobject implements ICmdlet {
         try {
             m = Arrays.stream(cls.getDeclaredMethods())
                     .filter(x -> x.getName().equals(opts.get("<method>")))
-                    .filter(x -> x.getParameterCount() == (opts.get("<args>") == null ?
-                            0 : ((String) opts.get("<args>")).split(",").length))
+                    .filter(x -> x.getParameterCount() == arity)
                     .findFirst().get();
         } catch (NoSuchElementException nsee) {
-            throw new RuntimeException("Method " + opts.get("<method>") + " with " +
-                    (opts.get("<args>") == null ?
-                            0 : ((String) opts.get("<args>")).split(",").length)
+            return cmdlet.err("Method " + opts.get("<method>") + " with " +
+                    arity
                     + " arguments not found!");
         }
         if (m == null) {
-            throw new RuntimeException("Method " + opts.get("<method>") + " with " +
-                    (opts.get("<args>") == null ?
-                            0 : ((String) opts.get("<args>")).split(",").length)
+            return cmdlet.err("Method " + opts.get("<method>") + " with " +
+                    arity
                     + " arguments not found!");
         }
 
         Object ret;
         try {
-            ret = m.invoke(o, (opts.get("<args>") == null ?
-                    null : ((String) opts.get("<args>")).split(",")));
+            ret = m.invoke(o, splitz);
         } catch (IllegalAccessException | InvocationTargetException e) {
-            throw new RuntimeException("Couldn't invoke method on object", e);
+            return cmdlet.err("Couldn't invoke method on object" + e);
         }
 
         if (ret != null) {
-            System.out.println(ansi().fg(WHITE).a("Output:").reset());
-            System.out.println(ret.toString());
-            System.out.println(ansi().fg(GREEN).a("SUCCESS").reset());
+            return cmdlet.ok(ret.toString());
         } else {
-            System.out.println(ansi().fg(GREEN).a("SUCCESS").reset());
+            return cmdlet.ok();
         }
     }
 }

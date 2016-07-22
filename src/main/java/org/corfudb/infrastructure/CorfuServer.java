@@ -17,6 +17,7 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
@@ -44,6 +45,8 @@ import static org.fusesource.jansi.Ansi.ansi;
 
 @Slf4j
 public class CorfuServer {
+    @Getter
+    private static LayoutServer layoutServer;
 
     /**
      * This string defines the command line arguments,
@@ -60,7 +63,7 @@ public class CorfuServer {
             "Corfu Server, the server for the Corfu Infrastructure.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tcorfu_server (-l <path>|-m) [-fs] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] <port>\n"
+                    + "\tcorfu_server (-l <path>|-m) [-fsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-P <seconds>] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>            Set the path to the storage file for the log unit.\n"
@@ -81,6 +84,8 @@ public class CorfuServer {
                     + "                                         contiguous tail) in seconds [default: 60].\n"
                     + " -d <level>, --log-level=<level>         Set the logging level, valid levels are: \n"
                     + "                                         ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
+                    + " -Q, --quickcheck-test-mode              Run in QuickCheck test mode\n"
+                    + " -P <seconds>, --cm-poll-interval        Configuration manager poll interval [default: 1]\n"
                     + " -h, --help  Show this screen\n"
                     + " --version  Show version\n";
 
@@ -161,7 +166,8 @@ public class CorfuServer {
 
         // Add each role to the router.
         router.addServer(new SequencerServer(serverContext));
-        router.addServer(new LayoutServer(serverContext));
+        layoutServer = new LayoutServer(serverContext);
+        router.addServer(layoutServer);
         router.addServer(new LogUnitServer(serverContext));
         router.baseServer.setOptionsMap(opts);
 

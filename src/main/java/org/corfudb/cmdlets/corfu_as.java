@@ -6,6 +6,7 @@ import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Utils;
 import org.docopt.Docopt;
 
 import java.util.Collections;
@@ -35,7 +36,7 @@ public class corfu_as implements ICmdlet {
                     + " --version  Show version\n";
 
     @Override
-    public void main(String[] args) {
+    public String[] main2(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -59,6 +60,7 @@ public class corfu_as implements ICmdlet {
             log.error("Exception", e);
             throw new RuntimeException(e);
         }
+        return cmdlet.err("FIXME 13");
     }
 
     void write(CorfuRuntime runtime, Map<String, Object> opts)

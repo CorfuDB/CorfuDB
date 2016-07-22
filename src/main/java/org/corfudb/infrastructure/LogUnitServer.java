@@ -225,12 +225,12 @@ public class LogUnitServer extends AbstractServer {
                     "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
                     "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
             localLog = new InMemoryLog(0, Long.MAX_VALUE);
-            reset();
+            reboot();
         } else {
             localLog = new RollingLog(0, Long.MAX_VALUE, logdir, (Boolean) opts.get("--sync"));
         }
 
-        reset();
+        reboot();
 
 /*       compactTail seems to be broken, disabling it for now
          scheduler.scheduleAtFixedRate(this::compactTail,
@@ -244,6 +244,15 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     public void reset() {
+        // TODO: implement fully.
+        log.warn("LogUnitServer reset() called: NOT IMPLEMENTED");
+
+        reboot();
+    }
+
+    @Override
+    public void reboot() {
+        contiguousHead = 0L;
 
         if (dataCache != null) {
             /** Free all references */
