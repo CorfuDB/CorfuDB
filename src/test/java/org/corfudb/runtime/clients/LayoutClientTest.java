@@ -25,7 +25,7 @@ public class LayoutClientTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new LayoutServer(defaultOptionsMap(), getRouter()))
+                .add(new LayoutServer(defaultOptionsMap(), getServerRouter()))
                 .build();
     }
 

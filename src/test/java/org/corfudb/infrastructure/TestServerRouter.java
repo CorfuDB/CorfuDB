@@ -5,10 +5,16 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.runtime.clients.TestChannelContext;
+import org.corfudb.runtime.clients.TestRule;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,11 +22,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by mwei on 12/13/15.
  */
+@Slf4j
 public class TestServerRouter implements IServerRouter {
 
     @Getter
     public List<CorfuMsg> responseMessages;
-    AbstractServer serverUnderTest;
+
+    @Getter
+    public Map<CorfuMsg.CorfuMsgType, AbstractServer> handlerMap;
+
+    public List<TestRule> rules;
+
     AtomicLong requestCounter;
 
     @Getter
@@ -31,26 +43,64 @@ public class TestServerRouter implements IServerRouter {
         reset();
     }
 
-    void setServerUnderTest(AbstractServer server) {
-        serverUnderTest = server;
-    }
-
     public void reset() {
         this.responseMessages = new ArrayList<>();
         this.requestCounter = new AtomicLong();
+        this.handlerMap = new ConcurrentHashMap<>();
+        this.rules = new ArrayList<>();
     }
 
     @Override
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
+        outMsg.copyBaseFields(inMsg);
         outMsg.setEpoch(serverEpoch);
-        CorfuMsg response = simulateSerialization(outMsg);
-        this.responseMessages.add(response);
+        if (rules.stream()
+                .map(x -> x.evaluate(outMsg, this))
+                .allMatch(x -> x)) {
+            if (ctx != null && ctx instanceof TestChannelContext) {
+                ctx.writeAndFlush(outMsg);
+            } else {
+                this.responseMessages.add(outMsg);
+            }
+        }
     }
 
+    /**
+     * Register a server to route messages to
+     *
+     * @param server The server to route messages to
+     */
+    @Override
+    public void addServer(AbstractServer server) {
+        // Iterate through all types of CorfuMsgType, registering the handler
+        Arrays.<CorfuMsg.CorfuMsgType>stream(CorfuMsg.CorfuMsgType.values())
+                .forEach(x -> {
+                    if (x.handler.isInstance(server)) {
+                        handlerMap.put(x, server);
+                        log.trace("Registered {} to handle messages of type {}", server, x);
+                    }
+                });
+    }
+
+
     public void sendServerMessage(CorfuMsg msg) {
-        msg.setEpoch(serverEpoch);
-        msg.setRequestID(requestCounter.getAndIncrement());
-        serverUnderTest.handleMessage(msg, null, this);
+        AbstractServer as = handlerMap.get(msg.getMsgType());
+        if (as != null) {
+            as.handleMessage(msg, null, this);
+        }
+        else {
+            log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
+        }
+    }
+
+    public void sendServerMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
+        AbstractServer as = handlerMap.get(msg.getMsgType());
+        if (as != null) {
+            as.handleMessage(msg, ctx, this);
+        }
+        else {
+            log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
+        }
     }
 
     /**

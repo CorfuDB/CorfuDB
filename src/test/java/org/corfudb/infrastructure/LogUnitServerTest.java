@@ -26,7 +26,8 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder().build());
 
-        this.router.setServerUnderTest(s1);
+        this.router.reset();
+        this.router.addServer(s1);
         long address = 0L;
         LogUnitWriteMsg m = new LogUnitWriteMsg(address);
         //write at 0
@@ -54,7 +55,8 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setSync(true)
                 .build());
 
-        this.router.setServerUnderTest(s1);
+        this.router.reset();
+        this.router.addServer(s1);
         LogUnitWriteMsg m = new LogUnitWriteMsg(0L);
         //write at 0
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
@@ -94,7 +96,8 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setMemory(false)
                 .setSync(true)
                 .build());
-        this.router.setServerUnderTest(s2);
+        this.router.reset();
+        this.router.addServer(s2);
 
         assertThat(s2)
                 .containsDataAtAddress(0)
@@ -114,7 +117,8 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setSync(true)
                 .build());
 
-        this.router.setServerUnderTest(s1);
+        this.router.reset();
+        this.router.addServer(s1);
         LogUnitWriteMsg m = new LogUnitWriteMsg(0L);
         //write at 0
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
@@ -172,7 +176,8 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setSync(true)
                 .build());
 
-        this.router.setServerUnderTest(s1);
+        this.router.reset();
+        this.router.addServer(s1);
         LogUnitWriteMsg m = new LogUnitWriteMsg(0L);
         //write at 0
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));

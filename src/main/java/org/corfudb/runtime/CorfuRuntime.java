@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -93,6 +94,13 @@ public class CorfuRuntime {
      */
     @Getter
     public boolean backpointersDisabled = false;
+
+    /**
+     * When set, overrides the default getRouterFunction. Used by the testing
+     * framework to ensure the default routers used are for testing.
+     */
+    public static BiFunction<CorfuRuntime, String, IClientRouter> overrideGetRouterFunction = null;
+
     /**
      * A function to handle getting routers. Used by test framework to inject
      * a test router. Can also be used to provide alternative logic for obtaining
@@ -100,7 +108,8 @@ public class CorfuRuntime {
      */
     @Getter
     @Setter
-    public Function<String, IClientRouter> getRouterFunction = (address) -> {
+    public Function<String, IClientRouter> getRouterFunction = overrideGetRouterFunction != null ?
+            (address) -> overrideGetRouterFunction.apply(this, address) : (address) -> {
 
         // Return an existing router if we already have one.
         if (nodeRouters.containsKey(address)) {

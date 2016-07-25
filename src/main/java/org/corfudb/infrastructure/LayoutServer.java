@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.JSONUtils;

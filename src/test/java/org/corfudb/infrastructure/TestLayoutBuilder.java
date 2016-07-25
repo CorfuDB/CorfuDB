@@ -30,7 +30,7 @@ public class TestLayoutBuilder {
     }
 
     static String getEndpoint(int port) {
-        return "localhost:" + port;
+        return "test:" + port;
     }
 
     public static Layout single(int port) {
