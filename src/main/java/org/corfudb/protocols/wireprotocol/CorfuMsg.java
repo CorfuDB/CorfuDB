@@ -201,7 +201,9 @@ public class CorfuMsg {
         ERROR_RANK(54, CorfuMsg.class, LogUnitServer.class),
 
         // EXTRA CODES
-        LAYOUT_ALREADY_BOOTSTRAP(60, CorfuMsg.class, LayoutServer.class);
+        LAYOUT_ALREADY_BOOTSTRAP(60, CorfuMsg.class, LayoutServer.class),
+        LAYOUT_PREPARE_ACK(61, LayoutRankMsg.class, LayoutServer.class);
+
 
         public final int type;
         public final Class<? extends CorfuMsg> messageType;

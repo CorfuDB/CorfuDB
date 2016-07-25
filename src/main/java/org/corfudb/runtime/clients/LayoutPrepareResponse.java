@@ -1,0 +1,23 @@
+package org.corfudb.runtime.clients;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.ToString;
+import org.corfudb.runtime.view.Layout;
+
+/**
+ * {@link org.corfudb.infrastructure.LayoutServer} response in phase1 of paxos can be an accept or reject.
+ * If a {@link org.corfudb.infrastructure.LayoutServer} accepts (the proposal rank is higher than
+ * any seen by the server so far), it will send back a previously agreed {@link Layout}.
+ * {@link org.corfudb.infrastructure.LayoutServer} will reject any proposal with a rank less than or equal to
+ * any already seen by the server.
+ * <p>
+ * Created by mdhawan on 7/21/16.
+ */
+@ToString(callSuper = true)
+@Data
+@AllArgsConstructor
+public class LayoutPrepareResponse {
+    boolean accepted;
+    Layout layout;
+}

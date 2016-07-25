@@ -2,11 +2,7 @@ package org.corfudb.runtime.view;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
@@ -26,7 +22,8 @@ import java.util.stream.Stream;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-@ToString(exclude = "runtime")
+@ToString(exclude = {"runtime", "valid"})
+@EqualsAndHashCode(exclude = {"runtime","valid"})
 public class Layout implements Cloneable {
     /**
      * A Gson parser.

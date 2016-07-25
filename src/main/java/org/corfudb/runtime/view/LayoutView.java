@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LayoutPrepareResponse;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.util.CFUtils;
@@ -51,7 +52,7 @@ public class LayoutView extends AbstractView {
         layoutHelper(
                 (LayoutFunction<Layout, Void, QuorumUnreachableException, OutrankedException, RuntimeException, RuntimeException>)
                         l -> {
-                            CompletableFuture<Boolean>[] prepareList = l.getLayoutClientStream()
+                            CompletableFuture<LayoutPrepareResponse>[] prepareList = l.getLayoutClientStream()
                                     .map(x -> x.prepare(rank))
                                     .toArray(CompletableFuture[]::new);
 
@@ -78,8 +79,8 @@ public class LayoutView extends AbstractView {
 
                                 // count successes.
                                 long count = Arrays.stream(prepareList)
-                                        .map(x -> x.getNow(false))
-                                        .filter(x -> true)
+                                        .map(x -> x.getNow(new LayoutPrepareResponse(false, null)))
+                                        .filter( x -> x.isAccepted())
                                         .count();
 
                                 log.debug("Successful responses={}, needed={}, timeouts={}", count, getQuorumNumber(), timeouts);
