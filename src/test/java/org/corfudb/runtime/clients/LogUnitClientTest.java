@@ -112,66 +112,6 @@ public class LogUnitClientTest extends AbstractClientTest {
     }
 
     @Test
-    public void contiguousTailIsCorrect()
-            throws Exception {
-        byte[] testString = "hello world".getBytes();
-        assertThat(client.getContiguousTail(null).get().contiguousTail)
-                .isEqualTo(-1);
-        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
-        client.forceCompact();
-        assertThat(client.getContiguousTail(null).get().contiguousTail)
-                .isEqualTo(0);
-        client.write(1, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
-        client.forceCompact();
-        assertThat(client.getContiguousTail(null).get().contiguousTail)
-                .isEqualTo(1);
-        client.write(100, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
-        client.forceCompact();
-        assertThat(client.getContiguousTail(null).get().contiguousTail)
-                .isEqualTo(1);
-    }
-
-    @Test
-    public void contiguousStreamIsCorrect()
-            throws Exception {
-        byte[] testString = "hello world".getBytes();
-        UUID streamA = CorfuRuntime.getStreamID("a");
-        UUID streamB = CorfuRuntime.getStreamID("b");
-        assertThat(client.getContiguousTail(streamA).get().getRange().contains(0L))
-                .isFalse();
-
-        client.write(0, Collections.singleton(streamA), 0, testString, Collections.emptyMap()).get();
-        client.forceCompact();
-        assertThat(client.getContiguousTail(streamA).get().getRange().contains(0L))
-                .isTrue();
-
-        client.write(1, Collections.singleton(streamA), 0, testString, Collections.emptyMap()).get();
-        client.forceCompact();
-        assertThat(client.getContiguousTail(streamA).get().getRange().contains(0L))
-                .isTrue();
-        assertThat(client.getContiguousTail(streamA).get().getRange().contains(1L))
-                .isTrue();
-
-        client.write(2, Collections.singleton(streamB), 0, testString, Collections.emptyMap()).get();
-        client.forceCompact();
-        assertThat(client.getContiguousTail(streamA).get().getRange().contains(0L))
-                .isTrue();
-        assertThat(client.getContiguousTail(streamA).get().getRange().contains(1L))
-                .isTrue();
-        assertThat(client.getContiguousTail(streamB).get().getRange().contains(2L))
-                .isTrue();
-
-        client.write(100, Collections.singleton(streamB), 0, testString, Collections.emptyMap()).get();
-        client.forceCompact();
-        assertThat(client.getContiguousTail(streamA).get().getRange().contains(0L))
-                .isTrue();
-        assertThat(client.getContiguousTail(streamA).get().getRange().contains(1L))
-                .isTrue();
-        assertThat(client.getContiguousTail(streamB).get().getRange().contains(2L))
-                .isTrue();
-    }
-
-    @Test
     public void canReadRange()
             throws Exception {
         RangeSet<Long> ranges = TreeRangeSet.create();
