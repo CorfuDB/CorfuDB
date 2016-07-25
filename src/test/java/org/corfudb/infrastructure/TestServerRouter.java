@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 12/13/15.
@@ -98,4 +102,24 @@ public class TestServerRouter implements IServerRouter {
             log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
         }
     }
+
+    /**
+     * This simulates the serialization and deserialization that happens in the Netty pipeline for all messages
+     * from server to client.
+     *
+     * @param message
+     * @return
+     */
+
+    public CorfuMsg simulateSerialization(CorfuMsg message) {
+        /* simulate serialization/deserialization */
+        ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
+        Class<? extends CorfuMsg> type = message.getMsgType().messageType;
+        //extra assert needed to simulate real Netty behavior
+        assertThat(message.getClass().getSimpleName()).isEqualTo(type.getSimpleName());
+        type.cast(message).serialize(oBuf);
+        oBuf.resetReaderIndex();
+        return CorfuMsg.deserialize(oBuf);
+    }
+
 }

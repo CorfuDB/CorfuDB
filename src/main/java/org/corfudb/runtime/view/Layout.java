@@ -22,8 +22,8 @@ import java.util.stream.Stream;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-@ToString(exclude = "runtime")
-@EqualsAndHashCode
+@ToString(exclude = {"runtime", "valid"})
+@EqualsAndHashCode(exclude = {"runtime","valid"})
 public class Layout implements Cloneable {
     /**
      * A Gson parser.

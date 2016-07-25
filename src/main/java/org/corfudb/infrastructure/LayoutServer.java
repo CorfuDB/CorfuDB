@@ -314,7 +314,7 @@ public class LayoutServer extends AbstractServer {
                 } else {
                     savePhase1Data(prepareRank);
                     log.debug("New phase 1 rank={}", phase1Rank);
-                    r.sendResponse(ctx, msg, new LayoutRankMsg(proposedLayout, phase1Rank.getRank(), CorfuMsg.CorfuMsgType.ACK));
+                    r.sendResponse(ctx, msg, new LayoutRankMsg(proposedLayout, phase1Rank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK));
                 }
             }
             break;

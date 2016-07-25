@@ -106,7 +106,7 @@ public class corfu_layout implements ICmdlet {
             long rank = Long.parseLong((String) opts.get("--rank"));
             log.debug("Prepare with new rank={}", rank);
             try {
-                if (router.getClient(LayoutClient.class).prepare(rank).get()) {
+                if (router.getClient(LayoutClient.class).prepare(rank).get().isAccepted()) {
                     System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
                             .reset().fg(GREEN).a(": ACK"));
                 } else {

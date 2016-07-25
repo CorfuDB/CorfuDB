@@ -114,6 +114,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         new TestServer(new ServerConfigBuilder().setSingle(false).setPort(port).build()).addToTest(port, this);
     }
 
+
     /** Add a default, in-memory bootstrapped single node server at a specific port.
      *
      * @param port      The port to use.

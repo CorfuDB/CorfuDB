@@ -90,7 +90,7 @@ public class LayoutServerTest extends AbstractServerTest {
         bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
         sendMessage(new LayoutRankMsg(null, 10, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_REJECT);
@@ -106,7 +106,7 @@ public class LayoutServerTest extends AbstractServerTest {
         bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
         sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT);
@@ -117,7 +117,7 @@ public class LayoutServerTest extends AbstractServerTest {
         bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 10, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
         sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
@@ -131,7 +131,7 @@ public class LayoutServerTest extends AbstractServerTest {
         bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
         sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
@@ -157,7 +157,7 @@ public class LayoutServerTest extends AbstractServerTest {
         l100.setEpoch(100);
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
         sendMessage(new LayoutRankMsg(l100, 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
 
         assertThat(getLastMessage().getMsgType())
@@ -215,7 +215,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         // validate phase 1
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
 
 //        assertThat(s1).isInEpoch(0);
         assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
@@ -273,7 +273,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         // validate phase 1
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
 
         assertThat(s1).isInEpoch(0);
         assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
@@ -296,7 +296,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         //new LAYOUT_PREPARE message with a higher phase1 rank should be accepted
         sendMessage(new LayoutRankMsg(null, 101, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
     }
 
     /**
@@ -325,7 +325,7 @@ public class LayoutServerTest extends AbstractServerTest {
         l100.setEpoch(100);
         // validate phase 1
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
 
         // the epoch should not change yet.
 //        assertThat(s1).isInEpoch(0);
@@ -395,7 +395,7 @@ public class LayoutServerTest extends AbstractServerTest {
         l100.setEpoch(100);
         /* validate phase 1 */
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
 
         // the epoch should not change yet.
 //        assertThat(s1).isInEpoch(0);
@@ -407,11 +407,11 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_REJECT);
 
         sendMessage(UUID.nameUUIDFromBytes("TEST_CLIENT_OTHER".getBytes()), new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
 
         // message from a different client but with a higher rank gets accepted
         sendMessage(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), new LayoutRankMsg(null, 101, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
         assertThat(s1).isPhase1Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
 //        assertThat(s1).isInEpoch(0);
 

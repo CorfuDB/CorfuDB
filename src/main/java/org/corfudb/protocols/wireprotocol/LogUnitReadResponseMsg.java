@@ -8,6 +8,7 @@ import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.Accessors;
 import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.log.LogUnitEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -41,7 +42,7 @@ public class LogUnitReadResponseMsg extends LogUnitPayloadMsg {
         this.result = result;
     }
 
-    public LogUnitReadResponseMsg(LogUnitServer.LogUnitEntry entry) {
+    public LogUnitReadResponseMsg(LogUnitEntry entry) {
         this.msgType = CorfuMsgType.READ_RESPONSE;
         this.result = ReadResultType.DATA;
         this.setMetadataMap(entry.getMetadataMap());
