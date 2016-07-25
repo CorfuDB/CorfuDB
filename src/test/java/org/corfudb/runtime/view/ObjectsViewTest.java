@@ -22,9 +22,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class ObjectsViewTest extends AbstractViewTest {
 
-    @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
-
     public static boolean referenceTX(Map<String, String> smrMap) {
         smrMap.put("a", "b");
         assertThat(smrMap)
@@ -79,7 +76,8 @@ public class ObjectsViewTest extends AbstractViewTest {
     public void abortedTransactionDoesNotConflict()
             throws Exception {
         //Enbale transaction logging
-        CorfuRuntime r = getDefaultRuntime(true);
+        CorfuRuntime r = getDefaultRuntime()
+                .setTransactionLogging(true);
 
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
         smrMap.put("a", "b");
@@ -109,7 +107,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         // The transaction stream should have two transaction entries, one for the first
         // failed transaction and the other for successful transaction
         StreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
-        ILogUnitEntry[] txns = txStream.readTo(5);
+        ILogUnitEntry[] txns = txStream.readTo(Long.MAX_VALUE);
         assertThat(txns.length).isEqualTo(2);
         assertThat(txns[0].getLogEntry().getType()).isEqualTo(LogEntry.LogEntryType.TX);
         assertThat(txns[1].getLogEntry().getType()).isEqualTo(LogEntry.LogEntryType.TX);
