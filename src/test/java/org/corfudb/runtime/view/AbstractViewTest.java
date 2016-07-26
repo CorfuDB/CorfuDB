@@ -286,7 +286,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         TestServer(Map<String, Object> optsMap)
         {
             serverRouter = new TestServerRouter();
-            baseServer = new BaseServer(serverRouter);
+            baseServer = new BaseServer();
             sequencerServer = new SequencerServer(optsMap);
             layoutServer = new LayoutServer(optsMap, serverRouter);
             logUnitServer = new LogUnitServer(optsMap);

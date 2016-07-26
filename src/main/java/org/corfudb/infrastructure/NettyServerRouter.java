@@ -40,7 +40,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
 
     public NettyServerRouter() {
         handlerMap = new ConcurrentHashMap<>();
-        baseServer = new BaseServer(this);
+        baseServer = new BaseServer();
         addServer(baseServer);
     }
 

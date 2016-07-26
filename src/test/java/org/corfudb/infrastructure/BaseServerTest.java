@@ -15,7 +15,7 @@ public class BaseServerTest extends AbstractServerTest {
 
     @Before
     public void setupTest() {
-        server = new BaseServer(this.router);
+        server = new BaseServer();
         this.setServer(server);
     }
 
