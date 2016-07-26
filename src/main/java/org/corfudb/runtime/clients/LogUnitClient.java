@@ -4,19 +4,16 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuRangeMsg;
-import org.corfudb.protocols.wireprotocol.CorfuUUIDMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitFillHoleMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitGCIntervalMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadRangeResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadRequestMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
-import org.corfudb.protocols.wireprotocol.LogUnitTailMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitTrimMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
@@ -49,11 +46,8 @@ public class LogUnitClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.FORCE_GC)
                     .add(CorfuMsg.CorfuMsgType.GC_INTERVAL)
                     .add(CorfuMsg.CorfuMsgType.FORCE_COMPACT)
-                    .add(CorfuMsg.CorfuMsgType.CONTIGUOUS_TAIL)
-                    .add(CorfuMsg.CorfuMsgType.GET_CONTIGUOUS_TAIL)
                     .add(CorfuMsg.CorfuMsgType.READ_RANGE)
                     .add(CorfuMsg.CorfuMsgType.READ_RANGE_RESPONSE)
-                    .add(CorfuMsg.CorfuMsgType.STREAM_READ)
 
                     .add(CorfuMsg.CorfuMsgType.ERROR_OK)
                     .add(CorfuMsg.CorfuMsgType.ERROR_TRIMMED)
@@ -97,12 +91,6 @@ public class LogUnitClient implements IClient {
                 rmsg.getResponseMap().entrySet().parallelStream()
                         .forEach(e -> lr.put(e.getKey(), new ReadResult(e.getValue())));
                 router.completeRequest(msg.getRequestID(), lr);
-            }
-            break;
-            case CONTIGUOUS_TAIL: {
-                LogUnitTailMsg m = (LogUnitTailMsg) msg;
-                router.completeRequest(msg.getRequestID(), new ContiguousTailData(m.getContiguousTail(),
-                        m.getStreamAddresses()));
             }
             break;
         }
@@ -205,25 +193,6 @@ public class LogUnitClient implements IClient {
     }
 
     /**
-     * Read a contiguous stream prefix
-     *
-     * @param streamID The stream to read.
-     */
-    public CompletableFuture<Map<Long, ReadResult>> readStream(UUID streamID) {
-        return router.sendMessageAndGetCompletable(new CorfuUUIDMsg(CorfuMsg.CorfuMsgType.STREAM_READ, streamID));
-    }
-
-    /**
-     * Get the contiguous tail data for a particular stream.
-     *
-     * @param stream The contiguous tail for a stream.
-     * @return A ContiguousTailData containing the data for that stream.
-     */
-    public CompletableFuture<ContiguousTailData> getContiguousTail(UUID stream) {
-        return router.sendMessageAndGetCompletable(new CorfuUUIDMsg(CorfuMsg.CorfuMsgType.GET_CONTIGUOUS_TAIL, stream));
-    }
-
-    /**
      * Change the default garbage collection interval.
      *
      * @param millis The new garbage collection interval, in milliseconds.
@@ -232,10 +201,5 @@ public class LogUnitClient implements IClient {
         router.sendMessage(new LogUnitGCIntervalMsg(millis));
     }
 
-    @Data
-    public static class ContiguousTailData {
-        final Long contiguousTail;
-        final RangeSet<Long> range;
-    }
 
 }

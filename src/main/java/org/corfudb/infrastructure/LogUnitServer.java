@@ -7,7 +7,6 @@ import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
-import com.google.common.collect.TreeRangeSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Data;
@@ -20,14 +19,12 @@ import org.corfudb.infrastructure.log.LogUnitEntry;
 import org.corfudb.infrastructure.log.RollingLog;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuRangeMsg;
-import org.corfudb.protocols.wireprotocol.CorfuUUIDMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitFillHoleMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitGCIntervalMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadRangeResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadRequestMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
-import org.corfudb.protocols.wireprotocol.LogUnitTailMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitTrimMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
 import org.corfudb.util.Utils;
@@ -35,10 +32,7 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -89,16 +83,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @Getter
     long contiguousHead;
-    @Getter
-    long contiguousTail;
-    /**
-     * The addresses that this unit has seen, temporarily until they are integrated into the contiguousTail.
-     */
-    Set<Address> seenAddressesTemp;
-    /**
-     * A range set representing trimmed addresses on the log unit.
-     */
-    RangeSet<Long> trimRange;
+
     ConcurrentHashMap<UUID, Long> trimMap;
     IntervalAndSentinelRetry gcRetry;
     AtomicBoolean running = new AtomicBoolean(true);
@@ -108,10 +93,6 @@ public class LogUnitServer extends AbstractServer {
      */
     LoadingCache<Long, LogUnitEntry> dataCache;
     long maxCacheSize;
-    /**
-     * This cache services requests for stream addresses.
-     */
-    LoadingCache<UUID, RangeSet<Long>> streamCache;
 
     private final AbstractLocalLog localLog;
 
@@ -141,32 +122,6 @@ public class LogUnitServer extends AbstractServer {
 
         gcThread = new Thread(this::runGC);
         gcThread.start();
-    }
-
-    public synchronized void compactTail() {
-        long numEntries = 0;
-        List<Address> setCopy = new ArrayList<>(seenAddressesTemp);
-        Collections.sort(setCopy);
-        for (Address i : setCopy) {
-            if (i.getLogAddress() == contiguousTail + 1) {
-                contiguousTail = i.getLogAddress();
-                seenAddressesTemp.remove(i);
-                numEntries++;
-
-                if (i.getStreamIDs().size() > 0) {
-                    for (UUID stream : i.getStreamIDs()) {
-                        RangeSet<Long> currentSet = streamCache.get(stream);
-                        currentSet.add(Range.singleton(i.getLogAddress()));
-                        streamCache.put(stream, currentSet);
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-        if (numEntries > 0) {
-            log.debug("Completed tail compaction, compacted {} entries, tail is now at {}", numEntries, contiguousTail);
-        }
     }
 
     @Override
@@ -213,40 +168,12 @@ public class LogUnitServer extends AbstractServer {
                 log.debug("Trim requested at prefix={}", m.getPrefix());
             }
             break;
-            case FORCE_COMPACT: {
-                log.info("Compaction forced by client {}", msg.getClientID());
-                compactTail();
-            }
-            break;
-            case GET_CONTIGUOUS_TAIL: {
-                CorfuUUIDMsg m = (CorfuUUIDMsg) msg;
-                if (m.getId() == null) {
-                    r.sendResponse(ctx, m, new LogUnitTailMsg(contiguousTail));
-                } else {
-                    r.sendResponse(ctx, m, new LogUnitTailMsg(contiguousTail, streamCache.get(m.getId())));
-                }
-            }
-            break;
-            case STREAM_READ: {
-                CorfuUUIDMsg m = (CorfuUUIDMsg) msg;
-                if (m.getId() == null) {
-                    r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.CorfuMsgType.NACK));
-                } else {
-                    CorfuRangeMsg rm = new CorfuRangeMsg(streamCache.get(m.getId()));
-                    rm.copyBaseFields(m);
-                    read(rm, ctx, r);
-                }
-            }
-            break;
         }
     }
 
     @Override
     public void reset() {
         contiguousHead = 0L;
-        contiguousTail = -1L;
-        trimRange = TreeRangeSet.create();
-        seenAddressesTemp = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
         if (dataCache != null) {
             /** Free all references */
@@ -264,7 +191,6 @@ public class LogUnitServer extends AbstractServer {
                         if (dataCache.getIfPresent(address) != null) {// || seenAddresses.contains(address)) {
                             throw new RuntimeException("overwrite");
                         }
-                        seenAddressesTemp.add(new Address(address, entry.getStreams()));
                         if (!entry.isPersisted) { //don't persist an entry twice.
                             localLog.write(address, entry);
                         }
@@ -276,28 +202,9 @@ public class LogUnitServer extends AbstractServer {
                     }
                 }).build(this::handleRetrieval);
 
-        streamCache = Caffeine.newBuilder()
-                .maximumSize(Utils.getOption(opts, "--stream-cache", Long.class, 5L))
-                .writer(new CacheWriter<UUID, RangeSet<Long>>() {
-                    @Override
-                    public void write(UUID streamID, RangeSet<Long> entry) {
-                        localLog.streamWrite(streamID, entry);
-                    }
-
-                    @Override
-                    public void delete(UUID streamID, RangeSet<Long> entry, RemovalCause removalCause) {
-                        // never need to delete
-                    }
-                }).build(this::handleStreamRetrieval);
-
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
         trimMap = new ConcurrentHashMap<>();
-    }
-
-    @SuppressWarnings("unchecked")
-    public RangeSet<Long> handleStreamRetrieval(UUID stream) {
-        return localLog.streamRead(stream);
     }
 
     /**
@@ -328,17 +235,13 @@ public class LogUnitServer extends AbstractServer {
      */
     public void read(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("Read[{}]", msg.getAddress());
-        if (trimRange.contains(msg.getAddress())) {
-            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.TRIMMED));
+        LogUnitEntry e = dataCache.get(msg.getAddress());
+        if (e == null) {
+            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
+        } else if (e.isHole) {
+            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.FILLED_HOLE));
         } else {
-            LogUnitEntry e = dataCache.get(msg.getAddress());
-            if (e == null) {
-                r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
-            } else if (e.isHole) {
-                r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.FILLED_HOLE));
-            } else {
-                r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(e));
-            }
+            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(e));
         }
     }
 
@@ -365,22 +268,17 @@ public class LogUnitServer extends AbstractServer {
     public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         long address = msg.getAddress();
         log.trace("Write[{}]", address);
-        //TODO: locking of trimRange.
-        if (trimRange.contains(address)) {
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_TRIMMED));
-        } else {
-            // The payload in the message is a view of a larger buffer allocated
-            // by netty, thus direct memory can leak. Copy the view and release the
-            // underlying buffer
-            LogUnitEntry e = new LogUnitEntry(address, msg.getData().copy(), msg.getMetadataMap(), false);
-            msg.getData().release();
-            try {
-                dataCache.put(e.getAddress(), e);
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OK));
-            } catch (Exception ex) {
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE));
-                e.getBuffer().release();
-            }
+        // The payload in the message is a view of a larger buffer allocated
+        // by netty, thus direct memory can leak. Copy the view and release the
+        // underlying buffer
+        LogUnitEntry e = new LogUnitEntry(address, msg.getData().copy(), msg.getMetadataMap(), false);
+        msg.getData().release();
+        try {
+            dataCache.put(e.getAddress(), e);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OK));
+        } catch (Exception ex) {
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE));
+            e.getBuffer().release();
         }
     }
 
@@ -399,8 +297,6 @@ public class LogUnitServer extends AbstractServer {
     public boolean handleGC() {
         log.info("Garbage collector starting...");
         long freedEntries = 0;
-
-        log.trace("Trim range is {}", trimRange);
 
         /* Pick a non-compacted region or just scan the cache */
         Map<Long, LogUnitEntry> map = dataCache.asMap();
@@ -438,7 +334,7 @@ public class LogUnitServer extends AbstractServer {
 
     public void trimEntry(long address, Set<java.util.UUID> streams, LogUnitEntry entry) {
         // Add this entry to the trimmed range map.
-        trimRange.add(Range.closed(address, address));
+        //trimRange.add(Range.closed(address, address));
         // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
         // assuming the entry is back by disk
         dataCache.invalidate(address);
@@ -459,26 +355,5 @@ public class LogUnitServer extends AbstractServer {
     @VisibleForTesting
     LoadingCache<Long, LogUnitEntry> getDataCache() {
         return dataCache;
-    }
-
-    @Data
-    class Address implements Comparable<Address> {
-        final long logAddress;
-        final Set<UUID> StreamIDs;
-
-        @Override
-        public int compareTo(Address o) {
-            return Long.compare(logAddress, o.logAddress);
-        }
-
-        @Override
-        public int hashCode() {
-            return Long.hashCode(logAddress);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            return obj instanceof Address && logAddress == ((Address) obj).logAddress;
-        }
     }
 }

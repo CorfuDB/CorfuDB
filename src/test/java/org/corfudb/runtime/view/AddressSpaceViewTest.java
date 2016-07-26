@@ -204,13 +204,5 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(5, Collections.singleton(streamA),
                 "3".getBytes(), Collections.emptyMap());
 
-        r.getAddressSpaceView().compactAll();
-
-        Map<Long, ILogUnitEntry> aAddresses = r.getAddressSpaceView().readPrefix(streamA);
-        assertThat(aAddresses.keySet())
-                .contains(0L)
-                .contains(1L)
-                .contains(3L)
-                .doesNotContain(2L);
     }
 }

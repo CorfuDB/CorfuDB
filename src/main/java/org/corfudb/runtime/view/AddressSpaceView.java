@@ -40,11 +40,6 @@ public class AddressSpaceView extends AbstractView {
     static LoadingCache<Long, ILogUnitEntry> readCache;
 
     /**
-     * A cache for stream addresses.
-     */
-    static LoadingCache<UUID, Set<Long>> streamAddressCache;
-
-    /**
      * Duration before retrying an empty read.
      */
     @Getter
@@ -80,9 +75,6 @@ public class AddressSpaceView extends AbstractView {
                         return cacheFetch((Iterable<Long>) keys);
                     }
                 });
-
-        streamAddressCache = Caffeine.newBuilder()
-                .build(this::getStream);
     }
 
     /**
@@ -93,19 +85,8 @@ public class AddressSpaceView extends AbstractView {
      * @return The long
      */
     private Set<Long> getStream(UUID streamID) {
-        return layoutHelper(l -> {
-            Set<Long> rSet = Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
-            for (Layout.LayoutSegment s : l.getSegments()) {
-                AbstractReplicationView v = AbstractReplicationView
-                        .getReplicationView(l, s.getReplicationMode(), s);
-                Map<Long, ILogUnitEntry> r = v.read(streamID);
-                if (!runtime.cacheDisabled) {
-                    readCache.putAll(r);
-                }
-                rSet.addAll(r.keySet());
-            }
-            return rSet;
-        });
+        /* TODO : implement in both backpointer and Replex cases */
+        throw new UnsupportedOperationException("unsupported");
     }
 
     /**
@@ -116,19 +97,8 @@ public class AddressSpaceView extends AbstractView {
      * @return The long
      */
     private Map<Long, ILogUnitEntry> fetchStream(UUID streamID) {
-        return layoutHelper(l -> {
-            Map<Long, ILogUnitEntry> rMap = new ConcurrentHashMap<>();
-            for (Layout.LayoutSegment s : l.getSegments()) {
-                AbstractReplicationView v = AbstractReplicationView
-                        .getReplicationView(l, s.getReplicationMode(), s);
-                Map<Long, ILogUnitEntry> r = v.read(streamID);
-                if (!runtime.cacheDisabled) {
-                    readCache.putAll(r);
-                }
-                rMap.putAll(r);
-            }
-            return rMap;
-        });
+        /* TODO : implement in both backpointer and Replex cases */
+        throw new UnsupportedOperationException("unsupported");
     }
 
     /**
@@ -196,11 +166,8 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public Map<Long, ILogUnitEntry> readPrefix(UUID stream) {
-
-        if (!runtime.isCacheDisabled()) {
-            return readCache.getAll(streamAddressCache.get(stream));
-        }
-        return fetchStream(stream);
+        /* TODO : implement in both backpointer and Replex cases */
+        throw new UnsupportedOperationException("unsupported");
     }
 
 
