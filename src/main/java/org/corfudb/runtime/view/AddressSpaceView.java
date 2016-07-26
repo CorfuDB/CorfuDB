@@ -40,11 +40,6 @@ public class AddressSpaceView extends AbstractView {
     static LoadingCache<Long, ILogUnitEntry> readCache;
 
     /**
-     * A cache for stream addresses.
-     */
-    static LoadingCache<UUID, Set<Long>> streamAddressCache;
-
-    /**
      * Duration before retrying an empty read.
      */
     @Getter
@@ -80,9 +75,6 @@ public class AddressSpaceView extends AbstractView {
                         return cacheFetch((Iterable<Long>) keys);
                     }
                 });
-
-        streamAddressCache = Caffeine.newBuilder()
-                .build(this::getStream);
     }
 
     /**
