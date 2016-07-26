@@ -93,19 +93,8 @@ public class AddressSpaceView extends AbstractView {
      * @return The long
      */
     private Set<Long> getStream(UUID streamID) {
-        return layoutHelper(l -> {
-            Set<Long> rSet = Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
-            for (Layout.LayoutSegment s : l.getSegments()) {
-                AbstractReplicationView v = AbstractReplicationView
-                        .getReplicationView(l, s.getReplicationMode(), s);
-                Map<Long, ILogUnitEntry> r = v.read(streamID);
-                if (!runtime.cacheDisabled) {
-                    readCache.putAll(r);
-                }
-                rSet.addAll(r.keySet());
-            }
-            return rSet;
-        });
+        /* TODO : implement in both backpointer and Replex cases */
+        throw new UnsupportedOperationException("unsupported");
     }
 
     /**
