@@ -379,25 +379,4 @@ public class LogUnitServer extends AbstractServer {
     LoadingCache<Long, LogUnitEntry> getDataCache() {
         return dataCache;
     }
-
-    @Data
-    class Address implements Comparable<Address> {
-        final long logAddress;
-        final Set<UUID> StreamIDs;
-
-        @Override
-        public int compareTo(Address o) {
-            return Long.compare(logAddress, o.logAddress);
-        }
-
-        @Override
-        public int hashCode() {
-            return Long.hashCode(logAddress);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            return obj instanceof Address && logAddress == ((Address) obj).logAddress;
-        }
-    }
 }
