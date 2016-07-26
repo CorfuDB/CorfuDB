@@ -116,19 +116,8 @@ public class AddressSpaceView extends AbstractView {
      * @return The long
      */
     private Map<Long, ILogUnitEntry> fetchStream(UUID streamID) {
-        return layoutHelper(l -> {
-            Map<Long, ILogUnitEntry> rMap = new ConcurrentHashMap<>();
-            for (Layout.LayoutSegment s : l.getSegments()) {
-                AbstractReplicationView v = AbstractReplicationView
-                        .getReplicationView(l, s.getReplicationMode(), s);
-                Map<Long, ILogUnitEntry> r = v.read(streamID);
-                if (!runtime.cacheDisabled) {
-                    readCache.putAll(r);
-                }
-                rMap.putAll(r);
-            }
-            return rMap;
-        });
+        /* TODO : implement in both backpointer and Replex cases */
+        throw new UnsupportedOperationException("unsupported");
     }
 
     /**
@@ -196,11 +185,8 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public Map<Long, ILogUnitEntry> readPrefix(UUID stream) {
-
-        if (!runtime.isCacheDisabled()) {
-            return readCache.getAll(streamAddressCache.get(stream));
-        }
-        return fetchStream(stream);
+        /* TODO : implement in both backpointer and Replex cases */
+        throw new UnsupportedOperationException("unsupported");
     }
 
 
