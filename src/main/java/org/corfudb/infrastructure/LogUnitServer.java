@@ -93,10 +93,6 @@ public class LogUnitServer extends AbstractServer {
      */
     LoadingCache<Long, LogUnitEntry> dataCache;
     long maxCacheSize;
-    /**
-     * This cache services requests for stream addresses.
-     */
-    LoadingCache<UUID, RangeSet<Long>> streamCache;
 
     private final AbstractLocalLog localLog;
 
@@ -206,28 +202,9 @@ public class LogUnitServer extends AbstractServer {
                     }
                 }).build(this::handleRetrieval);
 
-        streamCache = Caffeine.newBuilder()
-                .maximumSize(Utils.getOption(opts, "--stream-cache", Long.class, 5L))
-                .writer(new CacheWriter<UUID, RangeSet<Long>>() {
-                    @Override
-                    public void write(UUID streamID, RangeSet<Long> entry) {
-                        localLog.streamWrite(streamID, entry);
-                    }
-
-                    @Override
-                    public void delete(UUID streamID, RangeSet<Long> entry, RemovalCause removalCause) {
-                        // never need to delete
-                    }
-                }).build(this::handleStreamRetrieval);
-
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
         trimMap = new ConcurrentHashMap<>();
-    }
-
-    @SuppressWarnings("unchecked")
-    public RangeSet<Long> handleStreamRetrieval(UUID stream) {
-        return localLog.streamRead(stream);
     }
 
     /**
