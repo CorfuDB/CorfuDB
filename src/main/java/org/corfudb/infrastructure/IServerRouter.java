@@ -9,9 +9,19 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 public interface IServerRouter {
     void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg);
 
-    /** Get the current epoch. */
+    /**
+     * Get the current epoch.
+     */
     long getServerEpoch();
 
-    /** Set the current epoch. */
+    /**
+     * Set the current epoch.
+     */
     void setServerEpoch(long newEpoch);
+
+    /**
+     * Register a server to route messages to
+     * @param server    The server to route messages to
+     */
+    void addServer(AbstractServer server);
 }

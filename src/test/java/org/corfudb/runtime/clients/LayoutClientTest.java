@@ -10,7 +10,6 @@ import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,7 +25,7 @@ public class LayoutClientTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new LayoutServer(defaultOptionsMap(), getRouter()))
+                .add(new LayoutServer(defaultOptionsMap(), getServerRouter()))
                 .build();
     }
 
@@ -40,17 +39,15 @@ public class LayoutClientTest extends AbstractClientTest {
     }
 
     @Test
-    public void nonBootstrappedServerThrowsException()
-    {
+    public void nonBootstrappedServerThrowsException() {
         assertThatThrownBy(() -> {
-          client.getLayout().get();
+            client.getLayout().get();
         }).hasCauseInstanceOf(NoBootstrapException.class);
     }
 
     @Test
     public void bootstrapServerInstallsNewLayout()
-            throws Exception
-    {
+            throws Exception {
         assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
@@ -60,8 +57,7 @@ public class LayoutClientTest extends AbstractClientTest {
 
     @Test
     public void cannotBootstrapServerTwice()
-            throws Exception
-    {
+            throws Exception {
         assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
         assertThatThrownBy(() -> client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
@@ -70,8 +66,7 @@ public class LayoutClientTest extends AbstractClientTest {
 
     @Test
     public void canGetNewLayoutInDifferentEpoch()
-            throws Exception
-    {
+            throws Exception {
         Layout l = TestLayoutBuilder.single(9000);
         l.setEpoch(42L);
         assertThat(client.bootstrapLayout(l).get())
@@ -83,12 +78,11 @@ public class LayoutClientTest extends AbstractClientTest {
 
     @Test
     public void prepareRejectsLowerRanks()
-            throws Exception
-    {
+            throws Exception {
         assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get())
+        assertThat(client.prepare(10L).get().isAccepted())
                 .isEqualTo(true);
 
         assertThatThrownBy(() -> {
@@ -102,12 +96,11 @@ public class LayoutClientTest extends AbstractClientTest {
 
     @Test
     public void proposeRejectsLowerRanks()
-            throws Exception
-    {
+            throws Exception {
         assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get())
+        assertThat(client.prepare(10L).get().isAccepted())
                 .isEqualTo(true);
 
         assertThatThrownBy(() -> {
@@ -120,12 +113,11 @@ public class LayoutClientTest extends AbstractClientTest {
 
     @Test
     public void proposeRejectsAlreadyProposed()
-            throws Exception
-    {
+            throws Exception {
         assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get())
+        assertThat(client.prepare(10L).get().isAccepted())
                 .isEqualTo(true);
 
         client.propose(10L, TestLayoutBuilder.single(9000)).get();
@@ -141,12 +133,11 @@ public class LayoutClientTest extends AbstractClientTest {
 
     @Test
     public void commitReturnsAck()
-            throws Exception
-    {
+            throws Exception {
         assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get())
+        assertThat(client.prepare(10L).get().isAccepted())
                 .isEqualTo(true);
 
         assertThat(client.committed(10L).get())

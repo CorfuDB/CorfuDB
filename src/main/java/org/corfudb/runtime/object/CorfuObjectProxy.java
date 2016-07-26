@@ -3,12 +3,12 @@ package org.corfudb.runtime.object;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import net.bytebuddy.implementation.bind.annotation.*;
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.logprotocol.TXEntry;
+import net.bytebuddy.implementation.bind.annotation.AllArguments;
+import net.bytebuddy.implementation.bind.annotation.Origin;
+import net.bytebuddy.implementation.bind.annotation.RuntimeType;
+import net.bytebuddy.implementation.bind.annotation.SuperCall;
+import net.bytebuddy.implementation.bind.annotation.This;
 import org.corfudb.protocols.logprotocol.TXLambdaReferenceEntry;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by mwei on 3/30/16.
@@ -29,28 +28,40 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class CorfuObjectProxy<P> {
 
-    /** The underlying streamView for this CorfuObject. */
+    /**
+     * The underlying streamView for this CorfuObject.
+     */
     @Getter
     StreamView sv;
 
-    /** The original class which this class proxies. */
+    /**
+     * The original class which this class proxies.
+     */
     @Getter
     Class<P> originalClass;
 
-    /** The serializer used by this proxy when it is written to the log. */
+    /**
+     * The serializer used by this proxy when it is written to the log.
+     */
     @Getter
     Serializers.SerializerType serializer;
 
-    /** The runtime used to create this proxy. */
+    /**
+     * The runtime used to create this proxy.
+     */
     @Getter
     CorfuRuntime runtime;
 
-    /** The current timestamp of this proxy. */
+    /**
+     * The current timestamp of this proxy.
+     */
     @Getter
     @Setter
     long timestamp;
 
-    /** The generated proxy class that this proxy wraps around. */
+    /**
+     * The generated proxy class that this proxy wraps around.
+     */
     @Getter
     @Setter
     Class<? extends P> generatedClass;
@@ -70,8 +81,7 @@ public class CorfuObjectProxy<P> {
                                             @Origin Method method,
                                             @AllArguments Object[] arguments,
                                             @This ICorfuObject obj)
-            throws Exception
-    {
+            throws Exception {
         if (TransactionalContext.isInOptimisticTransaction()) {
             // TODO: in an optimistic TX, insert a Lambda TXn entry instead of converting everything
             // into a writeset
@@ -111,22 +121,20 @@ public class CorfuObjectProxy<P> {
                     return true;
                 });
                 log.debug("Wrote TX to log@{}", txAddr);
-            // pick the first affected object and sync.
+                // pick the first affected object and sync.
                 ICorfuObject cobj = (ICorfuObject) runtime.getObjectsView().getObjectCache().entrySet().stream()
                         .filter(x -> affectedStreams.contains(x.getKey().getStreamID()))
                         .findFirst().get().getValue();
                 cobj.getProxy().sync(cobj, txAddr);
                 return cf.join();
-            }
-            else {
+            } else {
                 // TX doesn't return anything, so we can blindly write to the log.
                 long txAddr = runtime.getStreamsView().write(affectedStreams, tlre);
                 log.debug("Wrote TX to log@{}", txAddr);
                 return null;
             }
 
-        }
-        else {
+        } else {
             try {
                 runtime.getObjectsView().TXBegin();
                 res = originalCall.call();
@@ -144,7 +152,11 @@ public class CorfuObjectProxy<P> {
         Arrays.stream(sv.readTo(maxPos));
     }
 
-    public UUID getStreamID() { return sv.getStreamID(); }
+    public UUID getStreamID() {
+        return sv.getStreamID();
+    }
 
-    public CorfuObjectProxy getProxy() { return this; }
+    public CorfuObjectProxy getProxy() {
+        return this;
+    }
 }

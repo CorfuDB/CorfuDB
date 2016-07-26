@@ -26,10 +26,10 @@ public class TransactionalContextTest extends AbstractViewTest {
         assertThat(ai.get())
                 .isEqualTo(0);
 
-        Map<String,String> smrMap = cr.getObjectsView().build()
-                                        .setStreamName("test")
-                                        .setType(SMRMap.class)
-                                        .open();
+        Map<String, String> smrMap = cr.getObjectsView().build()
+                .setStreamName("test")
+                .setType(SMRMap.class)
+                .open();
 
         cr.getObjectsView().TXBegin();
         smrMap.put("a", "b");

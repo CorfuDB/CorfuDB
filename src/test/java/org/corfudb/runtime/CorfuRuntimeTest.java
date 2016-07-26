@@ -33,4 +33,14 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         executeScheduled(2, 30, TimeUnit.SECONDS);
 
     }
+
+    @Test
+    public void canInstantiateRuntimeWithoutTestRef() throws Exception {
+
+        addSingleServer(9000);
+
+        CorfuRuntime rt = new CorfuRuntime("test:9000");
+        rt.connect();
+
+    }
 }

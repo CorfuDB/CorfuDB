@@ -2,6 +2,7 @@ package org.corfudb.runtime.clients;
 
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
+import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.junit.Test;
 
@@ -17,15 +18,18 @@ public class TestClientRouterTest extends AbstractCorfuTest {
 
     @Test
     public void testRuleDropsMessages() {
-        TestClientRouter tcr = new TestClientRouter();
-        tcr.addServer(new BaseServer(tcr));
+        TestServerRouter tsr = new TestServerRouter();
+        BaseServer bs = new BaseServer();
+        tsr.addServer(bs);
+        TestClientRouter tcr = new TestClientRouter(tsr);
+
         BaseClient bc = new BaseClient();
         tcr.addClient(bc);
 
         assertThat(bc.pingSync())
                 .isTrue();
 
-        tcr.serverToClientRules.add(new TestClientRule()
+        tcr.rules.add(new TestRule()
                 .always()
                 .drop());
 
@@ -35,12 +39,15 @@ public class TestClientRouterTest extends AbstractCorfuTest {
 
     @Test
     public void onlyDropEpochChangeMessages() {
-        TestClientRouter tcr = new TestClientRouter();
-        tcr.addServer(new BaseServer(tcr));
+        TestServerRouter tsr = new TestServerRouter();
+        BaseServer bs = new BaseServer();
+        tsr.addServer(bs);
+        TestClientRouter tcr = new TestClientRouter(tsr);
+
         BaseClient bc = new BaseClient();
         tcr.addClient(bc);
 
-        tcr.clientToServerRules.add(new TestClientRule()
+        tcr.rules.add(new TestRule()
                 .matches(x -> x.getMsgType().equals(CorfuMsg.CorfuMsgType.SET_EPOCH))
                 .drop());
 

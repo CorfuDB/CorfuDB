@@ -1,14 +1,10 @@
 package org.corfudb.protocols.wireprotocol;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import org.corfudb.runtime.view.Layout;
-
-import java.nio.charset.StandardCharsets;
 
 /**
  * Created by mwei on 12/14/15.
@@ -20,8 +16,7 @@ public class LayoutRankMsg extends LayoutMsg {
     @Getter
     long rank;
 
-    public LayoutRankMsg(Layout layout, long rank, CorfuMsgType type)
-    {
+    public LayoutRankMsg(Layout layout, long rank, CorfuMsgType type) {
         super(layout, type);
         this.rank = rank;
     }

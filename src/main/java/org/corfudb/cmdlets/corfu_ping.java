@@ -11,13 +11,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.fusesource.jansi.Ansi.Color.RED;
+import static org.fusesource.jansi.Ansi.Color.WHITE;
 import static org.fusesource.jansi.Ansi.ansi;
-import static org.fusesource.jansi.Ansi.Color.*;
+
 /**
  * Created by mwei on 12/10/15.
  */
 @Slf4j
-public class corfu_ping implements ICmdlet{
+public class corfu_ping implements ICmdlet {
 
     private static final String USAGE =
             "corfu_ping, pings a Corfu Server to check for connectivity.\n"
@@ -47,7 +49,7 @@ public class corfu_ping implements ICmdlet{
         Integer port = Integer.parseInt(addressport.split(":")[1]);
 
         // Create a client router and ping.
-        log.trace("Creating router for {}:{}", host,port);
+        log.trace("Creating router for {}:{}", host, port);
         NettyClientRouter router = new NettyClientRouter(host, port);
         router.start();
         System.out.println(ansi().a("PING ").fg(WHITE).a(host + ":" + port).reset().a(":"));
@@ -90,7 +92,8 @@ public class corfu_ping implements ICmdlet{
             });
             try {
                 Thread.sleep(1000);
-            } catch (InterruptedException ie) {}
+            } catch (InterruptedException ie) {
+            }
         }
     }
 }
