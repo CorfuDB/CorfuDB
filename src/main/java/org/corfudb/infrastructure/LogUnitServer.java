@@ -7,7 +7,6 @@ import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
-import com.google.common.collect.TreeRangeSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Data;
@@ -20,14 +19,12 @@ import org.corfudb.infrastructure.log.LogUnitEntry;
 import org.corfudb.infrastructure.log.RollingLog;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuRangeMsg;
-import org.corfudb.protocols.wireprotocol.CorfuUUIDMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitFillHoleMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitGCIntervalMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadRangeResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadRequestMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
-import org.corfudb.protocols.wireprotocol.LogUnitTailMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitTrimMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
 import org.corfudb.util.Utils;
@@ -35,10 +32,7 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -176,17 +170,6 @@ public class LogUnitServer extends AbstractServer {
                 trimMap.compute(m.getStreamID(), (key, prev) ->
                         prev == null ? m.getPrefix() : Math.max(prev, m.getPrefix()));
                 log.debug("Trim requested at prefix={}", m.getPrefix());
-            }
-            break;
-            case STREAM_READ: {
-                CorfuUUIDMsg m = (CorfuUUIDMsg) msg;
-                if (m.getId() == null) {
-                    r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.CorfuMsgType.NACK));
-                } else {
-                    CorfuRangeMsg rm = new CorfuRangeMsg(streamCache.get(m.getId()));
-                    rm.copyBaseFields(m);
-                    read(rm, ctx, r);
-                }
             }
             break;
         }

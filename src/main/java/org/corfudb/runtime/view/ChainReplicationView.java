@@ -133,27 +133,8 @@ public class ChainReplicationView extends AbstractReplicationView {
      */
     @Override
     public Map<Long, ILogUnitEntry> read(UUID stream) {
-        // for each chain, simply query the last one...
-        Set<Map.Entry<Layout.LayoutStripe, Map<Long, LogUnitReadResponseMsg.ReadResult>>> e = segment.getStripes().parallelStream()
-                .map(x -> {
-                    LogUnitClient luc = layout.getRuntime().getRouter(x.getLogServers().get(x.getLogServers().size() - 1))
-                            .getClient(LogUnitClient.class);
-                    return new AbstractMap.SimpleImmutableEntry<>(x, CFUtils.getUninterruptibly(luc.readStream(stream)));
-                })
-                .collect(Collectors.toSet());
-        Map<Long, ILogUnitEntry> resultMap = new ConcurrentHashMap<>();
-
-        e.parallelStream()
-                .forEach(x ->
-                {
-                    x.getValue().entrySet().parallelStream()
-                            .forEach(y -> {
-                                long globalAddress = layout.getGlobalAddress(x.getKey(), y.getKey());
-                                y.getValue().setAddress(globalAddress);
-                                resultMap.put(globalAddress, y.getValue());
-                            });
-                });
-        return resultMap;
+        // TODO: when chain replication is used, scan
+       throw new UnsupportedOperationException("not supported in chain replication");
     }
 
     /**
