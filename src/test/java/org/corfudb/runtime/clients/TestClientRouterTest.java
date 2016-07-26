@@ -19,7 +19,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
     @Test
     public void testRuleDropsMessages() {
         TestServerRouter tsr = new TestServerRouter();
-        BaseServer bs = new BaseServer(tsr);
+        BaseServer bs = new BaseServer();
         tsr.addServer(bs);
         TestClientRouter tcr = new TestClientRouter(tsr);
 
@@ -40,7 +40,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
     @Test
     public void onlyDropEpochChangeMessages() {
         TestServerRouter tsr = new TestServerRouter();
-        BaseServer bs = new BaseServer(tsr);
+        BaseServer bs = new BaseServer();
         tsr.addServer(bs);
         TestClientRouter tcr = new TestClientRouter(tsr);
 
