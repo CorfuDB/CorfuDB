@@ -1,12 +1,16 @@
 package org.corfudb.runtime.object.transactions;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.view.TransactionStrategy;
+import org.corfudb.util.serializer.Serializers;
 
-import java.util.Deque;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
+import java.util.*;
 
 /**
  * Created by mwei on 1/11/16.
@@ -16,6 +20,12 @@ public class TransactionalContext {
 
     private static final ThreadLocal<Deque<AbstractTransactionalContext>> threadStack = ThreadLocal.withInitial(
             LinkedList<AbstractTransactionalContext>::new);
+
+    @FunctionalInterface
+    public interface TXCompletionMethod {
+        void handle(AbstractTransactionalContext context);
+    }
+
     @Getter
     private static final LinkedHashSet<TXCompletionMethod> completionMethods = new LinkedHashSet<>();
 
@@ -23,29 +33,27 @@ public class TransactionalContext {
         completionMethods.add(completionMethod);
     }
 
-    /**
-     * Returns the transaction stack for the calling thread.
+    /** Returns the transaction stack for the calling thread.
      *
-     * @return The transaction stack for the calling thread.
+     * @return      The transaction stack for the calling thread.
      */
-    public static Deque<AbstractTransactionalContext> getTransactionStack() {
+    public static Deque<AbstractTransactionalContext> getTransactionStack()
+    {
         return threadStack.get();
     }
 
-    /**
-     * Returns the current transactional context for the calling thread.
+    /** Returns the current transactional context for the calling thread.
      *
-     * @return The current transactional context for the calling thread.
+     * @return      The current transactional context for the calling thread.
      */
     public static AbstractTransactionalContext getCurrentContext() {
         return getTransactionStack().peekFirst();
     }
 
-    /**
-     * Returns whether or not the calling thread is in a transaction.
+    /** Returns whether or not the calling thread is in a transaction.
      *
-     * @return True, if the calling thread is in a transaction.
-     * False otherwise.
+     * @return      True, if the calling thread is in a transaction.
+     *              False otherwise.
      */
     public static boolean isInTransaction() {
         return getTransactionStack().peekFirst() != null;
@@ -70,11 +78,5 @@ public class TransactionalContext {
     }
 
     public static boolean isInOptimisticTransaction() {
-        return getCurrentContext() instanceof OptimisticTransactionalContext;
-    }
-
-    @FunctionalInterface
-    public interface TXCompletionMethod {
-        void handle(AbstractTransactionalContext context);
-    }
+        return getCurrentContext() instanceof OptimisticTransactionalContext;}
 }

@@ -172,7 +172,7 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
 
     @Override
     public int ensureWritable(int i, boolean b) {
-        return buf.ensureWritable(i, b);
+        return buf.ensureWritable(i,b);
     }
 
     @Override
@@ -467,7 +467,7 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
 
     @Override
     public ByteBuf readBytes(byte[] bytes, int i, int i1) {
-        return buf.readBytes(bytes, i, i1);
+        return buf.readBytes(bytes, i , i1);
     }
 
     @Override
@@ -557,7 +557,7 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
 
     @Override
     public ByteBuf writeBytes(byte[] bytes, int i, int i1) {
-        return buf.writeBytes(bytes, i, i1);
+        return buf.writeBytes(bytes, i ,i1);
     }
 
     @Override
@@ -717,7 +717,8 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
 
     @Override
     public boolean equals(Object o) {
-        if (o instanceof AutoCloseableByteBuf) {
+        if (o instanceof  AutoCloseableByteBuf)
+        {
             return o.hashCode() == hashCode();
         }
         return buf.equals(o);

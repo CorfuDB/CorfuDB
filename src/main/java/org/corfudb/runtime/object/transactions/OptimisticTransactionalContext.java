@@ -1,19 +1,16 @@
 package org.corfudb.runtime.object.transactions;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.view.TransactionStrategy;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -23,41 +20,38 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class OptimisticTransactionalContext extends AbstractTransactionalContext {
 
-    AtomicInteger updateCounter;
-    @Getter
-    Map<CorfuSMRObjectProxy, TransactionalObjectData> objectMap;
-    @Getter
-    private boolean firstReadTimestampSet = false;
-    /**
-     * The timestamp of the first read in the system.
-     *
+    /** The timestamp of the first read in the system.
      * @return The timestamp of the first read object, which may be null.
      */
-    @Getter(lazy = true)
+    @Getter(lazy=true)
     private final long firstReadTimestamp = fetchFirstTimestamp();
 
+    @Getter
+    private boolean firstReadTimestampSet = false;
+
+    AtomicInteger updateCounter;
+
     public OptimisticTransactionalContext(CorfuRuntime runtime) {
-        super(runtime);
+        super (runtime);
         this.objectMap = new ConcurrentHashMap<>();
         this.updateCounter = new AtomicInteger();
     }
 
-    /**
-     * Check if there was nothing to write.
+    /** Check if there was nothing to write.
      *
      * @return Return true, if there was no write set.
      */
     public boolean hasNoWriteSet() {
-        for (TransactionalObjectData od : objectMap.values()) {
+        for (TransactionalObjectData od : objectMap.values())
+        {
             if (od.bufferedWrites.size() > 0) return false;
         }
         return true;
     }
 
-    /**
-     * Get the first timestamp for this transaction.
+    /** Get the first timestamp for this transaction.
      *
-     * @return The first timestamp to be used for this transaction.
+     * @return  The first timestamp to be used for this transaction.
      */
     public synchronized long fetchFirstTimestamp() {
         firstReadTimestampSet = true;
@@ -66,12 +60,74 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return token;
     }
 
-    /**
-     * Compute and write a TXEntry for this transaction to insert into the log.
+    @SuppressWarnings("unchecked")
+    class TransactionalObjectData<T> {
+
+        CorfuSMRObjectProxy<T> proxy;
+        T smrObjectClone;
+        long readTimestamp;
+        List<SMREntry> bufferedWrites;
+        boolean objectIsRead;
+        boolean nextCloneIsReset;
+
+        public TransactionalObjectData(CorfuSMRObjectProxy<T> proxy)
+        {
+            this.proxy = proxy;
+            this.bufferedWrites = new ArrayList<>();
+            this.readTimestamp = Long.MIN_VALUE;
+            this.objectIsRead = false;
+            this.nextCloneIsReset = false;
+        }
+
+        public boolean objectIsCloned() {
+            return smrObjectClone != null;
+        }
+
+        T cloneAndGetObject() {
+            if (smrObjectClone == null) {
+                log.debug("Cloning SMR object {} due to transactional write.", proxy.getSv().getStreamID());
+                if (nextCloneIsReset) {
+                    log.trace("SMR object was marked for reset, constructing from scratch.");
+                    try {
+                        smrObjectClone = proxy.constructSMRObject(null);
+                        return smrObjectClone;
+                    } catch (Exception ex) {
+                        log.warn("Error constructing SMR object" , ex);
+                    }
+                }
+                smrObjectClone = (T) Serializers.getSerializer(proxy.getSerializer())
+                        .clone(proxy.getSmrObject(), proxy.getRuntime());
+            }
+            return smrObjectClone;
+        }
+
+        public T readObject() {
+            if (bufferedWrites.isEmpty()) { objectIsRead = true; }
+            readTimestamp = proxy.getTimestamp();
+            return (T) (smrObjectClone == null ? proxy.getSmrObject() : smrObjectClone);
+        }
+
+        public T writeObject() {
+            return cloneAndGetObject();
+        }
+
+        public T readWriteObject() {
+            if (bufferedWrites.isEmpty()) { objectIsRead = true; }
+            readTimestamp = proxy.getTimestamp();
+            return cloneAndGetObject();
+        }
+    }
+
+    @Getter
+    Map<CorfuSMRObjectProxy, TransactionalObjectData> objectMap;
+
+
+    /** Compute and write a TXEntry for this transaction to insert into the log.
      *
-     * @return A TXEntry which represents this transactional context.
+     * @return  A TXEntry which represents this transactional context.
      */
-    public TXEntry getEntry() {
+    public TXEntry getEntry()
+    {
         Map<UUID, TXEntry.TXObjectEntry> entryMap = new HashMap<>();
         objectMap.entrySet().stream()
                 .forEach(x -> entryMap.put(x.getKey().getSv().getStreamID(),
@@ -79,22 +135,22 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L);
     }
 
-    /**
-     * Buffer away an object update, adding it to the write set that will be generated
+    /** Buffer away an object update, adding it to the write set that will be generated
      * in the resulting TXEntry.
      *
-     * @param proxy        The SMR Object proxy to buffer for.
-     * @param SMRMethod    The method being called.
-     * @param SMRArguments The arguments to that method.
-     * @param serializer   The serializer to use.
-     * @param <T>          The type of the proxy.
+     * @param proxy         The SMR Object proxy to buffer for.
+     * @param SMRMethod     The method being called.
+     * @param SMRArguments  The arguments to that method.
+     * @param serializer    The serializer to use.
+     * @param <T>           The type of the proxy.
      */
     @SuppressWarnings("unchecked")
     @Override
     public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
-                                       Object[] SMRArguments, Serializers.SerializerType serializer, boolean writeOnly) {
+                                       Object[] SMRArguments, Serializers.SerializerType serializer, boolean writeOnly)
+    {
         objectMap
-                .compute(proxy, (k, v) ->
+                .compute(proxy, (k,v) ->
                 {
                     TransactionalObjectData<T> data = v;
                     if (v == null) {
@@ -112,7 +168,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     public <T> void resetObject(CorfuSMRObjectProxy<T> proxy) {
         objectMap
-                .compute(proxy, (k, v) ->
+                .compute(proxy, (k,v) ->
                 {
                     TransactionalObjectData<T> data = v;
                     if (v == null) {
@@ -127,10 +183,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 });
     }
 
-    /**
-     * Commit a transaction into this transaction by merging the read/write sets.
+
+
+    /** Commit a transaction into this transaction by merging the read/write sets.
      *
-     * @param tc The transaction to merge.
+     * @param tc        The transaction to merge.
      */
     @SuppressWarnings("unchecked")
     public void addTransaction(AbstractTransactionalContext tc) {
@@ -159,122 +216,59 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
     }
 
-    /**
-     * Open an object for reading. The implementation will avoid creating a copy of the object
+
+    /** Open an object for reading. The implementation will avoid creating a copy of the object
      * if it has not already been done.
      *
-     * @param proxy The SMR Object proxy to get an object for reading.
-     * @param <T>   The type of object to get for reading.
-     * @return An object for reading.
+     * @param proxy     The SMR Object proxy to get an object for reading.
+     * @param <T>       The type of object to get for reading.
+     * @return          An object for reading.
      */
     @SuppressWarnings("unchecked")
-    public <T> T getObjectRead(CorfuSMRObjectProxy<T> proxy) {
+    public <T> T getObjectRead(CorfuSMRObjectProxy<T> proxy)
+    {
         return (T) objectMap
                 .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
                 .readObject();
     }
 
-    /**
-     * Open an object for writing. For opacity, the implementation will create a clone of the
+    /** Open an object for writing. For opacity, the implementation will create a clone of the
      * object.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
+     * @param proxy     The SMR Object proxy to get an object for writing.
+     * @param <T>       The type of object to get for writing.
+     * @return          An object for writing.
      */
     @SuppressWarnings("unchecked")
-    public <T> T getObjectWrite(CorfuSMRObjectProxy<T> proxy) {
+    public <T> T getObjectWrite(CorfuSMRObjectProxy<T> proxy)
+    {
         return (T) objectMap
                 .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
                 .writeObject();
     }
 
-    /**
-     * Open an object for reading and writing. For opacity, the implementation will create a clone of the
+    /** Open an object for reading and writing. For opacity, the implementation will create a clone of the
      * object.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
+     * @param proxy     The SMR Object proxy to get an object for writing.
+     * @param <T>       The type of object to get for writing.
+     * @return          An object for writing.
      */
     @SuppressWarnings("unchecked")
-    public <T> T getObjectReadWrite(CorfuSMRObjectProxy<T> proxy) {
+    public <T> T getObjectReadWrite(CorfuSMRObjectProxy<T> proxy)
+    {
         return (T) objectMap
                 .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
                 .readWriteObject();
     }
 
-    /**
-     * Check if the object is cloned.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
+    /** Check if the object is cloned.
+     * @param proxy     The SMR Object proxy to get an object for writing.
+     * @param <T>       The type of object to get for writing.
+     * @return          An object for writing.
      */
     @SuppressWarnings("unchecked")
-    public <T> boolean isObjectCloned(CorfuSMRObjectProxy<T> proxy) {
-        return objectMap.containsKey(proxy) && objectMap.get(proxy).objectIsCloned();
-    }
-
-    @SuppressWarnings("unchecked")
-    class TransactionalObjectData<T> {
-
-        CorfuSMRObjectProxy<T> proxy;
-        T smrObjectClone;
-        long readTimestamp;
-        List<SMREntry> bufferedWrites;
-        boolean objectIsRead;
-        boolean nextCloneIsReset;
-
-        public TransactionalObjectData(CorfuSMRObjectProxy<T> proxy) {
-            this.proxy = proxy;
-            this.bufferedWrites = new ArrayList<>();
-            this.readTimestamp = Long.MIN_VALUE;
-            this.objectIsRead = false;
-            this.nextCloneIsReset = false;
-        }
-
-        public boolean objectIsCloned() {
-            return smrObjectClone != null;
-        }
-
-        T cloneAndGetObject() {
-            if (smrObjectClone == null) {
-                log.debug("Cloning SMR object {} due to transactional write.", proxy.getSv().getStreamID());
-                if (nextCloneIsReset) {
-                    log.trace("SMR object was marked for reset, constructing from scratch.");
-                    try {
-                        smrObjectClone = proxy.constructSMRObject(null);
-                        return smrObjectClone;
-                    } catch (Exception ex) {
-                        log.warn("Error constructing SMR object", ex);
-                    }
-                }
-                smrObjectClone = (T) Serializers.getSerializer(proxy.getSerializer())
-                        .clone(proxy.getSmrObject(), proxy.getRuntime());
-            }
-            return smrObjectClone;
-        }
-
-        public T readObject() {
-            if (bufferedWrites.isEmpty()) {
-                objectIsRead = true;
-            }
-            readTimestamp = proxy.getTimestamp();
-            return (T) (smrObjectClone == null ? proxy.getSmrObject() : smrObjectClone);
-        }
-
-        public T writeObject() {
-            return cloneAndGetObject();
-        }
-
-        public T readWriteObject() {
-            if (bufferedWrites.isEmpty()) {
-                objectIsRead = true;
-            }
-            readTimestamp = proxy.getTimestamp();
-            return cloneAndGetObject();
-        }
+    public <T> boolean isObjectCloned(CorfuSMRObjectProxy<T> proxy)
+    {
+        return  objectMap.containsKey(proxy) && objectMap.get(proxy).objectIsCloned();
     }
 
 

@@ -212,13 +212,8 @@ Once you have Corfu added as a dependency, you can start writing Corfu code. Let
 ```java
     CorfuRuntime rt = new CorfuRuntime("localhost:9000")
                             .connect();
-
     Map<String,Integer> map = rt.getObjectsView()
-                .build()
-                .setStreamName("A")
-                .setType(SMRMap.class)
-                .open();
-
+                .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
     Integer previous = map.get("a");
     if (previous == null) {
         System.out.println("This is the first time we were run!");

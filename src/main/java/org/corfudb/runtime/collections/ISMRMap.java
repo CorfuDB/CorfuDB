@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableSet;
+import lombok.Getter;
 import org.corfudb.runtime.object.ISMRInterface;
 
 import java.util.Map;
@@ -9,7 +10,7 @@ import java.util.Set;
 /**
  * Created by mwei on 1/9/16.
  */
-public interface ISMRMap<K, V> extends ISMRInterface, Map<K, V> {
+public interface ISMRMap<K,V> extends ISMRInterface, Map<K,V> {
 
     Set<SMRMethod> SMRAccessors = ImmutableSet.<SMRMethod>builder()
             .add(new SMRMethod("size", new Class[0]))

@@ -15,16 +15,14 @@ import lombok.Setter;
 public class CorfuResetMsg extends CorfuMsg {
 
 
-    /**
-     * The new epoch to reset to.
-     */
+    /** The new epoch to reset to. */
     long newEpoch;
 
-    public CorfuResetMsg(long newEpoch) {
+    public CorfuResetMsg(long newEpoch)
+    {
         this.msgType = CorfuMsgType.RESET;
         this.newEpoch = newEpoch;
     }
-
     /**
      * Serialize the message into the given bytebuffer.
      *

@@ -12,19 +12,57 @@ import java.util.UUID;
  */
 public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAssertions, LogUnitServer> {
 
-    public LogUnitServerAssertions(LogUnitServer actual) {
+    public LogUnitServerAssertions(LogUnitServer actual)
+    {
         super(actual, LogUnitServerAssertions.class);
     }
 
-    public static LogUnitServerAssertions assertThat(LogUnitServer actual) {
+    public static LogUnitServerAssertions assertThat(LogUnitServer actual)
+    {
         return new LogUnitServerAssertions(actual);
+    }
+
+    public LogUnitServerAssertions hasContiguousTailAt(long address) {
+        isNotNull();
+
+        if (actual.contiguousTail != address)
+        {
+            failWithMessage("Expected contiguous tail to be at <%d> but was at <%d>!", address, actual.contiguousTail);
+        }
+
+        return this;
+    }
+
+    public LogUnitServerAssertions hasContiguousStreamEntryAt(UUID stream, long address) {
+        isNotNull();
+
+        if (!actual.streamCache.get(stream).contains(address))
+        {
+            failWithMessage("Expected contiguous stream <%s> to contain <%d> but it did not!",
+                    stream, address);
+        }
+
+        return this;
+    }
+
+    public LogUnitServerAssertions doestNotHaveContiguousStreamEntryAt(UUID stream, long address) {
+        isNotNull();
+
+        if (actual.streamCache.get(stream).contains(address))
+        {
+            failWithMessage("Expected contiguous stream <%s> to not contain <%d> but it did!",
+                    stream, address);
+        }
+
+        return this;
     }
 
 
     public LogUnitServerAssertions isEmptyAtAddress(long address) {
         isNotNull();
 
-        if (actual.dataCache.get(address) != null) {
+        if (actual.dataCache.get(address) != null)
+        {
             failWithMessage("Expected address <%d> to be empty but contained data!", address);
         }
 
@@ -34,9 +72,12 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
     public LogUnitServerAssertions containsDataAtAddress(long address) {
         isNotNull();
 
-        if (actual.dataCache.get(address) == null) {
+        if (actual.dataCache.get(address) == null)
+        {
             failWithMessage("Expected address <%d> to contain data but was empty!", address);
-        } else if (actual.dataCache.get(address).isHole()) {
+        }
+        else if (actual.dataCache.get(address).isHole())
+        {
             failWithMessage("Expected address <%d> to contain data but was filled hole!", address);
         }
 
@@ -46,9 +87,12 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
     public LogUnitServerAssertions containsFilledHoleAtAddress(long address) {
         isNotNull();
 
-        if (actual.dataCache.get(address) == null) {
+        if (actual.dataCache.get(address) == null)
+        {
             failWithMessage("Expected address <%d> to contain filled hole but was empty!", address);
-        } else if (!actual.dataCache.get(address).isHole()) {
+        }
+        else if (!actual.dataCache.get(address).isHole())
+        {
             failWithMessage("Expected address <%d> to contain filled hole but was data!", address);
         }
 
@@ -58,9 +102,12 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
     public LogUnitServerAssertions matchesDataAtAddress(long address, Object data) {
         isNotNull();
 
-        if (actual.dataCache.get(address) == null) {
+        if (actual.dataCache.get(address) == null)
+        {
             failWithMessage("Expected address <%d> to contain data but was empty!", address);
-        } else {
+        }
+        else
+        {
             actual.dataCache.get(address).getBuffer().resetReaderIndex();
             ByteBuf b = UnpooledByteBufAllocator.DEFAULT.buffer();
             LogUnitPayloadMsg.defaultSerializer.serialize(data, b);

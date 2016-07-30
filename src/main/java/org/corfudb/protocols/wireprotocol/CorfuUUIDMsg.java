@@ -1,13 +1,14 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.collect.TreeRangeSet;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 /**
  * Created by mwei on 2/10/16.
@@ -16,15 +17,21 @@ import java.util.Map;
 @Setter
 @NoArgsConstructor
 @ToString(callSuper = true)
-public class LogUnitReadRangeResponseMsg extends CorfuMsg {
+public class CorfuUUIDMsg extends CorfuMsg {
 
-    Map<Long, LogUnitReadResponseMsg> responseMap;
+    UUID id;
 
-    public LogUnitReadRangeResponseMsg(Map<Long, LogUnitReadResponseMsg> map)
+    public CorfuUUIDMsg(UUID id)
     {
-        this.msgType = CorfuMsgType.READ_RANGE_RESPONSE;
-        this.responseMap = map;
+        this.id = id;
     }
+
+    public CorfuUUIDMsg(CorfuMsgType msgType, UUID id)
+    {
+        this.msgType = msgType;
+        this.id = id;
+    }
+
 
     /**
      * Serialize the message into the given bytebuffer.
@@ -34,11 +41,15 @@ public class LogUnitReadRangeResponseMsg extends CorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        buffer.writeInt(responseMap.size());
-        for (Map.Entry<Long,LogUnitReadResponseMsg> e : responseMap.entrySet())
+        if (id == null)
         {
-            buffer.writeLong(e.getKey());
-            e.getValue().serialize(buffer);
+            buffer.writeByte(1);
+        }
+        else
+        {
+            buffer.writeByte(0);
+            buffer.writeLong(id.getMostSignificantBits());
+            buffer.writeLong(id.getLeastSignificantBits());
         }
     }
 
@@ -52,13 +63,9 @@ public class LogUnitReadRangeResponseMsg extends CorfuMsg {
     @SuppressWarnings("unchecked")
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
-        int size = buffer.readInt();
-        responseMap = new HashMap<>();
-        for (int i = 0; i < size; i++)
-        {
-            long address = buffer.readLong();
-            LogUnitReadResponseMsg m = (LogUnitReadResponseMsg)(CorfuMsg.deserialize(buffer));
-            responseMap.put(address, m);
+        if (buffer.readByte() == 1) {id = null;}
+        else {
+            id = new UUID(buffer.readLong(), buffer.readLong());
         }
     }
 }

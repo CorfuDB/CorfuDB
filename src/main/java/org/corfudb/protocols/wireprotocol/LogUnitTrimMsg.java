@@ -17,22 +17,18 @@ import java.util.UUID;
 public class LogUnitTrimMsg extends CorfuMsg {
 
 
-    /**
-     * The address to prefix trim, inclusive.
-     */
+    /** The address to prefix trim, inclusive. */
     long prefix;
 
-    /**
-     * The stream ID to trim.
-     */
+    /** The stream ID to trim. */
     UUID streamID;
 
-    public LogUnitTrimMsg(long prefix, UUID streamID) {
+    public LogUnitTrimMsg(long prefix, UUID streamID)
+    {
         this.msgType = CorfuMsgType.TRIM;
         this.streamID = streamID;
         this.prefix = prefix;
     }
-
     /**
      * Serialize the message into the given bytebuffer.
      *

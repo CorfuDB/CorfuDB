@@ -15,7 +15,6 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
@@ -37,7 +36,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Slf4j
 public class NettyCommTest extends AbstractCorfuTest {
 
-
     private Integer findRandomOpenPort() throws IOException {
         try (
                 ServerSocket socket = new ServerSocket(0);
@@ -48,122 +46,54 @@ public class NettyCommTest extends AbstractCorfuTest {
 
     @Test
     public void nettyServerClientPingable() throws Exception {
-        runWithBaseServer((r, d) -> {
-            assertThat(r.getClient(BaseClient.class).pingSync())
-                    .isTrue();
-        });
-    }
-
-    @Test
-    public void nettyServerClientPingableAfterFailure() throws Exception {
-        runWithBaseServer((r, d) -> {
-            assertThat(r.getClient(BaseClient.class).pingSync())
-                    .isTrue();
-            d.shutdownServer();
-            d.bootstrapServer();
-            // We are now racing with the server's startup.  Immediate attempts
-            // to ping the server will fail immediately due to client-side
-            // rejection because the TCP session isn't yet connected.  Retry
-            // for up to 60 seconds before giving up: TravisCI can be truly
-            // unpredictably slow.
-            int sleep_incr = 10;
-            for (int i = 0; i < 60000; i += sleep_incr) {
-                if (r.getClient(BaseClient.class).pingSync() == true)
-                    break;
-                Thread.sleep(sleep_incr);
-            }
-            assertThat(r.getClient(BaseClient.class).pingSync())
-                    .isTrue();
-        });
-    }
-
-    void runWithBaseServer(NettyCommFunction actionFn)
-            throws Exception {
-
         NettyServerRouter nsr = new NettyServerRouter();
-        nsr.addServer(new BaseServer());
+        nsr.addServer(new BaseServer(nsr));
         int port = findRandomOpenPort();
 
-        NettyServerData d = new NettyServerData(port);
-        NettyClientRouter ncr = new NettyClientRouter("localhost", port);
-        try {
-            d.bootstrapServer();
-            ncr.addClient(new BaseClient());
-            ncr.start();
-            actionFn.runTest(ncr, d);
-        } catch (Exception ex) {
-            log.error("Exception ", ex);
-            throw ex;
-        } finally {
-            try {
-                ncr.stop();
-            } catch (Exception ex) {
-                log.warn("Error shutting down client...", ex);
-            }
-            d.shutdownServer();
-        }
-
-    }
-
-    @FunctionalInterface
-    public interface NettyCommFunction {
-        void runTest(NettyClientRouter r, NettyServerData d) throws Exception;
-    }
-
-    @Data
-    public class NettyServerData {
-        ServerBootstrap b;
-        ChannelFuture f;
-        int port;
+        // Create the event loops responsible for servicing inbound messages.
         EventLoopGroup bossGroup;
         EventLoopGroup workerGroup;
         EventExecutorGroup ee;
-        public NettyServerData(int port) {
-            this.port = port;
-        }
 
-        void bootstrapServer() throws Exception {
-            NettyServerRouter nsr = new NettyServerRouter();
-            bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
-                final AtomicInteger threadNum = new AtomicInteger(0);
+        bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
+            final AtomicInteger threadNum = new AtomicInteger(0);
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName("accept-" +threadNum.getAndIncrement());
+                return t;
+            }
+        });
 
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r);
-                    t.setName("accept-" + threadNum.getAndIncrement());
-                    return t;
-                }
-            });
+        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+            final AtomicInteger threadNum = new AtomicInteger(0);
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName("io-" + threadNum.getAndIncrement());
+                return t;
+            }
+        });
 
-            workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-                final AtomicInteger threadNum = new AtomicInteger(0);
+        ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
 
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r);
-                    t.setName("io-" + threadNum.getAndIncrement());
-                    return t;
-                }
-            });
+            final AtomicInteger threadNum = new AtomicInteger(0);
 
-            ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName("event-" + threadNum.getAndIncrement());
+                return t;
+            }
+        });
 
-                final AtomicInteger threadNum = new AtomicInteger(0);
 
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r);
-                    t.setName("event-" + threadNum.getAndIncrement());
-                    return t;
-                }
-            });
-
-            b = new ServerBootstrap();
+        try {
+            ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .option(ChannelOption.SO_BACKLOG, 100)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
-                    .childOption(ChannelOption.SO_REUSEADDR, true)
                     .childOption(ChannelOption.TCP_NODELAY, true)
                     .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                     .handler(new LoggingHandler(LogLevel.INFO))
@@ -177,11 +107,31 @@ public class NettyCommTest extends AbstractCorfuTest {
                             ch.pipeline().addLast(ee, nsr);
                         }
                     });
-            f = b.bind(port).sync();
-        }
+            ChannelFuture f = b.bind(port).sync();
 
-        public void shutdownServer() {
-            f.channel().close().awaitUninterruptibly();
+            NettyClientRouter ncr = new NettyClientRouter("localhost", port);
+            try {
+
+                ncr.addClient(new BaseClient());
+                ncr.start();
+                assertThat(ncr.getClient(BaseClient.class).pingSync())
+                        .isTrue();
+            }
+            finally {
+                ncr.stop();
+            }
+            f.channel().close();
+
+        }
+        catch (InterruptedException ie)
+        {
+
+        }
+        catch (Exception ex)
+        {
+            log.error("Corfu server shut down unexpectedly due to exception", ex);
+        }
+        finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }

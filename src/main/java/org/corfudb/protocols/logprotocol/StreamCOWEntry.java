@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
-
 import java.util.UUID;
 
 /**
@@ -22,7 +21,8 @@ public class StreamCOWEntry extends LogEntry {
     @Getter
     long followUntil;
 
-    public StreamCOWEntry(UUID originalStream, long followUntil) {
+    public StreamCOWEntry(UUID originalStream, long followUntil)
+    {
         super(LogEntryType.STREAM_COW);
         this.originalStream = originalStream;
         this.followUntil = followUntil;

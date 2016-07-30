@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * Created by mwei on 1/7/16.
  */
-public class SMRMap<K, V> implements Map<K, V>, ICorfuSMRObject<HashMap<K, V>> {
+public class SMRMap<K,V> implements Map<K,V>, ICorfuSMRObject<HashMap<K,V>> {
 
     /**
      * Returns the number of key-value mappings in this map.  If the
@@ -143,7 +143,7 @@ public class SMRMap<K, V> implements Map<K, V>, ICorfuSMRObject<HashMap<K, V>> {
      *                                       or value prevents it from being stored in this map
      */
     @Override
-    @MutatorAccessor(name = "put")
+    @MutatorAccessor(name="put")
     public V put(K key, V value) {
         return getSMRObject().put(key, value);
     }
@@ -179,7 +179,7 @@ public class SMRMap<K, V> implements Map<K, V>, ICorfuSMRObject<HashMap<K, V>> {
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      */
     @Override
-    @MutatorAccessor(name = "remove")
+    @MutatorAccessor(name="remove")
     public V remove(Object key) {
         return getSMRObject().remove(key);
     }
@@ -204,7 +204,7 @@ public class SMRMap<K, V> implements Map<K, V>, ICorfuSMRObject<HashMap<K, V>> {
      *                                       the specified map prevents it from being stored in this map
      */
     @Override
-    @Mutator(name = "putAll")
+    @Mutator(name="putAll")
     public void putAll(Map<? extends K, ? extends V> m) {
         getSMRObject().putAll(m);
     }
@@ -217,7 +217,7 @@ public class SMRMap<K, V> implements Map<K, V>, ICorfuSMRObject<HashMap<K, V>> {
      *                                       is not supported by this map
      */
     @Override
-    @Mutator(name = "clear", reset = true)
+    @Mutator(name="clear", reset=true)
     public void clear() {
         getSMRObject().clear();
     }

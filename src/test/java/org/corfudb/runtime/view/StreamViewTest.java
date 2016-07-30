@@ -1,11 +1,18 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.collections.SMRMap;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -23,8 +30,14 @@ public class StreamViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteFromStream()
             throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
         //begin tests
-        CorfuRuntime r = getDefaultRuntime().connect();
+        CorfuRuntime r = getRuntime().connect();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
@@ -42,8 +55,14 @@ public class StreamViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteFromStreamConcurrent()
             throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
         //begin tests
-        CorfuRuntime r = getDefaultRuntime().connect();
+        CorfuRuntime r = getRuntime().connect();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
@@ -51,7 +70,7 @@ public class StreamViewTest extends AbstractViewTest {
         scheduleConcurrently(100, i -> sv.write(testPayload));
         executeScheduled(8, 10, TimeUnit.SECONDS);
 
-        scheduleConcurrently(100, i -> assertThat(sv.read().getPayload())
+        scheduleConcurrently(100, i-> assertThat(sv.read().getPayload())
                 .isEqualTo("hello world".getBytes()));
         executeScheduled(8, 10, TimeUnit.SECONDS);
         assertThat(sv.read())
@@ -62,8 +81,14 @@ public class StreamViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteFromStreamWithoutBackpointers()
             throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
         //begin tests
-        CorfuRuntime r = getDefaultRuntime()
+        CorfuRuntime r = getRuntime()
                 .setBackpointersDisabled(true)
                 .connect();
 
@@ -74,7 +99,7 @@ public class StreamViewTest extends AbstractViewTest {
         scheduleConcurrently(100, i -> sv.write(testPayload));
         executeScheduled(8, 10, TimeUnit.SECONDS);
 
-        scheduleConcurrently(100, i -> assertThat(sv.read().getPayload())
+        scheduleConcurrently(100, i-> assertThat(sv.read().getPayload())
                 .isEqualTo("hello world".getBytes()));
         executeScheduled(8, 10, TimeUnit.SECONDS);
         assertThat(sv.read())
@@ -82,12 +107,19 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
 
+
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWriteFromCachedStream()
             throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
         //begin tests
-        CorfuRuntime r = getDefaultRuntime().connect()
+        CorfuRuntime r = getRuntime().connect()
                 .setCacheDisabled(false);
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -102,12 +134,18 @@ public class StreamViewTest extends AbstractViewTest {
                 .isEqualTo(null);
     }
 
-    @Test
+        @Test
     @SuppressWarnings("unchecked")
     public void streamCanSurviveOverwriteException()
             throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
         //begin tests
-        CorfuRuntime r = getDefaultRuntime().connect();
+        CorfuRuntime r = getRuntime().connect();
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         byte[] testPayload = "hello world".getBytes();
 
@@ -129,8 +167,14 @@ public class StreamViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void streamWillHoleFill()
             throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
+
         //begin tests
-        CorfuRuntime r = getDefaultRuntime().connect();
+        CorfuRuntime r = getRuntime().connect();
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         byte[] testPayload = "hello world".getBytes();
 
@@ -147,6 +191,7 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(sv.read())
                 .isEqualTo(null);
     }
+
 
 
     @Test

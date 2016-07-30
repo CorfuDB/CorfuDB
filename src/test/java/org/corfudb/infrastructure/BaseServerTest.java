@@ -15,27 +15,20 @@ public class BaseServerTest extends AbstractServerTest {
 
     @Before
     public void setupTest() {
-        server = new BaseServer();
+        server = new BaseServer(this.router);
         this.setServer(server);
     }
 
     @Override
-    public AbstractServer getDefaultServer() {
+    public IServer getDefaultServer() {
         return null;
     }
 
     @Test
-    public void testPing() {
+    public void testPing()
+    {
         sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.PONG);
-    }
-
-    @Test
-    public void shutdownServerDoesNotRespond() {
-        server.shutdown();
-        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
-        assertThat(getLastMessage())
-                .isNull();
+            .isEqualTo(CorfuMsg.CorfuMsgType.PONG);
     }
 }

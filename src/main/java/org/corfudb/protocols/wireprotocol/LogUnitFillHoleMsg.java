@@ -15,16 +15,14 @@ import lombok.Setter;
 public class LogUnitFillHoleMsg extends CorfuMsg {
 
 
-    /**
-     * The address to fill the hole at.
-     */
+    /** The address to fill the hole at. */
     long address;
 
-    public LogUnitFillHoleMsg(long address) {
+    public LogUnitFillHoleMsg(long address)
+    {
         this.msgType = CorfuMsgType.FILL_HOLE;
         this.address = address;
     }
-
     /**
      * Serialize the message into the given bytebuffer.
      *

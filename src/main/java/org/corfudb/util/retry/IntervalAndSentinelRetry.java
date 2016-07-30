@@ -9,24 +9,18 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * This class implements a basic interval-based retry, with sentinel.
- * <p>
+/** This class implements a basic interval-based retry, with sentinel.
+ *
  * Created by mwei on 9/1/15.
  */
 @Slf4j
-public class IntervalAndSentinelRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> implements IRetry<E, F, G, H, O, IntervalAndSentinelRetry> {
+public class IntervalAndSentinelRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> implements IRetry<E,F,G,H,O,IntervalAndSentinelRetry> {
 
-    @Getter
-    final IRetryable<E, F, G, H, O> runFunction;
-    @Getter
-    final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
-    /**
-     * The interval, in milliseconds to wait for retry
-     **/
+    /** The interval, in milliseconds to wait for retry **/
     @Getter
     @Setter
     long retryInterval = 0;
+
     /**
      * The sentinel boolean reference. The sentinel should be set to true if we should
      * continue retrying, false otherwise.
@@ -35,7 +29,14 @@ public class IntervalAndSentinelRetry<E extends Exception, F extends Exception, 
     @Setter
     AtomicBoolean sentinelReference;
 
-    public IntervalAndSentinelRetry(IRetryable runFunction) {
+    @Getter
+    final IRetryable<E,F,G,H,O> runFunction;
+
+    @Getter
+    final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
+
+    public IntervalAndSentinelRetry(IRetryable runFunction)
+    {
         this.runFunction = runFunction;
     }
 
@@ -50,13 +51,12 @@ public class IntervalAndSentinelRetry<E extends Exception, F extends Exception, 
         return retryLogic();
     }
 
-    /**
-     * Return the value of the sentinel, if set.
+    /** Return the value of the sentinel, if set.
      * If the sentinel is not set, true is returned.
-     *
-     * @return The value of the sentinel, or true, if no sentinel was set.
+     * @return  The value of the sentinel, or true, if no sentinel was set.
      */
-    boolean checkSentinel() {
+    boolean checkSentinel()
+    {
         return sentinelReference == null || sentinelReference.get();
     }
 
@@ -69,14 +69,14 @@ public class IntervalAndSentinelRetry<E extends Exception, F extends Exception, 
     @SuppressWarnings("unchecked")
     @SneakyThrows
     public boolean retryLogic() {
-        if (!checkSentinel()) {
-            return false;
-        }
+        if (!checkSentinel()) { return false; }
         try {
             Thread.sleep(retryInterval);
-        } catch (InterruptedException ie) {
+        } catch (InterruptedException ie)
+        {
             //actually pass this up to the handler, in case interruptedexception was listened on.
-            if (handlerMap.containsKey(InterruptedException.class)) {
+            if (handlerMap.containsKey(InterruptedException.class))
+            {
                 return handlerMap.get(InterruptedException.class).HandleException(ie, this);
             }
         }

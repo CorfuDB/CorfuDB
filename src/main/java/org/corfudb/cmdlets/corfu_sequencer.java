@@ -47,7 +47,7 @@ public class corfu_sequencer implements ICmdlet {
         Integer port = Integer.parseInt(addressport.split(":")[1]);
 
         // Create a client router and get layout.
-        log.trace("Creating router for {}:{}", host, port);
+        log.trace("Creating router for {}:{}", host,port);
         NettyClientRouter router = new NettyClientRouter(host, port);
         router.addClient(new SequencerClient())
                 .start();
@@ -59,10 +59,13 @@ public class corfu_sequencer implements ICmdlet {
                     Integer.parseInt((String) opts.get("--num-tokens"))).get().getToken();
             System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port).reset().a(":"));
             System.out.println(token);
-        } catch (ExecutionException ex) {
+        } catch (ExecutionException ex)
+        {
             log.error("Exception getting sequence", ex.getCause());
             throw new RuntimeException(ex.getCause());
-        } catch (Exception e) {
+        }
+        catch (Exception e)
+        {
             log.error("Exception getting layout", e);
             throw new RuntimeException(e);
         }

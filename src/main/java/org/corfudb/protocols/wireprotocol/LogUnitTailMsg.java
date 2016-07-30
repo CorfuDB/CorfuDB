@@ -2,14 +2,19 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeMap;
 import com.google.common.collect.TreeRangeSet;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.Serializers;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 /**
@@ -19,19 +24,22 @@ import java.util.Set;
 @Setter
 @NoArgsConstructor
 @ToString(callSuper = true)
-public class CorfuRangeMsg extends CorfuMsg {
+public class LogUnitTailMsg extends CorfuMsg {
 
-    RangeSet<Long> ranges;
+    Long contiguousTail;
 
-    public CorfuRangeMsg(RangeSet<Long> ranges)
-    {
-        this.ranges = ranges;
+    RangeSet<Long> streamAddresses;
+
+    public LogUnitTailMsg(Long contiguousTail, RangeSet<Long> streamAddresses) {
+        this.msgType = CorfuMsgType.CONTIGUOUS_TAIL;
+        this.contiguousTail = contiguousTail;
+        this.streamAddresses = streamAddresses;
     }
 
-    public CorfuRangeMsg(CorfuMsg.CorfuMsgType type, RangeSet<Long> ranges)
-    {
-        this.msgType = type;
-        this.ranges = ranges;
+    public LogUnitTailMsg(Long contiguousTail) {
+        this.msgType = CorfuMsgType.CONTIGUOUS_TAIL;
+        this.contiguousTail = contiguousTail;
+        this.streamAddresses = TreeRangeSet.create();
     }
 
     /**
@@ -42,7 +50,8 @@ public class CorfuRangeMsg extends CorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        Set<Range<Long>> ranges = this.ranges.asRanges();
+        buffer.writeLong(contiguousTail);
+        Set<Range<Long>> ranges = streamAddresses.asRanges();
         buffer.writeInt(ranges.size());
         for (Range i : ranges)
         {
@@ -60,12 +69,13 @@ public class CorfuRangeMsg extends CorfuMsg {
     @SuppressWarnings("unchecked")
     public void fromBuffer(ByteBuf buffer) {
         super.fromBuffer(buffer);
-        this.ranges = TreeRangeSet.create();
+        contiguousTail = buffer.readLong();
+        streamAddresses = TreeRangeSet.create();
         int ranges = buffer.readInt();
         for (int i = 0; i < ranges; i++)
         {
             Range r = (Range) Serializers.getSerializer(Serializers.SerializerType.JAVA).deserialize(buffer, null);
-            this.ranges.add(r);
+            streamAddresses.add(r);
         }
     }
 }

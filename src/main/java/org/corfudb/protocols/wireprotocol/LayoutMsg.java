@@ -19,14 +19,14 @@ import java.nio.charset.StandardCharsets;
 @NoArgsConstructor
 @ToString(callSuper = true)
 public class LayoutMsg extends CorfuMsg {
-    static final Gson parser = new GsonBuilder().create();
-    /**
-     * The current layout.
-     */
+    /** The current layout. */
     @Getter
     Layout layout;
 
-    public LayoutMsg(Layout layout, CorfuMsgType type) {
+    static final Gson parser = new GsonBuilder().create();
+
+    public LayoutMsg(Layout layout, CorfuMsgType type)
+    {
         this.msgType = type;
         this.layout = layout;
     }
@@ -39,7 +39,7 @@ public class LayoutMsg extends CorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        byte[] b = parser.toJson(layout).getBytes();
+        byte[] b =  parser.toJson(layout).getBytes();
         buffer.writeInt(b.length);
         buffer.writeBytes(b);
     }

@@ -5,8 +5,6 @@ package org.corfudb.util.retry;
  */
 @FunctionalInterface
 public interface IRetryable<E extends Exception, F extends Exception, G extends Exception, H extends Exception, T> {
-    /**
-     * Returns true on success, false will cause retry
-     */
+    /** Returns true on success, false will cause retry */
     T retryFunction() throws Exception;
 }

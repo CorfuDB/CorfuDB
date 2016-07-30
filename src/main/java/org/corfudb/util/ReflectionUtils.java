@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 /**
@@ -17,6 +18,16 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class ReflectionUtils {
+    public static String getShortMethodName(String longName)
+    {
+        int packageIndex = longName.substring(0, longName.indexOf("(")).lastIndexOf(".");
+        return longName.substring(packageIndex + 1);
+    }
+
+    public static String getMethodNameOnlyFromString(String s) {
+        return s.substring(0, s.indexOf("("));
+    }
+
     static Map<String, Class> primitiveTypeMap = ImmutableMap.<String, Class>builder()
             .put("int", Integer.TYPE)
             .put("long", Long.TYPE)
@@ -36,17 +47,6 @@ public class ReflectionUtils {
             .put("byte[]", byte[].class)
             .put("short[]", short[].class)
             .build();
-    private static Pattern methodExtractor = Pattern.compile("([^.\\s]*)\\((.*)\\)$");
-    private static Pattern classExtractor = Pattern.compile("(\\S*)\\.(.*)\\(.*$");
-
-    public static String getShortMethodName(String longName) {
-        int packageIndex = longName.substring(0, longName.indexOf("(")).lastIndexOf(".");
-        return longName.substring(packageIndex + 1);
-    }
-
-    public static String getMethodNameOnlyFromString(String s) {
-        return s.substring(0, s.indexOf("("));
-    }
 
     public static Class<?> getPrimitiveType(String s) {
         return primitiveTypeMap.get(s);
@@ -79,16 +79,19 @@ public class ReflectionUtils {
     public static <T> T newInstanceFromUnknownArgumentTypes(Class<T> cls, Object[] args) {
         try {
             return cls.getDeclaredConstructor(getArgumentTypesFromArgumentList(args)).newInstance(args);
-        } catch (InstantiationException | InvocationTargetException | IllegalAccessException ie) {
+        }
+        catch (InstantiationException | InvocationTargetException | IllegalAccessException ie) {
             throw new RuntimeException(ie);
-        } catch (NoSuchMethodException nsme) {
+        }
+        catch (NoSuchMethodException nsme) {
             // Now we need to find a matching primitive type.
             // We can maybe cheat by running through all the constructors until we get what we want
             // due to autoboxing
             Constructor[] ctors = Arrays.stream(cls.getDeclaredConstructors())
-                    .filter(c -> c.getParameterTypes().length == args.length)
-                    .toArray(Constructor[]::new);
-            for (Constructor<?> ctor : ctors) {
+                                            .filter(c -> c.getParameterTypes().length == args.length)
+                                            .toArray(Constructor[]::new);
+            for (Constructor<?> ctor : ctors)
+            {
                 try {
                     return (T) ctor.newInstance(args);
                 } catch (Exception e) {
@@ -97,19 +100,21 @@ public class ReflectionUtils {
             }
 
             String argTypes = Arrays.stream(args)
-                    .map(Object::getClass)
-                    .map(Object::toString)
-                    .collect(Collectors.joining(", "));
+                                .map(Object::getClass)
+                                .map(Object::toString)
+                                .collect(Collectors.joining(", "));
 
             String availableCtors = Arrays.stream(ctors)
-                    .map(Constructor::toString)
-                    .collect(Collectors.joining(", "));
+                                        .map(Constructor::toString)
+                                        .collect(Collectors.joining(", "));
 
             throw new RuntimeException("Couldn't find a matching ctor for " +
                     argTypes + "; available ctors are " + availableCtors);
         }
     }
 
+
+    private static Pattern methodExtractor = Pattern.compile("([^.\\s]*)\\((.*)\\)$");
     public static Method getMethodFromToString(String methodString) {
         Class<?> cls = getClassFromMethodToString(methodString);
         Matcher m = methodExtractor.matcher(methodString);
@@ -121,12 +126,13 @@ public class ReflectionUtils {
         }
     }
 
+    private static Pattern classExtractor = Pattern.compile("(\\S*)\\.(.*)\\(.*$");
     public static Class getClassFromMethodToString(String methodString) {
         Matcher m = classExtractor.matcher(methodString);
         m.find();
         String className = m.group(1);
         try {
-            return Class.forName(className);
+             return Class.forName(className);
         } catch (ClassNotFoundException cnfe) {
             throw new RuntimeException(cnfe);
         }

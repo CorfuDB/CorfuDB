@@ -2,11 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 
 import java.util.Map;
 import java.util.UUID;
@@ -19,14 +15,10 @@ import java.util.UUID;
 @NoArgsConstructor
 @ToString(callSuper = true)
 public class TokenResponseMsg extends CorfuMsg {
-    /**
-     * The issued token
-     */
+    /** The issued token */
     Long token;
 
-    /**
-     * A map of backpointers.
-     */
+    /** A map of backpointers. */
     Map<UUID, Long> backpointerMap;
         /* The wire format of the NettyStreamingServerTokenResponse message is below:
             | client ID(16) | request ID(8) |  type(1)  |  token(8) |
@@ -34,7 +26,8 @@ public class TokenResponseMsg extends CorfuMsg {
             0       7       15              23          24          32
          */
 
-    public TokenResponseMsg(@NonNull Long token, @NonNull Map<UUID, Long> backpointerMap) {
+    public TokenResponseMsg(@NonNull Long token, @NonNull Map<UUID,Long> backpointerMap)
+    {
         this.msgType = CorfuMsgType.TOKEN_RES;
         this.token = token;
         this.backpointerMap = backpointerMap;
@@ -52,9 +45,9 @@ public class TokenResponseMsg extends CorfuMsg {
         buffer.writeShort(backpointerMap.size());
         backpointerMap.entrySet().stream()
                 .forEach(e -> {
-                    buffer.writeLong(e.getKey().getMostSignificantBits());
-                    buffer.writeLong(e.getKey().getLeastSignificantBits());
-                    buffer.writeLong(e.getValue());
+                   buffer.writeLong(e.getKey().getMostSignificantBits());
+                   buffer.writeLong(e.getKey().getLeastSignificantBits());
+                   buffer.writeLong(e.getValue());
                 });
     }
 
@@ -69,8 +62,9 @@ public class TokenResponseMsg extends CorfuMsg {
         super.fromBuffer(buffer);
         this.token = buffer.readLong();
         short numEntries = buffer.readShort();
-        ImmutableMap.Builder<UUID, Long> mb = ImmutableMap.builder();
-        for (int i = 0; i < numEntries; i++) {
+        ImmutableMap.Builder<UUID,Long> mb = ImmutableMap.builder();
+        for (int i = 0; i < numEntries; i++)
+        {
             UUID id = new UUID(buffer.readLong(), buffer.readLong());
             Long backPointer = buffer.readLong();
             mb.put(id, backPointer);

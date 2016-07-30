@@ -20,7 +20,8 @@ public class StreamHintEntry extends LogEntry {
 
     RangeSet<Long> ranges;
 
-    public StreamHintEntry(RangeSet<Long> ranges) {
+    public StreamHintEntry(RangeSet<Long> ranges)
+    {
         super(LogEntryType.STREAM_HINT);
         this.ranges = ranges;
     }
@@ -36,7 +37,8 @@ public class StreamHintEntry extends LogEntry {
         super.serialize(buffer);
         Set<Range<Long>> ranges = this.ranges.asRanges();
         buffer.writeInt(ranges.size());
-        for (Range i : ranges) {
+        for (Range i : ranges)
+        {
             Serializers.getSerializer(Serializers.SerializerType.JAVA).serialize(i, buffer);
         }
     }
@@ -53,7 +55,8 @@ public class StreamHintEntry extends LogEntry {
         super.deserializeBuffer(buffer, rt);
         this.ranges = TreeRangeSet.create();
         int ranges = buffer.readInt();
-        for (int i = 0; i < ranges; i++) {
+        for (int i = 0; i < ranges; i++)
+        {
             Range r = (Range) Serializers.getSerializer(Serializers.SerializerType.JAVA).deserialize(buffer, null);
             this.ranges.add(r);
         }

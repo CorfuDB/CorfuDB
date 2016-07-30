@@ -1,5 +1,6 @@
 package org.corfudb.util;
 
+import java.io.Closeable;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 
@@ -13,7 +14,8 @@ public class LockUtils {
         ReadWriteLock lock;
         Lock releasingLock;
 
-        public AutoCloseRWLock(ReadWriteLock lock) {
+        public AutoCloseRWLock(ReadWriteLock lock)
+        {
             this.lock = lock;
         }
 
@@ -39,7 +41,7 @@ public class LockUtils {
          * Closes this resource, relinquishing any underlying resources.
          * This method is invoked automatically on objects managed by the
          * {@code try}-with-resources statement.
-         */
+         * */
         @Override
         public void close() {
             releasingLock.unlock();

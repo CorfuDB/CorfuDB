@@ -5,29 +5,31 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * This class implements a basic interval-based retry.
- * <p>
+/** This class implements a basic interval-based retry.
+ *
  * Created by mwei on 9/1/15.
  */
 @Slf4j
-public class IntervalRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> implements IRetry<E, F, G, H, O, IntervalRetry> {
+public class IntervalRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> implements IRetry<E,F,G,H,O,IntervalRetry> {
 
-    @Getter
-    final IRetryable<E, F, G, H, O> runFunction;
-    @Getter
-    final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
-    /**
-     * The interval, in milliseconds to wait for retry
-     **/
+    /** The interval, in milliseconds to wait for retry **/
     @Getter
     @Setter
     long retryInterval = 1000;
 
-    public IntervalRetry(IRetryable runFunction) {
+    @Getter
+    final IRetryable<E,F,G,H,O> runFunction;
+
+    @Getter
+    final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
+
+    public IntervalRetry(IRetryable runFunction)
+    {
         this.runFunction = runFunction;
     }
 
@@ -54,9 +56,11 @@ public class IntervalRetry<E extends Exception, F extends Exception, G extends E
     public boolean retryLogic() {
         try {
             Thread.sleep(retryInterval);
-        } catch (InterruptedException ie) {
+        } catch (InterruptedException ie)
+        {
             //actually pass this up to the handler, in case interruptedexception was listened on.
-            if (handlerMap.containsKey(InterruptedException.class)) {
+            if (handlerMap.containsKey(InterruptedException.class))
+            {
                 return handlerMap.get(InterruptedException.class).HandleException(ie, this);
             }
         }

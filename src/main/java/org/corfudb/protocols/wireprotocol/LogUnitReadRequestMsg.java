@@ -14,16 +14,14 @@ import lombok.Setter;
 @NoArgsConstructor
 public class LogUnitReadRequestMsg extends CorfuMsg {
 
-    /**
-     * The address to read from
-     */
+    /** The address to read from */
     long address;
 
-    public LogUnitReadRequestMsg(long address) {
+    public LogUnitReadRequestMsg(long address)
+    {
         this.msgType = CorfuMsgType.READ_REQUEST;
         this.address = address;
     }
-
     /**
      * Serialize the message into the given bytebuffer.
      *

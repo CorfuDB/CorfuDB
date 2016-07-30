@@ -13,8 +13,9 @@ public class QuorumUnreachableException extends Exception {
     @Getter
     public int required;
 
-    public QuorumUnreachableException(int reachable, int required) {
-        super("Couldn't reach quorum, reachable=" + reachable + ", required=" + required);
+    public QuorumUnreachableException(int reachable, int required)
+    {
+        super ("Couldn't reach quorum, reachable="+ reachable + ", required=" + required);
         this.reachable = reachable;
         this.required = required;
     }

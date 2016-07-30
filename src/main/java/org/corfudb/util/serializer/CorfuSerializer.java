@@ -1,8 +1,21 @@
 package org.corfudb.util.serializer;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.lang.reflect.Array;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 9/29/15.
@@ -11,11 +24,10 @@ public class CorfuSerializer implements ISerializer {
 
     //region Constants
         /* The magic that denotes this is a corfu payload */
-    final byte CorfuPayloadMagic = 0x42;
+        final byte CorfuPayloadMagic = 0x42;
     //endregion
 
     //region Serializer
-
     /**
      * Deserialize an object from a given byte buffer.
      *
@@ -42,14 +54,19 @@ public class CorfuSerializer implements ISerializer {
      */
     @Override
     public void serialize(Object o, ByteBuf b) {
-        if (o instanceof ICorfuSerializable) {
+        if (o instanceof ICorfuSerializable)
+        {
             b.writeByte(CorfuPayloadMagic);
             ICorfuSerializable c = (ICorfuSerializable) o;
             c.serialize(b);
-        } else if (o instanceof byte[]) {
-            byte[] bytes = (byte[]) o;
+        }
+        else if (o instanceof byte[])
+        {
+            byte[] bytes = (byte[])o;
             b.writeBytes(bytes);
-        } else {
+        }
+        else
+        {
             throw new RuntimeException("Attempting to serialize unsupported type.");
         }
     }

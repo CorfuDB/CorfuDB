@@ -1,10 +1,12 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.TestRule;
 import org.junit.Test;
+
+import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,9 +14,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by mwei on 1/6/16.
  */
 public class LayoutViewTest extends AbstractViewTest {
+
+    @Getter
+    final String defaultConfigurationString = getDefaultEndpoint();
+
     @Test
     public void canGetLayout() {
-        CorfuRuntime r = getDefaultRuntime().connect();
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        wireRouters();
+
+        CorfuRuntime r = getRuntime().connect();
         Layout l = r.getLayoutView().getCurrentLayout();
         assertThat(l.asJSONString())
                 .isNotNull();
@@ -23,51 +32,30 @@ public class LayoutViewTest extends AbstractViewTest {
     @Test
     public void canSetLayout()
             throws Exception {
-        CorfuRuntime r = getDefaultRuntime().connect();
-        Layout l = new TestLayoutBuilder()
-                .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addSequencer(9000)
-                .buildSegment()
-                    .buildStripe()
-                        .addLogUnit(9000)
-                    .addToSegment()
-                .addToLayout()
-                .build();
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        wireRouters();
+
+        CorfuRuntime r = getRuntime().connect();
+        String localAddress = "localhost:9000";
+        Layout l = new Layout(
+                Collections.singletonList(localAddress),
+                Collections.singletonList(localAddress),
+                Collections.singletonList(new Layout.LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        Collections.singletonList(localAddress)
+                                )
+                        )
+                )),
+                1L
+        );
 
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
         assertThat(r.getLayoutView().getLayout().epoch)
                 .isEqualTo(1L);
-    }
-
-    @Test
-    public void canTolerateLayoutServerFailure()
-            throws Exception {
-        addServer(9000);
-        addServer(9001);
-
-        bootstrapAllServers(new TestLayoutBuilder()
-                .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addLayoutServer(9001)
-                .addSequencer(9000)
-                .buildSegment()
-                    .buildStripe()
-                        .addLogUnit(9000)
-                    .addToSegment()
-                .addToLayout()
-                .build());
-
-        CorfuRuntime r = getRuntime().connect();
-
-        // Fail the network link between the client and test server
-        addServerRule(9001, new TestRule()
-                            .always()
-                            .drop());
-
-        r.invalidateLayout();
-
-        r.getStreamsView().get(CorfuRuntime.getStreamID("hi")).check();
     }
 }

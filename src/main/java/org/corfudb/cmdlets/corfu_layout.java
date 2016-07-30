@@ -17,7 +17,9 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
-import static org.fusesource.jansi.Ansi.Color.*;
+import static org.fusesource.jansi.Ansi.Color.WHITE;
+import static org.fusesource.jansi.Ansi.Color.GREEN;
+import static org.fusesource.jansi.Ansi.Color.RED;
 import static org.fusesource.jansi.Ansi.ansi;
 
 /**
@@ -63,7 +65,7 @@ public class corfu_layout implements ICmdlet {
         Integer port = Integer.parseInt(addressport.split(":")[1]);
 
         // Create a client router and get layout.
-        log.trace("Creating router for {}:{}", host, port);
+        log.trace("Creating router for {}:{}", host,port);
         NettyClientRouter router = new NettyClientRouter(host, port);
         router.addClient(new BaseClient())
                 .addClient(new LayoutClient())
@@ -84,17 +86,20 @@ public class corfu_layout implements ICmdlet {
                 log.error("Exception getting layout", e);
                 throw new RuntimeException(e);
             }
-        } else if ((Boolean) opts.get("bootstrap")) {
+        }
+        else if ((Boolean) opts.get("bootstrap")) {
             Layout l = getLayout(opts);
             log.debug("Bootstrapping with layout {}", l);
             try {
-                if (router.getClient(LayoutClient.class).bootstrapLayout(l).get()) {
-                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
-                            .reset().fg(GREEN).a(": ACK"));
-                } else {
-                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
-                            .reset().fg(RED).a(": NACK"));
-                }
+               if (router.getClient(LayoutClient.class).bootstrapLayout(l).get()) {
+                   System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                           .reset().fg(GREEN).a(": ACK"));
+               }
+                else
+               {
+                   System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                           .reset().fg(RED).a(": NACK"));
+               }
             } catch (ExecutionException ex) {
                 log.error("Exception bootstrapping layout", ex.getCause());
                 throw new RuntimeException(ex.getCause());
@@ -102,14 +107,17 @@ public class corfu_layout implements ICmdlet {
                 log.error("Exception bootstrapping layout", e);
                 throw new RuntimeException(e);
             }
-        } else if ((Boolean) opts.get("prepare")) {
+        }
+        else if ((Boolean) opts.get("prepare")) {
             long rank = Long.parseLong((String) opts.get("--rank"));
             log.debug("Prepare with new rank={}", rank);
             try {
-                if (router.getClient(LayoutClient.class).prepare(rank).get().isAccepted()) {
+                if (router.getClient(LayoutClient.class).prepare(rank).get()) {
                     System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
                             .reset().fg(GREEN).a(": ACK"));
-                } else {
+                }
+                else
+                {
                     System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
                             .reset().fg(RED).a(": NACK"));
                 }
@@ -120,7 +128,8 @@ public class corfu_layout implements ICmdlet {
                 log.error("Exception during prepare", e);
                 throw new RuntimeException(e);
             }
-        } else if ((Boolean) opts.get("propose")) {
+        }
+        else if ((Boolean) opts.get("propose")) {
             long rank = Long.parseLong((String) opts.get("--rank"));
             Layout l = getLayout(opts);
             log.debug("Propose with new rank={}, layout={}", rank, l);
@@ -128,7 +137,9 @@ public class corfu_layout implements ICmdlet {
                 if (router.getClient(LayoutClient.class).propose(rank, l).get()) {
                     System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
                             .reset().fg(GREEN).a(": ACK"));
-                } else {
+                }
+                else
+                {
                     System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
                             .reset().fg(RED).a(": NACK"));
                 }
@@ -139,14 +150,17 @@ public class corfu_layout implements ICmdlet {
                 log.error("Exception during prepare", e);
                 throw new RuntimeException(e);
             }
-        } else if ((Boolean) opts.get("committed")) {
+        }
+        else if ((Boolean) opts.get("committed")) {
             long rank = Long.parseLong((String) opts.get("--rank"));
             log.debug("Propose with new rank={}", rank);
             try {
                 if (router.getClient(LayoutClient.class).committed(rank).get()) {
                     System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
                             .reset().fg(GREEN).a(": ACK"));
-                } else {
+                }
+                else
+                {
                     System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
                             .reset().fg(RED).a(": NACK"));
                 }
@@ -160,11 +174,13 @@ public class corfu_layout implements ICmdlet {
         }
     }
 
-    Layout getLayout(Map<String, Object> opts) {
+    Layout getLayout(Map<String,Object> opts)
+    {
         Layout oLayout = null;
 
-        if ((Boolean) opts.getOrDefault("--single", false)) {
-            String localAddress = (String) opts.get("<address>:<port>");
+        if ((Boolean)opts.getOrDefault("--single", false))
+        {
+            String localAddress =  (String) opts.get("<address>:<port>");
             log.info("Single-node mode requested, initializing layout with single log unit and sequencer at {}.",
                     localAddress);
             oLayout = new Layout(
@@ -182,25 +198,31 @@ public class corfu_layout implements ICmdlet {
                     )),
                     0L
             );
-        } else if (opts.get("--layout-file") != null) {
+        }
+        else if (opts.get("--layout-file") != null)
+        {
             try {
                 String f = (String) opts.get("--layout-file");
                 String layoutJson = new String(Files.readAllBytes(Paths.get
                         ((String) opts.get("--layout-file"))));
                 Gson g = new GsonBuilder().create();
                 oLayout = g.fromJson(layoutJson, Layout.class);
-            } catch (Exception e) {
+            } catch (Exception e)
+            {
                 throw new RuntimeException("Failed to read from file (not a JSON file?)", e);
             }
         }
 
-        if (oLayout == null) {
+        if (oLayout == null)
+        {
             log.trace("Reading layout from stdin.");
             try {
                 String s = new String(ByteStreams.toByteArray(System.in));
                 Gson g = new GsonBuilder().create();
                 oLayout = g.fromJson(s, Layout.class);
-            } catch (Exception e) {
+            }
+            catch (Exception e)
+            {
                 throw new RuntimeException("Failed to read from stdin (not valid JSON?)", e);
             }
         }

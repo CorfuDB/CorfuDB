@@ -10,8 +10,7 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-import static org.fusesource.jansi.Ansi.Color.GREEN;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
+import static org.fusesource.jansi.Ansi.Color.*;
 import static org.fusesource.jansi.Ansi.ansi;
 
 /**
@@ -49,50 +48,52 @@ public class corfu_smrobject implements ICmdlet {
         // Attempt to open the object
         Class<?> cls;
         try {
-            cls = Class.forName((String) opts.get("<class>"));
-        } catch (ClassNotFoundException cnfe) {
+            cls = Class.forName((String)opts.get("<class>"));
+        } catch (ClassNotFoundException cnfe)
+        {
             throw new RuntimeException(cnfe);
         }
 
-        Object o = rt.getObjectsView().build()
-                .setStreamName((String) opts.get("--stream-id"))
-                .setType(cls)
-                .open();
-
+        Object o = rt.getObjectsView().open(getUUIDfromString((String) opts.get("--stream-id")), cls);
         // Use reflection to find the method...
         Method m;
         try {
-            m = Arrays.stream(cls.getDeclaredMethods())
+            m=Arrays.stream(cls.getDeclaredMethods())
                     .filter(x -> x.getName().equals(opts.get("<method>")))
                     .filter(x -> x.getParameterCount() == (opts.get("<args>") == null ?
-                            0 : ((String) opts.get("<args>")).split(",").length))
+                           0 : ((String) opts.get("<args>")).split(",").length ))
                     .findFirst().get();
-        } catch (NoSuchElementException nsee) {
+        } catch (NoSuchElementException nsee)
+        {
             throw new RuntimeException("Method " + opts.get("<method>") + " with " +
                     (opts.get("<args>") == null ?
                             0 : ((String) opts.get("<args>")).split(",").length)
-                    + " arguments not found!");
+                            + " arguments not found!");
         }
-        if (m == null) {
+        if (m == null)
+        {
             throw new RuntimeException("Method " + opts.get("<method>") + " with " +
                     (opts.get("<args>") == null ?
                             0 : ((String) opts.get("<args>")).split(",").length)
-                    + " arguments not found!");
+                            + " arguments not found!");
         }
 
         Object ret;
         try {
             ret = m.invoke(o, (opts.get("<args>") == null ?
                     null : ((String) opts.get("<args>")).split(",")));
-        } catch (IllegalAccessException | InvocationTargetException e) {
+        } catch(IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException("Couldn't invoke method on object", e);
         }
 
-        if (ret != null) {
+        if (ret != null)
+        {
             System.out.println(ansi().fg(WHITE).a("Output:").reset());
             System.out.println(ret.toString());
             System.out.println(ansi().fg(GREEN).a("SUCCESS").reset());
-        } else {
+        }
+        else
+        {
             System.out.println(ansi().fg(GREEN).a("SUCCESS").reset());
         }
     }

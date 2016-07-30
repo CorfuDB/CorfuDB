@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.ICorfuSerializable;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Arrays;
@@ -18,7 +19,7 @@ import java.util.Arrays;
 public class SMREntry extends LogEntry {
 
     /**
-     * The name of the SMR method. Note that this is limited to the size of a short.
+     *  The name of the SMR method. Note that this is limited to the size of a short.
      */
     @Getter
     private String SMRMethod;
@@ -35,7 +36,8 @@ public class SMREntry extends LogEntry {
     @Getter
     private Serializers.SerializerType serializerType;
 
-    public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, Serializers.SerializerType serializer) {
+    public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, Serializers.SerializerType serializer)
+    {
         super(LogEntryType.SMR);
         this.SMRMethod = SMRMethod;
         this.SMRArguments = SMRArguments;
@@ -58,7 +60,8 @@ public class SMREntry extends LogEntry {
         serializerType = Serializers.typeMap.get(b.readByte());
         byte numArguments = b.readByte();
         Object[] arguments = new Object[numArguments];
-        for (byte arg = 0; arg < numArguments; arg++) {
+        for (byte arg = 0; arg < numArguments; arg++)
+        {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
             arguments[arg] = Serializers.getSerializer(serializerType).deserialize(objBuf, rt);

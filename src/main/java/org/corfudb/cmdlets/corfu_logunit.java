@@ -2,7 +2,6 @@ package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
@@ -11,6 +10,8 @@ import org.docopt.Docopt;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 
 /**
  * Created by mwei on 12/10/15.
@@ -55,67 +56,83 @@ public class corfu_logunit implements ICmdlet {
         Integer port = Integer.parseInt(addressport.split(":")[1]);
 
         // Create a client router and ping.
-        log.trace("Creating router for {}:{}", host, port);
+        log.trace("Creating router for {}:{}", host,port);
         NettyClientRouter router = new NettyClientRouter(host, port);
         router.addClient(new LogUnitClient())
                 .start();
 
         try {
-            if ((Boolean) opts.get("write")) {
+            if ((Boolean)opts.get("write"))
+            {
                 write(router, opts);
-            } else if ((Boolean) opts.get("read")) {
+            } else if ((Boolean)opts.get("read"))
+            {
                 read(router, opts);
-            } else if ((Boolean) opts.get("trim")) {
+            } else if ((Boolean)opts.get("trim"))
+            {
                 trim(router, opts);
-            } else if ((Boolean) opts.get("fillHole")) {
+            } else if ((Boolean)opts.get("fillHole"))
+            {
                 fillHole(router, opts);
-            } else if ((Boolean) opts.get("forceGC")) {
+            } else if ((Boolean)opts.get("forceGC"))
+            {
                 forceGC(router, opts);
-            } else if ((Boolean) opts.get("setGCInterval")) {
+            } else if ((Boolean)opts.get("setGCInterval"))
+            {
                 setGCInterval(router, opts);
             }
-        } catch (ExecutionException ex) {
+        } catch (ExecutionException ex)
+        {
             log.error("Exception", ex.getCause());
             throw new RuntimeException(ex.getCause());
-        } catch (Exception e) {
+        }
+        catch (Exception e)
+        {
             log.error("Exception", e);
             throw new RuntimeException(e);
         }
     }
 
-    void write(NettyClientRouter router, Map<String, Object> opts)
-            throws Exception {
+    void write(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
         router.getClient(LogUnitClient.class).write(Long.parseLong((String) opts.get("--log-address")),
                 streamsFromString((String) opts.get("--stream-ids")), Integer.parseInt((String) opts.get("--rank")),
                 ByteStreams.toByteArray(System.in), Collections.emptyMap()).get();
     }
 
-    void trim(NettyClientRouter router, Map<String, Object> opts)
-            throws Exception {
+    void trim(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
         router.getClient(LogUnitClient.class).trim(getUUIDfromString((String) opts.get("--stream-id")),
                 Long.parseLong((String) opts.get("--log-address")));
     }
 
-    void fillHole(NettyClientRouter router, Map<String, Object> opts)
-            throws Exception {
+    void fillHole(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
         router.getClient(LogUnitClient.class).fillHole(
                 Long.parseLong((String) opts.get("--log-address"))).get();
     }
 
-    void forceGC(NettyClientRouter router, Map<String, Object> opts)
-            throws Exception {
+    void forceGC(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
         router.getClient(LogUnitClient.class).forceGC();
     }
 
-    void setGCInterval(NettyClientRouter router, Map<String, Object> opts)
-            throws Exception {
+    void setGCInterval(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
         router.getClient(LogUnitClient.class).setGCInterval(Long.parseLong((String) opts.get("--interval")));
     }
 
-    void read(NettyClientRouter router, Map<String, Object> opts)
-            throws Exception {
+    void read(NettyClientRouter router, Map<String,Object> opts)
+            throws Exception
+    {
         ReadResult r = router.getClient(LogUnitClient.class).read(Long.parseLong((String) opts.get("--log-address"))).get();
-        switch (r.getResultType()) {
+        switch (r.getResultType())
+        {
             case EMPTY:
                 System.err.println("Error: EMPTY");
                 break;

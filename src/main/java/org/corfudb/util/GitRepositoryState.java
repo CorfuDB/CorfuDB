@@ -1,6 +1,8 @@
 package org.corfudb.util;
 
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Properties;
@@ -34,7 +36,24 @@ public class GitRepositoryState {
     public String buildHost;
     public String buildVersion;
 
-    private GitRepositoryState(Properties properties) {
+    public static GitRepositoryState getRepositoryState()
+    {
+        if (_gitRepositoryState == null)
+        {
+            Properties properties = new Properties();
+            try {
+                properties.load(GitRepositoryState.class.getClassLoader().getResourceAsStream("git.properties"));
+            } catch (IOException ie)
+            {
+                log.error("Failed to get repository state", ie);
+            }
+            _gitRepositoryState = new GitRepositoryState(properties);
+        }
+        return _gitRepositoryState;
+    }
+
+    private GitRepositoryState(Properties properties)
+    {
         this.tags = properties.get("git.tags").toString();
         this.branch = properties.get("git.branch").toString();
         this.dirty = properties.get("git.dirty").toString();
@@ -57,19 +76,6 @@ public class GitRepositoryState {
         this.buildTime = properties.get("git.build.time").toString();
         this.buildHost = properties.get("git.build.host").toString();
         this.buildVersion = properties.get("git.build.version").toString();
-    }
-
-    public static GitRepositoryState getRepositoryState() {
-        if (_gitRepositoryState == null) {
-            Properties properties = new Properties();
-            try {
-                properties.load(GitRepositoryState.class.getClassLoader().getResourceAsStream("git.properties"));
-            } catch (IOException ie) {
-                log.error("Failed to get repository state", ie);
-            }
-            _gitRepositoryState = new GitRepositoryState(properties);
-        }
-        return _gitRepositoryState;
     }
 
 }

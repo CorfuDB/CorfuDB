@@ -1,6 +1,9 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
@@ -19,9 +22,14 @@ public class StreamsViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canCopyStream()
             throws Exception {
+        // default layout is chain replication.
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new LogUnitServer(defaultOptionsMap()));
+        addServerForTest(getDefaultEndpoint(), new SequencerServer(defaultOptionsMap()));
+        wireRouters();
 
         //begin tests
-        CorfuRuntime r = getDefaultRuntime().connect();
+        CorfuRuntime r = getRuntime().connect();
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         UUID streamACopy = CorfuRuntime.getStreamID("stream A copy");
         byte[] testPayload = "hello world".getBytes();
@@ -35,7 +43,7 @@ public class StreamsViewTest extends AbstractViewTest {
         assertThat(sv.read())
                 .isEqualTo(null);
 
-        StreamView svCopy = r.getStreamsView().copy(streamA, streamACopy, sv.getLogPointer() - 1L);
+        StreamView svCopy = r.getStreamsView().copy(streamA, streamACopy, sv.getLogPointer()-1L);
 
         assertThat(svCopy.read().getPayload())
                 .isEqualTo(testPayload);

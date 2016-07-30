@@ -5,20 +5,23 @@ import org.assertj.core.api.AbstractAssert;
 /**
  * Created by mwei on 2/2/16.
  */
-public class SequencerServerAssertions extends AbstractAssert<SequencerServerAssertions, SequencerServer> {
+public class SequencerServerAssertions  extends AbstractAssert<SequencerServerAssertions, SequencerServer> {
 
-    public SequencerServerAssertions(SequencerServer actual) {
+    public SequencerServerAssertions(SequencerServer actual)
+    {
         super(actual, SequencerServerAssertions.class);
     }
 
-    public static SequencerServerAssertions assertThat(SequencerServer actual) {
+    public static SequencerServerAssertions assertThat(SequencerServer actual)
+    {
         return new SequencerServerAssertions(actual);
     }
 
     public SequencerServerAssertions tokenIsAt(long address) {
         isNotNull();
 
-        if (actual.globalIndex.get() != address) {
+        if (actual.globalIndex.get() != address)
+        {
             failWithMessage("Expected token to be at <%d> but got <%d>!", address, actual.globalIndex.get());
         }
 

@@ -1,6 +1,10 @@
 package org.corfudb.runtime.collections;
 
 import lombok.Getter;
+import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.runtime.exceptions.ObjectExistsException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
@@ -13,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 3/29/16.
@@ -26,11 +31,11 @@ public class FGMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingle()
             throws Exception {
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
         testMap.clear();
-        assertThat(testMap.put("a", "a"))
+        assertThat(testMap.put("a","a"))
                 .isNull();
-        assertThat(testMap.put("a", "b"))
+        assertThat(testMap.put("a","b"))
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
@@ -60,12 +65,13 @@ public class FGMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void sizeIsCorrect()
             throws Exception {
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 100; i++)
+        {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
 
@@ -77,12 +83,13 @@ public class FGMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canNestTX()
             throws Exception {
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 100; i++)
+        {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
 
@@ -101,19 +108,20 @@ public class FGMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canClear()
             throws Exception {
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 100; i++)
+        {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
 
         assertThat(testMap)
                 .hasSize(100);
 
-        testMap.put("a", "b");
+        testMap.put("a" , "b");
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
@@ -123,13 +131,14 @@ public class FGMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canClearInTX()
             throws Exception {
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        Map<String,String> testMap = getDefaultRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
 
         getRuntime().getObjectsView().TXBegin();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 100; i++)
+        {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
         testMap.clear();
@@ -145,16 +154,17 @@ public class FGMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canVaryBucketCount()
             throws Exception {
-        FGMap<String, String> testMap = getDefaultRuntime().getObjectsView().open("hello", FGMap.class, 101);
+        FGMap<String,String> testMap = getDefaultRuntime().getObjectsView().open("hello", FGMap.class, 101);
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 100; i++)
+        {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
 
-        FGMap<String, String> testMap2 = getRuntime().getObjectsView().open("hello", FGMap.class,
+        FGMap<String,String> testMap2 = getRuntime().getObjectsView().open("hello", FGMap.class,
                 EnumSet.of(ObjectOpenOptions.NO_CACHE));
         assertThat(testMap2)
                 .hasSize(100);
@@ -169,7 +179,7 @@ public class FGMapTest extends AbstractViewTest {
             throws Exception {
         getDefaultRuntime();
 
-        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
 
         final int num_threads = 5;
         final int num_records = 500;
@@ -206,7 +216,7 @@ public class FGMapTest extends AbstractViewTest {
             throws Exception {
         getDefaultRuntime();
 
-        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
+        Map<String,String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), FGMap.class);
 
         final int num_threads = 5;
         final int num_records = 100;
@@ -231,7 +241,7 @@ public class FGMapTest extends AbstractViewTest {
         executeScheduled(num_threads, 30, TimeUnit.SECONDS);
         calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
-        calculateAbortRate(aborts.get(), num_records * num_threads);
+        calculateAbortRate(aborts.get(), num_records*num_threads);
     }
 
     @Test
@@ -240,7 +250,7 @@ public class FGMapTest extends AbstractViewTest {
             throws Exception {
         getDefaultRuntime();
 
-        Map<String, String> testMap = getRuntime().getObjectsView()
+        Map<String,String> testMap = getRuntime().getObjectsView()
                 .open(UUID.randomUUID(), FGMap.class, 20);
 
         final int num_threads = 5;
