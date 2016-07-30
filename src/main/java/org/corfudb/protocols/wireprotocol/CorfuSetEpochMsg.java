@@ -14,17 +14,17 @@ import lombok.Setter;
 public class CorfuSetEpochMsg extends CorfuMsg {
 
 
-    /** The new epoch to move to. */
+    /**
+     * The new epoch to move to.
+     */
     long newEpoch;
 
-    public CorfuSetEpochMsg(long newEpoch)
-    {
+    public CorfuSetEpochMsg(long newEpoch) {
         this.msgType = CorfuMsgType.SET_EPOCH;
         this.newEpoch = newEpoch;
     }
 
-    public CorfuSetEpochMsg(CorfuMsgType type, long newEpoch)
-    {
+    public CorfuSetEpochMsg(CorfuMsgType type, long newEpoch) {
         this.msgType = type;
         this.newEpoch = newEpoch;
     }

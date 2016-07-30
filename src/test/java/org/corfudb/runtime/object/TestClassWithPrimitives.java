@@ -11,13 +11,13 @@ public class TestClassWithPrimitives {
 
     }
 
-    @Mutator
-    void setPrimitive(byte[] a) {
-        this.a = a;
-    }
-
     @Accessor
     byte[] getPrimitive() {
         return a;
+    }
+
+    @Mutator
+    void setPrimitive(byte[] a) {
+        this.a = a;
     }
 }

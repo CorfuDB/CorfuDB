@@ -1,9 +1,10 @@
 package org.corfudb.runtime.object;
 
-import java.lang.annotation.*;
-import java.util.Set;
-import java.util.UUID;
-import java.util.function.Function;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * Created by mwei on 3/29/16.
@@ -13,5 +14,6 @@ import java.util.function.Function;
 @Inherited
 public @interface TransactionalMethod {
     boolean readOnly() default false;
+
     String modifiedStreamsFunction() default "";
 }

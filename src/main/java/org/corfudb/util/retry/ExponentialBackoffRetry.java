@@ -8,48 +8,39 @@ import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 
-/** This class implements a basic exponential backoff retry.
- *
+/**
+ * This class implements a basic exponential backoff retry.
+ * <p>
  * Created by mwei on 9/1/15.
  */
 @Slf4j
-public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O, A extends IRetry> implements IRetry<E,F,G,H,O,ExponentialBackoffRetry> {
+public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O, A extends IRetry> implements IRetry<E, F, G, H, O, ExponentialBackoffRetry> {
 
     @Getter
+    final IRetryable<E, F, G, H, O> runFunction;
+    @Getter
+    final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
+    @Getter
     long retryCounter = 0;
-
     @Getter
     LocalDateTime backoffTime = null;
 
-    @Getter
-    final IRetryable<E,F,G,H,O> runFunction;
-
-    @Getter
-    final Map<Class<? extends Exception>, ExceptionHandler> handlerMap = new HashMap<>();
-
-    public ExponentialBackoffRetry(IRetryable runFunction)
-    {
+    public ExponentialBackoffRetry(IRetryable runFunction) {
         this.runFunction = runFunction;
     }
 
     boolean exponentialRetry() {
-        if (backoffTime == null)
-        {
+        if (backoffTime == null) {
             backoffTime = LocalDateTime.now();
             retryCounter++;
-        }
-        else if (backoffTime.isAfter(LocalDateTime.now().minus((long)Math.pow(10, retryCounter), ChronoUnit.MILLIS)))
-        {
+        } else if (backoffTime.isAfter(LocalDateTime.now().minus((long) Math.pow(10, retryCounter), ChronoUnit.MILLIS))) {
             backoffTime = LocalDateTime.now();
             retryCounter = 0;
-        }
-        else
-        {
+        } else {
             retryCounter++;
             try {
                 Thread.sleep((long) Math.pow(10, retryCounter));
-            } catch (InterruptedException ie)
-            {
+            } catch (InterruptedException ie) {
 
             }
         }

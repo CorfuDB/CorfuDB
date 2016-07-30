@@ -1,8 +1,10 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableMap;
+import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.IServer;
+import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.TestServerRouter;
 import org.junit.Before;
 
 import java.util.Map;
@@ -13,22 +15,26 @@ import java.util.Set;
  */
 public abstract class AbstractClientTest extends AbstractCorfuTest {
 
+    @Getter
     TestClientRouter router;
 
+    @Getter
+    TestServerRouter serverRouter;
+
     @Before
-    public void resetTest()
-    {
-        router = new TestClientRouter();
-        getServersForTest().stream().forEach(router::addServer);
+    public void resetTest() {
+        serverRouter = new TestServerRouter();
+        router = new TestClientRouter(serverRouter);
+        getServersForTest().stream().forEach(serverRouter::addServer);
         getClientsForTest().stream().forEach(router::addClient);
     }
 
-    abstract Set<IServer> getServersForTest();
+    abstract Set<AbstractServer> getServersForTest();
+
     abstract Set<IClient> getClientsForTest();
 
-    public Map<String,Object> defaultOptionsMap()
-    {
-        return new ImmutableMap.Builder<String,Object>()
+    public Map<String, Object> defaultOptionsMap() {
+        return new ImmutableMap.Builder<String, Object>()
                 .put("--initial-token", "0")
                 .put("--memory", true)
                 .put("--single", false)

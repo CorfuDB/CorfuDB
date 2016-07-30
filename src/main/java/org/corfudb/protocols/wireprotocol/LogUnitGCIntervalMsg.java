@@ -15,14 +15,16 @@ import lombok.Setter;
 public class LogUnitGCIntervalMsg extends CorfuMsg {
 
 
-    /** The interval to use, in milliseconds */
+    /**
+     * The interval to use, in milliseconds
+     */
     long interval;
 
-    public LogUnitGCIntervalMsg(long interval)
-    {
+    public LogUnitGCIntervalMsg(long interval) {
         this.msgType = CorfuMsgType.GC_INTERVAL;
         this.interval = interval;
     }
+
     /**
      * Serialize the message into the given bytebuffer.
      *

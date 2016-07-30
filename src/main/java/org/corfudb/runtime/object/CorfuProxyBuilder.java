@@ -11,14 +11,12 @@ import net.bytebuddy.matcher.ElementMatchers;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ObjectExistsException;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.Serializers;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Set;
@@ -60,8 +58,7 @@ public class CorfuProxyBuilder {
                     .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class))))
                     .intercept(MethodDelegation.to(proxy, "maccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
                     .annotateMethod(instrumentedDescription);
-        } catch (NoSuchMethodError nsme)
-        {
+        } catch (NoSuchMethodError nsme) {
             log.trace("Class {} has no mutatoraccessors", proxy.getOriginalClass());
         }
 
@@ -88,7 +85,7 @@ public class CorfuProxyBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    public static <T,R extends ISMRInterface> Class<? extends T>
+    public static <T, R extends ISMRInterface> Class<? extends T>
     getProxyClass(CorfuObjectProxy proxy, Class<T> type, Class<R> overlay) {
         if (type.isAnnotationPresent(CorfuObject.class)) {
             log.trace("Detected CorfuObject({}), instrumenting methods.", type);
@@ -98,7 +95,26 @@ public class CorfuProxyBuilder {
 
             b = instrumentCorfuObjectMethods(proxy, b);
             if (corfuAnnotation.objectType() == ObjectType.SMR) {
+                // Make all methods public, so we can instrument them.
+                Method[] ms = type.getDeclaredMethods();
+                for (Method m : ms) {
+                    if (m.getModifiers() == 0) {
+                        log.warn("Method {} is not public, please mark it as public if you wish to call it via SMR");
+                    }
+                }
+
                 b = instrumentSMRMethods(proxy, b);
+
+                // default methods to MutatorAccessors
+                b = b.method(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Mutator.class))
+                        .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Accessor.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(MutatorAccessor.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(DontInstrument.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
+                        .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
+                        .intercept(MethodDelegation.to(proxy, "mutatorAccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
+                        .annotateMethod(instrumentedDescription);
             }
 
             Class<? extends T> generatedClass = b.make()
@@ -110,8 +126,7 @@ public class CorfuProxyBuilder {
 
 
         /** TODO: Legacy code which may need cleanup. */
-        else if (Arrays.stream(type.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom))
-        {
+        else if (Arrays.stream(type.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom)) {
             log.trace("Detected ICorfuSMRObject({}), instrumenting methods.", type);
 
             DynamicType.Builder<T> b = new ByteBuddy()
@@ -120,22 +135,20 @@ public class CorfuProxyBuilder {
             b = instrumentCorfuObjectMethods(proxy, b);
             b = instrumentSMRMethods(proxy, b);
 
+
             Class<? extends T> generatedClass = b.make()
                     .load(CorfuSMRObjectProxy.class.getClassLoader(), ClassLoadingStrategy.Default.WRAPPER)
                     .getLoaded();
             proxy.generatedClass = generatedClass;
             return generatedClass;
-        }
-        else if (overlay != null) {
+        } else if (overlay != null) {
             log.trace("Detected Overlay({}), instrumenting methods", overlay);
-        }
-        else if (Arrays.stream(type.getInterfaces()).anyMatch(ISMRInterface.class::isAssignableFrom)){
+        } else if (Arrays.stream(type.getInterfaces()).anyMatch(ISMRInterface.class::isAssignableFrom)) {
             ISMRInterface[] iface = Arrays.stream(type.getInterfaces())
                     .filter(ISMRInterface.class::isAssignableFrom)
                     .toArray(ISMRInterface[]::new);
             log.trace("Detected ISMRInterfaces({}), instrumenting methods", iface);
-        }
-        else {
+        } else {
             log.trace("{} is not an ICorfuSMRObject, no ISMRInterfaces and no overlay provided. " +
                     "Instrumenting all methods as mutatorAccessors but respecting annotations", type);
 
@@ -158,7 +171,7 @@ public class CorfuProxyBuilder {
                     .and(ElementMatchers.not(ElementMatchers.isAnnotatedWith(Instrumented.class)))
                     .and(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
                     .and(ElementMatchers.not(ElementMatchers.isDefaultMethod())))
-                    .intercept(MethodDelegation.to(proxy, "accessor").filter(ElementMatchers.named("interceptAccessor")))
+                    .intercept(MethodDelegation.to(proxy, "mutatorAccessor").filter(ElementMatchers.named("interceptMutatorAccessor")))
                     .annotateMethod(instrumentedDescription);
 
             bb.annotateType(instrumentedObjectDescription);
@@ -171,7 +184,7 @@ public class CorfuProxyBuilder {
         throw new UnsupportedOperationException("Not yet implemented.");
     }
 
-    public static <T,R extends ISMRInterface>
+    public static <T, R extends ISMRInterface>
     T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime,
                Serializers.SerializerType serializer, Set<ObjectOpenOptions> options, Object... constructorArgs) {
         try {
@@ -183,13 +196,10 @@ public class CorfuProxyBuilder {
                     proxy = new CorfuSMRObjectProxy<>(runtime, sv, type, serializer);
                     if (annotation.stateSource().equals(StateSource.SELF)) {
                         ((CorfuSMRObjectProxy) proxy).setSelfState(true);
-                    }
-                    else {
+                    } else {
                         ((CorfuSMRObjectProxy) proxy).setStateClass(annotation.stateType());
                     }
-                }
-                else
-                {
+                } else {
                     proxy = new CorfuObjectProxy<>(runtime, sv, type, serializer);
                 }
 
@@ -205,12 +215,11 @@ public class CorfuProxyBuilder {
                                 t -> false);
                         readConstructor = streamStart == -1L;
                         if (annotation.objectType() == ObjectType.SMR) {
-                            ((CorfuSMRObjectProxy)proxy).setCreationArguments(constructorArgs);
+                            ((CorfuSMRObjectProxy) proxy).setCreationArguments(constructorArgs);
                         }
                     }
                     if (readConstructor) {
-                        if (options.contains(ObjectOpenOptions.CREATE_ONLY))
-                        {
+                        if (options.contains(ObjectOpenOptions.CREATE_ONLY)) {
                             throw new ObjectExistsException(token);
                         }
                         log.debug("There appears to be an existing constructor for {}, reading it...", sv.getStreamID());
@@ -219,13 +228,12 @@ public class CorfuProxyBuilder {
                         ILogUnitEntry entry = sv.read();
                         while (entry != null) {
                             if (entry.getPayload() instanceof SMREntry &&
-                                    ((SMREntry) entry.getPayload()).getSMRMethod().equals("default"))
-                            {
+                                    ((SMREntry) entry.getPayload()).getSMRMethod().equals("default")) {
                                 log.trace("Setting contructor arguments to {}", ((SMREntry) entry.getPayload())
                                         .getSMRArguments());
                                 constructorArgs = ((SMREntry) entry.getPayload()).getSMRArguments();
                                 if (annotation.objectType() == ObjectType.SMR) {
-                                    ((CorfuSMRObjectProxy)proxy).setCreationArguments(constructorArgs);
+                                    ((CorfuSMRObjectProxy) proxy).setCreationArguments(constructorArgs);
                                 }
                                 break;
                             }
@@ -239,19 +247,18 @@ public class CorfuProxyBuilder {
             T ret;
             if (constructorArgs == null || constructorArgs.length == 0) {
                 ret = getProxyClass(proxy, type, overlay).newInstance();
-            }
-            else {
+            } else {
                 ret = ReflectionUtils.newInstanceFromUnknownArgumentTypes(getProxyClass(proxy, type, overlay),
                         constructorArgs);
             }
             if (proxy instanceof CorfuSMRObjectProxy) {
-                ((CorfuSMRObjectProxy)proxy).calculateMethodHashTable(ret.getClass());
+                ((CorfuSMRObjectProxy) proxy).calculateMethodHashTable(ret.getClass());
             }
             if (type.isAnnotationPresent(CorfuObject.class)) {
                 CorfuObject annotation = type.getAnnotation(CorfuObject.class);
                 if (annotation.objectType().equals(ObjectType.SMR) &&
                         annotation.stateSource().equals(StateSource.SELF)) {
-                    ((CorfuSMRObjectProxy)proxy).setUnderlyingObject(ret);
+                    ((CorfuSMRObjectProxy) proxy).setUnderlyingObject(ret);
                 }
             }
             return ret;
