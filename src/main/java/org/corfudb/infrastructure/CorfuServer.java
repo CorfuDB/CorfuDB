@@ -160,6 +160,7 @@ public class CorfuServer {
         router.addServer(new SequencerServer(opts));
         router.addServer(new LayoutServer(opts, router));
         router.addServer(new LogUnitServer(opts));
+        router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.
         EventLoopGroup bossGroup;

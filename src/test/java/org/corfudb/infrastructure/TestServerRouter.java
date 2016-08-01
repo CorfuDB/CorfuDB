@@ -114,12 +114,15 @@ public class TestServerRouter implements IServerRouter {
     public CorfuMsg simulateSerialization(CorfuMsg message) {
         /* simulate serialization/deserialization */
         ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
-        Class<? extends CorfuMsg> type = message.getMsgType().messageType;
+        //Class<? extends CorfuMsg> type = message.getMsgType().messageType;
         //extra assert needed to simulate real Netty behavior
-        assertThat(message.getClass().getSimpleName()).isEqualTo(type.getSimpleName());
-        type.cast(message).serialize(oBuf);
+        //assertThat(message.getClass().getSimpleName()).isEqualTo(type.getSimpleName());
+        //type.cast(message).serialize(oBuf);
+        message.serialize(oBuf);
         oBuf.resetReaderIndex();
-        return CorfuMsg.deserialize(oBuf);
+        CorfuMsg msgOut = CorfuMsg.deserialize(oBuf);
+        oBuf.release();
+        return msgOut;
     }
 
 }

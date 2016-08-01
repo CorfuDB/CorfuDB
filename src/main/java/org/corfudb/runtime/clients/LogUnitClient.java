@@ -56,6 +56,7 @@ public class LogUnitClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.ERROR_RANK)
                     .build();
     @Setter
+    @Getter
     IClientRouter router;
 
     /**

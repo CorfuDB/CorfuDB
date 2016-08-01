@@ -3,31 +3,32 @@ package org.corfudb.util;
 import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.runtime.clients.IClient;
+import org.corfudb.runtime.clients.IClientRouter;
 
-import java.lang.reflect.ParameterizedType;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 
 /**
- * This class simplifies writing switch(msg.getType()) statements.
- *
- * For maximum performance, make the handlers static whenever possible.
- *
- * Created by mwei on 7/26/16.
+ * Created by mwei on 7/27/16.
  */
-public class CorfuMsgHandler {
+public class ClientMsgHandler {
 
     @FunctionalInterface
     public interface Handler<T extends CorfuMsg> {
-        void handle(T CorfuMsg, ChannelHandlerContext ctx, IServerRouter r);
+        Object handle(T CorfuMsg, ChannelHandlerContext ctx, IClientRouter r) throws Exception;
     }
 
     /** The handler map. */
-    private Map<CorfuMsg.CorfuMsgType, Handler> handlerMap;
+    private Map<CorfuMsg.CorfuMsgType, ClientMsgHandler.Handler> handlerMap;
 
-    /** Construct a new instance of CorfuMsgHandler. */
-    public CorfuMsgHandler() {
+    /** The client. */
+    private IClient client;
+
+    /** Construct a new instance of ClientMsgHandler. */
+    public ClientMsgHandler(IClient client) {
+        this.client = client;
         handlerMap = new ConcurrentHashMap<>();
     }
 
@@ -38,9 +39,8 @@ public class CorfuMsgHandler {
      * @param <T>               A CorfuMsg type.
      * @return                  This handler, to support chaining.
      */
-    @SuppressWarnings("unchecked")
-    public <T extends CorfuMsg> CorfuMsgHandler
-    addHandler(CorfuMsg.CorfuMsgType messageType, Handler<T> handler) {
+    public <T extends CorfuMsg> ClientMsgHandler
+    addHandler(CorfuMsg.CorfuMsgType messageType, ClientMsgHandler.Handler<T> handler) {
         // We do type-checking at runtime.
         // This should be okay as any incorrect handler will be registered
         // at startup, and be caught during almost any unit test.
@@ -51,7 +51,7 @@ public class CorfuMsgHandler {
         // TODO: Turn off this check when we aren't running tests.
         try {
             Class<?> c = handler.getClass().getMethod("handle",
-                    CorfuMsg.class, ChannelHandlerContext.class, IServerRouter.class)
+                    CorfuMsg.class, ChannelHandlerContext.class, IClientRouter.class)
                     .getParameterTypes()[0];
 
             if (!c.isAssignableFrom(messageType.messageType.getRawType())) {
@@ -72,17 +72,30 @@ public class CorfuMsgHandler {
      *
      * @param message   The message to handle.
      * @param ctx       The channel handler context.
-     * @param r         The server router.
      * @return          True, if the message was handled.
      *                  False otherwise.
      */
     @SuppressWarnings("unchecked")
-    public boolean handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r) {
+    public boolean handle(CorfuMsg message, ChannelHandlerContext ctx) {
         if (handlerMap.containsKey(message.getMsgType())) {
-            handlerMap.get(message.getMsgType()).handle(message, ctx, r);
+            try {
+                Object ret = handlerMap.get(message.getMsgType()).handle(message, ctx, client.getRouter());
+                if (ret != null) {
+                    client.getRouter().completeRequest(message.getRequestID(), ret);
+                }
+            } catch (Exception ex) {
+                client.getRouter().completeExceptionally(message.getRequestID(), ex);
+            }
             return true;
         }
         return false;
     }
 
+    /** Get the types this handler will handle.
+     *
+     * @return  The types this handler will handle.
+     */
+    public Set<CorfuMsg.CorfuMsgType> getHandledTypes() {
+        return handlerMap.keySet();
+    }
 }
