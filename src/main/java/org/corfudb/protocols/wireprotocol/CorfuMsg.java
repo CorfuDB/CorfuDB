@@ -1,17 +1,17 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
+import lombok.*;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
@@ -88,10 +88,11 @@ public class CorfuMsg {
         CorfuMsgType message = typeMap.get(buffer.readByte());
         CorfuMsg msg;
         try {
-            msg = message.messageType.getConstructor().newInstance();
+            msg = message.messageType
+                    .constructor(message.messageType.getRawType().getConstructor()).invoke(null);
         } catch (NoSuchMethodException nsme) {
             throw new RuntimeException("Unrecognized message type " + message.toString());
-        } catch (InstantiationException | IllegalAccessException | InvocationTargetException ite) {
+        } catch (IllegalAccessException | InvocationTargetException ite) {
             throw new RuntimeException("Error deserializing message type " + message.toString());
         }
         msg.clientID = clientID;
@@ -154,56 +155,58 @@ public class CorfuMsg {
     @AllArgsConstructor
     public enum CorfuMsgType {
         // Base Messages
-        PING(0, CorfuMsg.class, BaseServer.class, true),
-        PONG(1, CorfuMsg.class, BaseServer.class, true),
-        RESET(2, CorfuResetMsg.class, BaseServer.class),
-        SET_EPOCH(3, CorfuSetEpochMsg.class, BaseServer.class, true),
-        ACK(4, CorfuMsg.class, BaseServer.class, true),
-        WRONG_EPOCH(5, CorfuSetEpochMsg.class, BaseServer.class),
-        NACK(6, CorfuMsg.class, BaseServer.class),
+        PING(0, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
+        PONG(1, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
+        RESET(2, TypeToken.of(CorfuResetMsg.class), BaseServer.class,  true),
+        SET_EPOCH(3, TypeToken.of(CorfuSetEpochMsg.class), BaseServer.class, true),
+        ACK(4, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
+        WRONG_EPOCH(5, TypeToken.of(CorfuSetEpochMsg.class), BaseServer.class),
+        NACK(6, TypeToken.of(CorfuMsg.class), BaseServer.class),
+        VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), BaseServer.class),
+        VERSION_RESPONSE(8, new TypeToken<JSONPayloadMsg<VersionInfo>>(){}, BaseServer.class),
 
         // Layout Messages
-        LAYOUT_REQUEST(10, CorfuMsg.class, LayoutServer.class, true),
-        LAYOUT_RESPONSE(11, LayoutMsg.class, LayoutServer.class, true),
-        LAYOUT_PREPARE(12, LayoutRankMsg.class, LayoutServer.class),
-        LAYOUT_PREPARE_REJECT(13, LayoutRankMsg.class, LayoutServer.class),
-        LAYOUT_PROPOSE(14, LayoutRankMsg.class, LayoutServer.class),
-        LAYOUT_PROPOSE_REJECT(15, LayoutRankMsg.class, LayoutServer.class),
-        LAYOUT_COMMITTED(16, LayoutRankMsg.class, LayoutServer.class),
-        LAYOUT_QUERY(17, LayoutRankMsg.class, LayoutServer.class),
-        LAYOUT_BOOTSTRAP(18, LayoutMsg.class, LayoutServer.class),
-        LAYOUT_NOBOOTSTRAP(19, CorfuMsg.class, LayoutServer.class, true),
+        LAYOUT_REQUEST(10, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
+        LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), LayoutServer.class, true),
+        LAYOUT_PREPARE(12, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_PREPARE_REJECT(13, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_PROPOSE(14, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_PROPOSE_REJECT(15, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_COMMITTED(16, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_QUERY(17, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_BOOTSTRAP(18, TypeToken.of(LayoutMsg.class), LayoutServer.class),
+        LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
 
         // Sequencer Messages
-        TOKEN_REQ(20, TokenRequestMsg.class, SequencerServer.class),
-        TOKEN_RES(21, TokenResponseMsg.class, SequencerServer.class),
+        TOKEN_REQ(20, TypeToken.of(TokenRequestMsg.class), SequencerServer.class),
+        TOKEN_RES(21, TypeToken.of(TokenResponseMsg.class), SequencerServer.class),
 
         // Logging Unit Messages
-        WRITE(30, LogUnitWriteMsg.class, LogUnitServer.class),
-        READ_REQUEST(31, LogUnitReadRequestMsg.class, LogUnitServer.class),
-        READ_RESPONSE(32, LogUnitReadResponseMsg.class, LogUnitServer.class),
-        TRIM(33, LogUnitTrimMsg.class, LogUnitServer.class),
-        FILL_HOLE(34, LogUnitFillHoleMsg.class, LogUnitServer.class),
-        FORCE_GC(35, CorfuMsg.class, LogUnitServer.class),
-        GC_INTERVAL(36, LogUnitGCIntervalMsg.class, LogUnitServer.class),
-        FORCE_COMPACT(37, CorfuMsg.class, LogUnitServer.class),
-        READ_RANGE(40, CorfuRangeMsg.class, LogUnitServer.class),
-        READ_RANGE_RESPONSE(41, LogUnitReadRangeResponseMsg.class, LogUnitServer.class),
+        WRITE(30, TypeToken.of(LogUnitWriteMsg.class), LogUnitServer.class),
+        READ_REQUEST(31, TypeToken.of(LogUnitReadRequestMsg.class), LogUnitServer.class),
+        READ_RESPONSE(32, TypeToken.of(LogUnitReadResponseMsg.class), LogUnitServer.class),
+        TRIM(33, TypeToken.of(LogUnitTrimMsg.class), LogUnitServer.class),
+        FILL_HOLE(34, TypeToken.of(LogUnitFillHoleMsg.class), LogUnitServer.class),
+        FORCE_GC(35, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+        GC_INTERVAL(36, TypeToken.of(LogUnitGCIntervalMsg.class), LogUnitServer.class),
+        FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+        READ_RANGE(40, TypeToken.of(CorfuRangeMsg.class), LogUnitServer.class),
+        READ_RANGE_RESPONSE(41, TypeToken.of(LogUnitReadRangeResponseMsg.class), LogUnitServer.class),
 
         // Logging Unit Error Codes
-        ERROR_OK(50, CorfuMsg.class, LogUnitServer.class),
-        ERROR_TRIMMED(51, CorfuMsg.class, LogUnitServer.class),
-        ERROR_OVERWRITE(52, CorfuMsg.class, LogUnitServer.class),
-        ERROR_OOS(53, CorfuMsg.class, LogUnitServer.class),
-        ERROR_RANK(54, CorfuMsg.class, LogUnitServer.class),
+        ERROR_OK(50, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+        ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+        ERROR_OVERWRITE(52, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+        ERROR_OOS(53, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+        ERROR_RANK(54, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
 
         // EXTRA CODES
-        LAYOUT_ALREADY_BOOTSTRAP(60, CorfuMsg.class, LayoutServer.class),
-        LAYOUT_PREPARE_ACK(61, LayoutRankMsg.class, LayoutServer.class);
+        LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class),
+        LAYOUT_PREPARE_ACK(61, TypeToken.of(LayoutRankMsg.class), LayoutServer.class);
 
 
         public final int type;
-        public final Class<? extends CorfuMsg> messageType;
+        public final TypeToken<? extends CorfuMsg> messageType;
         public final Class<? extends AbstractServer> handler;
         public Boolean ignoreEpoch = false;
 

@@ -33,6 +33,7 @@ public class SequencerClient implements IClient {
                     .add(CorfuMsg.CorfuMsgType.TOKEN_RES)
                     .build();
     @Setter
+    @Getter
     IClientRouter router;
 
     /**

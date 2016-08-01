@@ -6,6 +6,7 @@ import io.netty.channel.*;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
 import java.net.SocketAddress;
@@ -14,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Created by mwei on 7/6/16.
  */
+@Slf4j
 public class TestChannelContext implements ChannelHandlerContext {
 
     @FunctionalInterface
@@ -29,10 +31,14 @@ public class TestChannelContext implements ChannelHandlerContext {
 
     void sendMessageAsync(Object o) {
         CompletableFuture.runAsync(() -> {
-            if (o instanceof ByteBuf) {
-                CorfuMsg m = CorfuMsg.deserialize((ByteBuf) o);
-                hmf.handleMessage(m);
-                ((ByteBuf) o).release();
+            try {
+                if (o instanceof ByteBuf) {
+                    CorfuMsg m = CorfuMsg.deserialize((ByteBuf) o);
+                    hmf.handleMessage(m);
+                    ((ByteBuf) o).release();
+                }
+            } catch (Exception e) {
+                 log.warn("Error during deserialization", e);
             }
         });
     }

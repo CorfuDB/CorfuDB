@@ -11,6 +11,8 @@ import java.util.function.Consumer;
 /**
  * This class simplifies writing switch(msg.getType()) statements.
  *
+ * For maximum performance, make the handlers static whenever possible.
+ *
  * Created by mwei on 7/26/16.
  */
 public class CorfuMsgHandler {

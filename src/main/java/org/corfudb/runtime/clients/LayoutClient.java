@@ -43,6 +43,7 @@ public class LayoutClient implements IClient {
                     .build();
 
     @Setter
+    @Getter
     IClientRouter router;
 
     /**
