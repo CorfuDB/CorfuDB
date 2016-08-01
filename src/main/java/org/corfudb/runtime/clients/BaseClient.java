@@ -49,12 +49,12 @@ public class BaseClient implements IClient {
 
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-            .addHandler(CorfuMsg.CorfuMsgType.PING, CorfuMsg.class, BaseClient::handlePing)
-            .addHandler(CorfuMsg.CorfuMsgType.PONG, CorfuMsg.class, BaseClient::handlePong)
-            .addHandler(CorfuMsg.CorfuMsgType.ACK, CorfuMsg.class, BaseClient::handleAck)
-            .addHandler(CorfuMsg.CorfuMsgType.NACK, CorfuMsg.class, BaseClient::handleNack)
-            .addHandler(CorfuMsg.CorfuMsgType.WRONG_EPOCH, CorfuSetEpochMsg.class, BaseClient::handleWrongEpoch)
-            .addHandler(CorfuMsg.CorfuMsgType.VERSION_RESPONSE, JSONPayloadMsg.class, BaseClient::handleVersionResponse);
+            .addHandler(CorfuMsg.CorfuMsgType.PING, BaseClient::handlePing)
+            .addHandler(CorfuMsg.CorfuMsgType.PONG, BaseClient::handlePong)
+            .addHandler(CorfuMsg.CorfuMsgType.ACK, BaseClient::handleAck)
+            .addHandler(CorfuMsg.CorfuMsgType.NACK, BaseClient::handleNack)
+            .addHandler(CorfuMsg.CorfuMsgType.WRONG_EPOCH, BaseClient::handleWrongEpoch)
+            .addHandler(CorfuMsg.CorfuMsgType.VERSION_RESPONSE, BaseClient::handleVersionResponse);
 
     /** Handle a ping request from the server.
      *
@@ -97,7 +97,7 @@ public class BaseClient implements IClient {
      * @param r     A reference to the router
      * @return      Always True, since the ACK message was successful.
      */
-    private static Object handleNack(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+    private static Object handleNack(CorfuSetEpochMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         return false;
     }
 

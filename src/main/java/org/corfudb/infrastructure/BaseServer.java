@@ -18,9 +18,9 @@ public class BaseServer extends AbstractServer {
     /** Handler for the base server */
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
-            .addHandler(CorfuMsg.CorfuMsgType.PING, CorfuMsg.class, BaseServer::ping)
-            .addHandler(CorfuMsg.CorfuMsgType.SET_EPOCH, CorfuSetEpochMsg.class, BaseServer::setEpoch)
-            .addHandler(CorfuMsg.CorfuMsgType.VERSION_REQUEST, CorfuMsg.class, BaseServer::getVersion);
+            .addHandler(CorfuMsg.CorfuMsgType.PING, BaseServer::ping)
+            .addHandler(CorfuMsg.CorfuMsgType.SET_EPOCH, BaseServer::setEpoch)
+            .addHandler(CorfuMsg.CorfuMsgType.VERSION_REQUEST, BaseServer::getVersion);
 
     /** Respond to a ping message.
      *
