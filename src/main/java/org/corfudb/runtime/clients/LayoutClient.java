@@ -140,10 +140,10 @@ public class LayoutClient implements IClient {
      *              Otherwise, the completablefuture completes exceptionally
      *              with OutrankedException.
      */
-    public CompletableFuture<Boolean> committed(long rank)
+    public CompletableFuture<Boolean> committed(long rank, Layout layout)
     {
         return router.sendMessageAndGetCompletable(
-                new LayoutRankMsg(null, rank, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED)
+                new LayoutRankMsg(layout, rank, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED)
         );
     }
 

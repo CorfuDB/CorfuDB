@@ -135,7 +135,7 @@ public class LayoutServerTest extends AbstractServerTest {
         sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(null, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
     }
@@ -163,7 +163,7 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
         assertThat(s1)
-                .isInEpoch(100);
+                .isInEpoch(0);
         assertThat(s1)
                 .isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         assertThat(s1)
@@ -178,7 +178,7 @@ public class LayoutServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s2);
         assertThat(s2)
-                .isInEpoch(100);
+                .isInEpoch(0);
         assertThat(s2)
                 .isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         assertThat(s2)
@@ -188,7 +188,7 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
         assertThat(((LayoutMsg) getLastMessage()).getLayout().getEpoch())
-                .isEqualTo(100);
+                .isEqualTo(0);
     }
 
     /**
@@ -244,7 +244,7 @@ public class LayoutServerTest extends AbstractServerTest {
                 .build(), getRouter());
         this.router.reset();
         this.router.addServer(s3);
-        assertThat(s3).isInEpoch(100);
+        assertThat(s3).isInEpoch(0);
         assertThat(s3).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         assertThat(s3).isPhase2Rank(new Rank(100L, AbstractServerTest.testClientId));
         assertThat(s3).isProposedLayout(l100);
@@ -364,7 +364,7 @@ public class LayoutServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s3);
         // the epoch should have changed by now.
-        assertThat(s3).isInEpoch(100);
+        assertThat(s3).isInEpoch(0);
         assertThat(s3).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         assertThat(s3).isProposedLayout(l100);
     }
@@ -440,8 +440,7 @@ public class LayoutServerTest extends AbstractServerTest {
         sendMessage(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), new LayoutRankMsg(l100, 101, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
 
-        //TODO fix this epoch needs to be fixed and should still be 0 till COMMIT
-        assertThat(s2).isInEpoch(100);
+        assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
         assertThat(s2).isPhase2Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
         assertThat(s2).isProposedLayout(l100);

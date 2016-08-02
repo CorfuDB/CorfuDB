@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -80,7 +81,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     void runWithBaseServer(NettyCommFunction actionFn)
             throws Exception {
 
-        NettyServerRouter nsr = new NettyServerRouter();
+        NettyServerRouter nsr = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
         nsr.addServer(new BaseServer());
         int port = findRandomOpenPort();
 
@@ -123,7 +124,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         }
 
         void bootstrapServer() throws Exception {
-            NettyServerRouter nsr = new NettyServerRouter();
+            NettyServerRouter nsr = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
             bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
                 final AtomicInteger threadNum = new AtomicInteger(0);
 
