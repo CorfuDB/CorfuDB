@@ -27,6 +27,7 @@ import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
 import org.corfudb.protocols.wireprotocol.LogUnitTrimMsg;
 import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
+import org.corfudb.util.CorfuMsgHandler;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
@@ -74,6 +75,47 @@ public class LogUnitServer extends AbstractServer {
      * The options map.
      */
     Map<String, Object> opts;
+
+    /** Handler for the base server */
+    @Getter
+    private CorfuMsgHandler handler = new CorfuMsgHandler()
+            .addHandler(CorfuMsg.CorfuMsgType.WRITE, this::write)
+            .addHandler(CorfuMsg.CorfuMsgType.READ_REQUEST, this::read_normal)
+            .addHandler(CorfuMsg.CorfuMsgType.READ_RANGE, this::read_range)
+            .addHandler(CorfuMsg.CorfuMsgType.GC_INTERVAL, this::gc_interval)
+            .addHandler(CorfuMsg.CorfuMsgType.FORCE_GC,  this::force_gc)
+            .addHandler(CorfuMsg.CorfuMsgType.FILL_HOLE, this::fill_hole)
+            .addHandler(CorfuMsg.CorfuMsgType.TRIM, this::trim);
+
+    private void read_normal(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        read(msg, ctx, r);
+    }
+
+    private void read_range(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        read(msg, ctx, r);
+    }
+
+    private void gc_interval(LogUnitGCIntervalMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        gcRetry.setRetryInterval(msg.getInterval());
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    }
+
+    private void force_gc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        gcThread.interrupt();
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    }
+
+    private void fill_hole(LogUnitFillHoleMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        dataCache.get(msg.getAddress(), LogUnitEntry::new);
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    }
+
+    private void trim(LogUnitTrimMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        trimMap.compute(msg.getStreamID(), (key, prev) ->
+                prev == null ? msg.getPrefix() : Math.max(prev, msg.getPrefix()));
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    }
+
     /**
      * The garbage collection thread.
      */
@@ -122,53 +164,6 @@ public class LogUnitServer extends AbstractServer {
 
         gcThread = new Thread(this::runGC);
         gcThread.start();
-    }
-
-    @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        if (isShutdown()) return;
-        switch (msg.getMsgType()) {
-            case WRITE:
-                LogUnitWriteMsg writeMsg = (LogUnitWriteMsg) msg;
-                log.trace("Handling write request for address {}", writeMsg.getAddress());
-                write(writeMsg, ctx, r);
-                break;
-            case READ_REQUEST:
-                LogUnitReadRequestMsg readMsg = (LogUnitReadRequestMsg) msg;
-                log.trace("Handling read request for address {}", readMsg.getAddress());
-                read(readMsg, ctx, r);
-                break;
-            case READ_RANGE:
-                CorfuRangeMsg rangeReadMsg = (CorfuRangeMsg) msg;
-                log.trace("Handling read request for address ranges {}", rangeReadMsg.getRanges());
-                read(rangeReadMsg, ctx, r);
-                break;
-            case GC_INTERVAL: {
-                LogUnitGCIntervalMsg m = (LogUnitGCIntervalMsg) msg;
-                log.info("Garbage collection interval set to {}", m.getInterval());
-                gcRetry.setRetryInterval(m.getInterval());
-            }
-            break;
-            case FORCE_GC: {
-                log.info("GC forced by client {}", msg.getClientID());
-                gcThread.interrupt();
-            }
-            break;
-            case FILL_HOLE: {
-                LogUnitFillHoleMsg m = (LogUnitFillHoleMsg) msg;
-                log.debug("Hole fill requested at {}", m.getAddress());
-                dataCache.get(m.getAddress(), (address) -> new LogUnitEntry(address));
-                r.sendResponse(ctx, m, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
-            }
-            break;
-            case TRIM: {
-                LogUnitTrimMsg m = (LogUnitTrimMsg) msg;
-                trimMap.compute(m.getStreamID(), (key, prev) ->
-                        prev == null ? m.getPrefix() : Math.max(prev, m.getPrefix()));
-                log.debug("Trim requested at prefix={}", m.getPrefix());
-            }
-            break;
-        }
     }
 
     @Override
