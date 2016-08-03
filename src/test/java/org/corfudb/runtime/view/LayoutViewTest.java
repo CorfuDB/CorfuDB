@@ -34,7 +34,7 @@ public class LayoutViewTest extends AbstractViewTest {
                     .addToSegment()
                 .addToLayout()
                 .build();
-
+        l.setRuntime(r);
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
         assertThat(r.getLayoutView().getLayout().epoch)

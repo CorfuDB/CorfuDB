@@ -154,7 +154,7 @@ public class CorfuServer {
         }
 
         // Now, we start the Netty router, and have it route to the correct port.
-        NettyServerRouter router = new NettyServerRouter();
+        NettyServerRouter router = new NettyServerRouter(opts);
 
         // Add each role to the router.
         router.addServer(new SequencerServer(opts));

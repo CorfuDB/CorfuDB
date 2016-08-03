@@ -1,26 +1,17 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.io.Files;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.util.JSONUtils;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
-
-import static com.google.common.io.Files.write;
 
 /**
  * The layout server serves layouts, which are used by clients to find the
@@ -46,15 +37,24 @@ import static com.google.common.io.Files.write;
  * either another client has sent a prepare with a higher rank,
  * or this was a propose of a previously accepted rank.
  * <p>
- * 3)   Committed(rank) - Clients then send a hint to each layout
+ * 3)   Committed(rank, layout) - Clients then send a hint to each layout
  * server that a new rank has been accepted by a quorum of
  * servers.
  * <p>
  * Created by mwei on 12/8/15.
  */
 //TODO Finer grained synchronization needed for this class.
+//TODO Need a janitor to cleanup old phases data and to fill up holes in layout history.
 @Slf4j
 public class LayoutServer extends AbstractServer {
+
+    public static final String PREFIX_LAYOUT = "LAYOUT";
+    public static final String KEY_LAYOUT = "CURRENT";
+    public static final String PREFIX_PHASE_1 = "PHASE_1";
+    public static final String KEY_SUFFIX_PHASE_1 = "RANK";
+    public static final String PREFIX_PHASE_2 = "PHASE_2";
+    public static final String KEY_SUFFIX_PHASE_2 = "DATA";
+    public static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     /**
      * The options map.
@@ -62,61 +62,23 @@ public class LayoutServer extends AbstractServer {
     Map<String, Object> opts;
 
     /**
-     * The current layout.
-     */
-    Layout currentLayout;
-
-    /**
-     * The current phase 1 rank
-     */
-    Rank phase1Rank;
-
-    /**
-     * The current phase 2 rank, which should be equal to the epoch.
-     */
-    Rank phase2Rank;
-
-    /**
-     * The layout proposed in phase 2.
-     */
-    Layout proposedLayout;
-
-    /**
      * The server router.
      */
     @Getter
     IServerRouter serverRouter;
 
-    /**
-     * The layout file, or null if in memory.
-     */
-    File layoutFile;
-
-    /**
-     * Persistent storage for phase1 data in paxos
-     */
-    File phase1File;
-
-    /**
-     * Persistent storage for phase2 data in paxos
-     */
-    File phase2File;
+    private DataStore dataStore;
 
     public LayoutServer(Map<String, Object> opts, IServerRouter serverRouter) {
         this.opts = opts;
         this.serverRouter = serverRouter;
-
-        if (opts.get("--log-path") != null) {
-            layoutFile = new File(opts.get("--log-path") + File.separator + "layout");
-            phase1File = new File(opts.get("--log-path") + File.separator + "phase1Data");
-            phase2File = new File(opts.get("--log-path") + File.separator + "phase2Data");
-        }
+        this.dataStore = new DataStore(opts);
 
         if ((Boolean) opts.get("--single")) {
             String localAddress = opts.get("--address") + ":" + opts.get("<port>");
             log.info("Single-node mode requested, initializing layout with single log unit and sequencer at {}.",
                     localAddress);
-            saveCurrentLayout(new Layout(
+            setCurrentLayout(new Layout(
                     Collections.singletonList(localAddress),
                     Collections.singletonList(localAddress),
                     Collections.singletonList(new LayoutSegment(
@@ -131,219 +93,40 @@ public class LayoutServer extends AbstractServer {
                     )),
                     0L
             ));
-
-            phase1Rank = phase2Rank = null;
         } else {
-            loadCurrentLayout();
+            Layout currentLayout = getCurrentLayout();
             if (currentLayout != null) {
                 getServerRouter().setServerEpoch(currentLayout.getEpoch());
             }
             log.info("Layout server started with layout from disk: {}.", currentLayout);
-            loadPhase1Data();
-            loadPhase2Data();
-        }
-    }
-
-    /**
-     * Save the current layout to disk, if not in-memory mode.
-     */
-    public synchronized void saveCurrentLayout(Layout layout) {
-        if (layoutFile == null) {
-            currentLayout = layout;
-            return;
-        }
-        try {
-            write(layout.asJSONString().getBytes(), layoutFile);
-            log.info("Layout epoch {} saved to disk.", layout.getEpoch());
-            currentLayout = layout;
-        } catch (Exception e) {
-            e.printStackTrace();
-            log.error("Error saving layout to disk!", e);
-        }
-    }
-
-    /**
-     * Loads the latest committed layout
-     * TODO need to figure out the right behaviour when their is error from the persistence layer.
-     *
-     * @return
-     */
-    private void loadCurrentLayout() {
-        try {
-            if (layoutFile == null) {
-                log.info("Layout server started, but in-memory mode set without bootstrap. " +
-                        "Starting uninitialized layout server.");
-                this.currentLayout = null;
-            } else if (!layoutFile.exists()) {
-                log.warn("Layout server started, but no layout log found. Starting uninitialized layout server.");
-                this.currentLayout = null;
-            } else {
-                String l = Files.toString(layoutFile, Charset.defaultCharset());
-                this.currentLayout = Layout.fromJSONString(l);
-            }
-        } catch (Exception e) {
-            log.error("Error reading from layout server", e);
-        }
-    }
-
-    /**
-     * TODO need to figure out what to do when the phase1Rank cannot be saved to disk.
-     */
-    /**
-     * Persists phase1 Rank and also caches it in memory.
-     *
-     * @param rank
-     */
-    private synchronized void savePhase1Data(Rank rank) {
-        if (phase1File == null) {
-            this.phase1Rank = rank;
-            return;
-        }
-        try {
-            write(rank.asJSONString().getBytes(), phase1File);
-            log.info("Phase1Rank {} saved to disk.", rank);
-            this.phase1Rank = rank;
-        } catch (Exception e) {
-            log.error("Error saving phase1Rank to disk!", e);
-        }
-    }
-
-    /**
-     * Loads the last persisted phase1 data into memory.
-     * TODO need to figure out the right behaviour when their is error from the persistence layer.
-     *
-     * @return
-     */
-    private void loadPhase1Data() {
-        try {
-            if (phase1File == null) {
-                log.info("No phase1 data persisted so far. ");
-            } else if (!phase1File.exists()) {
-                log.warn("Phase1 data file found but no phase1 data found!");
-            } else {
-                String r = Files.toString(phase1File, Charset.defaultCharset());
-                phase1Rank = Rank.fromJSONString(r);
-            }
-        } catch (Exception e) {
-            log.error("Error reading phase1 rank from data file for phase1.", e);
-        }
-
-    }
-
-    /**
-     * Persists  phase2 Data [rank, layout] and caches it in memory
-     * TODO need to figure out what to do when the phase1Rank cannot be saved to disk.
-     */
-    private synchronized void savePhase2Data(Rank rank, Layout layout) {
-        if (phase2File == null) {
-            this.phase2Rank = rank;
-            this.proposedLayout = layout;
-            return;
-        }
-        Phase2Data phase2Data = new Phase2Data(rank, layout);
-        try {
-            write(phase2Data.asJSONString().getBytes(), phase2File);
-            log.info("Phase2Rank {} saved to disk.", phase2Rank);
-            this.phase2Rank = rank;
-            this.proposedLayout = layout;
-        } catch (Exception e) {
-            log.error("Error saving phase2Rank to disk!", e);
-        }
-    }
-
-    /**
-     * Returns the last persisted phase2 rank and proposed layout.
-     * TODO need to figure out the right behaviour when their is error from the persistence layer.
-     *
-     * @return
-     */
-    private void loadPhase2Data() {
-        try {
-            if (phase2File == null) {
-                log.info("No phase2 data witnessed so far. ");
-            } else if (!phase2File.exists()) {
-                log.warn("Phase2 data file found but no data found!");
-            } else {
-                String r = Files.toString(phase2File, Charset.defaultCharset());
-                Phase2Data phase2Data = Phase2Data.fromJSONString(r);
-                phase2Rank = phase2Data.getRank();
-                proposedLayout = phase2Data.getLayout();
-            }
-        } catch (Exception e) {
-            log.error("Error reading phase2 rank from data file for phase2.", e);
         }
     }
 
     //TODO need to figure out if we need to send the complete Rank object in the responses
-    //TODO need to figure out how to send back the last accepted value.
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (isShutdown()) return;
         // This server has not been bootstrapped yet, ignore ALL requests except for LAYOUT_BOOTSTRAP
-        if (currentLayout == null) {
-            if (msg.getMsgType().equals(CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP)) {
-                log.info("Bootstrap with new layout={}", ((LayoutMsg) msg).getLayout());
-
-                saveCurrentLayout(((LayoutMsg) msg).getLayout());
-                getServerRouter().setServerEpoch(currentLayout.getEpoch());
-                //send a response that the bootstrap was successful.
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
-            } else {
-                log.warn("Received message but not bootstrapped! Message={}", msg);
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_NOBOOTSTRAP));
-            }
+        if (getCurrentLayout() == null && !msg.getMsgType().equals(CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP)) {
+            log.warn("Received message but not bootstrapped! Message={}", msg);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_NOBOOTSTRAP));
             return;
         }
-
         switch (msg.getMsgType()) {
             case LAYOUT_REQUEST:
-                r.sendResponse(ctx, msg, new LayoutMsg(currentLayout, CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE));
+                r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE));
                 break;
             case LAYOUT_BOOTSTRAP:
-                // We are already bootstrapped, bootstrap again is not allowed.
-                log.warn("Got a request to bootstrap a server which is already bootstrapped, rejecting!");
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP));
+                handleMessageLayoutBootStrap(msg, ctx, r);
                 break;
-            case LAYOUT_PREPARE: {
-                LayoutRankMsg m = (LayoutRankMsg) msg;
-                Rank prepareRank = getRank(m);
-                // This is a prepare. If the rank is less than or equal to the phase 1 rank, reject.
-                if (phase1Rank != null && prepareRank.compareTo(phase1Rank) <= 0) {
-                    log.debug("Rejected phase 1 prepare of rank={}, phase1Rank={}", prepareRank, phase1Rank);
-                    r.sendResponse(ctx, msg, new LayoutRankMsg(proposedLayout, phase1Rank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_REJECT));
-                } else {
-                    savePhase1Data(prepareRank);
-                    log.debug("New phase 1 rank={}", phase1Rank);
-                    r.sendResponse(ctx, msg, new LayoutRankMsg(proposedLayout, phase1Rank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK));
-                }
-            }
-            break;
-            case LAYOUT_PROPOSE: {
-                LayoutRankMsg m = (LayoutRankMsg) msg;
-                Rank proposeRank = getRank(m);
-                Layout proposeLayout = ((LayoutRankMsg) msg).getLayout();
-                // This is a propose. If the rank is less than or equal to the phase 1 rank, reject.
-                if (phase1Rank != null && proposeRank.compareTo(phase1Rank) != 0) {
-                    log.debug("Rejected phase 2 propose of rank={}, phase1Rank={}", proposeRank, phase1Rank);
-                    r.sendResponse(ctx, msg, new LayoutRankMsg(null, phase1Rank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT));
-                }
-                // In addition, if the rank is equal to the current phase 2 rank (already accepted message), reject.
-                else if (phase2Rank != null && proposeRank.compareTo(phase2Rank) == 0) {
-                    log.debug("Rejected phase 2 propose of rank={}, phase2Rank={}", m.getRank(), phase2Rank);
-                    r.sendResponse(ctx, msg, new LayoutRankMsg(null, phase2Rank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT));
-                } else {
-                    log.debug("New phase 2 rank={},  layout={}", proposeRank, proposeLayout);
-                    savePhase2Data(proposeRank, proposeLayout);
-                    //TODO this should be moved into commit message handling as this is for committed layouts.
-                    commitLayout(proposeLayout);
-                    r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
-                }
-            }
-            break;
+            case LAYOUT_PREPARE:
+                handleMessageLayoutPrepare((LayoutRankMsg) msg, ctx, r);
+                break;
+            case LAYOUT_PROPOSE:
+                handleMessageLayoutPropose((LayoutRankMsg) msg, ctx, r);
+                break;
             case LAYOUT_COMMITTED: {
-                // Currently we just acknowledge the commit. We could do more than
-                // just that.
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+                handleMessageLayoutCommit((LayoutRankMsg) msg, ctx, r);
             }
             break;
             default:
@@ -352,59 +135,168 @@ public class LayoutServer extends AbstractServer {
         }
     }
 
-    private synchronized void commitLayout(Layout layout) {
-        saveCurrentLayout(layout);
-        serverRouter.setServerEpoch(currentLayout.getEpoch());
-        // this is needed so that we do not keep
-        // choosing the same value over each slot.
-        //TODO move this into commit message processing and then uncomment
-        //clearPhase2Data();
+    @Override
+    public void reset() {
     }
 
-    private void clearPhase2Data() {
-        phase2Rank = null;
-        proposedLayout = null;
-        if (phase2File != null) {
-            try {
-                Files.write(new byte[0], phase2File);
-            } catch (IOException e) {
-                log.error("Error clearing phase2 Data from disk!", e);
-            }
+    // Helper Methods
+
+    /**
+     * Sets the new layout if the server has not been bootstrapped with one already.
+     *
+     * @param msg
+     * @param ctx
+     * @param r
+     */
+    public synchronized void handleMessageLayoutBootStrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (getCurrentLayout() == null) {
+            log.info("Bootstrap with new layout={}", ((LayoutMsg) msg).getLayout());
+            setCurrentLayout(((LayoutMsg) msg).getLayout());
+            getServerRouter().setServerEpoch(getCurrentLayout().getEpoch());
+            //send a response that the bootstrap was successful.
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+        } else {
+            // We are already bootstrapped, bootstrap again is not allowed.
+            log.warn("Got a request to bootstrap a server which is already bootstrapped, rejecting!");
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP));
         }
+    }
+
+    /**
+     * Accepts a prepare message if the rank is higher than any accepted so far.
+     * @param msg
+     * @param ctx
+     * @param r
+     */
+    // TODO this can work under a separate lock for this step as it does not change the global components
+    public synchronized void handleMessageLayoutPrepare(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Rank prepareRank = getRank(msg);
+        Rank phase1Rank = getPhase1Rank();
+        Layout proposedLayout = getProposedLayout();
+        // This is a prepare. If the rank is less than or equal to the phase 1 rank, reject.
+        if (phase1Rank != null && prepareRank.compareTo(phase1Rank) <= 0) {
+            log.debug("Rejected phase 1 prepare of rank={}, phase1Rank={}", prepareRank, phase1Rank);
+            r.sendResponse(ctx, msg, new LayoutRankMsg(proposedLayout, phase1Rank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_REJECT));
+        } else {
+            setPhase1Rank(prepareRank);
+            log.debug("New phase 1 rank={}", getPhase1Rank());
+            r.sendResponse(ctx, msg, new LayoutRankMsg(proposedLayout, prepareRank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK));
+        }
+    }
+
+    /**
+     * Accepts a proposal for which it had accepted in the prepare phase.
+     * A minor optimization is to reject any duplicate propose messages.
+     * @param msg
+     * @param ctx
+     * @param r
+     */
+    public synchronized void handleMessageLayoutPropose(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Rank proposeRank = getRank(msg);
+        Layout proposeLayout = msg.getLayout();
+        Rank phase1Rank = getPhase1Rank();
+        Rank phase2Rank = getPhase2Rank();
+        // This is a propose. If the rank is less than or equal to the phase 1 rank, reject.
+        if ((phase1Rank == null ) || (phase1Rank != null && proposeRank.compareTo(phase1Rank) != 0)) {
+            log.debug("Rejected phase 2 propose of rank={}, phase1Rank={}", proposeRank, phase1Rank);
+            r.sendResponse(ctx, msg, new LayoutRankMsg(null, phase1Rank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT));
+            return;
+        }
+        // In addition, if the rank is equal to the current phase 2 rank (already accepted message), reject.
+        // This can happen in case of duplicate messages.
+        if (phase2Rank != null && proposeRank.compareTo(phase2Rank) == 0) {
+            log.debug("Rejected phase 2 propose of rank={}, phase2Rank={}", proposeRank, phase2Rank);
+            r.sendResponse(ctx, msg, new LayoutRankMsg(null, phase2Rank.getRank(), CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT));
+            return;
+        }
+
+        log.debug("New phase 2 rank={},  layout={}", proposeRank, proposeLayout);
+        setPhase2Data(new Phase2Data(proposeRank, proposeLayout));
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    }
+
+    /**
+     * Accepts any committed layouts for the current epoch or newer epochs.
+     * As part of the accept, the server changes it's current layout and epoch.
+     * @param msg
+     * @param ctx
+     * @param r
+     */
+    // TODO If a server does not get SET_EPOCH layout commit message cannot reach it
+    // TODO as this message is not set to ignore EPOCH.
+    // TODO How do we handle holes in history if let in layout commit message. Maybe we have a hole filling process
+    // TODO how do reject the older epoch commits, should it be an explicit NACK.
+    public synchronized void handleMessageLayoutCommit(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if(msg.getEpoch() < serverRouter.getServerEpoch()) {
+            return;
+        }
+        Layout commitLayout = msg.getLayout();
+        setCurrentLayout(commitLayout);
+        serverRouter.setServerEpoch(commitLayout.getEpoch());
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    }
+
+    public Layout getCurrentLayout() {
+        return dataStore.get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
+    }
+
+    public void setCurrentLayout(Layout layout) {
+        dataStore.put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+        // set the layout in history as well
+        setLayoutInHistory(layout);
+    }
+
+    public Rank getPhase1Rank() {
+        return dataStore.get(Rank.class, PREFIX_PHASE_1, serverRouter.getServerEpoch() + KEY_SUFFIX_PHASE_1);
+    }
+
+    public void setPhase1Rank(Rank rank) {
+        dataStore.put(Rank.class, PREFIX_PHASE_1, serverRouter.getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
+    }
+
+    public Phase2Data getPhase2Data() {
+        return dataStore.get(Phase2Data.class, PREFIX_PHASE_2, serverRouter.getServerEpoch() + KEY_SUFFIX_PHASE_2);
+    }
+
+    public void setPhase2Data(Phase2Data phase2Data) {
+        dataStore.put(Phase2Data.class, PREFIX_PHASE_2, serverRouter.getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
+    }
+
+    public void setLayoutInHistory(Layout layout) {
+        dataStore.put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), layout);
+    }
+
+    public List<Layout> getLayoutHistory() {
+        List<Layout> layouts = dataStore.getAll(Layout.class, PREFIX_LAYOUTS);
+        Collections.sort(layouts, (a, b) -> {
+            if (a.getEpoch() > b.getEpoch()) {
+                return 1;
+            } else if (a.getEpoch() < b.getEpoch()) {
+                return -1;
+            } else {
+                return 0;
+            }
+        });
+        return layouts;
+    }
+
+    public Rank getPhase2Rank() {
+        Phase2Data phase2Data = getPhase2Data();
+        if (phase2Data != null) {
+            return phase2Data.getRank();
+        }
+        return null;
+    }
+
+    public Layout getProposedLayout() {
+        Phase2Data phase2Data = getPhase2Data();
+        if (phase2Data != null) {
+            return phase2Data.getLayout();
+        }
+        return null;
     }
 
     private Rank getRank(LayoutRankMsg msg) {
         return new Rank(msg.getRank(), msg.getClientID());
-    }
-
-    @Override
-    public void reset() {
-
-    }
-
-    /**
-     * Phase2 data consists of rank and the proposed layout.
-     * The container class provides a convenience to persist and retrieve
-     * these two pieces of data together.
-     */
-    @Data
-    @AllArgsConstructor
-    static class Phase2Data {
-        Rank rank;
-        Layout layout;
-
-        /**
-         * Get a layout from a JSON string.
-         */
-        public static Phase2Data fromJSONString(String json) {
-            return JSONUtils.parser.fromJson(json, Phase2Data.class);
-        }
-
-        /**
-         * Get the layout as a JSON string.
-         */
-        public String asJSONString() {
-            return JSONUtils.parser.toJson(this);
-        }
     }
 }
