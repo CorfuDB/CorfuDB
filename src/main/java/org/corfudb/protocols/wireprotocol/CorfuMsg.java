@@ -157,13 +157,13 @@ public class CorfuMsg {
         // Base Messages
         PING(0, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
         PONG(1, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
-        RESET(2, TypeToken.of(CorfuResetMsg.class), BaseServer.class,  true),
-        SET_EPOCH(3, TypeToken.of(CorfuSetEpochMsg.class), LayoutServer.class, true),
+        RESET(2, TypeToken.of(CorfuMsg.class), BaseServer.class,  true),
+        SET_EPOCH(3, new TypeToken<CorfuPayloadMsg<Long>>(){}, LayoutServer.class, true),
         ACK(4, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
-        WRONG_EPOCH(5, TypeToken.of(CorfuSetEpochMsg.class), BaseServer.class),
+        WRONG_EPOCH(5, new TypeToken<CorfuPayloadMsg<Long>>(){}, BaseServer.class, true),
         NACK(6, TypeToken.of(CorfuMsg.class), BaseServer.class),
-        VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), BaseServer.class),
-        VERSION_RESPONSE(8, new TypeToken<JSONPayloadMsg<VersionInfo>>(){}, BaseServer.class),
+        VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
+        VERSION_RESPONSE(8, new TypeToken<JSONPayloadMsg<VersionInfo>>(){}, BaseServer.class, true),
 
         // Layout Messages
         LAYOUT_REQUEST(10, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
