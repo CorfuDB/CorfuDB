@@ -73,6 +73,17 @@ public class BaseClient implements IClient {
                 new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
     }
 
+    /**
+     * Reset the endpoint, asynchronously.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint acks, otherwise False or exceptional completion.
+     */
+    public CompletableFuture<Boolean> reset() {
+        return router.sendMessageAndGetCompletable(
+                new CorfuMsg(CorfuMsg.CorfuMsgType.RESET));
+    }
+
     /** The handler and handlers which implement this client. */
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)

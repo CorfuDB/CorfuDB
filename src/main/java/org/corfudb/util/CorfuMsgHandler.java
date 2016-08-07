@@ -41,31 +41,8 @@ public class CorfuMsgHandler {
     @SuppressWarnings("unchecked")
     public <T extends CorfuMsg> CorfuMsgHandler
     addHandler(CorfuMsg.CorfuMsgType messageType, Handler<T> handler) {
-        // We do type-checking at runtime.
-        // This should be okay as any incorrect handler will be registered
-        // at startup, and be caught during almost any unit test.
-
-        // Type-checking during compile time would be nice, but Java is just
-        // not friendly...
-
-        // TODO: Turn off this check when we aren't running tests.
-        try {
-            Class<?> c = handler.getClass().getMethod("handle",
-                    CorfuMsg.class, ChannelHandlerContext.class, IServerRouter.class)
-                    .getParameterTypes()[0];
-
-            if (!c.isAssignableFrom(messageType.messageType.getRawType())) {
-                throw new UnsupportedOperationException(
-                        "Handler for incorrect type registered, expected "
-                                + messageType.messageType.toString() + " but got " +
-                                c.toGenericString());
-            }
-
-            handlerMap.put(messageType, handler);
-            return this;
-        } catch (NoSuchMethodException nsme) {
-            throw new RuntimeException(nsme);
-        }
+        handlerMap.put(messageType, handler);
+        return this;
     }
 
     /** Handle an incoming CorfuMsg.

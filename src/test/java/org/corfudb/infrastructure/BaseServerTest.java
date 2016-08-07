@@ -1,7 +1,9 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
+import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -34,7 +36,7 @@ public class BaseServerTest extends AbstractServerTest {
 
     @Test
     public void canSetServerEpoch() {
-        sendMessage(new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.SET_EPOCH, 6L));
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsg.CorfuMsgType.SET_EPOCH, 6L));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
         sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));

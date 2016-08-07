@@ -10,11 +10,7 @@ import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicLong;
 
-import static jdk.nashorn.internal.runtime.regexp.joni.Config.log;
 import static org.fusesource.jansi.Ansi.Color.RED;
 import static org.fusesource.jansi.Ansi.Color.WHITE;
 import static org.fusesource.jansi.Ansi.ansi;
@@ -23,13 +19,13 @@ import static org.fusesource.jansi.Ansi.ansi;
  * Created by mwei on 8/1/16.
  */
 @Slf4j
-public class corfu_query implements ICmdlet {
+public class corfu_reset implements ICmdlet {
 
     private static final String USAGE =
-            "corfu_query, query a Corfu server to get runtime information.\n"
+            "corfu_reset, reset a Corfu server.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tcorfu_query <address>:<port> [-d <level>]\n"
+                    + "\tcorfu_reset <address>:<port> [-d <level>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -d <level>, --log-level=<level>      Set the logging level, valid levels are: \n"
@@ -56,12 +52,14 @@ public class corfu_query implements ICmdlet {
         log.trace("Creating router for {}:{}", host, port);
         NettyClientRouter router = new NettyClientRouter(host, port);
         router.start();
-        System.out.println(ansi().a("QUERY ").fg(WHITE).a(host + ":" + port).reset().a(":"));
+        System.out.println(ansi().a("RESET ").fg(WHITE).a(host + ":" + port).reset().a(":"));
         try {
-            VersionInfo vi = router.getClient(BaseClient.class).getVersionInfo().get();
-            Gson gs = new GsonBuilder().setPrettyPrinting().create();
-            System.out.println(ansi().a("RESPONSE").fg(WHITE).reset().a(":"));
-            System.out.println(gs.toJson(vi));
+            if (router.getClient(BaseClient.class).reset().get()) {
+                System.out.println(ansi().fg(WHITE).a("ACK").reset());
+            }
+            else {
+                System.out.println(ansi().fg(RED).a("NACK").reset());
+            }
         } catch (Exception ex) {
             System.out.println(ansi().fg(RED).a("ERROR").reset().a(":"));
             System.out.println(ex.toString());

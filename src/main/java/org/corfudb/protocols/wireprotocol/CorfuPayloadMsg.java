@@ -1,6 +1,7 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+import lombok.Getter;
 
 import java.lang.reflect.ParameterizedType;
 
@@ -21,6 +22,7 @@ public class CorfuPayloadMsg<T> extends CorfuMsg {
     /**
      * The payload.
      */
+    @Getter
     private T payload;
 
 

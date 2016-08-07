@@ -10,18 +10,14 @@ import jdk.internal.org.objectweb.asm.tree.MethodNode;
 import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
+import lombok.extern.slf4j.Slf4j;
 import net.bytebuddy.agent.ByteBuddyAgent;
 import net.bytebuddy.description.type.TypeDescription;
 import net.bytebuddy.dynamic.ClassFileLocator;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
+import java.io.*;
 import java.lang.instrument.Instrumentation;
+import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -35,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Created by crossbach on 5/22/15.
  */
-
+@Slf4j
 public class Utils {
     private static final Instrumentation instrumentation = ByteBuddyAgent.install();
     private static Printer printer = new Textifier();
@@ -328,4 +324,21 @@ public class Utils {
         return simpleUUIDHash(uuid, seed);
     }
 
+
+    /** restart the JVM - borrowed from https://dzone.com/articles/programmatically-restart-java */
+    /**
+     * Sun property pointing the main class and its arguments.
+     * Might not be defined on non Hotspot VM implementations.
+     */
+    public static final String SUN_JAVA_COMMAND = "sun.java.command";
+
+    public static void sleepUninterruptibly(long millis) {
+        while (true) {
+            try {
+                Thread.sleep(millis);
+                return;
+            } catch (InterruptedException ie) {
+            }
+        }
+    }
 }
