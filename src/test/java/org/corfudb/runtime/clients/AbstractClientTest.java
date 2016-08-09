@@ -4,6 +4,8 @@ import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.junit.Before;
 
@@ -23,7 +25,7 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
 
     @Before
     public void resetTest() {
-        serverRouter = new TestServerRouter();
+        serverRouter = new TestServerRouter(ServerContextBuilder.emptyContext());
         router = new TestClientRouter(serverRouter);
         getServersForTest().stream().forEach(serverRouter::addServer);
         getClientsForTest().stream().forEach(router::addClient);
@@ -33,13 +35,13 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
 
     abstract Set<IClient> getClientsForTest();
 
-    public Map<String, Object> defaultOptionsMap() {
-        return new ImmutableMap.Builder<String, Object>()
-                .put("--initial-token", "0")
-                .put("--memory", true)
-                .put("--single", false)
-                .put("--max-cache", "256M")
-                .put("--sync", false)
+    public ServerContext defaultServerContext() {
+        return new ServerContextBuilder()
+                .setInitialToken(0)
+                .setMemory(true)
+                .setSingle(false)
+                .setMaxCache(256000000)
+                .setSync(false)
                 .build();
     }
 }

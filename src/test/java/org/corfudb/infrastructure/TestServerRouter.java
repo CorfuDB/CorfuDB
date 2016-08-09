@@ -35,11 +35,10 @@ public class TestServerRouter implements IServerRouter {
 
     AtomicLong requestCounter;
 
-    @Getter
-    @Setter
-    long serverEpoch;
+    ServerContext serverContext;
 
-    public TestServerRouter() {
+    public TestServerRouter(ServerContext serverContext) {
+        this.serverContext = serverContext;
         reset();
     }
 
@@ -53,7 +52,7 @@ public class TestServerRouter implements IServerRouter {
     @Override
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        outMsg.setEpoch(serverEpoch);
+        outMsg.setEpoch(serverContext.getServerEpoch());
         if (rules.stream()
                 .map(x -> x.evaluate(outMsg, this))
                 .allMatch(x -> x)) {

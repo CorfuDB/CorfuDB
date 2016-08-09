@@ -153,13 +153,15 @@ public class CorfuServer {
             }
         }
 
+        ServerContext serverContext = new ServerContext(opts);
+
         // Now, we start the Netty router, and have it route to the correct port.
-        NettyServerRouter router = new NettyServerRouter(opts);
+        NettyServerRouter router = new NettyServerRouter(serverContext);
 
         // Add each role to the router.
-        router.addServer(new SequencerServer(opts));
-        router.addServer(new LayoutServer(opts, router));
-        router.addServer(new LogUnitServer(opts));
+        router.addServer(new SequencerServer(serverContext));
+        router.addServer(new LayoutServer(serverContext));
+        router.addServer(new LogUnitServer(serverContext));
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.

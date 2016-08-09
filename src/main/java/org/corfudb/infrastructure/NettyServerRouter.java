@@ -32,26 +32,12 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
 
     BaseServer baseServer;
 
-    DataStore dataStore;
+    ServerContext serverContext;
 
-    /**
-     * The epoch of this router. This is managed by the base server implementation.
-     */
-    @Override
-    public long getServerEpoch() {
-        Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
-        return epoch == null ? 0 : epoch;
-    }
-
-    @Override
-    public void setServerEpoch(long serverEpoch) {
-        dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
-    }
-
-    public NettyServerRouter(Map<String, Object> opts) {
+    public NettyServerRouter(ServerContext serverContext) {
         handlerMap = new ConcurrentHashMap<>();
-        this.dataStore = new DataStore(opts);
         baseServer = new BaseServer();
+        this.serverContext = serverContext;
         addServer(baseServer);
     }
 
@@ -80,7 +66,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        outMsg.setEpoch(getServerEpoch());
+        outMsg.setEpoch(serverContext.getServerEpoch());
         ctx.writeAndFlush(outMsg);
         log.trace("Sent response: {}", outMsg);
     }
@@ -95,11 +81,11 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      * @return True, if the epoch is correct, but false otherwise.
      */
     public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
-        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != getServerEpoch()) {
+        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverContext.getServerEpoch()) {
             sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
-                    getServerEpoch()));
+                    serverContext.getServerEpoch()));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), getServerEpoch(), msg);
+                    msg.getEpoch(), serverContext.getServerEpoch(), msg);
             return false;
         }
         return true;

@@ -103,7 +103,16 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param config    The configuration to use for the server.
      */
     public void addServer(int port, Map<String, Object> config) {
-        new TestServer(config).addToTest(port, this);
+        addServer(port, new ServerContext(config));
+    }
+
+    /**
+     * Add a server to a specific port, using the given ServerContext.
+     * @param port
+     * @param serverContext
+     */
+    public void addServer(int port, ServerContext serverContext) {
+        new TestServer(serverContext).addToTest(port, this);
     }
 
     /** Add a default, in-memory unbootstrapped server at a specific port.
@@ -111,7 +120,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port      The port to use.
      */
     public void addServer(int port) {
-        new TestServer(new ServerConfigBuilder().setSingle(false).setPort(port).build()).addToTest(port, this);
+        new TestServer(new ServerContextBuilder().setSingle(false).setPort(port).build()).addToTest(port, this);
     }
 
 
@@ -276,6 +285,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     @Data
     private static class TestServer {
+        ServerContext serverContext;
         BaseServer baseServer;
         SequencerServer sequencerServer;
         LayoutServer layoutServer;
@@ -285,11 +295,16 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         TestServer(Map<String, Object> optsMap)
         {
-            serverRouter = new TestServerRouter();
+            this(new ServerContext(optsMap));
+        }
+
+        TestServer(ServerContext serverContext) {
+            this.serverContext = serverContext;
+            serverRouter = new TestServerRouter(serverContext);
             baseServer = new BaseServer();
-            sequencerServer = new SequencerServer(optsMap);
-            layoutServer = new LayoutServer(optsMap, serverRouter);
-            logUnitServer = new LogUnitServer(optsMap);
+            sequencerServer = new SequencerServer(serverContext);
+            layoutServer = new LayoutServer(serverContext);
+            logUnitServer = new LogUnitServer(serverContext);
 
             serverRouter.addServer(baseServer);
             serverRouter.addServer(sequencerServer);
@@ -299,7 +314,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         TestServer(int port)
         {
-            this(ServerConfigBuilder.defaultConfig(port));
+            this(ServerContextBuilder.defaultContext(port).getServerConfig());
         }
 
         void addToTest(int port, AbstractViewTest test) {

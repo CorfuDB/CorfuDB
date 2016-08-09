@@ -22,7 +22,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     AtomicInteger requestCounter;
 
     public AbstractServerTest() {
-        router = new TestServerRouter();
+        router = new TestServerRouter(ServerContextBuilder.emptyContext());
         requestCounter = new AtomicInteger();
     }
 

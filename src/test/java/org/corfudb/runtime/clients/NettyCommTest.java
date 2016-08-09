@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.NettyServerRouter;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.junit.Test;
@@ -81,10 +82,10 @@ public class NettyCommTest extends AbstractCorfuTest {
     void runWithBaseServer(NettyCommFunction actionFn)
             throws Exception {
 
-        NettyServerRouter nsr = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
+        NettyServerRouter nsr = new NettyServerRouter(ServerContextBuilder.emptyContext());
         nsr.addServer(new BaseServer());
-        int port = findRandomOpenPort();
 
+        int port = findRandomOpenPort();
         NettyServerData d = new NettyServerData(port);
         NettyClientRouter ncr = new NettyClientRouter("localhost", port);
         try {
@@ -124,7 +125,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         }
 
         void bootstrapServer() throws Exception {
-            NettyServerRouter nsr = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
+            NettyServerRouter nsr = new NettyServerRouter(ServerContextBuilder.emptyContext());
             bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
                 final AtomicInteger threadNum = new AtomicInteger(0);
 

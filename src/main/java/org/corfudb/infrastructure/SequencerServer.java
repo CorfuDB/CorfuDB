@@ -60,7 +60,8 @@ public class SequencerServer extends AbstractServer {
      */
     ConcurrentHashMap<UUID, Long> lastIssuedMap;
 
-    public SequencerServer(Map<String, Object> opts) {
+    public SequencerServer(ServerContext serverContext) {
+        Map<String, Object> opts = serverContext.getServerConfig();
         lastIssuedMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
 

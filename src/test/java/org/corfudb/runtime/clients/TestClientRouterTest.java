@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.junit.Test;
@@ -18,7 +20,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
 
     @Test
     public void testRuleDropsMessages() {
-        TestServerRouter tsr = new TestServerRouter();
+        TestServerRouter tsr = new TestServerRouter(ServerContextBuilder.emptyContext());
         BaseServer bs = new BaseServer();
         tsr.addServer(bs);
         TestClientRouter tcr = new TestClientRouter(tsr);
@@ -39,7 +41,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
 
     @Test
     public void onlyDropEpochChangeMessages() {
-        TestServerRouter tsr = new TestServerRouter();
+        TestServerRouter tsr = new TestServerRouter(ServerContextBuilder.emptyContext());
         BaseServer bs = new BaseServer();
         tsr.addServer(bs);
         TestClientRouter tcr = new TestClientRouter(tsr);

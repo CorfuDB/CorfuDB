@@ -28,7 +28,6 @@ public class BaseServer extends AbstractServer {
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .addHandler(CorfuMsg.CorfuMsgType.PING, BaseServer::ping)
-            .addHandler(CorfuMsg.CorfuMsgType.SET_EPOCH, BaseServer::setEpoch)
             .addHandler(CorfuMsg.CorfuMsgType.VERSION_REQUEST, this::getVersion);
 
     /** Respond to a ping message.
@@ -41,24 +40,6 @@ public class BaseServer extends AbstractServer {
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.PONG));
     }
 
-    /** Respond to a epoch change message.
-     *
-     * @param csem      The incoming message
-     * @param ctx       The channel context
-     * @param r         The server router.
-     */
-    private static void setEpoch(CorfuSetEpochMsg csem, ChannelHandlerContext ctx, IServerRouter r) {
-        if (csem.getNewEpoch() >= r.getServerEpoch()) {
-            log.info("Received SET_EPOCH, moving to new epoch {}", csem.getNewEpoch());
-            r.setServerEpoch(csem.getNewEpoch());
-            r.sendResponse(ctx, csem, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
-        } else {
-            log.debug("Rejected SET_EPOCH currrent={}, requested={}",
-                    r.getServerEpoch(), csem.getNewEpoch());
-            r.sendResponse(ctx, csem, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
-                    r.getServerEpoch()));
-        }
-    }
 
     /** Respond to a version request message.
      *
