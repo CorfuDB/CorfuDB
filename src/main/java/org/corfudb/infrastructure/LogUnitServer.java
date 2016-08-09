@@ -71,10 +71,39 @@ public class LogUnitServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
                                             .generateHandlers(MethodHandles.lookup(), this);
 
+    /**
+     * Service an incoming write request.
+     */
+    @ServerHandler(type=CorfuMsgType.WRITE)
+    public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        long address = msg.getPayload().getGlobalAddress();
+        log.trace("Write[{}]", address);
+        // The payload in the message is a view of a larger buffer allocated
+        // by netty, thus direct memory can leak. Copy the view and release the
+        // underlying buffer
+        LogUnitEntry e = new LogUnitEntry(address, msg.getPayload().getDataBuffer().copy(),
+                msg.getPayload().getMetadataMap(), false);
+        msg.getPayload().getDataBuffer().release();
+        try {
+            dataCache.put(e.getAddress(), e);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ERROR_OK));
+        } catch (Exception ex) {
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ERROR_OVERWRITE));
+            e.getBuffer().release();
+        }
+    }
 
     @ServerHandler(type=CorfuMsgType.READ_REQUEST)
     private void read_normal(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        read(msg, ctx, r);
+        log.trace("Read[{}]", msg.getPayload());
+        LogUnitEntry e = dataCache.get(msg.getPayload());
+        if (e == null) {
+            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
+        } else if (e.isHole) {
+            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.FILLED_HOLE));
+        } else {
+            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(e));
+        }
     }
 
     @ServerHandler(type=CorfuMsgType.READ_RANGE)
@@ -106,6 +135,7 @@ public class LogUnitServer extends AbstractServer {
                 prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
+
 
     /**
      * The garbage collection thread.
@@ -174,7 +204,7 @@ public class LogUnitServer extends AbstractServer {
                 .writer(new CacheWriter<Long, LogUnitEntry>() {
                     @Override
                     public void write(Long address, LogUnitEntry entry) {
-                        if (dataCache.getIfPresent(address) != null) {// || seenAddresses.contains(address)) {
+                        if (dataCache.getIfPresent(address) != null) {
                             throw new RuntimeException("overwrite");
                         }
                         if (!entry.isPersisted) { //don't persist an entry twice.
@@ -217,21 +247,6 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Service an incoming read request.
-     */
-    public void read(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("Read[{}]", msg.getPayload());
-        LogUnitEntry e = dataCache.get(msg.getPayload());
-        if (e == null) {
-            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
-        } else if (e.isHole) {
-            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.FILLED_HOLE));
-        } else {
-            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(e));
-        }
-    }
-
-    /**
      * Service an incoming ranged read request.
      */
     public void read(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -248,26 +263,6 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, new LogUnitReadRangeResponseMsg(o));
     }
 
-    /**
-     * Service an incoming write request.
-     */
-    @ServerHandler(type=CorfuMsgType.WRITE)
-    public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        long address = msg.getAddress();
-        log.trace("Write[{}]", address);
-        // The payload in the message is a view of a larger buffer allocated
-        // by netty, thus direct memory can leak. Copy the view and release the
-        // underlying buffer
-        LogUnitEntry e = new LogUnitEntry(address, msg.getData().copy(), msg.getMetadataMap(), false);
-        msg.getData().release();
-        try {
-            dataCache.put(e.getAddress(), e);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ERROR_OK));
-        } catch (Exception ex) {
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ERROR_OVERWRITE));
-            e.getBuffer().release();
-        }
-    }
 
     public void runGC() {
         Thread.currentThread().setName("LogUnit-GC");

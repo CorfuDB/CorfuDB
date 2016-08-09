@@ -1,8 +1,10 @@
 package org.corfudb.infrastructure;
 
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.infrastructure.log.LogUnitEntry;
-import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
@@ -29,19 +31,23 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
         long address = 0L;
-        LogUnitWriteMsg m = new LogUnitWriteMsg(address);
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        b.writeByte(42);
+        WriteRequest wr = WriteRequest.builder()
+                            .writeMode(WriteMode.NORMAL)
+                            .globalAddress(address)
+                            .dataBuffer(b)
+                            .build();
         //write at 0
-        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
-        m.setRank(0L);
-        m.setBackpointerMap(Collections.emptyMap());
-        byte[] payload = "0".getBytes();
-        m.setPayload(payload);
-        sendMessage(m);
+        wr.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        wr.setRank(0L);
+        wr.setBackpointerMap(Collections.emptyMap());
+
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(wr));
 
         LoadingCache<Long, LogUnitEntry> dataCache = s1.getDataCache();
         // Make sure that extra bytes are truncated from the payload byte buf
-        assertThat(dataCache.get(address).getBuffer().capacity()).isEqualTo(payload.length);
-
+        assertThat(dataCache.get(address).getBuffer().capacity()).isEqualTo(1);
     }
 
     @Test
@@ -57,28 +63,42 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         this.router.reset();
         this.router.addServer(s1);
-        LogUnitWriteMsg m = new LogUnitWriteMsg(0L);
         //write at 0
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        b.writeBytes("0".getBytes());
+        WriteRequest m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .globalAddress(0L)
+                .dataBuffer(b)
+                .build();
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
-        m.setPayload("0".getBytes());
-        sendMessage(m);
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
         //100
-        m = new LogUnitWriteMsg(100L);
+        b = ByteBufAllocator.DEFAULT.buffer();
+        b.writeBytes("100".getBytes());
+        m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .globalAddress(100L)
+                .dataBuffer(b)
+                .build();
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
-        m.setPayload("100".getBytes());
-        sendMessage(m);
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
         //and 10000000
-        m = new LogUnitWriteMsg(10000000L);
-        m.setAddress(10000000);
+        b = ByteBufAllocator.DEFAULT.buffer();
+        b.writeBytes("10000000".getBytes());
+        m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .globalAddress(10000000L)
+                .dataBuffer(b)
+                .build();
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
-        m.setPayload("10000000".getBytes());
-        sendMessage(m);
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
 
         assertThat(s1)
                 .containsDataAtAddress(0)

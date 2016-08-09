@@ -36,7 +36,7 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.PING)
     private static void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.PONG));
+        r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
     }
 
     /** Respond to a version request message.
@@ -62,7 +62,7 @@ public class BaseServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.RESET)
     private static void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("Remote reset requested from client " + msg.getClientID());
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         Utils.sleepUninterruptibly(500); // Sleep, to make sure that all channels are flushed...
         System.exit(100);
     }

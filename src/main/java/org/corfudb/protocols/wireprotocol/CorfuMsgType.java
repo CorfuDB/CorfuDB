@@ -47,7 +47,7 @@ public enum CorfuMsgType {
     TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}, SequencerServer.class),
 
     // Logging Unit Messages
-    WRITE(30, TypeToken.of(LogUnitWriteMsg.class), LogUnitServer.class),
+    WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}, LogUnitServer.class),
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     READ_RESPONSE(32, TypeToken.of(LogUnitReadResponseMsg.class), LogUnitServer.class),
     TRIM(33, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}, LogUnitServer.class),
@@ -74,6 +74,15 @@ public enum CorfuMsgType {
     public final TypeToken<? extends CorfuMsg> messageType;
     public final Class<? extends AbstractServer> handler;
     public Boolean ignoreEpoch = false;
+
+    public <T> CorfuPayloadMsg<T> payloadMsg(T payload) {
+        // todo:: maybe some typechecking here (performance impact?)
+        return new CorfuPayloadMsg<T>(this, payload);
+    }
+
+    public CorfuMsg msg() {
+        return new CorfuMsg(this);
+    }
 
     @FunctionalInterface
     interface MessageConstructor<T> {

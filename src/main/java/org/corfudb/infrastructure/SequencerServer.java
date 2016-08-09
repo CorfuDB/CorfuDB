@@ -138,8 +138,7 @@ public class SequencerServer extends AbstractServer {
                     if (req.getStreams().size() == 0) {
                         max = globalIndex.get() - 1;
                     }
-                    r.sendResponse(ctx, msg,
-                            new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_RES,
+                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                                     new TokenResponse(max, Collections.emptyMap())));
                 } else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
@@ -154,8 +153,7 @@ public class SequencerServer extends AbstractServer {
                             return Math.max(thisIssue + req.getNumTokens() - 1, v);
                         });
                     }
-                    r.sendResponse(ctx, msg,
-                            new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_RES,
+                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                                     new TokenResponse(thisIssue, mb.build())));
                 }
             }

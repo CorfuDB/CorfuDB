@@ -1,5 +1,8 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.reflect.TypeToken;
+import lombok.Data;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
@@ -95,16 +98,22 @@ public interface IMetadata {
     }
 
     @RequiredArgsConstructor
-    public enum LogUnitMetadataType {
-        STREAM(0),
-        RANK(1),
-        STREAM_ADDRESS(2),
-        BACKPOINTER_MAP(3);
+    public enum LogUnitMetadataType implements ITypedEnum {
+        STREAM(0, new TypeToken<Set<UUID>>() {}),
+        RANK(1, TypeToken.of(Long.class)),
+        STREAM_ADDRESS(2, TypeToken.of(Long.class)),
+        BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {});
 
         final int type;
+        @Getter
+        final TypeToken<?> componentType;
 
         public byte asByte() {
             return (byte) type;
         }
+
+        public static Map<Byte, LogUnitMetadataType> typeMap =
+                Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
+                        .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
     }
 }

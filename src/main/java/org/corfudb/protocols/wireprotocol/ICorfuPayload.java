@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
 import org.corfudb.infrastructure.CorfuMsgHandler;
 
@@ -9,6 +10,7 @@ import java.lang.invoke.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -40,6 +42,12 @@ public interface ICorfuPayload<T> {
                     return new String(bytes);
                 })
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
+                .put(ByteBuf.class, x -> {
+                    int bytes = x.readInt();
+                    ByteBuf o = x.slice(x.readerIndex(), bytes);
+                    x.readerIndex(x.readerIndex()+bytes);
+                    return o;
+                })
                 .build());
 
 
@@ -53,6 +61,18 @@ public interface ICorfuPayload<T> {
             return (T) constructorMap.get(cls).construct(buf);
         }
         else {
+            if (cls.isEnum()) {
+                // we only know how to deal with enums with a typemap...
+                try {
+                    Map<Byte, T> enumMap = (Map<Byte, T>) cls.getDeclaredField("typeMap").get(null);
+                    constructorMap.put(cls, x -> enumMap.get(x.readByte()));
+                    return (T) constructorMap.get(cls).construct(buf);
+                } catch (NoSuchFieldException e) {
+                    throw new RuntimeException("only enums with a typeMap are supported!");
+                } catch (IllegalAccessException e) {
+                    throw new RuntimeException(e);
+                }
+            }
             if (ICorfuPayload.class.isAssignableFrom(cls)) {
                 // Grab the constructor and get convert it to a lambda.
                 try {
@@ -113,6 +133,32 @@ public interface ICorfuPayload<T> {
         return builder.build();
     }
 
+    static <K extends Enum<K> & ITypedEnum<K>,V> EnumMap<K,V> enumMapFromBuffer(ByteBuf buf, Class<K> keyClass,
+                                                                                Class<V> objectClass) {
+        EnumMap<K, V> metadataMap =
+                new EnumMap<>(keyClass);
+        byte numEntries = buf.readByte();
+        while (numEntries > 0 && buf.isReadable()) {
+            K type = fromBuffer(buf, keyClass);
+            V value = (V)fromBuffer(buf, type.getComponentType());
+            metadataMap.put(type, value);
+            numEntries--;
+        }
+        return metadataMap;
+    }
+
+    @SuppressWarnings("unchecked")
+    static <T> T fromBuffer(ByteBuf buf, TypeToken<T> token) {
+        Class<?> rawType = token.getRawType();
+        if (rawType.isAssignableFrom(Map.class)) {
+            return (T) mapFromBuffer(buf, token.resolveType(Map.class.getTypeParameters()[0]).getRawType(),
+                    token.resolveType(Map.class.getTypeParameters()[1]).getRawType());
+        } else if (rawType.isAssignableFrom(Set.class)) {
+            return (T) setFromBuffer(buf, token.resolveType(Set.class.getTypeParameters()[0]).getRawType());
+        }
+        return (T) fromBuffer(buf, rawType);
+    }
+
     static <T> void serialize(ByteBuf buffer, T payload) {
         // If it's an ICorfuPayload, use the defined serializer.
         if (payload instanceof ICorfuPayload) {
@@ -144,6 +190,14 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(((UUID) payload).getLeastSignificantBits());
         }
         // and some collection types
+        else if (payload instanceof EnumMap) {
+            EnumMap<?,?> map = (EnumMap<?,?>) payload;
+            buffer.writeByte(map.size());
+            map.entrySet().stream().forEach(x -> {
+                serialize(buffer, x.getKey());
+                serialize(buffer, x.getValue());
+            });
+        }
         else if (payload instanceof Map) {
             Map<?,?> map = (Map<?,?>) payload;
             buffer.writeInt(map.size());
@@ -157,6 +211,12 @@ public interface ICorfuPayload<T> {
             set.stream().forEach(x -> {
                 serialize(buffer, x);
             });
+        }
+        // and if its a bytebuf
+        else if (payload instanceof ByteBuf) {
+            int bytes = ((ByteBuf) payload).readableBytes();
+            buffer.writeInt(bytes);
+            buffer.writeBytes((ByteBuf)payload);
         }
         else {
             throw new RuntimeException("Unknown class " + payload.getClass()

@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,6 +11,8 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.serializer.CorfuSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import java.util.Map;
 import java.util.Set;
@@ -102,12 +105,13 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
                                             Object writeObject, Map<UUID, Long> backpointerMap) {
-        LogUnitWriteMsg w = new LogUnitWriteMsg(address);
-        w.setStreams(streams);
-        w.setRank(rank);
-        w.setBackpointerMap(backpointerMap);
-        w.setPayload(writeObject);
-        return router.sendMessageAndGetCompletable(w);
+        ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
+        Serializers.getSerializer(Serializers.SerializerType.CORFU).serialize(writeObject, payload);
+        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, address, null, payload);
+        wr.setStreams(streams);
+        wr.setRank(rank);
+        wr.setBackpointerMap(backpointerMap);
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
     /**
@@ -123,12 +127,11 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
                                             ByteBuf buffer, Map<UUID, Long> backpointerMap) {
-        LogUnitWriteMsg w = new LogUnitWriteMsg(address);
-        w.setStreams(streams);
-        w.setRank(rank);
-        w.setBackpointerMap(backpointerMap);
-        w.setData(buffer);
-        return router.sendMessageAndGetCompletable(w);
+        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, address, null, buffer);
+        wr.setStreams(streams);
+        wr.setRank(rank);
+        wr.setBackpointerMap(backpointerMap);
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
     /**
@@ -150,8 +153,7 @@ public class LogUnitClient implements IClient {
      * @param prefix The prefix of the stream, as a global physical offset, to trim.
      */
     public void trim(UUID stream, long prefix) {
-        router.sendMessage(new CorfuPayloadMsg<>
-                (CorfuMsgType.TRIM, new TrimRequest(stream, prefix)));
+        router.sendMessage(CorfuMsgType.TRIM.payloadMsg(new TrimRequest(stream, prefix)));
     }
 
     /**
@@ -161,21 +163,21 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> fillHole(long address) {
         return router.sendMessageAndGetCompletable(
-                new CorfuPayloadMsg<>(CorfuMsgType.FILL_HOLE, address));
+                CorfuMsgType.FILL_HOLE.payloadMsg(address));
     }
 
     /**
      * Force the garbage collector to begin garbage collection.
      */
     public void forceGC() {
-        router.sendMessage(new CorfuMsg(CorfuMsgType.FORCE_GC));
+        router.sendMessage(CorfuMsgType.FORCE_GC.msg());
     }
 
     /**
      * Force the compactor to recalculate the contiguous tail.
      */
     public void forceCompact() {
-        router.sendMessage(new CorfuMsg(CorfuMsgType.FORCE_COMPACT));
+        router.sendMessage(CorfuMsgType.FORCE_COMPACT.msg());
     }
 
     /**
@@ -193,7 +195,7 @@ public class LogUnitClient implements IClient {
      * @param millis The new garbage collection interval, in milliseconds.
      */
     public void setGCInterval(long millis) {
-        router.sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.GC_INTERVAL, millis));
+        router.sendMessage(CorfuMsgType.GC_INTERVAL.payloadMsg(millis));
     }
 
 

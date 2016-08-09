@@ -40,7 +40,7 @@ public class SequencerClient implements IClient {
 
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
         return router.sendMessageAndGetCompletable(
-                new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ, new TokenRequest(numTokens, streamIDs)));
+                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs)));
     }
 
 }
