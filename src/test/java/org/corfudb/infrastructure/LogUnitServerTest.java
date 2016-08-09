@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.LogUnitEntry;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
@@ -45,9 +46,9 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         sendMessage(CorfuMsgType.WRITE.payloadMsg(wr));
 
-        LoadingCache<Long, LogUnitEntry> dataCache = s1.getDataCache();
+        LoadingCache<LogAddress, LogUnitEntry> dataCache = s1.getDataCache();
         // Make sure that extra bytes are truncated from the payload byte buf
-        assertThat(dataCache.get(address).getBuffer().capacity()).isEqualTo(1);
+        assertThat(dataCache.get(new LogAddress(address, null)).getBuffer().capacity()).isEqualTo(1);
     }
 
     @Test

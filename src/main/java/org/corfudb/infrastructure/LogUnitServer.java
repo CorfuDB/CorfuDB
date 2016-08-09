@@ -11,10 +11,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.corfudb.infrastructure.log.AbstractLocalLog;
-import org.corfudb.infrastructure.log.InMemoryLog;
-import org.corfudb.infrastructure.log.LogUnitEntry;
-import org.corfudb.infrastructure.log.RollingLog;
+import org.corfudb.infrastructure.log.*;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
 import org.corfudb.util.Utils;
@@ -33,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/10/15.
@@ -85,10 +83,12 @@ public class LogUnitServer extends AbstractServer {
                 msg.getPayload().getMetadataMap(), false);
         msg.getPayload().getDataBuffer().release();
         try {
-            dataCache.put(e.getAddress(), e);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ERROR_OK));
+            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
+                dataCache.put(new LogAddress(e.address, null), e);
+            }
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OK.msg());
         } catch (Exception ex) {
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ERROR_OVERWRITE));
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
             e.getBuffer().release();
         }
     }
@@ -96,7 +96,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.READ_REQUEST)
     private void read_normal(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("Read[{}]", msg.getPayload());
-        LogUnitEntry e = dataCache.get(msg.getPayload());
+        LogUnitEntry e = dataCache.get(new LogAddress(msg.getPayload(), null));
         if (e == null) {
             r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
         } else if (e.isHole) {
@@ -114,26 +114,26 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.GC_INTERVAL)
     private void gc_interval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         gcRetry.setRetryInterval(msg.getPayload());
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type=CorfuMsgType.FORCE_GC)
     private void force_gc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         gcThread.interrupt();
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type=CorfuMsgType.FILL_HOLE)
     private void fill_hole(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        dataCache.get(msg.getPayload(), LogUnitEntry::new);
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        dataCache.get(new LogAddress(msg.getPayload(), null), x -> new LogUnitEntry(msg.getPayload()));
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type=CorfuMsgType.TRIM)
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
                 prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
 
@@ -141,11 +141,6 @@ public class LogUnitServer extends AbstractServer {
      * The garbage collection thread.
      */
     Thread gcThread;
-    /**
-     * The contiguous head of the log (that is, the lowest address which has NOT been trimmed yet).
-     */
-    @Getter
-    long contiguousHead;
 
     ConcurrentHashMap<UUID, Long> trimMap;
     IntervalAndSentinelRetry gcRetry;
@@ -154,7 +149,7 @@ public class LogUnitServer extends AbstractServer {
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
      */
-    LoadingCache<Long, LogUnitEntry> dataCache;
+    LoadingCache<LogAddress, LogUnitEntry> dataCache;
     long maxCacheSize;
 
     private final AbstractLocalLog localLog;
@@ -189,7 +184,6 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     public void reset() {
-        contiguousHead = 0L;
 
         if (dataCache != null) {
             /** Free all references */
@@ -198,22 +192,22 @@ public class LogUnitServer extends AbstractServer {
         }
 
         dataCache = Caffeine.newBuilder()
-                .<Long, LogUnitEntry>weigher((k, v) -> v.buffer == null ? 1 : v.buffer.readableBytes())
+                .<LogAddress,LogUnitEntry>weigher((k, v) -> v.buffer == null ? 1 : v.buffer.readableBytes())
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
-                .writer(new CacheWriter<Long, LogUnitEntry>() {
+                .writer(new CacheWriter<LogAddress, LogUnitEntry>() {
                     @Override
-                    public void write(Long address, LogUnitEntry entry) {
+                    public void write(LogAddress address, LogUnitEntry entry) {
                         if (dataCache.getIfPresent(address) != null) {
                             throw new RuntimeException("overwrite");
                         }
                         if (!entry.isPersisted) { //don't persist an entry twice.
-                            localLog.write(address, entry);
+                            localLog.write(address.getAddress(), entry);
                         }
                     }
 
                     @Override
-                    public void delete(Long aLong, LogUnitEntry logUnitEntry, RemovalCause removalCause) {
+                    public void delete(LogAddress aLong, LogUnitEntry logUnitEntry, RemovalCause removalCause) {
                         // never need to delete
                     }
                 }).build(this::handleRetrieval);
@@ -232,13 +226,13 @@ public class LogUnitServer extends AbstractServer {
      * the read() and write(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
-    public synchronized LogUnitEntry handleRetrieval(Long address) {
-        LogUnitEntry entry = localLog.read(address);
+    public synchronized LogUnitEntry handleRetrieval(LogAddress address) {
+        LogUnitEntry entry = localLog.read(address.getAddress());
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }
 
-    public synchronized void handleEviction(Long address, LogUnitEntry entry, RemovalCause cause) {
+    public synchronized void handleEviction(LogAddress address, LogUnitEntry entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
         if (entry.buffer != null) {
             // Free the internal buffer once the data has been evicted (in the case the server is not sync).
@@ -251,15 +245,17 @@ public class LogUnitServer extends AbstractServer {
      */
     public void read(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("ReadRange[{}]", msg.getRanges());
-        Set<Long> total = new HashSet<>();
+        Set<LogAddress> total = new HashSet<>();
         for (Range<Long> range : msg.getRanges().asRanges()) {
-            total.addAll(Utils.discretizeRange(range));
+            total.addAll(Utils.discretizeRange(range).parallelStream()
+                            .map(x -> new LogAddress(x, null))
+                            .collect(Collectors.toSet()));
         }
 
-        Map<Long, LogUnitEntry> e = dataCache.getAll(total);
+        Map<LogAddress, LogUnitEntry> e = dataCache.getAll(total);
         Map<Long, LogUnitReadResponseMsg> o = new ConcurrentHashMap<>();
         e.entrySet().parallelStream()
-                .forEach(rv -> o.put(rv.getKey(), new LogUnitReadResponseMsg(rv.getValue())));
+                .forEach(rv -> o.put(rv.getKey().getAddress(), new LogUnitReadResponseMsg(rv.getValue())));
         r.sendResponse(ctx, msg, new LogUnitReadRangeResponseMsg(o));
     }
 
@@ -281,9 +277,9 @@ public class LogUnitServer extends AbstractServer {
         long freedEntries = 0;
 
         /* Pick a non-compacted region or just scan the cache */
-        Map<Long, LogUnitEntry> map = dataCache.asMap();
-        SortedSet<Long> addresses = new TreeSet<>(map.keySet());
-        for (long address : addresses) {
+        Map<LogAddress, LogUnitEntry> map = dataCache.asMap();
+        SortedSet<LogAddress> addresses = new TreeSet<>(map.keySet());
+        for (LogAddress address : addresses) {
             LogUnitEntry buffer = dataCache.getIfPresent(address);
             if (buffer != null) {
                 Set<UUID> streams = buffer.getStreams();
@@ -293,7 +289,7 @@ public class LogUnitServer extends AbstractServer {
                     for (java.util.UUID stream : streams) {
                         Long trimMark = trimMap.getOrDefault(stream, null);
                         // if the stream has not been trimmed, or has not been trimmed to this point
-                        if (trimMark == null || address > trimMark) {
+                        if (trimMark == null || address.getAddress() > trimMark) {
                             trimmable = false;
                             break;
                         }
@@ -301,7 +297,7 @@ public class LogUnitServer extends AbstractServer {
                     }
                     if (trimmable) {
                         log.trace("Trimming entry at {}", address);
-                        trimEntry(address, streams, buffer);
+                        trimEntry(address.getAddress(), streams, buffer);
                         freedEntries++;
                     }
                 } else {
@@ -335,7 +331,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    LoadingCache<Long, LogUnitEntry> getDataCache() {
+    LoadingCache<LogAddress, LogUnitEntry> getDataCache() {
         return dataCache;
     }
 }
