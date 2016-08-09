@@ -12,6 +12,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+import java.util.UUID;
 
 /**
  * Created by mwei on 8/8/16.
@@ -55,6 +56,8 @@ public enum CorfuMsgType {
     FORCE_GC(35, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     GC_INTERVAL(36, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+    STREAM_TOKEN(38, new TypeToken<CorfuPayloadMsg<UUID>>() {}, LogUnitServer.class),
+    STREAM_TOKEN_RESPONSE(39, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     READ_RANGE(40, TypeToken.of(CorfuRangeMsg.class), LogUnitServer.class),
     READ_RANGE_RESPONSE(41, TypeToken.of(LogUnitReadRangeResponseMsg.class), LogUnitServer.class),
 

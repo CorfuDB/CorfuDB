@@ -127,7 +127,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 500;
+        final int num_records = 2000;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {

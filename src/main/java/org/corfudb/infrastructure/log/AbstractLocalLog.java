@@ -4,6 +4,7 @@ package org.corfudb.infrastructure.log;
 import com.google.common.collect.RangeSet;
 
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * A LocalLog is the basic building unit of the distributed log. It provides an address space to write to.
@@ -51,6 +52,14 @@ public abstract class AbstractLocalLog {
     public LogUnitEntry read(long address) {
         checkRange(address);
         return backendRead(address);
+    }
+
+
+    AtomicLong counter = new AtomicLong();
+
+    // In this default implementation, the counter is in-memory only.
+    public Long getToken(int numTokens) {
+        return counter.getAndAdd(numTokens);
     }
 
     public void streamWrite(UUID streamID, RangeSet<Long> entry) {

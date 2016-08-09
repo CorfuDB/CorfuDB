@@ -14,6 +14,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -27,70 +28,123 @@ import java.util.concurrent.ConcurrentHashMap;
  * Created by mwei on 12/10/15.
  */
 public class LogUnitClient implements IClient {
-    /**
-     * The messages this client should handle.
-     */
-    @Getter
-    public final Set<CorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsgType>()
-                    .add(CorfuMsgType.WRITE)
-                    .add(CorfuMsgType.READ_REQUEST)
-                    .add(CorfuMsgType.READ_RESPONSE)
-                    .add(CorfuMsgType.TRIM)
-                    .add(CorfuMsgType.FILL_HOLE)
-                    .add(CorfuMsgType.FORCE_GC)
-                    .add(CorfuMsgType.GC_INTERVAL)
-                    .add(CorfuMsgType.FORCE_COMPACT)
-                    .add(CorfuMsgType.READ_RANGE)
-                    .add(CorfuMsgType.READ_RANGE_RESPONSE)
 
-                    .add(CorfuMsgType.ERROR_OK)
-                    .add(CorfuMsgType.ERROR_TRIMMED)
-                    .add(CorfuMsgType.ERROR_OVERWRITE)
-                    .add(CorfuMsgType.ERROR_OOS)
-                    .add(CorfuMsgType.ERROR_RANK)
-                    .build();
     @Setter
     @Getter
     IClientRouter router;
 
-    /**
-     * Handle a incoming message on the channel
+    /** The handler and handlers which implement this client. */
+    @Getter
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+    /** Handle an ERROR_OK message.
      *
-     * @param msg The incoming message
-     * @param ctx The channel handler context
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @return      True, since this indicates success.
      */
-    @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        switch (msg.getMsgType()) {
-            case ERROR_OK:
-                router.completeRequest(msg.getRequestID(), true);
-                break;
-            case ERROR_TRIMMED:
-                router.completeExceptionally(msg.getRequestID(), new Exception("Trimmed"));
-                break;
-            case ERROR_OVERWRITE:
-                router.completeExceptionally(msg.getRequestID(), new OverwriteException());
-                break;
-            case ERROR_OOS:
-                router.completeExceptionally(msg.getRequestID(), new OutOfSpaceException());
-                break;
-            case ERROR_RANK:
-                router.completeExceptionally(msg.getRequestID(), new Exception("Rank"));
-                break;
-            case READ_RESPONSE:
-                router.completeRequest(msg.getRequestID(), new ReadResult((LogUnitReadResponseMsg) msg));
-                break;
-            case READ_RANGE_RESPONSE: {
-                LogUnitReadRangeResponseMsg rmsg = (LogUnitReadRangeResponseMsg) msg;
-                Map<Long, ReadResult> lr = new ConcurrentHashMap<>();
-                rmsg.getResponseMap().entrySet().parallelStream()
-                        .forEach(e -> lr.put(e.getKey(), new ReadResult(e.getValue())));
-                router.completeRequest(msg.getRequestID(), lr);
-            }
-            break;
-        }
+    @ClientHandler(type=CorfuMsgType.ERROR_OK)
+    private static Object handleOK(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return true;
     }
+
+    /** Handle an ERROR_TRIMMED message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws  Exception
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_TRIMMED)
+    private static Object handleTrimmed(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+    throws Exception
+    {
+        throw new Exception("Trimmed");
+    }
+
+    /** Handle an ERROR_OVERWRITE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      OverwriteException
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_OVERWRITE)
+    private static Object handleOverwrite(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new OverwriteException();
+    }
+
+    /** Handle an ERROR_OOS message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      OutOfSpaceException
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_OOS)
+    private static Object handleOOS(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new OutOfSpaceException();
+    }
+
+    /** Handle an ERROR_RANK message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      Exception
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_RANK)
+    private static Object handleOutranked(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new Exception("rank");
+    }
+
+    /** Handle a READ_RESPONSE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.READ_RESPONSE)
+    private static Object handleReadResponse(LogUnitReadResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+    {
+        return new ReadResult(msg);
+    }
+
+    /** Handle a RANGE_READ_RESPONSE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.READ_RANGE_RESPONSE)
+    private static Object handleRangeReadResponse(LogUnitReadRangeResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+    {
+        Map<Long, ReadResult> lr = new ConcurrentHashMap<>();
+        msg.getResponseMap().entrySet().parallelStream()
+                .forEach(e -> lr.put(e.getKey(), new ReadResult(e.getValue())));
+        return lr;
+    }
+
+    /** Handle a STREAM_TOKEN_RESPONSE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.STREAM_TOKEN_RESPONSE)
+    private static Object handleStreamTokenResponse(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IClientRouter r)
+    {
+        return msg.getPayload();
+    }
+
 
     /**
      * Asynchronously write to the logging unit.
@@ -187,6 +241,15 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Map<Long, ReadResult>> readRange(RangeSet<Long> addresses) {
         return router.sendMessageAndGetCompletable(new CorfuRangeMsg(CorfuMsgType.READ_RANGE, addresses));
+    }
+
+    /**
+     * Get the current token for a stream.
+     *
+     * @param stream The current token for the stream.
+     */
+    public CompletableFuture<Long> getStreamToken(UUID stream) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.STREAM_TOKEN.payloadMsg(stream));
     }
 
     /**

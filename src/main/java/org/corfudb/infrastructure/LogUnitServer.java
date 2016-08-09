@@ -85,12 +85,22 @@ public class LogUnitServer extends AbstractServer {
         try {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 dataCache.put(new LogAddress(e.address, null), e);
+            } else {
+                // In replex stream mode, we allocate a local token first, and use it as the
+                // stream address.
+                Long token = getLog(msg.getPayload().getStreamID()).getToken(1);
+                dataCache.put(new LogAddress(token, msg.getPayload().getStreamID()), e);
             }
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OK.msg());
         } catch (Exception ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
             e.getBuffer().release();
         }
+    }
+
+    @ServerHandler(type=CorfuMsgType.STREAM_TOKEN)
+    private void stream_token(CorfuPayloadMsg<UUID> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        r.sendResponse(ctx, msg, CorfuMsgType.STREAM_TOKEN_RESPONSE.payloadMsg(getLog(msg.getPayload()).getToken(0)));
     }
 
     @ServerHandler(type=CorfuMsgType.READ_REQUEST)
@@ -153,6 +163,23 @@ public class LogUnitServer extends AbstractServer {
     long maxCacheSize;
 
     private final AbstractLocalLog localLog;
+
+    private final ConcurrentHashMap<UUID, AbstractLocalLog> streamLogs = new ConcurrentHashMap<>();
+
+    private AbstractLocalLog getLog(UUID stream) {
+        if (stream == null) return localLog;
+        else {
+            return streamLogs.computeIfAbsent(stream, x-> {
+                if ((Boolean) opts.get("--memory")) {
+                    return new InMemoryLog(0, Long.MAX_VALUE);
+                }
+                else {
+                    String logdir = opts.get("--log-path") + File.separator + "log" + File.separator + stream;
+                    return new RollingLog(0, Long.MAX_VALUE, logdir, (Boolean) opts.get("--sync"));
+                }
+            });
+        }
+    }
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();

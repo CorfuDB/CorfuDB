@@ -130,4 +130,11 @@ public class LogUnitClientTest extends AbstractClientTest {
                     .isEqualTo(Integer.toString(i).getBytes());
         }
     }
+
+    @Test
+    public void streamTokenIsInitiallyZero()
+            throws Exception {
+        assertThat(client.getStreamToken(CorfuRuntime.getStreamID("test")).get())
+                .isEqualTo(0L);
+    }
 }
