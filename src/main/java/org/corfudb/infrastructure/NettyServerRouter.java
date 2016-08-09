@@ -3,8 +3,6 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
@@ -24,20 +22,36 @@ import java.util.concurrent.ConcurrentHashMap;
 public class NettyServerRouter extends ChannelInboundHandlerAdapter
 implements IServerRouter {
 
-    /** This map stores the mapping from message type to netty server handler. */
-    Map<CorfuMsg.CorfuMsgType, IServer> handlerMap;
+    public static final String PREFIX_EPOCH = "SERVER_EPOCH";
+    public static final String KEY_EPOCH = "CURRENT";
+
+    /**
+     * This map stores the mapping from message type to netty server handler.
+     */
+    Map<CorfuMsg.CorfuMsgType, AbstractServer> handlerMap;
 
     BaseServer baseServer;
 
-    /** The epoch of this router. This is managed by the base server implementation. */
-    @Getter
-    @Setter
-    long epoch;
+    DataStore dataStore;
 
-    public NettyServerRouter()
-    {
+    /**
+     * The epoch of this router. This is managed by the base server implementation.
+     */
+    @Override
+    public long getServerEpoch() {
+        Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        return epoch == null ? 0 : epoch;
+    }
+
+    @Override
+    public void setServerEpoch(long serverEpoch) {
+        dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
+    }
+
+    public NettyServerRouter(Map<String, Object> opts) {
         handlerMap = new ConcurrentHashMap<>();
-        baseServer = new BaseServer(this);
+        this.dataStore = new DataStore(opts);
+        baseServer = new BaseServer();
         addServer(baseServer);
     }
 
@@ -66,7 +80,7 @@ implements IServerRouter {
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg)
     {
         outMsg.copyBaseFields(inMsg);
-        outMsg.setEpoch(epoch);
+        outMsg.setEpoch(getServerEpoch());
         ctx.writeAndFlush(outMsg);
         log.trace("Sent response: {}", outMsg);
     }
@@ -78,14 +92,12 @@ implements IServerRouter {
      * @param ctx   The context of the channel handler.
      * @return      True, if the epoch is correct, but false otherwise.
      */
-    public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx)
-    {
-        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != epoch)
-        {
+    public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
+        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != getServerEpoch()) {
             sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
                     getEpoch()));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), epoch, msg);
+                    msg.getEpoch(), getServerEpoch(), msg);
             return false;
         }
         return true;

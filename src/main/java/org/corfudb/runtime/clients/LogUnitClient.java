@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class LogUnitClient implements IClient {
     @Setter
+    @Getter
     IClientRouter router;
 
     /**

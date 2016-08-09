@@ -7,7 +7,11 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
+import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
+import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.util.ClientMsgHandler;
+import org.corfudb.util.CorfuMsgHandler;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -21,60 +25,14 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class BaseClient implements IClient {
 
-    /** The router to use for the client. */
+    /**
+     * The router to use for the client.
+     */
     @Getter
     @Setter
     public IClientRouter router;
 
-    /**
-     * Handle a incoming message on the channel
-     *
-     * @param msg The incoming message
-     * @param ctx The channel handler context
-     * @param router   The router that routed the incoming message.
-     */
-    @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        switch (msg.getMsgType())
-        {
-            case PONG:
-                    router.completeRequest(msg.getRequestID(), true);
-                break;
-            case PING:
-                    router.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.PONG));
-                break;
-            case ACK:
-                    router.completeRequest(msg.getRequestID(), true);
-                break;
-            case NACK:
-                    router.completeRequest(msg.getRequestID(), false);
-                break;
-            case SET_EPOCH:
-                {
-                    CorfuSetEpochMsg csem = (CorfuSetEpochMsg) msg;
-                    if (csem.getNewEpoch() >= router.getEpoch())
-                    {
-                        log.info("Received SET_EPOCH, moving to new epoch {}", csem.getNewEpoch());
-                        router.setEpoch(csem.getNewEpoch());
-                        router.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
-                    }
-                    else
-                    {
-                        log.debug("Rejected SET_EPOCH currrent={}, requested={}",
-                                router.getEpoch(), csem.getNewEpoch());
-                        router.sendResponseToServer(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
-                                router.getEpoch()));
-                    }
-                }
-                break;
-            case WRONG_EPOCH:
-            {
-                CorfuSetEpochMsg csem = (CorfuSetEpochMsg) msg;
-                router.completeExceptionally(msg.getRequestID(), new WrongEpochException(csem.getNewEpoch()));
-            }
-            break;
-        }
-    }
+    /** Public functions which are exposed to clients. */
 
     /** The messages this client should handle. */
     @Getter
@@ -109,7 +67,14 @@ public class BaseClient implements IClient {
                 new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.SET_EPOCH, newEpoch));
     }
 
-    /** Ping the endpoint, asynchronously.
+    public CompletableFuture<VersionInfo> getVersionInfo() {
+        return router.sendMessageAndGetCompletable(
+                new CorfuMsg(CorfuMsg.CorfuMsgType.VERSION_REQUEST));
+    }
+
+
+    /**
+     * Ping the endpoint, asynchronously.
      *
      * @return A completable future which will be completed with True if
      *          the endpoint is reachable, otherwise False or exceptional completion.
@@ -118,4 +83,83 @@ public class BaseClient implements IClient {
         return router.sendMessageAndGetCompletable(
                 new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
     }
+
+    /** The handler and handlers which implement this client. */
+    @Getter
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .addHandler(CorfuMsg.CorfuMsgType.PING, BaseClient::handlePing)
+            .addHandler(CorfuMsg.CorfuMsgType.PONG, BaseClient::handlePong)
+            .addHandler(CorfuMsg.CorfuMsgType.ACK, BaseClient::handleAck)
+            .addHandler(CorfuMsg.CorfuMsgType.NACK, BaseClient::handleNack)
+            .addHandler(CorfuMsg.CorfuMsgType.WRONG_EPOCH, BaseClient::handleWrongEpoch)
+            .addHandler(CorfuMsg.CorfuMsgType.VERSION_RESPONSE, BaseClient::handleVersionResponse);
+
+    /** Handle a ping request from the server.
+     *
+     * @param msg   The ping request message
+     * @param ctx   The context the message was sent under
+     * @param r     A reference to the router
+     * @return      The return value, null since this is a message from the server.
+     */
+    private static Object handlePing(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        r.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.PONG));
+        return null;
+    }
+
+    /** Handle a pong response from the server.
+     *
+     * @param msg   The ping request message
+     * @param ctx   The context the message was sent under
+     * @param r     A reference to the router
+     * @return      Always True, since the ping message was successful.
+     */
+    private static Object handlePong(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return true;
+    }
+
+    /** Handle an ACK response from the server.
+     *
+     * @param msg   The ping request message
+     * @param ctx   The context the message was sent under
+     * @param r     A reference to the router
+     * @return      Always True, since the ACK message was successful.
+     */
+    private static Object handleAck(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return true;
+    }
+
+    /** Handle a NACK response from the server.
+     *
+     * @param msg   The ping request message
+     * @param ctx   The context the message was sent under
+     * @param r     A reference to the router
+     * @return      Always True, since the ACK message was successful.
+     */
+    private static Object handleNack(CorfuSetEpochMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return false;
+    }
+
+    /** Handle a WRONG_EPOCH response from the server.
+     *
+     * @param msg   The wrong epoch message
+     * @param ctx   The context the message was sent under
+     * @param r     A reference to the router
+     * @return      none, throw a wrong epoch exception instead.
+     */
+    private static Object handleWrongEpoch(CorfuSetEpochMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        throw new WrongEpochException(msg.getNewEpoch());
+    }
+
+    /** Handle a WRONG_EPOCH response from the server.
+     *
+     * @param msg   The wrong epoch message
+     * @param ctx   The context the message was sent under
+     * @param r     A reference to the router
+     * @return      none, throw a wrong epoch exception instead.
+     */
+    private static Object handleVersionResponse(JSONPayloadMsg<VersionInfo> msg,
+                                                ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
 }

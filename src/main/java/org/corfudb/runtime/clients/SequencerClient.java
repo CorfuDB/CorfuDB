@@ -23,6 +23,7 @@ import java.util.concurrent.CompletableFuture;
 public class SequencerClient implements IClient {
 
     @Setter
+    @Getter
     IClientRouter router;
 
     @Data

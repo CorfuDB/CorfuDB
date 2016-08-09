@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.util.ClientMsgHandler;
+import org.corfudb.util.CorfuMsgHandler;
 
 import java.util.Set;
 
@@ -18,16 +20,30 @@ public interface IClient {
     void setRouter(IClientRouter router);
 
     /**
-     * Handle a incoming message on the channel
-     * @param msg   The incoming message
-     * @param ctx   The channel handler context
-     * @param r     The router that routed the incoming message.
+     * Get the router used by the Netty client.
+     *
      */
-    void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx);
+    IClientRouter getRouter();
+
+    default ClientMsgHandler getMsgHandler() {
+        throw new UnsupportedOperationException("Message handler not provided, please override handleMessage!");
+    }
+
+    /**
+     * Handle a incoming message on the channel
+     *
+     * @param msg The incoming message
+     * @param ctx The channel handler context
+     */
+    default void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
+        getMsgHandler().handle(msg, ctx);
+    }
 
     /**
      * Returns a set of message types that the client handles.
      * @return  The set of message types this client handles.
      */
-    Set<CorfuMsg.CorfuMsgType> getHandledTypes();
+    default Set<CorfuMsg.CorfuMsgType> getHandledTypes() {
+        return getMsgHandler().getHandledTypes();
+    }
 }
