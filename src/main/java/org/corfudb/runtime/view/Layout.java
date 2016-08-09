@@ -15,6 +15,7 @@ import org.corfudb.util.CFUtils;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -22,8 +23,8 @@ import java.util.stream.Stream;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
-@ToString(exclude = {"runtime", "valid"})
-@EqualsAndHashCode(exclude = {"runtime","valid"})
+@ToString(exclude = {"runtime", "replicationViewCache"})
+@EqualsAndHashCode(exclude = {"runtime", "replicationViewCache"})
 public class Layout implements Cloneable {
     /**
      * A Gson parser.
@@ -50,10 +51,7 @@ public class Layout implements Cloneable {
     @Getter
     @Setter
     long epoch;
-    /**
-     * Whether or not this layout is valid.
-     */
-    transient boolean valid;
+
     /**
      * The org.corfudb.runtime this layout is associated with.
      */
@@ -61,12 +59,13 @@ public class Layout implements Cloneable {
     @Setter
     transient CorfuRuntime runtime;
 
+    transient ConcurrentHashMap<LayoutSegment, AbstractReplicationView> replicationViewCache;
+
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, long epoch) {
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
         this.segments = segments;
         this.epoch = epoch;
-        this.valid = true;
     }
 
     /**
@@ -309,6 +308,7 @@ public class Layout implements Cloneable {
     public enum ReplicationMode {
         CHAIN_REPLICATION,
         QUORUM_REPLICATION,
+        REPLEX,
         NO_REPLICATION
     }
 

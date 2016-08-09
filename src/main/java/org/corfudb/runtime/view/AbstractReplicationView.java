@@ -43,15 +43,21 @@ public abstract class AbstractReplicationView {
     }
 
     public static AbstractReplicationView getReplicationView(Layout l, Layout.ReplicationMode mode, Layout.LayoutSegment ls) {
-        switch (mode) {
-            case CHAIN_REPLICATION:
-                return new ChainReplicationView(l, ls);
-            case QUORUM_REPLICATION:
-                log.warn("Quorum replication is not yet supported!");
-                break;
-        }
-        log.error("Unknown replication mode {} selected.", mode);
-        throw new RuntimeException("Unsupported replication mode.");
+        if (l.replicationViewCache == null) { l.replicationViewCache = new ConcurrentHashMap<>(); } //super hacky
+        return l.replicationViewCache.computeIfAbsent(ls, x -> {
+            // TODO: really broken software engineering here... refactor!
+            switch (ls.getReplicationMode()) {
+                case CHAIN_REPLICATION:
+                    return new ChainReplicationView(l, ls);
+                case QUORUM_REPLICATION:
+                    log.warn("Quorum replication is not yet supported!");
+                    break;
+                default:
+                    log.error("Unknown replication mode {} selected.", mode);
+                    break;
+            }
+            return null;
+        });
     }
 
     /**

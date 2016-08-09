@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -11,7 +10,6 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.invoke.MethodHandles;
@@ -38,14 +36,14 @@ public class LogUnitClient implements IClient {
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
             .generateHandlers(MethodHandles.lookup(), this);
 
-    /** Handle an ERROR_OK message.
+    /** Handle an WRITE_OK message.
      *
      * @param msg   Incoming Message
      * @param ctx   Context
      * @param r     Router
      * @return      True, since this indicates success.
      */
-    @ClientHandler(type=CorfuMsgType.ERROR_OK)
+    @ClientHandler(type=CorfuMsgType.WRITE_OK)
     private static Object handleOK(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         return true;
     }
@@ -185,6 +183,13 @@ public class LogUnitClient implements IClient {
         wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+    }
+
+    public CompletableFuture<Long> writeStream(long address, UUID stream, Set<UUID> streams,
+                                            ByteBuf buffer) {
+        WriteRequest wr = new WriteRequest(WriteMode.REPLEX_STREAM, address, stream, buffer);
+        wr.setStreams(streams);
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 

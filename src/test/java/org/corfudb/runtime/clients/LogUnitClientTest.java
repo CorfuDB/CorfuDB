@@ -5,6 +5,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
@@ -136,5 +138,19 @@ public class LogUnitClientTest extends AbstractClientTest {
             throws Exception {
         assertThat(client.getStreamToken(CorfuRuntime.getStreamID("test")).get())
                 .isEqualTo(0L);
+    }
+
+    @Test
+    public void streamTokenIncrementsWithWrite()
+            throws Exception {
+        assertThat(client.getStreamToken(CorfuRuntime.getStreamID("test")).get())
+                .isEqualTo(0L);
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        b.writeBytes("hello".getBytes());
+        client.writeStream(1L, CorfuRuntime.getStreamID("test"),
+                Collections.singleton(CorfuRuntime.getStreamID("test")),
+                        b);
+        assertThat(client.getStreamToken(CorfuRuntime.getStreamID("test")).get())
+                .isEqualTo(1L);
     }
 }

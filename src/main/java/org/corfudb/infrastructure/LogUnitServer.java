@@ -85,13 +85,14 @@ public class LogUnitServer extends AbstractServer {
         try {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 dataCache.put(new LogAddress(e.address, null), e);
+                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.payloadMsg(0L));
             } else {
                 // In replex stream mode, we allocate a local token first, and use it as the
                 // stream address.
                 Long token = getLog(msg.getPayload().getStreamID()).getToken(1);
                 dataCache.put(new LogAddress(token, msg.getPayload().getStreamID()), e);
+                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.payloadMsg(token));
             }
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OK.msg());
         } catch (Exception ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
             e.getBuffer().release();

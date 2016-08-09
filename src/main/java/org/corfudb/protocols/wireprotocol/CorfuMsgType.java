@@ -62,7 +62,7 @@ public enum CorfuMsgType {
     READ_RANGE_RESPONSE(41, TypeToken.of(LogUnitReadRangeResponseMsg.class), LogUnitServer.class),
 
     // Logging Unit Error Codes
-    ERROR_OK(50, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+    WRITE_OK(50, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     ERROR_OVERWRITE(52, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     ERROR_OOS(53, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
