@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.util.ClientMsgHandler;
 
 import java.util.Set;
 
