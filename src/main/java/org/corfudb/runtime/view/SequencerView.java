@@ -12,16 +12,16 @@ import java.util.UUID;
  */
 public class SequencerView extends AbstractView {
 
-    public SequencerView(CorfuRuntime runtime)
-    {
+    public SequencerView(CorfuRuntime runtime) {
         super(runtime);
     }
 
-    /** Return the next token in the sequence for a particular stream.
+    /**
+     * Return the next token in the sequence for a particular stream.
      *
-     * @param streamIDs      The stream IDs to retrieve from.
-     * @param numTokens      The number of tokens to reserve.
-     * @return               The first token retrieved.
+     * @param streamIDs The stream IDs to retrieve from.
+     * @param numTokens The number of tokens to reserve.
+     * @return The first token retrieved.
      */
     public SequencerClient.TokenResponse nextToken(Set<UUID> streamIDs, int numTokens) {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(streamIDs, numTokens)));

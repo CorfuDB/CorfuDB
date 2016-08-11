@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import java.util.*;
+import java.util.EnumMap;
 
 
 /**
@@ -15,15 +15,16 @@ import java.util.*;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(callSuper=true)
+@ToString(callSuper = true)
 public class LogUnitWriteMsg extends LogUnitPayloadMsg {
 
 
-    /** The address to write to */
+    /**
+     * The address to write to
+     */
     long address;
 
-    public LogUnitWriteMsg(long address)
-    {
+    public LogUnitWriteMsg(long address) {
         this.msgType = CorfuMsgType.WRITE;
         this.address = address;
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);

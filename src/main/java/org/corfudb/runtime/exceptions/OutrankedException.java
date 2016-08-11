@@ -9,8 +9,7 @@ public class OutrankedException extends Exception {
     @Getter
     long newRank;
 
-    public OutrankedException(long newRank)
-    {
+    public OutrankedException(long newRank) {
         super("Higher rank " + newRank + " encountered");
         this.newRank = newRank;
     }

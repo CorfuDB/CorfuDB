@@ -23,15 +23,11 @@ public class JavaSerializer implements ISerializer {
      */
     @Override
     public Object deserialize(ByteBuf b, CorfuRuntime rt) {
-        try (ByteBufInputStream bbis = new ByteBufInputStream(b))
-        {
-            try (ObjectInputStream ois = new ObjectInputStream(bbis))
-            {
+        try (ByteBufInputStream bbis = new ByteBufInputStream(b)) {
+            try (ObjectInputStream ois = new ObjectInputStream(bbis)) {
                 return ois.readObject();
             }
-        }
-        catch (IOException | ClassNotFoundException ie)
-        {
+        } catch (IOException | ClassNotFoundException ie) {
             log.error("Exception during deserialization!", ie);
             throw new RuntimeException(ie);
         }
@@ -45,15 +41,11 @@ public class JavaSerializer implements ISerializer {
      */
     @Override
     public void serialize(Object o, ByteBuf b) {
-        try (ByteBufOutputStream bbos = new ByteBufOutputStream(b))
-        {
-            try (ObjectOutputStream oos = new ObjectOutputStream(bbos))
-            {
+        try (ByteBufOutputStream bbos = new ByteBufOutputStream(b)) {
+            try (ObjectOutputStream oos = new ObjectOutputStream(bbos)) {
                 oos.writeObject(o);
             }
-        }
-        catch (IOException ie)
-        {
+        } catch (IOException ie) {
             log.error("Exception during serialization!", ie);
         }
     }

@@ -1,13 +1,10 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
-import org.corfudb.infrastructure.BaseServer;
-import org.corfudb.infrastructure.IServer;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
-import org.junit.Before;
 import org.junit.Test;
 
-import javax.sound.midi.Sequencer;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
@@ -22,8 +19,8 @@ public class SequencerClientTest extends AbstractClientTest {
     SequencerClient client;
 
     @Override
-    Set<IServer> getServersForTest() {
-        return new ImmutableSet.Builder<IServer>()
+    Set<AbstractServer> getServersForTest() {
+        return new ImmutableSet.Builder<AbstractServer>()
                 .add(new SequencerServer(defaultOptionsMap()))
                 .build();
     }
@@ -38,7 +35,7 @@ public class SequencerClientTest extends AbstractClientTest {
 
     @Test
     public void canGetAToken()
-    throws Exception {
+            throws Exception {
         client.nextToken(Collections.<UUID>emptySet(), 1).get();
     }
 

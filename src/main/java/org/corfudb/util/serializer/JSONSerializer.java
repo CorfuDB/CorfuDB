@@ -8,10 +8,10 @@ import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.ICorfuObject;
-import org.corfudb.runtime.object.ICorfuSMRObject;
 
-import java.io.*;
-import java.lang.reflect.Field;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.util.UUID;
 
 /**
@@ -21,7 +21,8 @@ import java.util.UUID;
 public class JSONSerializer implements ISerializer {
 
     private static final Gson gson = new GsonBuilder()
-                                            .create();
+            .create();
+
     /**
      * Deserialize an object from a given byte buffer.
      *
@@ -34,24 +35,23 @@ public class JSONSerializer implements ISerializer {
         byte[] classNameBytes = new byte[classNameLength];
         b.readBytes(classNameBytes, 0, classNameLength);
         String className = new String(classNameBytes);
-        if (className.equals("null"))
-        {
+        if (className.equals("null")) {
             return null;
-        }
-        else if (className.equals("CorfuObject"))
-        {
+        } else if (className.equals("CorfuObject")) {
             int SMRClassNameLength = b.readShort();
             byte[] SMRClassNameBytes = new byte[SMRClassNameLength];
             b.readBytes(SMRClassNameBytes, 0, SMRClassNameLength);
             String SMRClassName = new String(SMRClassNameBytes);
             try {
-                return rt.getObjectsView().open(new UUID(b.readLong(), b.readLong()), Class.forName(SMRClassName));
+                return rt.getObjectsView().build()
+                        .setStreamID(new UUID(b.readLong(), b.readLong()))
+                        .setType(Class.forName(SMRClassName))
+                        .open();
             } catch (ClassNotFoundException cnfe) {
                 log.error("Exception during deserialization!", cnfe);
                 throw new RuntimeException(cnfe);
             }
-        }
-        else {
+        } else {
             try (ByteBufInputStream bbis = new ByteBufInputStream(b)) {
                 try (InputStreamReader r = new InputStreamReader(bbis)) {
                     return gson.fromJson(r, Class.forName(className));
@@ -71,9 +71,8 @@ public class JSONSerializer implements ISerializer {
      */
     @Override
     public void serialize(Object o, ByteBuf b) {
-        String className = o == null ? "null" :  o.getClass().getName();
-        if (className.contains("$ByteBuddy$"))
-        {
+        String className = o == null ? "null" : o.getClass().getName();
+        if (className.contains("$ByteBuddy$")) {
             String SMRClass = className.split("\\$")[0];
             className = "CorfuObject";
             byte[] classNameBytes = className.getBytes();
@@ -82,25 +81,22 @@ public class JSONSerializer implements ISerializer {
             byte[] SMRClassNameBytes = SMRClass.getBytes();
             b.writeShort(SMRClassNameBytes.length);
             b.writeBytes(SMRClassNameBytes);
-            UUID id = ((ICorfuObject)o).getStreamID();
+            UUID id = ((ICorfuObject) o).getStreamID();
             log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}", SMRClass, id);
             b.writeLong(id.getMostSignificantBits());
             b.writeLong(id.getLeastSignificantBits());
-        }
-        else {
+        } else {
             byte[] classNameBytes = className.getBytes();
             b.writeShort(classNameBytes.length);
             b.writeBytes(classNameBytes);
-            if (o == null) { return; }
-            try (ByteBufOutputStream bbos = new ByteBufOutputStream(b))
-            {
-                try (OutputStreamWriter osw = new OutputStreamWriter(bbos))
-                {
+            if (o == null) {
+                return;
+            }
+            try (ByteBufOutputStream bbos = new ByteBufOutputStream(b)) {
+                try (OutputStreamWriter osw = new OutputStreamWriter(bbos)) {
                     gson.toJson(o, o.getClass(), osw);
                 }
-            }
-            catch (IOException ie)
-            {
+            } catch (IOException ie) {
                 log.error("Exception during serialization!", ie);
             }
         }

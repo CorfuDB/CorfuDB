@@ -3,9 +3,7 @@ package org.corfudb.cmdlets;
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.AbstractReplicationView;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -17,7 +15,7 @@ import java.util.concurrent.ExecutionException;
  * Created by mwei on 12/11/15.
  */
 @Slf4j
-public class corfu_stream implements  ICmdlet {
+public class corfu_stream implements ICmdlet {
     private static final String USAGE =
             "corfu_stream, interact with streams in Corfu.\n"
                     + "\n"
@@ -50,20 +48,15 @@ public class corfu_stream implements  ICmdlet {
         CorfuRuntime rt = configureRuntime(opts);
 
         try {
-            if ((Boolean)opts.get("write"))
-            {
+            if ((Boolean) opts.get("write")) {
                 write(rt, opts);
-            } else if ((Boolean)opts.get("read"))
-            {
+            } else if ((Boolean) opts.get("read")) {
                 read(rt, opts);
             }
-        } catch (ExecutionException ex)
-        {
+        } catch (ExecutionException ex) {
             log.error("Exception", ex.getCause());
             throw new RuntimeException(ex.getCause());
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             log.error("Exception", e);
             throw new RuntimeException(e);
         }
@@ -85,8 +78,7 @@ public class corfu_stream implements  ICmdlet {
                     return;
                 }
                 Thread.sleep(100);
-            }
-            else {
+            } else {
                 r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
             }
         }

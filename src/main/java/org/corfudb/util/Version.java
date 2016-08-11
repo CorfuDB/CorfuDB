@@ -10,15 +10,14 @@ import java.util.Properties;
  */
 public class Version {
 
-    @Getter(lazy=true)
+    @Getter(lazy = true)
     private static final String versionString = getVersion();
 
-    private static String getVersion()
-    {
+    private static String getVersion() {
         try {
             Properties p = new Properties();
             InputStream is = Version.class
-                                .getResourceAsStream("/META-INF/maven/org.corfudb/corfu/pom.properties");
+                    .getResourceAsStream("/META-INF/maven/org.corfudb/corfu/pom.properties");
             if (is != null) {
                 p.load(is);
                 return p.getProperty("version", "");

@@ -21,26 +21,26 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-/** A view of an address implemented by chain replication.
- *
+/**
+ * A view of an address implemented by chain replication.
+ * <p>
  * Chain replication is a protocol defined by Renesse and Schneider (OSDI'04),
  * which is an alternative to quorum based replication protocols. It requires
  * that writes be written to a chain of replicas in order, and that reads are
  * always performed at the end of the chain.
- *
+ * <p>
  * The primary advantage of chain replication is that unlike quorum replication,
  * where reads must contact a quorum of replicas, chain replication only requires
  * contacting the last replica in the chain. However, writes require contacting
  * every replica in sequence. In general, chain replication is best suited for
  * small chains.
- *
+ * <p>
  * Created by mwei on 12/11/15.
  */
 @Slf4j
 public class ChainReplicationView extends AbstractReplicationView {
 
-    public ChainReplicationView(Layout l, Layout.LayoutSegment ls)
-    {
+    public ChainReplicationView(Layout l, Layout.LayoutSegment ls) {
         super(l, ls);
     }
 
@@ -53,7 +53,7 @@ public class ChainReplicationView extends AbstractReplicationView {
      */
     @Override
     public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
-    throws OverwriteException {
+            throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         int payloadBytes = 0;
         // To reduce the overhead of serialization, we serialize only the first time we write, saving
@@ -63,14 +63,13 @@ public class ChainReplicationView extends AbstractReplicationView {
             Serializers.getSerializer(Serializers.SerializerType.CORFU)
                     .serialize(data, b);
             payloadBytes = b.readableBytes();
-                for (int i = 0; i < numUnits; i++)
-                {
-                    log.trace("Write[{}]: chain {}/{}", address, i+1, numUnits);
-                    // In chain replication, we write synchronously to every unit in the chain.
-                        CFUtils.getUninterruptibly(
-                                getLayout().getLogUnitClient(address, i)
-                                        .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
-                }
+            for (int i = 0; i < numUnits; i++) {
+                log.trace("Write[{}]: chain {}/{}", address, i + 1, numUnits);
+                // In chain replication, we write synchronously to every unit in the chain.
+                CFUtils.getUninterruptibly(
+                        getLayout().getLogUnitClient(address, i)
+                                .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
+            }
         }
         return payloadBytes;
     }
@@ -88,8 +87,8 @@ public class ChainReplicationView extends AbstractReplicationView {
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
         return CFUtils.getUninterruptibly(getLayout()
-                        .getLogUnitClient(address, numUnits - 1).read(getLayout().getLocalAddress(address)))
-                            .setAddress(address);
+                .getLogUnitClient(address, numUnits - 1).read(getLayout().getLocalAddress(address)))
+                .setAddress(address);
     }
 
     /**
@@ -105,23 +104,23 @@ public class ChainReplicationView extends AbstractReplicationView {
         ConcurrentHashMap<Layout.LayoutStripe, Long> eMap = new ConcurrentHashMap<>();
         Set<Long> total = Utils.discretizeRangeSet(addresses);
         total.parallelStream()
-                .forEach(l-> {
-            rangeMap.computeIfAbsent(layout.getStripe(l), k -> TreeRangeSet.create())
-                    .add(Range.singleton(layout.getLocalAddress(l)));
-                    eMap.computeIfAbsent(layout.getStripe(l), k->l);
-        });
+                .forEach(l -> {
+                    rangeMap.computeIfAbsent(layout.getStripe(l), k -> TreeRangeSet.create())
+                            .add(Range.singleton(layout.getLocalAddress(l)));
+                    eMap.computeIfAbsent(layout.getStripe(l), k -> l);
+                });
         ConcurrentHashMap<Long, ILogUnitEntry> resultMap = new ConcurrentHashMap<>();
         rangeMap.entrySet().parallelStream()
                 .forEach(x -> {
-                                    CFUtils.getUninterruptibly(
-                                            layout.getLogUnitClient(eMap.get(x.getKey()), layout.getSegmentLength(eMap.get(x.getKey()))-1)
+                    CFUtils.getUninterruptibly(
+                            layout.getLogUnitClient(eMap.get(x.getKey()), layout.getSegmentLength(eMap.get(x.getKey())) - 1)
                                     .readRange(x.getValue()))
-                                    .entrySet().parallelStream()
-                                    .forEach(ex ->{
-                                            long globalAddress = layout.getGlobalAddress(x.getKey(),ex.getKey());
-                                            ex.getValue().setAddress(globalAddress);
-                                            resultMap.put(globalAddress, ex.getValue());
-                                    });
+                            .entrySet().parallelStream()
+                            .forEach(ex -> {
+                                long globalAddress = layout.getGlobalAddress(x.getKey(), ex.getKey());
+                                ex.getValue().setAddress(globalAddress);
+                                resultMap.put(globalAddress, ex.getValue());
+                            });
                 });
         return resultMap;
     }
@@ -134,27 +133,8 @@ public class ChainReplicationView extends AbstractReplicationView {
      */
     @Override
     public Map<Long, ILogUnitEntry> read(UUID stream) {
-        // for each chain, simply query the last one...
-        Set<Map.Entry<Layout.LayoutStripe, Map<Long, LogUnitReadResponseMsg.ReadResult>>> e = segment.getStripes().parallelStream()
-                .map(x -> {
-                    LogUnitClient luc = layout.getRuntime().getRouter(x.getLogServers().get(x.getLogServers().size() - 1))
-                            .getClient(LogUnitClient.class);
-                    return new AbstractMap.SimpleImmutableEntry<>(x, CFUtils.getUninterruptibly(luc.readStream(stream)));
-                })
-                .collect(Collectors.toSet());
-        Map<Long, ILogUnitEntry> resultMap = new ConcurrentHashMap<>();
-
-        e.parallelStream()
-                .forEach(x ->
-                {
-                    x.getValue().entrySet().parallelStream()
-                            .forEach(y -> {
-                                long globalAddress = layout.getGlobalAddress(x.getKey(), y.getKey());
-                                y.getValue().setAddress(globalAddress);
-                                resultMap.put(globalAddress, y.getValue());
-                            });
-                });
-        return resultMap;
+        // TODO: when chain replication is used, scan
+       throw new UnsupportedOperationException("not supported in chain replication");
     }
 
     /**
@@ -165,9 +145,8 @@ public class ChainReplicationView extends AbstractReplicationView {
     @Override
     public void fillHole(long address) throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
-        for (int i = 0; i < numUnits; i++)
-        {
-            log.trace("fillHole[{}]: chain {}/{}", address, i+1, numUnits);
+        for (int i = 0; i < numUnits; i++) {
+            log.trace("fillHole[{}]: chain {}/{}", address, i + 1, numUnits);
             // In chain replication, we write synchronously to every unit in the chain.
             CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, i)
                     .fillHole(address), OverwriteException.class);

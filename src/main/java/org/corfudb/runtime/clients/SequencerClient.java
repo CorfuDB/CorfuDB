@@ -14,22 +14,27 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-/** A sequencer client.
- *
+/**
+ * A sequencer client.
+ * <p>
  * This client allows the client to obtain sequence numbers from a sequencer.
- *
+ * <p>
  * Created by mwei on 12/10/15.
  */
 public class SequencerClient implements IClient {
 
+    /**
+     * The messages this client should handle.
+     */
+    @Getter
+    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
+            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
+                    .add(CorfuMsg.CorfuMsgType.TOKEN_REQ)
+                    .add(CorfuMsg.CorfuMsgType.TOKEN_RES)
+                    .build();
     @Setter
+    @Getter
     IClientRouter router;
-
-    @Data
-    public class TokenResponse {
-        public final Long token;
-        public final Map<UUID, Long> backpointerMap;
-    }
 
     /**
      * Handle a incoming message on the channel
@@ -39,29 +44,24 @@ public class SequencerClient implements IClient {
      */
     @Override
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        switch (msg.getMsgType())
-        {
+        switch (msg.getMsgType()) {
             case TOKEN_RES:
-                TokenResponseMsg tmsg = ((TokenResponseMsg)msg);
+                TokenResponseMsg tmsg = ((TokenResponseMsg) msg);
                 router.completeRequest(msg.getRequestID(),
                         new TokenResponse(tmsg.getToken(), tmsg.getBackpointerMap()));
                 break;
         }
     }
 
-    /** The messages this client should handle. */
-    @Getter
-    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
-                    .add(CorfuMsg.CorfuMsgType.TOKEN_REQ)
-                    .add(CorfuMsg.CorfuMsgType.TOKEN_RES)
-                    .build();
-
-
-    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens)
-    {
+    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
         return router.sendMessageAndGetCompletable(
                 new TokenRequestMsg(streamIDs, numTokens));
+    }
+
+    @Data
+    public class TokenResponse {
+        public final Long token;
+        public final Map<UUID, Long> backpointerMap;
     }
 
 }

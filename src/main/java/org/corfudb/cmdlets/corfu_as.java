@@ -7,8 +7,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
-
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -48,41 +46,32 @@ public class corfu_as implements ICmdlet {
         CorfuRuntime rt = configureRuntime(opts);
 
         try {
-            if ((Boolean)opts.get("write"))
-            {
+            if ((Boolean) opts.get("write")) {
                 write(rt, opts);
-            }
-            else if ((Boolean)opts.get("read"))
-            {
+            } else if ((Boolean) opts.get("read")) {
                 read(rt, opts);
             }
-        } catch (ExecutionException ex)
-        {
+        } catch (ExecutionException ex) {
             log.error("Exception", ex.getCause());
             throw new RuntimeException(ex.getCause());
-        }
-        catch (Exception e)
-        {
+        } catch (Exception e) {
             log.error("Exception", e);
             throw new RuntimeException(e);
         }
     }
 
-    void write(CorfuRuntime runtime, Map<String,Object> opts)
-            throws Exception
-    {
+    void write(CorfuRuntime runtime, Map<String, Object> opts)
+            throws Exception {
         runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
                 streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
                 Collections.emptyMap());
     }
 
-    void read(CorfuRuntime runtime, Map<String,Object> opts)
-            throws Exception
-    {
+    void read(CorfuRuntime runtime, Map<String, Object> opts)
+            throws Exception {
         ILogUnitEntry r = runtime.getAddressSpaceView()
                 .read(Long.parseLong((String) opts.get("--log-address")));
-        switch (r.getResultType())
-        {
+        switch (r.getResultType()) {
             case EMPTY:
                 System.err.println("Error: EMPTY");
                 break;

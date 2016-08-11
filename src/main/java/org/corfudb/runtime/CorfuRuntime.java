@@ -3,8 +3,19 @@ package org.corfudb.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.*;
-import org.corfudb.runtime.view.*;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutView;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SequencerView;
+import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.Version;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +23,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -22,78 +34,85 @@ import java.util.stream.Collectors;
 @Slf4j
 public class CorfuRuntime {
 
-    /** A list of known layout servers. */
-    public List<String> layoutServers;
-
-    /** A map of routers, representing nodes. */
-    public Map<String, IClientRouter> nodeRouters;
-
-    /** A completable future containing a layout, when completed. */
-    public CompletableFuture<Layout> layout;
-
-    /** The rate in seconds to retry accessing a layout, in case of a failure. */
-    public int retryRate;
+    /**
+     * A view of the layout service in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final LayoutView layoutView = new LayoutView(this);
+    /**
+     * A view of the sequencer server in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final SequencerView sequencerView = new SequencerView(this);
+    /**
+     * A view of the address space in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
+    /**
+     * A view of streams in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final StreamsView streamsView = new StreamsView(this);
 
     //region Address Space Options
-
-    /** Whether or not to disable the cache. */
-    @Getter
-    public boolean cacheDisabled = false;
-
-    /** The maximum size of the cache, in bytes. */
-    @Getter
-    public int maxCacheSize = 100_000_000;
+    /**
+     * Views of objects in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final ObjectsView objectsView = new ObjectsView(this);
+    /**
+     * A list of known layout servers.
+     */
+    public List<String> layoutServers;
 
     //endregion Address Space Options
-
-
-    /** Whether or not to disable backpointers. */
+    /**
+     * A map of routers, representing nodes.
+     */
+    public Map<String, IClientRouter> nodeRouters;
+    /**
+     * A completable future containing a layout, when completed.
+     */
+    public volatile CompletableFuture<Layout> layout;
+    /**
+     * The rate in seconds to retry accessing a layout, in case of a failure.
+     */
+    public int retryRate;
+    /**
+     * Whether or not to disable the cache.
+     */
+    @Getter
+    public boolean cacheDisabled = false;
+    /**
+     * The maximum size of the cache, in bytes.
+     */
+    @Getter
+    public int maxCacheSize = 100_000_000;
+    /**
+     * Whether or not to disable backpointers.
+     */
     @Getter
     public boolean backpointersDisabled = false;
 
     /**
-     * Whether or not to disable backpointers
-     * @param disable   True, if the cache should be disabled, false otherwise.
-     * @return          A CorfuRuntime to support chaining.
+     * When set, overrides the default getRouterFunction. Used by the testing
+     * framework to ensure the default routers used are for testing.
      */
-    public CorfuRuntime setBackpointersDisabled(boolean disable)
-    {
-        this.backpointersDisabled = disable;
-        return this;
-    }
+    public static BiFunction<CorfuRuntime, String, IClientRouter> overrideGetRouterFunction = null;
 
     /**
-     * Whether or not to disable the cache
-     * @param disable   True, if the cache should be disabled, false otherwise.
-     * @return          A CorfuRuntime to support chaining.
-     */
-    public CorfuRuntime setCacheDisabled(boolean disable)
-    {
-        this.cacheDisabled = disable;
-        return this;
-    }
-
-    /** Get a UUID for a named stream.
-     *
-     * @param string    The name of the stream.
-     * @return          The ID of the stream.
-     */
-    public static UUID getStreamID(String string)
-    {
-        return UUID.nameUUIDFromBytes(string.getBytes());
-    }
-
-    /** A function to handle getting routers. Used by test framework to inject
+     * A function to handle getting routers. Used by test framework to inject
      * a test router. Can also be used to provide alternative logic for obtaining
      * a router.
      */
     @Getter
     @Setter
-    public Function<String, IClientRouter> getRouterFunction = (address) -> {
+    public Function<String, IClientRouter> getRouterFunction = overrideGetRouterFunction != null ?
+            (address) -> overrideGetRouterFunction.apply(this, address) : (address) -> {
 
         // Return an existing router if we already have one.
-        if (nodeRouters.containsKey(address))
-        {
+        if (nodeRouters.containsKey(address)) {
             return nodeRouters.get(address);
         }
         // Parse the string in host:port format.
@@ -102,57 +121,86 @@ public class CorfuRuntime {
         // Generate a new router, start it and add it to the table.
         NettyClientRouter router = new NettyClientRouter(host, port);
         log.debug("Connecting to new router {}:{}", host, port);
-        router.addClient(new LayoutClient())
-                .addClient(new SequencerClient())
-                .addClient(new LogUnitClient())
-                .start();
-        nodeRouters.put(address, router);
+        try {
+            router.addClient(new LayoutClient())
+                    .addClient(new SequencerClient())
+                    .addClient(new LogUnitClient())
+                    .start();
+            nodeRouters.put(address, router);
+        } catch (Exception e) {
+            log.warn("Error connecting to router", e);
+        }
         return router;
     };
-
-    /** A view of the layout service in the Corfu server instance. */
-    @Getter(lazy=true)
-    private final LayoutView layoutView = new LayoutView(this);
-
-    /** A view of the sequencer server in the Corfu server instance. */
-    @Getter(lazy=true)
-    private final SequencerView sequencerView = new SequencerView(this);
-
-    /** A view of the address space in the Corfu server instance. */
-    @Getter(lazy=true)
-    private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
-
-    /** A view of streams in the Corfu server instance. */
-    @Getter(lazy=true)
-    private final StreamsView streamsView = new StreamsView(this);
-
-    /** Views of objects in the Corfu server instance. */
-    @Getter(lazy=true)
-    private final ObjectsView objectsView = new ObjectsView(this);
 
     public CorfuRuntime() {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
+        log.debug("Corfu runtime version {} initialized.", getVersionString());
     }
 
-    /** Parse a configuration string and get a CorfuRuntime.
+    /**
+     * Parse a configuration string and get a CorfuRuntime.
      *
-     * @param configurationString   The configuration string to parse.
+     * @param configurationString The configuration string to parse.
      */
-    public CorfuRuntime(String configurationString)
-    {
+    public CorfuRuntime(String configurationString) {
         this();
         this.parseConfigurationString(configurationString);
     }
 
-    /** Parse a configuration string and get a CorfuRuntime.
+    /**
+     * Get a UUID for a named stream.
      *
-     * @param configurationString   The configuration string to parse.
-     * @return                      A CorfuRuntime Configured based on the configuration string.
+     * @param string The name of the stream.
+     * @return The ID of the stream.
      */
-    public CorfuRuntime parseConfigurationString(String configurationString)
-    {
+    public static UUID getStreamID(String string) {
+        return UUID.nameUUIDFromBytes(string.getBytes());
+    }
+
+    public static String getVersionString() {
+        if (Version.getVersionString().contains("SNAPSHOT") || Version.getVersionString().contains("source")) {
+            return Version.getVersionString() + "(" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")";
+        }
+        return Version.getVersionString();
+    }
+
+    /**
+     * Whether or not to disable backpointers
+     *
+     * @param disable True, if the cache should be disabled, false otherwise.
+     * @return A CorfuRuntime to support chaining.
+     */
+    public CorfuRuntime setBackpointersDisabled(boolean disable) {
+        this.backpointersDisabled = disable;
+        return this;
+    }
+
+    /**
+     * Whether or not to disable the cache
+     *
+     * @param disable True, if the cache should be disabled, false otherwise.
+     * @return A CorfuRuntime to support chaining.
+     */
+    public CorfuRuntime setCacheDisabled(boolean disable) {
+        this.cacheDisabled = disable;
+        return this;
+    }
+
+    public CorfuRuntime setTransactionLogging(boolean enable) {
+        this.getObjectsView().setTransactionLogging(enable);
+        return this;
+    }
+
+    /**
+     * Parse a configuration string and get a CorfuRuntime.
+     *
+     * @param configurationString The configuration string to parse.
+     * @return A CorfuRuntime Configured based on the configuration string.
+     */
+    public CorfuRuntime parseConfigurationString(String configurationString) {
         // Parse comma sep. list.
         layoutServers = Pattern.compile(",")
                 .splitAsStream(configurationString)
@@ -161,34 +209,24 @@ public class CorfuRuntime {
         return this;
     }
 
-    /** Add a layout server to the list of servers known by the CorfuRuntime.
+    /**
+     * Get a router, given the address.
      *
-     * @param layoutServer  A layout server to use.
-     * @return              A CorfuRuntime, to support the builder pattern.
+     * @param address The address of the router to get.
+     * @return The router.
      */
-    public CorfuRuntime addLayoutServer(String layoutServer) {
-        layoutServers.add(layoutServer);
-        return this;
-    }
-
-    /** Get a router, given the address.
-     *
-     * @param address   The address of the router to get.
-     * @return          The router.
-     */
-    public IClientRouter getRouter(String address)
-    {
+    public IClientRouter getRouter(String address) {
         return getRouterFunction.apply(address);
     }
 
-    /** Invalidate the current layout.
+    /**
+     * Invalidate the current layout.
      * If the layout has been previously invalidated and a new layout has not yet been retrieved,
      * this function does nothing.
      */
     public void invalidateLayout() {
         // Is there a pending request to retrieve the layout?
-        if (!layout.isDone())
-        {
+        if (!layout.isDone()) {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
@@ -196,13 +234,14 @@ public class CorfuRuntime {
     }
 
 
-    /** Return a completable future which is guaranteed to contain a layout.
+    /**
+     * Return a completable future which is guaranteed to contain a layout.
      * This future will continue retrying until it gets a layout. If you need this completable future to fail,
      * you should chain it with a timeout.
      *
-     * @return  A completable future containing a layout.
+     * @return A completable future containing a layout.
      */
-    public CompletableFuture<Layout> fetchLayout() {
+    private CompletableFuture<Layout> fetchLayout() {
         return CompletableFuture.<Layout>supplyAsync(() -> {
             while (true) {
                 // Iterate through the layout servers, attempting to connect to one
@@ -211,9 +250,15 @@ public class CorfuRuntime {
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
-                        layout = router.getClient(LayoutClient.class).getLayout();
-                        Layout l = layout.get(); // wait for layout to complete
+                        CompletableFuture<Layout> layoutFuture = router.getClient(LayoutClient.class).getLayout();
+                        // Wait for layout
+                        Layout l = layoutFuture.get();
                         l.setRuntime(this);
+                        // this.layout should only be assigned to the new layout future once it has been
+                        // completely constructed and initialized. For example, assigning this.layout = l
+                        // before setting the layout's runtime can result in other threads trying to access a layout
+                        // with  a null runtime.
+                        layout = layoutFuture;
                         l.getAllServers().stream()
                                 .map(getRouterFunction)
                                 .forEach(x -> x.setEpoch(l.getEpoch()));
@@ -232,11 +277,11 @@ public class CorfuRuntime {
         });
     }
 
-    /** Connect to the Corfu server instance.
+    /**
+     * Connect to the Corfu server instance.
      * When this function returns, the Corfu server is ready to be accessed.
      */
-    public synchronized CorfuRuntime connect()
-    {
+    public synchronized CorfuRuntime connect() {
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
             // Fetch the current layout and save the future.
