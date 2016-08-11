@@ -32,18 +32,27 @@ public class LayoutViewTest extends AbstractViewTest {
     @Test
     public void canSetLayout()
             throws Exception {
-        CorfuRuntime r = getDefaultRuntime().connect();
-        Layout l = new TestLayoutBuilder()
-                .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addSequencer(9000)
-                .buildSegment()
-                    .buildStripe()
-                        .addLogUnit(9000)
-                    .addToSegment()
-                .addToLayout()
-                .build();
-        l.setRuntime(r);
+        addServerForTest(getDefaultEndpoint(), new LayoutServer(defaultOptionsMap()));
+        wireRouters();
+
+        CorfuRuntime r = getRuntime().connect();
+        String localAddress = "localhost:9000";
+        Layout l = new Layout(
+                Collections.singletonList(localAddress),
+                Collections.singletonList(localAddress),
+                Collections.singletonList(new Layout.LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        Collections.singletonList(localAddress)
+                                )
+                        )
+                )),
+                1L
+        );
+
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
         assertThat(r.getLayoutView().getLayout().epoch)

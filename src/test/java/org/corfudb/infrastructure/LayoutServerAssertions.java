@@ -22,47 +22,49 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
 
     public LayoutServerAssertions layoutHasSequencerCount(int count) {
         isNotNull();
-        if (actual.getCurrentLayout().getSequencers().size() != count) {
+
+        if (actual.currentLayout.getSequencers().size() != count)
+        {
             failWithMessage("Expected server to be have <%d> sequencers but it had <%d>", count,
-                    actual.getCurrentLayout().getSequencers().size());
+                    actual.currentLayout.getSequencers().size());
         }
+
         return this;
     }
 
     public LayoutServerAssertions isInEpoch(long epoch) {
         isNotNull();
-        if (actual.getCurrentLayout().getEpoch() != epoch) {
+
+        if (actual.currentLayout.getEpoch() != epoch)
+        {
             failWithMessage("Expected server to be in epoch <%d> but it was in epoch <%d>", epoch,
-                    actual.getCurrentLayout().getEpoch());
+                    actual.currentLayout.getEpoch());
         }
+
         return this;
     }
 
     public LayoutServerAssertions isPhase1Rank(long phase1Rank) {
         isNotNull();
-        if (actual.getPhase1Rank().compareTo(phase1Rank) != 0) {
+
+        if (actual.currentLayout.getEpoch() != phase1Rank)
+        {
             failWithMessage("Expected server to be in phase1Rank <%d> but it was in phase1Rank <%d>", phase1Rank,
-                    actual.getPhase1Rank());
+                    actual.phase1Rank);
         }
+
         return this;
     }
 
     public LayoutServerAssertions isPhase2Rank(long phase2Rank) {
         isNotNull();
-        if (actual.getPhase2Rank().compareTo(phase2Rank) != 0) {
+
+        if (actual.currentLayout.getEpoch() != phase2Rank)
+        {
             failWithMessage("Expected server to be in phase2Rank <%d> but it was in phase2Rank <%d>", phase2Rank,
-                    actual.getPhase2Rank());
+                    actual.phase2Rank);
         }
+
         return this;
     }
-
-    public LayoutServerAssertions isProposedLayout(Layout layout) {
-        isNotNull();
-        if (!actual.getProposedLayout().asJSONString().equals(layout.asJSONString())) {
-            failWithMessage("Expected server to have proposedLayout  <%s> but it is <%s>", layout,
-                    actual.getProposedLayout());
-
-        }
-        return this;
-    }
- }
+}

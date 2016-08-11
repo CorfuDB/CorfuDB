@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -78,9 +77,7 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
 
-        NettyServerRouter nsr = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
-        nsr.addServer(new BaseServer());
-        int port = findRandomOpenPort();
+            final AtomicInteger threadNum = new AtomicInteger(0);
 
             @Override
             public Thread newThread(Runnable r) {
@@ -91,55 +88,8 @@ public class NettyCommTest extends AbstractCorfuTest {
         });
 
 
-    @Data
-    public class NettyServerData {
-        ServerBootstrap b;
-        ChannelFuture f;
-        int port;
-        EventLoopGroup bossGroup;
-        EventLoopGroup workerGroup;
-        EventExecutorGroup ee;
-        public NettyServerData(int port) {
-            this.port = port;
-        }
-
-        void bootstrapServer() throws Exception {
-            NettyServerRouter nsr = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
-            bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
-                final AtomicInteger threadNum = new AtomicInteger(0);
-
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r);
-                    t.setName("accept-" + threadNum.getAndIncrement());
-                    return t;
-                }
-            });
-
-            workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-                final AtomicInteger threadNum = new AtomicInteger(0);
-
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r);
-                    t.setName("io-" + threadNum.getAndIncrement());
-                    return t;
-                }
-            });
-
-            ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-
-                final AtomicInteger threadNum = new AtomicInteger(0);
-
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r);
-                    t.setName("event-" + threadNum.getAndIncrement());
-                    return t;
-                }
-            });
-
-            b = new ServerBootstrap();
+        try {
+            ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .option(ChannelOption.SO_BACKLOG, 100)
