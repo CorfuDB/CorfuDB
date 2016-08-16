@@ -21,7 +21,7 @@ public class SequencerClientTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new SequencerServer(defaultOptionsMap()))
+                .add(new SequencerServer(defaultServerContext()))
                 .build();
     }
 

@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.junit.Test;

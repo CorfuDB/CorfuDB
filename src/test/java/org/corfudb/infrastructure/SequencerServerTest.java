@@ -23,7 +23,7 @@ public class SequencerServerTest extends AbstractServerTest {
     @Override
     public AbstractServer getDefaultServer() {
         return new
-                SequencerServer(new ServerConfigBuilder().build());
+                SequencerServer(ServerContextBuilder.emptyContext());
     }
 
     @Test
@@ -101,7 +101,7 @@ public class SequencerServerTest extends AbstractServerTest {
             throws Exception {
         String serviceDir = getTempDir();
 
-        SequencerServer s1 = new SequencerServer(new ServerConfigBuilder()
+        SequencerServer s1 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .setInitialToken(0)
@@ -117,7 +117,7 @@ public class SequencerServerTest extends AbstractServerTest {
         Thread.sleep(1400);
         s1.shutdown();
 
-        SequencerServer s2 = new SequencerServer(new ServerConfigBuilder()
+        SequencerServer s2 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .setInitialToken(-1)

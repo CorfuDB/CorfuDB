@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
+import com.sun.corba.se.spi.activation.Server;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
@@ -11,7 +12,7 @@ import java.util.Map;
  */
 @Accessors(chain = true)
 @Data
-public class ServerConfigBuilder {
+public class ServerContextBuilder {
 
     long initialToken = 0;
     boolean single = true;
@@ -22,12 +23,13 @@ public class ServerConfigBuilder {
     int checkpoint = 100;
     String address = "test";
     int port = 9000;
+    IServerRouter serverRouter;
 
-    public ServerConfigBuilder() {
+    public ServerContextBuilder() {
 
     }
 
-    public Map<String, Object> build() {
+    public ServerContext build() {
         ImmutableMap.Builder<String,Object> builder =
                 new ImmutableMap.Builder<String, Object>()
                 .put("--initial-token", initialToken)
@@ -42,12 +44,15 @@ public class ServerConfigBuilder {
                 .put("--checkpoint", checkpoint)
                 .put("--address", address)
                 .put("<port>", port);
-        return builder.build();
+        return new ServerContext(builder.build(), serverRouter);
     }
 
-    public static Map<String,Object> defaultConfig(int port) {
-        return new ServerConfigBuilder().setPort(port).build();
+    public static ServerContext defaultContext(int port) {
+        return new ServerContextBuilder().setPort(port).build();
     }
 
+    public static ServerContext emptyContext() {
+        return new ServerContextBuilder().build();
+    }
 
 }
