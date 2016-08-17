@@ -294,7 +294,7 @@ public class LayoutServer extends AbstractServer {
         }
         return true;
     }
-    
+
     public Layout getCurrentLayout() {
         return serverContext.getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
     }
