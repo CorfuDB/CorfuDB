@@ -195,6 +195,14 @@ public class LayoutServer extends AbstractServer {
      */
     // TODO this can work under a separate lock for this step as it does not change the global components
     public synchronized void handleMessageLayoutPrepare(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // Check if the prepare is for the correct epoch
+        long serverEpoch = getServerEpoch();
+        if (msg.getEpoch() != serverEpoch) {
+            r.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH, serverEpoch));
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getEpoch(), serverEpoch, msg);
+            return;
+        }
+
         Rank prepareRank = getRank(msg);
         Rank phase1Rank = getPhase1Rank();
         Layout proposedLayout = getProposedLayout();
@@ -217,6 +225,14 @@ public class LayoutServer extends AbstractServer {
      * @param r
      */
     public synchronized void handleMessageLayoutPropose(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // Check if the propose is for the correct epoch
+        long serverEpoch = getServerEpoch();
+        if (msg.getEpoch() != serverEpoch) {
+            r.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH, serverEpoch));
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getEpoch(), serverEpoch, msg);
+            return;
+        }
+
         Rank proposeRank = getRank(msg);
         Layout proposeLayout = msg.getLayout();
         Rank phase1Rank = getPhase1Rank();
@@ -252,15 +268,34 @@ public class LayoutServer extends AbstractServer {
     // TODO How do we handle holes in history if let in layout commit message. Maybe we have a hole filling process
     // TODO how do reject the older epoch commits, should it be an explicit NACK.
     public synchronized void handleMessageLayoutCommit(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        if(msg.getEpoch() < serverContext.getServerEpoch()) {
-            r.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
-                    serverContext.getServerEpoch()));
+        long serverEpoch = getServerEpoch();
+        if(msg.getEpoch() < serverEpoch) {
+            r.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }
         Layout commitLayout = msg.getLayout();
         setCurrentLayout(commitLayout);
         setServerEpoch(commitLayout.getEpoch());
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    }
+
+    /**
+     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
+     * the server is in the wrong epoch. Ignored if the message type is reset (which
+     * is valid in any epoch).
+     *
+     * @param msg The incoming message to validate.
+     * @param ctx The context of the channel handler.
+     * @return True, if the epoch is correct, but false otherwise.
+     */
+    public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        long serverEpoch = getServerEpoch();
+        if (msg.getEpoch() != serverEpoch) {
+            r.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH, serverEpoch));
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getEpoch(), serverEpoch, msg);
+            return false;
+        }
+        return true;
     }
 
 
