@@ -144,21 +144,18 @@ public class CorfuRuntime {
      * Stop all routers associated with this runtime & disconnect them.
      */
     public void stop() {
+        stop(false);
+    }
+
+    public void stop(boolean shutdown_p) {
         for (IClientRouter r: nodeRouters.values()) {
-            if (r.getClass() == NettyClientRouter.class) {
-                /*
-                int handlers = ((NettyClientRouter) r).handlerMap.size();
-                System.out.println("handlers " + handlers);
-                int clients = ((NettyClientRouter) r).clientList.size();
-                System.out.println("clients " + clients);
-                int outstandings = ((NettyClientRouter) r).outstandingRequests.size();
-                System.out.println("outstandings " + outstandings);
-                // (NettyClientRouter) r).context.channel().close();
-                */
-            }
-            r.stop();
+            r.stop(shutdown_p);
         }
-        nodeRouters = new ConcurrentHashMap<>();
+        if (shutdown_p) {
+            // N.B. An icky side-effect of this clobbering is leaking
+            // Pthreads, namely the Netty client-side worker threads.
+            nodeRouters = new ConcurrentHashMap<>();
+        }
     }
 
     /**

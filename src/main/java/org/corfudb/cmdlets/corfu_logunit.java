@@ -3,6 +3,8 @@ package org.corfudb.cmdlets;
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.codehaus.plexus.util.ExceptionUtils;
+import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
@@ -64,79 +66,85 @@ public class corfu_logunit implements ICmdlet {
 
         try {
             if ((Boolean) opts.get("write")) {
-                write(router, opts);
+                return write(router, opts);
             } else if ((Boolean) opts.get("read")) {
-                read(router, opts);
+                return read(router, opts);
             } else if ((Boolean) opts.get("trim")) {
-                trim(router, opts);
+                return trim(router, opts);
             } else if ((Boolean) opts.get("fillHole")) {
-                fillHole(router, opts);
+                return fillHole(router, opts);
             } else if ((Boolean) opts.get("forceGC")) {
-                forceGC(router, opts);
+                return forceGC(router, opts);
             } else if ((Boolean) opts.get("setGCInterval")) {
-                setGCInterval(router, opts);
+                return setGCInterval(router, opts);
             }
         } catch (ExecutionException ex) {
-            log.error("Exception", ex.getCause());
-            throw new RuntimeException(ex.getCause());
+            return cmdlet.err("Exception", ex.toString(), ExceptionUtils.getStackTrace(ex));
         } catch (Exception e) {
-            log.error("Exception", e);
-            throw new RuntimeException(e);
+            return cmdlet.err("Exception", e.toString(), ExceptionUtils.getStackTrace(e));
         }
-        return cmdlet.err("FIXME 8");
+        return cmdlet.err("Hush, compiler.");
     }
 
-    void write(NettyClientRouter router, Map<String, Object> opts)
+    String[] write(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).write(Long.parseLong((String) opts.get("--log-address")),
                 streamsFromString((String) opts.get("--stream-ids")), Integer.parseInt((String) opts.get("--rank")),
                 ByteStreams.toByteArray(System.in), Collections.emptyMap()).get();
+        return cmdlet.ok();
     }
 
-    void trim(NettyClientRouter router, Map<String, Object> opts)
+    String[] trim(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).trim(getUUIDfromString((String) opts.get("--stream-id")),
                 Long.parseLong((String) opts.get("--log-address")));
+        return cmdlet.ok();
     }
 
-    void fillHole(NettyClientRouter router, Map<String, Object> opts)
+    String[] fillHole(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).fillHole(
                 Long.parseLong((String) opts.get("--log-address"))).get();
+        return cmdlet.ok();
     }
 
-    void forceGC(NettyClientRouter router, Map<String, Object> opts)
+    String[] forceGC(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).forceGC();
+        return cmdlet.ok();
     }
 
-    void setGCInterval(NettyClientRouter router, Map<String, Object> opts)
+    String[] setGCInterval(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).setGCInterval(Long.parseLong((String) opts.get("--interval")));
+        return cmdlet.ok();
     }
 
-    void read(NettyClientRouter router, Map<String, Object> opts)
+    String[] read(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         ReadResponse r = router.getClient(LogUnitClient.class).read(Long.parseLong((String) opts.get("--log-address"))).get();
         r.getReadSet().entrySet().stream().forEach(x -> {
             switch (x.getValue().getType()) {
                 case EMPTY:
-                    System.err.println("Error: EMPTY");
+                    return cmdlet.err("EMPTY");
                     break;
                 case HOLE:
-                    System.err.println("Error: HOLE");
+                    return cmdlet.err("HOLE");
                     break;
                 case TRIMMED:
-                    System.err.println("Error: TRIMMED");
+                    return cmdlet.err("TRIMMED");
                     break;
                 case DATA:
                     try {
-                        x.getValue().getData().getBytes(0, System.out, x.getValue().getData().readableBytes());
+                        byte[] ba = new byte[r.getBuffer().readableBytes()];
+                        x.getBuffer().getBytes(0, ba);
+                        return cmdlet.ok(new String(ba, "UTF8"));
                     } catch (IOException i) {
                         System.err.println("Error: IOException " + i.getMessage());
                     }
                     break;
             }
+            return cmdlet.err("Hush, compiler.");
         });
     }
 }

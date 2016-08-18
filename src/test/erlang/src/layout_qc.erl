@@ -1,33 +1,42 @@
--module(layout_eqc).
+-module(layout_qc).
 
-%% To compile and run with Quviq's QuickCheck:
+%% -------------------------------------------------------------------
 %%
-%% $ erl -sname foo -pz ~/lib/eqc/ebin
+%% Copyright (c) 2016 VMware, Inc. All Rights Reserved.
 %%
-%% > c(layout_eqc, [{d, 'EQC'}]).
-%% > eqc:quickcheck(layout_eqc:prop()).
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
 %%
-%% To compile and run with Proper:
+%%   http://www.apache.org/licenses/LICENSE-2.0
 %%
-%% $ erl -sname foo -pz /Users/fritchie/src/erlang/proper/ebin
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
 %%
-%% > c(layout_eqc, [{d, 'PROPER'}]).
-%% > proper:quickcheck(layout_eqc:prop()).
+%% -------------------------------------------------------------------
 
-%% To run the corfu_server:
-%% ./bin/corfu_server -Q -l /tmp/corfu-test-dir -s 8000 --cm-poll-interval=9999
-%%
-%% The --cm-poll-interval flag is optional: it can avoid spammy noise
-%% when also using "-d TRACE" that is caused by config manager polling.
+%% See the README.md file for instructions for compiling & running.
 
 -ifdef(PROPER).
+%% Automagically import generator functions like choose(), frequency(), etc.
 -include_lib("proper/include/proper.hrl").
 -endif.
 
 -ifdef(EQC).
+%% Automagically import generator functions like choose(), frequency(), etc.
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_statem.hrl").
 -endif.
+
+-define(QUICK_MBOX, qc_java:quick_mbox_endpoint()).
+-define(TIMEOUT, 2*1000).
+
+-include("qc_java.hrl").
 
 -compile(export_all).
 
@@ -52,7 +61,7 @@
 
 gen_mbox(#state{endpoint=Endpoint, reg_names=RegNames}) ->
     noshrink( ?LET(RegName, oneof(RegNames),
-                   {RegName, endpoint2nodename(Endpoint)} )).
+                   {RegName, qc_java:endpoint2nodename(Endpoint)} )).
 
 gen_rank() ->
     choose(1, 100).
@@ -79,7 +88,7 @@ gen_layout(Epoch) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 initial_state() ->
-    initial_state(local_mboxes(), local_endpoint()).
+    initial_state(qc_java:local_mboxes(), qc_java:local_endpoint()).
 
 initial_state(Mboxes, Endpoint) ->
     #state{endpoint=Endpoint, reg_names=Mboxes}.
@@ -127,19 +136,22 @@ postcondition2(_S, {call,_,RRR,[_Mbox, _EP]}, Ret)
         ["OK"] -> true;
         Else   -> {got, Else}
     end;
-postcondition2(#state{committed_layout=CommittedLayout},
+postcondition2(#state{committed_layout=CommittedLayout,
+                      committed_epoch=CommittedEpoch},
                {call,_,query,[_Mbox, _EP, C_Epoch]}, Ret) ->
-    case Ret of
+    case termify(Ret) of
         timeout ->
             false;
-        ["OK", _JSON] when CommittedLayout == "" ->
+        {ok, _JSON} when CommittedLayout == "" ->
             %% We haven't committed anything.  Whatever default layout
             %% that the server has (e.g. after reset()) is ok.
             true;
-        ["OK", JSON] ->
+        {ok, JSON} ->
             JSON == layout_to_json(CommittedLayout);
         {error, wrongEpochException, CorrectEpoch} ->
-            CorrectEpoch /= C_Epoch;
+            CorrectEpoch /= C_Epoch
+            orelse
+            C_Epoch /= CommittedEpoch;
         Else ->
             io:format(user, "Q ~p\n", [Else]),
             false
@@ -200,13 +212,12 @@ postcondition2(#state{committed_epoch=CommittedEpoch},
             %%
             %% Thus, no rank checking here, just epoch going forward.
             Layout#layout.epoch > CommittedEpoch;
-        {error, nack} ->
-            %% TODO: verify that the epoch went backward.
-            Layout#layout.epoch =< CommittedEpoch;
         {error, wrongEpochException, CorrectEpoch} ->
-            CorrectEpoch /= C_Epoch
-            andalso
-            CorrectEpoch == CommittedEpoch;
+            (CorrectEpoch /= C_Epoch
+             andalso
+             CorrectEpoch == CommittedEpoch)
+            orelse
+            Layout#layout.epoch =< CommittedEpoch;
         Else ->
             {commit, rank, Rank, layout, Layout,
              committed, CommittedEpoch, Else}
@@ -231,8 +242,8 @@ next_state(S=#state{prepared_rank=PreparedRank,
             S
     end;
 next_state(S=#state{committed_epoch=CommittedEpoch}, _V,
-           {call,_,commit,[_Mbox, _EP, C_Epoch, _Rank, Layout]}) ->
-    if C_Epoch == CommittedEpoch andalso Layout#layout.epoch > CommittedEpoch ->
+           {call,_,commit,[_Mbox, _EP, _C_Epoch, _Rank, Layout]}) ->
+    if Layout#layout.epoch > CommittedEpoch ->
             S#state{prepared_rank=-1,
                     proposed_layout="",
                     committed_layout=Layout,
@@ -243,43 +254,75 @@ next_state(S=#state{committed_epoch=CommittedEpoch}, _V,
 next_state(S, _V, _NoSideEffectCall) ->
     S.
 
-%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 reset(Mbox, Endpoint) ->
-    io:format(user, "R", []),
-    java_rpc(Mbox, reset, Endpoint).
+    %% io:format(user, "R", []),
+    rpc(Mbox, reset, Endpoint).
 
 reboot(Mbox, Endpoint) ->
     %% io:format(user, "r", []),
-    java_rpc(Mbox, reboot, Endpoint).
+    rpc(Mbox, reboot, Endpoint).
 
 query(Mbox, Endpoint, C_Epoch) ->
-    java_rpc(Mbox, "query", Endpoint, C_Epoch, []).
+    rpc(Mbox, "query", Endpoint, C_Epoch, []).
 
 prepare(Mbox, Endpoint, C_Epoch, Rank) ->
-    java_rpc(Mbox, "prepare", Endpoint, C_Epoch,
+    rpc(Mbox, "prepare", Endpoint, C_Epoch,
              ["-r", integer_to_list(Rank)]).
 
 propose(Mbox, Endpoint, C_Epoch, Rank, Layout) ->
     JSON = layout_to_json(Layout),
     TmpPath = lists:flatten(io_lib:format("/tmp/layout.~w", [now()])),
     ok = file:write_file(TmpPath, JSON),
-    Res = java_rpc(Mbox, "propose", Endpoint, C_Epoch,
-                   ["-r", integer_to_list(Rank), "-l", TmpPath]),
-    file:delete(TmpPath),
-    Res.
+    try
+        rpc(Mbox, "propose", Endpoint, C_Epoch,
+            ["-r", integer_to_list(Rank), "-l", TmpPath])
+    after
+        file:delete(TmpPath)
+    end.
 
 commit(Mbox, Endpoint, C_Epoch, Rank, Layout) ->
+    %% ["OK"].  %% intentional failure testing
     JSON = layout_to_json(Layout),
     TmpPath = lists:flatten(io_lib:format("/tmp/layout.~w", [now()])),
     ok = file:write_file(TmpPath, JSON),
-    Res = java_rpc(Mbox, "committed", Endpoint, C_Epoch,
-                   ["-r", integer_to_list(Rank), "-l", TmpPath]),
-    file:delete(TmpPath),
-    Res.
+    try
+        rpc(Mbox, "committed", Endpoint, C_Epoch,
+            ["-r", integer_to_list(Rank), "-l", TmpPath])
+    after
+        file:delete(TmpPath)
+    end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Quick human-friendly versions of RPC invocations to Java Land(tm).
+%% Useful for developer exploration at the Erlang shell.
+
+reset() ->
+    apply(?MODULE, reset, ?QUICK_MBOX).
+
+reboot() ->
+    apply(?MODULE, reboot, ?QUICK_MBOX).
+
+query(C_Epoch) ->
+    apply(?MODULE, query, ?QUICK_MBOX ++ [C_Epoch]).
+
+prepare(C_Epoch, Rank) ->
+    apply(?MODULE, prepare, ?QUICK_MBOX ++ [C_Epoch, Rank]).
+
+propose(C_Epoch, Rank, Layout) ->
+    apply(?MODULE, propose, ?QUICK_MBOX ++ [C_Epoch, Rank, Layout]).
+
+commit(C_Epoch, Rank, Layout) ->
+    apply(?MODULE, commit, ?QUICK_MBOX ++ [C_Epoch, Rank, Layout]).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 termify(["OK"]) ->
     ok;
+termify(["OK", JSON_perhaps]) ->
+    {ok, JSON_perhaps};
 termify(["ERROR", "NACK"]) ->
     {error, nack};
 termify(["ERROR", "Exception " ++ _E1, E2|Rest] = _L) ->
@@ -323,69 +366,11 @@ string_ify_list(L) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-local_mboxes() ->
-    [cmdlet0, cmdlet1, cmdlet2, cmdlet3, cmdlet4,
-     cmdlet5, cmdlet6, cmdlet7, cmdlet8, cmdlet9].
-
-local_endpoint() ->
-    "sbb5:8000".
-
-endpoint2nodename(Endpoint) ->
-    [HostName, Port] = string:tokens(Endpoint, ":"),
-    list_to_atom("corfu-" ++ Port ++ "@" ++ HostName).
-
--ifdef(EQC).
-my_run_always(AlwaysNum, Mod, Cmds, RunFun, CheckFun) ->
-    ?ALWAYS(AlwaysNum,
-            begin
-                {H, S_or_Hs, Res} = RunFun(Mod, Cmds),
-                aggregate(command_names(Cmds),
-                measure(
-                  cmds_length,
-                  try length(Cmds) catch _:_ -> 0 end,
-                pretty_commands(
-                  ?MODULE, Cmds, {H,S_or_Hs,Res},
-                %% ?WHENFAIL(
-                %%   io:format("H: ~p~nS: ~p~nR: ~p~n", [H,S_or_Hs,Res]),
-                  CheckFun(Cmds, H, S_or_Hs, Res)
-                )))
-            end).
--endif.
--ifdef(PROPER).
-my_run_always(AlwaysNum, Mod, Cmds, RunFun, CheckFun) ->
-    begin
-        BigResList = [RunFun(Mod, Cmds) || _ <- lists:seq(1, AlwaysNum)],
-        aggregate(command_names(Cmds),
-        measure(
-          cmds_length,
-          try length(Cmds) catch _:_ -> 0 end,
-          begin
-              Chk_HSHsRes =
-                  lists:zip([CheckFun(Cmds, H, S_or_Hs, Res) ||
-                                {H, S_or_Hs, Res} <- BigResList],
-                            BigResList),
-              HSHsRes_failed = [X || X={Chk, _HSHsRes} <- Chk_HSHsRes,
-                                     Chk /= true],
-              case HSHsRes_failed of
-                  [] ->
-                      true;
-                  [{Chk, {H, S_or_Hs, Res}}|_] ->
-                  ?WHENFAIL(
-                     io:format("H: ~p~nS: ~p~nR: ~p~n", [H,S_or_Hs,Res]),
-                     Chk
-                    )
-              end
-          end
-         ))
-    end.
-
--endif.
-
 prop() ->
     prop(1).
 
 prop(MoreCmds) ->
-    prop(MoreCmds, local_mboxes(), local_endpoint()).
+    prop(MoreCmds, qc_java:local_mboxes(), qc_java:local_endpoint()).
 
 prop(MoreCmds, Mboxes, Endpoint) ->
     random:seed(now()),
@@ -393,20 +378,26 @@ prop(MoreCmds, Mboxes, Endpoint) ->
     ?FORALL(Cmds, more_commands(MoreCmds,
                                 commands(?MODULE,
                                          initial_state(Mboxes, Endpoint))),
-            my_run_always(1, ?MODULE, Cmds,
-                          fun(Mod, TheCmds) ->
-                                  run_commands(Mod, TheCmds)
-                          end,
-                          fun(_TheCmds, _H, _S_or_Hs, Res) ->
-                                  Res == ok
-                          end)
-            ).
+            begin
+                {H, S_or_Hs, Res} = run_commands(?MODULE, Cmds),
+                aggregate(command_names(Cmds),
+                measure(
+                  cmds_length,
+                  ?COMMANDS_LENGTH(Cmds),
+                ?PRETTY_FAIL(
+                  ?MODULE, Cmds, H,S_or_Hs,Res,
+                  begin
+                      Res == ok
+                  end
+                )))
+            end).
+
 
 prop_parallel() ->
     prop_parallel(1).
 
 prop_parallel(MoreCmds) ->
-    prop_parallel(MoreCmds, local_mboxes(), local_endpoint()).
+    prop_parallel(MoreCmds, qc_java:local_mboxes(), qc_java:local_endpoint()).
 
 % % EQC has an exponential worst case for checking {SIGH}
 -define(PAR_CMDS_LIMIT, 6). % worst case so far @ 7 = 52 seconds!
@@ -418,40 +409,33 @@ prop_parallel(MoreCmds, Mboxes, Endpoint) ->
                            non_empty(
                              parallel_commands(?MODULE,
                                       initial_state(Mboxes, Endpoint)))),
-            my_run_always(100, ?MODULE, Cmds,
-                          fun(Mod, TheCmds) ->
-                                  run_parallel_commands(Mod, TheCmds)
-                          end,
-                          fun(_TheCmds, _H, _S_or_Hs, Res) ->
-                                  Res == ok
-                          end)
-            ).
-
-seq_to_par_cmds(L) ->
-    [Cmd || Cmd <- L,
-            element(1, Cmd) /= init].
+            ?WRAP_ALWAYS(100,
+            begin
+                {H, S_or_Hs, Res} = run_parallel_commands(?MODULE, Cmds),
+                aggregate(command_names(Cmds),
+                measure(
+                  cmds_length,
+                  ?COMMANDS_LENGTH(Cmds),
+                ?PRETTY_FAIL(
+                  ?MODULE, Cmds, H,S_or_Hs,Res,
+                  begin
+                      Res == ok
+                  end
+                )))
+            end)).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-java_rpc(Node, reset, Endpoint) ->
+rpc(Mbox, reset, Endpoint) ->
     AllArgs = ["corfu_layout", "reset", Endpoint],
-    java_rpc_call(Node, AllArgs);
-java_rpc(Node, reboot, Endpoint) ->
+    qc_java:rpc_call(Mbox, AllArgs, ?TIMEOUT);
+rpc(Mbox, reboot, Endpoint) ->
     AllArgs = ["corfu_layout", "reboot", Endpoint],
-    java_rpc_call(Node, AllArgs).
+    qc_java:rpc_call(Mbox, AllArgs, ?TIMEOUT).
 
-java_rpc({_RegName, _NodeName} = Mbox, CmdName, Endpoint, C_Epoch, Args) ->
+rpc({_RegName, _NodeName} = Mbox, CmdName, Endpoint, C_Epoch, Args) ->
     AllArgs = ["corfu_layout", CmdName, Endpoint] ++
-        ["-p", lists:flatten(io_lib:format("~w", [Mbox])) ] ++ %% --quickcheck-ap-prefix
+        %% -p = --quickcheck-ap-prefix
+        ["-p", lists:flatten(io_lib:format("~w", [Mbox])) ] ++
         ["-e", integer_to_list(C_Epoch)] ++ Args,
-    java_rpc_call(Mbox, AllArgs).
-
-java_rpc_call(Mbox, AllArgs) ->
-    ID = make_ref(),
-    Mbox ! {self(), ID, AllArgs},
-    receive
-        {ID, Res} ->
-            Res
-    after 2*1000 ->
-            timeout
-    end.
+    qc_java:rpc_call(Mbox, AllArgs, ?TIMEOUT).

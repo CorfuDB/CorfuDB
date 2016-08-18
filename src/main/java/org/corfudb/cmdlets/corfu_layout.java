@@ -139,7 +139,17 @@ public class corfu_layout implements ICmdlet {
                 Gson gs = new GsonBuilder().setPrettyPrinting().create();
                 return cmdlet.ok(gs.toJson(l));
             } catch (ExecutionException ex) {
-                return cmdlet.err("ERROR Exception getting layout" + ex.getCause());
+                if (ex.getCause().getClass() == WrongEpochException.class) {
+                    WrongEpochException we = (WrongEpochException) ex.getCause();
+                    return cmdlet.err("Exception during query",
+                            ex.getCause().toString(),
+                            "correctEpoch: " + we.getCorrectEpoch(),
+                            "stack: " + ExceptionUtils.getStackTrace(ex));
+                } else {
+                    return cmdlet.err("Exception during query",
+                            ex.getCause().toString(),
+                            "stack: " + ExceptionUtils.getStackTrace(ex));
+                }
             } catch (Exception e) {
                 return cmdlet.err("ERROR Exception getting layout" + e);
             }
@@ -153,9 +163,9 @@ public class corfu_layout implements ICmdlet {
                     return cmdlet.err("NACK");
                 }
             } catch (ExecutionException ex) {
-                return cmdlet.err("Exception bootstrapping layout {}\n", ex.getCause().toString());
+                return cmdlet.err("Exception bootstrapping layout", ex.getCause().toString());
             } catch (Exception e) {
-                return cmdlet.err("Exception bootstrapping layout {}\n", e.toString());
+                return cmdlet.err("Exception bootstrapping layout", e.toString());
             }
         } else if ((Boolean) opts.get("prepare")) {
             long rank = Long.parseLong((String) opts.get("--rank"));
@@ -238,17 +248,17 @@ public class corfu_layout implements ICmdlet {
                             "correctEpoch: " + we.getCorrectEpoch(),
                             "stack: " + ExceptionUtils.getStackTrace(ex));
                 } else {
-                    return cmdlet.err("Exception during commit {}\n",
+                    return cmdlet.err("Exception during commit",
                             ex.getCause().toString(),
                             "stack: " + ExceptionUtils.getStackTrace(ex));
                 }
             } catch (Exception e) {
-                return cmdlet.err("Exception during commit {}\n",
+                return cmdlet.err("Exception during commit",
                         e.toString(),
                         "stack: " + ExceptionUtils.getStackTrace(e));
             }
         }
-        return cmdlet.err("FIXME 10");
+        return cmdlet.err("Hush, compiler.");
     }
 
     Layout getLayout(Map<String, Object> opts) {

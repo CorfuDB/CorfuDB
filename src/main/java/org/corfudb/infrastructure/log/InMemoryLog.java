@@ -39,4 +39,8 @@ public class InMemoryLog extends AbstractLocalLog {
     protected RangeSet<Long> backendStreamRead(UUID streamID) {
         return TreeRangeSet.create();
     }
+
+    public void close() {
+        cache = new HashMap();
+    }
 }

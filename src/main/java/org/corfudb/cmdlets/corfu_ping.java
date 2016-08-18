@@ -96,6 +96,6 @@ public class corfu_ping implements ICmdlet {
             } catch (InterruptedException ie) {
             }
         }
-        // return cmdlet.err("FIXME 5");
+        // return cmdlet.err("Hush, compiler.");
     }
 }

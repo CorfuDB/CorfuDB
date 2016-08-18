@@ -87,7 +87,7 @@ public class corfu_multiping implements ICmdlet {
             c++;
         }
         // notreached
-        // return cmdlet.err("FIXME 6");
+        // return cmdlet.err("Hush, compiler.");
     }
 
     private void ping_one_round(long c) {

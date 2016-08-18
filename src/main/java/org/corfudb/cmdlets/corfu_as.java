@@ -1,14 +1,18 @@
 package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
+import io.netty.buffer.ByteBuf;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Utils;
 import org.docopt.Docopt;
 
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -49,44 +53,65 @@ public class corfu_as implements ICmdlet {
 
         try {
             if ((Boolean) opts.get("write")) {
-                write(rt, opts);
+                return write(rt, opts);
             } else if ((Boolean) opts.get("read")) {
-                read(rt, opts);
+                return read(rt, opts);
             }
         } catch (ExecutionException ex) {
-            log.error("Exception", ex.getCause());
-            throw new RuntimeException(ex.getCause());
+            return cmdlet.err("Exception", ex.toString(), ex.getCause().toString());
         } catch (Exception e) {
-            log.error("Exception", e);
-            throw new RuntimeException(e);
+            return cmdlet.err("Exception", e.toString(), ExceptionUtils.getStackTrace(e));
         }
-        return cmdlet.err("FIXME 13");
+        return cmdlet.err("Hush, compiler.");
     }
 
-    void write(CorfuRuntime runtime, Map<String, Object> opts)
+    String[] write(CorfuRuntime runtime, Map<String, Object> opts)
             throws Exception {
+<<<<<<< d9d2eb815b0ad708875e6d21834a19a5cfc05f18
         runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
                 streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
                 Collections.emptyMap(), Collections.emptyMap());
+=======
+        try {
+            runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
+                    streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
+                    Collections.emptyMap());
+            return cmdlet.ok();
+        } catch (OverwriteException e) {
+            return cmdlet.err("OVERWRITE");
+        }
+>>>>>>> Squash of slfritchie/eqc-layout-hack6c branch (prep for final PR) at 9a51bd10
     }
 
-    void read(CorfuRuntime runtime, Map<String, Object> opts)
+    String[] read(CorfuRuntime runtime, Map<String, Object> opts)
             throws Exception {
         LogData r = runtime.getAddressSpaceView()
                 .read(Long.parseLong((String) opts.get("--log-address")));
         switch (r.getType()) {
             case EMPTY:
+<<<<<<< d9d2eb815b0ad708875e6d21834a19a5cfc05f18
                 System.err.println("Error: EMPTY");
                 break;
             case HOLE:
                 System.err.println("Error: HOLE");
                 break;
+=======
+                return cmdlet.err("EMPTY");
+            case FILLED_HOLE:
+                return cmdlet.err("HOLE");
+>>>>>>> Squash of slfritchie/eqc-layout-hack6c branch (prep for final PR) at 9a51bd10
             case TRIMMED:
-                System.err.println("Error: TRIMMED");
-                break;
+                return cmdlet.err("TRIMMED");
             case DATA:
+<<<<<<< d9d2eb815b0ad708875e6d21834a19a5cfc05f18
                 r.getData().getBytes(0, System.out, r.getData().readableBytes());
                 break;
+=======
+                byte[] ba = new byte[r.getBuffer().readableBytes()];
+                r.getBuffer().getBytes(0, ba);
+                return cmdlet.ok(new String(ba, "UTF8"));
+>>>>>>> Squash of slfritchie/eqc-layout-hack6c branch (prep for final PR) at 9a51bd10
         }
+        return cmdlet.err("Hush, compiler.");
     }
 }
