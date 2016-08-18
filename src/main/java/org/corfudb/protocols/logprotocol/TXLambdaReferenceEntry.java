@@ -55,14 +55,14 @@ public class TXLambdaReferenceEntry extends LogEntry {
         try {
             method.setAccessible(true);
             Object ret = method.invoke(transactionalObject, lambdaArguments);
-            if (runtime.getObjectsView().getTxFuturesMap().containsKey(entry.getAddress())) {
-                runtime.getObjectsView().getTxFuturesMap().get(entry.getAddress()).complete(ret);
-                runtime.getObjectsView().getTxFuturesMap().remove(entry.getAddress());
+            if (runtime.getObjectsView().getTxFuturesMap().containsKey(entry.getGlobalAddress())) {
+                runtime.getObjectsView().getTxFuturesMap().get(entry.getGlobalAddress()).complete(ret);
+                runtime.getObjectsView().getTxFuturesMap().remove(entry.getGlobalAddress());
             }
             return ret;
         } catch (IllegalAccessException | InvocationTargetException nsme) {
-            runtime.getObjectsView().getTxFuturesMap().get(entry.getAddress()).completeExceptionally(nsme);
-            runtime.getObjectsView().getTxFuturesMap().remove(entry.getAddress());
+            runtime.getObjectsView().getTxFuturesMap().get(entry.getGlobalAddress()).completeExceptionally(nsme);
+            runtime.getObjectsView().getTxFuturesMap().remove(entry.getGlobalAddress());
             throw new RuntimeException(nsme);
         }
     }

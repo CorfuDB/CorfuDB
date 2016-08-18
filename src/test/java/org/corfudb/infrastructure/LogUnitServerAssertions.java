@@ -4,9 +4,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import org.assertj.core.api.AbstractAssert;
 import org.corfudb.infrastructure.log.LogAddress;
-import org.corfudb.protocols.wireprotocol.LogUnitPayloadMsg;
-
-import java.util.UUID;
+import org.corfudb.protocols.wireprotocol.CorfuPayload;
+import org.corfudb.util.serializer.Serializers;
 
 /**
  * Created by mwei on 1/7/16.
@@ -62,15 +61,15 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
         if (actual.dataCache.get(new LogAddress(address, null)) == null) {
             failWithMessage("Expected address <%d> to contain data but was empty!", address);
         } else {
-            actual.dataCache.get(new LogAddress(address, null)).getBuffer().resetReaderIndex();
+            actual.dataCache.get(new LogAddress(address, null)).getData().resetReaderIndex();
             ByteBuf b = UnpooledByteBufAllocator.DEFAULT.buffer();
-            LogUnitPayloadMsg.defaultSerializer.serialize(data, b);
+            Serializers.getSerializer(Serializers.SerializerType.CORFU).serialize(data, b);
             byte[] expected = new byte[b.readableBytes()];
             b.getBytes(0, expected);
-            int actualbytes = actual.dataCache.get(new LogAddress(address, null)).getBuffer().readableBytes();
+            int actualbytes = actual.dataCache.get(new LogAddress(address, null)).getData().readableBytes();
             byte[] actualb = new byte[actualbytes];
-            actual.dataCache.get(new LogAddress(address, null)).getBuffer().getBytes(0, actualb);
-            actual.dataCache.get(new LogAddress(address, null)).getBuffer().resetReaderIndex();
+            actual.dataCache.get(new LogAddress(address, null)).getData().getBytes(0, actualb);
+            actual.dataCache.get(new LogAddress(address, null)).getData().resetReaderIndex();
 
             org.assertj.core.api.Assertions.assertThat(actualb)
                     .isEqualTo(expected);

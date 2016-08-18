@@ -4,9 +4,10 @@ import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 import org.corfudb.infrastructure.*;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
@@ -27,16 +28,16 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     public void cacheMissTimesOut() {
         getDefaultRuntime().setCacheDisabled(false).connect();
 
-        getRuntime().getAddressSpaceView().setEmptyDuration(Duration.ofNanos(100));
-        assertThat(getRuntime().getAddressSpaceView().read(0).getResultType())
-                .isEqualTo(LogUnitReadResponseMsg.ReadResultType.EMPTY);
+        getRuntime().getAddressSpaceView().setEmptyDuration(Duration.ofNanos(10));
+        assertThat(getRuntime().getAddressSpaceView().read(0).getType())
+                .isEqualTo(DataType.EMPTY);
         getRuntime().getLayoutView().getLayout().getLogUnitClient(0, 0).fillHole(0);
         try {
             Thread.sleep(100);
         } catch (InterruptedException e) {// don't do anything
         }
-        assertThat(getRuntime().getAddressSpaceView().read(0).getResultType())
-                .isEqualTo(LogUnitReadResponseMsg.ReadResultType.FILLED_HOLE);
+        assertThat(getRuntime().getAddressSpaceView().read(0).getType())
+                .isEqualTo(DataType.HOLE);
     }
 
     @Test
@@ -73,7 +74,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap());
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload())
+        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
         assertThat((Set<UUID>) r.getAddressSpaceView().read(0L).getMetadataMap()
@@ -93,7 +94,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         LogUnitServerAssertions.assertThat(getLogUnit(9000))
                 .matchesDataAtAddress(0, testPayload);
         LogUnitServerAssertions.assertThat(getLogUnit(9001))
-                .matchesDataAtAddress(0, "1".getBytes());
+                .matchesDataAtAddress(1, "1".getBytes());
         LogUnitServerAssertions.assertThat(getLogUnit(9002))
                 .isEmptyAtAddress(0);
     }
@@ -132,7 +133,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap());
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload())
+        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
 
@@ -144,13 +145,13 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         RangeSet<Long> rs = TreeRangeSet.create();
         rs.add(Range.closed(0L, 3L));
-        Map<Long, ILogUnitEntry> m = r.getAddressSpaceView().read(rs);
+        Map<Long, LogData> m = r.getAddressSpaceView().read(rs);
 
-        assertThat(m.get(0L).getPayload())
+        assertThat(m.get(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
-        assertThat(m.get(1L).getPayload())
+        assertThat(m.get(1L).getPayload(getRuntime()))
                 .isEqualTo("1".getBytes());
-        assertThat(m.get(3L).getPayload())
+        assertThat(m.get(3L).getPayload(getRuntime()))
                 .isEqualTo("3".getBytes());
     }
 

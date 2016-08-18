@@ -2,12 +2,13 @@ package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -114,20 +115,26 @@ public class corfu_logunit implements ICmdlet {
 
     void read(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
-        ReadResult r = router.getClient(LogUnitClient.class).read(Long.parseLong((String) opts.get("--log-address"))).get();
-        switch (r.getResultType()) {
-            case EMPTY:
-                System.err.println("Error: EMPTY");
-                break;
-            case FILLED_HOLE:
-                System.err.println("Error: HOLE");
-                break;
-            case TRIMMED:
-                System.err.println("Error: TRIMMED");
-                break;
-            case DATA:
-                r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
-                break;
-        }
+        ReadResponse r = router.getClient(LogUnitClient.class).read(Long.parseLong((String) opts.get("--log-address"))).get();
+        r.getReadSet().entrySet().stream().forEach(x -> {
+            switch (x.getValue().getType()) {
+                case EMPTY:
+                    System.err.println("Error: EMPTY");
+                    break;
+                case HOLE:
+                    System.err.println("Error: HOLE");
+                    break;
+                case TRIMMED:
+                    System.err.println("Error: TRIMMED");
+                    break;
+                case DATA:
+                    try {
+                        x.getValue().getData().getBytes(0, System.out, x.getValue().getData().readableBytes());
+                    } catch (IOException i) {
+                        System.err.println("Error: IOException " + i.getMessage());
+                    }
+                    break;
+            }
+        });
     }
 }

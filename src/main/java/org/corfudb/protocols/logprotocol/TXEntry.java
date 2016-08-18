@@ -6,9 +6,10 @@ import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ICorfuSerializable;
 import org.corfudb.util.serializer.Serializers;
@@ -44,22 +45,22 @@ public class TXEntry extends LogEntry {
 
     public boolean checkIfStreamAborts(UUID stream) {
         if (getEntry() != null && getEntry().hasBackpointer(stream)) {
-            ILogUnitEntry backpointedEntry = getEntry();
+            LogData backpointedEntry = getEntry();
             if (backpointedEntry.isFirstEntry(stream)) {
                 return false;
             }
 
             while (
                     backpointedEntry.hasBackpointer(stream) &&
-                            backpointedEntry.getAddress() > readTimestamp &&
+                            backpointedEntry.getGlobalAddress() > readTimestamp &&
                             !backpointedEntry.isFirstEntry(stream)) {
-                if (!backpointedEntry.getAddress().equals(getEntry().getAddress()) && //not self!
-                        backpointedEntry.isLogEntry() && backpointedEntry.getLogEntry().isMutation(stream)) {
+                if (!backpointedEntry.getGlobalAddress().equals(getEntry().getGlobalAddress()) && //not self!
+                        backpointedEntry.isLogEntry(runtime) && backpointedEntry.getLogEntry(runtime).isMutation(stream)) {
                     log.debug("TX aborted due to mutation [via backpointer]: " +
                                     "on stream {} at {}, tx is at {}, object read at {}, aborting entry was {}",
                             stream,
-                            backpointedEntry.getAddress(),
-                            entry.getAddress(),
+                            backpointedEntry.getGlobalAddress(),
+                            entry.getGlobalAddress(),
                             readTimestamp,
                             backpointedEntry);
                     return true;
@@ -71,17 +72,17 @@ public class TXEntry extends LogEntry {
             return false;
         }
 
-        for (long i = readTimestamp + 1; i < entry.getAddress(); i++) {
+        for (long i = readTimestamp + 1; i < getEntry().getGlobalAddress(); i++) {
             // Backpointers not available, so we do a scan.
-            ILogUnitEntry rr = runtime.getAddressSpaceView().read(i);
-            if (rr.getResultType() ==
-                    LogUnitReadResponseMsg.ReadResultType.DATA &&
+            LogData rr = runtime.getAddressSpaceView().read(i);
+            if (rr.getType() ==
+                    DataType.DATA &&
                     ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
                             .contains(stream) && readTimestamp != i &&
-                    rr.getPayload() instanceof LogEntry &&
-                    ((LogEntry) rr.getPayload()).isMutation(stream)) {
+                    rr.getPayload(runtime) instanceof LogEntry &&
+                    ((LogEntry) rr.getPayload(runtime)).isMutation(stream)) {
                 log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", stream,
-                        i, entry.getAddress(), readTimestamp);
+                        i, getEntry().getGlobalAddress(), readTimestamp);
                 return true;
             }
         }

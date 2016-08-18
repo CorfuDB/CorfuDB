@@ -4,12 +4,8 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
 import java.util.ArrayList;
@@ -144,9 +140,9 @@ public class StreamView implements AutoCloseable {
         boolean hitBeforeRead = false;
         if (!runtime.backpointersDisabled) {
             resolvedBackpointers.add(latestToken);
-            ILogUnitEntry r = runtime.getAddressSpaceView().read(latestToken);
+            LogData r = runtime.getAddressSpaceView().read(latestToken);
             long backPointer = latestToken;
-            while (r.getResultType() != LogUnitReadResponseMsg.ReadResultType.EMPTY
+            while (r.getType() != DataType.EMPTY
                     && r.getBackpointerMap().containsKey(streamID)) {
                 long prevRead = backPointer;
                 backPointer = r.getBackpointerMap().get(streamID);
@@ -194,7 +190,7 @@ public class StreamView implements AutoCloseable {
      * @return The next item from the stream.
      */
     @SuppressWarnings("unchecked")
-    public synchronized ILogUnitEntry read() {
+    public synchronized LogData read() {
         while (true) {
             /*
             long thisRead = logPointer.getAndIncrement();
@@ -231,8 +227,8 @@ public class StreamView implements AutoCloseable {
             getCurrentContext().logPointer.set(thisRead + 1);
 
             log.trace("Read[{}]: reading at {}", streamID, thisRead);
-            ILogUnitEntry r = runtime.getAddressSpaceView().read(thisRead);
-            if (r.getResultType() == LogUnitReadResponseMsg.ReadResultType.EMPTY) {
+            LogData r = runtime.getAddressSpaceView().read(thisRead);
+            if (r.getType() == DataType.EMPTY) {
                 //determine whether or not this is a hole
                 long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
                 log.trace("Read[{}]: latest token at {}", streamID, latestToken);
@@ -247,12 +243,12 @@ public class StreamView implements AutoCloseable {
                     //ignore overwrite.
                 }
                 r = runtime.getAddressSpaceView().read(thisRead);
-                log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getResultType());
+                log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getType());
             }
             Set<UUID> streams = (Set<UUID>) r.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
             if (streams != null && streams.contains(getCurrentContext().contextID)) {
                 log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
-                Object res = r.getPayload();
+                Object res = r.getPayload(runtime);
                 if (res instanceof StreamCOWEntry) {
                     StreamCOWEntry ce = (StreamCOWEntry) res;
                     log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
@@ -265,7 +261,7 @@ public class StreamView implements AutoCloseable {
         }
     }
 
-    public synchronized ILogUnitEntry[] readTo(long pos) {
+    public synchronized LogData[] readTo(long pos) {
         long latestToken = pos;
         boolean max = false;
         if (pos == Long.MAX_VALUE) {
@@ -273,17 +269,17 @@ public class StreamView implements AutoCloseable {
             latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
             log.trace("Linearization point set to {}", latestToken);
         }
-        ArrayList<ILogUnitEntry> al = new ArrayList<>();
+        ArrayList<LogData> al = new ArrayList<>();
         log.debug("Stream[{}] pointer[{}], readTo {}", streamID, getCurrentContext().logPointer.get(), pos);
         while (getCurrentContext().logPointer.get() <= latestToken) {
-            ILogUnitEntry r = read();
-            if (r != null && (max || r.getAddress() <= pos)) {
+            LogData r = read();
+            if (r != null && (max || r.getGlobalAddress() <= pos)) {
                 al.add(r);
             } else {
                 break;
             }
         }
-        return al.toArray(new ILogUnitEntry[al.size()]);
+        return al.toArray(new LogData[al.size()]);
     }
 
     /**

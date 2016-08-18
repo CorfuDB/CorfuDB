@@ -8,7 +8,7 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
@@ -90,7 +90,7 @@ public abstract class AbstractReplicationView {
      * @param address The address to read from.
      * @return The result of the read.
      */
-    public abstract ILogUnitEntry read(long address);
+    public abstract LogData read(long address);
 
     /**
      * Read a set of addresses, using the replication method given.
@@ -98,10 +98,10 @@ public abstract class AbstractReplicationView {
      * @param addresses The addresses to read from.
      * @return A map containing the results of the read.
      */
-    public Map<Long, ILogUnitEntry> read(RangeSet<Long> addresses) {
-        Map<Long, ILogUnitEntry> results = new ConcurrentHashMap<>();
+    public Map<Long, LogData> read(RangeSet<Long> addresses) {
+        Map<Long, LogData> results = new ConcurrentHashMap<>();
         Set<Long> total = Utils.discretizeRangeSet(addresses);
-        total.parallelStream()
+        total.stream()
                 .forEach(i -> results.put(i, read(i)));
         return results;
     }
@@ -112,7 +112,7 @@ public abstract class AbstractReplicationView {
      * @param stream The stream to read from.
      * @return A map containing the results of the read.
      */
-    public abstract Map<Long, ILogUnitEntry> read(UUID stream);
+    public abstract Map<Long, LogData> read(UUID stream);
 
     /**
      * Fill a hole at an address, using the replication method given.
@@ -121,40 +121,5 @@ public abstract class AbstractReplicationView {
      */
     public abstract void fillHole(long address)
             throws OverwriteException;
-
-    @ToString(exclude = {"runtime"})
-    @RequiredArgsConstructor
-    public static class CachedLogUnitEntry implements ILogUnitEntry {
-        @Getter
-        final LogUnitReadResponseMsg.ReadResultType resultType;
-
-        @Getter
-        final EnumMap<LogUnitMetadataType, Object> metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
-
-        @Getter
-        final Object payload;
-
-        @Getter
-        final Long address;
-
-        final CorfuRuntime runtime;
-        @Getter
-        final int sizeEstimate;
-
-        public ILogUnitEntry setRuntime(CorfuRuntime runtime) {
-            return this;
-        }
-
-        /**
-         * Gets a ByteBuf representing the payload for this data.
-         *
-         * @return A ByteBuf representing the payload for this data.
-         */
-        @Override
-        public ByteBuf getBuffer() {
-            log.warn("Attempted to get a buffer of a cached entry!");
-            throw new RuntimeException("Invalid attempt to get the ByteBuf of a cached entry!");
-        }
-    }
 
 }

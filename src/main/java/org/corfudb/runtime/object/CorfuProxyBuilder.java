@@ -10,6 +10,7 @@ import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.matcher.ElementMatchers;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.ObjectExistsException;
 import org.corfudb.runtime.view.ObjectOpenOptions;
@@ -225,13 +226,13 @@ public class CorfuProxyBuilder {
                         log.debug("There appears to be an existing constructor for {}, reading it...", sv.getStreamID());
                         // The "default" entry should be the first entry in the stream.
                         // TODO: handle garbage collected streams.
-                        ILogUnitEntry entry = sv.read();
+                        LogData entry = sv.read();
                         while (entry != null) {
-                            if (entry.getPayload() instanceof SMREntry &&
-                                    ((SMREntry) entry.getPayload()).getSMRMethod().equals("default")) {
-                                log.trace("Setting contructor arguments to {}", ((SMREntry) entry.getPayload())
+                            if (entry.getPayload(runtime) instanceof SMREntry &&
+                                    ((SMREntry) entry.getPayload(runtime)).getSMRMethod().equals("default")) {
+                                log.trace("Setting contructor arguments to {}", ((SMREntry) entry.getPayload(runtime))
                                         .getSMRArguments());
-                                constructorArgs = ((SMREntry) entry.getPayload()).getSMRArguments();
+                                constructorArgs = ((SMREntry) entry.getPayload(runtime)).getSMRArguments();
                                 if (annotation.objectType() == ObjectType.SMR) {
                                     ((CorfuSMRObjectProxy) proxy).setCreationArguments(constructorArgs);
                                 }

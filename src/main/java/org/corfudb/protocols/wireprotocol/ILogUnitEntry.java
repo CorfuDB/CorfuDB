@@ -17,7 +17,7 @@ public interface ILogUnitEntry extends IMetadata {
      *
      * @return The type of result this entry represents.
      */
-    LogUnitReadResponseMsg.ReadResultType getResultType();
+    DataType getResultType();
 
     /**
      * Gets the metadata map.

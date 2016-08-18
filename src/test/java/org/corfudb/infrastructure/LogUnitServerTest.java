@@ -32,12 +32,12 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
         long address = 0L;
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer(1);
         b.writeByte(42);
         WriteRequest wr = WriteRequest.builder()
                             .writeMode(WriteMode.NORMAL)
                             .globalAddress(address)
-                            .dataBuffer(b)
+                            .data(new LogData(DataType.DATA, b))
                             .build();
         //write at 0
         wr.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
@@ -46,9 +46,9 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         sendMessage(CorfuMsgType.WRITE.payloadMsg(wr));
 
-        LoadingCache<LogAddress, LogUnitEntry> dataCache = s1.getDataCache();
+        LoadingCache<LogAddress, LogData> dataCache = s1.getDataCache();
         // Make sure that extra bytes are truncated from the payload byte buf
-        assertThat(dataCache.get(new LogAddress(address, null)).getBuffer().capacity()).isEqualTo(1);
+        assertThat(dataCache.get(new LogAddress(address, null)).getData().capacity()).isEqualTo(1);
     }
 
     @Test
@@ -70,7 +70,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         WriteRequest m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
                 .globalAddress(0L)
-                .dataBuffer(b)
+                .data(new LogData(DataType.DATA, b))
                 .build();
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
@@ -82,7 +82,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
                 .globalAddress(100L)
-                .dataBuffer(b)
+                .data(new LogData(DataType.DATA, b))
                 .build();
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
@@ -94,7 +94,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
                 .globalAddress(10000000L)
-                .dataBuffer(b)
+                .data(new LogData(DataType.DATA, b))
                 .build();
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);

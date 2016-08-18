@@ -7,7 +7,6 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.serializer.Serializers;
@@ -111,24 +110,9 @@ public class LogUnitClient implements IClient {
      * @param r     Router
      */
     @ClientHandler(type=CorfuMsgType.READ_RESPONSE)
-    private static Object handleReadResponse(LogUnitReadResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+    private static Object handleReadResponse(CorfuPayloadMsg<ReadResponse> msg, ChannelHandlerContext ctx, IClientRouter r)
     {
-        return new ReadResult(msg);
-    }
-
-    /** Handle a RANGE_READ_RESPONSE message.
-     *
-     * @param msg   Incoming Message
-     * @param ctx   Context
-     * @param r     Router
-     */
-    @ClientHandler(type=CorfuMsgType.READ_RANGE_RESPONSE)
-    private static Object handleRangeReadResponse(LogUnitReadRangeResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r)
-    {
-        Map<Long, ReadResult> lr = new ConcurrentHashMap<>();
-        msg.getResponseMap().entrySet().parallelStream()
-                .forEach(e -> lr.put(e.getKey(), new ReadResult(e.getValue())));
-        return lr;
+        return msg.getPayload();
     }
 
     /** Handle a STREAM_TOKEN_RESPONSE message.
@@ -163,6 +147,7 @@ public class LogUnitClient implements IClient {
         wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
+        wr.setGlobalAddress(address);
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
@@ -183,6 +168,7 @@ public class LogUnitClient implements IClient {
         wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
+        wr.setGlobalAddress(address);
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
@@ -190,6 +176,7 @@ public class LogUnitClient implements IClient {
                                             ByteBuf buffer) {
         WriteRequest wr = new WriteRequest(WriteMode.REPLEX_STREAM, address, stream, buffer);
         wr.setStreams(streams);
+        wr.setGlobalAddress(address);
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
@@ -200,9 +187,9 @@ public class LogUnitClient implements IClient {
      * @return A CompletableFuture which will complete with a ReadResult once the read
      * completes.
      */
-    public CompletableFuture<ReadResult> read(long address) {
-        return router.sendMessageAndGetCompletable(new CorfuPayloadMsg<>
-                (CorfuMsgType.READ_REQUEST, address));
+    public CompletableFuture<ReadResponse> read(long address) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
     }
 
     /**
@@ -237,15 +224,6 @@ public class LogUnitClient implements IClient {
      */
     public void forceCompact() {
         router.sendMessage(CorfuMsgType.FORCE_COMPACT.msg());
-    }
-
-    /**
-     * Read a range of addresses.
-     *
-     * @param addresses The addresses to read.
-     */
-    public CompletableFuture<Map<Long, ReadResult>> readRange(RangeSet<Long> addresses) {
-        return router.sendMessageAndGetCompletable(new CorfuRangeMsg(CorfuMsgType.READ_RANGE, addresses));
     }
 
     /**

@@ -2,20 +2,17 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
-import com.google.common.collect.TreeRangeSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.junit.Test;
 
 import java.util.Collections;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -51,10 +48,10 @@ public class LogUnitClientTest extends AbstractClientTest {
             throws Exception {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
-        LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
-        assertThat(r.getResultType())
-                .isEqualTo(LogUnitReadResponseMsg.ReadResultType.DATA);
-        assertThat(r.getPayload())
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
                 .isEqualTo(testString);
     }
 
@@ -75,10 +72,10 @@ public class LogUnitClientTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
         client.fillHole(0).get();
-        LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
-        assertThat(r.getResultType())
-                .isEqualTo(LogUnitReadResponseMsg.ReadResultType.DATA);
-        assertThat(r.getPayload())
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
                 .isEqualTo(testString);
     }
 
@@ -87,9 +84,9 @@ public class LogUnitClientTest extends AbstractClientTest {
             throws Exception {
         byte[] testString = "hello world".getBytes();
         client.fillHole(0).get();
-        LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
-        assertThat(r.getResultType())
-                .isEqualTo(LogUnitReadResponseMsg.ReadResultType.FILLED_HOLE);
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.HOLE);
 
         assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
@@ -106,31 +103,11 @@ public class LogUnitClientTest extends AbstractClientTest {
                         .put(CorfuRuntime.getStreamID("hello2"), 1338L)
                         .build()).get();
 
-        LogUnitReadResponseMsg.ReadResult r = client.read(0).get();
+        LogData r = client.read(0).get().getReadSet().get(0L);
         assertThat(r.getBackpointerMap())
                 .containsEntry(CorfuRuntime.getStreamID("hello"), 1337L);
         assertThat(r.getBackpointerMap())
                 .containsEntry(CorfuRuntime.getStreamID("hello2"), 1338L);
-    }
-
-    @Test
-    public void canReadRange()
-            throws Exception {
-        RangeSet<Long> ranges = TreeRangeSet.create();
-        ranges.add(Range.closed(0L, 100L));
-        for (int i = 0; i < 100; i++) {
-            client.write(i, Collections.<UUID>emptySet(), 0,
-                    Integer.toString(i).getBytes(), Collections.emptyMap()).get();
-        }
-
-
-        Map<Long, LogUnitReadResponseMsg.ReadResult> rm = client.readRange(ranges).get();
-        for (int i = 0; i < 100; i++) {
-            assertThat(rm)
-                    .containsKey((long) i);
-            assertThat(rm.get((long) i).getPayload())
-                    .isEqualTo(Integer.toString(i).getBytes());
-        }
     }
 
     @Test

@@ -3,6 +3,7 @@ package org.corfudb.cmdlets;
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -69,20 +70,20 @@ public class corfu_as implements ICmdlet {
 
     void read(CorfuRuntime runtime, Map<String, Object> opts)
             throws Exception {
-        ILogUnitEntry r = runtime.getAddressSpaceView()
+        LogData r = runtime.getAddressSpaceView()
                 .read(Long.parseLong((String) opts.get("--log-address")));
-        switch (r.getResultType()) {
+        switch (r.getType()) {
             case EMPTY:
                 System.err.println("Error: EMPTY");
                 break;
-            case FILLED_HOLE:
+            case HOLE:
                 System.err.println("Error: HOLE");
                 break;
             case TRIMMED:
                 System.err.println("Error: TRIMMED");
                 break;
             case DATA:
-                r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
+                r.getData().getBytes(0, System.out, r.getData().readableBytes());
                 break;
         }
     }

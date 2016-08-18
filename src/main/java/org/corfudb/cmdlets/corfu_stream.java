@@ -3,6 +3,7 @@ package org.corfudb.cmdlets;
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.GitRepositoryState;
@@ -72,14 +73,14 @@ public class corfu_stream implements ICmdlet {
             throws Exception {
         StreamView s = runtime.getStreamsView().get(getUUIDfromString((String) opts.get("--stream-id")));
         while (true) {
-            ILogUnitEntry r = s.read();
+            LogData r = s.read();
             if (r == null) {
                 if (!(Boolean) opts.get("--loop")) {
                     return;
                 }
                 Thread.sleep(100);
             } else {
-                r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
+                r.getData().getBytes(0, System.out, r.getData().readableBytes());
             }
         }
     }

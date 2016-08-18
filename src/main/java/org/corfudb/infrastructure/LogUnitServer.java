@@ -13,14 +13,13 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.corfudb.infrastructure.log.*;
 import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.lang.invoke.MethodHandles;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -30,7 +29,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/10/15.
@@ -75,27 +73,19 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         long address = msg.getPayload().getGlobalAddress();
-        log.trace("Write[{}]", address);
-        // The payload in the message is a view of a larger buffer allocated
-        // by netty, thus direct memory can leak. Copy the view and release the
-        // underlying buffer
-        LogUnitEntry e = new LogUnitEntry(address, msg.getPayload().getDataBuffer().copy(),
-                msg.getPayload().getMetadataMap(), false);
-        msg.getPayload().getDataBuffer().release();
         try {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
-                dataCache.put(new LogAddress(e.address, null), e);
+                dataCache.put(new LogAddress(address, null), msg.getPayload().getData());
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.payloadMsg(0L));
             } else {
                 // In replex stream mode, we allocate a local token first, and use it as the
                 // stream address.
                 Long token = getLog(msg.getPayload().getStreamID()).getToken(1);
-                dataCache.put(new LogAddress(token, msg.getPayload().getStreamID()), e);
+                dataCache.put(new LogAddress(token, msg.getPayload().getStreamID()), msg.getPayload().getData());
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.payloadMsg(token));
             }
         } catch (Exception ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
-            e.getBuffer().release();
         }
     }
 
@@ -105,21 +95,21 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type=CorfuMsgType.READ_REQUEST)
-    private void read_normal(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("Read[{}]", msg.getPayload());
-        LogUnitEntry e = dataCache.get(new LogAddress(msg.getPayload(), null));
-        if (e == null) {
-            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
-        } else if (e.isHole) {
-            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.FILLED_HOLE));
-        } else {
-            r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(e));
+    private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        ReadResponse rr = new ReadResponse();
+        for (Range<Long> range : msg.getPayload().getAddresses().asRanges()) {
+            for (Long l = range.lowerEndpoint(); l < range.upperEndpoint()+1L; l++) {
+                LogData e = dataCache.get(new LogAddress(l, null));
+                if (e == null) {
+                    rr.put(l, LogData.EMPTY);
+                } else if (e.getType() == DataType.HOLE) {
+                    rr.put(l, LogData.HOLE);
+                } else {
+                    rr.put(l, e);
+                }
+            }
         }
-    }
-
-    @ServerHandler(type=CorfuMsgType.READ_RANGE)
-    private void read_range(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        read(msg, ctx, r);
+        r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
     }
 
     @ServerHandler(type=CorfuMsgType.GC_INTERVAL)
@@ -136,7 +126,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type=CorfuMsgType.FILL_HOLE)
     private void fill_hole(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        dataCache.get(new LogAddress(msg.getPayload(), null), x -> new LogUnitEntry(msg.getPayload()));
+        dataCache.get(new LogAddress(msg.getPayload(), null), x -> LogData.HOLE);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -160,7 +150,7 @@ public class LogUnitServer extends AbstractServer {
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
      */
-    LoadingCache<LogAddress, LogUnitEntry> dataCache;
+    LoadingCache<LogAddress, LogData> dataCache;
     long maxCacheSize;
 
     private final AbstractLocalLog localLog;
@@ -216,29 +206,30 @@ public class LogUnitServer extends AbstractServer {
         if (dataCache != null) {
             /** Free all references */
             dataCache.asMap().values().parallelStream()
-                    .map(m -> m.buffer.release());
+                    .map(m -> m.getData().release());
         }
 
-        dataCache = Caffeine.newBuilder()
-                .<LogAddress,LogUnitEntry>weigher((k, v) -> v.buffer == null ? 1 : v.buffer.readableBytes())
+        dataCache = Caffeine.<LogAddress,LogData>newBuilder()
+                .<LogAddress,LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().readableBytes())
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
-                .writer(new CacheWriter<LogAddress, LogUnitEntry>() {
+                .writer(new CacheWriter<LogAddress, LogData>() {
                     @Override
-                    public void write(LogAddress address, LogUnitEntry entry) {
+                    public void write(@Nonnull LogAddress address, @Nonnull LogData entry) {
                         if (dataCache.getIfPresent(address) != null) {
                             throw new RuntimeException("overwrite");
                         }
-                        if (!entry.isPersisted) { //don't persist an entry twice.
-                            localLog.write(address.getAddress(), entry);
-                        }
+                        //TODO - persisted entries should be of type PersistedLogData
+                        //if (!entry.isPersisted) { //don't persist an entry twice.
+                        localLog.write(address.getAddress(), entry);
+                        //    }
                     }
 
                     @Override
-                    public void delete(LogAddress aLong, LogUnitEntry logUnitEntry, RemovalCause removalCause) {
+                    public void delete(LogAddress aLong, LogData logUnitEntry, RemovalCause removalCause) {
                         // never need to delete
                     }
-                }).build(this::handleRetrieval);
+                }).<LogAddress,LogData>build(this::handleRetrieval);
 
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
@@ -254,37 +245,18 @@ public class LogUnitServer extends AbstractServer {
      * the read() and write(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
-    public synchronized LogUnitEntry handleRetrieval(LogAddress address) {
-        LogUnitEntry entry = localLog.read(address.getAddress());
+    public synchronized LogData handleRetrieval(LogAddress address) {
+        LogData entry = localLog.read(address.getAddress());
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }
 
-    public synchronized void handleEviction(LogAddress address, LogUnitEntry entry, RemovalCause cause) {
+    public synchronized void handleEviction(LogAddress address, LogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
-        if (entry.buffer != null) {
+        if (entry.getData() != null) {
             // Free the internal buffer once the data has been evicted (in the case the server is not sync).
-            entry.buffer.release();
+            entry.getData().release();
         }
-    }
-
-    /**
-     * Service an incoming ranged read request.
-     */
-    public void read(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("ReadRange[{}]", msg.getRanges());
-        Set<LogAddress> total = new HashSet<>();
-        for (Range<Long> range : msg.getRanges().asRanges()) {
-            total.addAll(Utils.discretizeRange(range).parallelStream()
-                            .map(x -> new LogAddress(x, null))
-                            .collect(Collectors.toSet()));
-        }
-
-        Map<LogAddress, LogUnitEntry> e = dataCache.getAll(total);
-        Map<Long, LogUnitReadResponseMsg> o = new ConcurrentHashMap<>();
-        e.entrySet().parallelStream()
-                .forEach(rv -> o.put(rv.getKey().getAddress(), new LogUnitReadResponseMsg(rv.getValue())));
-        r.sendResponse(ctx, msg, new LogUnitReadRangeResponseMsg(o));
     }
 
 
@@ -305,10 +277,10 @@ public class LogUnitServer extends AbstractServer {
         long freedEntries = 0;
 
         /* Pick a non-compacted region or just scan the cache */
-        Map<LogAddress, LogUnitEntry> map = dataCache.asMap();
+        Map<LogAddress, LogData> map = dataCache.asMap();
         SortedSet<LogAddress> addresses = new TreeSet<>(map.keySet());
         for (LogAddress address : addresses) {
-            LogUnitEntry buffer = dataCache.getIfPresent(address);
+            LogData buffer = dataCache.getIfPresent(address);
             if (buffer != null) {
                 Set<UUID> streams = buffer.getStreams();
                 // this is a normal entry
@@ -338,15 +310,15 @@ public class LogUnitServer extends AbstractServer {
         return true;
     }
 
-    public void trimEntry(long address, Set<java.util.UUID> streams, LogUnitEntry entry) {
+    public void trimEntry(long address, Set<java.util.UUID> streams, LogData entry) {
         // Add this entry to the trimmed range map.
         //trimRange.add(Range.closed(address, address));
         // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
         // assuming the entry is back by disk
         dataCache.invalidate(address);
         //and free any references the buffer might have
-        if (entry.getBuffer() != null) {
-            entry.getBuffer().release();
+        if (entry.getData() != null) {
+            entry.getData().release();
         }
     }
 
@@ -359,7 +331,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    LoadingCache<LogAddress, LogUnitEntry> getDataCache() {
+    LoadingCache<LogAddress, LogData> getDataCache() {
         return dataCache;
     }
 }

@@ -8,7 +8,9 @@ import io.netty.buffer.Unpooled;
 import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.LogUnitMetadataMsg;
+import org.corfudb.protocols.wireprotocol.ICorfuPayload;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.util.serializer.Serializers;
 
 import java.io.File;
@@ -70,7 +72,7 @@ public class RollingLog extends AbstractLocalLog {
      * @param address The address of the entry.
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
-    private LogUnitEntry readEntry(FileHandle fh, long address)
+    private LogData readEntry(FileHandle fh, long address)
             throws IOException {
         ByteBuffer o = fh.getMapForRegion(64, (int) fh.getChannel().size());
         while (o.hasRemaining()) {
@@ -99,10 +101,8 @@ public class RollingLog extends AbstractLocalLog {
                 o.position(o.position() + metadataMapSize);
                 ByteBuffer dBuf = o.slice();
                 dBuf.limit(size - metadataMapSize - 24);
-                return new LogUnitEntry(address, Unpooled.wrappedBuffer(dBuf),
-                        LogUnitMetadataMsg.mapFromBuffer(mBuf),
-                        false,
-                        true);
+                return new LogData(Unpooled.wrappedBuffer(dBuf),
+                        ICorfuPayload.enumMapFromBuffer(mBuf, IMetadata.LogUnitMetadataType.class, Object.class));
             }
         }
         return null;
@@ -157,11 +157,11 @@ public class RollingLog extends AbstractLocalLog {
      * @param address The address of the entry.
      * @param entry   The LogUnitEntry to write.
      */
-    private void writeEntry(FileHandle fh, long address, LogUnitEntry entry)
+    private void writeEntry(FileHandle fh, long address, LogData entry)
             throws IOException {
         ByteBuf metadataBuffer = Unpooled.buffer();
-        LogUnitMetadataMsg.bufferFromMap(metadataBuffer, entry.getMetadataMap());
-        int entrySize = entry.getBuffer().writerIndex() + metadataBuffer.writerIndex() + 24;
+        ICorfuPayload.serialize(metadataBuffer, entry.getMetadataMap());
+        int entrySize = entry.getData().writerIndex() + metadataBuffer.writerIndex() + 24;
         long pos = fh.getFilePointer().getAndAdd(entrySize);
         ByteBuffer o = fh.getMapForRegion((int) pos, entrySize);
         o.putInt(0x4C450000); // Flags
@@ -169,13 +169,13 @@ public class RollingLog extends AbstractLocalLog {
         o.putInt(entrySize); // Size
         o.putInt(metadataBuffer.writerIndex()); // the metadata size
         o.put(metadataBuffer.nioBuffer());
-        o.put(entry.buffer.nioBuffer());
+        o.put(entry.getData().nioBuffer());
         metadataBuffer.release();
         o.putShort(2, (short) 1); // written flag
         o.flip();
     }
 
-    protected void backendWrite(long address, LogUnitEntry entry) {
+    protected void backendWrite(long address, LogData entry) {
         //evict the data by getting the next pointer.
         try {
             // make sure the entry doesn't currently exist...
@@ -204,7 +204,7 @@ public class RollingLog extends AbstractLocalLog {
         }
     }
 
-    protected LogUnitEntry backendRead(long address) {
+    protected LogData backendRead(long address) {
         try {
             return readEntry(getChannelForAddress(address), address);
         } catch (Exception e) {

@@ -1,19 +1,17 @@
 package org.corfudb.protocols.wireprotocol;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.*;
 import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import org.corfudb.infrastructure.CorfuMsgHandler;
 
 import java.lang.invoke.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.EnumMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -44,9 +42,9 @@ public interface ICorfuPayload<T> {
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                 .put(ByteBuf.class, x -> {
                     int bytes = x.readInt();
-                    ByteBuf o = x.slice(x.readerIndex(), bytes);
-                    x.readerIndex(x.readerIndex()+bytes);
-                    return o;
+                    ByteBuf b = PooledByteBufAllocator.DEFAULT.buffer(bytes);
+                    b.writeBytes(x, bytes);
+                    return b;
                 })
                 .build());
 
@@ -133,6 +131,42 @@ public interface ICorfuPayload<T> {
         return builder.build();
     }
 
+    /** A really simple flat list implementation. The first entry is the size of the set as an int,
+     * and the next entries are each value..
+     * @param buf        The buffer to deserialize.
+     * @param valueClass    The class of the values.
+     * @param <V>           The type of the values.
+     * @return
+     */
+    static <V> List<V> listFromBuffer(ByteBuf buf, Class<V> valueClass) {
+        int numEntries = buf.readInt();
+        ImmutableList.Builder<V> builder = ImmutableList.builder();
+        for (int i = 0; i < numEntries; i++) {
+            builder.add(fromBuffer(buf, valueClass));
+        }
+        return builder.build();
+    }
+
+    /** A really simple flat set implementation. The first entry is the size of the set as an int,
+     * and the next entries are each value..
+     * @param buf        The buffer to deserialize.
+     * @param valueClass    The class of the values.
+     * @param <V>           The type of the values.
+     * @return
+     */
+    static <V extends Comparable<V>> RangeSet<V> rangeSetFromBuffer(ByteBuf buf, Class<V> valueClass) {
+        int numEntries = buf.readInt();
+        ImmutableRangeSet.Builder<V> rs = ImmutableRangeSet.builder();
+        for (int i = 0; i < numEntries; i++) {
+            BoundType upperType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
+            V upper = fromBuffer(buf, valueClass);
+            BoundType lowerType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
+            V lower = fromBuffer(buf, valueClass);
+            rs.add(Range.range(lower, lowerType, upper, upperType));
+        }
+        return rs.build();
+    }
+
     static <K extends Enum<K> & ITypedEnum<K>,V> EnumMap<K,V> enumMapFromBuffer(ByteBuf buf, Class<K> keyClass,
                                                                                 Class<V> objectClass) {
         EnumMap<K, V> metadataMap =
@@ -159,6 +193,7 @@ public interface ICorfuPayload<T> {
         return (T) fromBuffer(buf, rawType);
     }
 
+    @SuppressWarnings("unchecked")
     static <T> void serialize(ByteBuf buffer, T payload) {
         // If it's an ICorfuPayload, use the defined serializer.
         if (payload instanceof ICorfuPayload) {
@@ -198,6 +233,16 @@ public interface ICorfuPayload<T> {
                 serialize(buffer, x.getValue());
             });
         }
+        else if (payload instanceof RangeSet) {
+            Set<Range<?>> rs = (((RangeSet) payload).asRanges());
+            buffer.writeInt(rs.size());
+            rs.stream().forEach(x -> {
+                buffer.writeBoolean(x.upperBoundType() == BoundType.CLOSED);
+                serialize(buffer, x.upperEndpoint());
+                buffer.writeBoolean(x.upperBoundType() == BoundType.CLOSED);
+                serialize(buffer, x.lowerEndpoint());
+            });
+        }
         else if (payload instanceof Map) {
             Map<?,?> map = (Map<?,?>) payload;
             buffer.writeInt(map.size());
@@ -212,11 +257,20 @@ public interface ICorfuPayload<T> {
                 serialize(buffer, x);
             });
         }
+        else if (payload instanceof List) {
+            List<?> list = (List<?>) payload;
+            buffer.writeInt(list.size());
+            list.stream().forEach(x -> {
+                serialize(buffer, x);
+            });
+        }
         // and if its a bytebuf
         else if (payload instanceof ByteBuf) {
-            int bytes = ((ByteBuf) payload).readableBytes();
+            ByteBuf b = ((ByteBuf) payload).slice();
+            b.resetReaderIndex();
+            int bytes = b.readableBytes();
             buffer.writeInt(bytes);
-            buffer.writeBytes((ByteBuf)payload);
+            buffer.writeBytes(b, bytes);
         }
         else {
             throw new RuntimeException("Unknown class " + payload.getClass()

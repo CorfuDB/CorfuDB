@@ -97,13 +97,23 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.BACKPOINTER_MAP, backpointerMap);
     }
 
+    default void setGlobalAddress(Long address) {
+        getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);
+    }
+
+    @SuppressWarnings("unchecked")
+    default Long getGlobalAddress() {
+        return (Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS);
+    }
+
     @RequiredArgsConstructor
     public enum LogUnitMetadataType implements ITypedEnum {
         STREAM(0, new TypeToken<Set<UUID>>() {}),
         RANK(1, TypeToken.of(Long.class)),
         STREAM_ADDRESS(2, TypeToken.of(Long.class)),
-        BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {});
-
+        BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
+        GLOBAL_ADDRESS(4, TypeToken.of(Long.class))
+        ;
         final int type;
         @Getter
         final TypeToken<?> componentType;

@@ -5,6 +5,7 @@ import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -87,8 +88,8 @@ public class ObjectsViewTest extends AbstractViewTest {
         String b = smrMap.get("a");
         smrMap.put("b", b);
         StreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("map a"));
-        ILogUnitEntry rr = sv.read();
-        sv.write(rr.getPayload());
+        LogData rr = sv.read();
+        sv.write(rr.getPayload(getRuntime()));
         assertThatThrownBy(() -> {
             r.getObjectsView().TXEnd();
         }).isInstanceOf(TransactionAbortedException.class);
@@ -107,12 +108,12 @@ public class ObjectsViewTest extends AbstractViewTest {
         // The transaction stream should have two transaction entries, one for the first
         // failed transaction and the other for successful transaction
         StreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
-        ILogUnitEntry[] txns = txStream.readTo(Long.MAX_VALUE);
+        LogData[] txns = txStream.readTo(Long.MAX_VALUE);
         assertThat(txns.length).isEqualTo(2);
-        assertThat(txns[0].getLogEntry().getType()).isEqualTo(LogEntry.LogEntryType.TX);
-        assertThat(txns[1].getLogEntry().getType()).isEqualTo(LogEntry.LogEntryType.TX);
-        TXEntry tx1 = (TXEntry)txns[0].getLogEntry();
-        TXEntry tx2 = (TXEntry)txns[1].getLogEntry();
+        assertThat(txns[0].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.TX);
+        assertThat(txns[1].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.TX);
+        TXEntry tx1 = (TXEntry)txns[0].getLogEntry(getRuntime());
+        TXEntry tx2 = (TXEntry)txns[1].getLogEntry(getRuntime());
         assertThat(tx1.isAborted()).isEqualTo(true);
         assertThat(tx2.isAborted()).isEqualTo(false);
     }

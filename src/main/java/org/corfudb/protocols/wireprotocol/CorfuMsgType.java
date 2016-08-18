@@ -49,8 +49,8 @@ public enum CorfuMsgType {
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}, LogUnitServer.class),
-    READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
-    READ_RESPONSE(32, TypeToken.of(LogUnitReadResponseMsg.class), LogUnitServer.class),
+    READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}, LogUnitServer.class),
+    READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}, LogUnitServer.class),
     TRIM(33, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}, LogUnitServer.class),
     FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     FORCE_GC(35, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
@@ -58,8 +58,6 @@ public enum CorfuMsgType {
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     STREAM_TOKEN(38, new TypeToken<CorfuPayloadMsg<UUID>>() {}, LogUnitServer.class),
     STREAM_TOKEN_RESPONSE(39, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
-    READ_RANGE(40, TypeToken.of(CorfuRangeMsg.class), LogUnitServer.class),
-    READ_RANGE_RESPONSE(41, TypeToken.of(LogUnitReadRangeResponseMsg.class), LogUnitServer.class),
 
     // Logging Unit Error Codes
     WRITE_OK(50, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
