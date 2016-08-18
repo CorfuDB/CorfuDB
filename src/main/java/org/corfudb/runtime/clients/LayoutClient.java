@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -29,17 +30,17 @@ public class LayoutClient implements IClient {
      * The messages this client should handle.
      */
     @Getter
-    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST)
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE)
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE)
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP)
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_NOBOOTSTRAP)
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK)
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_REJECT)
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT)
-                    .add(CorfuMsg.CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP)
+    public final Set<CorfuMsgType> HandledTypes =
+            new ImmutableSet.Builder<CorfuMsgType>()
+                    .add(CorfuMsgType.LAYOUT_REQUEST)
+                    .add(CorfuMsgType.LAYOUT_RESPONSE)
+                    .add(CorfuMsgType.LAYOUT_PREPARE)
+                    .add(CorfuMsgType.LAYOUT_BOOTSTRAP)
+                    .add(CorfuMsgType.LAYOUT_NOBOOTSTRAP)
+                    .add(CorfuMsgType.LAYOUT_PREPARE_ACK)
+                    .add(CorfuMsgType.LAYOUT_PREPARE_REJECT)
+                    .add(CorfuMsgType.LAYOUT_PROPOSE_REJECT)
+                    .add(CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP)
                     .build();
 
     @Setter
@@ -88,7 +89,7 @@ public class LayoutClient implements IClient {
      */
     public CompletableFuture<Layout> getLayout() {
         return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
+                new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
     }
 
     /**
@@ -100,7 +101,7 @@ public class LayoutClient implements IClient {
     public CompletableFuture<Boolean>  bootstrapLayout(Layout l)
     {
         return router.sendMessageAndGetCompletable(
-                new LayoutMsg(l, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
+                new LayoutMsg(l, CorfuMsgType.LAYOUT_BOOTSTRAP));
     }
 
     /**
@@ -113,7 +114,7 @@ public class LayoutClient implements IClient {
     public CompletableFuture<LayoutPrepareResponse> prepare(long rank)
     {
         return router.sendMessageAndGetCompletable(
-                new LayoutRankMsg(null, rank, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE)
+                new LayoutRankMsg(null, rank, CorfuMsgType.LAYOUT_PREPARE)
         );
     }
 
@@ -129,7 +130,7 @@ public class LayoutClient implements IClient {
     public CompletableFuture<Boolean> propose(long rank, Layout layout)
     {
         return router.sendMessageAndGetCompletable(
-                new LayoutRankMsg(layout, rank, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE)
+                new LayoutRankMsg(layout, rank, CorfuMsgType.LAYOUT_PROPOSE)
         );
     }
 
@@ -143,7 +144,7 @@ public class LayoutClient implements IClient {
     public CompletableFuture<Boolean> committed(long rank, Layout layout)
     {
         return router.sendMessageAndGetCompletable(
-                new LayoutRankMsg(layout, rank, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED)
+                new LayoutRankMsg(layout, rank, CorfuMsgType.LAYOUT_COMMITTED)
         );
     }
 

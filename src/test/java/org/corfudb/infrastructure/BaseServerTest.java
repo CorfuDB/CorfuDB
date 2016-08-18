@@ -1,9 +1,8 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
-import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -29,26 +28,15 @@ public class BaseServerTest extends AbstractServerTest {
 
     @Test
     public void testPing() {
-        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
+        sendMessage(new CorfuMsg(CorfuMsgType.PING));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.PONG);
-    }
-
-    @Test
-    public void canSetServerEpoch() {
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsg.CorfuMsgType.SET_EPOCH, 6L));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
-        assertThat(getLastMessage().getEpoch())
-                .isEqualTo(6L);
-
+                .isEqualTo(CorfuMsgType.PONG);
     }
 
     @Test
     public void shutdownServerDoesNotRespond() {
         server.shutdown();
-        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
+        sendMessage(new CorfuMsg(CorfuMsgType.PING));
         assertThat(getLastMessage())
                 .isNull();
     }

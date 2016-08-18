@@ -7,7 +7,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
 
@@ -30,7 +31,7 @@ public class TestServerRouter implements IServerRouter {
     public List<CorfuMsg> responseMessages;
 
     @Getter
-    public Map<CorfuMsg.CorfuMsgType, AbstractServer> handlerMap;
+    public Map<CorfuMsgType, AbstractServer> handlerMap;
 
     public List<TestRule> rules;
 
@@ -74,7 +75,7 @@ public class TestServerRouter implements IServerRouter {
     @Override
     public void addServer(AbstractServer server) {
         // Iterate through all types of CorfuMsgType, registering the handler
-        Arrays.<CorfuMsg.CorfuMsgType>stream(CorfuMsg.CorfuMsgType.values())
+        Arrays.<CorfuMsgType>stream(CorfuMsgType.values())
                 .forEach(x -> {
                     if (x.handler.isInstance(server)) {
                         handlerMap.put(x, server);
@@ -95,7 +96,7 @@ public class TestServerRouter implements IServerRouter {
      */
     public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
         if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverEpoch) {
-            sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
+            sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
                     getServerEpoch()));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), serverEpoch, msg);

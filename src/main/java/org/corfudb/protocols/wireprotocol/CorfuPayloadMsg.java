@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.lang.reflect.ParameterizedType;
 
@@ -10,13 +11,14 @@ import java.lang.reflect.ParameterizedType;
  * payload.
  *
  * T should be either of a primitive boxed type (Long, Integer, etc)
- * or of CorfuPayload.
+ * or of ICorfuPayload.
  *
  * NEVER, EVER use this class as a raw type. This class DEPENDS on
  * the generic captured at runtime by CorfuMsg (via TypeToken).
  *
  * Created by mwei on 8/1/16.
  */
+@NoArgsConstructor
 public class CorfuPayloadMsg<T> extends CorfuMsg {
 
     /**
@@ -39,7 +41,7 @@ public class CorfuPayloadMsg<T> extends CorfuMsg {
     @Override
     public void serialize(ByteBuf buffer) {
         super.serialize(buffer);
-        CorfuPayload.serialize(buffer, payload);
+        ICorfuPayload.serialize(buffer, payload);
     }
 
     /**
@@ -49,8 +51,9 @@ public class CorfuPayloadMsg<T> extends CorfuMsg {
      * @param buffer
      */
     @Override
+    @SuppressWarnings("unchecked")
     public void fromBuffer(ByteBuf buffer) {
-        CorfuPayload.fromBuffer(buf,
+        payload = (T) ICorfuPayload.fromBuffer(buffer,
                 (Class)((ParameterizedType)msgType.messageType.getType())
                         .getActualTypeArguments()[0]);
     }

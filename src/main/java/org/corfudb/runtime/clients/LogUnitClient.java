@@ -6,16 +6,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuRangeMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitFillHoleMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitGCIntervalMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadRangeResponseMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadRequestMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
-import org.corfudb.protocols.wireprotocol.LogUnitTrimMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
@@ -36,24 +28,24 @@ public class LogUnitClient implements IClient {
      * The messages this client should handle.
      */
     @Getter
-    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
-                    .add(CorfuMsg.CorfuMsgType.WRITE)
-                    .add(CorfuMsg.CorfuMsgType.READ_REQUEST)
-                    .add(CorfuMsg.CorfuMsgType.READ_RESPONSE)
-                    .add(CorfuMsg.CorfuMsgType.TRIM)
-                    .add(CorfuMsg.CorfuMsgType.FILL_HOLE)
-                    .add(CorfuMsg.CorfuMsgType.FORCE_GC)
-                    .add(CorfuMsg.CorfuMsgType.GC_INTERVAL)
-                    .add(CorfuMsg.CorfuMsgType.FORCE_COMPACT)
-                    .add(CorfuMsg.CorfuMsgType.READ_RANGE)
-                    .add(CorfuMsg.CorfuMsgType.READ_RANGE_RESPONSE)
+    public final Set<CorfuMsgType> HandledTypes =
+            new ImmutableSet.Builder<CorfuMsgType>()
+                    .add(CorfuMsgType.WRITE)
+                    .add(CorfuMsgType.READ_REQUEST)
+                    .add(CorfuMsgType.READ_RESPONSE)
+                    .add(CorfuMsgType.TRIM)
+                    .add(CorfuMsgType.FILL_HOLE)
+                    .add(CorfuMsgType.FORCE_GC)
+                    .add(CorfuMsgType.GC_INTERVAL)
+                    .add(CorfuMsgType.FORCE_COMPACT)
+                    .add(CorfuMsgType.READ_RANGE)
+                    .add(CorfuMsgType.READ_RANGE_RESPONSE)
 
-                    .add(CorfuMsg.CorfuMsgType.ERROR_OK)
-                    .add(CorfuMsg.CorfuMsgType.ERROR_TRIMMED)
-                    .add(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE)
-                    .add(CorfuMsg.CorfuMsgType.ERROR_OOS)
-                    .add(CorfuMsg.CorfuMsgType.ERROR_RANK)
+                    .add(CorfuMsgType.ERROR_OK)
+                    .add(CorfuMsgType.ERROR_TRIMMED)
+                    .add(CorfuMsgType.ERROR_OVERWRITE)
+                    .add(CorfuMsgType.ERROR_OOS)
+                    .add(CorfuMsgType.ERROR_RANK)
                     .build();
     @Setter
     @Getter
@@ -147,7 +139,8 @@ public class LogUnitClient implements IClient {
      * completes.
      */
     public CompletableFuture<ReadResult> read(long address) {
-        return router.sendMessageAndGetCompletable(new LogUnitReadRequestMsg(address));
+        return router.sendMessageAndGetCompletable(new CorfuPayloadMsg<>
+                (CorfuMsgType.READ_REQUEST, address));
     }
 
     /**
@@ -157,8 +150,8 @@ public class LogUnitClient implements IClient {
      * @param prefix The prefix of the stream, as a global physical offset, to trim.
      */
     public void trim(UUID stream, long prefix) {
-
-        router.sendMessage(new LogUnitTrimMsg(prefix, stream));
+        router.sendMessage(new CorfuPayloadMsg<>
+                (CorfuMsgType.TRIM, new TrimRequest(stream, prefix)));
     }
 
     /**
@@ -167,21 +160,22 @@ public class LogUnitClient implements IClient {
      * @param address The address to fill a hole at.
      */
     public CompletableFuture<Boolean> fillHole(long address) {
-        return router.sendMessageAndGetCompletable(new LogUnitFillHoleMsg(address));
+        return router.sendMessageAndGetCompletable(
+                new CorfuPayloadMsg<>(CorfuMsgType.FILL_HOLE, address));
     }
 
     /**
      * Force the garbage collector to begin garbage collection.
      */
     public void forceGC() {
-        router.sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.FORCE_GC));
+        router.sendMessage(new CorfuMsg(CorfuMsgType.FORCE_GC));
     }
 
     /**
      * Force the compactor to recalculate the contiguous tail.
      */
     public void forceCompact() {
-        router.sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.FORCE_COMPACT));
+        router.sendMessage(new CorfuMsg(CorfuMsgType.FORCE_COMPACT));
     }
 
     /**
@@ -190,7 +184,7 @@ public class LogUnitClient implements IClient {
      * @param addresses The addresses to read.
      */
     public CompletableFuture<Map<Long, ReadResult>> readRange(RangeSet<Long> addresses) {
-        return router.sendMessageAndGetCompletable(new CorfuRangeMsg(CorfuMsg.CorfuMsgType.READ_RANGE, addresses));
+        return router.sendMessageAndGetCompletable(new CorfuRangeMsg(CorfuMsgType.READ_RANGE, addresses));
     }
 
     /**
@@ -199,7 +193,7 @@ public class LogUnitClient implements IClient {
      * @param millis The new garbage collection interval, in milliseconds.
      */
     public void setGCInterval(long millis) {
-        router.sendMessage(new LogUnitGCIntervalMsg(millis));
+        router.sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.GC_INTERVAL, millis));
     }
 
 

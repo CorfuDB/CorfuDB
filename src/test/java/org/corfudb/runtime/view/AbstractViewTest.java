@@ -4,7 +4,7 @@ import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.*;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
@@ -188,7 +188,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .forEach(e -> {
                     e.getValue().layoutServer.reset();
                     e.getValue().layoutServer
-                            .handleMessage(new LayoutMsg(l, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP),
+                            .handleMessage(new LayoutMsg(l, CorfuMsgType.LAYOUT_BOOTSTRAP),
                                     null, e.getValue().serverRouter);
                 });
     }

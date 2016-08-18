@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.junit.Test;
@@ -163,7 +164,7 @@ public class StreamViewTest extends AbstractViewTest {
         sv.write(testPayload);
 
         //generate a stream hole
-        SequencerClient.TokenResponse tr =
+        TokenResponse tr =
                 r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
         r.getAddressSpaceView().fillHole(tr.getToken());
 

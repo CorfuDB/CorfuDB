@@ -7,6 +7,7 @@ import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -85,10 +86,10 @@ public class StreamView implements AutoCloseable {
      *                              on a previously acquired token.
      * @return The address this object was written at.
      */
-    public long acquireAndWrite(Object object, Function<SequencerClient.TokenResponse, Boolean> acquisitionCallback,
-                                Function<SequencerClient.TokenResponse, Boolean> deacquisitionCallback) {
+    public long acquireAndWrite(Object object, Function<TokenResponse, Boolean> acquisitionCallback,
+                                Function<TokenResponse, Boolean> deacquisitionCallback) {
         while (true) {
-            SequencerClient.TokenResponse tokenResponse =
+            TokenResponse tokenResponse =
                     runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
             long token = tokenResponse.getToken();
             log.trace("Write[{}]: acquired token = {}", streamID, token);

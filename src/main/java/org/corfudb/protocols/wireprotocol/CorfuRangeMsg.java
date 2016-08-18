@@ -27,7 +27,7 @@ public class CorfuRangeMsg extends CorfuMsg {
         this.ranges = ranges;
     }
 
-    public CorfuRangeMsg(CorfuMsg.CorfuMsgType type, RangeSet<Long> ranges) {
+    public CorfuRangeMsg(CorfuMsgType type, RangeSet<Long> ranges) {
         this.msgType = type;
         this.ranges = ranges;
     }

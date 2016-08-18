@@ -5,9 +5,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
-import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.util.Utils;
 
 import java.io.File;
@@ -123,11 +121,11 @@ public class SequencerServer extends AbstractServer {
     public synchronized void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         switch (msg.getMsgType()) {
             case TOKEN_REQ: {
-                TokenRequestMsg req = (TokenRequestMsg) msg;
+                TokenRequest req = ((CorfuPayloadMsg<TokenRequest>) msg).getPayload();
                 if (req.getNumTokens() == 0) {
                     long max = 0L;
                     boolean hit = false;
-                    for (UUID id : req.getStreamIDs()) {
+                    for (UUID id : req.getStreams()) {
                         Long lastIssued = lastIssuedMap.get(id);
                         if (lastIssued != null) {
                             hit = true;
@@ -137,15 +135,16 @@ public class SequencerServer extends AbstractServer {
                     if (!hit) {
                         max = -1L; //no token ever issued
                     }
-                    if (req.getStreamIDs().size() == 0) {
+                    if (req.getStreams().size() == 0) {
                         max = globalIndex.get() - 1;
                     }
                     r.sendResponse(ctx, msg,
-                            new TokenResponseMsg(max, Collections.emptyMap()));
+                            new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_RES,
+                                    new TokenResponse(max, Collections.emptyMap())));
                 } else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
                     ImmutableMap.Builder<UUID, Long> mb = ImmutableMap.builder();
-                    for (UUID id : req.getStreamIDs()) {
+                    for (UUID id : req.getStreams()) {
                         lastIssuedMap.compute(id, (k, v) -> {
                             if (v == null) {
                                 mb.put(k, -1L);
@@ -156,7 +155,8 @@ public class SequencerServer extends AbstractServer {
                         });
                     }
                     r.sendResponse(ctx, msg,
-                            new TokenResponseMsg(thisIssue, mb.build()));
+                            new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_RES,
+                                    new TokenResponse(thisIssue, mb.build())));
                 }
             }
             break;

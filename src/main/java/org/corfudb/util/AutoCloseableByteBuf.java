@@ -2,7 +2,7 @@ package org.corfudb.util;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufProcessor;
+import io.netty.util.ByteProcessor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 import java.nio.charset.Charset;
@@ -68,6 +69,16 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     @Override
     public boolean isDirect() {
         return buf.isDirect();
+    }
+
+    @Override
+    public boolean isReadOnly() {
+        return buf.isReadOnly();
+    }
+
+    @Override
+    public ByteBuf asReadOnly() {
+        return buf.asReadOnly();
     }
 
     @Override
@@ -196,8 +207,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public short getShortLE(int i) {
+        return buf.getShortLE(i);
+    }
+
+    @Override
     public int getUnsignedShort(int i) {
         return buf.getUnsignedShort(i);
+    }
+
+    @Override
+    public int getUnsignedShortLE(int i) {
+        return buf.getUnsignedShortLE(i);
     }
 
     @Override
@@ -206,8 +227,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public int getMediumLE(int i) {
+        return buf.getMediumLE(i);
+    }
+
+    @Override
     public int getUnsignedMedium(int i) {
         return buf.getUnsignedMedium(i);
+    }
+
+    @Override
+    public int getUnsignedMediumLE(int i) {
+        return buf.getUnsignedMediumLE(i);
     }
 
     @Override
@@ -216,13 +247,28 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public int getIntLE(int i) {
+        return buf.getIntLE(i);
+    }
+
+    @Override
     public long getUnsignedInt(int i) {
+        return buf.getUnsignedInt(i);
+    }
+
+    @Override
+    public long getUnsignedIntLE(int i) {
         return buf.getUnsignedInt(i);
     }
 
     @Override
     public long getLong(int i) {
         return buf.getLong(i);
+    }
+
+    @Override
+    public long getLongLE(int i) {
+        return buf.getLongLE(i);
     }
 
     @Override
@@ -281,6 +327,16 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public int getBytes(int i, FileChannel fileChannel, long l, int i1) throws IOException {
+        return buf.getBytes(i, fileChannel, l, i1);
+    }
+
+    @Override
+    public CharSequence getCharSequence(int i, int i1, Charset charset) {
+        return buf.getCharSequence(i, i1, charset);
+    }
+
+    @Override
     public ByteBuf setBoolean(int i, boolean b) {
         return buf.setBoolean(i, b);
     }
@@ -296,8 +352,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public ByteBuf setShortLE(int i, int i1) {
+        return buf.setShortLE(i, i1);
+    }
+
+    @Override
     public ByteBuf setMedium(int i, int i1) {
         return buf.setMedium(i, i1);
+    }
+
+    @Override
+    public ByteBuf setMediumLE(int i, int i1) {
+        return buf.setMediumLE(i, i1);
     }
 
     @Override
@@ -306,8 +372,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public ByteBuf setIntLE(int i, int i1) {
+        return buf.setIntLE(i, i1);
+    }
+
+    @Override
     public ByteBuf setLong(int i, long l) {
         return buf.setLong(i, l);
+    }
+
+    @Override
+    public ByteBuf setLongLE(int i, long l) {
+        return buf.setLongLE(i, l);
     }
 
     @Override
@@ -366,8 +442,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public int setBytes(int i, FileChannel fileChannel, long l, int i1) throws IOException {
+        return buf.setBytes(i, fileChannel , l, i1);
+    }
+
+    @Override
     public ByteBuf setZero(int i, int i1) {
         return buf.setZero(i, i1);
+    }
+
+    @Override
+    public int setCharSequence(int i, CharSequence charSequence, Charset charset) {
+        return buf.setCharSequence(i, charSequence, charset);
     }
 
     @Override
@@ -391,8 +477,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public short readShortLE() {
+        return buf.readShortLE();
+    }
+
+    @Override
     public int readUnsignedShort() {
         return buf.readUnsignedShort();
+    }
+
+    @Override
+    public int readUnsignedShortLE() {
+        return buf.readUnsignedShortLE();
     }
 
     @Override
@@ -401,8 +497,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public int readMediumLE() {
+        return buf.readMediumLE();
+    }
+
+    @Override
     public int readUnsignedMedium() {
         return buf.readUnsignedMedium();
+    }
+
+    @Override
+    public int readUnsignedMediumLE() {
+        return buf.readUnsignedMediumLE();
     }
 
     @Override
@@ -411,13 +517,28 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public int readIntLE() {
+        return buf.readIntLE();
+    }
+
+    @Override
     public long readUnsignedInt() {
         return buf.readUnsignedInt();
     }
 
     @Override
+    public long readUnsignedIntLE() {
+        return buf.readUnsignedIntLE();
+    }
+
+    @Override
     public long readLong() {
         return buf.readLong();
+    }
+
+    @Override
+    public long readLongLE() {
+        return buf.readLongLE();
     }
 
     @Override
@@ -443,6 +564,11 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     @Override
     public ByteBuf readSlice(int i) {
         return buf.readSlice(i);
+    }
+
+    @Override
+    public ByteBuf readRetainedSlice(int i) {
+        return buf.readRetainedSlice(i);
     }
 
     @Override
@@ -486,6 +612,16 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public CharSequence readCharSequence(int i, Charset charset) {
+        return buf.readCharSequence(i, charset);
+    }
+
+    @Override
+    public int readBytes(FileChannel fileChannel, long l, int i) throws IOException {
+        return buf.readBytes(fileChannel, l, i);
+    }
+
+    @Override
     public ByteBuf skipBytes(int i) {
         return buf.skipBytes(i);
     }
@@ -506,8 +642,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public ByteBuf writeShortLE(int i) {
+        return buf.writeShortLE(i);
+    }
+
+    @Override
     public ByteBuf writeMedium(int i) {
         return buf.writeMedium(i);
+    }
+
+    @Override
+    public ByteBuf writeMediumLE(int i) {
+        return buf.writeMediumLE(i);
     }
 
     @Override
@@ -516,8 +662,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public ByteBuf writeIntLE(int i) {
+        return buf.writeIntLE(i);
+    }
+
+    @Override
     public ByteBuf writeLong(long l) {
         return buf.writeLong(l);
+    }
+
+    @Override
+    public ByteBuf writeLongLE(long l) {
+        return buf.writeLongLE(l);
     }
 
     @Override
@@ -576,8 +732,18 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public int writeBytes(FileChannel fileChannel, long l, int i) throws IOException {
+        return buf.writeBytes(fileChannel, l, i);
+    }
+
+    @Override
     public ByteBuf writeZero(int i) {
         return buf.writeZero(i);
+    }
+
+    @Override
+    public int writeCharSequence(CharSequence charSequence, Charset charset) {
+        return buf.writeCharSequence(charSequence, charset);
     }
 
     @Override
@@ -601,23 +767,23 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
-    public int forEachByte(ByteBufProcessor byteBufProcessor) {
-        return buf.forEachByte(byteBufProcessor);
+    public int forEachByte(ByteProcessor byteProcessor) {
+        return buf.forEachByte(byteProcessor);
     }
 
     @Override
-    public int forEachByte(int i, int i1, ByteBufProcessor byteBufProcessor) {
-        return buf.forEachByte(i, i1, byteBufProcessor);
+    public int forEachByte(int i, int i1, ByteProcessor byteProcessor) {
+        return buf.forEachByte(i, i1, byteProcessor);
     }
 
     @Override
-    public int forEachByteDesc(ByteBufProcessor byteBufProcessor) {
-        return buf.forEachByteDesc(byteBufProcessor);
+    public int forEachByteDesc(ByteProcessor byteProcessor) {
+        return buf.forEachByteDesc(byteProcessor);
     }
 
     @Override
-    public int forEachByteDesc(int i, int i1, ByteBufProcessor byteBufProcessor) {
-        return buf.forEachByteDesc(i, i1, byteBufProcessor);
+    public int forEachByteDesc(int i, int i1, ByteProcessor byteProcessor) {
+        return buf.forEachByteDesc(i, i1, byteProcessor);
     }
 
     @Override
@@ -636,13 +802,28 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     }
 
     @Override
+    public ByteBuf retainedSlice() {
+        return buf.retainedSlice();
+    }
+
+    @Override
     public ByteBuf slice(int i, int i1) {
         return buf.slice(i, i1);
     }
 
     @Override
+    public ByteBuf retainedSlice(int i, int i1) {
+        return buf.retainedSlice(i, i1);
+    }
+
+    @Override
     public ByteBuf duplicate() {
         return buf.duplicate();
+    }
+
+    @Override
+    public ByteBuf retainedDuplicate() {
+        return buf.retainedDuplicate();
     }
 
     @Override
@@ -756,5 +937,15 @@ public class AutoCloseableByteBuf extends ByteBuf implements AutoCloseable {
     @Override
     public ByteBuf retain() {
         return buf.retain();
+    }
+
+    @Override
+    public ByteBuf touch() {
+        return buf.touch();
+    }
+
+    @Override
+    public ByteBuf touch(Object o) {
+        return buf.touch(o);
     }
 }

@@ -6,10 +6,8 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -17,22 +15,14 @@ import org.corfudb.infrastructure.log.AbstractLocalLog;
 import org.corfudb.infrastructure.log.InMemoryLog;
 import org.corfudb.infrastructure.log.LogUnitEntry;
 import org.corfudb.infrastructure.log.RollingLog;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuRangeMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitFillHoleMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitGCIntervalMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadRangeResponseMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadRequestMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResultType;
-import org.corfudb.protocols.wireprotocol.LogUnitTrimMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
-import org.corfudb.util.CorfuMsgHandler;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
 import java.io.File;
+import java.lang.invoke.MethodHandles;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -79,41 +69,42 @@ public class LogUnitServer extends AbstractServer {
     /** Handler for the base server */
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
-            .addHandler(CorfuMsg.CorfuMsgType.WRITE, this::write)
-            .addHandler(CorfuMsg.CorfuMsgType.READ_REQUEST, this::read_normal)
-            .addHandler(CorfuMsg.CorfuMsgType.READ_RANGE, this::read_range)
-            .addHandler(CorfuMsg.CorfuMsgType.GC_INTERVAL, this::gc_interval)
-            .addHandler(CorfuMsg.CorfuMsgType.FORCE_GC,  this::force_gc)
-            .addHandler(CorfuMsg.CorfuMsgType.FILL_HOLE, this::fill_hole)
-            .addHandler(CorfuMsg.CorfuMsgType.TRIM, this::trim);
+                                            .generateHandlers(MethodHandles.lookup(), this);
 
-    private void read_normal(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+
+    @ServerHandler(type=CorfuMsgType.READ_REQUEST)
+    private void read_normal(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         read(msg, ctx, r);
     }
 
+    @ServerHandler(type=CorfuMsgType.READ_RANGE)
     private void read_range(CorfuRangeMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         read(msg, ctx, r);
     }
 
-    private void gc_interval(LogUnitGCIntervalMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        gcRetry.setRetryInterval(msg.getInterval());
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    @ServerHandler(type=CorfuMsgType.GC_INTERVAL)
+    private void gc_interval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        gcRetry.setRetryInterval(msg.getPayload());
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
+    @ServerHandler(type=CorfuMsgType.FORCE_GC)
     private void force_gc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         gcThread.interrupt();
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
-    private void fill_hole(LogUnitFillHoleMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        dataCache.get(msg.getAddress(), LogUnitEntry::new);
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    @ServerHandler(type=CorfuMsgType.FILL_HOLE)
+    private void fill_hole(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        dataCache.get(msg.getPayload(), LogUnitEntry::new);
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
-    private void trim(LogUnitTrimMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        trimMap.compute(msg.getStreamID(), (key, prev) ->
-                prev == null ? msg.getPrefix() : Math.max(prev, msg.getPrefix()));
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
+    @ServerHandler(type=CorfuMsgType.TRIM)
+    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
+                prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
     /**
@@ -228,9 +219,9 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming read request.
      */
-    public void read(LogUnitReadRequestMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("Read[{}]", msg.getAddress());
-        LogUnitEntry e = dataCache.get(msg.getAddress());
+    public void read(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("Read[{}]", msg.getPayload());
+        LogUnitEntry e = dataCache.get(msg.getPayload());
         if (e == null) {
             r.sendResponse(ctx, msg, new LogUnitReadResponseMsg(ReadResultType.EMPTY));
         } else if (e.isHole) {
@@ -260,6 +251,7 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming write request.
      */
+    @ServerHandler(type=CorfuMsgType.WRITE)
     public void write(LogUnitWriteMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         long address = msg.getAddress();
         log.trace("Write[{}]", address);
@@ -270,9 +262,9 @@ public class LogUnitServer extends AbstractServer {
         msg.getData().release();
         try {
             dataCache.put(e.getAddress(), e);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OK));
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ERROR_OK));
         } catch (Exception ex) {
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE));
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ERROR_OVERWRITE));
             e.getBuffer().release();
         }
     }

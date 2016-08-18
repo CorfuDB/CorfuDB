@@ -262,4 +262,13 @@ public class TestChannelContext implements ChannelHandlerContext {
     public <T> Attribute<T> attr(AttributeKey<T> attributeKey) {
         return null;
     }
+
+    /**
+     * @param attributeKey
+     * @deprecated
+     */
+    @Override
+    public <T> boolean hasAttr(AttributeKey<T> attributeKey) {
+        return false;
+    }
 }

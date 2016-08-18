@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -47,7 +48,7 @@ public class StreamsView {
     public StreamView copy(UUID source, UUID destination, long timestamp) {
         boolean written = false;
         while (!written) {
-            SequencerClient.TokenResponse tokenResponse =
+            TokenResponse tokenResponse =
                     runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
             if (!tokenResponse.getBackpointerMap().get(destination).equals(-1L)) {
                 try {
@@ -98,10 +99,10 @@ public class StreamsView {
      * @return The address this
      */
     public long acquireAndWrite(Set<UUID> streamIDs, Object object,
-                                Function<SequencerClient.TokenResponse, Boolean> acquisitionCallback,
-                                Function<SequencerClient.TokenResponse, Boolean> deacquisitionCallback) {
+                                Function<TokenResponse, Boolean> acquisitionCallback,
+                                Function<TokenResponse, Boolean> deacquisitionCallback) {
         while (true) {
-            SequencerClient.TokenResponse token =
+            TokenResponse token =
                     runtime.getSequencerView().nextToken(streamIDs, 1);
             log.trace("Write: acquired token = {}", token.getToken());
             if (acquisitionCallback != null) {

@@ -26,7 +26,7 @@ public class JSONPayloadMsg<T> extends CorfuMsg {
      */
     private String dataString;
 
-    public JSONPayloadMsg(T payload, CorfuMsg.CorfuMsgType type) {
+    public JSONPayloadMsg(T payload, CorfuMsgType type) {
         this.msgType = type;
         this.payload = payload;
     }

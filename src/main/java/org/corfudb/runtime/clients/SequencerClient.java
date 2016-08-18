@@ -5,9 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
-import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
+import org.corfudb.protocols.wireprotocol.*;
 
 import java.util.Map;
 import java.util.Set;
@@ -27,10 +25,10 @@ public class SequencerClient implements IClient {
      * The messages this client should handle.
      */
     @Getter
-    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
-                    .add(CorfuMsg.CorfuMsgType.TOKEN_REQ)
-                    .add(CorfuMsg.CorfuMsgType.TOKEN_RES)
+    public final Set<CorfuMsgType> HandledTypes =
+            new ImmutableSet.Builder<CorfuMsgType>()
+                    .add(CorfuMsgType.TOKEN_REQ)
+                    .add(CorfuMsgType.TOKEN_RES)
                     .build();
     @Setter
     @Getter
@@ -46,22 +44,15 @@ public class SequencerClient implements IClient {
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
         switch (msg.getMsgType()) {
             case TOKEN_RES:
-                TokenResponseMsg tmsg = ((TokenResponseMsg) msg);
-                router.completeRequest(msg.getRequestID(),
-                        new TokenResponse(tmsg.getToken(), tmsg.getBackpointerMap()));
+               CorfuPayloadMsg<TokenResponse> tmsg = ((CorfuPayloadMsg<TokenResponse>) msg);
+                router.completeRequest(msg.getRequestID(), tmsg.getPayload());
                 break;
         }
     }
 
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
         return router.sendMessageAndGetCompletable(
-                new TokenRequestMsg(streamIDs, numTokens));
-    }
-
-    @Data
-    public class TokenResponse {
-        public final Long token;
-        public final Map<UUID, Long> backpointerMap;
+                new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ, new TokenRequest(numTokens, streamIDs)));
     }
 
 }

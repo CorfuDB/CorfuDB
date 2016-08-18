@@ -2,8 +2,8 @@ package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.util.ClientMsgHandler;
-import org.corfudb.util.CorfuMsgHandler;
 
 import java.util.Set;
 
@@ -45,7 +45,7 @@ public interface IClient {
      *
      * @return The set of message types this client handles.
      */
-    default Set<CorfuMsg.CorfuMsgType> getHandledTypes() {
+    default Set<CorfuMsgType> getHandledTypes() {
         return getMsgHandler().getHandledTypes();
     }
 }

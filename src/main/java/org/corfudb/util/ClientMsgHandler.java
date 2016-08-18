@@ -1,8 +1,8 @@
 package org.corfudb.util;
 
 import io.netty.channel.ChannelHandlerContext;
-import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 
@@ -21,7 +21,7 @@ public class ClientMsgHandler {
     }
 
     /** The handler map. */
-    private Map<CorfuMsg.CorfuMsgType, ClientMsgHandler.Handler> handlerMap;
+    private Map<CorfuMsgType, ClientMsgHandler.Handler> handlerMap;
 
     /** The client. */
     private IClient client;
@@ -40,7 +40,7 @@ public class ClientMsgHandler {
      * @return                  This handler, to support chaining.
      */
     public <T extends CorfuMsg> ClientMsgHandler
-    addHandler(CorfuMsg.CorfuMsgType messageType, ClientMsgHandler.Handler<T> handler) {
+    addHandler(CorfuMsgType messageType, ClientMsgHandler.Handler<T> handler) {
             handlerMap.put(messageType, handler);
             return this;
     }
@@ -72,7 +72,7 @@ public class ClientMsgHandler {
      *
      * @return  The types this handler will handle.
      */
-    public Set<CorfuMsg.CorfuMsgType> getHandledTypes() {
+    public Set<CorfuMsgType> getHandledTypes() {
         return handlerMap.keySet();
     }
 }
