@@ -1,11 +1,11 @@
 package org.corfudb.infrastructure;
 
-import com.ericsson.otp.erlang.*;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.cmdlets.CmdletRouter;
+import org.corfudb.cmdlets.QuickCheckMode;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
@@ -125,17 +125,6 @@ public class LayoutServer extends AbstractServer {
     Layout todo_layout_source_kludge = null;
 
     /**
-     * TODO refactor/move to another class
-     */
-    private Thread erlNodeThread;
-
-    /**
-     * TODO refactor/move to another class
-     */
-    private static OtpNode otpNode = null;
-    private static Object otpNodeLock = new Object();
-
-    /**
      * A scheduler, which is used to schedule checkpoints and lease renewal
      */
     private final ScheduledExecutorService scheduler =
@@ -151,6 +140,7 @@ public class LayoutServer extends AbstractServer {
         this.serverContext = serverContext;
 
         reboot();
+        reset_part_2();
 
         // schedule config manager polling.
         if (! disableConfigMgrPolling) {
@@ -160,7 +150,7 @@ public class LayoutServer extends AbstractServer {
         // QuickCheck: Create the distributed Erlang message handling threads
         Object test_mode = opts.get("--quickcheck-test-mode");
         if (test_mode != null && (Boolean) test_mode) {
-            start_quickcheck_test_mode();
+            QuickCheckMode qm = new QuickCheckMode(opts);
         }
     }
 
@@ -169,7 +159,6 @@ public class LayoutServer extends AbstractServer {
     public synchronized void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (isShutdown()) return;
         if (r.getClass() == NettyServerRouter.class) {
-            System.out.printf("LayoutServer WHOA handleMessage: r's class = %s\n", r.getClass().toString());
             NettyServerRouter nsr = (NettyServerRouter) r;
             if (!nsr.validateEpoch(msg, ctx)) {
                 // RACE!  The epoch changed in between the epoch validation that
@@ -179,8 +168,6 @@ public class LayoutServer extends AbstractServer {
                 //        too late.  The appropriate reply has been sent to the client.
                 return;
             }
-        } else {
-            System.out.printf("LayoutServer handleMessage: r's class = %s\n", r.getClass().toString());
         }
         // This server has not been bootstrapped yet, ignore ALL requests except for LAYOUT_BOOTSTRAP
         if (getCurrentLayout() == null && !msg.getMsgType().equals(CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP)) {
@@ -248,6 +235,11 @@ public class LayoutServer extends AbstractServer {
             }
             */
         }
+        reset_part_2();
+        reboot();
+    }
+
+    private void reset_part_2() {
         if ((Boolean) opts.get("--single")) {
             String localAddress = opts.get("--address") + ":" + opts.get("<port>");
             String boot_msg = "Single-node mode requested, initializing layout with single log unit and sequencer at {}.";
@@ -273,7 +265,6 @@ public class LayoutServer extends AbstractServer {
                     0L
             ));
         }
-        reboot();
     }
 
     /**
@@ -282,7 +273,10 @@ public class LayoutServer extends AbstractServer {
     @Override
     public synchronized void reboot() {
         serverContext.resetDataStore();
-        System.out.printf("YO, reboot, my epoch = %d\n", serverContext.getServerEpoch());
+        if (serverContext.getServerRouter().getClass().toString().equals("class org.corfudb.infrastructure.TestServerRouter") &&
+                (Boolean) opts.get("--single") && (Boolean) opts.get("--memory")) {
+            reset_part_2();
+        }
     }
 
     // Helper Methods
@@ -290,10 +284,13 @@ public class LayoutServer extends AbstractServer {
     public synchronized  void handleMessageLayoutRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (msg.getEpoch() <= serverContext.getServerEpoch()) {
             r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE));
+            return;
         }
         // else the client is somehow ahead of the server.
         //TODO figure out a strategy to deal with this situation
-        log.warn("Message Epoch {} ahead of Server epoch {}", msg.getEpoch(), serverContext.getServerConfig());
+        // Very odd ... if we don't send any response here, we hang the OTP mailbox thread.
+        long serverEpoch = serverContext.getServerEpoch();
+        r.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH, serverEpoch));
     }
 
     /**
@@ -424,15 +421,11 @@ public class LayoutServer extends AbstractServer {
     // TODO how do reject the older epoch commits, should it be an explicit NACK.
     public synchronized void handleMessageLayoutCommit(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         long serverEpoch = getServerEpoch();
-        if(msg.getEpoch() < serverEpoch) {
+        if(msg.getLayout().getEpoch() <= serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }
         Layout commitLayout = msg.getLayout();
-        /*
-        deletePhase1Rank();
-        deletePhase2Data();
-        */
         setCurrentLayout(commitLayout);
         setServerEpoch(commitLayout.getEpoch());
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsg.CorfuMsgType.ACK));
@@ -766,122 +759,6 @@ public class LayoutServer extends AbstractServer {
             } else {
                 log.debug("No status change");
             }
-        }
-    }
-
-    private void start_quickcheck_test_mode() {
-        synchronized (otpNodeLock) {
-            if (otpNode == null) {
-                int port = Integer.parseInt((String) opts.get("<port>"));
-                String nodename = "corfu-" + port;
-                try {
-                    otpNode = new OtpNode(nodename);
-
-                    System.out.println("\n\n***************** Creating lots of OtpNode Threads ************\n\n");
-                    Thread erlNodeThread0 = new Thread(this::runErlMbox0);
-                    erlNodeThread0.start();
-                    Thread erlNodeThread1 = new Thread(this::runErlMbox1);
-                    erlNodeThread1.start();
-                    Thread erlNodeThread2 = new Thread(this::runErlMbox2);
-                    erlNodeThread2.start();
-                    Thread erlNodeThread3 = new Thread(this::runErlMbox3);
-                    erlNodeThread3.start();
-                    Thread erlNodeThread4 = new Thread(this::runErlMbox4);
-                    erlNodeThread4.start();
-                    Thread erlNodeThread5 = new Thread(this::runErlMbox5);
-                    erlNodeThread5.start();
-                    Thread erlNodeThread6 = new Thread(this::runErlMbox6);
-                    erlNodeThread6.start();
-                    Thread erlNodeThread7 = new Thread(this::runErlMbox7);
-                    erlNodeThread7.start();
-                    Thread erlNodeThread8 = new Thread(this::runErlMbox8);
-                    erlNodeThread8.start();
-                    Thread erlNodeThread9 = new Thread(this::runErlMbox9);
-                    erlNodeThread9.start();
-                    Thread erlNodeThread10 = new Thread(this::runErlMbox10);
-                    erlNodeThread10.start();
-                    Thread erlNodeThread11 = new Thread(this::runErlMbox11);
-                    erlNodeThread11.start();
-                    Thread erlNodeThread12 = new Thread(this::runErlMbox12);
-                    erlNodeThread12.start();
-                    Thread erlNodeThread13 = new Thread(this::runErlMbox13);
-                    erlNodeThread13.start();
-                    Thread erlNodeThread14 = new Thread(this::runErlMbox14);
-                    erlNodeThread14.start();
-                    Thread erlNodeThread15 = new Thread(this::runErlMbox15);
-                    erlNodeThread15.start();
-                } catch (IOException e) {
-                    log.info("Error creating OtpNode {}: {}", nodename, e);
-                }
-            }
-        }
-    }
-
-    private void runErlMbox0() { runErlMbox(0); }
-    private void runErlMbox1() { runErlMbox(1); }
-    private void runErlMbox2() { runErlMbox(2); }
-    private void runErlMbox3() { runErlMbox(3); }
-    private void runErlMbox4() { runErlMbox(4); }
-    private void runErlMbox5() { runErlMbox(5); }
-    private void runErlMbox6() { runErlMbox(6); }
-    private void runErlMbox7() { runErlMbox(7); }
-    private void runErlMbox8() { runErlMbox(8); }
-    private void runErlMbox9() { runErlMbox(9); }
-    private void runErlMbox10() { runErlMbox(10); }
-    private void runErlMbox11() { runErlMbox(11); }
-    private void runErlMbox12() { runErlMbox(12); }
-    private void runErlMbox13() { runErlMbox(13); }
-    private void runErlMbox14() { runErlMbox(14); }
-    private void runErlMbox15() { runErlMbox(15); }
-
-    private void runErlMbox(int num) {
-        Thread.currentThread().setName("DistErl-" + num);
-        try {
-            OtpMbox mbox = otpNode.createMbox("cmdlet" + num);
-
-            OtpErlangObject o;
-            OtpErlangTuple msg;
-            OtpErlangPid from;
-            CmdletRouter cr = new CmdletRouter();
-
-            while (true) {
-                try {
-                    o = mbox.receive();
-                    // System.err.print("{"); System.err.flush(); // Thread.sleep(100);
-                    if (o instanceof OtpErlangTuple) {
-                        msg = (OtpErlangTuple) o;
-                        from = (OtpErlangPid) msg.elementAt(0);
-                        OtpErlangObject id = msg.elementAt(1);
-                        OtpErlangList cmd = (OtpErlangList) msg.elementAt(2);
-                        String[] sopts = new String[cmd.elements().length];
-                        for (int i = 0; i < sopts.length; i++) {
-                            if (cmd.elementAt(i).getClass() == OtpErlangList.class) {
-                                // We're expecting a string always, but
-                                // the Erlang side will send an empty list
-                                // for a zero length string.
-                                sopts[i] = "";
-                            } else {
-                                sopts[i] = ((OtpErlangString) cmd.elementAt(i))
-                                    .stringValue();
-                            }
-                        }
-                        String[] res = cr.main2(sopts);
-                        OtpErlangObject[] reslist = new OtpErlangObject[res.length];
-                        for (int i = 0; i < res.length; i++) {
-                            reslist[i] = new OtpErlangString(res[i]);
-                        }
-                        OtpErlangList reply_reslist = new OtpErlangList(reslist);
-                        OtpErlangTuple reply = new OtpErlangTuple(new OtpErlangObject[] { id, reply_reslist });
-                        mbox.send(from, reply);
-                        // System.err.print("}"); System.err.flush();
-                    }
-                } catch (Exception e) {
-                    System.out.println("Qxx " + e);
-                    e.printStackTrace();
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Yo, bummer: " + e);
         }
     }
 }

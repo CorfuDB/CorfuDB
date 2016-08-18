@@ -197,6 +197,8 @@ public class SequencerServer extends AbstractServer {
 
     @Override
     public void reboot() {
+        lastIssuedMap = new ConcurrentHashMap<>();
+        globalIndex = new AtomicLong();
         long newIndex = Utils.parseLong(opts.get("--initial-token"));
         if (newIndex == -1) {
             if (!(Boolean) opts.get("--memory")) {

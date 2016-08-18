@@ -142,11 +142,6 @@ public class LayoutClient implements IClient {
      */
     public CompletableFuture<Boolean> committed(long rank, Layout layout)
     {
-        /*
-        LayoutRankMsg m = new LayoutRankMsg(layout, rank, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED);
-        m.setEpoch(layout == null ? 0 : layout.getEpoch());
-        return router.sendMessageAndGetCompletable(m);
-        */
         return router.sendMessageAndGetCompletable(
                 new LayoutRankMsg(layout, rank, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED)
         );

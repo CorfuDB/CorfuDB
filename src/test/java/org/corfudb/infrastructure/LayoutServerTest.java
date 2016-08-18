@@ -395,9 +395,9 @@ public class LayoutServerTest extends AbstractServerTest {
         LayoutServer s1 = getDefaultServer(serviceDir);
 
         setServer(s1);
-        Layout l100 = TestLayoutBuilder.single(9000);
-        l100.setEpoch(100);
-        bootstrapServer(l100);
+        Layout l99 = TestLayoutBuilder.single(9000);
+        l99.setEpoch(99);
+        bootstrapServer(l99);
 
         // Reboot, then check that our epoch 100 layout is still there.
         s1.reboot();
@@ -406,14 +406,12 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
         assertThat(((LayoutMsg) getLastMessage()).getLayout().getEpoch())
-                .isEqualTo(100);
+                .isEqualTo(99);
         s1.shutdown();
 
         for (int i = 0; i < 16; i++) {
-            String serviceDir2 = getTempDir();
-            LayoutServer s2 = getDefaultServer(serviceDir2);
+            LayoutServer s2 = getDefaultServer(serviceDir);
             setServer(s2);
-            bootstrapServer(l100);
             commitReturnsAck(s2, i, 100);
             s2.shutdown();
         }
@@ -425,27 +423,39 @@ public class LayoutServerTest extends AbstractServerTest {
     private void commitReturnsAck(LayoutServer s1, Integer reboot, long baseEpoch) {
         if ((reboot & 1) > 0) { s1.reboot(); }
 
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
+        LayoutRankMsg lrm1 = new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE);
+        lrm1.setEpoch(baseEpoch + reboot - 1);
+        sendMessage(lrm1);
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
         if ((reboot & 2) > 0) { s1.reboot(); }
 
         Layout layout = TestLayoutBuilder.single(9000);
-        layout.setEpoch(baseEpoch + reboot + 1);
-        sendMessage(new LayoutRankMsg(layout, 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        layout.setEpoch(baseEpoch + reboot);
+        LayoutRankMsg lrm2 = new LayoutRankMsg(layout, 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE);
+        lrm2.setEpoch(baseEpoch + reboot - 1);
+        sendMessage(lrm2);
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
         if ((reboot & 4) > 0) { s1.reboot(); }
 
-        // sendMessage(new LayoutRankMsg(null, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
-        LayoutRankMsg foo = new LayoutRankMsg(layout, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED);
-        sendMessage(foo);
+        LayoutRankMsg lrm3 = new LayoutRankMsg(layout, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED);
+        lrm3.setEpoch(baseEpoch + reboot - 1);
+        sendMessage(lrm3);
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
         if ((reboot & 8) > 0) {s1.reboot(); }
-        sendMessage(new LayoutRankMsg(layout, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
+        lrm3.setEpoch(baseEpoch + reboot);
+        sendMessage(lrm3);
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.NACK);
+                .isEqualTo(CorfuMsg.CorfuMsgType.WRONG_EPOCH);
+
+        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
+        assertThat(((LayoutMsg) getLastMessage()).getLayout())
+                .isEqualTo(layout);
+
     }
 
 }

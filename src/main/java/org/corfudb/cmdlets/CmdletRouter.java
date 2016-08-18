@@ -1,5 +1,6 @@
 package org.corfudb.cmdlets;
 
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.corfudb.util.Utils;
 
 import java.io.File;
@@ -54,7 +55,7 @@ public class CmdletRouter {
                     String[] res = ((ICmdlet) cmdlet.getConstructor().newInstance()).main2(Arrays.copyOfRange(args, 1, args.length));
                     return res;
                 } catch (Exception e) {
-                    return ICmdlet.cmdlet.err("exception", e.getClass().getSimpleName(), e.getMessage());
+                    return ICmdlet.cmdlet.err("exception", e.getClass().getSimpleName(), ExceptionUtils.getStackTrace(e));
                 }
             }
         } catch (ClassNotFoundException cnfe) {

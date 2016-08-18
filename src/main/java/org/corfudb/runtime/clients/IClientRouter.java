@@ -110,6 +110,7 @@ public interface IClientRouter {
      * Stops routing requests.
      */
     void stop();
+    void stop(boolean shutdown_p);
 
     /**
      * Get the current epoch.

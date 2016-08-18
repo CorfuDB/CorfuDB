@@ -12,7 +12,7 @@ import java.util.UUID;
  */
 public class InMemoryLog extends AbstractLocalLog {
 
-    private final Map<Long, LogUnitEntry> cache;
+    private Map<Long, LogUnitEntry> cache;
 
     public InMemoryLog(long start, long end) {
         super(start, end, "", true);
@@ -37,5 +37,9 @@ public class InMemoryLog extends AbstractLocalLog {
 
     protected RangeSet<Long> backendStreamRead(UUID streamID) {
         return TreeRangeSet.create();
+    }
+
+    public void close() {
+        cache = new HashMap();
     }
 }

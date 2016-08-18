@@ -46,7 +46,15 @@ import static org.fusesource.jansi.Ansi.ansi;
 @Slf4j
 public class CorfuServer {
     @Getter
+    private static SequencerServer sequencerServer;
+
+    @Getter
     private static LayoutServer layoutServer;
+
+    @Getter
+    private static LogUnitServer logUnitServer;
+
+    public static boolean serverRunning_p = false;
 
     /**
      * This string defines the command line arguments,
@@ -102,6 +110,7 @@ public class CorfuServer {
     }
 
     public static void main(String[] args) {
+        serverRunning_p = true;
 
         // Parse the options given, using docopt.
         Map<String, Object> opts =
@@ -165,10 +174,12 @@ public class CorfuServer {
         ServerContext serverContext = new ServerContext(opts, router);
 
         // Add each role to the router.
-        router.addServer(new SequencerServer(serverContext));
+        sequencerServer = new SequencerServer(serverContext);
+        router.addServer(sequencerServer);
         layoutServer = new LayoutServer(serverContext);
         router.addServer(layoutServer);
-        router.addServer(new LogUnitServer(serverContext));
+        logUnitServer = new LogUnitServer(serverContext);
+        router.addServer(logUnitServer);
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.
@@ -220,7 +231,6 @@ public class CorfuServer {
                     .childOption(ChannelOption.SO_REUSEADDR, true)
                     .childOption(ChannelOption.TCP_NODELAY, true)
                     .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                    .handler(new LoggingHandler(LogLevel.INFO))
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(io.netty.channel.socket.SocketChannel ch) throws Exception {
