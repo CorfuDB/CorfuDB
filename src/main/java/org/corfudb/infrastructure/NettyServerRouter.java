@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
@@ -32,25 +34,15 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
 
     BaseServer baseServer;
 
-    DataStore dataStore;
-
     /**
      * The epoch of this router. This is managed by the base server implementation.
      */
-    @Override
-    public long getServerEpoch() {
-        Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
-        return epoch == null ? 0 : epoch;
-    }
-
-    @Override
-    public void setServerEpoch(long serverEpoch) {
-        dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
-    }
+    @Getter
+    @Setter
+    long serverEpoch;
 
     public NettyServerRouter(Map<String, Object> opts) {
         handlerMap = new ConcurrentHashMap<>();
-        this.dataStore = new DataStore(opts);
         baseServer = new BaseServer();
         addServer(baseServer);
     }
@@ -95,11 +87,12 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      * @return True, if the epoch is correct, but false otherwise.
      */
     public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
-        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != getServerEpoch()) {
+        long serverEpoch = getServerEpoch();
+        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverEpoch) {
             sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH,
-                    getServerEpoch()));
+                    serverEpoch));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), getServerEpoch(), msg);
+                    msg.getEpoch(), serverEpoch, msg);
             return false;
         }
         return true;

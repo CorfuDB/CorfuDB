@@ -158,7 +158,7 @@ public class CorfuMsg {
         PING(0, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
         PONG(1, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
         RESET(2, TypeToken.of(CorfuResetMsg.class), BaseServer.class,  true),
-        SET_EPOCH(3, TypeToken.of(CorfuSetEpochMsg.class), BaseServer.class, true),
+        SET_EPOCH(3, TypeToken.of(CorfuSetEpochMsg.class), LayoutServer.class, true),
         ACK(4, TypeToken.of(CorfuMsg.class), BaseServer.class, true),
         WRONG_EPOCH(5, TypeToken.of(CorfuSetEpochMsg.class), BaseServer.class),
         NACK(6, TypeToken.of(CorfuMsg.class), BaseServer.class),
@@ -168,13 +168,13 @@ public class CorfuMsg {
         // Layout Messages
         LAYOUT_REQUEST(10, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
         LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), LayoutServer.class, true),
-        LAYOUT_PREPARE(12, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_PREPARE(12, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
         LAYOUT_PREPARE_REJECT(13, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-        LAYOUT_PROPOSE(14, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_PROPOSE(14, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
         LAYOUT_PROPOSE_REJECT(15, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-        LAYOUT_COMMITTED(16, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+        LAYOUT_COMMITTED(16, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
         LAYOUT_QUERY(17, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-        LAYOUT_BOOTSTRAP(18, TypeToken.of(LayoutMsg.class), LayoutServer.class),
+        LAYOUT_BOOTSTRAP(18, TypeToken.of(LayoutMsg.class), LayoutServer.class, true),
         LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
 
         // Sequencer Messages
@@ -201,7 +201,7 @@ public class CorfuMsg {
         ERROR_RANK(54, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
 
         // EXTRA CODES
-        LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class),
+        LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
         LAYOUT_PREPARE_ACK(61, TypeToken.of(LayoutRankMsg.class), LayoutServer.class);
 
 

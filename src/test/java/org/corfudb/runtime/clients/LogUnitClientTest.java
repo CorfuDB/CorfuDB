@@ -31,7 +31,7 @@ public class LogUnitClientTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new LogUnitServer(defaultOptionsMap()))
+                .add(new LogUnitServer(defaultServerContext()))
                 .build();
     }
 

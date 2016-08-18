@@ -96,8 +96,8 @@ public class LogUnitServer extends AbstractServer {
 
     private final AbstractLocalLog localLog;
 
-    public LogUnitServer(Map<String, Object> opts) {
-        this.opts = opts;
+    public LogUnitServer(ServerContext serverContext) {
+        this.opts = serverContext.getServerConfig();
 
         maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
         String logdir = opts.get("--log-path") + File.separator + "log";

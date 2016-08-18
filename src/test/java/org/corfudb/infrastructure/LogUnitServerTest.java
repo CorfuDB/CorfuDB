@@ -18,13 +18,13 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Override
     public AbstractServer getDefaultServer() {
-        return new LogUnitServer(new ServerConfigBuilder().build());
+        return new LogUnitServer(new ServerContextBuilder().build());
     }
 
     @Test
     public void checkHeapLeak() throws Exception {
 
-        LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder().build());
+        LogUnitServer s1 = new LogUnitServer(ServerContextBuilder.emptyContext());
 
         this.router.reset();
         this.router.addServer(s1);
@@ -49,7 +49,7 @@ public class LogUnitServerTest extends AbstractServerTest {
             throws Exception {
         String serviceDir = getTempDir();
 
-        LogUnitServer s1 = new LogUnitServer(new ServerConfigBuilder()
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .setSync(true)
@@ -91,7 +91,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         s1.shutdown();
 
-        LogUnitServer s2 = new LogUnitServer(new ServerConfigBuilder()
+        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .setSync(true)

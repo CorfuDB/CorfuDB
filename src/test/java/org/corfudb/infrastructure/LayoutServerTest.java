@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
 import org.corfudb.runtime.view.Layout;
@@ -20,13 +20,21 @@ import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 public class LayoutServerTest extends AbstractServerTest {
 
     @Override
-    public AbstractServer getDefaultServer() {
+    public LayoutServer getDefaultServer() {
         String serviceDir = getTempDir();
-        return new LayoutServer(new ServerConfigBuilder()
-                .setSingle(false)
-                .setLogPath(serviceDir)
-                .build(), getRouter());
+        return getDefaultServer(serviceDir);
     }
+
+    private LayoutServer getDefaultServer(String serviceDir) {
+        LayoutServer s1 = new LayoutServer(new ServerContextBuilder().setSingle(false).setMemory(false).setLogPath(serviceDir).setServerRouter(getRouter()).build());
+        setServer(s1);
+        return s1;
+    }
+
+    private void bootstrapServer(Layout l) {
+        sendMessage(new LayoutMsg(l, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
+    }
+
 
     @Test
     public void memoryLayoutServerReadsLayout()
@@ -41,9 +49,9 @@ public class LayoutServerTest extends AbstractServerTest {
 
         Files.write(l.asJSONString().getBytes(), new File(serviceDir, "layout"));
 
-        LayoutServer ls = new LayoutServer(new ServerConfigBuilder()
+        LayoutServer ls = new LayoutServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
-                .build(), getRouter());
+                .build());
 
         setServer(ls);
 
@@ -81,9 +89,6 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
 
-    void bootstrapServer(Layout l) {
-        sendMessage(new LayoutMsg(l, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
-    }
 
     @Test
     public void prepareRejectsLowerRanks() {
@@ -141,17 +146,30 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void checkThatLayoutIsPersisted()
+    public void checkServerEpochPersisted() {
+        String serviceDir = getTempDir();
+        LayoutServer s1 = getDefaultServer(serviceDir);
+
+        bootstrapServer(TestLayoutBuilder.single(9000));
+        sendMessage(new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.SET_EPOCH, 2));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
+        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
+        assertThat(getLastMessage().getEpoch()).isEqualTo(2);
+        sendMessage(new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.SET_EPOCH, 1));
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsg.CorfuMsgType.WRONG_EPOCH);
+
+    }
+
+    @Test
+    public void checkLayoutPersisted()
             throws Exception {
         String serviceDir = getTempDir();
 
-        LayoutServer s1 = new LayoutServer(new ServerConfigBuilder()
-                .setSingle(false)
-                .setMemory(false)
-                .setLogPath(serviceDir)
-                .build(), getRouter());
-
-        setServer(s1);
+        LayoutServer s1 = getDefaultServer(serviceDir);
         bootstrapServer(TestLayoutBuilder.single(9000));
         Layout l100 = TestLayoutBuilder.single(9000);
         l100.setEpoch(100);
@@ -170,13 +188,8 @@ public class LayoutServerTest extends AbstractServerTest {
                 .isPhase2Rank(new Rank(100L, AbstractServerTest.testClientId));
         s1.shutdown();
 
-        LayoutServer s2 = new LayoutServer(new ServerConfigBuilder()
-                .setSingle(false)
-                .setMemory(false)
-                .setLogPath(serviceDir)
-                .build(), getRouter());
-        this.router.reset();
-        this.router.addServer(s2);
+        LayoutServer s2 = getDefaultServer(serviceDir);
+
         assertThat(s2)
                 .isInEpoch(0);
         assertThat(s2)
@@ -201,13 +214,7 @@ public class LayoutServerTest extends AbstractServerTest {
     public void checkPaxosPhasesPersisted() throws Exception {
         String serviceDir = getTempDir();
 
-        LayoutServer s1 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--memory", false)
-                .put("--single", false)
-                .build(), getRouter());
-
-        setServer(s1);
+        LayoutServer s1 = getDefaultServer(serviceDir);
         Layout l100 = TestLayoutBuilder.single(9000);
         bootstrapServer(l100);
 
@@ -221,13 +228,8 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         s1.shutdown();
 
-        LayoutServer s2 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
-                .build(), getRouter());
-        this.router.reset();
-        this.router.addServer(s2);
+        LayoutServer s2 = getDefaultServer(serviceDir);
+
         assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
@@ -237,13 +239,8 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
         s2.shutdown();
 
-        LayoutServer s3 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
-                .build(), getRouter());
-        this.router.reset();
-        this.router.addServer(s3);
+        LayoutServer s3 = getDefaultServer(serviceDir);
+
         assertThat(s3).isInEpoch(0);
         assertThat(s3).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         assertThat(s3).isPhase2Rank(new Rank(100L, AbstractServerTest.testClientId));
@@ -261,13 +258,7 @@ public class LayoutServerTest extends AbstractServerTest {
     public void checkMessagesValidatedAgainstPhase1PersistedData() throws Exception {
         String serviceDir = getTempDir();
 
-        LayoutServer s1 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--memory", false)
-                .put("--single", false)
-                .build(), getRouter());
-
-        setServer(s1);
+        LayoutServer s1 = getDefaultServer(serviceDir);
         Layout l100 = TestLayoutBuilder.single(9000);
         bootstrapServer(l100);
 
@@ -279,13 +270,8 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         s1.shutdown();
 
-        LayoutServer s2 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
-                .build(), getRouter());
-        this.router.reset();
-        this.router.addServer(s2);
+        LayoutServer s2 = getDefaultServer(serviceDir);
+
         assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
@@ -313,13 +299,7 @@ public class LayoutServerTest extends AbstractServerTest {
     public void checkMessagesValidatedAgainstPhase2PersistedData() throws Exception {
         String serviceDir = getTempDir();
 
-        LayoutServer s1 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--memory", false)
-                .put("--single", false)
-                .build(), getRouter());
-
-        setServer(s1);
+        LayoutServer s1 = getDefaultServer(serviceDir);
         Layout l100 = TestLayoutBuilder.single(9000);
         bootstrapServer(l100);
         l100.setEpoch(100);
@@ -332,13 +312,8 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         s1.shutdown();
 
-        LayoutServer s2 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
-                .build(), getRouter());
-        this.router.reset();
-        this.router.addServer(s2);
+        LayoutServer s2 = getDefaultServer(serviceDir);
+
         assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
@@ -356,13 +331,8 @@ public class LayoutServerTest extends AbstractServerTest {
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsg.CorfuMsgType.ACK);
         s2.shutdown();
 
-        LayoutServer s3 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
-                .build(), getRouter());
-        this.router.reset();
-        this.router.addServer(s3);
+        LayoutServer s3 = getDefaultServer(serviceDir);
+
         // the epoch should have changed by now.
         assertThat(s3).isInEpoch(0);
         assertThat(s3).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
@@ -383,13 +353,7 @@ public class LayoutServerTest extends AbstractServerTest {
     public void checkPhase1AndPhase2MessagesFromMultipleClients() throws Exception {
         String serviceDir = getTempDir();
 
-        LayoutServer s1 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--memory", false)
-                .put("--single", false)
-                .build(), getRouter());
-
-        setServer(s1);
+        LayoutServer s1 = getDefaultServer(serviceDir);
         Layout l100 = TestLayoutBuilder.single(9000);
         bootstrapServer(l100);
         l100.setEpoch(100);
@@ -417,13 +381,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         // testing behaviour after server restart
         s1.shutdown();
-        LayoutServer s2 = new LayoutServer(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .put("--single", false)
-                .put("--memory", false)
-                .build(), getRouter());
-        this.router.reset();
-        this.router.addServer(s2);
+        LayoutServer s2 = getDefaultServer(serviceDir);
         assertThat(s2).isInEpoch(0);
         assertThat(s2).isPhase1Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
         //duplicate message to be rejected
@@ -447,6 +405,4 @@ public class LayoutServerTest extends AbstractServerTest {
 
         s2.shutdown();
     }
-
-
 }

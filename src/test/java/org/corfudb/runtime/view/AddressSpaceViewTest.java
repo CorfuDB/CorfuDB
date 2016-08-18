@@ -3,7 +3,6 @@ package org.corfudb.runtime.view;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
-import lombok.Getter;
 import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -103,9 +102,9 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingReadAllWorks()
             throws Exception {
-        addServer(9000, new ServerConfigBuilder().setSingle(false).build());
-        addServer(9001, new ServerConfigBuilder().setSingle(false).build());
-        addServer(9002, new ServerConfigBuilder().setSingle(false).build());
+        addServer(9000);
+        addServer(9001);
+        addServer(9002);
 
         bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
