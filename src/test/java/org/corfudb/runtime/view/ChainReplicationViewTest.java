@@ -49,7 +49,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         CorfuRuntime r = getDefaultRuntime();
 
         final int numberThreads = 5;
-        final int numberRecords = 10_000;
+        final int numberRecords = 1_000;
 
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;

@@ -36,13 +36,13 @@ public class LogUnitServerTest extends AbstractServerTest {
         b.writeByte(42);
         WriteRequest wr = WriteRequest.builder()
                             .writeMode(WriteMode.NORMAL)
-                            .globalAddress(address)
                             .data(new LogData(DataType.DATA, b))
                             .build();
         //write at 0
         wr.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         wr.setRank(0L);
         wr.setBackpointerMap(Collections.emptyMap());
+        wr.setGlobalAddress(0L);
 
         sendMessage(CorfuMsgType.WRITE.payloadMsg(wr));
 
@@ -69,9 +69,9 @@ public class LogUnitServerTest extends AbstractServerTest {
         b.writeBytes("0".getBytes());
         WriteRequest m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
-                .globalAddress(0L)
                 .data(new LogData(DataType.DATA, b))
                 .build();
+        m.setGlobalAddress(0L);
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
@@ -81,9 +81,9 @@ public class LogUnitServerTest extends AbstractServerTest {
         b.writeBytes("100".getBytes());
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
-                .globalAddress(100L)
                 .data(new LogData(DataType.DATA, b))
                 .build();
+        m.setGlobalAddress(100L);
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
@@ -93,9 +93,9 @@ public class LogUnitServerTest extends AbstractServerTest {
         b.writeBytes("10000000".getBytes());
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
-                .globalAddress(10000000L)
                 .data(new LogData(DataType.DATA, b))
                 .build();
+        m.setGlobalAddress(10000000L);
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());

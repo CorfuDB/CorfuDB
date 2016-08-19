@@ -72,10 +72,9 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        long address = msg.getPayload().getGlobalAddress();
         try {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
-                dataCache.put(new LogAddress(address, null), msg.getPayload().getData());
+                dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.payloadMsg(0L));
             } else {
                 // In replex stream mode, we allocate a local token first, and use it as the
