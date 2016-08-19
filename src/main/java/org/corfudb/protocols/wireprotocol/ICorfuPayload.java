@@ -42,7 +42,8 @@ public interface ICorfuPayload<T> {
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                 .put(ByteBuf.class, x -> {
                     int bytes = x.readInt();
-                    ByteBuf b = PooledByteBufAllocator.DEFAULT.buffer(bytes);
+                    ByteBuf b =
+                            PooledByteBufAllocator.DEFAULT.buffer(bytes);
                     b.writeBytes(x, bytes);
                     return b;
                 })
@@ -167,6 +168,21 @@ public interface ICorfuPayload<T> {
         return rs.build();
     }
 
+    /** A really simple flat set implementation. The first entry is the size of the set as an int,
+     * and the next entries are each value..
+     * @param buf        The buffer to deserialize.
+     * @param valueClass    The class of the values.
+     * @param <V>           The type of the values.
+     * @return
+     */
+    static <V extends Comparable<V>> Range<V> rangeFromBuffer(ByteBuf buf, Class<V> valueClass) {
+        BoundType upperType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
+        V upper = fromBuffer(buf, valueClass);
+        BoundType lowerType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
+        V lower = fromBuffer(buf, valueClass);
+        return Range.range(lower, lowerType, upper, upperType);
+    }
+
     static <K extends Enum<K> & ITypedEnum<K>,V> EnumMap<K,V> enumMapFromBuffer(ByteBuf buf, Class<K> keyClass,
                                                                                 Class<V> objectClass) {
         EnumMap<K, V> metadataMap =
@@ -242,6 +258,13 @@ public interface ICorfuPayload<T> {
                 buffer.writeBoolean(x.upperBoundType() == BoundType.CLOSED);
                 serialize(buffer, x.lowerEndpoint());
             });
+        }
+        else if (payload instanceof Range) {
+            Range<?> r = (Range) payload;
+            buffer.writeBoolean(r.upperBoundType() == BoundType.CLOSED);
+            serialize(buffer, r.upperEndpoint());
+            buffer.writeBoolean(r.upperBoundType() == BoundType.CLOSED);
+            serialize(buffer, r.lowerEndpoint());
         }
         else if (payload instanceof Map) {
             Map<?,?> map = (Map<?,?>) payload;

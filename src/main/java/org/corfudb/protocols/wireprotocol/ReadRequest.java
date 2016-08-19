@@ -15,11 +15,11 @@ import java.util.UUID;
 @AllArgsConstructor
 public class ReadRequest implements ICorfuPayload<ReadRequest> {
 
-    final RangeSet<Long> addresses;
+    final Range<Long> range;
     final UUID streamID;
 
     public ReadRequest(ByteBuf buf) {
-        addresses = ICorfuPayload.rangeSetFromBuffer(buf, Long.class);
+        range = ICorfuPayload.rangeFromBuffer(buf, Long.class);
         if (ICorfuPayload.fromBuffer(buf, Boolean.class)) {
             streamID = ICorfuPayload.fromBuffer(buf, UUID.class);
         }
@@ -29,13 +29,13 @@ public class ReadRequest implements ICorfuPayload<ReadRequest> {
     }
 
     public ReadRequest(Long address) {
-        addresses = ImmutableRangeSet.of(Range.singleton(address));
+        range = Range.singleton(address);
         streamID = null;
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, addresses);
+        ICorfuPayload.serialize(buf, range);
         ICorfuPayload.serialize(buf, streamID != null);
         if (streamID != null) {
             ICorfuPayload.serialize(buf, streamID);

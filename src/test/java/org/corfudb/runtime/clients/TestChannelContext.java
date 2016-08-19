@@ -2,6 +2,7 @@ package org.corfudb.runtime.clients;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
@@ -214,7 +215,7 @@ public class TestChannelContext implements ChannelHandlerContext {
     public ByteBuf simulateSerialization(Object message) {
         if (message instanceof CorfuMsg) {
         /* simulate serialization/deserialization */
-            ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
+            ByteBuf oBuf = PooledByteBufAllocator.DEFAULT.buffer();
             ((CorfuMsg) message).serialize(oBuf);
             oBuf.resetReaderIndex();
             return oBuf;

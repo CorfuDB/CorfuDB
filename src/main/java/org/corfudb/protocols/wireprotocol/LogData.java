@@ -46,6 +46,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                             ((LogEntry) actualValue).setEntry(this);
                             ((LogEntry) actualValue).setRuntime(runtime);
                         }
+                        this.getData().release();
                         value = actualValue == null ? this.payload : actualValue;
                         this.payload.set(value);
                     }

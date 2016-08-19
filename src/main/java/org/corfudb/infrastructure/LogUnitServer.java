@@ -96,16 +96,15 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         ReadResponse rr = new ReadResponse();
-        for (Range<Long> range : msg.getPayload().getAddresses().asRanges()) {
-            for (Long l = range.lowerEndpoint(); l < range.upperEndpoint()+1L; l++) {
-                LogData e = dataCache.get(new LogAddress(l, null));
-                if (e == null) {
-                    rr.put(l, LogData.EMPTY);
-                } else if (e.getType() == DataType.HOLE) {
-                    rr.put(l, LogData.HOLE);
-                } else {
-                    rr.put(l, e);
-                }
+        for (Long l = msg.getPayload().getRange().lowerEndpoint();
+             l < msg.getPayload().getRange().upperEndpoint()+1L; l++) {
+            LogData e = dataCache.get(new LogAddress(l, null));
+            if (e == null) {
+                rr.put(l, LogData.EMPTY);
+            } else if (e.getType() == DataType.HOLE) {
+                rr.put(l, LogData.HOLE);
+            } else {
+                rr.put(l, e);
             }
         }
         r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
