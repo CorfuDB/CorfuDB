@@ -63,7 +63,7 @@ public interface IMetadata {
      *
      * @param rank The rank of this write.
      */
-    default void setRank(Long rank) {
+    default void setRank(long rank) {
         getMetadataMap().put(IMetadata.LogUnitMetadataType.RANK, rank);
     }
 

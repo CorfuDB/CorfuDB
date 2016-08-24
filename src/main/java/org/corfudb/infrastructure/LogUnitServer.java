@@ -326,6 +326,7 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void shutdown() {
         scheduler.shutdownNow();
+        dataCache.invalidateAll(); //should evict all entries
     }
 
     @VisibleForTesting

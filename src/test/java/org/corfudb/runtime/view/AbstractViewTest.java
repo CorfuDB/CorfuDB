@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
+import org.junit.After;
 import org.junit.Before;
 
 import java.util.*;
@@ -95,6 +96,13 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.parseConfigurationString(getDefaultConfigurationString())
                 .setCacheDisabled(true); // Disable cache during unit tests to fully stress the system.
         runtime.getAddressSpaceView().resetCaches();
+    }
+
+    @After
+    public void cleanupBuffers() {
+        testServerMap.values().stream().forEach(x -> {
+            x.getLogUnitServer().shutdown();
+        });
     }
 
     /** Add a server at a specific port, using the given configuration options.

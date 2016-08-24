@@ -24,7 +24,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     final DataType type;
 
     @Getter
-    ByteBuf data;
+    final ByteBuf data;
 
     private transient final AtomicReference<Object> payload = new AtomicReference<>();
 
@@ -57,32 +57,38 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     }
 
     @Getter
-    final EnumMap<LogUnitMetadataType, Object> metadataMap =
-            new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+    final EnumMap<LogUnitMetadataType, Object> metadataMap;
 
     public LogData(ByteBuf buf) {
         type = ICorfuPayload.fromBuffer(buf, DataType.class);
         if (type == DataType.DATA) {
             data = ICorfuPayload.fromBuffer(buf, ByteBuf.class);
-            metadataMap.putAll(
+            metadataMap =
                     ICorfuPayload.enumMapFromBuffer(buf,
-                            IMetadata.LogUnitMetadataType.class, Object.class));
+                            IMetadata.LogUnitMetadataType.class, Object.class);
+        }
+        else {
+            data = null;
+            metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
         }
     }
 
     public LogData(DataType type) {
         this.type = type;
+        this.data = null;
+        this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }
 
     public LogData(DataType type, ByteBuf buf) {
         this.type = type;
         this.data = buf;
+        this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }
 
     public LogData(ByteBuf buf, EnumMap<LogUnitMetadataType, Object> metadataMap) {
         this.type = DataType.DATA;
         this.data = buf;
-        this.metadataMap.putAll(metadataMap);
+        this.metadataMap = metadataMap;
     }
 
     @Override

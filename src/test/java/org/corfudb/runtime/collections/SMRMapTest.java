@@ -122,7 +122,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void loadsFollowedByGetsConcurrent()
             throws Exception {
-        getDefaultRuntime().connect();
+        getDefaultRuntime().setBackpointersDisabled(true).connect();
 
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
