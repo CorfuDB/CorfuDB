@@ -42,9 +42,11 @@ public interface ICorfuPayload<T> {
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                 .put(ByteBuf.class, x -> {
                     int bytes = x.readInt();
-                    ByteBuf b =
-                            PooledByteBufAllocator.DEFAULT.buffer(bytes);
-                    b.writeBytes(x, bytes);
+                    //ByteBuf b =
+                    //        PooledByteBufAllocator.DEFAULT.buffer(bytes);
+                    //b.writeBytes(x, bytes);
+                    ByteBuf b = x.retainedSlice(x.readerIndex(), bytes);
+                    x.readerIndex(x.readerIndex() + bytes);
                     return b;
                 })
                 .build());
