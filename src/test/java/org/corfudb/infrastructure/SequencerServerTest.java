@@ -102,6 +102,83 @@ public class SequencerServerTest extends AbstractServerTest {
     }
 
     @Test
+    public void checkBackpointersWork() {
+        UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
+        UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
+
+        for (int i = 0; i < 100; i++) {
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singleton(streamA))));
+            long thisTokenA = getLastPayloadMessageAs(TokenResponse.class).getToken();
+
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singleton(streamA))));
+            long checkTokenA = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
+
+            assertThat(thisTokenA)
+                    .isEqualTo(checkTokenA);
+
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singleton(streamB))));
+            long thisTokenB = getLastPayloadMessageAs(TokenResponse.class).getToken();
+
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singleton(streamB))));
+            long checkTokenB = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamB);
+
+            assertThat(thisTokenB)
+                    .isEqualTo(checkTokenB);
+
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(5L, Collections.singleton(streamA))));
+            thisTokenA = getLastPayloadMessageAs(TokenResponse.class).getToken();
+
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singleton(streamA))));
+            checkTokenA = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
+
+            assertThat(thisTokenA + 4)
+                    .isEqualTo(checkTokenA);
+        }
+    }
+
+    @Test
+    public void localAddressesWork() {
+        UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
+        UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
+
+        long Alocal = -1L;
+        long Blocal = -1L;
+
+        for (int i = 0; i < 100; i++) {
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singleton(streamA))));
+            long thisTokenA = getLastPayloadMessageAs(TokenResponse.class).getStreamAddresses().get(streamA);
+
+            Alocal++;
+            assertThat(thisTokenA)
+                    .isEqualTo(Alocal);
+
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singleton(streamB))));
+            long thisTokenB = getLastPayloadMessageAs(TokenResponse.class).getStreamAddresses().get(streamB);
+
+            Blocal++;
+            assertThat(thisTokenB)
+                    .isEqualTo(Blocal);
+
+
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(2L, Collections.singleton(streamA))));
+            thisTokenA = getLastPayloadMessageAs(TokenResponse.class).getStreamAddresses().get(streamA);
+
+            Alocal+=2;
+            assertThat(thisTokenA)
+                    .isEqualTo(Alocal);
+        }
+    }
+
+    @Test
     public void checkSequencerCheckpointingWorks()
             throws Exception {
         String serviceDir = getTempDir();
