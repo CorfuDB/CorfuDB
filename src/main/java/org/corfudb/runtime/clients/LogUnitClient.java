@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -103,6 +104,20 @@ public class LogUnitClient implements IClient {
         throw new Exception("rank");
     }
 
+    /** Handle an ERROR_NOENTRY message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      Exception
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_NOENTRY)
+    private static Object handleNoEntry(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new Exception("Tried to write commit on a non-existent entry");
+    }
+
     /** Handle a READ_RESPONSE message.
      *
      * @param msg   Incoming Message
@@ -172,12 +187,24 @@ public class LogUnitClient implements IClient {
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
-    public CompletableFuture<Long> writeStream(long address, UUID stream, Set<UUID> streams,
-                                            ByteBuf buffer) {
-        WriteRequest wr = new WriteRequest(WriteMode.REPLEX_STREAM, stream, buffer);
-        wr.setStreams(streams);
+    public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
+                                                  Object object) {
+        ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
+        Serializers.getSerializer(Serializers.SerializerType.CORFU).serialize(object, payload);
+        return writeStream(address, streamAddresses, payload);
+    }
+
+    public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
+                                                  ByteBuf buffer) {
+        WriteRequest wr = new WriteRequest(WriteMode.REPLEX_STREAM, streamAddresses, buffer);
+        wr.setStreams(streamAddresses.keySet());
         wr.setGlobalAddress(address);
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+    }
+
+    public CompletableFuture<Boolean> writeCommit(Map<UUID, Long> streams, long address, boolean commit) {
+        CommitRequest wr = new CommitRequest(streams, address, commit);
+        return router.sendMessageAndGetCompletable(CorfuMsgType.COMMIT.payloadMsg(wr));
     }
 
     /**
@@ -190,6 +217,11 @@ public class LogUnitClient implements IClient {
     public CompletableFuture<ReadResponse> read(long address) {
         return router.sendMessageAndGetCompletable(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
+    }
+
+    public CompletableFuture<ReadResponse> read(UUID stream, long offset) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(Range.singleton(offset), stream)));
     }
 
     /**

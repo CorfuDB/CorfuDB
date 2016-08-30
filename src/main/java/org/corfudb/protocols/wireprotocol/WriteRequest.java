@@ -15,7 +15,7 @@ public class WriteRequest implements ICorfuPayload<WriteRequest>, IMetadata {
     @Getter
     final WriteMode writeMode;
     @Getter
-    final UUID streamID;
+    final Map<UUID, Long> streamAddresses;
     @Getter
     final LogData data;
 
@@ -23,14 +23,14 @@ public class WriteRequest implements ICorfuPayload<WriteRequest>, IMetadata {
     public WriteRequest(ByteBuf buf) {
         writeMode = ICorfuPayload.fromBuffer(buf, WriteMode.class);
         if (writeMode == WriteMode.REPLEX_STREAM) {
-            streamID = ICorfuPayload.fromBuffer(buf, UUID.class);
-        } else { streamID = null; }
+            streamAddresses = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
+        } else { streamAddresses = null; }
         data = ICorfuPayload.fromBuffer(buf, LogData.class);
     }
 
-    public WriteRequest(WriteMode writeMode, UUID streamID, ByteBuf buf) {
+    public WriteRequest(WriteMode writeMode, Map<UUID, Long> streamAddresses, ByteBuf buf) {
         this.writeMode = writeMode;
-        this.streamID = streamID;
+        this.streamAddresses = streamAddresses;
         this.data = new LogData(DataType.DATA, buf);
     }
 
@@ -38,7 +38,7 @@ public class WriteRequest implements ICorfuPayload<WriteRequest>, IMetadata {
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, writeMode);
         if (writeMode == WriteMode.REPLEX_STREAM) {
-            ICorfuPayload.serialize(buf, streamID);
+            ICorfuPayload.serialize(buf, streamAddresses);
         }
         ICorfuPayload.serialize(buf, data);
     }

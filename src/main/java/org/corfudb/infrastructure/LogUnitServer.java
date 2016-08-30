@@ -75,17 +75,52 @@ public class LogUnitServer extends AbstractServer {
         try {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
-                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.payloadMsg(0L));
+                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
             } else {
                 // In replex stream mode, we allocate a local token first, and use it as the
                 // stream address.
-                Long token = getLog(msg.getPayload().getStreamID()).getToken(1);
-                dataCache.put(new LogAddress(token, msg.getPayload().getStreamID()), msg.getPayload().getData());
-                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.payloadMsg(token));
+                //Long token = getLog(msg.getPayload().getStreamID()).getToken(1);
+                for (UUID streamID : msg.getPayload().getStreamAddresses().keySet()) {
+                    dataCache.put(new LogAddress(msg.getPayload().getStreamAddresses().get(streamID), streamID),
+                            msg.getPayload().getData());
+                }
+                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
             }
         } catch (Exception ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
         }
+    }
+
+    /**
+     * Service an incoming commit request.
+     */
+    @ServerHandler(type=CorfuMsgType.COMMIT)
+    public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Map<UUID, Long> streamAddresses = msg.getPayload().getStreams();
+        if (streamAddresses == null) {
+            // Then this is a commit bit for the global log.
+            LogData entry = dataCache.get(new LogAddress(msg.getPayload().getAddress(), null));
+            if (entry == null) {
+                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_NOENTRY.msg());
+                return;
+            }
+            else {
+                entry.getMetadataMap().put(IMetadata.LogUnitMetadataType.COMMIT, msg.getPayload().getCommit());
+            }
+        } else {
+            for (UUID streamID : msg.getPayload().getStreams().keySet()) {
+                LogData entry = dataCache.get(new LogAddress(streamAddresses.get(streamID), streamID));
+                if (entry == null) {
+                    r.sendResponse(ctx, msg, CorfuMsgType.ERROR_NOENTRY.msg());
+                    // TODO: Crap, we have to go back and undo all the commit bits??
+                    return;
+                }
+                else {
+                    entry.getMetadataMap().put(IMetadata.LogUnitMetadataType.COMMIT, msg.getPayload().getCommit());
+                }
+            }
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type=CorfuMsgType.STREAM_TOKEN)
@@ -98,7 +133,7 @@ public class LogUnitServer extends AbstractServer {
         ReadResponse rr = new ReadResponse();
         for (Long l = msg.getPayload().getRange().lowerEndpoint();
              l < msg.getPayload().getRange().upperEndpoint()+1L; l++) {
-            LogData e = dataCache.get(new LogAddress(l, null));
+            LogData e = dataCache.get(new LogAddress(l, msg.getPayload().getStreamID()));
             if (e == null) {
                 rr.put(l, LogData.EMPTY);
             } else if (e.getType() == DataType.HOLE) {

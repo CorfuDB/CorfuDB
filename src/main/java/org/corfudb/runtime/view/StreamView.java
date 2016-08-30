@@ -102,7 +102,7 @@ public class StreamView implements AutoCloseable {
             }
             try {
                 runtime.getAddressSpaceView().write(token, Collections.singleton(streamID),
-                        object, tokenResponse.getBackpointerMap());
+                        object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 return token;
             } catch (OverwriteException oe) {
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
@@ -204,58 +204,71 @@ public class StreamView implements AutoCloseable {
             */
 
             // Pop the context if it has changed.
-            if (getCurrentContext().logPointer.get() > getCurrentContext().maxAddress) {
-                StreamContext last = streamContexts.pollFirst();
-                log.trace("Completed context {}@{}, removing.", last.contextID, last.maxAddress);
-            }
-
-            Long thisRead = getCurrentContext().currentBackpointerList.pollFirst();
-            if (thisRead == null) {
-                getCurrentContext().currentBackpointerList =
-                        resolveBackpointersToRead(
-                                getCurrentContext().contextID,
-                                getCurrentContext().logPointer.get());
-                log.trace("Backpointer list was empty, it has been filled with {} entries.",
-                        getCurrentContext().currentBackpointerList.size());
-                if (getCurrentContext().currentBackpointerList.size() == 0) {
-                    log.trace("No backpointers resolved, nothing to read.");
-                    return null;
+            if (runtime.getLayoutView().getLayout().getSegments().get(
+                    runtime.getLayoutView().getLayout().getSegments().size() - 1)
+                    .getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
+                if (getCurrentContext().logPointer.get() > getCurrentContext().maxAddress) {
+                    StreamContext last = streamContexts.pollFirst();
+                    log.trace("Completed context {}@{}, removing.", last.contextID, last.maxAddress);
                 }
-                thisRead = getCurrentContext().currentBackpointerList.pollFirst();
-            }
 
-            getCurrentContext().logPointer.set(thisRead + 1);
+                Long thisRead = getCurrentContext().currentBackpointerList.pollFirst();
+                if (thisRead == null) {
+                    getCurrentContext().currentBackpointerList =
+                            resolveBackpointersToRead(
+                                    getCurrentContext().contextID,
+                                    getCurrentContext().logPointer.get());
+                    log.trace("Backpointer list was empty, it has been filled with {} entries.",
+                            getCurrentContext().currentBackpointerList.size());
+                    if (getCurrentContext().currentBackpointerList.size() == 0) {
+                        log.trace("No backpointers resolved, nothing to read.");
+                        return null;
+                    }
+                    thisRead = getCurrentContext().currentBackpointerList.pollFirst();
+                }
 
-            log.trace("Read[{}]: reading at {}", streamID, thisRead);
-            LogData r = runtime.getAddressSpaceView().read(thisRead);
-            if (r.getType() == DataType.EMPTY) {
-                //determine whether or not this is a hole
-                long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
-                log.trace("Read[{}]: latest token at {}", streamID, latestToken);
-                if (latestToken < thisRead) {
-                    getCurrentContext().logPointer.decrementAndGet();
-                    return null;
+                getCurrentContext().logPointer.set(thisRead + 1);
+
+                log.trace("Read[{}]: reading at {}", streamID, thisRead);
+                LogData r = runtime.getAddressSpaceView().read(thisRead);
+                if (r.getType() == DataType.EMPTY) {
+                    //determine whether or not this is a hole
+                    long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
+                    log.trace("Read[{}]: latest token at {}", streamID, latestToken);
+                    if (latestToken < thisRead) {
+                        getCurrentContext().logPointer.decrementAndGet();
+                        return null;
+                    }
+                    log.debug("Read[{}]: hole detected at {} (token at {}), attempting fill.", streamID, thisRead, latestToken);
+                    try {
+                        runtime.getAddressSpaceView().fillHole(thisRead);
+                    } catch (OverwriteException oe) {
+                        //ignore overwrite.
+                    }
+                    r = runtime.getAddressSpaceView().read(thisRead);
+                    log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getType());
                 }
-                log.debug("Read[{}]: hole detected at {} (token at {}), attempting fill.", streamID, thisRead, latestToken);
-                try {
-                    runtime.getAddressSpaceView().fillHole(thisRead);
-                } catch (OverwriteException oe) {
-                    //ignore overwrite.
+                Set<UUID> streams = (Set<UUID>) r.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
+                if (streams != null && streams.contains(getCurrentContext().contextID)) {
+                    log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
+                    Object res = r.getPayload(runtime);
+                    if (res instanceof StreamCOWEntry) {
+                        StreamCOWEntry ce = (StreamCOWEntry) res;
+                        log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
+                                ce.getFollowUntil());
+                        streamContexts.add(new StreamContext(ce.getOriginalStream(), ce.getFollowUntil()));
+                    } else {
+                        return r;
+                    }
                 }
-                r = runtime.getAddressSpaceView().read(thisRead);
-                log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getType());
-            }
-            Set<UUID> streams = (Set<UUID>) r.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
-            if (streams != null && streams.contains(getCurrentContext().contextID)) {
-                log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
-                Object res = r.getPayload(runtime);
-                if (res instanceof StreamCOWEntry) {
-                    StreamCOWEntry ce = (StreamCOWEntry) res;
-                    log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
-                            ce.getFollowUntil());
-                    streamContexts.add(new StreamContext(ce.getOriginalStream(), ce.getFollowUntil()));
+            } else {
+                if (runtime.getLayoutView().getLayout().getSegments().get(
+                        runtime.getLayoutView().getLayout().getSegments().size() - 1)
+                        .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
+                    return runtime.getAddressSpaceView().read(streamID,getCurrentContext().logPointer.get(), 1L)
+                            .get(getCurrentContext().logPointer.getAndIncrement());
                 } else {
-                    return r;
+                    throw new RuntimeException("Unsupported replication mode for a read in StreamView");
                 }
             }
         }

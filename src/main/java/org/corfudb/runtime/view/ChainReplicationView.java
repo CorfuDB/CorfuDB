@@ -46,7 +46,8 @@ public class ChainReplicationView extends AbstractReplicationView {
      * @param data    The data to write.
      */
     @Override
-    public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
+    public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                     Map<UUID, Long> streamAddresses)
             throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         int payloadBytes = 0;
@@ -104,7 +105,7 @@ public class ChainReplicationView extends AbstractReplicationView {
      * @return A map containing the results of the read.
      */
     @Override
-    public Map<Long, LogData> read(UUID stream) {
+    public Map<Long, LogData> read(UUID stream, long offset, long size) {
         // TODO: when chain replication is used, scan
        throw new UnsupportedOperationException("not supported in chain replication");
     }
