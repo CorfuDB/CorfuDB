@@ -343,42 +343,47 @@ prop_parallel(MapType, MoreCmds, Mboxes, Endpoint) ->
                 )))
             end)).
 
-res_contains_known_exceptions(S_or_Hs) ->
-    %% TODO: Checking in PropEr style.
-    Simplified = [{Except, What} ||
-                     #eqc_statem_history{
-                        result={normal,
-                                ["ERROR","exception",Except,What|_]}
-                       } <- lists:append(S_or_Hs)],
-
+classify_exception(String) ->
     %% Examples, from bugs #211 and #212:
     %%
     %%  ["ERROR","exception","IllegalReferenceCountException",
     %%   "refCnt: 0"]}}],
-    %%
     %% ["ERROR","exception","IndexOutOfBoundsException",
     %%  "readerIndex(5) + length(1892) exceeds writerIndex(13): SlicedAbstractByteBuf(ridx: 0, widx: 13, cap: 13/13, unwrapped: UnpooledUnsafeNoCleanerDirectByteBuf(freed))"]}}],
     %%
     %% ["ERROR","exception","IndexOutOfBoundsException",
     %%  "index: 13, length: 1819542016 (expected: range(0, 13))"]}}],
 
-    case lists:filter(
-           fun({"IllegalReferenceCountException", "refCnt: 0"}) ->
-                   true;
-              ({"IndexOutOfBoundsException", What}) ->
-                   case re:run(What, "(readerIndex.* length.* exceeds writerIndex.*SlicedAbstractByteBuf)|(index: .*, length: .*expected: range)") of
-                       nomatch ->
-                           false;
-                       {match, _} ->
-                           true
-                   end;
-              (_) ->
-                   false
-           end, Simplified) of
+    RsCs = [{"index: .*, length: .*expected: range", index_length_expected},
+            {"readerIndex.* length.* exceeds writerIndex.*SlicedAbstractByteBuf", readerIndex_exceeds_writerIndex},
+            {"refCnt: 0", refCnt_is_zero}],
+    lists:foldl(
+      fun({Regex, Class}, unknown) ->
+              case re:run(String, Regex) of
+                  nomatch ->
+                      unknown;
+                  {match, _} ->
+                      Class
+              end;
+         (_, Class) ->
+              Class
+      end, unknown, RsCs).
+
+res_contains_known_exceptions(S_or_Hs) ->
+    %% TODO: Checking in PropEr style.
+    ToCheck = [{Except, classify_exception(What)} ||
+                     #eqc_statem_history{
+                        result={normal,
+                                ["ERROR","exception",Except,What|_]}
+                       } <- lists:append(S_or_Hs)],
+    case lists:filter(fun({_,unknown}) -> true;
+                         (_)           -> false
+                      end, ToCheck) of
+        [_|_] ->
+            false;                              % One unknown is too many
         [] ->
-            false;
-        GotSome ->
-            [io:format(user, "~s,", [Ex]) || {Ex, _What} <- GotSome],
+            io:format(user, "Bug 212? ", []),
+            [io:format(user, "~s,", [Ex]) || {Ex, _Class} <- ToCheck],
             true
     end.
 
