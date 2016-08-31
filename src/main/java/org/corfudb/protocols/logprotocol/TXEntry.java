@@ -174,7 +174,7 @@ public class TXEntry extends LogEntry {
             for (short i = 0; i < numUpdates; i++) {
                 updates.add(
                         (SMREntry) Serializers
-                                .getSerializer(Serializers.SerializerType.CORFU)
+                                .getSerializer(Serializers.CORFU)
                                 .deserialize(b, rt));
             }
         }
@@ -185,7 +185,7 @@ public class TXEntry extends LogEntry {
             b.writeShort(updates.size());
             updates.stream()
                     .forEach(x -> Serializers
-                            .getSerializer(Serializers.SerializerType.CORFU)
+                            .getSerializer(Serializers.CORFU)
                             .serialize(x, b));
         }
     }

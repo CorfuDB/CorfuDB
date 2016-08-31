@@ -7,6 +7,7 @@ import lombok.experimental.Accessors;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuProxyBuilder;
 import org.corfudb.runtime.object.ISMRInterface;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.EnumSet;
@@ -30,7 +31,7 @@ public class ObjectBuilder<T> {
     @Setter
     String streamName;
     @Setter
-    Serializers.SerializerType serializer = Serializers.SerializerType.JSON;
+    SerializerType serializer = Serializers.JSON;
     @Setter
     Set<ObjectOpenOptions> options = EnumSet.noneOf(ObjectOpenOptions.class);
     @Setter(AccessLevel.NONE)

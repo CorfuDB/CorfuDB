@@ -341,7 +341,7 @@ public class SMRMapTest extends AbstractViewTest {
         CompletableFuture cf = CompletableFuture.runAsync(() -> {
             Map<String, String> testMap2 = getRuntime().getObjectsView()
                     .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class, null,
-                            EnumSet.of(ObjectOpenOptions.NO_CACHE), Serializers.SerializerType.JSON);
+                            EnumSet.of(ObjectOpenOptions.NO_CACHE), Serializers.JSON);
             testMap2.put("a", "f");
         });
         cf.join();

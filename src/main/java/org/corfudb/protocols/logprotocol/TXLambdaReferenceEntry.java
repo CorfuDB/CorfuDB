@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.ICorfuObject;
 import org.corfudb.util.ReflectionUtils;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.reflect.InvocationTargetException;
@@ -35,10 +36,10 @@ public class TXLambdaReferenceEntry extends LogEntry {
     @Getter
     Object[] lambdaArguments;
     @Getter
-    Serializers.SerializerType serializerType;
+    SerializerType serializerType;
 
     public TXLambdaReferenceEntry(Method lambdaReference, ICorfuObject transactionalObject,
-                                  Object[] lambdaArguments, Serializers.SerializerType serializer) {
+                                  Object[] lambdaArguments, SerializerType serializer) {
         super(LogEntryType.TX_LAMBDAREF);
         this.method = lambdaReference;
         this.lambdaArguments = lambdaArguments;
@@ -83,7 +84,8 @@ public class TXLambdaReferenceEntry extends LogEntry {
             b.writeLong(streamID.getMostSignificantBits());
             b.writeLong(streamID.getLeastSignificantBits());
         }
-        b.writeByte(serializerType.asByte());
+        b.writeShort(serializerType.getTypeName().getBytes().length);
+        b.writeBytes(serializerType.getTypeName().getBytes());
         b.writeByte(lambdaArguments.length);
         Arrays.stream(lambdaArguments)
                 .forEach(x -> {
@@ -123,7 +125,10 @@ public class TXLambdaReferenceEntry extends LogEntry {
         }
 
         method = ReflectionUtils.getMethodFromToString(methodName);
-        serializerType = Serializers.typeMap.get(b.readByte());
+        short serializerLength = b.readShort();
+        byte[] serializerBytes = new byte[serializerLength];
+        b.readBytes(serializerBytes, 0, serializerLength);
+        serializerType = Serializers.typeMap.get(new String(serializerBytes));
         byte numArguments = b.readByte();
         Object[] arguments = new Object[numArguments];
         for (byte arg = 0; arg < numArguments; arg++) {

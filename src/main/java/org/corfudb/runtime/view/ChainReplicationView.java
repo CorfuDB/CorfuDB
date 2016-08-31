@@ -60,7 +60,7 @@ public class ChainReplicationView extends AbstractReplicationView {
         // when we go down the chain.
         try (AutoCloseableByteBuf b =
                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
-            Serializers.getSerializer(Serializers.SerializerType.CORFU)
+            Serializers.getSerializer(Serializers.CORFU)
                     .serialize(data, b);
             payloadBytes = b.readableBytes();
             for (int i = 0; i < numUnits; i++) {

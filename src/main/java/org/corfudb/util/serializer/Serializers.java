@@ -1,5 +1,6 @@
 package org.corfudb.util.serializer;
 
+import com.google.common.collect.ImmutableMap;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
@@ -12,11 +13,23 @@ import java.util.stream.Collectors;
  * Created by mwei on 1/8/16.
  */
 public class Serializers {
-    public static final Map<Byte, SerializerType> typeMap =
-            Arrays.stream(SerializerType.values())
-                    .collect(Collectors.toMap(SerializerType::asByte, Function.identity()));
 
-    ;
+    public static final SerializerType CORFU = new SerializerType(CorfuSerializer.class, "CORFU");
+    public static final SerializerType JAVA = new SerializerType(JavaSerializer.class, "JAVA");
+    public static final SerializerType JSON = new SerializerType(JSONSerializer.class, "JSON");
+    public static final SerializerType PRIMITIVE = new SerializerType(PrimitiveSerializer.class, "PRIMITIVE");
+
+    public static final Map<String, SerializerType> typeMap = new HashMap() {{
+        put(CORFU.getTypeName(), CORFU);
+        put(JAVA.getTypeName(), JAVA);
+        put(JSON.getTypeName(), JSON);
+        put(PRIMITIVE.getTypeName(), PRIMITIVE);
+    }};
+
+    public static synchronized void registerSerializer(SerializerType type) {
+        typeMap.put(type.getTypeName(), type);
+    }
+
     public static final Map<SerializerType, ISerializer> serializerCache = new HashMap<>();
 
     public static ISerializer getSerializer(SerializerType type) {
@@ -29,19 +42,4 @@ public class Serializers {
         });
     }
 
-    @RequiredArgsConstructor
-    public enum SerializerType {
-        // Supported Serializers
-        CORFU(0, CorfuSerializer.class),
-        JAVA(1, JavaSerializer.class),
-        JSON(2, JSONSerializer.class),
-        PRIMITIVE(3, PrimitiveSerializer.class);
-
-        public final int type;
-        public final Class<? extends ISerializer> entryType;
-
-        public byte asByte() {
-            return (byte) type;
-        }
-    }
 }

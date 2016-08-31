@@ -127,7 +127,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
         StreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
         smrMap.put("a", "b");
-        streamB.write(new SMREntry("hi", new Object[]{"hello"}, Serializers.SerializerType.PRIMITIVE));
+        streamB.write(new SMREntry("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
 
         //this TX should not conflict
         assertThat(smrMap)
