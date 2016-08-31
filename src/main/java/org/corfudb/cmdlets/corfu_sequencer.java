@@ -51,10 +51,12 @@ public class corfu_sequencer implements ICmdlet {
                 .start();
 
         try {
-            long token = router.getClient(SequencerClient.class).nextToken(
+            SequencerClient.TokenResponse foo =
+                    router.getClient(SequencerClient.class).nextToken(
                     streamsFromString((String) opts.get("--stream-ids")),
-                    Integer.parseInt((String) opts.get("--num-tokens"))).get().getToken();
-            return cmdlet.ok(Long.toString(token));
+                    Integer.parseInt((String) opts.get("--num-tokens"))).get();
+            long token = foo.getToken();
+            return cmdlet.ok(Long.toString(token), foo.backpointerMap.toString());
         } catch (ExecutionException ex) {
             return cmdlet.err("Exception", ex.toString(), ex.getCause().toString());
         } catch (Exception e) {
