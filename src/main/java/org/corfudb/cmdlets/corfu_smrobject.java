@@ -182,12 +182,12 @@ public class corfu_smrobject implements ICmdlet {
                     try { Thread.sleep(50); } catch (InterruptedException ie){};
                     continue;
                 } else {
-                    return cmdlet.err("Couldn't invoke method on object: " + e,
+                    return cmdlet.err("exception", e.getClass().getSimpleName(),
                             "stack: " + ExceptionUtils.getStackTrace(e),
                             "cause: " + ExceptionUtils.getCause(e));
                 }
             } catch (IllegalAccessException e) {
-                return cmdlet.err("Couldn't invoke method on object: " + e,
+                return cmdlet.err("exception", e.getClass().getSimpleName(),
                         "stack: " + ExceptionUtils.getStackTrace(e));
             } catch (Exception e) {
                 return cmdlet.err("Exception on object: " + e,
