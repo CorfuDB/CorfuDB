@@ -353,10 +353,18 @@ classify_exception(String) ->
     %%
     %% ["ERROR","exception","IndexOutOfBoundsException",
     %%  "index: 13, length: 1819542016 (expected: range(0, 13))"]}}],
+    %%
+    %% ["ERROR", "exception", "InvocationTargetException",
+    %%  "stack: java.lang.reflect.InvocationTargetException
+    %% ...
+    %% Caused by: java.lang.NullPointerException
+    %% ...
+    %% org.corfudb.util.serializer.CorfuSerializer.deserialize
 
     RsCs = [{"index: .*, length: .*expected: range", index_length_expected},
             {"readerIndex.* length.* exceeds writerIndex.*SlicedAbstractByteBuf", readerIndex_exceeds_writerIndex},
-            {"refCnt: 0", refCnt_is_zero}],
+            {"refCnt: 0", refCnt_is_zero},
+            {"Caused by: .*NullPointer.*CorfuSerializer.deserialize", deserialize_null_ptr}],
     lists:foldl(
       fun({Regex, Class}, unknown) ->
               case re:run(String, Regex) of
@@ -383,7 +391,7 @@ res_contains_known_exceptions(S_or_Hs) ->
             false;                              % One unknown is too many
         [] ->
             io:format(user, "Bug 212? ", []),
-            [io:format(user, "~s,", [Ex]) || {Ex, _Class} <- ToCheck],
+            [io:format(user, "~s -> ~w,", [Ex, Class]) || {Ex, Class} <- ToCheck],
             true
     end.
 
