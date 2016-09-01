@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -184,7 +185,27 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         TestClassWithPrimitives test = r.getObjectsView().build()
                 .setType(TestClassWithPrimitives.class)
                 .setStreamName("test")
-                .setSerializer(Serializers.SerializerType.PRIMITIVE)
+                .setSerializer(Serializers.PRIMITIVE)
+                .open();
+        test.setPrimitive("hello world".getBytes());
+        assertThat(test.getPrimitive())
+                .isEqualTo("hello world".getBytes());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canUseCustomSerializer()
+            throws Exception {
+        //Register a custom serializer and use it with an SMR object
+        CorfuRuntime r = getDefaultRuntime().connect();
+
+        SerializerType customSerializer = new SerializerType(Serializers.PRIMITIVE.entryType, "customSerializer");
+        Serializers.registerSerializer(customSerializer);
+
+        TestClassWithPrimitives test = r.getObjectsView().build()
+                .setType(TestClassWithPrimitives.class)
+                .setStreamName("test")
+                .setSerializer(customSerializer)
                 .open();
         test.setPrimitive("hello world".getBytes());
         assertThat(test.getPrimitive())
