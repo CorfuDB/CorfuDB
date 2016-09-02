@@ -72,10 +72,13 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.debug("log write: global: {}, streams: {}, backpointers: {}", msg.getPayload().getGlobalAddress(),
+                msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
         try {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+                return;
             } else {
                 // In replex stream mode, we allocate a local token first, and use it as the
                 // stream address.
@@ -130,6 +133,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type=CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.debug("log read: {} {}", msg.getPayload().getStreamID(), msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         for (Long l = msg.getPayload().getRange().lowerEndpoint();
              l < msg.getPayload().getRange().upperEndpoint()+1L; l++) {
@@ -158,8 +162,8 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type=CorfuMsgType.FILL_HOLE)
-    private void fill_hole(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        dataCache.get(new LogAddress(msg.getPayload(), null), x -> LogData.HOLE);
+    private void fill_hole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        dataCache.get(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), x -> LogData.HOLE);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -254,7 +258,12 @@ public class LogUnitServer extends AbstractServer {
                         }
                         //TODO - persisted entries should be of type PersistedLogData
                         //if (!entry.isPersisted) { //don't persist an entry twice.
-                        localLog.write(address.getAddress(), entry);
+                        if (address.getStream() != null) {
+                            getLog(address.getStream()).write(address.getAddress(), entry);
+                        }
+                        else {
+                            localLog.write(address.getAddress(), entry);
+                        }
                         //    }
                     }
 
@@ -279,7 +288,13 @@ public class LogUnitServer extends AbstractServer {
      * unwritten (null).
      */
     public synchronized LogData handleRetrieval(LogAddress address) {
-        LogData entry = localLog.read(address.getAddress());
+        LogData entry;
+        if (address.getStream() != null) {
+            entry = getLog(address.getStream()).read(address.getAddress());
+        }
+        else {
+            entry = localLog.read(address.getAddress());
+        }
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }

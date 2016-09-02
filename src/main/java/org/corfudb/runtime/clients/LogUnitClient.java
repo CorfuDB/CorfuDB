@@ -241,8 +241,14 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> fillHole(long address) {
         return router.sendMessageAndGetCompletable(
-                CorfuMsgType.FILL_HOLE.payloadMsg(address));
+                CorfuMsgType.FILL_HOLE.payloadMsg(new TrimRequest(null, address)));
     }
+
+    public CompletableFuture<Boolean> fillHole(UUID streamID, long address) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.FILL_HOLE.payloadMsg(new TrimRequest(streamID, address)));
+    }
+
 
     /**
      * Force the garbage collector to begin garbage collection.

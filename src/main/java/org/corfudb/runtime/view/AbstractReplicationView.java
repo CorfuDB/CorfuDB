@@ -1,20 +1,13 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.collect.RangeSet;
-import io.netty.buffer.ByteBuf;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
-import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
 
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -126,5 +119,9 @@ public abstract class AbstractReplicationView {
      */
     public abstract void fillHole(long address)
             throws OverwriteException;
+
+    public void fillStreamHole(UUID stream, long address) throws OverwriteException {
+        throw new UnsupportedOperationException("This replication view doesn't support filling stream holes");
+    }
 
 }

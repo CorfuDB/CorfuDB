@@ -267,6 +267,18 @@ public class AddressSpaceView extends AbstractView {
         );
     }
 
+    public void fillStreamHole(UUID streamID, long address)
+            throws OverwriteException {
+        layoutHelper(
+                l -> {
+                    AbstractReplicationView
+                            .getReplicationView(l, l.getReplicationMode(address), l.getSegment(address))
+                            .fillHole(address);
+                    return null;
+                }
+        );
+    }
+
     public void compactAll() {
         layoutHelper(l -> {
             for (Layout.LayoutSegment s : l.getSegments()) {

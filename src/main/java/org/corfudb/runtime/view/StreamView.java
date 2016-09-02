@@ -7,6 +7,7 @@ import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -84,11 +85,27 @@ public class StreamView implements AutoCloseable {
      */
     public long acquireAndWrite(Object object, Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback) {
+        boolean replexOverwrite = false;
+        boolean overwrite = false;
+        TokenResponse tokenResponse = null;
         while (true) {
-            TokenResponse tokenResponse =
-                    runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
-            long token = tokenResponse.getToken();
-            log.trace("Write[{}]: acquired token = {}", streamID, token);
+            long token;
+            if (overwrite) {
+                token =
+                        runtime.getSequencerView()
+                                .nextToken(Collections.singleton(streamID), 1, tokenResponse.getBackpointerMap()).getToken();
+            } else if (replexOverwrite) {
+                TokenResponse temp =
+                        runtime.getSequencerView()
+                                .nextToken(Collections.singleton(streamID), 1, tokenResponse.getBackpointerMap());
+                token = temp.getToken();
+            }
+            else {
+                tokenResponse =
+                        runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
+                token = tokenResponse.getToken();
+            }
+            log.trace("Write[{}]: acquired token = {}, global addr: {}", streamID, tokenResponse, token);
             if (acquisitionCallback != null) {
                 if (!acquisitionCallback.apply(tokenResponse)) {
                     log.trace("Acquisition rejected token, hole filling acquired address.");
@@ -104,11 +121,20 @@ public class StreamView implements AutoCloseable {
                 runtime.getAddressSpaceView().write(token, Collections.singleton(streamID),
                         object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 return token;
+            } catch (ReplexOverwriteException re) {
+                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                    log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                    return -1L;
+                }
+                replexOverwrite = true;
+                overwrite = false;
             } catch (OverwriteException oe) {
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                     log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                     return -1L;
                 }
+                overwrite = true;
+                replexOverwrite = false;
                 log.debug("Overwrite occurred at {}, retrying.", token);
             }
         }
@@ -131,7 +157,7 @@ public class StreamView implements AutoCloseable {
      */
     public NavigableSet<Long> resolveBackpointersToRead(UUID streamID, long read) {
         long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
-        log.trace("Read[{}]: latest token at {}", streamID, latestToken);
+        log.trace("Read[{}]: latest token at {}, read at: {}", streamID, latestToken, read);
         if (latestToken < read) {
             return new ConcurrentSkipListSet<>();
         }
@@ -265,8 +291,32 @@ public class StreamView implements AutoCloseable {
                 if (runtime.getLayoutView().getLayout().getSegments().get(
                         runtime.getLayoutView().getLayout().getSegments().size() - 1)
                         .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
-                    return runtime.getAddressSpaceView().read(streamID,getCurrentContext().logPointer.get(), 1L)
-                            .get(getCurrentContext().logPointer.getAndIncrement());
+                    long thisRead = getCurrentContext().logPointer.get();
+                    log.trace("Doing a stream read, stream: {}, address: {}", streamID, thisRead);
+                    LogData result = runtime.getAddressSpaceView().read(streamID, thisRead, 1L).get(thisRead);
+
+                    if (result.getType() == DataType.EMPTY) {
+                        //determine whether or not this is a hole
+                        long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
+                        log.trace("Read[{}]: latest token at {}", streamID, latestToken);
+                        if (latestToken < thisRead) {
+                            getCurrentContext().logPointer.decrementAndGet();
+                            return null;
+                        }
+                        log.debug("Read[{}]: hole detected at {} (token at {}), attempting fill.", streamID, thisRead, latestToken);
+                        try {
+                            runtime.getAddressSpaceView().fillStreamHole(streamID, thisRead);
+                        } catch (OverwriteException oe) {
+                            //ignore overwrite.
+                        }
+                        LogData r = runtime.getAddressSpaceView().read(thisRead);
+                        log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getType());
+                        getCurrentContext().logPointer.incrementAndGet();
+                        continue;
+                    } else if (result.getType() == DataType.DATA) {
+                        getCurrentContext().logPointer.incrementAndGet();
+                    }
+                    return result;
                 } else {
                     throw new RuntimeException("Unsupported replication mode for a read in StreamView");
                 }

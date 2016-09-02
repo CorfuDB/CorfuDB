@@ -52,7 +52,7 @@ public enum CorfuMsgType {
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}, LogUnitServer.class),
     READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}, LogUnitServer.class),
     TRIM(33, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}, LogUnitServer.class),
-    FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
+    FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}, LogUnitServer.class),
     FORCE_GC(35, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     GC_INTERVAL(36, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
