@@ -6,6 +6,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.ArrayList;
@@ -92,7 +93,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     @Override
     public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
-                                       Object[] SMRArguments, Serializers.SerializerType serializer, boolean writeOnly) {
+                                       Object[] SMRArguments, SerializerType serializer, boolean writeOnly) {
         objectMap
                 .compute(proxy, (k, v) ->
                 {

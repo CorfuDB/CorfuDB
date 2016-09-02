@@ -12,6 +12,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.AutoCloseableByteBuf;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.AbstractMap;
@@ -60,7 +61,7 @@ public class ChainReplicationView extends AbstractReplicationView {
         // when we go down the chain.
         try (AutoCloseableByteBuf b =
                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
-            Serializers.getSerializer(Serializers.SerializerType.CORFU)
+            Serializers.getSerializer(SerializerType.CORFU)
                     .serialize(data, b);
             payloadBytes = b.readableBytes();
             for (int i = 0; i < numUnits; i++) {
