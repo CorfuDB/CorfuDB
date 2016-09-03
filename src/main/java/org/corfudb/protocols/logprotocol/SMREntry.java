@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Arrays;
@@ -33,9 +34,9 @@ public class SMREntry extends LogEntry {
      * The serializer used to serialize the SMR arguments.
      */
     @Getter
-    private Serializers.SerializerType serializerType;
+    private SerializerType serializerType;
 
-    public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, Serializers.SerializerType serializer) {
+    public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, SerializerType serializer) {
         super(LogEntryType.SMR);
         this.SMRMethod = SMRMethod;
         this.SMRArguments = SMRArguments;
