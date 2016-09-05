@@ -162,8 +162,8 @@ public class SequencerServer extends AbstractServer {
                             mb.put(k, v);
                             return Math.max(thisIssue + req.getNumTokens() - 1, v);
                         });
-                        if (((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getUseTheseBackpointers().isEmpty() ||
-                                ((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getReplexOverwrite()) {
+                        if (((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getReplexOverwrite() ||
+                                !((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getOverwrite()) {
                             lastLocalOffsetMap.compute(id, (k, v) -> {
                                 if (v == null) {
                                     localAddresses.put(k, 0L);
@@ -174,14 +174,14 @@ public class SequencerServer extends AbstractServer {
                             });
                         }
                     }
-                    if (((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getUseTheseBackpointers().isEmpty() ||
+                    if (!((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getOverwrite() ||
                             ((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getReplexOverwrite()) {
                         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                                 new TokenResponse(thisIssue, mb.build(), localAddresses.build())));
                     } else {
                         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                                 new TokenResponse(thisIssue,
-                                        ((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getUseTheseBackpointers(),
+                                        Collections.emptyMap(),
                                         localAddresses.build())));
                     }
                 }

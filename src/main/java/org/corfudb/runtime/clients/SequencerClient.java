@@ -41,18 +41,13 @@ public class SequencerClient implements IClient {
 
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
         return router.sendMessageAndGetCompletable(
-                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, Collections.emptyMap(), false)));
-    }
-
-    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens, Map<UUID, Long> useTheseBackpointers) {
-        return router.sendMessageAndGetCompletable(
-                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, useTheseBackpointers, false)));
+                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, false, false)));
     }
 
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens,
-                                                      Map<UUID, Long> useTheseBackpointers,
+                                                      boolean overwrite,
                                                       boolean replexOverwrite) {
         return router.sendMessageAndGetCompletable(
-                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, useTheseBackpointers, replexOverwrite)));
+                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, overwrite, replexOverwrite)));
     }
 }

@@ -93,11 +93,11 @@ public class StreamView implements AutoCloseable {
             if (overwrite) {
                 token =
                         runtime.getSequencerView()
-                                .nextToken(Collections.singleton(streamID), 1, tokenResponse.getBackpointerMap()).getToken();
+                                .nextToken(Collections.singleton(streamID), 1, true, false).getToken();
             } else if (replexOverwrite) {
                 TokenResponse temp =
                         runtime.getSequencerView()
-                                .nextToken(Collections.singleton(streamID), 1, tokenResponse.getBackpointerMap());
+                                .nextToken(Collections.singleton(streamID), 1, false, true);
                 token = temp.getToken();
             }
             else {

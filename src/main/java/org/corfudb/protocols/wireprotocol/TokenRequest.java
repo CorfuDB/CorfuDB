@@ -21,7 +21,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /** The streams which are affected by this token request. */
     final Set<UUID> streams;
 
-    final Map<UUID, Long> useTheseBackpointers;
+    final Boolean overwrite;
 
     final Boolean replexOverwrite;
 
@@ -30,7 +30,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
         if (ICorfuPayload.fromBuffer(buf, Boolean.class))
             streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
         else streams = null;
-        useTheseBackpointers = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
+        overwrite = ICorfuPayload.fromBuffer(buf, Boolean.class);
         replexOverwrite = ICorfuPayload.fromBuffer(buf, Boolean.class);
     }
 
@@ -40,7 +40,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
         ICorfuPayload.serialize(buf, streams != null);
         if (streams != null)
             ICorfuPayload.serialize(buf, streams);
-        ICorfuPayload.serialize(buf, useTheseBackpointers);
+        ICorfuPayload.serialize(buf, overwrite);
         ICorfuPayload.serialize(buf, replexOverwrite);
     }
 }
