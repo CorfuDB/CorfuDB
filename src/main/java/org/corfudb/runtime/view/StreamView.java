@@ -86,15 +86,10 @@ public class StreamView implements AutoCloseable {
     public long acquireAndWrite(Object object, Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback) {
         boolean replexOverwrite = false;
-        boolean overwrite = false;
         TokenResponse tokenResponse = null;
         while (true) {
             long token;
-            if (overwrite) {
-                token =
-                        runtime.getSequencerView()
-                                .nextToken(Collections.singleton(streamID), 1, true, false).getToken();
-            } else if (replexOverwrite) {
+            if (replexOverwrite) {
                 TokenResponse temp =
                         runtime.getSequencerView()
                                 .nextToken(Collections.singleton(streamID), 1, false, true);
@@ -127,13 +122,11 @@ public class StreamView implements AutoCloseable {
                     return -1L;
                 }
                 replexOverwrite = true;
-                overwrite = false;
             } catch (OverwriteException oe) {
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                     log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                     return -1L;
                 }
-                overwrite = true;
                 replexOverwrite = false;
                 log.debug("Overwrite occurred at {}, retrying.", token);
             }

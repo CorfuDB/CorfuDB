@@ -10,6 +10,7 @@ import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.EnumSet;
@@ -30,12 +31,17 @@ public class SMRMapTest extends AbstractViewTest {
     @Getter
     final String defaultConfigurationString = getDefaultEndpoint();
 
+    public CorfuRuntime r;
+
+    @Before
+    public void setRuntime() throws Exception {
+        r = getDefaultRuntime().connect();
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingle()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
         assertThat(testMap.put("a", "a"))
@@ -50,7 +56,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canGetID()
             throws Exception {
-        CorfuRuntime r = getDefaultRuntime();
         UUID id = UUID.randomUUID();
         ICorfuSMRObject testMap = getRuntime().getObjectsView().open(id, SMRMap.class);
         assertThat(id)
@@ -61,8 +66,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void loadsFollowedByGets()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
         for (int i = 0; i < 1_000; i++) {
@@ -79,8 +82,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canContainOtherCorfuObjects()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
         testMap.clear();
         testMap.put("z", "e");
@@ -106,8 +107,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canContainNullObjects()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(CorfuRuntime.getStreamID("a"), SMRMap.class);
         testMap.clear();
         testMap.put("z", null);
@@ -122,7 +121,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void loadsFollowedByGetsConcurrent()
             throws Exception {
-        getDefaultRuntime().setBackpointersDisabled(true).connect();
+        r.setBackpointersDisabled(true);
 
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
@@ -159,8 +158,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void collectionsStreamInterface()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         testMap.put("a", "b");
@@ -178,8 +175,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canUpdateSingleObjectTransacationally()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a", "a"))
@@ -197,8 +192,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void multipleTXesAreApplied()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         IntStream.range(0, 10).asLongStream()
                 .forEach(l -> {
@@ -226,8 +219,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void multipleTXesAreAppliedWOAccessors()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         IntStream.range(0, 10).asLongStream()
                 .forEach(l -> {
@@ -250,8 +241,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void mutatorFollowedByATransaction()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
         getRuntime().getObjectsView().TXBegin();
@@ -270,7 +259,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void objectViewCorrectlyReportsInsideTX()
             throws Exception {
-        getDefaultRuntime().connect();
         assertThat(getRuntime().getObjectsView().TXActive())
                 .isFalse();
         getRuntime().getObjectsView().TXBegin();
@@ -285,8 +273,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canUpdateSingleObjectTransacationallyWhenCached()
             throws Exception {
-        getDefaultRuntime().connect()
-                .setCacheDisabled(false);
+        r.setCacheDisabled(false);
 
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         getRuntime().getObjectsView().TXBegin();
@@ -306,8 +293,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void abortedTransactionsCannotBeReadOnSingleObject()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         getRuntime().getObjectsView().TXBegin();
         testMap.clear();
@@ -326,8 +311,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void modificationDuringTransactionCausesAbort()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
         assertThat(testMap.put("a", "z"));
@@ -353,8 +336,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void smrMapCanContainCustomObjects()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, TestObject> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(),
                 SMRMap.class);
         testMap.put("A", new TestObject("A", 2, ImmutableMap.of("A", "B")));
@@ -368,8 +349,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void smrMapCanContainCustomObjectsInsideTXes()
             throws Exception {
-        getDefaultRuntime().connect();
-
         Map<String, TestObject> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(),
                 SMRMap.class);
 
@@ -399,8 +378,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void unusedMutatorAccessor()
             throws Exception {
-        CorfuRuntime r = getDefaultRuntime();
-
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
 
@@ -411,8 +388,6 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void concurrentAbortTest()
             throws Exception {
-        getDefaultRuntime();
-
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
