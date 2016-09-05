@@ -61,7 +61,7 @@ public class StreamsView {
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
             try {
                 runtime.getAddressSpaceView().write(tokenResponse.getToken(), Collections.singleton(destination),
-                        entry, tokenResponse.getBackpointerMap());
+                        entry, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 written = true;
             } catch (OverwriteException oe) {
                 log.debug("hole fill during COW entry write, retrying...");
@@ -118,7 +118,7 @@ public class StreamsView {
             }
             try {
                 runtime.getAddressSpaceView().write(token.getToken(), streamIDs,
-                        object, token.getBackpointerMap());
+                        object, token.getBackpointerMap(), token.getStreamAddresses());
                 return token.getToken();
             } catch (OverwriteException oe) {
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(token)) {

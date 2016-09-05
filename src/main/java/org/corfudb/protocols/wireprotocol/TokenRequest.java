@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -20,14 +21,26 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /** The streams which are affected by this token request. */
     final Set<UUID> streams;
 
+    final Boolean overwrite;
+
+    final Boolean replexOverwrite;
+
     public TokenRequest(ByteBuf buf) {
         numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
-        streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
+        if (ICorfuPayload.fromBuffer(buf, Boolean.class))
+            streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
+        else streams = null;
+        overwrite = ICorfuPayload.fromBuffer(buf, Boolean.class);
+        replexOverwrite = ICorfuPayload.fromBuffer(buf, Boolean.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, numTokens);
-        ICorfuPayload.serialize(buf, streams);
+        ICorfuPayload.serialize(buf, streams != null);
+        if (streams != null)
+            ICorfuPayload.serialize(buf, streams);
+        ICorfuPayload.serialize(buf, overwrite);
+        ICorfuPayload.serialize(buf, replexOverwrite);
     }
 }

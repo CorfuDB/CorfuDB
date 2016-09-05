@@ -112,11 +112,11 @@ public class AddressSpaceView extends AbstractView {
      * @param data           The data to write.
      * @param backpointerMap
      */
-    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
+    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap, Map<UUID, Long> streamAddresses)
             throws OverwriteException {
         int numBytes = layoutHelper(l -> AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address),
                 l.getSegment(address))
-                .write(address, stream, data, backpointerMap));
+                .write(address, stream, data, backpointerMap, streamAddresses));
 
         // Insert this write to our local cache.
         if (!runtime.isCacheDisabled()) {
@@ -150,6 +150,15 @@ public class AddressSpaceView extends AbstractView {
             return readCache.get(address);
         }
         return fetch(address);
+    }
+
+    public Map<Long, LogData> read(UUID stream, long offset, long size) {
+        // TODO: We are assuming that we are reading from the most recent segment....
+        return layoutHelper(l -> AbstractReplicationView
+                        .getReplicationView(l, l.getSegments().get(l.getSegments().size() - 1).getReplicationMode(),
+                                l.getSegments().get(l.getSegments().size() - 1))
+                        .read(stream, offset, size)
+        );
     }
 
     /**
@@ -247,6 +256,18 @@ public class AddressSpaceView extends AbstractView {
      * @param address An address to hole fill at.
      */
     public void fillHole(long address)
+            throws OverwriteException {
+        layoutHelper(
+                l -> {
+                    AbstractReplicationView
+                            .getReplicationView(l, l.getReplicationMode(address), l.getSegment(address))
+                            .fillHole(address);
+                    return null;
+                }
+        );
+    }
+
+    public void fillStreamHole(UUID streamID, long address)
             throws OverwriteException {
         layoutHelper(
                 l -> {

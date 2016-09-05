@@ -5,16 +5,14 @@ import com.google.gson.GsonBuilder;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -188,6 +186,15 @@ public class Layout implements Cloneable {
         throw new RuntimeException("Unmapped address!");
     }
 
+    public int getNumReplexUnits(int whichReplex) {
+        return segments.get(segments.size() - 1).replexes.get(whichReplex).getLogServers().size();
+    }
+
+    public int getReplexUnitIndex(int whichReplex, UUID streamID) {
+        return streamID.hashCode() % getNumReplexUnits(whichReplex);
+
+    }
+
     public LayoutSegment getSegment(long globalAddress) {
         for (LayoutSegment ls : segments) {
             if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
@@ -233,6 +240,10 @@ public class Layout implements Cloneable {
         return runtime.getRouter(getStripe(address).getLogServers().get(index)).getClient(LogUnitClient.class);
     }
 
+    public LogUnitClient getReplexLogUnitClient(int whichReplex, int index) {
+        return runtime.getRouter(getSegments().get(getSegments().size() - 1).replexes.get(whichReplex)
+                .getLogServers().get(index)).getClient(LogUnitClient.class);
+    }
     /**
      * Get the layout as a JSON string.
      */
@@ -314,7 +325,8 @@ public class Layout implements Cloneable {
     }
 
     @Data
-    @AllArgsConstructor
+    @Getter
+    @Setter
     public static class LayoutSegment {
         /**
          * The replication mode of the segment.
@@ -333,9 +345,20 @@ public class Layout implements Cloneable {
          */
         List<LayoutStripe> stripes;
 
-        public int getNumberOfStripes() {
-            return stripes.size();
+        public LayoutSegment(ReplicationMode replicationMode, long start, long end, List<LayoutStripe> stripes) {
+            this.replicationMode = replicationMode;
+            this.start = start;
+            this.end = end;
+            this.stripes = stripes;
         }
+
+        List<LayoutStripe> replexes; // A list of replexes. Each LayoutStripe is a replex, because it is just a list of
+                                     // servers. Select one node from each LayoutStripe (replex) to write to.
+                                     // For now, there is only 1 replex, which are the stream homes.
+
+        public int getNumberOfStripes() { return stripes.size(); }
+
+        public int getNumberOfReplexes() { return replexes.size(); }
     }
 
     @Data

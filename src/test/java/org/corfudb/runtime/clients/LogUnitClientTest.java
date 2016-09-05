@@ -7,6 +7,7 @@ import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -111,23 +112,27 @@ public class LogUnitClientTest extends AbstractClientTest {
     }
 
     @Test
-    public void streamTokenIsInitiallyZero()
+    public void canCommitWrite()
             throws Exception {
-        assertThat(client.getStreamToken(CorfuRuntime.getStreamID("test")).get())
-                .isEqualTo(0L);
-    }
+        byte[] testString = "hello world".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
+        client.writeCommit(null, 0, true).get();
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString);
+        assertThat(r.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT));
 
-    @Test
-    public void streamTokenIncrementsWithWrite()
-            throws Exception {
-        assertThat(client.getStreamToken(CorfuRuntime.getStreamID("test")).get())
-                .isEqualTo(0L);
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
-        b.writeBytes("hello".getBytes());
-        client.writeStream(1L, CorfuRuntime.getStreamID("test"),
-                Collections.singleton(CorfuRuntime.getStreamID("test")),
-                        b);
-        assertThat(client.getStreamToken(CorfuRuntime.getStreamID("test")).get())
-                .isEqualTo(1L);
+        UUID streamA = CorfuRuntime.getStreamID("streamA");
+        client.writeStream(1, Collections.singletonMap(streamA, 0L), testString).get();
+        client.writeCommit(Collections.singletonMap(streamA, 0L), 10L, true).get(); // 10L shouldn't matter
+
+        r = client.read(streamA, 0L).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString);
+        assertThat(r.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT));
     }
 }

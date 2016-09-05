@@ -58,9 +58,13 @@ public class SequencerServer extends AbstractServer {
      */
     ConcurrentHashMap<UUID, Long> lastIssuedMap;
 
+    // A map of stream local addresses
+    ConcurrentHashMap<UUID, Long> lastLocalOffsetMap;
+
     public SequencerServer(ServerContext serverContext) {
         Map<String, Object> opts = serverContext.getServerConfig();
         lastIssuedMap = new ConcurrentHashMap<>();
+        lastLocalOffsetMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
 
         try {
@@ -139,10 +143,16 @@ public class SequencerServer extends AbstractServer {
                         max = globalIndex.get() - 1;
                     }
                     r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                                    new TokenResponse(max, Collections.emptyMap())));
+                                    new TokenResponse(max, Collections.emptyMap(), Collections.emptyMap())));
                 } else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
+                    if (req.getStreams() == null) {
+                        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                new TokenResponse(thisIssue, Collections.emptyMap(), Collections.emptyMap())));
+                        return;
+                    }
                     ImmutableMap.Builder<UUID, Long> mb = ImmutableMap.builder();
+                    ImmutableMap.Builder<UUID, Long> localAddresses = ImmutableMap.builder();
                     for (UUID id : req.getStreams()) {
                         lastIssuedMap.compute(id, (k, v) -> {
                             if (v == null) {
@@ -152,9 +162,28 @@ public class SequencerServer extends AbstractServer {
                             mb.put(k, v);
                             return Math.max(thisIssue + req.getNumTokens() - 1, v);
                         });
+                        if (((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getReplexOverwrite() ||
+                                !((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getOverwrite()) {
+                            lastLocalOffsetMap.compute(id, (k, v) -> {
+                                if (v == null) {
+                                    localAddresses.put(k, 0L);
+                                    return 0L;
+                                }
+                                localAddresses.put(k, v + req.getNumTokens());
+                                return v + req.getNumTokens();
+                            });
+                        }
                     }
-                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                                    new TokenResponse(thisIssue, mb.build())));
+                    if (!((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getOverwrite() ||
+                            ((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getReplexOverwrite()) {
+                        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                new TokenResponse(thisIssue, mb.build(), localAddresses.build())));
+                    } else {
+                        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                new TokenResponse(thisIssue,
+                                        Collections.emptyMap(),
+                                        localAddresses.build())));
+                    }
                 }
             }
             break;

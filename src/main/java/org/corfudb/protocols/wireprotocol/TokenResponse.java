@@ -20,14 +20,19 @@ public class TokenResponse implements ICorfuPayload<TokenResponse> {
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
 
+    /** The map of local stream addresses. */
+    final Map<UUID, Long> streamAddresses;
+
     public TokenResponse(ByteBuf buf) {
         token = ICorfuPayload.fromBuffer(buf, Long.class);
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
+        streamAddresses = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, token);
         ICorfuPayload.serialize(buf, backpointerMap);
+        ICorfuPayload.serialize(buf, streamAddresses);
     }
 }

@@ -8,6 +8,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
 
 import java.lang.invoke.MethodHandles;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -40,7 +41,13 @@ public class SequencerClient implements IClient {
 
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
         return router.sendMessageAndGetCompletable(
-                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs)));
+                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, false, false)));
     }
 
+    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens,
+                                                      boolean overwrite,
+                                                      boolean replexOverwrite) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, overwrite, replexOverwrite)));
+    }
 }

@@ -112,7 +112,8 @@ public interface IMetadata {
         RANK(1, TypeToken.of(Long.class)),
         STREAM_ADDRESS(2, TypeToken.of(Long.class)),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
-        GLOBAL_ADDRESS(4, TypeToken.of(Long.class))
+        GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
+        COMMIT(5, TypeToken.of(Boolean.class)),
         ;
         final int type;
         @Getter

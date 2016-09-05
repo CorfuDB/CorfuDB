@@ -19,13 +19,17 @@ public class TrimRequest implements ICorfuPayload<TrimRequest> {
     final Long prefix;
 
     public TrimRequest(ByteBuf buf) {
-        stream = ICorfuPayload.fromBuffer(buf, UUID.class);
+        if (ICorfuPayload.fromBuffer(buf, Boolean.class))
+            stream = ICorfuPayload.fromBuffer(buf, UUID.class);
+        else stream = null;
         prefix = ICorfuPayload.fromBuffer(buf, Long.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, stream);
+        ICorfuPayload.serialize(buf, stream != null);
+        if (stream != null)
+            ICorfuPayload.serialize(buf, stream);
         ICorfuPayload.serialize(buf, prefix);
     }
 }

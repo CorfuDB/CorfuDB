@@ -52,19 +52,21 @@ public enum CorfuMsgType {
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}, LogUnitServer.class),
     READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}, LogUnitServer.class),
     TRIM(33, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}, LogUnitServer.class),
-    FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
+    FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}, LogUnitServer.class),
     FORCE_GC(35, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     GC_INTERVAL(36, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     STREAM_TOKEN(38, new TypeToken<CorfuPayloadMsg<UUID>>() {}, LogUnitServer.class),
     STREAM_TOKEN_RESPONSE(39, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
+    COMMIT(40, new TypeToken<CorfuPayloadMsg<CommitRequest>>() {}, LogUnitServer.class),
 
     // Logging Unit Error Codes
-    WRITE_OK(50, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
+    WRITE_OK(50, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     ERROR_OVERWRITE(52, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     ERROR_OOS(53, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+    ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
 
     // EXTRA CODES
     LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class),

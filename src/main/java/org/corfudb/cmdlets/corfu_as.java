@@ -65,7 +65,7 @@ public class corfu_as implements ICmdlet {
             throws Exception {
         runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
                 streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
-                Collections.emptyMap());
+                Collections.emptyMap(), Collections.emptyMap());
     }
 
     void read(CorfuRuntime runtime, Map<String, Object> opts)

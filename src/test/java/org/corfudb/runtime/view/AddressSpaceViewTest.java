@@ -72,7 +72,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         byte[] testPayload = "hello world".getBytes();
 
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
-                testPayload, Collections.emptyMap());
+                testPayload, Collections.emptyMap(), Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
@@ -90,7 +90,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .isEmptyAtAddress(0);
 
         r.getAddressSpaceView().write(1, Collections.singleton(streamA),
-                "1".getBytes(), Collections.emptyMap());
+                "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
         LogUnitServerAssertions.assertThat(getLogUnit(9000))
                 .matchesDataAtAddress(0, testPayload);
         LogUnitServerAssertions.assertThat(getLogUnit(9001))
@@ -131,17 +131,17 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         byte[] testPayload = "hello world".getBytes();
 
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
-                testPayload, Collections.emptyMap());
+                testPayload, Collections.emptyMap(), Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
 
         r.getAddressSpaceView().write(1, Collections.singleton(streamA),
-                "1".getBytes(), Collections.emptyMap());
+                "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
         r.getAddressSpaceView().write(3, Collections.singleton(streamA),
-                "3".getBytes(), Collections.emptyMap());
+                "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
         RangeSet<Long> rs = TreeRangeSet.create();
         rs.add(Range.closed(0L, 3L));
@@ -189,20 +189,20 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         byte[] testPayload = "hello world".getBytes();
 
         r.getAddressSpaceView().write(0, Collections.singleton(streamA),
-                testPayload, Collections.emptyMap());
+                testPayload, Collections.emptyMap(), Collections.emptyMap());
 
 
         r.getAddressSpaceView().write(1, Collections.singleton(streamA),
-                "1".getBytes(), Collections.emptyMap());
+                "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
         r.getAddressSpaceView().write(2, Collections.singleton(streamB),
-                "2".getBytes(), Collections.emptyMap());
+                "2".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
         r.getAddressSpaceView().write(3, Collections.singleton(streamA),
-                "3".getBytes(), Collections.emptyMap());
+                "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
         r.getAddressSpaceView().write(5, Collections.singleton(streamA),
-                "3".getBytes(), Collections.emptyMap());
+                "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
     }
 }

@@ -1,20 +1,13 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.collect.RangeSet;
-import io.netty.buffer.ByteBuf;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
-import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
 
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -52,6 +45,8 @@ public abstract class AbstractReplicationView {
                 case QUORUM_REPLICATION:
                     log.warn("Quorum replication is not yet supported!");
                     break;
+                case REPLEX:
+                    return new ReplexReplicationView(l, ls);
                 default:
                     log.error("Unknown replication mode {} selected.", mode);
                     break;
@@ -69,7 +64,7 @@ public abstract class AbstractReplicationView {
      */
     public void write(long address, Set<UUID> stream, Object data)
             throws OverwriteException {
-        write(address, stream, data, Collections.emptyMap());
+        write(address, stream, data, Collections.emptyMap(), Collections.emptyMap());
     }
 
     /**
@@ -81,7 +76,8 @@ public abstract class AbstractReplicationView {
      * @param backpointerMap The map of backpointers to write.
      * @return The number of bytes that was remotely written.
      */
-    public abstract int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
+    public abstract int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                              Map<UUID, Long> streamAddresses)
             throws OverwriteException;
 
     /**
@@ -110,9 +106,11 @@ public abstract class AbstractReplicationView {
      * Read a contiguous stream prefix, using the replication method given.
      *
      * @param stream The stream to read from.
+     * @param offset The local stream address to read from.
+     * @param size   The number of stream entries to read.
      * @return A map containing the results of the read.
      */
-    public abstract Map<Long, LogData> read(UUID stream);
+    public abstract Map<Long, LogData> read(UUID stream, long offset, long size);
 
     /**
      * Fill a hole at an address, using the replication method given.
@@ -121,5 +119,9 @@ public abstract class AbstractReplicationView {
      */
     public abstract void fillHole(long address)
             throws OverwriteException;
+
+    public void fillStreamHole(UUID stream, long address) throws OverwriteException {
+        throw new UnsupportedOperationException("This replication view doesn't support filling stream holes");
+    }
 
 }
