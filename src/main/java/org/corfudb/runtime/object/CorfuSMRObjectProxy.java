@@ -21,6 +21,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.LockUtils;
 import org.corfudb.util.ReflectionUtils;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.annotation.Annotation;
@@ -62,7 +63,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     ICorfuSMRObject.SMRHandlerMethod postHandler;
 
     public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv,
-                               Class<P> originalClass, Serializers.SerializerType serializer) {
+                               Class<P> originalClass, SerializerType serializer) {
         super(runtime, sv, originalClass, serializer);
         this.completableFutureMap = new ConcurrentHashMap<>();
         if (Arrays.stream(originalClass.getInterfaces()).anyMatch(ICorfuSMRObject.class::isAssignableFrom)) {

@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Set;
@@ -43,7 +44,7 @@ public class CorfuRangeMsg extends CorfuMsg {
         Set<Range<Long>> ranges = this.ranges.asRanges();
         buffer.writeInt(ranges.size());
         for (Range i : ranges) {
-            Serializers.getSerializer(Serializers.SerializerType.JAVA).serialize(i, buffer);
+            Serializers.getSerializer(SerializerType.JAVA).serialize(i, buffer);
         }
     }
 
@@ -60,7 +61,7 @@ public class CorfuRangeMsg extends CorfuMsg {
         this.ranges = TreeRangeSet.create();
         int ranges = buffer.readInt();
         for (int i = 0; i < ranges; i++) {
-            Range r = (Range) Serializers.getSerializer(Serializers.SerializerType.JAVA).deserialize(buffer, null);
+            Range r = (Range) Serializers.getSerializer(SerializerType.JAVA).deserialize(buffer, null);
             this.ranges.add(r);
         }
     }
