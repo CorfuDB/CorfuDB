@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -44,6 +45,20 @@ public class ReplexReplicationView extends AbstractReplicationView {
             Serializers.getSerializer(Serializers.SerializerType.CORFU)
                     .serialize(data, b);
             payloadBytes = b.readableBytes();
+
+            // Need this for txns to work, in particular, TXEntry.java requires this info.
+            // We don't set the backpointers, to trigger using Replex to do reads.
+            // TODO: (amytai) When resolving optimistic txns in TXEnd, using seek instead of linear scan.
+            LogData ld = new LogData(DataType.DATA, b);
+            ld.setStreams(stream);
+            ld.setGlobalAddress(address);
+
+            // FIXME
+            if (data instanceof LogEntry) {
+                ((LogEntry) data).setRuntime(getLayout().getRuntime());
+                ((LogEntry) data).setEntry(ld);
+            }
+
             // First write to all the primary index units
             for (int i = 0; i < numUnits; i++)
             {
@@ -67,20 +82,20 @@ public class ReplexReplicationView extends AbstractReplicationView {
             }
 
             // Write to the secondary / stream index units.
-            for (int i = 0; i < streamPairs.size(); i++) {
-                    log.trace("Write, Replex: chain {}/{}", i+1, getLayout().getNumReplexUnits(0));
+            for (Integer lu : streamPairs.keySet()) {
+                    log.trace("Write, Replex: chain {}/{}", lu+1, getLayout().getNumReplexUnits(0));
                     CFUtils.getUninterruptibly(
-                            getLayout().getReplexLogUnitClient(0, i)
-                                    .writeStream(address, streamPairs.get(i), b), ReplexOverwriteException.class);
+                            getLayout().getReplexLogUnitClient(0, lu)
+                                    .writeStream(address, streamPairs.get(lu), b), ReplexOverwriteException.class);
             }
 
             // TODO: Wait.. the reads are ALWAYS true, because the sequencer hands out values. The protocol might
             // be able to just skip the commit bits.
-            for (int i = 0; i < streamPairs.size(); i++) {
-                log.trace("Commit, Replex: chain {}/{}", address, i+1, getLayout().getNumReplexUnits(0));
+            for (Integer lu : streamPairs.keySet()) {
+                log.trace("Commit, Replex: chain {}/{}", address, lu+1, getLayout().getNumReplexUnits(0));
                 CFUtils.getUninterruptibly(
-                        getLayout().getReplexLogUnitClient(0, i)
-                                .writeCommit(streamPairs.get(i), -1L, true), null);
+                        getLayout().getReplexLogUnitClient(0, lu)
+                                .writeCommit(streamPairs.get(lu), -1L, true), null);
             }
 
             // COMMIT bits to the global layer
@@ -132,8 +147,9 @@ public class ReplexReplicationView extends AbstractReplicationView {
         for (Long address : potentialResult.keySet()) {
             if (potentialResult.get(address).getType() == DataType.DATA &&
                     potentialResult.get(address).getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT) &&
-                    !(Boolean)(potentialResult.get(address).getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT)))
+                    !(Boolean)(potentialResult.get(address).getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT))) {
                 potentialResult.put(address, LogData.EMPTY);
+            }
         }
         return potentialResult;
     }

@@ -273,7 +273,7 @@ public class AddressSpaceView extends AbstractView {
                 l -> {
                     AbstractReplicationView
                             .getReplicationView(l, l.getReplicationMode(address), l.getSegment(address))
-                            .fillHole(address);
+                            .fillStreamHole(streamID, address);
                     return null;
                 }
         );

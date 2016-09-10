@@ -90,7 +90,10 @@ public class LogUnitServer extends AbstractServer {
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
             }
         } catch (Exception ex) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM)
+                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+            else
+                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_REPLEX_OVERWRITE.msg());
         }
     }
 

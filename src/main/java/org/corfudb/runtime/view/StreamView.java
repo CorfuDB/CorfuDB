@@ -86,14 +86,21 @@ public class StreamView implements AutoCloseable {
     public long acquireAndWrite(Object object, Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback) {
         boolean replexOverwrite = false;
+        boolean overwrite = false;
         TokenResponse tokenResponse = null;
         while (true) {
             long token;
             if (replexOverwrite) {
-                TokenResponse temp =
+                tokenResponse =
                         runtime.getSequencerView()
                                 .nextToken(Collections.singleton(streamID), 1, false, true);
+                token = tokenResponse.getToken();
+            } else if (overwrite) {
+                TokenResponse temp =
+                        runtime.getSequencerView()
+                                .nextToken(Collections.singleton(streamID), 1, true, false);
                 token = temp.getToken();
+                tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
             }
             else {
                 tokenResponse =
@@ -122,12 +129,14 @@ public class StreamView implements AutoCloseable {
                     return -1L;
                 }
                 replexOverwrite = true;
+                overwrite = false;
             } catch (OverwriteException oe) {
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                     log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                     return -1L;
                 }
                 replexOverwrite = false;
+                overwrite = true;
                 log.debug("Overwrite occurred at {}, retrying.", token);
             }
         }
@@ -287,10 +296,12 @@ public class StreamView implements AutoCloseable {
                     long thisRead = getCurrentContext().logPointer.get();
                     log.trace("Doing a stream read, stream: {}, address: {}", streamID, thisRead);
                     LogData result = runtime.getAddressSpaceView().read(streamID, thisRead, 1L).get(thisRead);
+                    getCurrentContext().logPointer.incrementAndGet();
 
                     if (result.getType() == DataType.EMPTY) {
                         //determine whether or not this is a hole
-                        long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
+                        long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0)
+                                .getStreamAddresses().get(streamID);
                         log.trace("Read[{}]: latest token at {}", streamID, latestToken);
                         if (latestToken < thisRead) {
                             getCurrentContext().logPointer.decrementAndGet();
@@ -302,14 +313,23 @@ public class StreamView implements AutoCloseable {
                         } catch (OverwriteException oe) {
                             //ignore overwrite.
                         }
-                        LogData r = runtime.getAddressSpaceView().read(thisRead);
-                        log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getType());
-                        getCurrentContext().logPointer.incrementAndGet();
-                        continue;
-                    } else if (result.getType() == DataType.DATA) {
-                        getCurrentContext().logPointer.incrementAndGet();
+                        result = runtime.getAddressSpaceView().read(streamID, thisRead, 1L).get(thisRead);
+                        log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, result.getType());
                     }
-                    return result;
+
+                    Set<UUID> streams = (Set<UUID>) result.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
+                    if (streams != null && streams.contains(getCurrentContext().contextID)) {
+                        log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
+                        Object res = result.getPayload(runtime);
+                        if (res instanceof StreamCOWEntry) {
+                            StreamCOWEntry ce = (StreamCOWEntry) res;
+                            log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
+                                    ce.getFollowUntil());
+                            streamContexts.add(new StreamContext(ce.getOriginalStream(), ce.getFollowUntil()));
+                        } else {
+                            return result;
+                        }
+                    }
                 } else {
                     throw new RuntimeException("Unsupported replication mode for a read in StreamView");
                 }
