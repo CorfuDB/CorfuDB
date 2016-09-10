@@ -21,6 +21,10 @@ public class SequencerView extends AbstractView {
     /**
      * Return the next token in the sequence for a particular stream.
      *
+     * If numTokens == 0, then the streamAddressesMap returned is the last handed out token for
+     * each stream (if streamIDs is not empty). The token returned is the global address as
+     * previously defined, namely, max global address across all the streams.
+     *
      * @param streamIDs The stream IDs to retrieve from.
      * @param numTokens The number of tokens to reserve.
      * @return The first token retrieved.

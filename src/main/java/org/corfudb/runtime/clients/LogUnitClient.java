@@ -10,6 +10,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.invoke.MethodHandles;
@@ -74,6 +75,20 @@ public class LogUnitClient implements IClient {
             throws Exception
     {
         throw new OverwriteException();
+    }
+
+    /** Handle an ERROR_REPLEX_OVERWRITE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      OverwriteException
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_REPLEX_OVERWRITE)
+    private static Object handleReplexOverwrite(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new ReplexOverwriteException();
     }
 
     /** Handle an ERROR_OOS message.

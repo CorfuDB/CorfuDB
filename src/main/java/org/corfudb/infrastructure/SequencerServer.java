@@ -129,7 +129,16 @@ public class SequencerServer extends AbstractServer {
                 if (req.getNumTokens() == 0) {
                     long max = 0L;
                     boolean hit = false;
+                    ImmutableMap.Builder<UUID, Long> streamsLastIssued = ImmutableMap.builder();
                     for (UUID id : req.getStreams()) {
+                        lastLocalOffsetMap.compute(id, (k, v) -> {
+                            if (v == null) {
+                                streamsLastIssued.put(k, -1L);
+                                return null;
+                            }
+                            streamsLastIssued.put(k, v);
+                            return v;
+                        });
                         Long lastIssued = lastIssuedMap.get(id);
                         if (lastIssued != null) {
                             hit = true;
@@ -143,7 +152,7 @@ public class SequencerServer extends AbstractServer {
                         max = globalIndex.get() - 1;
                     }
                     r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                                    new TokenResponse(max, Collections.emptyMap(), Collections.emptyMap())));
+                                    new TokenResponse(max, Collections.emptyMap(), streamsLastIssued.build())));
                 } else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
                     if (req.getStreams() == null) {
@@ -174,16 +183,10 @@ public class SequencerServer extends AbstractServer {
                             });
                         }
                     }
-                    if (!((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getOverwrite() ||
-                            ((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getReplexOverwrite()) {
-                        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                                new TokenResponse(thisIssue, mb.build(), localAddresses.build())));
-                    } else {
-                        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                                new TokenResponse(thisIssue,
-                                        Collections.emptyMap(),
-                                        localAddresses.build())));
-                    }
+                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                            new TokenResponse(thisIssue,
+                                    mb.build(),
+                                    localAddresses.build())));
                 }
             }
             break;
