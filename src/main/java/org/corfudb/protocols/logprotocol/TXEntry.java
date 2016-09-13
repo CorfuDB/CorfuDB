@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.ICorfuSerializable;
 import org.corfudb.util.serializer.Serializers;
 
@@ -44,16 +45,40 @@ public class TXEntry extends LogEntry {
     }
 
     public boolean checkIfStreamAborts(UUID stream) {
+        if (runtime.getLayoutView().getLayout().getSegments().get(
+                runtime.getLayoutView().getLayout().getSegments().size() - 1)
+                .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
+            // Starting at the stream local address of this entry, read backwards until you hit a stream entry whose
+            // global address is less than readTimestamp.
+            if (getEntry().getLogicalAddresses().get(stream) == 0)
+                return false;
+            LogData curEntry = runtime.getAddressSpaceView().read(stream, getEntry().getLogicalAddresses().get(stream) - 1, 1)
+                    .get(getEntry().getLogicalAddresses().get(stream) - 1);
+            while (curEntry != null  && curEntry.getType() == DataType.DATA && curEntry.getGlobalAddress() > readTimestamp) {
+                if (curEntry.getLogEntry(runtime).isMutation(stream)) {
+                    return true;
+                }
+
+                if (curEntry.getLogicalAddresses().get(stream) == 0)
+                    break;
+                curEntry = runtime.getAddressSpaceView().read(stream, curEntry.getLogicalAddresses().get(stream) - 1, 1)
+                        .get(curEntry.getLogicalAddresses().get(stream) - 1);
+            }
+            return false;
+        }
+
         if (getEntry() != null && getEntry().hasBackpointer(stream)) {
             LogData backpointedEntry = getEntry();
             if (backpointedEntry.isFirstEntry(stream)) {
                 return false;
             }
+            int i = 0;
 
             while (
                     backpointedEntry.hasBackpointer(stream) &&
                             backpointedEntry.getGlobalAddress() > readTimestamp &&
                             !backpointedEntry.isFirstEntry(stream)) {
+                i++;
                 if (!backpointedEntry.getGlobalAddress().equals(getEntry().getGlobalAddress()) && //not self!
                         backpointedEntry.isLogEntry(runtime) && backpointedEntry.getLogEntry(runtime).isMutation(stream)) {
                     log.debug("TX aborted due to mutation [via backpointer]: " +

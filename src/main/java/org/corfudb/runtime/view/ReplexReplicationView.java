@@ -50,8 +50,8 @@ public class ReplexReplicationView extends AbstractReplicationView {
             // We don't set the backpointers, to trigger using Replex to do reads.
             // TODO: (amytai) When resolving optimistic txns in TXEnd, using seek instead of linear scan.
             LogData ld = new LogData(DataType.DATA, b);
-            ld.setStreams(stream);
             ld.setGlobalAddress(address);
+            ld.setLogicalAddresses(streamAddresses);
 
             // FIXME
             if (data instanceof LogEntry) {

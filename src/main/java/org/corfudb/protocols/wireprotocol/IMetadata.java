@@ -70,21 +70,21 @@ public interface IMetadata {
     /**
      * Get the logical stream addresses that belong to this write.
      *
-     * @return A list of logical stream addresses that belong to this write.
+     * @return A map of UUID to logical stream addresses that belong to this write.
      */
     @SuppressWarnings("unchecked")
-    default List<Long> getLogicalAddresses() {
-        return (List<Long>) getMetadataMap().getOrDefault(IMetadata.LogUnitMetadataType.STREAM_ADDRESS,
-                Collections.EMPTY_LIST);
+    default Map<UUID, Long> getLogicalAddresses() {
+        return (Map<UUID, Long>) getMetadataMap().getOrDefault(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES,
+                Collections.EMPTY_MAP);
     }
 
     /**
      * Set the logical stream addresses that belong to this write.
      *
-     * @param streams The set of logical stream addresses that will belong to this write.
+     * @param streams The map from UUID to logical stream addresses that will belong to this write.
      */
-    default void setLogicalAddresses(List<Long> streams) {
-        getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM_ADDRESS, streams);
+    default void setLogicalAddresses(Map<UUID, Long> streams) {
+        getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES, streams);
     }
 
     @SuppressWarnings("unchecked")
@@ -110,7 +110,7 @@ public interface IMetadata {
     public enum LogUnitMetadataType implements ITypedEnum {
         STREAM(0, new TypeToken<Set<UUID>>() {}),
         RANK(1, TypeToken.of(Long.class)),
-        STREAM_ADDRESS(2, TypeToken.of(Long.class)),
+        STREAM_ADDRESSES(2, new TypeToken<Map<UUID, Long>>() {}),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
         COMMIT(5, TypeToken.of(Boolean.class)),

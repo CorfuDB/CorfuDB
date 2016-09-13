@@ -212,7 +212,7 @@ public class LogUnitClient implements IClient {
     public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
                                                   ByteBuf buffer) {
         WriteRequest wr = new WriteRequest(WriteMode.REPLEX_STREAM, streamAddresses, buffer);
-        wr.setStreams(streamAddresses.keySet());
+        wr.setLogicalAddresses(streamAddresses);
         wr.setGlobalAddress(address);
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }

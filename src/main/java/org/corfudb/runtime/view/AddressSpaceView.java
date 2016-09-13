@@ -129,6 +129,7 @@ public class AddressSpaceView extends AbstractView {
             ld.setGlobalAddress(address);
             ld.setBackpointerMap(backpointerMap);
             ld.setStreams(stream);
+            ld.setLogicalAddresses(streamAddresses);
 
             // FIXME
             if (data instanceof LogEntry) {
