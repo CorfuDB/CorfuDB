@@ -9,11 +9,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -316,8 +312,10 @@ public class StreamView implements AutoCloseable {
                         result = runtime.getAddressSpaceView().read(streamID, thisRead, 1L).get(thisRead);
                         log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, result.getType());
                     }
+                    if (result.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)  == null)
+                        continue;
 
-                    Set<UUID> streams = (Set<UUID>) result.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
+                    Set<UUID> streams = ((Map<UUID, Long>) result.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)).keySet();
                     if (streams != null && streams.contains(getCurrentContext().contextID)) {
                         log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
                         Object res = result.getPayload(runtime);

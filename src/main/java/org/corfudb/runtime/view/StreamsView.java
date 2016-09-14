@@ -6,6 +6,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 
 import java.util.Collections;
 import java.util.Set;
@@ -101,15 +102,32 @@ public class StreamsView {
     public long acquireAndWrite(Set<UUID> streamIDs, Object object,
                                 Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback) {
+        boolean replexOverwrite = false;
+        boolean overwrite = false;
+        TokenResponse tokenResponse = null;
         while (true) {
-            TokenResponse token =
-                    runtime.getSequencerView().nextToken(streamIDs, 1);
-            log.trace("Write: acquired token = {}", token.getToken());
+            long token;
+            if (replexOverwrite) {
+                tokenResponse =
+                        runtime.getSequencerView().nextToken(streamIDs, 1, false, true);
+                token = tokenResponse.getToken();
+            } else if (overwrite) {
+                TokenResponse temp =
+                        runtime.getSequencerView().nextToken(streamIDs, 1, true, false);
+                token = temp.getToken();
+                tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+            }
+            else {
+                tokenResponse =
+                        runtime.getSequencerView().nextToken(streamIDs, 1);
+                token = tokenResponse.getToken();
+            }
+            log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
             if (acquisitionCallback != null) {
-                if (!acquisitionCallback.apply(token)) {
+                if (!acquisitionCallback.apply(tokenResponse)) {
                     log.trace("Acquisition rejected token, hole filling acquired address.");
                     try {
-                        runtime.getAddressSpaceView().fillHole(token.getToken());
+                        runtime.getAddressSpaceView().fillHole(token);
                     } catch (OverwriteException oe) {
                         log.trace("Hole fill completed by remote client.");
                     }
@@ -117,14 +135,23 @@ public class StreamsView {
                 }
             }
             try {
-                runtime.getAddressSpaceView().write(token.getToken(), streamIDs,
-                        object, token.getBackpointerMap(), token.getStreamAddresses());
-                return token.getToken();
-            } catch (OverwriteException oe) {
-                if (deacquisitionCallback != null && !deacquisitionCallback.apply(token)) {
+                runtime.getAddressSpaceView().write(token, streamIDs,
+                        object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                return token;
+            } catch (ReplexOverwriteException re) {
+                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                     log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                     return -1L;
                 }
+                replexOverwrite = true;
+                overwrite = false;
+            } catch (OverwriteException oe) {
+                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                    log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                    return -1L;
+                }
+                replexOverwrite = false;
+                overwrite = true;
                 log.debug("Overwrite occurred at {}, retrying.", token);
             }
         }
