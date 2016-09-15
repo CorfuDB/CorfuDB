@@ -62,7 +62,7 @@ public class corfu_layout implements ICmdlet {
                     + " --version  Show version\n";
 
     @Override
-    public String[] main2(String[] args) {
+    public String[] main(String[] args) {
         if (args != null && args.length > 0 && args[0].contentEquals("reset")) {
             log.trace("corfu_layout top: reset");
             LayoutServer ls = CorfuServer.getLayoutServer();

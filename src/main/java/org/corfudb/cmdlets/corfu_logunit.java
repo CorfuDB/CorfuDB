@@ -45,7 +45,7 @@ public class corfu_logunit implements ICmdlet {
                     + " --version  Show version\n";
 
     @Override
-    public String[] main2(String[] args) {
+    public String[] main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);

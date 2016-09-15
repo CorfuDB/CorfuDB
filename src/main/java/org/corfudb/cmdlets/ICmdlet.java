@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  */
 
 public interface ICmdlet {
-    String[] main2(String[] args);
+    String[] main(String[] args);
 
     default void configureBase(Map<String, Object> opts) {
         if (CorfuServer.serverRunning_p) {
