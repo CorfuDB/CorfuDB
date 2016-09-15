@@ -416,6 +416,34 @@ public class SMRMapTest extends AbstractViewTest {
         calculateAbortRate(aborts.get(), num_records * num_threads);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    public void bulkReads()
+            throws Exception {
+        UUID stream = UUID.randomUUID();
+        Map<String, String> testMap = getRuntime().getObjectsView().open(stream, SMRMap.class);
+        testMap.clear();
+        for (int i = 0; i < 1_000; i++) {
+            assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
+                    .isNull();
+        }
+
+        // Do a bulk read of the stream by initializing a new view.
+        final int num_threads = 1;
+
+        long startTime = System.nanoTime();
+        Map<String, String> testMap2 = getRuntime().getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamID(stream)
+                .addOption(ObjectOpenOptions.NO_CACHE)
+                .open();
+        // Do a get to prompt the sync
+        assertThat(testMap2.get(Integer.toString(0))).isEqualTo(Integer.toString(0));
+        long endTime = System.nanoTime();
+
+        testStatus += "Time to sync whole stream=" + String.format("%d us", (endTime - startTime) / 1000);
+    }
+
     @Data
     @ToString
     static class TestObject {
