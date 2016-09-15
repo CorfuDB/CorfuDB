@@ -1,12 +1,9 @@
 package org.corfudb.cmdlets;
 
 import org.apache.commons.lang.exception.ExceptionUtils;
-import org.corfudb.util.Utils;
 
 import java.io.File;
 import java.util.Arrays;
-
-import static java.lang.System.exit;
 
 /**
  * Routes symlink-files to the proper cmdlet.
@@ -52,7 +49,7 @@ public class CmdletRouter {
             } else {
                 try {
                     // Execute with the arguments other than the name of the cmdlet itself.
-                    String[] res = ((ICmdlet) cmdlet.getConstructor().newInstance()).main2(Arrays.copyOfRange(args, 1, args.length));
+                    String[] res = ((ICmdlet) cmdlet.getConstructor().newInstance()).main(Arrays.copyOfRange(args, 1, args.length));
                     return res;
                 } catch (Exception e) {
                     return ICmdlet.cmdlet.err("exception", e.getClass().getSimpleName(), ExceptionUtils.getStackTrace(e));
