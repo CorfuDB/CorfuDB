@@ -317,6 +317,38 @@ propose(C_Epoch, Rank, Layout) ->
 commit(C_Epoch, Rank, Layout) ->
     apply(?MODULE, commit, ?QUICK_MBOX ++ [C_Epoch, Rank, Layout]).
 
+sanity() ->
+    case reset() of
+        ["OK"] ->
+            ok;
+        _Else1 ->
+            io:format("\n"),
+            io:format("reset() error: do you have corfu_server running\n"),
+            io:format("on host ~s?\n", [qc_java:local_endpoint()]),
+            io:format("\n"),
+            throw(reset_error)
+    end,
+    case query(0) of
+        ["OK", _] ->
+            ok;
+        _Else2 ->
+            io:format("\n"),
+            io:format("query(0) error: do you have corfu_server running\n"),
+            io:format("on host ~s\n", [qc_java:local_endpoint()]),
+            io:format("\n"),
+            Host = qc_java:local_endpoint_host(),
+            io:format("Also, please verify that the host ~s is resolvable\n",
+                      [Host]),
+            io:format("via DNS or /etc/hosts.  Here are 'ping' results:\n"),
+            io:format("\n"),
+            io:format("~s\n", [os:cmd("ping -c 1 " ++ Host)]),
+            io:format("When /etc/hosts or DNS is fixed, please restart "
+                      "the corfu_server process!\n"),
+            io:format("\n"),
+            throw(query_error)
+    end,
+    ok.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 termify(["OK"]) ->
