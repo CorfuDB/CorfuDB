@@ -336,24 +336,89 @@ public class StreamView implements AutoCloseable {
     }
 
     public synchronized LogData[] readTo(long pos) {
-        long latestToken = pos;
-        boolean max = false;
-        if (pos == Long.MAX_VALUE) {
-            max = true;
-            latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
-            log.trace("Linearization point set to {}", latestToken);
-        }
-        ArrayList<LogData> al = new ArrayList<>();
-        log.debug("Stream[{}] pointer[{}], readTo {}", streamID, getCurrentContext().logPointer.get(), pos);
-        while (getCurrentContext().logPointer.get() <= latestToken) {
-            LogData r = read();
-            if (r != null && (max || r.getGlobalAddress() <= pos)) {
-                al.add(r);
-            } else {
-                break;
+        if (runtime.getLayoutView().getLayout().getSegments().get(
+                runtime.getLayoutView().getLayout().getSegments().size() - 1)
+                .getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
+            long latestToken = pos;
+            boolean max = false;
+            if (pos == Long.MAX_VALUE) {
+                max = true;
+                latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
+                log.trace("Linearization point set to {}", latestToken);
             }
+            ArrayList<LogData> al = new ArrayList<>();
+            log.debug("Stream[{}] pointer[{}], readTo {}", streamID, getCurrentContext().logPointer.get(), latestToken);
+            while (getCurrentContext().logPointer.get() <= latestToken) {
+                LogData r = read();
+                if (r != null && (max || r.getGlobalAddress() <= pos)) {
+                    al.add(r);
+                } else {
+                    break;
+                }
+            }
+            return al.toArray(new LogData[al.size()]);
+        } else if (runtime.getLayoutView().getLayout().getSegments().get(
+                runtime.getLayoutView().getLayout().getSegments().size() - 1)
+                .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
+            // pos is a global address, but we want the local stream address..
+            long latestToken = pos;
+            boolean max = false;
+            if (pos == Long.MAX_VALUE) {
+                max = true;
+                latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getStreamAddresses().get(streamID);
+                log.trace("Linearization point set to {}", latestToken);
+            }
+
+            if (latestToken < getCurrentContext().logPointer.get())
+                return (new ArrayList<LogData>()).toArray(new LogData[0]);
+            // We can do a bulk read
+            Map<Long, LogData> readResult = runtime.getAddressSpaceView().read(streamID, getCurrentContext().logPointer.get(),
+                    latestToken - getCurrentContext().logPointer.get() + 1);
+            getCurrentContext().logPointer.addAndGet(latestToken - getCurrentContext().logPointer.get() + 1);
+            ArrayList<LogData> al = new ArrayList<>();
+            for (Long addr : readResult.keySet()) {
+                // Now we effectively copy the logic from the read() function above.
+                if (readResult.get(addr) == null) {
+                    continue;
+                }
+                if (max && addr > pos)
+                    break;
+                if (readResult.get(addr).getType() == DataType.EMPTY) {
+                    if (addr <= latestToken) {
+                        // If it's a hole, fill it and don't return it
+                        log.debug("Replex readTO[{}]: hole detected at {} (token at {}), attempting fill.", streamID, addr, latestToken);
+                        try {
+                            runtime.getAddressSpaceView().fillStreamHole(streamID, addr);
+                        } catch (OverwriteException oe) {
+                            //ignore overwrite.
+                        }
+                        LogData retry = runtime.getAddressSpaceView().read(streamID, addr, 1L).get(addr);
+                        if (retry.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)  == null)
+                            continue;
+
+                        Set<UUID> streams = ((Map<UUID, Long>) retry.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)).keySet();
+                        if (streams != null && streams.contains(getCurrentContext().contextID)) {
+                            log.trace("Read[{}]: valid entry at {}", streamID, retry);
+                            Object res = retry.getPayload(runtime);
+                            if (res instanceof StreamCOWEntry) {
+                                StreamCOWEntry ce = (StreamCOWEntry) res;
+                                log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
+                                        ce.getFollowUntil());
+                                streamContexts.add(new StreamContext(ce.getOriginalStream(), ce.getFollowUntil()));
+                            } else {
+                                al.add(retry);
+                            }
+                        }
+                    } else {
+                        getCurrentContext().logPointer.decrementAndGet();
+                    }
+                    continue;
+                }
+                al.add(readResult.get(addr));
+            }
+            return al.toArray(new LogData[al.size()]);
         }
-        return al.toArray(new LogData[al.size()]);
+        return (new ArrayList<LogData>()).toArray(new LogData[0]);
     }
 
     /**
@@ -382,7 +447,7 @@ public class StreamView implements AutoCloseable {
          */
         final long maxAddress;
         /**
-         * A pointer to the log.
+         * A pointer to the log. In Chain-Replication, this is a GLOBAL address. In Replex-Corfu, this is a STREAM addr.
          */
         final AtomicLong logPointer;
         /**

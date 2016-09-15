@@ -2,6 +2,7 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Range;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.infrastructure.AbstractServer;
@@ -128,7 +129,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         client.writeStream(1, Collections.singletonMap(streamA, 0L), testString).get();
         client.writeCommit(Collections.singletonMap(streamA, 0L), 10L, true).get(); // 10L shouldn't matter
 
-        r = client.read(streamA, 0L).get().getReadSet().get(0L);
+        r = client.read(streamA, Range.singleton(0L)).get().getReadSet().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))

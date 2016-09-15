@@ -234,9 +234,9 @@ public class LogUnitClient implements IClient {
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
     }
 
-    public CompletableFuture<ReadResponse> read(UUID stream, long offset) {
+    public CompletableFuture<ReadResponse> read(UUID stream, Range<Long> offsetRange) {
         return router.sendMessageAndGetCompletable(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(Range.singleton(offset), stream)));
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(offsetRange, stream)));
     }
 
     /**

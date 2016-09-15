@@ -112,6 +112,10 @@ public abstract class AbstractReplicationView {
      */
     public abstract Map<Long, LogData> read(UUID stream, long offset, long size);
 
+    public Map<Long, LogData> readPrefix(UUID stream) {
+        throw new UnsupportedOperationException("unsupported");
+    }
+
     /**
      * Fill a hole at an address, using the replication method given.
      *
