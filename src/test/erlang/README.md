@@ -175,15 +175,23 @@ Now we can run QuickCheck commands and support utility functions at
 the Erlang shell.
 
 If we can communicate correctly with the JVM, you should see this
-value from the `reset()` function:
+value when calling the `sanity()` function:
 
-    (qc@sbb5)1> layout_qc:reset(). 
-    ["OK"]
+    (qc@sbb5)1> layout_qc:sanity().
+    ok
+
+If the `sanity()` function throws an error, and you're sure that the
+`corfu_server` process is running, then you probably need to add an
+entry to `/etc/hosts` or to DNS.  The hostname that the QuickCheck
+code is attempting to use can be shown by calling the function at
+Erlang shell:
+
+    (qc@sbb5)1> qc_java:local_endpoint_host().
 
 The following example QuickCheck execution should run in under four
 seconds.
 
-    (qc@sbb5)2> proper:quickcheck(layout_qc:prop()).
+    (qc@sbb5)3> proper:quickcheck(layout_qc:prop()).
     ....................................................................................................
     OK: Passed 100 test(s).
     

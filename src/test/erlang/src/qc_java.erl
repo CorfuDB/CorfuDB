@@ -30,7 +30,8 @@
 
 -include("qc_java.hrl").
 
--export([local_mboxes/0, local_endpoint/0, local_endpoint_port/0,
+-export([local_mboxes/0, local_endpoint/0,
+         local_endpoint_port/0, local_endpoint_host/0,
          endpoint2nodename/1,
          quick_mbox_endpoint/0,
          rpc_call/3]).
@@ -40,15 +41,20 @@ local_mboxes() ->
      cmdlet5, cmdlet6, cmdlet7, cmdlet8, cmdlet9].
 
 local_endpoint() ->
-    ShortName = case os:getenv("CORFU_HOST") of
-                    false ->
-                        %% confirm that we're using short names
-                        false = net_kernel:longnames(),
-                        [_, SN] = string:tokens(atom_to_list(node()), "@"),
-                        SN
-                end,
+    ShortName = local_endpoint_host(),
     Port = local_endpoint_port(),
     ShortName ++ ":" ++ integer_to_list(Port).
+
+local_endpoint_host() ->
+    case os:getenv("CORFU_HOST") of
+        false ->
+            %% confirm that we're using short names
+            false = net_kernel:longnames(),
+            [_, SN] = string:tokens(atom_to_list(node()), "@"),
+            SN;
+        Host ->
+            Host
+    end.
 
 local_endpoint_port() ->
     case os:getenv("CORFU_PORT") of
