@@ -288,6 +288,11 @@ public class TestClientRouter implements IClientRouter {
         //TODO - pause pipeline
     }
 
+    @Override
+    public void stop(boolean unused) {
+        //TODO - pause pipeline
+    }
+
     public CorfuMsg simulateSerialization(CorfuMsg message) {
         /* simulate serialization/deserialization */
         ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();

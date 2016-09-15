@@ -2,10 +2,12 @@ package org.corfudb.cmdlets;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.util.Utils;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
@@ -20,9 +22,12 @@ import java.util.stream.Collectors;
  */
 
 public interface ICmdlet {
-    void main(String[] args);
+    String[] main(String[] args);
 
     default void configureBase(Map<String, Object> opts) {
+        if (CorfuServer.serverRunning_p) {
+            return;
+        }
         Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         switch ((String) opts.get("--log-level")) {
             case "ERROR":
@@ -93,4 +98,25 @@ public interface ICmdlet {
                 .map(this::getUUIDfromString)
                 .collect(Collectors.toSet());
     }
+
+    class cmdlet {
+        protected static String[] ok(String... args) {
+            return makeStringArray("OK", args);
+        }
+
+        protected static String[] err(String... args) {
+            return makeStringArray("ERROR", args);
+        }
+
+        private static String[] makeStringArray(String zeroth, String... args) {
+            String[] a = new String[args.length + 1];
+            for (int i = 0; i < args.length; i++) {
+                a[i + 1] = args[i];
+            }
+            a[0] = zeroth;
+            return a;
+        }
+
+    }
+
 }

@@ -53,7 +53,8 @@ public class BaseServer extends AbstractServer {
     }
 
     @Override
-    public void reset() {
+    public void reset() { }
 
-    }
+    @Override
+    public void reboot() { }
 }
