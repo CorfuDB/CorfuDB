@@ -177,14 +177,17 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Read the given object from a range of addresses.
+     * Do a bulk read of the stream.
      *
-     * @param stream An address range to read from.
-     * @return A result, which be cached.
+     * @param stream The stream to download.
+     * @return A result.
      */
     public Map<Long, LogData> readPrefix(UUID stream) {
-        /* TODO : implement in both backpointer and Replex cases */
-        throw new UnsupportedOperationException("unsupported");
+        return layoutHelper(l -> AbstractReplicationView
+                        .getReplicationView(l, l.getSegments().get(l.getSegments().size() - 1).getReplicationMode(),
+                                l.getSegments().get(l.getSegments().size() - 1))
+                        .readPrefix(stream)
+        );
     }
 
 

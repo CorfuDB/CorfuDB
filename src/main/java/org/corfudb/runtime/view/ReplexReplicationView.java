@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Range;
 import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -131,7 +132,7 @@ public class ReplexReplicationView extends AbstractReplicationView {
     }
 
     /**
-     * Read a stream prefix, using the replication method given.
+     * Read from an offset in a stream, for a certain number of entries.
      *
      * @param stream the stream to read from.
      * @return A map containing the results of the read.
@@ -140,10 +141,10 @@ public class ReplexReplicationView extends AbstractReplicationView {
     public Map<Long, LogData> read(UUID stream, long offset, long size) {
         // Fetch the entries from the client. If the commit bit isn't set, then don't return the entry.
         // This is problematic for bulk reads -- what do you do if there is a hole in the middle of your bulk read?
-        // TODO (amytai): implement this for size != 1
         log.trace("Replex Stream Read[{}, {}]", stream, offset);
         Map<Long, LogData> potentialResult = CFUtils.getUninterruptibly(getLayout()
-                .getReplexLogUnitClient(0, getLayout().getReplexUnitIndex(0, stream)).read(stream, offset)).getReadSet();
+                .getReplexLogUnitClient(0, getLayout().getReplexUnitIndex(0, stream))
+                .read(stream, Range.closedOpen(offset, offset + size))).getReadSet();
         for (Long address : potentialResult.keySet()) {
             if (potentialResult.get(address).getType() == DataType.DATA &&
                     potentialResult.get(address).getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT) &&
@@ -152,6 +153,18 @@ public class ReplexReplicationView extends AbstractReplicationView {
             }
         }
         return potentialResult;
+    }
+
+    /**
+     * Read a stream prefix, using the replication method given.
+     *
+     * @param stream the stream to read from.
+     * @return A map containing the results of the read.
+     */
+    @Override
+    public Map<Long, LogData> readPrefix(UUID stream) {
+        return read(stream, 0, Long.MAX_VALUE);
+
     }
 
     /**
