@@ -204,8 +204,9 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         String method = getSMRMethodName(Mmethod);
         log.debug("Object[{}]: +Mutator {} {}", getStreamID(),
                 TransactionalContext.isInTransaction() ? "tx" : "", method);
-        StackTraceElement[] stack = new Exception().getStackTrace();
-        if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+        //StackTraceElement[] stack = new Exception().getStackTrace();
+        //if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+         if (methodAccessMode.get()) {
             if (isCorfuObject) {
                 return superMethod.call();
             } else {
@@ -243,8 +244,9 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         log.debug("Object[{}] +MutatorAccessor {} {}", getStreamID(),
                 TransactionalContext.isInTransaction() ? "tx" : "", method);
 
-        StackTraceElement[] stack = new Exception().getStackTrace();
-        if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+        //StackTraceElement[] stack = new Exception().getStackTrace();
+        //if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+        if (methodAccessMode.get()) {
             return doUnderlyingCall(superMethod, Mmethod, allArguments);
         } else if (!TransactionalContext.isInTransaction()) {
             // write the update to the stream and map a future for the completion.
@@ -360,7 +362,9 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                 throw new NoSuchMethodException(entry.getSMRMethod());
             }
             // Execute the SMR command
+            methodAccessMode.set(true);
             Object ret = m.invoke(obj, entry.getSMRArguments());
+            methodAccessMode.set(false);
             // Update the current timestamp.
             timestamp = address;
             log.trace("Timestamp for [{}] updated to {}", sv.getStreamID(), address);
@@ -430,16 +434,14 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     }
 
     @Override
-    public void sync(P obj, long maxPos) {
-        try (LockUtils.AutoCloseRWLock writeLock = new LockUtils.AutoCloseRWLock(rwLock).writeLock()) {
-            LogData[] entries = sv.readTo(maxPos);
-            log.trace("Object[{}] sync to pos {}, read {} entries",
-                    sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos, entries.length);
-            Arrays.stream(entries)
-                    .filter(m -> m.getType() == DataType.DATA)
-                    .filter(m -> m.getPayload(runtime) instanceof SMREntry ||
-                            m.getPayload(runtime) instanceof TXEntry || m.getPayload(runtime) instanceof TXLambdaReferenceEntry)
-                    .forEach(m -> applyUpdate(m.getGlobalAddress(), (LogEntry) m.getPayload(runtime), obj));
-        }
+    public synchronized void sync(P obj, long maxPos) {
+        LogData[] entries = sv.readTo(maxPos);
+        log.trace("Object[{}] sync to pos {}, read {} entries",
+                sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos, entries.length);
+        Arrays.stream(entries)
+                .filter(m -> m.getType() == DataType.DATA)
+                .filter(m -> m.getPayload(runtime) instanceof SMREntry ||
+                        m.getPayload(runtime) instanceof TXEntry || m.getPayload(runtime) instanceof TXLambdaReferenceEntry)
+                .forEach(m -> applyUpdate(m.getGlobalAddress(), (LogEntry) m.getPayload(runtime), obj));
     }
 }
