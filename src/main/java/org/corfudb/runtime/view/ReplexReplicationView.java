@@ -145,11 +145,13 @@ public class ReplexReplicationView extends AbstractReplicationView {
         Map<Long, LogData> potentialResult = CFUtils.getUninterruptibly(getLayout()
                 .getReplexLogUnitClient(0, getLayout().getReplexUnitIndex(0, stream))
                 .read(stream, Range.closedOpen(offset, offset + size))).getReadSet();
+        potentialResult = new HashMap<>(potentialResult); //TODO : readresult returns an immutablemap, so this is a problem.
         for (Long address : potentialResult.keySet()) {
             if (potentialResult.get(address).getType() == DataType.DATA &&
                     potentialResult.get(address).getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT) &&
                     !(Boolean)(potentialResult.get(address).getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT))) {
-                potentialResult.put(address, LogData.EMPTY);
+                //potentialResult.put(address, LogData.EMPTY);
+                //FIXME:: hole filling protocol needs to be initiated here.
             }
         }
         return potentialResult;
