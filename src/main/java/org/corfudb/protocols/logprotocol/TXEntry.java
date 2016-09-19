@@ -1,10 +1,7 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.ToString;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
@@ -35,8 +32,9 @@ public class TXEntry extends LogEntry {
     Map<UUID, TXObjectEntry> txMap;
     @Getter
     long readTimestamp;
-    @Getter(lazy = true)
-    private final transient boolean aborted = checkAbort();
+    @Getter
+    @Setter
+    private transient boolean aborted;
 
     public TXEntry(@NonNull Map<UUID, TXObjectEntry> txMap, long readTimestamp) {
         this.type = LogEntryType.TX;

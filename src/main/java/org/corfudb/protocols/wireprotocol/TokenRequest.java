@@ -25,6 +25,19 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
 
     final Boolean replexOverwrite;
 
+    final Boolean txnResolution;
+
+    final Long readTimestamp;
+
+    public TokenRequest(Long numTokens, Set<UUID> streams, Boolean overwrite, Boolean replexOverwrite) {
+        this.numTokens = numTokens;
+        this.streams = streams;
+        this.overwrite = overwrite;
+        this.replexOverwrite = replexOverwrite;
+        txnResolution = false;
+        readTimestamp = -1L;
+    }
+
     public TokenRequest(ByteBuf buf) {
         numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
         if (ICorfuPayload.fromBuffer(buf, Boolean.class))
@@ -32,6 +45,10 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
         else streams = null;
         overwrite = ICorfuPayload.fromBuffer(buf, Boolean.class);
         replexOverwrite = ICorfuPayload.fromBuffer(buf, Boolean.class);
+        txnResolution = ICorfuPayload.fromBuffer(buf, Boolean.class);
+        if (txnResolution)
+            readTimestamp = ICorfuPayload.fromBuffer(buf, Long.class);
+        else readTimestamp = -1L;
     }
 
     @Override
@@ -42,5 +59,9 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
             ICorfuPayload.serialize(buf, streams);
         ICorfuPayload.serialize(buf, overwrite);
         ICorfuPayload.serialize(buf, replexOverwrite);
+        ICorfuPayload.serialize(buf, txnResolution);
+        if (txnResolution) {
+            ICorfuPayload.serialize(buf, readTimestamp);
+        }
     }
 }

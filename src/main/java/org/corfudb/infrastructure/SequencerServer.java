@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -160,6 +161,31 @@ public class SequencerServer extends AbstractServer {
                                 new TokenResponse(thisIssue, Collections.emptyMap(), Collections.emptyMap())));
                         return;
                     }
+                    if (req.getTxnResolution()) {
+                        // Then also need a read timestamp.
+                        long timestamp = req.getReadTimestamp();
+                        AtomicBoolean abort = new AtomicBoolean(false);
+                        for (UUID id : req.getStreams()) {
+                            if (abort.get())
+                                break;
+                            lastIssuedMap.compute(id, (k, v) -> {
+                                if (v == null) {
+                                    return null;
+                                } else {
+                                    if (v > timestamp) {
+                                        abort.set(true);
+                                    }
+                                }
+                                return v;
+                            });
+                        }
+                        if (abort.get()) {
+                            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                    new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
+                            return;
+                        }
+                    }
+
                     ImmutableMap.Builder<UUID, Long> mb = ImmutableMap.builder();
                     ImmutableMap.Builder<UUID, Long> localAddresses = ImmutableMap.builder();
                     for (UUID id : req.getStreams()) {

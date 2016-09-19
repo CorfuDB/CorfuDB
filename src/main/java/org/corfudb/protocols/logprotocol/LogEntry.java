@@ -115,7 +115,8 @@ public class LogEntry implements ICorfuSerializable {
         TX(2, TXEntry.class),
         STREAM_HINT(3, StreamHintEntry.class),
         STREAM_COW(4, StreamCOWEntry.class),
-        TX_LAMBDAREF(5, TXLambdaReferenceEntry.class);
+        TX_LAMBDAREF(5, TXLambdaReferenceEntry.class),
+        OPT_TX(6, OptimizedTXEntry.class);
 
         public final int type;
         public final Class<? extends LogEntry> entryType;
