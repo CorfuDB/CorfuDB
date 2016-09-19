@@ -8,10 +8,7 @@ import net.bytebuddy.implementation.bind.annotation.Origin;
 import net.bytebuddy.implementation.bind.annotation.RuntimeType;
 import net.bytebuddy.implementation.bind.annotation.SuperCall;
 import net.bytebuddy.implementation.bind.annotation.This;
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.logprotocol.TXEntry;
-import org.corfudb.protocols.logprotocol.TXLambdaReferenceEntry;
+import org.corfudb.protocols.logprotocol.*;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -429,19 +426,25 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                 }
             }
             return true;
+        } else if (entry instanceof OptimizedTXEntry) {
+            ((OptimizedTXEntry)entry).getUpdates().stream().forEach(x -> applySMRUpdate(address, x, obj));
         }
         return false;
     }
 
     @Override
-    public synchronized void sync(P obj, long maxPos) {
-        LogData[] entries = sv.readTo(maxPos);
-        log.trace("Object[{}] sync to pos {}, read {} entries",
-                sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos, entries.length);
-        Arrays.stream(entries)
-                .filter(m -> m.getType() == DataType.DATA)
-                .filter(m -> m.getPayload(runtime) instanceof SMREntry ||
-                        m.getPayload(runtime) instanceof TXEntry || m.getPayload(runtime) instanceof TXLambdaReferenceEntry)
-                .forEach(m -> applyUpdate(m.getGlobalAddress(), (LogEntry) m.getPayload(runtime), obj));
+    public void sync(P obj, long maxPos) {
+        try (LockUtils.AutoCloseRWLock writeLock = new LockUtils.AutoCloseRWLock(rwLock).writeLock()) {
+            LogData[] entries = sv.readTo(maxPos);
+            log.trace("Object[{}] sync to pos {}, read {} entries",
+                    sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos, entries.length);
+            Arrays.stream(entries)
+                    .filter(m -> m.getType() == DataType.DATA)
+                    .filter(m -> m.getPayload(runtime) instanceof SMREntry ||
+                            m.getPayload(runtime) instanceof TXEntry || m.getPayload(runtime) instanceof TXLambdaReferenceEntry ||
+                            m.getPayload(runtime) instanceof OptimizedTXEntry)
+                    .forEach(m -> applyUpdate(m.getGlobalAddress(), (LogEntry) m.getPayload(runtime), obj));
+        }
+
     }
 }

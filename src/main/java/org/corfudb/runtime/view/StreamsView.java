@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
+import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
@@ -106,53 +107,106 @@ public class StreamsView {
         boolean overwrite = false;
         TokenResponse tokenResponse = null;
         while (true) {
-            long token;
-            if (replexOverwrite) {
-                tokenResponse =
-                        runtime.getSequencerView().nextToken(streamIDs, 1, false, true);
-                token = tokenResponse.getToken();
-            } else if (overwrite) {
-                TokenResponse temp =
-                        runtime.getSequencerView().nextToken(streamIDs, 1, true, false);
-                token = temp.getToken();
-                tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
-            }
-            else {
-                tokenResponse =
-                        runtime.getSequencerView().nextToken(streamIDs, 1);
-                token = tokenResponse.getToken();
-            }
-            log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
-            if (acquisitionCallback != null) {
-                if (!acquisitionCallback.apply(tokenResponse)) {
-                    log.trace("Acquisition rejected token, hole filling acquired address.");
-                    try {
-                        runtime.getAddressSpaceView().fillHole(token);
-                    } catch (OverwriteException oe) {
-                        log.trace("Hole fill completed by remote client.");
+            if (object instanceof TXEntry) {
+                long token;
+                if (overwrite) {
+                    TokenResponse temp =
+                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false, true, ((TXEntry) object).getReadTimestamp());
+                    token = temp.getToken();
+                    tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                } else {
+                    log.trace("object is instance of TXEntry! readTimestamp: {}", ((TXEntry) object).getReadTimestamp());
+                    tokenResponse =
+                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false, true, ((TXEntry) object).getReadTimestamp());
+                    token = tokenResponse.getToken();
+                }
+                log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
+                if (acquisitionCallback != null) {
+                    if (!acquisitionCallback.apply(tokenResponse)) {
+                        log.trace("Acquisition rejected token, hole filling acquired address.");
+                        try {
+                            runtime.getAddressSpaceView().fillHole(token);
+                        } catch (OverwriteException oe) {
+                            log.trace("Hole fill completed by remote client.");
+                        }
+                        return -1L;
+                    }
+                }
+                if (token == -1L) {
+                    ((TXEntry)object).setAborted(true);
+                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                     }
                     return -1L;
                 }
-            }
-            try {
-                runtime.getAddressSpaceView().write(token, streamIDs,
-                        object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
-                return token;
-            } catch (ReplexOverwriteException re) {
-                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                    log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                try {
+                    runtime.getAddressSpaceView().write(token, streamIDs,
+                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    return token;
+                } catch (ReplexOverwriteException re) {
+                    ((TXEntry) object).setAborted(true);
+                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                        return -1L;
+                    }
                     return -1L;
+                } catch (OverwriteException oe) {
+                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                        return -1L;
+                    }
+                    replexOverwrite = false;
+                    overwrite = true;
+                    log.debug("Overwrite occurred at {}, retrying.", token);
                 }
-                replexOverwrite = true;
-                overwrite = false;
-            } catch (OverwriteException oe) {
-                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                    log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                    return -1L;
+            } else {
+                long token;
+                if (replexOverwrite) {
+                    tokenResponse =
+                            runtime.getSequencerView().nextToken(streamIDs, 1, false, true);
+                    token = tokenResponse.getToken();
+                } else if (overwrite) {
+                    TokenResponse temp =
+                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false);
+                    token = temp.getToken();
+                    tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                } else {
+                    tokenResponse =
+                            runtime.getSequencerView().nextToken(streamIDs, 1);
+                    token = tokenResponse.getToken();
                 }
-                replexOverwrite = false;
-                overwrite = true;
-                log.debug("Overwrite occurred at {}, retrying.", token);
+                log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
+                if (acquisitionCallback != null) {
+                    if (!acquisitionCallback.apply(tokenResponse)) {
+                        log.trace("Acquisition rejected token, hole filling acquired address.");
+                        try {
+                            runtime.getAddressSpaceView().fillHole(token);
+                        } catch (OverwriteException oe) {
+                            log.trace("Hole fill completed by remote client.");
+                        }
+                        return -1L;
+                    }
+                }
+                try {
+                    runtime.getAddressSpaceView().write(token, streamIDs,
+                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    return token;
+                } catch (ReplexOverwriteException re) {
+                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                        return -1L;
+                    }
+                    replexOverwrite = true;
+                    overwrite = false;
+                } catch (OverwriteException oe) {
+                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                        return -1L;
+                    }
+                    replexOverwrite = false;
+                    overwrite = true;
+                    log.debug("Overwrite occurred at {}, retrying.", token);
+                }
             }
         }
     }

@@ -1,9 +1,12 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Range;
 import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.OptimizedTXEntry;
+import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -49,7 +52,6 @@ public class ReplexReplicationView extends AbstractReplicationView {
 
             // Need this for txns to work, in particular, TXEntry.java requires this info.
             // We don't set the backpointers, to trigger using Replex to do reads.
-            // TODO: (amytai) When resolving optimistic txns in TXEnd, using seek instead of linear scan.
             LogData ld = new LogData(DataType.DATA, b);
             ld.setGlobalAddress(address);
             ld.setLogicalAddresses(streamAddresses);
@@ -60,14 +62,15 @@ public class ReplexReplicationView extends AbstractReplicationView {
                 ((LogEntry) data).setEntry(ld);
             }
 
+
             // First write to all the primary index units
-            for (int i = 0; i < numUnits; i++)
-            {
+            for (int i = 0; i < numUnits; i++) {
                 log.trace("Write, Global[{}]: chain {}/{}", address, i + 1, numUnits);
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
-                                .write(getLayout().getLocalAddress(address), stream, 0L, data, Collections.emptyMap()), OverwriteException.class);
+                                .write(getLayout().getLocalAddress(address), stream, 0L, b, Collections.emptyMap()), OverwriteException.class);
             }
+
             // Write to the secondary / stream index units. To reduce the amount of network traffic, aggregate all
             // streams that hash to the same logging unit in one write.
             Map<Integer, Map<UUID, Long>> streamPairs = new HashMap<Integer, Map<UUID, Long>>();
@@ -82,27 +85,49 @@ public class ReplexReplicationView extends AbstractReplicationView {
                 }
             }
 
-            // Write to the secondary / stream index units.
-            for (Integer lu : streamPairs.keySet()) {
-                    log.trace("Write, Replex: chain {}/{}", lu+1, getLayout().getNumReplexUnits(0));
+            if (data instanceof TXEntry) {
+                // If the Object is of type TxEntry, only write partial write sets.
+                for (UUID streamID : stream) {
+                    if (((TXEntry) data).getTxMap().get(streamID) == null ||
+                            ((TXEntry) data).getTxMap().get(streamID).getUpdates().size() == 0)
+                        continue;
+                    OptimizedTXEntry partialWriteSet = new OptimizedTXEntry(((TXEntry) data).getTxMap().get(streamID).getUpdates());
+                    try (AutoCloseableByteBuf tempbuf =
+                                 new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
+                        Serializers.getSerializer(Serializers.SerializerType.CORFU)
+                                .serialize(partialWriteSet, tempbuf);
+
+                        CFUtils.getUninterruptibly(
+                                getLayout().getReplexLogUnitClient(0, getLayout().getReplexUnitIndex(0, streamID))
+                                        .writeStream(address,
+                                                Collections.singletonMap(streamID, streamAddresses.get(streamID)), tempbuf),
+                                ReplexOverwriteException.class);
+                    }
+                }
+
+            } else {
+                // Write to the secondary / stream index units.
+                for (Integer lu : streamPairs.keySet()) {
+                    log.trace("Write, Replex: chain {}/{}", lu + 1, getLayout().getNumReplexUnits(0));
                     CFUtils.getUninterruptibly(
                             getLayout().getReplexLogUnitClient(0, lu)
                                     .writeStream(address, streamPairs.get(lu), b), ReplexOverwriteException.class);
+                }
             }
 
             // TODO: Wait.. the reads are ALWAYS true, because the sequencer hands out values. The protocol might
             // be able to just skip the commit bits.
+
             for (Integer lu : streamPairs.keySet()) {
-                log.trace("Commit, Replex: chain {}/{}", address, lu+1, getLayout().getNumReplexUnits(0));
+                log.trace("Commit, Replex: chain {}/{}", address, lu + 1, getLayout().getNumReplexUnits(0));
                 CFUtils.getUninterruptibly(
                         getLayout().getReplexLogUnitClient(0, lu)
                                 .writeCommit(streamPairs.get(lu), -1L, true), null);
             }
 
             // COMMIT bits to the global layer
-            for (int i = 0; i < numUnits; i++)
-            {
-                log.trace("Commit, Global[{}]: chain {}/{}", address, i+1, numUnits);
+            for (int i = 0; i < numUnits; i++) {
+                log.trace("Commit, Global[{}]: chain {}/{}", address, i + 1, numUnits);
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
                                 .writeCommit(null, getLayout().getLocalAddress(address), true), null);
@@ -125,9 +150,13 @@ public class ReplexReplicationView extends AbstractReplicationView {
         LogData potentialResult = CFUtils.getUninterruptibly(getLayout()
                 .getLogUnitClient(address, 0).read(getLayout().getLocalAddress(address))).getReadSet().get(address);
         if (potentialResult.getType() == DataType.DATA &&
-                potentialResult.getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT) &&
-                !(Boolean)(potentialResult.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT)))
-            return LogData.EMPTY;
+                potentialResult.getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT)) {
+            if (!(Boolean)(potentialResult.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT))) {
+                // If the commit is FALSE, then it is an aborted write and doesn't need to be hole-filled.
+                return LogData.HOLE;
+            }
+            else return LogData.EMPTY;
+        }
         else return potentialResult;
     }
 
@@ -141,20 +170,29 @@ public class ReplexReplicationView extends AbstractReplicationView {
     public Map<Long, LogData> read(UUID stream, long offset, long size) {
         // Fetch the entries from the client. If the commit bit isn't set, then don't return the entry.
         // This is problematic for bulk reads -- what do you do if there is a hole in the middle of your bulk read?
-        log.trace("Replex Stream Read[{}, {}]", stream, offset);
+        log.trace("Replex Stream Read stream: {}, [{}, {})", stream, offset, offset + size);
         Map<Long, LogData> potentialResult = CFUtils.getUninterruptibly(getLayout()
                 .getReplexLogUnitClient(0, getLayout().getReplexUnitIndex(0, stream))
-                .read(stream, Range.closedOpen(offset, offset + size))).getReadSet();
-        potentialResult = new HashMap<>(potentialResult); //TODO : readresult returns an immutablemap, so this is a problem.
+                .read(stream, Range.closed(offset, offset + size - 1))).getReadSet();
+        ImmutableMap.Builder<Long, LogData> builder = ImmutableMap.builder();
         for (Long address : potentialResult.keySet()) {
-            if (potentialResult.get(address).getType() == DataType.DATA &&
-                    potentialResult.get(address).getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT) &&
-                    !(Boolean)(potentialResult.get(address).getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT))) {
-                //potentialResult.put(address, LogData.EMPTY);
-                //FIXME:: hole filling protocol needs to be initiated here.
+            if (potentialResult.get(address).getType() == DataType.DATA) {
+                if (potentialResult.get(address).getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT)) {
+                    if (!(Boolean)(potentialResult.get(address).getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT))) {
+                        // If the commit is FALSE, then it is an aborted write and doesn't need to be hole-filled.
+                        //potentialResult.put(address, LogData.HOLE);
+                        builder.put(address, LogData.EMPTY);
+                    } else {
+                        builder.put(address, potentialResult.get(address));
+                    }
+                } else {
+                    builder.put(address, LogData.EMPTY);
+                }
+            } else {
+                builder.put(address, potentialResult.get(address));
             }
         }
-        return potentialResult;
+        return builder.build();
     }
 
     /**
