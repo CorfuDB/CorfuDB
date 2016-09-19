@@ -82,7 +82,9 @@ public class CorfuProxyBuilder {
                 .method(ElementMatchers.named("getRuntime"))
                 .intercept(MethodDelegation.to(proxy, "getRuntime").filter(ElementMatchers.named("getRuntime")))
                 .method(ElementMatchers.isAnnotatedWith(TransactionalMethod.class))
-                .intercept(MethodDelegation.to(proxy, "handleTX").filter(ElementMatchers.named("handleTransactionalMethod")));
+                .intercept(MethodDelegation.to(proxy, "handleTX").filter(ElementMatchers.named("handleTransactionalMethod")))
+                .method(ElementMatchers.named("getMethodAccessMode"))
+                .intercept(MethodDelegation.to(proxy, "getMethodAccessMode").filter(ElementMatchers.named("getMethodAccessMode")));
     }
 
     @SuppressWarnings("unchecked")

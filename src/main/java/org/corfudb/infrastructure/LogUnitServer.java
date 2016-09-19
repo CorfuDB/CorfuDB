@@ -74,6 +74,8 @@ public class LogUnitServer extends AbstractServer {
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg.getPayload().getGlobalAddress(),
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
+        // clear any commit record (or set initially to false).
+        msg.getPayload().clearCommit();
         try {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());

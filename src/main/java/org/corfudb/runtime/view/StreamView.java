@@ -371,6 +371,9 @@ public class StreamView implements AutoCloseable {
 
             if (latestToken < getCurrentContext().logPointer.get())
                 return (new ArrayList<LogData>()).toArray(new LogData[0]);
+
+            if (getCurrentContext().logPointer.get() != 0 && latestToken == getCurrentContext().logPointer.get())
+                return (new ArrayList<LogData>()).toArray(new LogData[0]);
             // We can do a bulk read
             Map<Long, LogData> readResult = runtime.getAddressSpaceView().read(streamID, getCurrentContext().logPointer.get(),
                     latestToken - getCurrentContext().logPointer.get() + 1);

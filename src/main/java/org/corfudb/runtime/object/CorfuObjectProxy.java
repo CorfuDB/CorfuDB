@@ -59,6 +59,12 @@ public class CorfuObjectProxy<P> {
     @Setter
     long timestamp;
 
+    /** The access mode of this proxy, per thread.
+     *
+     */
+    @Getter
+    ThreadLocal<Boolean> methodAccessMode = ThreadLocal.withInitial(() -> false);
+
     /**
      * The generated proxy class that this proxy wraps around.
      */

@@ -30,9 +30,10 @@ public class TestChannelContext implements ChannelHandlerContext {
         this.hmf = hmf;
     }
 
-    void sendMessageAsync(Object o) {
+    void sendMessageAsync(Object o, Object orig) {
         CompletableFuture.runAsync(() -> {
             try {
+                Object origCapture = orig; //for debugging
                 if (o instanceof ByteBuf) {
                     CorfuMsg m = CorfuMsg.deserialize((ByteBuf) o);
                     hmf.handleMessage(m);
@@ -182,14 +183,14 @@ public class TestChannelContext implements ChannelHandlerContext {
     @Override
     public ChannelFuture write(Object o) {
         ByteBuf b = simulateSerialization(o);
-        sendMessageAsync(b);
+        sendMessageAsync(b,o);
         return null;
     }
 
     @Override
     public ChannelFuture write(Object o, ChannelPromise channelPromise) {
         ByteBuf b = simulateSerialization(o);
-        sendMessageAsync(b);
+        sendMessageAsync(b,o);
         return null;
     }
 
@@ -201,14 +202,14 @@ public class TestChannelContext implements ChannelHandlerContext {
     @Override
     public ChannelFuture writeAndFlush(Object o, ChannelPromise channelPromise) {
         ByteBuf b = simulateSerialization(o);
-        sendMessageAsync(b);
+        sendMessageAsync(b,o);
         return null;
     }
 
     @Override
     public ChannelFuture writeAndFlush(Object o) {
         ByteBuf b = simulateSerialization(o);
-        sendMessageAsync(b);
+        sendMessageAsync(b,o);
         return null;
     }
 

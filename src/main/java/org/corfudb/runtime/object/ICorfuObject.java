@@ -50,4 +50,10 @@ public interface ICorfuObject {
     default CorfuObjectProxy getProxy() {
         throw new UnprocessedException();
     }
+
+    /**
+     * Get the mode in which Mutators/Accessors should be accessed in.
+     * @return  A thread local representing the current execution context.
+     */
+    default ThreadLocal<Boolean> getMethodAccessMode() { throw new UnprocessedException(); }
 }

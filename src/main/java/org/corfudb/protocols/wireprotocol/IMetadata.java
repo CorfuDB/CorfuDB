@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -104,6 +105,14 @@ public interface IMetadata {
     @SuppressWarnings("unchecked")
     default Long getGlobalAddress() {
         return (Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS);
+    }
+
+    default void clearCommit() {
+        getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
+    }
+
+    default void setCommit() {
+        getMetadataMap().put(LogUnitMetadataType.COMMIT, true);
     }
 
     @RequiredArgsConstructor
