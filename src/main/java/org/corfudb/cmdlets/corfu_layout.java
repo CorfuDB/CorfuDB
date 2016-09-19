@@ -69,6 +69,20 @@ public class corfu_layout implements ICmdlet {
     @Override
     public String[] main(String[] args) {
         if (args != null && args.length > 0 && args[0].contentEquals("reset")) {
+            log.trace("corfu_layout top: reset");
+
+            // The client views get really confused when the epoch goes backward.
+            // (N.B. layoutViews is only used for "update_layout" testing via QuickCheck.)
+            // Discard the current layoutViews and get some new ones....
+            //
+            // Unfortunately, the runtime's stop() method is broken: it doesn't close all TCP
+            // connections, and leaks Netty client-side worker threads.
+            // FIX ME.  These leaks make QuickCheck testing extremely difficult.
+            layoutViews.forEach((k, v_layout) -> {
+                v_layout.getRuntime().stop(true);
+                });
+            layoutViews = new ConcurrentHashMap<>();
+
             LayoutServer ls = CorfuServer.getLayoutServer();
             if (ls != null) {
                 ls.reset();
