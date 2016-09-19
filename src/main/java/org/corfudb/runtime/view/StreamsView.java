@@ -144,7 +144,6 @@ public class StreamsView {
                             object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
                     return token;
                 } catch (ReplexOverwriteException re) {
-                    ((TXEntry) object).setAborted(true);
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                         return -1L;
