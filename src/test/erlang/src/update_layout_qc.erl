@@ -98,7 +98,7 @@ command(S=#state{endpoint=Endpoint, reset_p=true}) ->
        {20, {call, ?MODULE, query,
              [gen_mbox(S), Endpoint, gen_c_epoch(S)]}},
        {20, {call, ?MODULE, update_layout,
-             [gen_mbox(S), Endpoint, gen_c_epoch(S), gen_layout(S), gen_rank(S)]}}
+             [gen_mbox(S), Endpoint, gen_layout(S), gen_rank(S)]}}
       ]).
 
 postcondition(S, Call, Ret) ->
@@ -140,14 +140,11 @@ postcondition2(#state{committed_layout=CommittedLayout,
             false
     end;
 postcondition2(#state{committed_epoch=CommittedEpoch},
-              {call,_,update_layout,[_Mbox, _EP, C_Epoch, Layout, _Rank]}, RetStr) ->
+              {call,_,update_layout,[_Mbox, _EP, Layout, _Rank]}, RetStr) ->
     case termify(RetStr) of
         ok ->
-            C_Epoch == CommittedEpoch andalso
-                Layout#layout.epoch > CommittedEpoch;
+            Layout#layout.epoch > CommittedEpoch;
         {error, wrongEpochException, CorrectEpoch} ->
-            CorrectEpoch /= C_Epoch
-            andalso
             CorrectEpoch == CommittedEpoch;
         Else ->
             io:format("OUCH ~p\n", [{update_layout, Else}]),
@@ -157,9 +154,8 @@ postcondition2(#state{committed_epoch=CommittedEpoch},
 next_state(S, _V, {call,_,reset,[_Mbox, _EP]}) ->
     S#state{reset_p=true};
 next_state(S=#state{committed_epoch=CommittedEpoch}, _V,
-           {call,_,update_layout,[_Mbox, _EP, C_Epoch, Layout, _Rank]}) ->
-    if C_Epoch == CommittedEpoch andalso
-       Layout#layout.epoch > CommittedEpoch ->
+           {call,_,update_layout,[_Mbox, _EP, Layout, _Rank]}) ->
+    if Layout#layout.epoch > CommittedEpoch ->
             S#state{committed_layout=Layout,
                     committed_epoch=Layout#layout.epoch};
        true ->
@@ -181,12 +177,12 @@ reboot(Mbox, Endpoint) ->
 query(Mbox, Endpoint, C_Epoch) ->
     rpc(Mbox, "query", Endpoint, C_Epoch, []).
 
-update_layout(Mbox, Endpoint, C_Epoch, Layout, Rank) ->
+update_layout(Mbox, Endpoint, Layout, Rank) ->
     JSON = layout_to_json(Layout),
     TmpPath = lists:flatten(io_lib:format("/tmp/layout.~w", [now()])),
     ok = file:write_file(TmpPath, JSON),
     try
-        rpc(Mbox, "update_layout", Endpoint, C_Epoch,
+        rpc(Mbox, "update_layout", Endpoint, 0,
             ["-l", TmpPath, "-r", integer_to_list(Rank)])
     after
         file:delete(TmpPath)
@@ -206,8 +202,8 @@ reboot() ->
 query(C_Epoch) ->
     apply(?MODULE, query, ?QUICK_MBOX ++ [C_Epoch]).
 
-update_layout(C_Epoch, Layout, Rank) ->
-    apply(?MODULE, update_layout, ?QUICK_MBOX ++ [C_Epoch, Layout, Rank]).
+update_layout(Layout, Rank) ->
+    apply(?MODULE, update_layout, ?QUICK_MBOX ++ [Layout, Rank]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
