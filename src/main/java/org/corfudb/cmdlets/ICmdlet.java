@@ -58,6 +58,12 @@ public interface ICmdlet {
                 .connect();
     }
 
+    default CorfuRuntime configureRuntimeAddrPort(Map<String, Object> opts) {
+        return new CorfuRuntime()
+                .parseConfigurationString((String) opts.get("<address>:<port>"))
+                .connect();
+    }
+
     default void checkEndpoint(String endpoint)
             throws NetworkException {
         // Create a client router and ping.

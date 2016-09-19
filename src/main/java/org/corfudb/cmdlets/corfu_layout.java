@@ -7,12 +7,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Utils;
 import org.docopt.Docopt;
@@ -35,6 +38,7 @@ import static org.fusesource.jansi.Ansi.ansi;
 public class corfu_layout implements ICmdlet {
 
     private static Map<String, NettyClientRouter> routers = new ConcurrentHashMap<>();
+    private static Map<String, LayoutView> layoutViews = new ConcurrentHashMap<>();
 
     private static final String USAGE =
             "corfu_layout, directly interact with a layout server.\n"
@@ -45,6 +49,7 @@ public class corfu_layout implements ICmdlet {
                     + "\tcorfu_layout prepare <address>:<port> -r <rank> [-d <level>] [-e epoch] [-p <qapp>]\n"
                     + "\tcorfu_layout propose <address>:<port> -r <rank> [-l <layout>|-s] [-d <level>] [-e epoch] [-p <qapp>]\n"
                     + "\tcorfu_layout committed <address>:<port> -r <rank> [-l <layout>] [-d <level>] [-e epoch] [-p <qapp>]\n"
+                    + "\tcorfu_layout update_layout <address>:<port> -r <rank> [-l <layout>] [-d <level>] [-e epoch] [-p <qapp>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <layout>, --layout-file=<layout>  Path to a JSON file describing the \n"
@@ -249,6 +254,39 @@ public class corfu_layout implements ICmdlet {
                 }
             } catch (Exception e) {
                 return cmdlet.err("Exception during commit",
+                        e.toString(),
+                        "stack: " + ExceptionUtils.getStackTrace(e));
+            }
+        } else if ((Boolean) opts.get("update_layout")) {
+            // This is not strictly a low-level primitive for the layout Paxos protocol.
+            // Rather, it's here at glue for QuickCheck testing of higher-level
+            // layout API exercise in the same spirit that layout_qc.erl tests
+            // the lower-level Paxos protocol.
+
+            LayoutView lv;
+            if ((lv = layoutViews.get(addressportPrefix + addressport)) == null) {
+                log.trace("Creating LayoutView for {} ++ {}:{}", addressportPrefix, port);
+                System.out.printf("opts = %s\n", opts.toString());
+                CorfuRuntime rt = configureRuntimeAddrPort(opts);
+                lv = new LayoutView(rt);
+                layoutViews.putIfAbsent(addressportPrefix + addressport, lv);
+            }
+            lv = layoutViews.get(addressportPrefix + addressport);
+
+            Layout l = getLayout(opts);
+            long rank = Long.parseLong((String) opts.get("--rank"));
+            log.debug("update_layout with layout={}, rank={}, ", l, rank);
+            try {
+                // Important: we must add a CorfuRuntime to the Layout object l.
+                // If we don't, then we'll get a NullPointerException deep in the
+                // guts of LayoutView.committed() which tries to use the layout's
+                // runtime member.
+                CorfuRuntime rt = configureRuntimeAddrPort(opts);
+                l.setRuntime(rt);
+                lv.updateLayout(l, rank);
+                return cmdlet.ok();
+            } catch (Exception e) {
+                return cmdlet.err("Exception during update_layout",
                         e.toString(),
                         "stack: " + ExceptionUtils.getStackTrace(e));
             }
