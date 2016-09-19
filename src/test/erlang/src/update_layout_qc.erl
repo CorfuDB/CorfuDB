@@ -226,7 +226,9 @@ termify(["ERROR", "Exception " ++ _E1, E2|Rest] = _L) ->
             end
     end;
 termify(timeout) ->
-    timeout.
+    timeout;
+termify(["ERROR", "exception", "NullPointerException"|_Rest] = _L) ->
+    {error, nullPointerException}.
 
 parse_newrank(["newRank: " ++ NR|_]) ->
     list_to_integer(NR);

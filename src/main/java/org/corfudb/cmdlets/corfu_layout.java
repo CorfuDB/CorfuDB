@@ -13,6 +13,7 @@ import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
@@ -115,10 +116,10 @@ public class corfu_layout implements ICmdlet {
         }
         router = routers.get(addressportPrefix + addressport);
 
+        Long clientEpoch = Long.parseLong((String) opts.get("--epoch"));
         if (opts.get("--epoch") != null) {
-            Long epoch = Long.parseLong((String) opts.get("--epoch"));
-            log.trace("Specify router's epoch as " + epoch);
-            router.setEpoch(epoch);
+            log.trace("Specify router's epoch as " + clientEpoch);
+            router.setEpoch(clientEpoch);
         } else {
             try {
                 Layout l = router.getClient(LayoutClient.class).getLayout().get();
@@ -282,13 +283,24 @@ public class corfu_layout implements ICmdlet {
                 // guts of LayoutView.committed() which tries to use the layout's
                 // runtime member.
                 CorfuRuntime rt = configureRuntimeAddrPort(opts);
+                log.trace("Specify (2) router's epoch as " + clientEpoch);
+                rt.getRouter((String) opts.get("<address>:<port>")).setEpoch(clientEpoch);
                 l.setRuntime(rt);
                 lv.updateLayout(l, rank);
                 return cmdlet.ok();
-            } catch (Exception e) {
-                return cmdlet.err("Exception during update_layout",
-                        e.toString(),
-                        "stack: " + ExceptionUtils.getStackTrace(e));
+            } catch (WrongEpochException we) {
+                return cmdlet.err("Exception (1) during updateLayout",
+                        we.getCause().toString(),
+                        "correctEpoch: " + we.getCorrectEpoch(),
+                        "stack: " + ExceptionUtils.getStackTrace(we));
+            } catch (OutrankedException oe) {
+                return cmdlet.err("Exception (2) during updateLayout",
+                    oe.getCause().toString(),
+                    "newRank: " + Long.toString(oe.getNewRank()),
+                    "stack: " + ExceptionUtils.getStackTrace(oe));
+            } catch (QuorumUnreachableException ue) {
+                return cmdlet.err("Exception (2) during updateLayout",
+                        ue.getCause().toString());
             }
         }
         return cmdlet.err("Hush, compiler.");
