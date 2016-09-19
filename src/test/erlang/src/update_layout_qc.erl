@@ -126,7 +126,7 @@ postcondition2(#state{committed_layout=CommittedLayout,
             %% that the server has (e.g. after reset()) is ok.
             true;
         {ok, JSON} ->
-            JSON == layout_to_json(CommittedLayout);
+            strip_ws(JSON) == strip_ws(layout_to_json(CommittedLayout));
         {error, wrongEpochException, CorrectEpoch} ->
             CorrectEpoch /= C_Epoch
             orelse
@@ -253,6 +253,9 @@ layout_to_json(#layout{ls=Ls, ss=Seqs, segs=Segs, epoch=Epoch}) ->
 
 string_ify_list(L) ->
     "[" ++ string:join([[$\"] ++ X ++ [$\"] || X <- L], ",") ++ "]".
+
+strip_ws(Str) ->
+    re:replace(Str, "[\n\t ]", "", [global, {return, list}]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
