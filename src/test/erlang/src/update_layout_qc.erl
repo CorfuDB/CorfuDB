@@ -128,9 +128,13 @@ postcondition2(#state{committed_layout=CommittedLayout,
         {ok, JSON} ->
             strip_ws(JSON) == strip_ws(layout_to_json(CommittedLayout));
         {error, wrongEpochException, CorrectEpoch} ->
-            CorrectEpoch /= C_Epoch
-            orelse
-            C_Epoch /= CommittedEpoch;
+            %% The current implementation doesn't check for client's epoch
+            %% in the general case, but the handleMessageLayoutRequest()
+            %% method does check that the client's epoch is less than or
+            %% equal to the committed epoch.
+            CorrectEpoch == CommittedEpoch
+            andalso
+            C_Epoch =< CommittedEpoch;
         Else ->
             io:format(user, "Q ~p\n", [Else]),
             false
