@@ -109,13 +109,10 @@ public class ObjectsViewTest extends AbstractViewTest {
         // failed transaction and the other for successful transaction
         StreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
         LogData[] txns = txStream.readTo(Long.MAX_VALUE);
-        assertThat(txns.length).isEqualTo(2);
+        assertThat(txns.length).isEqualTo(1);
         assertThat(txns[0].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.TX);
-        assertThat(txns[1].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.TX);
         TXEntry tx1 = (TXEntry)txns[0].getLogEntry(getRuntime());
-        TXEntry tx2 = (TXEntry)txns[1].getLogEntry(getRuntime());
-        assertThat(tx1.isAborted()).isEqualTo(true);
-        assertThat(tx2.isAborted()).isEqualTo(false);
+        assertThat(tx1.isAborted()).isEqualTo(false);
     }
 
     @Test

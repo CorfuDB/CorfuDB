@@ -372,8 +372,8 @@ public class StreamView implements AutoCloseable {
             if (latestToken < getCurrentContext().logPointer.get())
                 return (new ArrayList<LogData>()).toArray(new LogData[0]);
 
-            if (getCurrentContext().logPointer.get() != 0 && latestToken == getCurrentContext().logPointer.get())
-                return (new ArrayList<LogData>()).toArray(new LogData[0]);
+            //if (getCurrentContext().logPointer.get() != 0 && latestToken == getCurrentContext().logPointer.get())
+            //    return (new ArrayList<LogData>()).toArray(new LogData[0]);
             // We can do a bulk read
             Map<Long, LogData> readResult = runtime.getAddressSpaceView().read(streamID, getCurrentContext().logPointer.get(),
                     latestToken - getCurrentContext().logPointer.get() + 1);
@@ -389,16 +389,20 @@ public class StreamView implements AutoCloseable {
                 if (readResult.get(addr).getType() == DataType.EMPTY) {
                     if (addr <= latestToken) {
                         // If it's a hole, fill it and don't return it
-                        log.debug("Replex readTO[{}]: hole detected at {} (token at {}), attempting fill.", streamID, addr, latestToken);
-                        try {
-                            runtime.getAddressSpaceView().fillStreamHole(streamID, addr);
-                        } catch (OverwriteException oe) {
-                            //ignore overwrite.
+                        LogData retry;
+                        while (true) {
+                            log.debug("Replex readTO[{}]: hole detected at {} (token at {}), attempting fill.", streamID, addr, latestToken);
+                            try {
+                                runtime.getAddressSpaceView().fillStreamHole(streamID, addr);
+                            } catch (OverwriteException oe) {
+                                //ignore overwrite.
+                            }
+                            retry = runtime.getAddressSpaceView().read(streamID, addr, 1L).get(addr);
+                            if (retry.getType() != DataType.EMPTY)
+                                break;
                         }
-                        LogData retry = runtime.getAddressSpaceView().read(streamID, addr, 1L).get(addr);
-                        if (retry.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)  == null)
+                        if (retry.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES) == null)
                             continue;
-
                         Set<UUID> streams = ((Map<UUID, Long>) retry.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)).keySet();
                         if (streams != null && streams.contains(getCurrentContext().contextID)) {
                             log.trace("Read[{}]: valid entry at {}", streamID, retry);

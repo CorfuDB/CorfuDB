@@ -134,6 +134,9 @@ public class StreamsView {
                 }
                 if (token == -1L) {
                     ((TXEntry)object).setAborted(true);
+                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
+                    }
                     return -1L;
                 }
                 try {

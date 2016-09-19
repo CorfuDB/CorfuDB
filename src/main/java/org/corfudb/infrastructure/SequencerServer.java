@@ -164,25 +164,27 @@ public class SequencerServer extends AbstractServer {
                     if (req.getTxnResolution()) {
                         // Then also need a read timestamp.
                         long timestamp = req.getReadTimestamp();
-                        AtomicBoolean abort = new AtomicBoolean(false);
-                        for (UUID id : req.getStreams()) {
-                            if (abort.get())
-                                break;
-                            lastIssuedMap.compute(id, (k, v) -> {
-                                if (v == null) {
-                                    return null;
-                                } else {
-                                    if (v > timestamp) {
-                                        abort.set(true);
+                        if (timestamp != -1L) {
+                            AtomicBoolean abort = new AtomicBoolean(false);
+                            for (UUID id : req.getStreams()) {
+                                if (abort.get())
+                                    break;
+                                lastIssuedMap.compute(id, (k, v) -> {
+                                    if (v == null) {
+                                        return null;
+                                    } else {
+                                        if (v > timestamp) {
+                                            abort.set(true);
+                                        }
                                     }
-                                }
-                                return v;
-                            });
-                        }
-                        if (abort.get()) {
-                            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                                    new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
-                            return;
+                                    return v;
+                                });
+                            }
+                            if (abort.get()) {
+                                r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                        new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
+                                return;
+                            }
                         }
                     }
 
