@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.IDivisibleEntry;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -88,6 +89,13 @@ public class StreamsView {
         return acquireAndWrite(streamIDs, object, t -> true, t -> true);
     }
 
+    public void writeAt(TokenResponse address, Set<UUID> streamIDs, Object object) throws OverwriteException {
+        Function<UUID, Object> partialEntryFunction =
+                object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
+        runtime.getAddressSpaceView().write(address.getToken(), streamIDs,
+                object, address.getBackpointerMap(), address.getStreamAddresses(), partialEntryFunction);
+    }
+
     /**
      * Write an object to multiple streams, retuning the physical address it
      * was written at.
@@ -133,7 +141,6 @@ public class StreamsView {
                     }
                 }
                 if (token == -1L) {
-                    ((TXEntry)object).setAborted(true);
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                     }
@@ -144,12 +151,13 @@ public class StreamsView {
                             object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
                     return token;
                 } catch (ReplexOverwriteException re) {
-                    ((TXEntry) object).setAborted(true);
+                    //((TXEntry) object).setAborted(true);
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                         return -1L;
                     }
-                    return -1L;
+                    //
+                    return tokenResponse.getToken(); // uh, probably should figure out what is going on here.
                 } catch (OverwriteException oe) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
@@ -188,8 +196,10 @@ public class StreamsView {
                     }
                 }
                 try {
+                    Function<UUID, Object> partialEntryFunction =
+                            object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
                     runtime.getAddressSpaceView().write(token, streamIDs,
-                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(), partialEntryFunction);
                     return token;
                 } catch (ReplexOverwriteException re) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {

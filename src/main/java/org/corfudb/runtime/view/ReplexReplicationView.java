@@ -2,10 +2,11 @@ package org.corfudb.runtime.view;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Range;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.OptimizedTXEntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -17,6 +18,7 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
+import java.util.function.Function;
 
 /** A view of address space with Replex replication.
  *
@@ -38,7 +40,7 @@ public class ReplexReplicationView extends AbstractReplicationView {
      */
     @Override
     public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
-                     Map<UUID,Long> streamAddresses)
+                     Map<UUID,Long> streamAddresses, Function<UUID, Object> partialEntryFunction)
             throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         int payloadBytes = 0;
@@ -84,14 +86,14 @@ public class ReplexReplicationView extends AbstractReplicationView {
                     streamPairs.get(getLayout().getReplexUnitIndex(0, streamID)).put(streamID, streamAddresses.get(streamID));
                 }
             }
-
+/*
             if (data instanceof TXEntry) {
                 // If the Object is of type TxEntry, only write partial write sets.
                 for (UUID streamID : stream) {
                     if (((TXEntry) data).getTxMap().get(streamID) == null ||
                             ((TXEntry) data).getTxMap().get(streamID).getUpdates().size() == 0)
                         continue;
-                    OptimizedTXEntry partialWriteSet = new OptimizedTXEntry(((TXEntry) data).getTxMap().get(streamID).getUpdates());
+                    MultiSMREntry partialWriteSet = new MultiSMREntry(((TXEntry) data).getTxMap().get(streamID).getUpdates());
                     try (AutoCloseableByteBuf tempbuf =
                                  new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
                         Serializers.getSerializer(Serializers.SerializerType.CORFU)
@@ -114,7 +116,35 @@ public class ReplexReplicationView extends AbstractReplicationView {
                                     .writeStream(address, streamPairs.get(lu), b), ReplexOverwriteException.class);
                 }
             }
+*/
+            if (partialEntryFunction != null) {
+                for (UUID streamID : stream) {
+                    Object partial = partialEntryFunction.apply(streamID);
+                    ByteBuf outBuf = b;
+                    if (partial.equals(data)) {
+                        try (AutoCloseableByteBuf tempbuf =
+                                     new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
+                            Serializers.getSerializer(Serializers.SerializerType.CORFU)
+                                    .serialize(partial, tempbuf);
 
+                            CFUtils.getUninterruptibly(
+                                    getLayout().getReplexLogUnitClient(0, getLayout().getReplexUnitIndex(0, streamID))
+                                            .writeStream(address,
+                                                    Collections.singletonMap(streamID, streamAddresses.get(streamID)), tempbuf),
+                                    ReplexOverwriteException.class);
+                        }
+                    }
+                }
+            }
+            else {
+                    // no partial entry, just use the previous buffer.
+                    for (Integer lu : streamPairs.keySet()) {
+                        log.trace("Write, Replex: chain {}/{}", lu + 1, getLayout().getNumReplexUnits(0));
+                        CFUtils.getUninterruptibly(
+                                getLayout().getReplexLogUnitClient(0, lu)
+                                        .writeStream(address, streamPairs.get(lu), b), ReplexOverwriteException.class);
+                    }
+            }
             // TODO: Wait.. the reads are ALWAYS true, because the sequencer hands out values. The protocol might
             // be able to just skip the commit bits.
 

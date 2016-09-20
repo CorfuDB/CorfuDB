@@ -1,13 +1,16 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,5 +31,6 @@ public class ReplexSMRMapTest extends SMRMapTest {
         r.getLayoutView().committed(0L, newLayout);
         r.invalidateLayout();
     }
+
 
 }

@@ -215,6 +215,10 @@ public class StreamView implements AutoCloseable {
      */
     @SuppressWarnings("unchecked")
     public synchronized LogData read() {
+        return read(Long.MAX_VALUE);
+    }
+
+    public synchronized LogData read(long maxGlobal) {
         while (true) {
             /*
             long thisRead = logPointer.getAndIncrement();
@@ -249,6 +253,11 @@ public class StreamView implements AutoCloseable {
                         return null;
                     }
                     thisRead = getCurrentContext().currentBackpointerList.pollFirst();
+                }
+
+                if (thisRead > maxGlobal) {
+                    getCurrentContext().currentBackpointerList.add(thisRead);
+                    return null;
                 }
 
                 getCurrentContext().logPointer.set(thisRead + 1);
@@ -290,6 +299,9 @@ public class StreamView implements AutoCloseable {
                         runtime.getLayoutView().getLayout().getSegments().size() - 1)
                         .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
                     long thisRead = getCurrentContext().logPointer.get();
+                    if (thisRead > maxGlobal) {
+                        return null;
+                    }
                     log.trace("Doing a stream read, stream: {}, address: {}", streamID, thisRead);
                     LogData result = runtime.getAddressSpaceView().read(streamID, thisRead, 1L).get(thisRead);
                     getCurrentContext().logPointer.incrementAndGet();
@@ -349,7 +361,7 @@ public class StreamView implements AutoCloseable {
             ArrayList<LogData> al = new ArrayList<>();
             log.debug("Stream[{}] pointer[{}], readTo {}", streamID, getCurrentContext().logPointer.get(), latestToken);
             while (getCurrentContext().logPointer.get() <= latestToken) {
-                LogData r = read();
+                LogData r = read(pos);
                 if (r != null && (max || r.getGlobalAddress() <= pos)) {
                     al.add(r);
                 } else {

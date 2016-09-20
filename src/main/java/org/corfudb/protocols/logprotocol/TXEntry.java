@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 @ToString(exclude = "aborted")
 @NoArgsConstructor
 @Slf4j
-public class TXEntry extends LogEntry {
+public class TXEntry extends LogEntry implements ISMRConsumable {
 
     @Getter
     Map<UUID, TXObjectEntry> txMap;
@@ -175,6 +175,11 @@ public class TXEntry extends LogEntry {
     @Override
     public boolean isMutation(UUID stream) {
         return !isAborted() && getAffectedStreams().contains(stream);
+    }
+
+    @Override
+    public List<SMREntry> getSMRUpdates(UUID id) {
+        return txMap.get(id).getUpdates();
     }
 
     @ToString

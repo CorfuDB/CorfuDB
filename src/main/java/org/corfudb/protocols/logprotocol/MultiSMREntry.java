@@ -15,12 +15,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.ICorfuSerializable;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -29,12 +24,12 @@ import java.util.stream.Collectors;
 @ToString
 @NoArgsConstructor
 @Slf4j
-public class OptimizedTXEntry extends LogEntry {
+public class MultiSMREntry extends LogEntry implements ISMRConsumable {
 
     @Getter
     List<SMREntry> updates;
 
-    public OptimizedTXEntry(List<SMREntry> updates) {
+    public MultiSMREntry(List<SMREntry> updates) {
         this.type = LogEntryType.OPT_TX;
         this.updates = updates;
     }
@@ -66,5 +61,12 @@ public class OptimizedTXEntry extends LogEntry {
                 .forEach(x -> Serializers
                         .getSerializer(Serializers.SerializerType.CORFU)
                         .serialize(x, b));
+    }
+
+    @Override
+    public List<SMREntry> getSMRUpdates(UUID id) {
+        // TODO: we should check that the id matches the id of this entry,
+        // but replex erases this information.
+        return updates;
     }
 }
