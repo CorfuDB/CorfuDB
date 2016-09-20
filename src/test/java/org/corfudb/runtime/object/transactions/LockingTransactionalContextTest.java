@@ -76,7 +76,7 @@ public class LockingTransactionalContextTest extends AbstractViewTest {
 
 
         final int num_threads = 10;
-        final int num_records = 500;
+        final int num_records = 10;
 
         IntStream.range(0, num_threads * num_records)
                 .forEach(x -> {
