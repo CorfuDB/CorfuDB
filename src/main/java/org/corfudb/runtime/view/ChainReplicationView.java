@@ -14,6 +14,7 @@ import org.corfudb.util.serializer.Serializers;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * A view of an address implemented by chain replication.
@@ -47,7 +48,7 @@ public class ChainReplicationView extends AbstractReplicationView {
      */
     @Override
     public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
-                     Map<UUID, Long> streamAddresses)
+                     Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction)
             throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         int payloadBytes = 0;

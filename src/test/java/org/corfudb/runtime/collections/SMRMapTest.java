@@ -1,24 +1,25 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.reflect.TypeToken;
 import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRObject;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.EnumSet;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -391,7 +392,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 100;
+        final int num_records = 1_000;
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();
 
@@ -402,6 +403,48 @@ public class SMRMapTest extends AbstractViewTest {
                     getRuntime().getObjectsView().TXBegin();
                     assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
                             .isEqualTo(null);
+                    getRuntime().getObjectsView().TXEnd();
+                } catch (TransactionAbortedException tae) {
+                    aborts.incrementAndGet();
+                }
+            }
+        });
+
+        long startTime = System.currentTimeMillis();
+        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
+
+        calculateAbortRate(aborts.get(), num_records * num_threads);
+    }
+
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void concurrentAbortTestMulti()
+            throws Exception {
+
+        final int num_maps = 100;
+        List<Map<Integer,Integer>> mapList = IntStream.range(0, num_maps)
+                                                    .mapToObj(x ->
+                                                        getRuntime()
+                                                                .getObjectsView().build()
+                                                                .setStreamName("map-" + x)
+                                                                .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {})
+                                                                .open()
+                                                    )
+                                                    .collect(Collectors.toList());
+        final int num_threads = 5;
+        final int num_records = 1_000;
+        AtomicInteger aborts = new AtomicInteger();
+
+        scheduleConcurrently(num_threads, threadNumber -> {
+            int base = threadNumber * num_records;
+            Random r = new Random(threadNumber);
+            for (int i = base; i < base + num_records; i++) {
+                try {
+                    getRuntime().getObjectsView().TXBegin();
+                    //pick a map at "random" to insert to
+                    mapList.get(r.nextInt(num_maps)).put(0, 1);
                     getRuntime().getObjectsView().TXEnd();
                 } catch (TransactionAbortedException tae) {
                     aborts.incrementAndGet();

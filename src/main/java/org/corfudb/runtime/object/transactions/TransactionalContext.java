@@ -73,6 +73,10 @@ public class TransactionalContext {
         return getCurrentContext() instanceof OptimisticTransactionalContext;
     }
 
+    public static boolean needsReadLock() {
+        return getCurrentContext().transactionRequiresReadLock();
+    }
+
     @FunctionalInterface
     public interface TXCompletionMethod {
         void handle(AbstractTransactionalContext context);

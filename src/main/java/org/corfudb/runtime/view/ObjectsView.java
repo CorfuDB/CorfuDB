@@ -12,8 +12,10 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuProxyBuilder;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.object.ICorfuObject;
 import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.LockingTransactionalContext;
 import org.corfudb.runtime.object.transactions.OptimisticTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.LambdaUtils;
@@ -162,6 +164,19 @@ public class ObjectsView extends AbstractView {
         throw new RuntimeException("Couldn't get call site!");
     }
 
+    public void TXBegin(TransactionStrategy strategy, Object... writeSet) {
+        if (strategy == TransactionStrategy.LOCKING) {
+            LockingTransactionalContext context = new LockingTransactionalContext(runtime);
+            context.setWriteSet(writeSet);
+            context.setStartTime(System.currentTimeMillis());
+            TransactionalContext.newContext(context);
+
+            log.trace("Entering transactional context {}.", context.getTransactionID());
+        } else {
+            TXBegin(strategy);
+        }
+    }
+
     /**
      * Begins a transaction on the current thread.
      * Modifications to objects will not be visible
@@ -170,11 +185,12 @@ public class ObjectsView extends AbstractView {
     public void TXBegin(TransactionStrategy strategy) {
 
         if (strategy == TransactionStrategy.AUTOMATIC) {
-            StackTraceElement st = getCallSite();
-            log.trace("Determined call site to be {}", st);
-            CallSiteData csd = callSiteDataCache.get(st);
-            strategy = csd.getNextStrategy();
-            log.trace("Selecting transaction strategy {} based on call site.", strategy);
+            //StackTraceElement st = getCallSite();
+            //log.trace("Determined call site to be {}", st);
+            //CallSiteData csd = callSiteDataCache.get(st);
+            //strategy = csd.getNextStrategy();
+            //log.trace("Selecting transaction strategy {} based on call site.", strategy);
+            strategy = TransactionStrategy.OPTIMISTIC;
         }
 
 
@@ -236,19 +252,23 @@ public class ObjectsView extends AbstractView {
                         TransactionalContext.getCurrentContext().getTransactionID());
                 TransactionalContext.getCurrentContext().addTransaction(context);
             } else {
-                TXEntry entry = ((OptimisticTransactionalContext) context).getEntry();
-                Set<UUID> affectedStreams = entry.getAffectedStreams();
-                if(transactionLogging) {
-                    affectedStreams.add(TRANSACTION_STREAM_ID);
-                    log.trace("TX entry {} will be writted to transaction stream : {}", entry, TRANSACTION_STREAM_ID);
+                //TXEntry entry = ((OptimisticTransactionalContext) context).getEntry();
+                //Set<UUID> affectedStreams = entry.getAffectedStreams();
+                //if(transactionLogging) {
+                //    affectedStreams.add(TRANSACTION_STREAM_ID);
+                //    log.trace("TX entry {} will be writted to transaction stream : {}", entry, TRANSACTION_STREAM_ID);
+                //}
+                //long address = runtime.getStreamsView().write(affectedStreams, entry);
+                try {
+                    TransactionalContext.getCurrentContext().commitTransaction();
+                } finally {
+                    TransactionalContext.removeContext();
                 }
-                long address = runtime.getStreamsView().write(affectedStreams, entry);
-                TransactionalContext.removeContext();
-                log.trace("TX entry {} written at address {}", entry, address);
+                //log.trace("TX entry {} written at address {}", entry, address);
                 //now check if the TX will be an abort...
-                if (entry.isAborted()) {
-                    throw new TransactionAbortedException();
-                }
+                //if (entry.isAborted()) {
+                //    throw new TransactionAbortedException();
+                //}
                 //otherwise fire the handlers.
                 TransactionalContext.getCompletionMethods().parallelStream()
                         .forEach(x -> x.handle(context));

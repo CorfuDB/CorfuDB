@@ -174,6 +174,7 @@ public class SequencerServer extends AbstractServer {
                                         return null;
                                     } else {
                                         if (v > timestamp) {
+                                            log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
                                             abort.set(true);
                                         }
                                     }

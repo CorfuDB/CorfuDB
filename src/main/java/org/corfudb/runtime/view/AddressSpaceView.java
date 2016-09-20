@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * A view of the address space implemented by Corfu.
@@ -112,11 +113,18 @@ public class AddressSpaceView extends AbstractView {
      * @param data           The data to write.
      * @param backpointerMap
      */
-    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap, Map<UUID, Long> streamAddresses)
+    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                      Map<UUID, Long> streamAddresses)
+            throws OverwriteException {
+        write(address, stream, data, backpointerMap, streamAddresses, null);
+    }
+
+    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                      Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction)
             throws OverwriteException {
         int numBytes = layoutHelper(l -> AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address),
                 l.getSegment(address))
-                .write(address, stream, data, backpointerMap, streamAddresses));
+                .write(address, stream, data, backpointerMap, streamAddresses, partialEntryFunction));
 
         // Insert this write to our local cache.
         if (!runtime.isCacheDisabled()) {

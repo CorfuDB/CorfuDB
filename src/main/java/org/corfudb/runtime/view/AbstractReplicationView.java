@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 
 /**
@@ -76,9 +77,15 @@ public abstract class AbstractReplicationView {
      * @param backpointerMap The map of backpointers to write.
      * @return The number of bytes that was remotely written.
      */
-    public abstract int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+    public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
                               Map<UUID, Long> streamAddresses)
-            throws OverwriteException;
+            throws OverwriteException {
+        return write(address, stream, data, backpointerMap, streamAddresses, null);
+    }
+
+    public abstract int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                              Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction)
+        throws OverwriteException;
 
     /**
      * Read the given object from an address, using the replication method given.

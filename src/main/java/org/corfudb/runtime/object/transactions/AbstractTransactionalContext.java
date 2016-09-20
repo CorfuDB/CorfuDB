@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
 import org.corfudb.runtime.view.TransactionStrategy;
 import org.corfudb.util.serializer.Serializers;
@@ -121,6 +122,12 @@ public abstract class AbstractTransactionalContext implements AutoCloseable {
     @SuppressWarnings("unchecked")
     public <T> boolean isObjectCloned(CorfuSMRObjectProxy<T> proxy) {
         return false;
+    }
+
+    public boolean transactionRequiresReadLock() { return false; }
+
+
+    public void commitTransaction() throws TransactionAbortedException {
     }
 
     @Override

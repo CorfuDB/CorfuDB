@@ -1,41 +1,55 @@
 package org.corfudb.runtime.object.transactions;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.object.ICorfuObject;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
- * Created by mwei on 4/4/16.
+ * Created by mwei on 9/19/16.
  */
 @Slf4j
-public class OptimisticTransactionalContext extends AbstractTransactionalContext {
+public class LockingTransactionalContext extends AbstractTransactionalContext {
 
     AtomicInteger updateCounter;
     @Getter
-    Map<CorfuSMRObjectProxy, TransactionalObjectData> objectMap;
+    Map<CorfuSMRObjectProxy, LockingTransactionalContext.TransactionalObjectData> objectMap;
     @Getter
     private boolean firstReadTimestampSet = false;
+    @Setter
+    Object[] writeSet;
+
+    public long getFirstReadTimestamp() {
+        return getFirstTimestamp().getToken() - 1L;
+    }
+
+    @Override
+    public boolean transactionRequiresReadLock() { return true; }
+
     /**
      * The timestamp of the first read in the system.
      *
      * @return The timestamp of the first read object, which may be null.
      */
     @Getter(lazy = true)
-    private final long firstReadTimestamp = fetchFirstTimestamp();
+    private final TokenResponse firstTimestamp = fetchFirstTimestamp();
 
-    @Override
-    public boolean transactionRequiresReadLock() { return true; }
-
-    public OptimisticTransactionalContext(CorfuRuntime runtime) {
+    public LockingTransactionalContext(CorfuRuntime runtime) {
         super(runtime);
         this.objectMap = new ConcurrentHashMap<>();
         this.updateCounter = new AtomicInteger();
@@ -47,7 +61,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @return Return true, if there was no write set.
      */
     public boolean hasNoWriteSet() {
-        for (TransactionalObjectData od : objectMap.values()) {
+        for (LockingTransactionalContext.TransactionalObjectData od : objectMap.values()) {
             if (od.bufferedWrites.size() > 0) return false;
         }
         return true;
@@ -58,9 +72,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      *
      * @return The first timestamp to be used for this transaction.
      */
-    public synchronized long fetchFirstTimestamp() {
+    public synchronized TokenResponse fetchFirstTimestamp() {
         firstReadTimestampSet = true;
-        long token = runtime.getSequencerView().nextToken(Collections.emptySet(), 0).getToken();
+        Set<UUID> writeIds = Arrays.stream(writeSet)
+                .map(ICorfuObject.class::cast)
+                .map(ICorfuObject::getStreamID)
+                .collect(Collectors.toSet());
+        TokenResponse token = runtime.getSequencerView()
+                .nextToken(writeIds, 1);
         log.trace("Set first read timestamp for tx {} to {}", transactionID, token);
         return token;
     }
@@ -70,12 +89,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      *
      * @return A TXEntry which represents this transactional context.
      */
-    public TXEntry getEntry() {
-        Map<UUID, TXEntry.TXObjectEntry> entryMap = new HashMap<>();
+    public MultiObjectSMREntry getEntry() {
+        Map<UUID, MultiSMREntry> entryMap = new HashMap<>();
         objectMap.entrySet().stream()
                 .forEach(x -> entryMap.put(x.getKey().getSv().getStreamID(),
-                        new TXEntry.TXObjectEntry(x.getValue().bufferedWrites, x.getValue().objectIsRead)));
-        return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L);
+                        new MultiSMREntry(x.getValue().bufferedWrites)));
+        return new MultiObjectSMREntry(entryMap);
     }
 
     /**
@@ -95,9 +114,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         objectMap
                 .compute(proxy, (k, v) ->
                 {
-                    TransactionalObjectData<T> data = v;
+                    LockingTransactionalContext.TransactionalObjectData<T> data = v;
                     if (v == null) {
-                        data = new TransactionalObjectData<>(proxy);
+                        data = new LockingTransactionalContext.TransactionalObjectData<>(proxy);
                     }
 
                     if (!writeOnly) {
@@ -113,9 +132,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         objectMap
                 .compute(proxy, (k, v) ->
                 {
-                    TransactionalObjectData<T> data = v;
+                    LockingTransactionalContext.TransactionalObjectData<T> data = v;
                     if (v == null) {
-                        data = new TransactionalObjectData<>(proxy);
+                        data = new LockingTransactionalContext.TransactionalObjectData<>(proxy);
                     }
 
                     data.objectIsRead = false;
@@ -133,16 +152,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @SuppressWarnings("unchecked")
     public void addTransaction(AbstractTransactionalContext tc) {
-        if (tc instanceof OptimisticTransactionalContext) {
-            ((OptimisticTransactionalContext) tc).getObjectMap().entrySet().stream()
-                    .forEach(e -> {
-                        if (objectMap.containsKey(e.getKey())) {
-                            objectMap.get(e.getKey())
-                                    .bufferedWrites.addAll(e.getValue().bufferedWrites);
-                        } else {
-                            objectMap.put(e.getKey(), e.getValue());
-                        }
-                    });
+        throw new UnsupportedOperationException("Locking transaction doesn't support nesting yet");
+    }
+
+    @Override
+    public void commitTransaction() throws TransactionAbortedException {
+        MultiObjectSMREntry entry = getEntry();
+        try {
+            runtime.getStreamsView().writeAt(getFirstTimestamp(), entry.getEntryMap().keySet(), entry);
+        } catch (OverwriteException oe) {
+            throw new TransactionAbortedException();
         }
     }
 
@@ -169,7 +188,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     public <T> T getObjectRead(CorfuSMRObjectProxy<T> proxy) {
         return (T) objectMap
-                .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
+                .computeIfAbsent(proxy, x -> new LockingTransactionalContext.TransactionalObjectData<>(proxy))
                 .readObject();
     }
 
@@ -184,7 +203,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     public <T> T getObjectWrite(CorfuSMRObjectProxy<T> proxy) {
         return (T) objectMap
-                .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
+                .computeIfAbsent(proxy, x -> new LockingTransactionalContext.TransactionalObjectData<>(proxy))
                 .writeObject();
     }
 
@@ -199,7 +218,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     public <T> T getObjectReadWrite(CorfuSMRObjectProxy<T> proxy) {
         return (T) objectMap
-                .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
+                .computeIfAbsent(proxy, x -> new LockingTransactionalContext.TransactionalObjectData<>(proxy))
                 .readWriteObject();
     }
 
@@ -213,17 +232,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     public <T> boolean isObjectCloned(CorfuSMRObjectProxy<T> proxy) {
         return objectMap.containsKey(proxy) && objectMap.get(proxy).objectIsCloned();
-    }
-
-    @Override
-    public void commitTransaction() throws TransactionAbortedException {
-        TXEntry entry = getEntry();
-        Set<UUID> affectedStreams = entry.getAffectedStreams();
-        //TODO:: refactor commitTransaction into here...
-        if (runtime.getStreamsView().write(affectedStreams, entry) == -1L) {
-            log.debug("Transaction aborted due to sequencer rejecting request");
-            throw new TransactionAbortedException();
-        }
     }
 
     @SuppressWarnings("unchecked")
@@ -275,7 +283,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
 
         public T writeObject() {
-            return cloneAndGetObject();
+            //return cloneAndGetObject();
+            return (T) (smrObjectClone == null ? proxy.getSmrObject() : smrObjectClone);
         }
 
         public T readWriteObject() {
@@ -283,9 +292,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 objectIsRead = true;
             }
             readTimestamp = proxy.getTimestamp();
-            return cloneAndGetObject();
+            //return cloneAndGetObject();
+            return (T) (smrObjectClone == null ? proxy.getSmrObject() : smrObjectClone);
         }
     }
-
 
 }
