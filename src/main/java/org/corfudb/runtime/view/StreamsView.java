@@ -148,7 +148,9 @@ public class StreamsView {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                         return -1L;
                     }
-                    return -1L;
+                    replexOverwrite = true;
+                    overwrite = false;
+                    //return -1L;
                 } catch (OverwriteException oe) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
