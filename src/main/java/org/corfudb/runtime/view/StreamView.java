@@ -374,12 +374,10 @@ public class StreamView implements AutoCloseable {
                 .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
             // pos is a global address, but we want the local stream address..
             long latestToken = pos;
-            boolean max = false;
-            if (pos == Long.MAX_VALUE) {
-                max = true;
-                latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getStreamAddresses().get(streamID);
-                log.trace("Linearization point set to {}", latestToken);
-            }
+
+            latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0)
+                    .getStreamAddresses().get(streamID);
+            log.trace("Linearization point set to {}", latestToken);
 
             if (latestToken < getCurrentContext().logPointer.get())
                 return (new ArrayList<LogData>()).toArray(new LogData[0]);
@@ -396,8 +394,7 @@ public class StreamView implements AutoCloseable {
                 if (readResult.get(addr) == null) {
                     continue;
                 }
-                if (max && addr > pos)
-                    break;
+
                 if (readResult.get(addr).getType() == DataType.EMPTY) {
                     if (addr <= latestToken) {
                         // If it's a hole, fill it and don't return it
