@@ -8,6 +8,8 @@ import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -74,9 +76,37 @@ public class ObjectsViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void checkPersistTransactionId() throws Exception {
+        CorfuRuntime r = getDefaultRuntime()
+                .setTransactionLogging(true);
+
+        Map<String, String> smrMap = r.getObjectsView()
+                .build()
+                .setType(SMRMap.class)
+                .setStreamName("test")
+                .open();
+
+        // Generate a transaction
+        AbstractTransactionalContext txnContext;
+        r.getObjectsView().TXBegin();
+        txnContext = TransactionalContext.getCurrentContext();
+        smrMap.put("a", "b");
+        r.getObjectsView().TXEnd();
+
+        // Verify that the transaction id has been properly persisted
+        StreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
+        ILogUnitEntry[] txns = txStream.readTo(Long.MAX_VALUE);
+        assertThat(txns.length).isEqualTo(1);
+        assertThat(txns[0].getLogEntry().getType()).isEqualTo(LogEntry.LogEntryType.TX);
+        TXEntry tx1 = (TXEntry)txns[0].getLogEntry();
+        assertThat(txnContext.getTransactionID()).isEqualTo(tx1.getTransactionID());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     public void abortedTransactionDoesNotConflict()
             throws Exception {
-        //Enbale transaction logging
+        //Enable transaction logging
         CorfuRuntime r = getDefaultRuntime()
                 .setTransactionLogging(true);
 
