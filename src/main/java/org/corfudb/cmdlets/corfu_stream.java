@@ -2,12 +2,10 @@ package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Utils;
 import org.docopt.Docopt;
 
 import java.util.Map;
@@ -38,7 +36,7 @@ public class corfu_stream implements ICmdlet {
                     + " --version                                      Show version\n";
 
     @Override
-    public String[] main(String[] args) {
+    public void main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -51,33 +49,33 @@ public class corfu_stream implements ICmdlet {
 
         try {
             if ((Boolean) opts.get("write")) {
-                return write(rt, opts);
+                write(rt, opts);
             } else if ((Boolean) opts.get("read")) {
-                return read(rt, opts);
+                read(rt, opts);
             }
         } catch (ExecutionException ex) {
-            return cmdlet.err("Exception", ex.toString(), ex.getCause().toString());
+            log.error("Exception", ex.getCause());
+            throw new RuntimeException(ex.getCause());
         } catch (Exception e) {
-            return cmdlet.err("Exception", e.toString(), ExceptionUtils.getStackTrace(e));
+            log.error("Exception", e);
+            throw new RuntimeException(e);
         }
-        return cmdlet.err("Hush, compiler.");
     }
 
-    String[] write(CorfuRuntime runtime, Map<String, Object> opts)
+    void write(CorfuRuntime runtime, Map<String, Object> opts)
             throws Exception {
         runtime.getStreamsView().write(streamsFromString((String) opts.get("--stream-ids")),
                 ByteStreams.toByteArray(System.in));
-        return cmdlet.ok();
     }
 
-    String[] read(CorfuRuntime runtime, Map<String, Object> opts)
+    void read(CorfuRuntime runtime, Map<String, Object> opts)
             throws Exception {
         StreamView s = runtime.getStreamsView().get(getUUIDfromString((String) opts.get("--stream-id")));
         while (true) {
             ILogUnitEntry r = s.read();
             if (r == null) {
                 if (!(Boolean) opts.get("--loop")) {
-                    return cmdlet.ok();
+                    return;
                 }
                 Thread.sleep(100);
             } else {

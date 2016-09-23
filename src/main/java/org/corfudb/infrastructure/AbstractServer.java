@@ -45,12 +45,7 @@ public abstract class AbstractServer {
     }
 
     /**
-     * Reboot the server, using persistent state on disk to restart.
-     */
-    public abstract void reboot();
-
-    /**
-     * Reset the server, deleting persistent state on disk prior to rebooting.
+     * Reset the server.
      */
     public abstract void reset();
 

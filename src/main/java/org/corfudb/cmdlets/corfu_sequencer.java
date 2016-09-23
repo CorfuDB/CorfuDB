@@ -1,7 +1,6 @@
 package org.corfudb.cmdlets;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.util.GitRepositoryState;
@@ -9,6 +8,9 @@ import org.docopt.Docopt;
 
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+
+import static org.fusesource.jansi.Ansi.Color.WHITE;
+import static org.fusesource.jansi.Ansi.ansi;
 
 /**
  * Created by mwei on 12/11/15.
@@ -31,7 +33,7 @@ public class corfu_sequencer implements ICmdlet {
                     + " --version  Show version\n";
 
     @Override
-    public String[] main(String[] args) {
+    public void main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -49,19 +51,20 @@ public class corfu_sequencer implements ICmdlet {
         NettyClientRouter router = new NettyClientRouter(host, port);
         router.addClient(new SequencerClient())
                 .start();
+        System.out.println(ansi().a("TOKEN_REQUEST ").fg(WHITE).a(host + ":" + port).reset().a(":"));
 
         try {
-            SequencerClient.TokenResponse foo =
-                    router.getClient(SequencerClient.class).nextToken(
+            long token = router.getClient(SequencerClient.class).nextToken(
                     streamsFromString((String) opts.get("--stream-ids")),
-                    Integer.parseInt((String) opts.get("--num-tokens"))).get();
-            long token = foo.getToken();
-            return cmdlet.ok(Long.toString(token), foo.backpointerMap.toString());
+                    Integer.parseInt((String) opts.get("--num-tokens"))).get().getToken();
+            System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port).reset().a(":"));
+            System.out.println(token);
         } catch (ExecutionException ex) {
-            return cmdlet.err("Exception", ex.toString(), ex.getCause().toString());
+            log.error("Exception getting sequence", ex.getCause());
+            throw new RuntimeException(ex.getCause());
         } catch (Exception e) {
-            return cmdlet.err("Exception", e.toString(), ExceptionUtils.getStackTrace(e));
+            log.error("Exception getting layout", e);
+            throw new RuntimeException(e);
         }
-        // return cmdlet.err("Hush, compiler.");
     }
 }
