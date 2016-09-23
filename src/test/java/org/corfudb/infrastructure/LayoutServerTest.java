@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.io.Files;
-import com.google.common.util.concurrent.ExecutionError;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
@@ -36,7 +35,31 @@ public class LayoutServerTest extends AbstractServerTest {
         sendMessage(new LayoutMsg(l, CorfuMsg.CorfuMsgType.LAYOUT_BOOTSTRAP));
     }
 
-    // memoryLayoutServerReadsLayout() test is no longer valid.
+
+    @Test
+    public void memoryLayoutServerReadsLayout()
+            throws Exception {
+
+        String serviceDir = getTempDir();
+
+        Layout l = TestLayoutBuilder.single(9000);
+
+        l.getSequencers().add("test200");
+        l.getSequencers().add("test201");
+
+        Files.write(l.asJSONString().getBytes(), new File(serviceDir, "layout"));
+
+        LayoutServer ls = new LayoutServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .build());
+
+        setServer(ls);
+
+        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
+
+        assertThat((getLastMessage().getMsgType()))
+                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
+    }
 
     @Test
     public void nonBootstrappedServerNoLayout() {
@@ -110,17 +133,14 @@ public class LayoutServerTest extends AbstractServerTest {
 
     @Test
     public void commitReturnsAck() {
-        Layout layout = TestLayoutBuilder.single(9000);
-
-        bootstrapServer(layout);
-        layout.setEpoch(layout.getEpoch() + 1);
+        bootstrapServer(TestLayoutBuilder.single(9000));
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
-        sendMessage(new LayoutRankMsg(layout, 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(layout, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
+        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
     }
@@ -169,11 +189,9 @@ public class LayoutServerTest extends AbstractServerTest {
         s1.shutdown();
 
         LayoutServer s2 = getDefaultServer(serviceDir);
-        this.router.reset();
-        this.router.addServer(s2);
 
         assertThat(s2)
-                .isInEpoch(0);  // SLF: TODO: rebase conflict: new is 0, old was 100
+                .isInEpoch(0);
         assertThat(s2)
                 .isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
         assertThat(s2)
@@ -331,7 +349,7 @@ public class LayoutServerTest extends AbstractServerTest {
      *
      * @throws Exception
      */
-    // SLF TODO: put me back: @Test
+    @Test
     public void checkPhase1AndPhase2MessagesFromMultipleClients() throws Exception {
         String serviceDir = getTempDir();
 
@@ -387,75 +405,4 @@ public class LayoutServerTest extends AbstractServerTest {
 
         s2.shutdown();
     }
-
-    @Test
-    public void testReboot() throws Exception {
-        String serviceDir = getTempDir();
-
-        LayoutServer s1 = getDefaultServer(serviceDir);
-
-        setServer(s1);
-        Layout l99 = TestLayoutBuilder.single(9000);
-        l99.setEpoch(99);
-        bootstrapServer(l99);
-
-        // Reboot, then check that our epoch 100 layout is still there.
-        s1.reboot();
-
-        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
-        assertThat(((LayoutMsg) getLastMessage()).getLayout().getEpoch())
-                .isEqualTo(99);
-        s1.shutdown();
-
-        for (int i = 0; i < 16; i++) {
-            LayoutServer s2 = getDefaultServer(serviceDir);
-            setServer(s2);
-            commitReturnsAck(s2, i, 100);
-            s2.shutdown();
-        }
-    }
-
-    // Same as commitReturnsAck() test, but we perhaps make a .reboot() call
-    // between each step.
-
-    private void commitReturnsAck(LayoutServer s1, Integer reboot, long baseEpoch) {
-        if ((reboot & 1) > 0) { s1.reboot(); }
-
-        LayoutRankMsg lrm1 = new LayoutRankMsg(null, 100, CorfuMsg.CorfuMsgType.LAYOUT_PREPARE);
-        lrm1.setEpoch(baseEpoch + reboot - 1);
-        sendMessage(lrm1);
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_PREPARE_ACK);
-        if ((reboot & 2) > 0) { s1.reboot(); }
-
-        Layout layout = TestLayoutBuilder.single(9000);
-        layout.setEpoch(baseEpoch + reboot);
-        LayoutRankMsg lrm2 = new LayoutRankMsg(layout, 100, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE);
-        lrm2.setEpoch(baseEpoch + reboot - 1);
-        sendMessage(lrm2);
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        if ((reboot & 4) > 0) { s1.reboot(); }
-
-        LayoutRankMsg lrm3 = new LayoutRankMsg(layout, 1000, CorfuMsg.CorfuMsgType.LAYOUT_COMMITTED);
-        lrm3.setEpoch(baseEpoch + reboot - 1);
-        sendMessage(lrm3);
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.ACK);
-        if ((reboot & 8) > 0) {s1.reboot(); }
-        lrm3.setEpoch(baseEpoch + reboot);
-        sendMessage(lrm3);
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.WRONG_EPOCH);
-
-        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.LAYOUT_REQUEST));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.LAYOUT_RESPONSE);
-        assertThat(((LayoutMsg) getLastMessage()).getLayout())
-                .isEqualTo(layout);
-
-    }
-
 }

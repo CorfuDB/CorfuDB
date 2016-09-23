@@ -36,12 +36,8 @@ public class ServerContext {
 
     public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
         this.serverConfig = serverConfig;
-        resetDataStore();
-        this.serverRouter = serverRouter;
-    }
-
-    public void resetDataStore() {
         this.dataStore = new DataStore(serverConfig);
+        this.serverRouter = serverRouter;
     }
 
     /**

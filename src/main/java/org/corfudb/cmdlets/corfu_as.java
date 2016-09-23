@@ -1,17 +1,12 @@
 package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
-import io.netty.buffer.ByteBuf;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Utils;
 import org.docopt.Docopt;
 
-import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -39,7 +34,7 @@ public class corfu_as implements ICmdlet {
                     + " --version  Show version\n";
 
     @Override
-    public String[] main(String[] args) {
+    public void main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -52,46 +47,43 @@ public class corfu_as implements ICmdlet {
 
         try {
             if ((Boolean) opts.get("write")) {
-                return write(rt, opts);
+                write(rt, opts);
             } else if ((Boolean) opts.get("read")) {
-                return read(rt, opts);
+                read(rt, opts);
             }
         } catch (ExecutionException ex) {
-            return cmdlet.err("Exception", ex.toString(), ex.getCause().toString());
+            log.error("Exception", ex.getCause());
+            throw new RuntimeException(ex.getCause());
         } catch (Exception e) {
-            return cmdlet.err("Exception", e.toString(), ExceptionUtils.getStackTrace(e));
+            log.error("Exception", e);
+            throw new RuntimeException(e);
         }
-        return cmdlet.err("Hush, compiler.");
     }
 
-    String[] write(CorfuRuntime runtime, Map<String, Object> opts)
+    void write(CorfuRuntime runtime, Map<String, Object> opts)
             throws Exception {
-        try {
-            runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
-                    streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
-                    Collections.emptyMap());
-            return cmdlet.ok();
-        } catch (OverwriteException e) {
-            return cmdlet.err("OVERWRITE");
-        }
+        runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
+                streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
+                Collections.emptyMap());
     }
 
-    String[] read(CorfuRuntime runtime, Map<String, Object> opts)
+    void read(CorfuRuntime runtime, Map<String, Object> opts)
             throws Exception {
         ILogUnitEntry r = runtime.getAddressSpaceView()
                 .read(Long.parseLong((String) opts.get("--log-address")));
         switch (r.getResultType()) {
             case EMPTY:
-                return cmdlet.err("EMPTY");
+                System.err.println("Error: EMPTY");
+                break;
             case FILLED_HOLE:
-                return cmdlet.err("HOLE");
+                System.err.println("Error: HOLE");
+                break;
             case TRIMMED:
-                return cmdlet.err("TRIMMED");
+                System.err.println("Error: TRIMMED");
+                break;
             case DATA:
-                byte[] ba = new byte[r.getBuffer().readableBytes()];
-                r.getBuffer().getBytes(0, ba);
-                return cmdlet.ok(new String(ba, "UTF8"));
+                r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
+                break;
         }
-        return cmdlet.err("Hush, compiler.");
     }
 }

@@ -32,11 +32,6 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -64,8 +59,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
-
-    private ServerContext serverContext;
 
     /**
      * A scheduler, which is used to schedule periodic tasks like garbage collection.
@@ -101,26 +94,25 @@ public class LogUnitServer extends AbstractServer {
     LoadingCache<Long, LogUnitEntry> dataCache;
     long maxCacheSize;
 
-    private AbstractLocalLog localLog;
-
-    public static long maxLogFileSize = Integer.MAX_VALUE;  // 2GB by default
+    private final AbstractLocalLog localLog;
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
-        this.serverContext = serverContext;
 
         maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
-        if (opts.get("--quickcheck-test-mode") != null &&
-            (Boolean) opts.get("--quickcheck-test-mode")) {
-            // It's really annoying when using OS X + HFS+ that HFS+ does not
-            // support sparse files.  If we use the default 2GB file size, then
-            // every time that a sparse file is closed, the OS will always
-            // write 2GB of data to disk.  {sadpanda}  Use this static class
-            // var to signal to RollingLog to use a smaller file size.
-            maxLogFileSize = 4_000_000;
+        String logdir = opts.get("--log-path") + File.separator + "log";
+        if ((Boolean) opts.get("--memory")) {
+            log.warn("Log unit opened in-memory mode (Maximum size={}). " +
+                    "This should be run for testing purposes only. " +
+                    "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
+                    "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
+            localLog = new InMemoryLog(0, Long.MAX_VALUE);
+            reset();
+        } else {
+            localLog = new RollingLog(0, Long.MAX_VALUE, logdir, (Boolean) opts.get("--sync"));
         }
 
-        reboot();
+        reset();
 
 /*       compactTail seems to be broken, disabling it for now
          scheduler.scheduleAtFixedRate(this::compactTail,
@@ -181,47 +173,14 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     public void reset() {
-        String d = serverContext.getDataStore().getLogDir();
-        localLog.close();
-        if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d);
-            String prefixes[] = new String[]{"log"};
-
-            for (String pfx : prefixes) {
-                try (DirectoryStream<Path> stream =
-                             Files.newDirectoryStream(dir, pfx + "*")) {
-                    for (Path entry : stream) {
-                        // System.out.println("Deleting " + entry);
-                        Files.delete(entry);
-                    }
-                } catch (IOException e) {
-                    log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
-                }
-            }
-        }
-        reboot();
-    }
-
-    @Override
-    public void reboot() {
         contiguousHead = 0L;
-
-        if ((Boolean) opts.get("--memory")) {
-            log.warn("Log unit opened in-memory mode (Maximum size={}). " +
-                    "This should be run for testing purposes only. " +
-                    "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
-                    "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
-            localLog = new InMemoryLog(0, Long.MAX_VALUE);
-        } else {
-            String logdir = opts.get("--log-path") + File.separator + "log";
-            localLog = new RollingLog(0, Long.MAX_VALUE, logdir, (Boolean) opts.get("--sync"));
-        }
 
         if (dataCache != null) {
             /** Free all references */
             dataCache.asMap().values().parallelStream()
                     .map(m -> m.buffer.release());
         }
+
         dataCache = Caffeine.newBuilder()
                 .<Long, LogUnitEntry>weigher((k, v) -> v.buffer == null ? 1 : v.buffer.readableBytes())
                 .maximumWeight(maxCacheSize)

@@ -71,7 +71,5 @@ public abstract class AbstractLocalLog {
 
     protected abstract void initializeLog();
 
-    public abstract void close();
-
 
 }

@@ -67,7 +67,7 @@ public class LayoutClient implements IClient {
                 break;
             case LAYOUT_PREPARE_REJECT:
                 router.completeExceptionally(msg.getRequestID(),
-                        new OutrankedException(((LayoutRankMsg) msg).getRank(), ((LayoutRankMsg) msg).getLayout()));
+                        new OutrankedException(((LayoutRankMsg) msg).getRank()));
                 break;
             case LAYOUT_PROPOSE_REJECT:
                 router.completeExceptionally(msg.getRequestID(),

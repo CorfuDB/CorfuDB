@@ -3,7 +3,6 @@ package org.corfudb.cmdlets;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import lombok.extern.slf4j.Slf4j;
-import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -53,7 +52,7 @@ public class corfu_layouts implements ICmdlet {
                     + " --version                               Show version\n";
 
     @Override
-    public String[] main(String[] args) {
+    public void main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -66,29 +65,30 @@ public class corfu_layouts implements ICmdlet {
 
         try {
             if ((Boolean) opts.get("query")) {
-                return query(rt, opts);
+                query(rt, opts);
             } else if ((Boolean) opts.get("add_layout")) {
-                return add_layout(rt, opts);
+                add_layout(rt, opts);
             } else if ((Boolean) opts.get("add_sequencer")) {
-                return add_sequencer(rt, opts);
+                add_sequencer(rt, opts);
             } else if ((Boolean) opts.get("edit_segment")) {
-                return edit_segment(rt, opts);
+                edit_segment(rt, opts);
             } else if ((Boolean) opts.get("add_stripe")) {
-                return add_stripe(rt, opts);
+                add_stripe(rt, opts);
             }
         } catch (Exception e) {
-            return cmdlet.err("Exception", e.toString(), ExceptionUtils.getStackTrace(e));
+            log.error("Exception", e);
+            throw new RuntimeException(e);
         }
-        return cmdlet.err("Hush, compiler.");
     }
 
-    public String[] query(CorfuRuntime runtime, Map<String, Object> options) {
+    public void query(CorfuRuntime runtime, Map<String, Object> options) {
         Layout l = runtime.getLayoutView().getLayout();
         Gson gs = new GsonBuilder().setPrettyPrinting().create();
-        return cmdlet.ok(gs.toJson(l));
+        System.out.println(ansi().a("RESPONSE").fg(WHITE).reset().a(":"));
+        System.out.println(gs.toJson(l));
     }
 
-    public String[] add_layout(CorfuRuntime runtime, Map<String, Object> options)
+    public void add_layout(CorfuRuntime runtime, Map<String, Object> options)
             throws NetworkException, QuorumUnreachableException, OutrankedException, AlreadyBootstrappedException {
         checkEndpoint((String) options.get("--endpoint"));
         Layout l;
@@ -97,23 +97,22 @@ public class corfu_layouts implements ICmdlet {
             l = (Layout) lPrev.clone();
             l.setRuntime(runtime);
         } catch (CloneNotSupportedException cnse) {
-            return cmdlet.err("Exception", cnse.toString(), ExceptionUtils.getStackTrace(cnse));
+            throw new RuntimeException(cnse);
         }
         // increment the epoch by 1, and try installing the new layout.
         l.setEpoch(l.getEpoch() + 1);
-        log.trace("Updating epoch, old={}, new={}", l.getEpoch() - 1, l.getEpoch());
+        log.info("Updating epoch, old={}, new={}", l.getEpoch() - 1, l.getEpoch());
         l.getLayoutServers().add((String) options.get("--endpoint"));
         // bootstrap the new layout server with this configuration.
-        log.trace("Bootstrap layout server at {}", options.get("--endpoint"));
+        log.info("Bootstrap layout server at {}", options.get("--endpoint"));
         runtime.getRouter((String) options.get("--endpoint")).getClient(LayoutClient.class)
                 .bootstrapLayout(l);
         l.moveServersToEpoch();
         runtime.getLayoutView().updateLayout(l, l.getEpoch());
-        log.trace("Layout server at {} added to layout.", options.get("--endpoint"));
-        return cmdlet.ok();
+        log.info("Layout server at {} added to layout.", options.get("--endpoint"));
     }
 
-    public String[] add_sequencer(CorfuRuntime runtime, Map<String, Object> options)
+    public void add_sequencer(CorfuRuntime runtime, Map<String, Object> options)
             throws NetworkException, QuorumUnreachableException, OutrankedException {
         checkEndpoint((String) options.get("--endpoint"));
         Layout l;
@@ -122,20 +121,19 @@ public class corfu_layouts implements ICmdlet {
             l = (Layout) lPrev.clone();
             l.setRuntime(runtime);
         } catch (CloneNotSupportedException cnse) {
-            return cmdlet.err("Exception", cnse.toString(), ExceptionUtils.getStackTrace(cnse));
+            throw new RuntimeException(cnse);
         }
         // increment the epoch by 1, and try installing the new layout.
         l.setEpoch(l.getEpoch() + 1);
-        log.trace("Updating epoch, old={}, new={}", l.getEpoch() - 1, l.getEpoch());
+        log.info("Updating epoch, old={}, new={}", l.getEpoch() - 1, l.getEpoch());
         l.getSequencers().add((String) options.get("--endpoint"));
 
         l.moveServersToEpoch();
         runtime.getLayoutView().updateLayout(l, l.getEpoch());
-        log.trace("Sequencer server at {} added to layout.", options.get("--endpoint"));
-        return cmdlet.ok();
+        log.info("Sequencer server at {} added to layout.", options.get("--endpoint"));
     }
 
-    public String[] add_stripe(CorfuRuntime runtime, Map<String, Object> options)
+    public void add_stripe(CorfuRuntime runtime, Map<String, Object> options)
             throws NetworkException, QuorumUnreachableException, OutrankedException {
         checkEndpoint((String) options.get("--endpoint"));
         Layout l;
@@ -144,11 +142,11 @@ public class corfu_layouts implements ICmdlet {
             l = (Layout) lPrev.clone();
             l.setRuntime(runtime);
         } catch (CloneNotSupportedException cnse) {
-            return cmdlet.err("Exception", cnse.toString(), ExceptionUtils.getStackTrace(cnse));
+            throw new RuntimeException(cnse);
         }
         // increment the epoch by 1, and try installing the new layout.
         l.setEpoch(l.getEpoch() + 1);
-        log.trace("Updating epoch, old={}, new={}", l.getEpoch() - 1, l.getEpoch());
+        log.info("Updating epoch, old={}, new={}", l.getEpoch() - 1, l.getEpoch());
         ArrayList<String> lus = new ArrayList<>();
         lus.add(Utils.getOption(options, "--endpoint", String.class));
         Layout.LayoutStripe ls = new Layout.LayoutStripe(lus);
@@ -157,11 +155,10 @@ public class corfu_layouts implements ICmdlet {
 
         l.moveServersToEpoch();
         runtime.getLayoutView().updateLayout(l, l.getEpoch());
-        log.trace("Layout server at {} added to new stripe.", options.get("--endpoint"));
-        return cmdlet.ok();
+        log.info("Layout server at {} added to new stripe.", options.get("--endpoint"));
     }
 
-    public String[] edit_segment(CorfuRuntime runtime, Map<String, Object> options)
+    public void edit_segment(CorfuRuntime runtime, Map<String, Object> options)
             throws NetworkException, QuorumUnreachableException, OutrankedException {
         Layout l;
         Layout lPrev = runtime.getLayoutView().getCurrentLayout();
@@ -169,12 +166,12 @@ public class corfu_layouts implements ICmdlet {
             l = (Layout) lPrev.clone();
             l.setRuntime(runtime);
         } catch (CloneNotSupportedException cnse) {
-            return cmdlet.err("Exception", cnse.toString(), ExceptionUtils.getStackTrace(cnse));
+            throw new RuntimeException(cnse);
         }
 
         // increment the epoch by 1, and try installing the new layout.
         l.setEpoch(l.getEpoch() + 1);
-        log.trace("Updating epoch, old={}, new={}", l.getEpoch() - 1, l.getEpoch());
+        log.info("Updating epoch, old={}, new={}", l.getEpoch() - 1, l.getEpoch());
 
         int segmentIndex = Integer.parseInt((String) options.get("<index>"));
 
@@ -187,11 +184,11 @@ public class corfu_layouts implements ICmdlet {
         // Remove a server from the segment.
         if ((Boolean) options.get("--remove")) {
             int serverIndex = Integer.parseInt((String) options.get("--segment-index"));
-            log.trace("Removing server {} from segment {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers()
+            log.info("Removing server {} from segment {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers()
                     .get(serverIndex), segmentIndex);
             l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers()
                     .remove(serverIndex);
-            log.trace("New server set is {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers());
+            log.info("New server set is {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers());
         }
 
         // Add a server to the segment.
@@ -200,18 +197,17 @@ public class corfu_layouts implements ICmdlet {
             Integer serverIndex = options.get("--segment-index") == null ?
                     null : Integer.parseInt((String) options.get("--segment-index"));
             if (serverIndex == null) {
-                log.trace("Adding server {} to end of segment {}", options.get("--endpoint"), segmentIndex);
+                log.info("Adding server {} to end of segment {}", options.get("--endpoint"), segmentIndex);
                 l.getSegments().get(segmentIndex).getStripes().get(Utils.getOption(options, "<stripe>", Integer.class)).getLogServers().add((String) options.get("--endpoint"));
             } else {
-                log.trace("Adding server {} to segment {} at index {}", options.get("--endpoint"), segmentIndex, serverIndex);
+                log.info("Adding server {} to segment {} at index {}", options.get("--endpoint"), segmentIndex, serverIndex);
                 l.getSegments().get(segmentIndex).getStripes().get(Utils.getOption(options, "<stripe>", Integer.class)).getLogServers().add(serverIndex, (String) options.get("--endpoint"));
             }
-            log.trace("New server set is {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers());
+            log.info("New server set is {}", l.getSegments().get(segmentIndex).getStripes().get(0).getLogServers());
         }
 
         l.moveServersToEpoch();
         runtime.getLayoutView().updateLayout(l, l.getEpoch());
-        log.trace("Segment {} edited in layout.", segmentIndex);
-        return cmdlet.ok();
+        log.info("Segment {} edited in layout.", segmentIndex);
     }
 }

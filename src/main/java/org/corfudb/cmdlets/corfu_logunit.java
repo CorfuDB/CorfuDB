@@ -2,12 +2,10 @@ package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
-import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Utils;
 import org.docopt.Docopt;
 
 import java.util.Collections;
@@ -43,7 +41,7 @@ public class corfu_logunit implements ICmdlet {
                     + " --version  Show version\n";
 
     @Override
-    public String[] main(String[] args) {
+    public void main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -64,75 +62,72 @@ public class corfu_logunit implements ICmdlet {
 
         try {
             if ((Boolean) opts.get("write")) {
-                return write(router, opts);
+                write(router, opts);
             } else if ((Boolean) opts.get("read")) {
-                return read(router, opts);
+                read(router, opts);
             } else if ((Boolean) opts.get("trim")) {
-                return trim(router, opts);
+                trim(router, opts);
             } else if ((Boolean) opts.get("fillHole")) {
-                return fillHole(router, opts);
+                fillHole(router, opts);
             } else if ((Boolean) opts.get("forceGC")) {
-                return forceGC(router, opts);
+                forceGC(router, opts);
             } else if ((Boolean) opts.get("setGCInterval")) {
-                return setGCInterval(router, opts);
+                setGCInterval(router, opts);
             }
         } catch (ExecutionException ex) {
-            return cmdlet.err("Exception", ex.toString(), ExceptionUtils.getStackTrace(ex));
+            log.error("Exception", ex.getCause());
+            throw new RuntimeException(ex.getCause());
         } catch (Exception e) {
-            return cmdlet.err("Exception", e.toString(), ExceptionUtils.getStackTrace(e));
+            log.error("Exception", e);
+            throw new RuntimeException(e);
         }
-        return cmdlet.err("Hush, compiler.");
     }
 
-    String[] write(NettyClientRouter router, Map<String, Object> opts)
+    void write(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).write(Long.parseLong((String) opts.get("--log-address")),
                 streamsFromString((String) opts.get("--stream-ids")), Integer.parseInt((String) opts.get("--rank")),
                 ByteStreams.toByteArray(System.in), Collections.emptyMap()).get();
-        return cmdlet.ok();
     }
 
-    String[] trim(NettyClientRouter router, Map<String, Object> opts)
+    void trim(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).trim(getUUIDfromString((String) opts.get("--stream-id")),
                 Long.parseLong((String) opts.get("--log-address")));
-        return cmdlet.ok();
     }
 
-    String[] fillHole(NettyClientRouter router, Map<String, Object> opts)
+    void fillHole(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).fillHole(
                 Long.parseLong((String) opts.get("--log-address"))).get();
-        return cmdlet.ok();
     }
 
-    String[] forceGC(NettyClientRouter router, Map<String, Object> opts)
+    void forceGC(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).forceGC();
-        return cmdlet.ok();
     }
 
-    String[] setGCInterval(NettyClientRouter router, Map<String, Object> opts)
+    void setGCInterval(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         router.getClient(LogUnitClient.class).setGCInterval(Long.parseLong((String) opts.get("--interval")));
-        return cmdlet.ok();
     }
 
-    String[] read(NettyClientRouter router, Map<String, Object> opts)
+    void read(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         ReadResult r = router.getClient(LogUnitClient.class).read(Long.parseLong((String) opts.get("--log-address"))).get();
         switch (r.getResultType()) {
             case EMPTY:
-                return cmdlet.err("EMPTY");
+                System.err.println("Error: EMPTY");
+                break;
             case FILLED_HOLE:
-                return cmdlet.err("HOLE");
+                System.err.println("Error: HOLE");
+                break;
             case TRIMMED:
-                return cmdlet.err("TRIMMED");
+                System.err.println("Error: TRIMMED");
+                break;
             case DATA:
-                byte[] ba = new byte[r.getBuffer().readableBytes()];
-                r.getBuffer().getBytes(0, ba);
-                return cmdlet.ok(new String(ba, "UTF8"));
+                r.getBuffer().getBytes(0, System.out, r.getBuffer().readableBytes());
+                break;
         }
-        return cmdlet.err("Hush, compiler.");
     }
 }

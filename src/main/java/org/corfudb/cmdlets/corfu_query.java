@@ -39,7 +39,7 @@ public class corfu_query implements ICmdlet {
 
 
     @Override
-    public String[] main(String[] args) {
+    public void main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -56,12 +56,15 @@ public class corfu_query implements ICmdlet {
         log.trace("Creating router for {}:{}", host, port);
         NettyClientRouter router = new NettyClientRouter(host, port);
         router.start();
+        System.out.println(ansi().a("QUERY ").fg(WHITE).a(host + ":" + port).reset().a(":"));
         try {
             VersionInfo vi = router.getClient(BaseClient.class).getVersionInfo().get();
             Gson gs = new GsonBuilder().setPrettyPrinting().create();
-            return cmdlet.ok(gs.toJson(vi));
+            System.out.println(ansi().a("RESPONSE").fg(WHITE).reset().a(":"));
+            System.out.println(gs.toJson(vi));
         } catch (Exception ex) {
-            return cmdlet.err(ex.toString());
+            System.out.println(ansi().fg(RED).a("ERROR").reset().a(":"));
+            System.out.println(ex.toString());
         }
     }
 }
