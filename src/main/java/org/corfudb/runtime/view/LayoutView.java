@@ -93,7 +93,7 @@ public class LayoutView extends AbstractView {
 
                                 // wait for someone to complete.
                                 try {
-                                    CFUtils.getUninterruptibly(CompletableFuture.anyOf(prepareList),
+                                    CFUtils.getInterruptible(CompletableFuture.anyOf(prepareList),
                                             OutrankedException.class, TimeoutException.class);
                                 } catch (TimeoutException te) {
                                     timeouts++;
@@ -154,7 +154,7 @@ public class LayoutView extends AbstractView {
 
                                 // wait for someone to complete.
                                 try {
-                                    CFUtils.getUninterruptibly(CompletableFuture.anyOf(proposeList),
+                                    CFUtils.getInterruptible(CompletableFuture.anyOf(proposeList),
                                             OutrankedException.class, TimeoutException.class);
                                 } catch (TimeoutException te) {
                                     timeouts++;
@@ -205,7 +205,7 @@ public class LayoutView extends AbstractView {
                             while (responses < commitList.length) {
                                 // wait for someone to complete.
                                 try {
-                                    CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
+                                    CFUtils.getInterruptible(CompletableFuture.anyOf(commitList),
                                             WrongEpochException.class, TimeoutException.class);
                                 } catch (TimeoutException te) {
                                     timeouts++;
