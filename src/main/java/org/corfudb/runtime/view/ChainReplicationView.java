@@ -6,8 +6,6 @@ import com.google.common.collect.TreeRangeSet;
 import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
-import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.AutoCloseableByteBuf;
 import org.corfudb.util.CFUtils;
@@ -15,12 +13,10 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.AbstractMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * A view of an address implemented by chain replication.
@@ -67,7 +63,7 @@ public class ChainReplicationView extends AbstractReplicationView {
             for (int i = 0; i < numUnits; i++) {
                 log.trace("Write[{}]: chain {}/{}", address, i + 1, numUnits);
                 // In chain replication, we write synchronously to every unit in the chain.
-                CFUtils.getUninterruptibly(
+                CFUtils.getInterruptible(
                         getLayout().getLogUnitClient(address, i)
                                 .write(getLayout().getLocalAddress(address), stream, 0L, data, backpointerMap), OverwriteException.class);
             }
@@ -87,7 +83,7 @@ public class ChainReplicationView extends AbstractReplicationView {
         log.trace("Read[{}]: chain {}/{}", address, numUnits, numUnits);
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
-        return CFUtils.getUninterruptibly(getLayout()
+        return CFUtils.getInterruptible(getLayout()
                 .getLogUnitClient(address, numUnits - 1).read(getLayout().getLocalAddress(address)))
                 .setAddress(address);
     }
@@ -113,7 +109,7 @@ public class ChainReplicationView extends AbstractReplicationView {
         ConcurrentHashMap<Long, ILogUnitEntry> resultMap = new ConcurrentHashMap<>();
         rangeMap.entrySet().parallelStream()
                 .forEach(x -> {
-                    CFUtils.getUninterruptibly(
+                    CFUtils.getInterruptible(
                             layout.getLogUnitClient(eMap.get(x.getKey()), layout.getSegmentLength(eMap.get(x.getKey())) - 1)
                                     .readRange(x.getValue()))
                             .entrySet().parallelStream()
@@ -149,7 +145,7 @@ public class ChainReplicationView extends AbstractReplicationView {
         for (int i = 0; i < numUnits; i++) {
             log.trace("fillHole[{}]: chain {}/{}", address, i + 1, numUnits);
             // In chain replication, we write synchronously to every unit in the chain.
-            CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, i)
+            CFUtils.getInterruptible(getLayout().getLogUnitClient(address, i)
                     .fillHole(address), OverwriteException.class);
         }
     }

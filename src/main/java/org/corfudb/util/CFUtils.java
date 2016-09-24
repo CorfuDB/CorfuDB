@@ -30,17 +30,18 @@ public class CFUtils {
             B extends Throwable,
             C extends Throwable,
             D extends Throwable>
-    T getUninterruptibly(CompletableFuture<T> future,
-                         Class<A> throwableA,
-                         Class<B> throwableB,
-                         Class<C> throwableC,
-                         Class<D> throwableD)
+    T getInterruptible(CompletableFuture<T> future,
+                       Class<A> throwableA,
+                       Class<B> throwableB,
+                       Class<C> throwableC,
+                       Class<D> throwableD)
             throws A, B, C, D {
         while (true) {
             try {
                 return future.get();
             } catch (InterruptedException e) {
-                //retry
+                future.cancel(true);
+                return null;
             } catch (ExecutionException ee) {
                 if (throwableA.isInstance(ee.getCause())) {
                     throw (A) ee.getCause();
@@ -63,35 +64,35 @@ public class CFUtils {
             A extends Throwable,
             B extends Throwable,
             C extends Throwable>
-    T getUninterruptibly(CompletableFuture<T> future,
-                         Class<A> throwableA,
-                         Class<B> throwableB,
-                         Class<C> throwableC)
+    T getInterruptible(CompletableFuture<T> future,
+                       Class<A> throwableA,
+                       Class<B> throwableB,
+                       Class<C> throwableC)
             throws A, B, C {
-        return getUninterruptibly(future, throwableA, throwableB, throwableC, RuntimeException.class);
+        return getInterruptible(future, throwableA, throwableB, throwableC, RuntimeException.class);
     }
 
     public static <T,
             A extends Throwable,
             B extends Throwable>
-    T getUninterruptibly(CompletableFuture<T> future,
-                         Class<A> throwableA,
-                         Class<B> throwableB)
+    T getInterruptible(CompletableFuture<T> future,
+                       Class<A> throwableA,
+                       Class<B> throwableB)
             throws A, B {
-        return getUninterruptibly(future, throwableA, throwableB, RuntimeException.class, RuntimeException.class);
+        return getInterruptible(future, throwableA, throwableB, RuntimeException.class, RuntimeException.class);
     }
 
     public static <T,
             A extends Throwable>
-    T getUninterruptibly(CompletableFuture<T> future,
-                         Class<A> throwableA)
+    T getInterruptible(CompletableFuture<T> future,
+                       Class<A> throwableA)
             throws A {
-        return getUninterruptibly(future, throwableA, RuntimeException.class, RuntimeException.class, RuntimeException.class);
+        return getInterruptible(future, throwableA, RuntimeException.class, RuntimeException.class, RuntimeException.class);
     }
 
     public static <T>
-    T getUninterruptibly(CompletableFuture<T> future) {
-        return getUninterruptibly(future, RuntimeException.class, RuntimeException.class, RuntimeException.class, RuntimeException.class);
+    T getInterruptible(CompletableFuture<T> future) {
+        return getInterruptible(future, RuntimeException.class, RuntimeException.class, RuntimeException.class, RuntimeException.class);
     }
 
     /**
