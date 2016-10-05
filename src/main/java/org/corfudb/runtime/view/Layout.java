@@ -88,7 +88,7 @@ public class Layout implements Cloneable {
         getAllServers().stream()
                 .map(runtime::getRouter)
                 .map(x -> x.getClient(BaseClient.class))
-                .forEach(x -> CFUtils.getUninterruptibly(x.setRemoteEpoch(epoch)));
+                .forEach(x -> CFUtils.getInterruptible(x.setRemoteEpoch(epoch)));
     }
 
     /**

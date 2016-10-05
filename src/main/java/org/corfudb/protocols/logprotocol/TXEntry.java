@@ -34,12 +34,15 @@ public class TXEntry extends LogEntry {
     Map<UUID, TXObjectEntry> txMap;
     @Getter
     long readTimestamp;
+    @Getter
+    UUID transactionID;
     @Getter(lazy = true)
     private final transient boolean aborted = checkAbort();
 
-    public TXEntry(@NonNull Map<UUID, TXObjectEntry> txMap, long readTimestamp) {
+    public TXEntry(@NonNull Map<UUID, TXObjectEntry> txMap, long readTimestamp, UUID transactionID) {
         this.type = LogEntryType.TX;
         this.txMap = txMap;
+        this.transactionID = transactionID;
         this.readTimestamp = readTimestamp;
     }
 
@@ -118,6 +121,9 @@ public class TXEntry extends LogEntry {
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
         readTimestamp = b.readLong();
+        long lsb = b.readLong();
+        long msb = b.readLong();
+        transactionID = new UUID(msb, lsb);
         short mapEntries = b.readShort();
         txMap = new HashMap<>();
         for (short i = 0; i < mapEntries; i++) {
@@ -133,6 +139,8 @@ public class TXEntry extends LogEntry {
     public void serialize(ByteBuf b) {
         super.serialize(b);
         b.writeLong(readTimestamp);
+        b.writeLong(transactionID.getLeastSignificantBits());
+        b.writeLong(transactionID.getMostSignificantBits());
         b.writeShort(txMap.size());
         txMap.entrySet().stream()
                 .forEach(x -> {

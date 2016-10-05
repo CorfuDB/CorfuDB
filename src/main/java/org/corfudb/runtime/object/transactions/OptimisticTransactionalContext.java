@@ -77,7 +77,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         objectMap.entrySet().stream()
                 .forEach(x -> entryMap.put(x.getKey().getSv().getStreamID(),
                         new TXEntry.TXObjectEntry(x.getValue().bufferedWrites, x.getValue().objectIsRead)));
-        return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L);
+        return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L, transactionID);
     }
 
     /**
