@@ -543,7 +543,6 @@ public class LayoutServer extends AbstractServer {
         File f;
         List<String> layout_servers;
 
-        System.out.printf("Poll top, "); System.out.flush();
         f = new File("/tmp/shutdown-layout-server");
         if (f.canRead()) {
             System.out.println("SHUTDOWN FOUND");

@@ -47,11 +47,9 @@ public class corfu_smrobject implements ICmdlet {
     @Override
     public String[] main(String[] args) {
         if (args != null && args.length > 0 && args[0].contentEquals("reset")) {
-            log.trace("corfu_smrobject top: reset");
             LogUnitServer ls = CorfuServer.getLogUnitServer();
             SequencerServer ss = CorfuServer.getSequencerServer();
             if (ls != null && ss != null) {
-                log.trace("corfu_smrobject top: reset now");
 
                 // Reset the local log server.
                 ls.reset();
@@ -82,10 +80,8 @@ public class corfu_smrobject implements ICmdlet {
             }
         }
         if (args != null && args.length > 0 && args[0].contentEquals("reboot")) {
-            log.trace("corfu_smrobject top: reboot");
             LogUnitServer ls = CorfuServer.getLogUnitServer();
             if (ls != null) {
-                log.trace("corfu_smrobject top: reboot now");
                 ls.reboot();
                 return cmdlet.ok();
             } else {
