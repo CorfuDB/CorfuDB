@@ -5,16 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
 import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,6 +32,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Getter(lazy = true)
     private final long firstReadTimestamp = fetchFirstTimestamp();
+
+    @Override
+    public boolean transactionRequiresReadLock() { return true; }
 
     public OptimisticTransactionalContext(CorfuRuntime runtime) {
         super(runtime);
@@ -215,6 +214,17 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     public <T> boolean isObjectCloned(CorfuSMRObjectProxy<T> proxy) {
         return objectMap.containsKey(proxy) && objectMap.get(proxy).objectIsCloned();
+    }
+
+    @Override
+    public void commitTransaction() throws TransactionAbortedException {
+        TXEntry entry = getEntry();
+        Set<UUID> affectedStreams = entry.getAffectedStreams();
+        //TODO:: refactor commitTransaction into here...
+        if (runtime.getStreamsView().write(affectedStreams, entry) == -1L) {
+            log.debug("Transaction aborted due to sequencer rejecting request");
+            throw new TransactionAbortedException();
+        }
     }
 
     @SuppressWarnings("unchecked")

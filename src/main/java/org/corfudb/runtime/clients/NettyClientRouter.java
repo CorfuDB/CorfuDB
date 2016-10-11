@@ -20,6 +20,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -91,7 +92,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * The handlers registered to this router.
      */
-    public Map<CorfuMsg.CorfuMsgType, IClient> handlerMap;
+    public Map<CorfuMsgType, IClient> handlerMap;
     /**
      * The clients registered to this router.
      */

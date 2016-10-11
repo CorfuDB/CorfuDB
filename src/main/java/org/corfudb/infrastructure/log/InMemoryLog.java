@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.log;
 
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
+import org.corfudb.protocols.wireprotocol.LogData;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -12,18 +13,18 @@ import java.util.UUID;
  */
 public class InMemoryLog extends AbstractLocalLog {
 
-    private final Map<Long, LogUnitEntry> cache;
+    private final Map<Long, LogData> cache;
 
     public InMemoryLog(long start, long end) {
         super(start, end, "", true);
         cache = new HashMap();
     }
 
-    protected void backendWrite(long address, LogUnitEntry entry) {
+    protected void backendWrite(long address, LogData entry) {
         cache.put(address, entry);
     }
 
-    protected LogUnitEntry backendRead(long address) {
+    protected LogData backendRead(long address) {
         return cache.get(address);
     }
 

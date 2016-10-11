@@ -5,9 +5,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.TokenRequestMsg;
-import org.corfudb.protocols.wireprotocol.TokenResponseMsg;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.util.Utils;
 
 import java.io.File;
@@ -24,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -60,9 +59,13 @@ public class SequencerServer extends AbstractServer {
      */
     ConcurrentHashMap<UUID, Long> lastIssuedMap;
 
+    // A map of stream local addresses
+    ConcurrentHashMap<UUID, Long> lastLocalOffsetMap;
+
     public SequencerServer(ServerContext serverContext) {
         Map<String, Object> opts = serverContext.getServerConfig();
         lastIssuedMap = new ConcurrentHashMap<>();
+        lastLocalOffsetMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
 
         try {
@@ -123,11 +126,20 @@ public class SequencerServer extends AbstractServer {
     public synchronized void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         switch (msg.getMsgType()) {
             case TOKEN_REQ: {
-                TokenRequestMsg req = (TokenRequestMsg) msg;
+                TokenRequest req = ((CorfuPayloadMsg<TokenRequest>) msg).getPayload();
                 if (req.getNumTokens() == 0) {
                     long max = 0L;
                     boolean hit = false;
-                    for (UUID id : req.getStreamIDs()) {
+                    ImmutableMap.Builder<UUID, Long> streamsLastIssued = ImmutableMap.builder();
+                    for (UUID id : req.getStreams()) {
+                        lastLocalOffsetMap.compute(id, (k, v) -> {
+                            if (v == null) {
+                                streamsLastIssued.put(k, -1L);
+                                return null;
+                            }
+                            streamsLastIssued.put(k, v);
+                            return v;
+                        });
                         Long lastIssued = lastIssuedMap.get(id);
                         if (lastIssued != null) {
                             hit = true;
@@ -137,15 +149,50 @@ public class SequencerServer extends AbstractServer {
                     if (!hit) {
                         max = -1L; //no token ever issued
                     }
-                    if (req.getStreamIDs().size() == 0) {
+                    if (req.getStreams().size() == 0) {
                         max = globalIndex.get() - 1;
                     }
-                    r.sendResponse(ctx, msg,
-                            new TokenResponseMsg(max, Collections.emptyMap()));
+                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                    new TokenResponse(max, Collections.emptyMap(), streamsLastIssued.build())));
                 } else {
                     long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
+                    if (req.getStreams() == null) {
+                        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                new TokenResponse(thisIssue, Collections.emptyMap(), Collections.emptyMap())));
+                        return;
+                    }
+                    if (req.getTxnResolution()) {
+                        // Then also need a read timestamp.
+                        long timestamp = req.getReadTimestamp();
+                        if (timestamp != -1L) {
+                            AtomicBoolean abort = new AtomicBoolean(false);
+                            for (UUID id : req.getStreams()) {
+                                if (abort.get())
+                                    break;
+                                lastIssuedMap.compute(id, (k, v) -> {
+                                    if (v == null) {
+                                        return null;
+                                    } else {
+                                        if (v > timestamp) {
+                                            log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
+                                            abort.set(true);
+                                        }
+                                    }
+                                    return v;
+                                });
+                            }
+                            if (abort.get()) {
+                                globalIndex.getAndAdd(-req.getNumTokens());
+                                r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                        new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
+                                return;
+                            }
+                        }
+                    }
+
                     ImmutableMap.Builder<UUID, Long> mb = ImmutableMap.builder();
-                    for (UUID id : req.getStreamIDs()) {
+                    ImmutableMap.Builder<UUID, Long> localAddresses = ImmutableMap.builder();
+                    for (UUID id : req.getStreams()) {
                         lastIssuedMap.compute(id, (k, v) -> {
                             if (v == null) {
                                 mb.put(k, -1L);
@@ -154,9 +201,22 @@ public class SequencerServer extends AbstractServer {
                             mb.put(k, v);
                             return Math.max(thisIssue + req.getNumTokens() - 1, v);
                         });
+                        if (((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getReplexOverwrite() ||
+                                !((CorfuPayloadMsg<TokenRequest>) msg).getPayload().getOverwrite()) {
+                            lastLocalOffsetMap.compute(id, (k, v) -> {
+                                if (v == null) {
+                                    localAddresses.put(k, 0L);
+                                    return 0L;
+                                }
+                                localAddresses.put(k, v + req.getNumTokens());
+                                return v + req.getNumTokens();
+                            });
+                        }
                     }
-                    r.sendResponse(ctx, msg,
-                            new TokenResponseMsg(thisIssue, mb.build()));
+                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                            new TokenResponse(thisIssue,
+                                    mb.build(),
+                                    localAddresses.build())));
                 }
             }
             break;

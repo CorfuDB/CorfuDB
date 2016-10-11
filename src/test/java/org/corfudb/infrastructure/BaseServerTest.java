@@ -1,6 +1,8 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -26,15 +28,15 @@ public class BaseServerTest extends AbstractServerTest {
 
     @Test
     public void testPing() {
-        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
+        sendMessage(new CorfuMsg(CorfuMsgType.PING));
         assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsg.CorfuMsgType.PONG);
+                .isEqualTo(CorfuMsgType.PONG);
     }
 
     @Test
     public void shutdownServerDoesNotRespond() {
         server.shutdown();
-        sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.PING));
+        sendMessage(new CorfuMsg(CorfuMsgType.PING));
         assertThat(getLastMessage())
                 .isNull();
     }

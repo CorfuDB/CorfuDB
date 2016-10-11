@@ -1,24 +1,18 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.collect.RangeSet;
-import io.netty.buffer.ByteBuf;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
 
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 
 /**
@@ -43,15 +37,23 @@ public abstract class AbstractReplicationView {
     }
 
     public static AbstractReplicationView getReplicationView(Layout l, Layout.ReplicationMode mode, Layout.LayoutSegment ls) {
-        switch (mode) {
-            case CHAIN_REPLICATION:
-                return new ChainReplicationView(l, ls);
-            case QUORUM_REPLICATION:
-                log.warn("Quorum replication is not yet supported!");
-                break;
-        }
-        log.error("Unknown replication mode {} selected.", mode);
-        throw new RuntimeException("Unsupported replication mode.");
+        if (l.replicationViewCache == null) { l.replicationViewCache = new ConcurrentHashMap<>(); } //super hacky
+        return l.replicationViewCache.computeIfAbsent(ls, x -> {
+            // TODO: really broken software engineering here... refactor!
+            switch (ls.getReplicationMode()) {
+                case CHAIN_REPLICATION:
+                    return new ChainReplicationView(l, ls);
+                case QUORUM_REPLICATION:
+                    log.warn("Quorum replication is not yet supported!");
+                    break;
+                case REPLEX:
+                    return new ReplexReplicationView(l, ls);
+                default:
+                    log.error("Unknown replication mode {} selected.", mode);
+                    break;
+            }
+            return null;
+        });
     }
 
     /**
@@ -63,7 +65,7 @@ public abstract class AbstractReplicationView {
      */
     public void write(long address, Set<UUID> stream, Object data)
             throws OverwriteException {
-        write(address, stream, data, Collections.emptyMap());
+        write(address, stream, data, Collections.emptyMap(), Collections.emptyMap());
     }
 
     /**
@@ -75,8 +77,15 @@ public abstract class AbstractReplicationView {
      * @param backpointerMap The map of backpointers to write.
      * @return The number of bytes that was remotely written.
      */
-    public abstract int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap)
-            throws OverwriteException;
+    public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                              Map<UUID, Long> streamAddresses)
+            throws OverwriteException {
+        return write(address, stream, data, backpointerMap, streamAddresses, null);
+    }
+
+    public abstract int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                              Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction)
+        throws OverwriteException;
 
     /**
      * Read the given object from an address, using the replication method given.
@@ -84,7 +93,7 @@ public abstract class AbstractReplicationView {
      * @param address The address to read from.
      * @return The result of the read.
      */
-    public abstract ILogUnitEntry read(long address);
+    public abstract LogData read(long address);
 
     /**
      * Read a set of addresses, using the replication method given.
@@ -92,10 +101,10 @@ public abstract class AbstractReplicationView {
      * @param addresses The addresses to read from.
      * @return A map containing the results of the read.
      */
-    public Map<Long, ILogUnitEntry> read(RangeSet<Long> addresses) {
-        Map<Long, ILogUnitEntry> results = new ConcurrentHashMap<>();
+    public Map<Long, LogData> read(RangeSet<Long> addresses) {
+        Map<Long, LogData> results = new ConcurrentHashMap<>();
         Set<Long> total = Utils.discretizeRangeSet(addresses);
-        total.parallelStream()
+        total.stream()
                 .forEach(i -> results.put(i, read(i)));
         return results;
     }
@@ -104,9 +113,15 @@ public abstract class AbstractReplicationView {
      * Read a contiguous stream prefix, using the replication method given.
      *
      * @param stream The stream to read from.
+     * @param offset The local stream address to read from.
+     * @param size   The number of stream entries to read.
      * @return A map containing the results of the read.
      */
-    public abstract Map<Long, ILogUnitEntry> read(UUID stream);
+    public abstract Map<Long, LogData> read(UUID stream, long offset, long size);
+
+    public Map<Long, LogData> readPrefix(UUID stream) {
+        throw new UnsupportedOperationException("unsupported");
+    }
 
     /**
      * Fill a hole at an address, using the replication method given.
@@ -116,39 +131,8 @@ public abstract class AbstractReplicationView {
     public abstract void fillHole(long address)
             throws OverwriteException;
 
-    @ToString(exclude = {"runtime"})
-    @RequiredArgsConstructor
-    public static class CachedLogUnitEntry implements ILogUnitEntry {
-        @Getter
-        final LogUnitReadResponseMsg.ReadResultType resultType;
-
-        @Getter
-        final EnumMap<LogUnitMetadataType, Object> metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
-
-        @Getter
-        final Object payload;
-
-        @Getter
-        final Long address;
-
-        final CorfuRuntime runtime;
-        @Getter
-        final int sizeEstimate;
-
-        public ILogUnitEntry setRuntime(CorfuRuntime runtime) {
-            return this;
-        }
-
-        /**
-         * Gets a ByteBuf representing the payload for this data.
-         *
-         * @return A ByteBuf representing the payload for this data.
-         */
-        @Override
-        public ByteBuf getBuffer() {
-            log.warn("Attempted to get a buffer of a cached entry!");
-            throw new RuntimeException("Invalid attempt to get the ByteBuf of a cached entry!");
-        }
+    public void fillStreamHole(UUID stream, long address) throws OverwriteException {
+        throw new UnsupportedOperationException("This replication view doesn't support filling stream holes");
     }
 
 }

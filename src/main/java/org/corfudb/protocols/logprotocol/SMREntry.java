@@ -10,13 +10,16 @@ import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Created by mwei on 1/8/16.
  */
 @ToString(callSuper = true)
 @NoArgsConstructor
-public class SMREntry extends LogEntry {
+public class SMREntry extends LogEntry implements ISMRConsumable {
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
@@ -85,5 +88,12 @@ public class SMREntry extends LogEntry {
                     b.writeInt(length);
                     b.writerIndex(lengthIndex + length + 4);
                 });
+    }
+
+    @Override
+    public List<SMREntry> getSMRUpdates(UUID id) {
+        // TODO: we should check that the id matches the id of this entry,
+        // but replex erases this information.
+        return Collections.singletonList(this);
     }
 }

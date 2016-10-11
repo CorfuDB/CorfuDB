@@ -2,6 +2,7 @@ package org.corfudb.runtime.clients;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
@@ -29,9 +30,10 @@ public class TestChannelContext implements ChannelHandlerContext {
         this.hmf = hmf;
     }
 
-    void sendMessageAsync(Object o) {
+    void sendMessageAsync(Object o, Object orig) {
         CompletableFuture.runAsync(() -> {
             try {
+                Object origCapture = orig; //for debugging
                 if (o instanceof ByteBuf) {
                     CorfuMsg m = CorfuMsg.deserialize((ByteBuf) o);
                     hmf.handleMessage(m);
@@ -181,14 +183,14 @@ public class TestChannelContext implements ChannelHandlerContext {
     @Override
     public ChannelFuture write(Object o) {
         ByteBuf b = simulateSerialization(o);
-        sendMessageAsync(b);
+        sendMessageAsync(b,o);
         return null;
     }
 
     @Override
     public ChannelFuture write(Object o, ChannelPromise channelPromise) {
         ByteBuf b = simulateSerialization(o);
-        sendMessageAsync(b);
+        sendMessageAsync(b,o);
         return null;
     }
 
@@ -200,21 +202,21 @@ public class TestChannelContext implements ChannelHandlerContext {
     @Override
     public ChannelFuture writeAndFlush(Object o, ChannelPromise channelPromise) {
         ByteBuf b = simulateSerialization(o);
-        sendMessageAsync(b);
+        sendMessageAsync(b,o);
         return null;
     }
 
     @Override
     public ChannelFuture writeAndFlush(Object o) {
         ByteBuf b = simulateSerialization(o);
-        sendMessageAsync(b);
+        sendMessageAsync(b,o);
         return null;
     }
 
     public ByteBuf simulateSerialization(Object message) {
         if (message instanceof CorfuMsg) {
         /* simulate serialization/deserialization */
-            ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
+            ByteBuf oBuf = PooledByteBufAllocator.DEFAULT.buffer();
             ((CorfuMsg) message).serialize(oBuf);
             oBuf.resetReaderIndex();
             return oBuf;
@@ -261,5 +263,14 @@ public class TestChannelContext implements ChannelHandlerContext {
     @Override
     public <T> Attribute<T> attr(AttributeKey<T> attributeKey) {
         return null;
+    }
+
+    /**
+     * @param attributeKey
+     * @deprecated
+     */
+    @Override
+    public <T> boolean hasAttr(AttributeKey<T> attributeKey) {
+        return false;
     }
 }

@@ -8,12 +8,9 @@ import net.bytebuddy.implementation.bind.annotation.Origin;
 import net.bytebuddy.implementation.bind.annotation.RuntimeType;
 import net.bytebuddy.implementation.bind.annotation.SuperCall;
 import net.bytebuddy.implementation.bind.annotation.This;
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.logprotocol.TXEntry;
-import org.corfudb.protocols.logprotocol.TXLambdaReferenceEntry;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.logprotocol.*;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnprocessedException;
 import org.corfudb.runtime.object.transactions.LambdaTransactionalContext;
@@ -204,8 +201,9 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         String method = getSMRMethodName(Mmethod);
         log.debug("Object[{}]: +Mutator {} {}", getStreamID(),
                 TransactionalContext.isInTransaction() ? "tx" : "", method);
-        StackTraceElement[] stack = new Exception().getStackTrace();
-        if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+        //StackTraceElement[] stack = new Exception().getStackTrace();
+        //if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+         if (methodAccessMode.get()) {
             if (isCorfuObject) {
                 return superMethod.call();
             } else {
@@ -243,8 +241,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         log.debug("Object[{}] +MutatorAccessor {} {}", getStreamID(),
                 TransactionalContext.isInTransaction() ? "tx" : "", method);
 
-        StackTraceElement[] stack = new Exception().getStackTrace();
-        if (stack.length > 6 && stack[6].getClassName().equals("org.corfudb.runtime.object.CorfuSMRObjectProxy")) {
+        if (methodAccessMode.get()) {
             return doUnderlyingCall(superMethod, Mmethod, allArguments);
         } else if (!TransactionalContext.isInTransaction()) {
             // write the update to the stream and map a future for the completion.
@@ -300,7 +297,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     }
 
     public synchronized void doTransactionalSync(P obj) {
-        if (TransactionalContext.isInOptimisticTransaction()) {
+        if (TransactionalContext.needsReadLock()) {
             TransactionalContext.getCurrentContext().setInSyncMode(true);
             // Otherwise we should make sure we're sync'd up to the TX
             sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
@@ -360,7 +357,9 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                 throw new NoSuchMethodException(entry.getSMRMethod());
             }
             // Execute the SMR command
+            methodAccessMode.set(true);
             Object ret = m.invoke(obj, entry.getSMRArguments());
+            methodAccessMode.set(false);
             // Update the current timestamp.
             timestamp = address;
             log.trace("Timestamp for [{}] updated to {}", sv.getStreamID(), address);
@@ -391,55 +390,29 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     }
 
     boolean applyUpdate(long address, LogEntry entry, P obj) {
-        if (entry instanceof SMREntry) {
-            return applySMRUpdate(address, (SMREntry) entry, obj);
-        } else if (entry instanceof TXEntry) {
-            TXEntry txEntry = (TXEntry) entry;
-            log.trace("Apply TX update at {}: {}", address, txEntry);
-            // First, determine if the TX is abort.
-            if (txEntry.isAborted()) {
-                return false;
-            }
-            txEntry.getTxMap().get(sv.getStreamID())
-                    .getUpdates().stream()
+        if (entry instanceof ISMRConsumable)
+        {
+            ((ISMRConsumable) entry).getSMRUpdates(getStreamID())
+                    .stream()
                     .forEach(x -> applySMRUpdate(address, x, obj));
-
-            return true;
-        } else if (entry instanceof TXLambdaReferenceEntry) {
-            log.debug("Apply TXLambdaRef {} at {}", ((TXLambdaReferenceEntry) entry).getMethod().toString(), address);
-            try (TXLambdaReferenceEntry.LambdaLock ll = TXLambdaReferenceEntry.getLockForTXAddress(address)) {
-                // unlock the sync lock :::
-                // TODO: fixme this is ugly
-                rwLock.writeLock().unlock();
-                try {
-                    ll.getLock().lock();
-                    // check if the timestamp has moved past this lambda ref (due to another thread applying the same TX)
-                    log.info("Object[{}]: execute TXLambdaRef@{}", getStreamID(), address);
-                    if (timestamp < address) {
-                        TransactionalContext.newContext(new LambdaTransactionalContext(runtime, address));
-                        ((TXLambdaReferenceEntry) entry).invoke();
-                        TransactionalContext.removeContext();
-                    }
-                } finally {
-                    rwLock.writeLock().lock();
-                }
-            }
-            return true;
         }
-        return false;
+        else {
+            log.warn("Non SMR entry of type={} encountered", entry.getClass());
+        }
+        return true;
     }
 
     @Override
     public void sync(P obj, long maxPos) {
         try (LockUtils.AutoCloseRWLock writeLock = new LockUtils.AutoCloseRWLock(rwLock).writeLock()) {
-            ILogUnitEntry[] entries = sv.readTo(maxPos);
+            LogData[] entries = sv.readTo(maxPos);
             log.trace("Object[{}] sync to pos {}, read {} entries",
                     sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos, entries.length);
             Arrays.stream(entries)
-                    .filter(m -> m.getResultType() == LogUnitReadResponseMsg.ReadResultType.DATA)
-                    .filter(m -> m.getPayload() instanceof SMREntry ||
-                            m.getPayload() instanceof TXEntry || m.getPayload() instanceof TXLambdaReferenceEntry)
-                    .forEach(m -> applyUpdate(m.getAddress(), (LogEntry) m.getPayload(), obj));
+                    .filter(m -> m.getType() == DataType.DATA)
+                    .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable)
+                    .forEach(m -> applyUpdate(m.getGlobalAddress(), (LogEntry) m.getPayload(runtime), obj));
         }
+
     }
 }

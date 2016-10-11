@@ -3,11 +3,14 @@ package org.corfudb.infrastructure;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.junit.Before;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 12/12/15.
@@ -54,6 +57,12 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         return (T) getLastMessage();
     }
 
+    @SuppressWarnings("unchecked")
+    public <T> T getLastPayloadMessageAs(Class<T> type) {
+        assertThat(getLastMessage())
+                .isInstanceOf(CorfuPayloadMsg.class);
+        return ((CorfuPayloadMsg<T>)getLastMessage()).getPayload();
+    }
     public void sendMessage(CorfuMsg message) {
         sendMessage(testClientId, message);
     }

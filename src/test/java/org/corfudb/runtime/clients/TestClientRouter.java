@@ -8,6 +8,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
@@ -36,7 +37,7 @@ public class TestClientRouter implements IClientRouter {
     /**
      * The handlers registered to this router.
      */
-    public Map<CorfuMsg.CorfuMsgType, IClient> handlerMap;
+    public Map<CorfuMsgType, IClient> handlerMap;
 
     /**
      * The outstanding requests on this router.

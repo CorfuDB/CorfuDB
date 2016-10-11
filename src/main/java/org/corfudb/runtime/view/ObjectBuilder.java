@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.reflect.TypeToken;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Setter;
@@ -40,6 +41,12 @@ public class ObjectBuilder<T> {
     @SuppressWarnings("unchecked")
     public <R> ObjectBuilder<R> setType(Class<R> type) {
         this.type = (Class<T>) type;
+        return (ObjectBuilder<R>) this;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <R> ObjectBuilder<R> setTypeToken(TypeToken<R> typeToken) {
+        this.type = (Class<T>)typeToken.getRawType();
         return (ObjectBuilder<R>) this;
     }
 

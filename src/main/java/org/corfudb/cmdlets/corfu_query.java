@@ -29,7 +29,7 @@ public class corfu_query implements ICmdlet {
             "corfu_query, query a Corfu server to get runtime information.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tcorfu_ping <address>:<port> [-d <level>]\n"
+                    + "\tcorfu_query <address>:<port> [-d <level>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -d <level>, --log-level=<level>      Set the logging level, valid levels are: \n"

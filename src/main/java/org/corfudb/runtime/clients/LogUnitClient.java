@@ -1,29 +1,26 @@
 package org.corfudb.runtime.clients;
 
-import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuRangeMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitFillHoleMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitGCIntervalMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadRangeResponseMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadRequestMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
-import org.corfudb.protocols.wireprotocol.LogUnitTrimMsg;
-import org.corfudb.protocols.wireprotocol.LogUnitWriteMsg;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.ReplexOverwriteException;
+import org.corfudb.util.serializer.Serializers;
 
+import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static org.corfudb.util.serializer.SerializerType.CORFU;
 
 /**
  * A client to a LogUnit.
@@ -32,70 +29,136 @@ import java.util.concurrent.ConcurrentHashMap;
  * Created by mwei on 12/10/15.
  */
 public class LogUnitClient implements IClient {
-    /**
-     * The messages this client should handle.
-     */
-    @Getter
-    public final Set<CorfuMsg.CorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsg.CorfuMsgType>()
-                    .add(CorfuMsg.CorfuMsgType.WRITE)
-                    .add(CorfuMsg.CorfuMsgType.READ_REQUEST)
-                    .add(CorfuMsg.CorfuMsgType.READ_RESPONSE)
-                    .add(CorfuMsg.CorfuMsgType.TRIM)
-                    .add(CorfuMsg.CorfuMsgType.FILL_HOLE)
-                    .add(CorfuMsg.CorfuMsgType.FORCE_GC)
-                    .add(CorfuMsg.CorfuMsgType.GC_INTERVAL)
-                    .add(CorfuMsg.CorfuMsgType.FORCE_COMPACT)
-                    .add(CorfuMsg.CorfuMsgType.READ_RANGE)
-                    .add(CorfuMsg.CorfuMsgType.READ_RANGE_RESPONSE)
 
-                    .add(CorfuMsg.CorfuMsgType.ERROR_OK)
-                    .add(CorfuMsg.CorfuMsgType.ERROR_TRIMMED)
-                    .add(CorfuMsg.CorfuMsgType.ERROR_OVERWRITE)
-                    .add(CorfuMsg.CorfuMsgType.ERROR_OOS)
-                    .add(CorfuMsg.CorfuMsgType.ERROR_RANK)
-                    .build();
     @Setter
     @Getter
     IClientRouter router;
 
-    /**
-     * Handle a incoming message on the channel
+    /** The handler and handlers which implement this client. */
+    @Getter
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+    /** Handle an WRITE_OK message.
      *
-     * @param msg The incoming message
-     * @param ctx The channel handler context
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @return      True, since this indicates success.
      */
-    @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        switch (msg.getMsgType()) {
-            case ERROR_OK:
-                router.completeRequest(msg.getRequestID(), true);
-                break;
-            case ERROR_TRIMMED:
-                router.completeExceptionally(msg.getRequestID(), new Exception("Trimmed"));
-                break;
-            case ERROR_OVERWRITE:
-                router.completeExceptionally(msg.getRequestID(), new OverwriteException());
-                break;
-            case ERROR_OOS:
-                router.completeExceptionally(msg.getRequestID(), new OutOfSpaceException());
-                break;
-            case ERROR_RANK:
-                router.completeExceptionally(msg.getRequestID(), new Exception("Rank"));
-                break;
-            case READ_RESPONSE:
-                router.completeRequest(msg.getRequestID(), new ReadResult((LogUnitReadResponseMsg) msg));
-                break;
-            case READ_RANGE_RESPONSE: {
-                LogUnitReadRangeResponseMsg rmsg = (LogUnitReadRangeResponseMsg) msg;
-                Map<Long, ReadResult> lr = new ConcurrentHashMap<>();
-                rmsg.getResponseMap().entrySet().parallelStream()
-                        .forEach(e -> lr.put(e.getKey(), new ReadResult(e.getValue())));
-                router.completeRequest(msg.getRequestID(), lr);
-            }
-            break;
-        }
+    @ClientHandler(type=CorfuMsgType.WRITE_OK)
+    private static Object handleOK(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return true;
     }
+
+    /** Handle an ERROR_TRIMMED message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws  Exception
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_TRIMMED)
+    private static Object handleTrimmed(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+    throws Exception
+    {
+        throw new Exception("Trimmed");
+    }
+
+    /** Handle an ERROR_OVERWRITE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      OverwriteException
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_OVERWRITE)
+    private static Object handleOverwrite(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new OverwriteException();
+    }
+
+    /** Handle an ERROR_REPLEX_OVERWRITE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      OverwriteException
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_REPLEX_OVERWRITE)
+    private static Object handleReplexOverwrite(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new ReplexOverwriteException();
+    }
+
+    /** Handle an ERROR_OOS message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      OutOfSpaceException
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_OOS)
+    private static Object handleOOS(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new OutOfSpaceException();
+    }
+
+    /** Handle an ERROR_RANK message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      Exception
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_RANK)
+    private static Object handleOutranked(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new Exception("rank");
+    }
+
+    /** Handle an ERROR_NOENTRY message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      Exception
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_NOENTRY)
+    private static Object handleNoEntry(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new Exception("Tried to write commit on a non-existent entry");
+    }
+
+    /** Handle a READ_RESPONSE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.READ_RESPONSE)
+    private static Object handleReadResponse(CorfuPayloadMsg<ReadResponse> msg, ChannelHandlerContext ctx, IClientRouter r)
+    {
+        return msg.getPayload();
+    }
+
+    /** Handle a STREAM_TOKEN_RESPONSE message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.STREAM_TOKEN_RESPONSE)
+    private static Object handleStreamTokenResponse(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IClientRouter r)
+    {
+        return msg.getPayload();
+    }
+
 
     /**
      * Asynchronously write to the logging unit.
@@ -110,12 +173,14 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
                                             Object writeObject, Map<UUID, Long> backpointerMap) {
-        LogUnitWriteMsg w = new LogUnitWriteMsg(address);
-        w.setStreams(streams);
-        w.setRank(rank);
-        w.setBackpointerMap(backpointerMap);
-        w.setPayload(writeObject);
-        return router.sendMessageAndGetCompletable(w);
+        ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
+        Serializers.getSerializer(CORFU).serialize(writeObject, payload);
+        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
+        wr.setStreams(streams);
+        wr.setRank(rank);
+        wr.setBackpointerMap(backpointerMap);
+        wr.setGlobalAddress(address);
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
     /**
@@ -131,12 +196,32 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
                                             ByteBuf buffer, Map<UUID, Long> backpointerMap) {
-        LogUnitWriteMsg w = new LogUnitWriteMsg(address);
-        w.setStreams(streams);
-        w.setRank(rank);
-        w.setBackpointerMap(backpointerMap);
-        w.setData(buffer);
-        return router.sendMessageAndGetCompletable(w);
+        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, buffer);
+        wr.setStreams(streams);
+        wr.setRank(rank);
+        wr.setBackpointerMap(backpointerMap);
+        wr.setGlobalAddress(address);
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+    }
+
+    public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
+                                                  Object object) {
+        ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
+        Serializers.getSerializer(CORFU).serialize(object, payload);
+        return writeStream(address, streamAddresses, payload);
+    }
+
+    public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
+                                                  ByteBuf buffer) {
+        WriteRequest wr = new WriteRequest(WriteMode.REPLEX_STREAM, streamAddresses, buffer);
+        wr.setLogicalAddresses(streamAddresses);
+        wr.setGlobalAddress(address);
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+    }
+
+    public CompletableFuture<Boolean> writeCommit(Map<UUID, Long> streams, long address, boolean commit) {
+        CommitRequest wr = new CommitRequest(streams, address, commit);
+        return router.sendMessageAndGetCompletable(CorfuMsgType.COMMIT.payloadMsg(wr));
     }
 
     /**
@@ -146,8 +231,14 @@ public class LogUnitClient implements IClient {
      * @return A CompletableFuture which will complete with a ReadResult once the read
      * completes.
      */
-    public CompletableFuture<ReadResult> read(long address) {
-        return router.sendMessageAndGetCompletable(new LogUnitReadRequestMsg(address));
+    public CompletableFuture<ReadResponse> read(long address) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
+    }
+
+    public CompletableFuture<ReadResponse> read(UUID stream, Range<Long> offsetRange) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(offsetRange, stream)));
     }
 
     /**
@@ -157,8 +248,7 @@ public class LogUnitClient implements IClient {
      * @param prefix The prefix of the stream, as a global physical offset, to trim.
      */
     public void trim(UUID stream, long prefix) {
-
-        router.sendMessage(new LogUnitTrimMsg(prefix, stream));
+        router.sendMessage(CorfuMsgType.TRIM.payloadMsg(new TrimRequest(stream, prefix)));
     }
 
     /**
@@ -167,30 +257,37 @@ public class LogUnitClient implements IClient {
      * @param address The address to fill a hole at.
      */
     public CompletableFuture<Boolean> fillHole(long address) {
-        return router.sendMessageAndGetCompletable(new LogUnitFillHoleMsg(address));
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.FILL_HOLE.payloadMsg(new TrimRequest(null, address)));
     }
+
+    public CompletableFuture<Boolean> fillHole(UUID streamID, long address) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.FILL_HOLE.payloadMsg(new TrimRequest(streamID, address)));
+    }
+
 
     /**
      * Force the garbage collector to begin garbage collection.
      */
     public void forceGC() {
-        router.sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.FORCE_GC));
+        router.sendMessage(CorfuMsgType.FORCE_GC.msg());
     }
 
     /**
      * Force the compactor to recalculate the contiguous tail.
      */
     public void forceCompact() {
-        router.sendMessage(new CorfuMsg(CorfuMsg.CorfuMsgType.FORCE_COMPACT));
+        router.sendMessage(CorfuMsgType.FORCE_COMPACT.msg());
     }
 
     /**
-     * Read a range of addresses.
+     * Get the current token for a stream.
      *
-     * @param addresses The addresses to read.
+     * @param stream The current token for the stream.
      */
-    public CompletableFuture<Map<Long, ReadResult>> readRange(RangeSet<Long> addresses) {
-        return router.sendMessageAndGetCompletable(new CorfuRangeMsg(CorfuMsg.CorfuMsgType.READ_RANGE, addresses));
+    public CompletableFuture<Long> getStreamToken(UUID stream) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.STREAM_TOKEN.payloadMsg(stream));
     }
 
     /**
@@ -199,7 +296,7 @@ public class LogUnitClient implements IClient {
      * @param millis The new garbage collection interval, in milliseconds.
      */
     public void setGCInterval(long millis) {
-        router.sendMessage(new LogUnitGCIntervalMsg(millis));
+        router.sendMessage(CorfuMsgType.GC_INTERVAL.payloadMsg(millis));
     }
 
 

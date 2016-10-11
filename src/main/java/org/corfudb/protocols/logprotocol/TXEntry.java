@@ -1,15 +1,14 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.ToString;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.ICorfuSerializable;
 import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
@@ -28,14 +27,15 @@ import java.util.stream.Collectors;
 @ToString(exclude = "aborted")
 @NoArgsConstructor
 @Slf4j
-public class TXEntry extends LogEntry {
+public class TXEntry extends LogEntry implements ISMRConsumable {
 
     @Getter
     Map<UUID, TXObjectEntry> txMap;
     @Getter
     long readTimestamp;
-    @Getter(lazy = true)
-    private final transient boolean aborted = checkAbort();
+    @Getter
+    @Setter
+    private transient boolean aborted;
 
     public TXEntry(@NonNull Map<UUID, TXObjectEntry> txMap, long readTimestamp) {
         this.type = LogEntryType.TX;
@@ -44,23 +44,47 @@ public class TXEntry extends LogEntry {
     }
 
     public boolean checkIfStreamAborts(UUID stream) {
+        if (runtime.getLayoutView().getLayout().getSegments().get(
+                runtime.getLayoutView().getLayout().getSegments().size() - 1)
+                .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
+            // Starting at the stream local address of this entry, read backwards until you hit a stream entry whose
+            // global address is less than readTimestamp.
+            if (getEntry().getLogicalAddresses().get(stream) == 0)
+                return false;
+            LogData curEntry = runtime.getAddressSpaceView().read(stream, getEntry().getLogicalAddresses().get(stream) - 1, 1)
+                    .get(getEntry().getLogicalAddresses().get(stream) - 1);
+            while (curEntry != null  && curEntry.getType() == DataType.DATA && curEntry.getGlobalAddress() > readTimestamp) {
+                if (curEntry.getLogEntry(runtime).isMutation(stream)) {
+                    return true;
+                }
+
+                if (curEntry.getLogicalAddresses().get(stream) == 0)
+                    break;
+                curEntry = runtime.getAddressSpaceView().read(stream, curEntry.getLogicalAddresses().get(stream) - 1, 1)
+                        .get(curEntry.getLogicalAddresses().get(stream) - 1);
+            }
+            return false;
+        }
+
         if (getEntry() != null && getEntry().hasBackpointer(stream)) {
-            ILogUnitEntry backpointedEntry = getEntry();
+            LogData backpointedEntry = getEntry();
             if (backpointedEntry.isFirstEntry(stream)) {
                 return false;
             }
+            int i = 0;
 
             while (
                     backpointedEntry.hasBackpointer(stream) &&
-                            backpointedEntry.getAddress() > readTimestamp &&
+                            backpointedEntry.getGlobalAddress() > readTimestamp &&
                             !backpointedEntry.isFirstEntry(stream)) {
-                if (!backpointedEntry.getAddress().equals(getEntry().getAddress()) && //not self!
-                        backpointedEntry.isLogEntry() && backpointedEntry.getLogEntry().isMutation(stream)) {
+                i++;
+                if (!backpointedEntry.getGlobalAddress().equals(getEntry().getGlobalAddress()) && //not self!
+                        backpointedEntry.isLogEntry(runtime) && backpointedEntry.getLogEntry(runtime).isMutation(stream)) {
                     log.debug("TX aborted due to mutation [via backpointer]: " +
                                     "on stream {} at {}, tx is at {}, object read at {}, aborting entry was {}",
                             stream,
-                            backpointedEntry.getAddress(),
-                            entry.getAddress(),
+                            backpointedEntry.getGlobalAddress(),
+                            entry.getGlobalAddress(),
                             readTimestamp,
                             backpointedEntry);
                     return true;
@@ -72,17 +96,17 @@ public class TXEntry extends LogEntry {
             return false;
         }
 
-        for (long i = readTimestamp + 1; i < entry.getAddress(); i++) {
+        for (long i = readTimestamp + 1; i < getEntry().getGlobalAddress(); i++) {
             // Backpointers not available, so we do a scan.
-            ILogUnitEntry rr = runtime.getAddressSpaceView().read(i);
-            if (rr.getResultType() ==
-                    LogUnitReadResponseMsg.ReadResultType.DATA &&
+            LogData rr = runtime.getAddressSpaceView().read(i);
+            if (rr.getType() ==
+                    DataType.DATA &&
                     ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))
                             .contains(stream) && readTimestamp != i &&
-                    rr.getPayload() instanceof LogEntry &&
-                    ((LogEntry) rr.getPayload()).isMutation(stream)) {
+                    rr.getPayload(runtime) instanceof LogEntry &&
+                    ((LogEntry) rr.getPayload(runtime)).isMutation(stream)) {
                 log.debug("TX aborted due to mutation on stream {} at {}, tx is at {}, object read at {}", stream,
-                        i, entry.getAddress(), readTimestamp);
+                        i, getEntry().getGlobalAddress(), readTimestamp);
                 return true;
             }
         }
@@ -152,6 +176,11 @@ public class TXEntry extends LogEntry {
     @Override
     public boolean isMutation(UUID stream) {
         return !isAborted() && getAffectedStreams().contains(stream);
+    }
+
+    @Override
+    public List<SMREntry> getSMRUpdates(UUID id) {
+        return txMap.get(id).getUpdates();
     }
 
     @ToString

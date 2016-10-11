@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
 
@@ -29,7 +31,7 @@ public class TestServerRouter implements IServerRouter {
     public List<CorfuMsg> responseMessages;
 
     @Getter
-    public Map<CorfuMsg.CorfuMsgType, AbstractServer> handlerMap;
+    public Map<CorfuMsgType, AbstractServer> handlerMap;
 
     public List<TestRule> rules;
 
@@ -73,7 +75,7 @@ public class TestServerRouter implements IServerRouter {
     @Override
     public void addServer(AbstractServer server) {
         // Iterate through all types of CorfuMsgType, registering the handler
-        Arrays.<CorfuMsg.CorfuMsgType>stream(CorfuMsg.CorfuMsgType.values())
+        Arrays.<CorfuMsgType>stream(CorfuMsgType.values())
                 .forEach(x -> {
                     if (x.handler.isInstance(server)) {
                         handlerMap.put(x, server);
@@ -83,13 +85,36 @@ public class TestServerRouter implements IServerRouter {
     }
 
 
+    /**
+     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
+     * the server is in the wrong epoch. Ignored if the message type is reset (which
+     * is valid in any epoch).
+     *
+     * @param msg The incoming message to validate.
+     * @param ctx The context of the channel handler.
+     * @return True, if the epoch is correct, but false otherwise.
+     */
+    public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
+        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverEpoch) {
+            sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
+                    getServerEpoch()));
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
+                    msg.getEpoch(), serverEpoch, msg);
+            return false;
+        }
+        return true;
+    }
+
     public void sendServerMessage(CorfuMsg msg) {
         AbstractServer as = handlerMap.get(msg.getMsgType());
-        if (as != null) {
-            as.handleMessage(msg, null, this);
-        }
-        else {
-            log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
+        if (validateEpoch(msg, null)) {
+            if (as != null) {
+                as.handleMessage(msg, null, this);
+            } else {
+                log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
+            }
+        } else {
+            log.trace("Message with wrong epoch {}, expected {}", msg.getEpoch(), serverEpoch);
         }
     }
 
