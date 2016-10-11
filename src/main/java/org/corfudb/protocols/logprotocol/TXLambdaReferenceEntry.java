@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.ICorfuObject;
 import org.corfudb.util.ReflectionUtils;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.reflect.InvocationTargetException;
@@ -35,10 +36,10 @@ public class TXLambdaReferenceEntry extends LogEntry {
     @Getter
     Object[] lambdaArguments;
     @Getter
-    Serializers.SerializerType serializerType;
+    SerializerType serializerType;
 
     public TXLambdaReferenceEntry(Method lambdaReference, ICorfuObject transactionalObject,
-                                  Object[] lambdaArguments, Serializers.SerializerType serializer) {
+                                  Object[] lambdaArguments, SerializerType serializer) {
         super(LogEntryType.TX_LAMBDAREF);
         this.method = lambdaReference;
         this.lambdaArguments = lambdaArguments;

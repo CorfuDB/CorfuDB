@@ -4,11 +4,11 @@ import io.netty.buffer.ByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.AutoCloseableByteBuf;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Map;
@@ -56,7 +56,7 @@ public class ChainReplicationView extends AbstractReplicationView {
         // when we go down the chain.
         try (AutoCloseableByteBuf b =
                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
-            Serializers.getSerializer(Serializers.SerializerType.CORFU)
+            Serializers.getSerializer(SerializerType.CORFU)
                     .serialize(data, b);
 
             LogData ld = new LogData(DataType.DATA, b);

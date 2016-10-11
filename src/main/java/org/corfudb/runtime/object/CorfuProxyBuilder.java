@@ -16,6 +16,7 @@ import org.corfudb.runtime.exceptions.ObjectExistsException;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.ReflectionUtils;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.reflect.Method;
@@ -189,7 +190,7 @@ public class CorfuProxyBuilder {
 
     public static <T, R extends ISMRInterface>
     T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime,
-               Serializers.SerializerType serializer, Set<ObjectOpenOptions> options, Object... constructorArgs) {
+               SerializerType serializer, Set<ObjectOpenOptions> options, Object... constructorArgs) {
         try {
             CorfuObjectProxy<T> proxy;
 

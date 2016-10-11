@@ -8,9 +8,14 @@ import io.netty.buffer.Unpooled;
 import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+<<<<<<< HEAD
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+=======
+import org.corfudb.protocols.wireprotocol.LogUnitMetadataMsg;
+import org.corfudb.util.serializer.SerializerType;
+>>>>>>> master
 import org.corfudb.util.serializer.Serializers;
 
 import java.io.File;
@@ -223,7 +228,7 @@ public class RollingLog extends AbstractLocalLog {
             b.writeInt(rs.size());
             for (Range<Long> r : rs) {
                 Serializers
-                        .getSerializer(Serializers.SerializerType.JAVA).serialize(r, b);
+                        .getSerializer(SerializerType.JAVA).serialize(r, b);
             }
             com.google.common.io.Files.write(b.array(), new File(logPathDir + File.pathSeparator +
                     "stream" + streamID.toString()));
@@ -242,7 +247,7 @@ public class RollingLog extends AbstractLocalLog {
                 int ranges = b.readInt();
                 for (int i = 0; i < ranges; i++) {
                     Range r = (Range) Serializers
-                            .getSerializer(Serializers.SerializerType.JAVA).deserialize(b, null);
+                            .getSerializer(SerializerType.JAVA).deserialize(b, null);
                     rs.add(r);
                 }
                 return rs;

@@ -10,6 +10,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.ICorfuSerializable;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.ArrayList;
@@ -203,7 +204,7 @@ public class TXEntry extends LogEntry implements ISMRConsumable {
             for (short i = 0; i < numUpdates; i++) {
                 updates.add(
                         (SMREntry) Serializers
-                                .getSerializer(Serializers.SerializerType.CORFU)
+                                .getSerializer(SerializerType.CORFU)
                                 .deserialize(b, rt));
             }
         }
@@ -214,7 +215,7 @@ public class TXEntry extends LogEntry implements ISMRConsumable {
             b.writeShort(updates.size());
             updates.stream()
                     .forEach(x -> Serializers
-                            .getSerializer(Serializers.SerializerType.CORFU)
+                            .getSerializer(SerializerType.CORFU)
                             .serialize(x, b));
         }
     }

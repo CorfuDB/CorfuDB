@@ -11,6 +11,7 @@ import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -325,7 +326,7 @@ public class SMRMapTest extends AbstractViewTest {
         CompletableFuture cf = CompletableFuture.runAsync(() -> {
             Map<String, String> testMap2 = getRuntime().getObjectsView()
                     .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class, null,
-                            EnumSet.of(ObjectOpenOptions.NO_CACHE), Serializers.SerializerType.JSON);
+                            EnumSet.of(ObjectOpenOptions.NO_CACHE), SerializerType.JSON);
             testMap2.put("a", "f");
         });
         cf.join();
