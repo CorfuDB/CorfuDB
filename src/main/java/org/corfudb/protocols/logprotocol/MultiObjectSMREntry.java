@@ -10,6 +10,8 @@ import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
 
+import static org.corfudb.util.serializer.SerializerType.CORFU;
+
 /**
  * Created by mwei on 9/20/16.
  */
@@ -50,7 +52,7 @@ public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, IS
             entryMap.put(
                     new UUID(b.readLong(), b.readLong()),
                     (MultiSMREntry) Serializers
-                            .getSerializer(Serializers.SerializerType.CORFU)
+                            .getSerializer(CORFU)
                             .deserialize(b, rt));
         }
     }
@@ -64,7 +66,7 @@ public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, IS
                         b.writeLong(x.getKey().getMostSignificantBits());
                         b.writeLong(x.getKey().getLeastSignificantBits());
                         Serializers
-                        .getSerializer(Serializers.SerializerType.CORFU)
+                        .getSerializer(CORFU)
                         .serialize(x.getValue(), b);});
     }
 

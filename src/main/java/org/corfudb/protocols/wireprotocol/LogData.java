@@ -12,6 +12,8 @@ import org.corfudb.util.serializer.Serializers;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.corfudb.util.serializer.SerializerType.CORFU;
+
 /**
  * Created by mwei on 8/15/16.
  */
@@ -39,7 +41,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                     }
                     else {
                         data.resetReaderIndex();
-                        final Object actualValue = Serializers.getSerializer(Serializers.SerializerType.CORFU)
+                        final Object actualValue = Serializers.getSerializer(CORFU)
                                 .deserialize(data, runtime);
                         // TODO: Possibly fix some dependencies here.
                         if (actualValue instanceof LogEntry) {

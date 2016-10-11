@@ -20,6 +20,8 @@ import org.corfudb.util.serializer.Serializers;
 import java.util.*;
 import java.util.function.Function;
 
+import static org.corfudb.util.serializer.SerializerType.CORFU;
+
 /** A view of address space with Replex replication.
  *
  * Created by amytai on 8/26/16.
@@ -48,7 +50,7 @@ public class ReplexReplicationView extends AbstractReplicationView {
         // when we go down the chain.
         try (AutoCloseableByteBuf b =
                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
-            Serializers.getSerializer(Serializers.SerializerType.CORFU)
+            Serializers.getSerializer(CORFU)
                     .serialize(data, b);
             payloadBytes = b.readableBytes();
 
@@ -124,7 +126,7 @@ public class ReplexReplicationView extends AbstractReplicationView {
                     if (partial.equals(data)) {
                         try (AutoCloseableByteBuf tempbuf =
                                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
-                            Serializers.getSerializer(Serializers.SerializerType.CORFU)
+                            Serializers.getSerializer(CORFU)
                                     .serialize(partial, tempbuf);
 
                             CFUtils.getUninterruptibly(

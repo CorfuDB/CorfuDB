@@ -7,6 +7,8 @@ import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.protocols.wireprotocol.CorfuPayload;
 import org.corfudb.util.serializer.Serializers;
 
+import static org.corfudb.util.serializer.SerializerType.CORFU;
+
 /**
  * Created by mwei on 1/7/16.
  */
@@ -63,7 +65,7 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
         } else {
             actual.dataCache.get(new LogAddress(address, null)).getData().resetReaderIndex();
             ByteBuf b = UnpooledByteBufAllocator.DEFAULT.buffer();
-            Serializers.getSerializer(Serializers.SerializerType.CORFU).serialize(data, b);
+            Serializers.getSerializer(CORFU).serialize(data, b);
             byte[] expected = new byte[b.readableBytes()];
             b.getBytes(0, expected);
             int actualbytes = actual.dataCache.get(new LogAddress(address, null)).getData().readableBytes();

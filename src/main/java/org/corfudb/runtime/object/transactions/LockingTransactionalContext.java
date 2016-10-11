@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -97,35 +96,6 @@ public class LockingTransactionalContext extends AbstractTransactionalContext {
         return new MultiObjectSMREntry(entryMap);
     }
 
-    /**
-     * Buffer away an object update, adding it to the write set that will be generated
-     * in the resulting TXEntry.
-     *
-     * @param proxy        The SMR Object proxy to buffer for.
-     * @param SMRMethod    The method being called.
-     * @param SMRArguments The arguments to that method.
-     * @param serializer   The serializer to use.
-     * @param <T>          The type of the proxy.
-     */
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
-                                       Object[] SMRArguments, Serializers.SerializerType serializer, boolean writeOnly) {
-        objectMap
-                .compute(proxy, (k, v) ->
-                {
-                    LockingTransactionalContext.TransactionalObjectData<T> data = v;
-                    if (v == null) {
-                        data = new LockingTransactionalContext.TransactionalObjectData<>(proxy);
-                    }
-
-                    if (!writeOnly) {
-                        data.objectIsRead = true;
-                    }
-                    data.bufferedWrites.add(new SMREntry(SMRMethod, SMRArguments, serializer));
-                    return data;
-                });
-    }
 
     @Override
     public <T> void resetObject(CorfuSMRObjectProxy<T> proxy) {

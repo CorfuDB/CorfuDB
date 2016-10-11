@@ -30,6 +30,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
+import static org.corfudb.util.serializer.SerializerType.CORFU;
+
 /**
  * A view of the address space implemented by Corfu.
  * <p>
@@ -130,7 +132,7 @@ public class AddressSpaceView extends AbstractView {
         if (!runtime.isCacheDisabled()) {
             //TODO: fix me
             ByteBuf b = PooledByteBufAllocator.DEFAULT.buffer();
-            Serializers.getSerializer(Serializers.SerializerType.CORFU)
+            Serializers.getSerializer(CORFU)
                     .serialize(data, b);
 
             LogData ld = new LogData(DataType.DATA, b);

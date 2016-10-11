@@ -18,6 +18,8 @@ import org.corfudb.util.serializer.Serializers;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static org.corfudb.util.serializer.SerializerType.CORFU;
+
 /**
  * Created by amytai on 9/16/16.
  */
@@ -48,7 +50,7 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         for (short i = 0; i < numUpdates; i++) {
             updates.add(
                     (SMREntry) Serializers
-                            .getSerializer(Serializers.SerializerType.CORFU)
+                            .getSerializer(CORFU)
                             .deserialize(b, rt));
         }
     }
@@ -59,7 +61,7 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         b.writeShort(updates.size());
         updates.stream()
                 .forEach(x -> Serializers
-                        .getSerializer(Serializers.SerializerType.CORFU)
+                        .getSerializer(CORFU)
                         .serialize(x, b));
     }
 

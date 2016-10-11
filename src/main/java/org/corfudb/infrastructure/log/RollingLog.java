@@ -8,14 +8,10 @@ import io.netty.buffer.Unpooled;
 import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-<<<<<<< HEAD
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
-=======
-import org.corfudb.protocols.wireprotocol.LogUnitMetadataMsg;
 import org.corfudb.util.serializer.SerializerType;
->>>>>>> master
 import org.corfudb.util.serializer.Serializers;
 
 import java.io.File;
