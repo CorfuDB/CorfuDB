@@ -3,17 +3,8 @@ package org.corfudb.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.view.AddressSpaceView;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutView;
-import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SequencerView;
-import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.view.*;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
 
@@ -206,6 +197,17 @@ public class CorfuRuntime {
                 .splitAsStream(configurationString)
                 .map(String::trim)
                 .collect(Collectors.toList());
+        return this;
+    }
+
+    /**
+     * Add a layout server to the list of servers known by the CorfuRuntime.
+     *
+     * @param layoutServer A layout server to use.
+     * @return A CorfuRuntime, to support the builder pattern.
+     */
+    public CorfuRuntime addLayoutServer(String layoutServer) {
+        layoutServers.add(layoutServer);
         return this;
     }
 

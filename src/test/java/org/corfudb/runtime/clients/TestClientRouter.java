@@ -57,6 +57,25 @@ public class TestClientRouter implements IClientRouter {
     @Setter
     public UUID clientID;
 
+    /**
+     * New connection timeout (milliseconds)
+     */
+    @Getter
+    @Setter
+    public long timeoutConnect = 5000L;
+    /**
+     * Sync call response timeout (milliseconds)
+     */
+    @Getter
+    @Setter
+    public long timeoutResponse = 5000L;
+    /**
+     * Retry interval after timeout (milliseconds)
+     */
+    @Getter
+    @Setter
+    public long timeoutRetry = 5000L;
+
     public List<TestRule> rules;
 
     /**
@@ -151,6 +170,7 @@ public class TestClientRouter implements IClientRouter {
         // Set the message fields.
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
+        message.setEpoch(epoch);
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
@@ -163,7 +183,7 @@ public class TestClientRouter implements IClientRouter {
                 routeMessage(message);
         }
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(5000));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);

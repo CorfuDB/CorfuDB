@@ -120,4 +120,16 @@ public interface IClientRouter {
      * Set the current epoch.
      */
     void setEpoch(long newEpoch);
+
+    default void setTimeoutConnect(long timeoutConnect) {
+
+    }
+
+    default void setTimeoutRetry(long timeoutRetry) {
+
+    }
+
+    default void setTimeoutResponse(long timeoutResponse) {
+
+    }
 }

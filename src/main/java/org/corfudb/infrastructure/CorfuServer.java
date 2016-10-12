@@ -159,10 +159,12 @@ public class CorfuServer {
         // Create a common Server Context for all servers to access.
         ServerContext serverContext = new ServerContext(opts, router);
 
+        LayoutServer layoutServer = new LayoutServer(serverContext);
         // Add each role to the router.
         router.addServer(new SequencerServer(serverContext));
-        router.addServer(new LayoutServer(serverContext));
+        router.addServer(layoutServer);
         router.addServer(new LogUnitServer(serverContext));
+        router.addServer(new ManagementServer(serverContext, new PeriodicPollPolicy(), layoutServer));
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.

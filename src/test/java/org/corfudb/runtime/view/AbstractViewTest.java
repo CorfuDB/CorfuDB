@@ -12,6 +12,7 @@ import org.junit.Before;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -96,6 +97,17 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .setCacheDisabled(true); // Disable cache during unit tests to fully stress the system.
         runtime.getAddressSpaceView().resetCaches();
     }
+
+    /**
+     * Create a runtime based on the provided layout.
+     * @param l
+     * @return
+     */
+    public CorfuRuntime getRuntime(Layout l) {
+        String cfg = l.getLayoutServers().stream().collect(Collectors.joining(","));
+        return new CorfuRuntime(cfg);
+    }
+
 
     /** Add a server at a specific port, using the given configuration options.
      *
@@ -290,6 +302,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         SequencerServer sequencerServer;
         LayoutServer layoutServer;
         LogUnitServer logUnitServer;
+        ManagementServer managementServer;
         IServerRouter serverRouter;
         int port;
 
@@ -305,11 +318,13 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
+            this.managementServer = new ManagementServer(serverContext, new PeriodicPollPolicy(), this.layoutServer);
 
             this.serverRouter.addServer(baseServer);
             this.serverRouter.addServer(sequencerServer);
             this.serverRouter.addServer(layoutServer);
             this.serverRouter.addServer(logUnitServer);
+            this.serverRouter.addServer(managementServer);
         }
 
         TestServer(int port)
