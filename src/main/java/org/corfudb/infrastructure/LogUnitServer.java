@@ -276,8 +276,6 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     public void reboot() {
-        contiguousHead = 0L;
-
         if ((Boolean) opts.get("--memory")) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). " +
                     "This should be run for testing purposes only. " +

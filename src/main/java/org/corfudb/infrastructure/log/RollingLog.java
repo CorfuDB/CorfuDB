@@ -14,7 +14,6 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.protocols.wireprotocol.LogUnitMetadataMsg;
 import org.corfudb.util.serializer.Serializers;
 
 import java.io.File;

@@ -8,7 +8,6 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.cmdlets.CmdletRouter;
 import org.corfudb.cmdlets.QuickCheckMode;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuSetEpochMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -291,7 +290,7 @@ public class LayoutServer extends AbstractServer {
         //TODO figure out a strategy to deal with this situation
         // Very odd ... if we don't send any response here, we hang the OTP mailbox thread.
         long serverEpoch = serverContext.getServerEpoch();
-        r.sendResponse(ctx, msg, new CorfuSetEpochMsg(CorfuMsg.CorfuMsgType.WRONG_EPOCH, serverEpoch));
+        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
     }
 
     /**
@@ -387,7 +386,7 @@ public class LayoutServer extends AbstractServer {
         // This is a propose. If no prepare, reject.
         if (phase1Rank == null) {
             log.debug("Rejected phase 2 propose of rank={}, phase1Rank=none", proposeRank);
-            r.sendResponse(ctx, msg, new LayoutRankMsg(null, -1, CorfuMsg.CorfuMsgType.LAYOUT_PROPOSE_REJECT));
+            r.sendResponse(ctx, msg, new LayoutRankMsg(null, -1, CorfuMsgType.LAYOUT_PROPOSE_REJECT));
             return;
         }
         // This is a propose. If the rank is less than or equal to the phase 1 rank, reject.

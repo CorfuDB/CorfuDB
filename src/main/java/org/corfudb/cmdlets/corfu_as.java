@@ -89,8 +89,8 @@ public class corfu_as implements ICmdlet {
             case TRIMMED:
                 return cmdlet.err("TRIMMED");
             case DATA:
-                byte[] ba = new byte[r.getBuffer().readableBytes()];
-                r.getBuffer().getBytes(0, ba);
+                byte[] ba = new byte[r.getData().readableBytes()];
+                r.getData().getBytes(0, ba);
                 return cmdlet.ok(new String(ba, "UTF8"));
         }
         return cmdlet.err("Hush, compiler.");

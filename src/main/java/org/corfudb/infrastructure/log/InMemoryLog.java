@@ -13,7 +13,7 @@ import java.util.UUID;
  */
 public class InMemoryLog extends AbstractLocalLog {
 
-    private final Map<Long, LogData> cache;
+    private Map<Long, LogData> cache;
 
     public InMemoryLog(long start, long end) {
         super(start, end, "", true);

@@ -2,9 +2,10 @@ package org.corfudb.cmdlets;
 
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.wireprotocol.*;
+// import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.codehaus.plexus.util.ExceptionUtils;
-import org.corfudb.protocols.wireprotocol.LogUnitReadResponseMsg.ReadResult;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.util.GitRepositoryState;
@@ -123,28 +124,24 @@ public class corfu_logunit implements ICmdlet {
     String[] read(NettyClientRouter router, Map<String, Object> opts)
             throws Exception {
         ReadResponse r = router.getClient(LogUnitClient.class).read(Long.parseLong((String) opts.get("--log-address"))).get();
-        r.getReadSet().entrySet().stream().forEach(x -> {
-            switch (x.getValue().getType()) {
-                case EMPTY:
-                    return cmdlet.err("EMPTY");
-                    break;
-                case HOLE:
-                    return cmdlet.err("HOLE");
-                    break;
-                case TRIMMED:
-                    return cmdlet.err("TRIMMED");
-                    break;
-                case DATA:
-                    try {
-                        byte[] ba = new byte[r.getBuffer().readableBytes()];
-                        x.getBuffer().getBytes(0, ba);
-                        return cmdlet.ok(new String(ba, "UTF8"));
-                    } catch (IOException i) {
-                        System.err.println("Error: IOException " + i.getMessage());
-                    }
-                    break;
-            }
-            return cmdlet.err("Hush, compiler.");
-        });
+        LogEntry lea[] = r.getReadSet().entrySet().toArray(new LogEntry[20]);
+        LogEntry l = lea[0];
+        switch (l.getEntry().getType()) {
+            case EMPTY:
+                return cmdlet.err("EMPTY");
+            case HOLE:
+                return cmdlet.err("HOLE");
+            case TRIMMED:
+                return cmdlet.err("TRIMMED");
+            case DATA:
+                try {
+                    byte[] ba = new byte[l.getEntry().getData().readableBytes()];
+                    l.getEntry().getData().getBytes(0, ba);
+                    return cmdlet.ok(new String(ba, "UTF8"));
+                } catch (IOException i) {
+                    return cmdlet.err("Exception", i.toString(), ExceptionUtils.getStackTrace(i));
+                }
+        }
+        return cmdlet.err("Hush, compiler.");
     }
 }

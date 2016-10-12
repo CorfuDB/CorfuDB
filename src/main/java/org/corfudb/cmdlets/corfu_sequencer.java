@@ -2,6 +2,7 @@ package org.corfudb.cmdlets;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.util.GitRepositoryState;
@@ -51,12 +52,16 @@ public class corfu_sequencer implements ICmdlet {
                 .start();
 
         try {
-            SequencerClient.TokenResponse foo =
+            router.getClient(SequencerClient.class).nextToken(
+                    streamsFromString((String) opts.get("--stream-ids")),
+                    Integer.parseInt((String) opts.get("--num-tokens"))).get();
+
+            TokenResponse foo =
                     router.getClient(SequencerClient.class).nextToken(
                     streamsFromString((String) opts.get("--stream-ids")),
                     Integer.parseInt((String) opts.get("--num-tokens"))).get();
             long token = foo.getToken();
-            return cmdlet.ok(Long.toString(token), foo.backpointerMap.toString());
+            return cmdlet.ok(Long.toString(token), foo.getBackpointerMap().toString());
         } catch (ExecutionException ex) {
             return cmdlet.err("Exception", ex.toString(), ex.getCause().toString());
         } catch (Exception e) {
