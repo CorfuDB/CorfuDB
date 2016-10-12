@@ -67,20 +67,14 @@ public class corfu_as implements ICmdlet {
 
     String[] write(CorfuRuntime runtime, Map<String, Object> opts)
             throws Exception {
-<<<<<<< d9d2eb815b0ad708875e6d21834a19a5cfc05f18
-        runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
-                streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
-                Collections.emptyMap(), Collections.emptyMap());
-=======
         try {
             runtime.getAddressSpaceView().write(Long.parseLong((String) opts.get("--log-address")),
                     streamsFromString((String) opts.get("--stream-ids")), ByteStreams.toByteArray(System.in),
-                    Collections.emptyMap());
+                    Collections.emptyMap(), Collections.emptyMap());
             return cmdlet.ok();
         } catch (OverwriteException e) {
             return cmdlet.err("OVERWRITE");
         }
->>>>>>> Squash of slfritchie/eqc-layout-hack6c branch (prep for final PR) at 9a51bd10
     }
 
     String[] read(CorfuRuntime runtime, Map<String, Object> opts)
@@ -89,28 +83,15 @@ public class corfu_as implements ICmdlet {
                 .read(Long.parseLong((String) opts.get("--log-address")));
         switch (r.getType()) {
             case EMPTY:
-<<<<<<< d9d2eb815b0ad708875e6d21834a19a5cfc05f18
-                System.err.println("Error: EMPTY");
-                break;
-            case HOLE:
-                System.err.println("Error: HOLE");
-                break;
-=======
                 return cmdlet.err("EMPTY");
-            case FILLED_HOLE:
+            case HOLE:
                 return cmdlet.err("HOLE");
->>>>>>> Squash of slfritchie/eqc-layout-hack6c branch (prep for final PR) at 9a51bd10
             case TRIMMED:
                 return cmdlet.err("TRIMMED");
             case DATA:
-<<<<<<< d9d2eb815b0ad708875e6d21834a19a5cfc05f18
-                r.getData().getBytes(0, System.out, r.getData().readableBytes());
-                break;
-=======
                 byte[] ba = new byte[r.getBuffer().readableBytes()];
                 r.getBuffer().getBytes(0, ba);
                 return cmdlet.ok(new String(ba, "UTF8"));
->>>>>>> Squash of slfritchie/eqc-layout-hack6c branch (prep for final PR) at 9a51bd10
         }
         return cmdlet.err("Hush, compiler.");
     }
