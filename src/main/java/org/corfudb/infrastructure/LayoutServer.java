@@ -421,7 +421,7 @@ public class LayoutServer extends AbstractServer {
     // TODO how do reject the older epoch commits, should it be an explicit NACK.
     public synchronized void handleMessageLayoutCommit(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         long serverEpoch = getServerEpoch();
-        if(msg.getEpoch() < serverEpoch) {
+        if(msg.getLayout().getEpoch() <= serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }

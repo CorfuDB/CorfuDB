@@ -33,32 +33,7 @@ public class LayoutServerTest extends AbstractServerTest {
         sendMessage(new LayoutMsg(l, CorfuMsgType.LAYOUT_BOOTSTRAP));
     }
 
-    // SLF: Git merge note: perhaps this test is no longer valid?
     // memoryLayoutServerReadsLayout() test is no longer valid.
-    @Test
-    public void memoryLayoutServerReadsLayout()
-            throws Exception {
-
-        String serviceDir = getTempDir();
-
-        Layout l = TestLayoutBuilder.single(9000);
-
-        l.getSequencers().add("test200");
-        l.getSequencers().add("test201");
-
-        Files.write(l.asJSONString().getBytes(), new File(serviceDir, "layout"));
-
-        LayoutServer ls = new LayoutServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .build());
-
-        setServer(ls);
-
-        sendMessage(new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
-
-        assertThat((getLastMessage().getMsgType()))
-                .isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
-    }
 
     @Test
     public void nonBootstrappedServerNoLayout() {
@@ -131,14 +106,17 @@ public class LayoutServerTest extends AbstractServerTest {
 
     @Test
     public void commitReturnsAck() {
-        bootstrapServer(TestLayoutBuilder.single(9000));
+        Layout layout = TestLayoutBuilder.single(9000);
+
+        bootstrapServer(layout);
+        layout.setEpoch(layout.getEpoch() + 1);
         sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 100, CorfuMsgType.LAYOUT_PROPOSE));
+        sendMessage(new LayoutRankMsg(layout, 100, CorfuMsgType.LAYOUT_PROPOSE));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 1000, CorfuMsgType.LAYOUT_COMMITTED));
+        sendMessage(new LayoutRankMsg(layout, 1000, CorfuMsgType.LAYOUT_COMMITTED));
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsgType.ACK);
     }
