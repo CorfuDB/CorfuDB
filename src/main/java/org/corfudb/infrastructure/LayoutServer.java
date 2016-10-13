@@ -277,6 +277,10 @@ public class LayoutServer extends AbstractServer {
                 (Boolean) opts.get("--single") && (Boolean) opts.get("--memory")) {
             reset_part_2();
         }
+        Layout currentLayout = getCurrentLayout();
+        if (currentLayout != null) {
+            setServerEpoch(currentLayout.getEpoch());
+        }
     }
 
     // Helper Methods
