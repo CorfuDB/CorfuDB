@@ -72,8 +72,12 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      * @param outMsg Outgoing message.
      */
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
+        long badEpoch = -667788;
+
+        outMsg.setEpoch(badEpoch);
         outMsg.copyBaseFields(inMsg);
-        outMsg.setEpoch(getServerEpoch());
+        if (outMsg.getEpoch() == badEpoch) { log.warn("copyBaseFields didn't clobber epoch"); System.exit(66); }
+
         ctx.writeAndFlush(outMsg);
         log.trace("Sent response: {}", outMsg);
     }

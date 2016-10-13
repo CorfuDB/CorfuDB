@@ -19,6 +19,7 @@ import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.codehaus.groovy.tools.shell.IO;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
@@ -137,6 +138,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Getter
     Boolean connected_p;
 
+    private Bootstrap b;
+
+    public NettyClientRouter(String endpoint) {
+        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]));
+    }
+
     public NettyClientRouter(String host, Integer port) {
         this.host = host;
         this.port = port;
@@ -224,8 +231,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             }
         });
 
-
-        Bootstrap b = new Bootstrap();
+        b = new Bootstrap();
         b.group(workerGroup);
         b.channel(NioSocketChannel.class);
         b.option(ChannelOption.SO_KEEPALIVE, true);
@@ -251,7 +257,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
     }
 
-    void connectChannel(Bootstrap b, long c) {
+    synchronized void connectChannel(Bootstrap b, long c) {
         ChannelFuture cf = b.connect(host, port);
         cf.syncUninterruptibly();
         if (!cf.awaitUninterruptibly(timeoutConnect)) {
@@ -277,7 +283,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 }
             }
         });
-        connected_p = true; // QQQ SLF verify!
+        connected_p = true;
     }
 
     /**
@@ -285,8 +291,19 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     @Override
     public void stop() {
-        shutdown = true;
-        channel.disconnect();
+        stop(false);
+    }
+
+    @Override
+    public void stop(boolean shutdown_p) {
+        // A very hasty check of Netty state-of-the-art is that shutting down
+        // the worker threads is tricksy or impossible.
+        shutdown = shutdown_p;
+        connected_p = false;
+
+        ChannelFuture cf = channel.disconnect();
+        cf.syncUninterruptibly();
+        boolean b1 = cf.awaitUninterruptibly(1000);
     }
 
     /**
@@ -309,6 +326,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             message.setClientID(clientID);
             message.setRequestID(thisRequest);
             message.setEpoch(epoch);
+
             // Generate a future and put it in the completion table.
             final CompletableFuture<T> cf = new CompletableFuture<>();
             outstandingRequests.put(thisRequest, cf);
@@ -423,10 +441,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
         // Check if the message is in the right epoch.
         if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != epoch) {
-            CorfuMsg m = new CorfuMsg();
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), epoch, msg);
-
             /* If this message was pending a completion, complete it with an error. */
             completeExceptionally(msg.getRequestID(), new WrongEpochException(msg.getEpoch()));
             return false;
