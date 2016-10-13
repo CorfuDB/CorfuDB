@@ -279,8 +279,10 @@ public class LayoutServer extends AbstractServer {
         }
         Layout currentLayout = getCurrentLayout();
         if (currentLayout != null) {
+            System.err.printf("Reboot: currentLayout epoch = %d\n", currentLayout.getEpoch());
             setServerEpoch(currentLayout.getEpoch());
         }
+        else { System.err.printf("Reboot: currentLayout is null\n"); }
     }
 
     // Helper Methods

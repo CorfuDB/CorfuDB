@@ -239,7 +239,11 @@ next_state(S, _V, _NoSideEffectCall) ->
 
 reset(Mbox, Endpoint) ->
     %% io:format(user, "R", []),
-    rpc(Mbox, reset, Endpoint).
+    layout_qc:reset(),
+    Res = rpc(Mbox, reset, Endpoint),
+    LayoutJSON = "{\"layoutServers\":[\"sfritchie-m01:8000\"],\"sequencers\":[\"sfritchie-m01:8000\"],\"segments\":[{\"replicationMode\":\"REPLEX\",\"start\":0,\"end\":-1,\"stripes\":[{\"logServers\":[\"sfritchie-m01:8000\"]}],\"replexes\":[{\"logServers\":[\"sfritchie-m01:8000\"]}]}],\"epoch\":1}",
+    layout_qc:commit(0, 1, LayoutJSON),
+    Res.
 
 reboot(Mbox, Endpoint) ->
     io:format(user, "r", []),
