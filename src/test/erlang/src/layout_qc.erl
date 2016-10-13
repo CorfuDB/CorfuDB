@@ -34,7 +34,7 @@
 -endif.
 
 -define(QUICK_MBOX, qc_java:quick_mbox_endpoint()).
--define(TIMEOUT, 2*1000).
+-define(TIMEOUT, 15*1000).
 
 -include("qc_java.hrl").
 
@@ -441,7 +441,7 @@ prop_parallel(MoreCmds, Mboxes, Endpoint) ->
                            non_empty(
                              parallel_commands(?MODULE,
                                       initial_state(Mboxes, Endpoint)))),
-            ?WRAP_ALWAYS(100,
+            ?WRAP_ALWAYS(5,
             begin
                 {H, S_or_Hs, Res} = run_parallel_commands(?MODULE, Cmds),
                 aggregate(command_names(Cmds),
