@@ -1,7 +1,7 @@
 package org.corfudb.cmdlets;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.exception.ExceptionUtils;
+import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;

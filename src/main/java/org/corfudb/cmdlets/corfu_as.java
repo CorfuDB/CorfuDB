@@ -3,7 +3,7 @@ package org.corfudb.cmdlets;
 import com.google.common.io.ByteStreams;
 import io.netty.buffer.ByteBuf;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.exception.ExceptionUtils;
+import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;

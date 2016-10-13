@@ -4,7 +4,6 @@ import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.*;
-// import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
