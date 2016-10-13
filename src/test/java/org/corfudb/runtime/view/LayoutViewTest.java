@@ -70,4 +70,37 @@ public class LayoutViewTest extends AbstractViewTest {
 
         r.getStreamsView().get(CorfuRuntime.getStreamID("hi")).check();
     }
+
+    @Test
+    public void canAvoidNullException()
+            throws Exception {
+        CorfuRuntime r = getDefaultRuntime().connect();
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        l.setRuntime(r);
+        r.getLayoutView().updateLayout(l, 1L);
+
+        Layout l2 = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        r.getLayoutView().updateLayout(l2, 1L);
+        // Bug: second attempt to call updateLayout() with same layout fails.  Bug fixed?
+        r.getLayoutView().updateLayout(l2, 1L);
+    }
+
 }
