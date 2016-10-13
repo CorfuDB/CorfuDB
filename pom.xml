@@ -170,6 +170,13 @@
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>findbugs-maven-plugin</artifactId>
             <version>3.0.3</version>
+            <scope>provided</scope>
+            <type>maven-plugin</type>
+        </dependency>
+        <dependency>
+            <groupId>org.codehaus.plexus</groupId>
+            <artifactId>plexus-utils</artifactId>
+            <version>1.5.6</version>
         </dependency>
         <dependency>
             <groupId>de.javakaffee</groupId>
