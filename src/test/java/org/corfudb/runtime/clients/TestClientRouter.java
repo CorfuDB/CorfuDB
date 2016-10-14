@@ -249,7 +249,6 @@ public class TestClientRouter implements IClientRouter {
         }
         // Check if the message is in the right epoch.
         if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != epoch) {
-            CorfuMsg m = new CorfuMsg();
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), epoch, msg);
 

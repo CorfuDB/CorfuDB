@@ -3,24 +3,12 @@ package org.corfudb.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.view.AddressSpaceView;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutView;
-import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SequencerView;
-import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.view.*;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
@@ -74,7 +62,9 @@ public class CorfuRuntime {
     /**
      * A completable future containing a layout, when completed.
      */
-    public volatile CompletableFuture<Layout> layout;
+    @Getter
+    @Setter
+    private volatile CompletableFuture<Layout> layout;
     /**
      * The rate in seconds to retry accessing a layout, in case of a failure.
      */
@@ -235,13 +225,18 @@ public class CorfuRuntime {
      * If the layout has been previously invalidated and a new layout has not yet been retrieved,
      * this function does nothing.
      */
-    public void invalidateLayout() {
+    public synchronized void invalidateLayout() {
         // Is there a pending request to retrieve the layout?
-        if (!layout.isDone()) {
+        if (!getLayout().isDone()) {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layout = fetchLayout();
+        //fetchLayout();
+        CompletableFuture<Layout> l = fetchLayout();
+        if (l == null) {
+            System.out.println("O NO");
+        }
+        setLayout(l);
     }
 
 
@@ -255,35 +250,41 @@ public class CorfuRuntime {
     private CompletableFuture<Layout> fetchLayout() {
         return CompletableFuture.<Layout>supplyAsync(() -> {
             while (true) {
+                Random r = new Random();
                 // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServers) {
-                    log.debug("Trying connection to layout server {}", s);
-                    try {
-                        IClientRouter router = getRouter(s);
-                        // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture = router.getClient(LayoutClient.class).getLayout();
-                        // Wait for layout
-                        Layout l = layoutFuture.get();
-                        l.setRuntime(this);
-                        // this.layout should only be assigned to the new layout future once it has been
-                        // completely constructed and initialized. For example, assigning this.layout = l
-                        // before setting the layout's runtime can result in other threads trying to access a layout
-                        // with  a null runtime.
-                        layout = layoutFuture;
-                        l.getAllServers().stream()
-                                .map(getRouterFunction)
-                                .forEach(x -> x.setEpoch(l.getEpoch()));
-                        log.debug("Layout server {} responded with layout {}", s, l);
-                        return l;
-                    } catch (Exception e) {
-                        log.warn("Tried to get layout from {} but failed with exception:", s, e);
-                    }
-                }
-                log.warn("Couldn't connect to any layout servers, retrying in {}s.", retryRate);
+                String s = layoutServers.get(r.nextInt(layoutServers.size()));
+                log.error("Trying connection to layout server {}", s);
                 try {
-                    Thread.sleep(retryRate * 1000);
-                } catch (InterruptedException e) {
+                    IClientRouter router = getRouter(s);
+                    // Try to get a layout.
+                    CompletableFuture<Layout> layoutFuture = router.getClient(LayoutClient.class).getLayout();
+                    // Wait for layout
+                    Layout l = layoutFuture.get();
+                    l.setRuntime(this);
+                    // this.layout should only be assigned to the new layout future once it has been
+                    // completely constructed and initialized. For example, assigning this.layout = l
+                    // before setting the layout's runtime can result in other threads trying to access a layout
+                    // with  a null runtime.
+                    if (layoutFuture == null) {
+                        System.out.println("O NO2");
+                    }
+                    setLayout(layoutFuture);
+                    l.getAllServers().stream()
+                            .map(getRouterFunction)
+                            .forEach(x -> x.setEpoch(l.getEpoch()));
+                    log.error("Layout server {} responded with layout {}", s, l);
+                    layoutServers.clear();
+                    layoutServers = l.getLayoutServers();
+                    return l;
+                } catch (Exception e) {
+                    log.warn("Tried to get layout from {} but failed with exception:", s, e);
                 }
+                // TODO need to define number of tries to start backing off
+                //log.warn("Couldn't connect to any layout servers, retrying in {}s.", retryRate);
+                //try {
+                //   Thread.sleep(retryRate * 1000);
+                //} catch (InterruptedException e) {
+                //}
             }
         });
     }
@@ -293,12 +294,12 @@ public class CorfuRuntime {
      * When this function returns, the Corfu server is ready to be accessed.
      */
     public synchronized CorfuRuntime connect() {
-        if (layout == null) {
+        if (getLayout() == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
             // Fetch the current layout and save the future.
-            layout = fetchLayout();
+            setLayout(fetchLayout());
             try {
-                layout.get();
+                getLayout().get();
             } catch (Exception e) {
                 // A serious error occurred trying to connect to the Corfu instance.
                 log.error("Fatal error connecting to Corfu server instance.", e);

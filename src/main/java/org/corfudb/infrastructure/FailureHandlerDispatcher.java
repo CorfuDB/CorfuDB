@@ -2,11 +2,11 @@ package org.corfudb.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -28,6 +28,8 @@ public class FailureHandlerDispatcher {
      */
     private Set<String> failedServers = null;
 
+    private CorfuRuntime corfuRuntime;
+
     /**
      * Takes in the existing layout and a set of failed nodes.
      * It first generates a new layout by removing the failed nodes from the
@@ -42,58 +44,50 @@ public class FailureHandlerDispatcher {
 
         this.layout = layout;
         this.failedServers = failedServers;
+        this.corfuRuntime = corfuRuntime;
 
-        // Generates a new layout by removing the failed nodes from the existing layout
-        generateLayout();
-        // Seals the epoch with the newly generated layout.
-        sealEpoch(layout);
-        // We now proceed to run paxos to commit the new layout
         try {
-            corfuRuntime.getLayoutView().updateLayout(layout, layout.getEpoch());
+            // Generates a new layout by removing the failed nodes from the existing layout
+            generateLayout();
+
+            // Seals the epoch with the newly generated layout.
+            sealEpoch(this.layout);
+
+            // We now proceed to run paxos to commit the new layout
+            corfuRuntime.getLayoutView().updateLayout(this.layout, this.layout.getEpoch());
+
             // Check if our proposed layout got selected and committed.
             corfuRuntime.invalidateLayout();
-            if (corfuRuntime.getLayoutView().getLayout().equals(layout)) {
-                log.warn("Failed node removed. New Layout committed = {}", layout);
+
+            if (corfuRuntime.getLayoutView().getLayout().equals(this.layout)) {
+                log.warn("Failed node removed. New Layout committed = {}", this.layout);
             }
+
         } catch (OutrankedException err) {
             log.warn("Conflict in updating layout by failureHandlerDispatcher.");
         } catch (QuorumUnreachableException err) {
             log.error("Quorum unreachable.");
             //TODO: Need to handle this condition better.
-            err.printStackTrace();
-        }
-    }
-
-    /**
-     * Removes failed nodes from layout servers list if present.
-     */
-    private void removeFailedLayoutServers() {
-
-        List<String> layoutServersList = layout.getLayoutServers();
-        // Iterating over the list of layout servers in the layout
-        // and removing the failed nodes addresses.
-        for (int i = 0; i < layoutServersList.size(); ) {
-            if (failedServers.contains(layoutServersList.get(i))) {
-                layoutServersList.remove(i);
-                continue;
-            }
-            i++;
+        } catch (LayoutModificationException lme) {
+            // Trying to remove either all layout or sequencer or logunit servers.
+            log.error(lme.getMessage());
         }
     }
 
     /**
      * Modifies the layout by removing the set failed nodes.
      */
-    private void generateLayout() {
+    private void generateLayout() throws LayoutModificationException {
 
-        // Remove failed layout servers.
-        removeFailedLayoutServers();
-        
-        // TODO: Remove failed log unit servers and correct the chain replication
-        // Throw exception if only one log unit server in a stripe and has failed.
-
-        // TODO: Remove failed Sequencer servers.
+        LayoutWorkflowManager layoutManager = new LayoutWorkflowManager(layout);
+        layout = layoutManager
+                .removeLayoutServers(failedServers)
+                .removeSequencerServers(failedServers)
+                .removeLogunitServers(failedServers)
+                .build();
+        layout.setRuntime(corfuRuntime);
         // Throw an error if only one seq server and has failed.
+        // Throw exception if only one log unit server in a stripe and has failed.
     }
 
     /**
@@ -103,6 +97,11 @@ public class FailureHandlerDispatcher {
      */
     private void sealEpoch(Layout layout) {
         layout.setEpoch(layout.getEpoch() + 1);
-        layout.moveServersToEpoch();
+        try {
+
+            layout.moveServersToEpoch();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

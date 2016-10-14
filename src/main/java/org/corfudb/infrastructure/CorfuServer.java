@@ -164,7 +164,7 @@ public class CorfuServer {
         router.addServer(new SequencerServer(serverContext));
         router.addServer(layoutServer);
         router.addServer(new LogUnitServer(serverContext));
-        router.addServer(new ManagementServer(serverContext, new PeriodicPollPolicy(), layoutServer));
+        router.addServer(new ManagementServer(serverContext, layoutServer));
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.

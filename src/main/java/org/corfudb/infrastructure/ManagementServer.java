@@ -58,14 +58,13 @@ public class ManagementServer extends AbstractServer {
                             .setNameFormat("Config-Mgr-%d")
                             .build());
 
-    public ManagementServer(ServerContext serverContext, IFailureDetectorPolicy failureDetectorPolicy,
-                            LayoutServer layoutServer) {
+    public ManagementServer(ServerContext serverContext, LayoutServer layoutServer) {
 
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
         this.layoutServer = layoutServer;
 
-        this.failureDetectorPolicy = failureDetectorPolicy;
+        this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
         this.localEndpoint = getLocalEndpoint();
 
         try {
@@ -154,7 +153,7 @@ public class ManagementServer extends AbstractServer {
             try {
                 // Fetch the latest layout view through the runtime.
                 layoutView = corfuRuntime.getLayoutView();
-                currentLayout = layoutView.getCurrentLayout();
+                currentLayout = layoutView.getLayout();
                 //TODO: Store this layout on disk for persistence.
 
                 // Execute the failure detection policy once.

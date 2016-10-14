@@ -27,7 +27,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         });
 
         scheduleConcurrently(10000, (v) -> {
-            assertThat(rt.layout.get().getRuntime()).isEqualTo(rt);
+            assertThat(rt.getLayout().get().getRuntime()).isEqualTo(rt);
         });
 
         executeScheduled(2, 30, TimeUnit.SECONDS);
