@@ -211,7 +211,16 @@ public class RollingLog extends AbstractLocalLog {
     }
 
     protected void initializeLog() {
+        File serviceDir = new File(logPathDir);
 
+        if (!serviceDir.exists()) {
+            if (serviceDir.mkdirs()) {
+                log.info("Created new rolling log service directory at {}.", serviceDir);
+            }
+        } else if (!serviceDir.isDirectory()) {
+            log.error("Rolling log service directory {} does not point to a directory. Aborting.", serviceDir);
+            throw new RuntimeException("Rolling log service directory must be a directory!");
+        }
     }
 
     protected void backendStreamWrite(UUID streamID, RangeSet<Long> entry){
