@@ -154,6 +154,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         shutdown = true;
 
         addClient(new BaseClient());
+        start();
     }
 
     /**
@@ -251,7 +252,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
     }
 
-    void connectChannel(Bootstrap b, long c) {
+    private void connectChannel(Bootstrap b, long c) {
         ChannelFuture cf = b.connect(host, port);
         cf.syncUninterruptibly();
         if (!cf.awaitUninterruptibly(timeoutConnect)) {
@@ -415,7 +416,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param ctx The context of the channel handler.
      * @return True, if the epoch is correct, but false otherwise.
      */
-    public boolean validateEpochAndClientID(CorfuMsg msg, ChannelHandlerContext ctx) {
+    private boolean validateEpochAndClientID(CorfuMsg msg, ChannelHandlerContext ctx) {
         // Check if the message is intended for us. If not, drop the message.
         if (!msg.getClientID().equals(clientID)) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!", msg.getClientID(), clientID);
