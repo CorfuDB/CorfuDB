@@ -6,6 +6,8 @@ import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Utils;
 import org.docopt.Docopt;
@@ -170,10 +172,19 @@ public class corfu_smrobject implements ICmdlet {
             try {
                 ret = m.invoke(o, splitz);
             } catch (WrongEpochException we) {
+                System.err.printf("correctEpoch A: %d\n", we.getCorrectEpoch());
+                rt.getLayoutView();
+                try {
+                    Thread.sleep((i * i) * 10);
+                } catch (InterruptedException ie) {
+                }
+                continue;
+/*
                 return cmdlet.err("Exception during invoke",
                         we.getCause().toString(),
                         "correctEpoch: " + we.getCorrectEpoch(),
                         "stack: " + ExceptionUtils.getStackTrace(we));
+*/
             } catch (InvocationTargetException e) {
                 Throwable c = ExceptionUtils.getCause(e);
                 if (c.getClass() == org.corfudb.runtime.exceptions.NetworkException.class &&
@@ -188,11 +199,25 @@ public class corfu_smrobject implements ICmdlet {
                     }
                     continue;
                 } else if (e.getCause().getClass() == WrongEpochException.class) {
+                    WrongEpochException we = (WrongEpochException) e.getCause();
+                    System.err.printf("correctEpoch B: %d\n", we.getCorrectEpoch());
+                    LayoutView qq = rt.getLayoutView();
+                    System.err.printf("qq epoch = %d\n", qq.getLayout().getEpoch());
+                    AddressSpaceView yy = rt.getAddressSpaceView();
+                    System.err.printf("yy foo = %s\n", yy.getCurrentLayout().toString());
+                    try {
+                        Thread.sleep((i * i) * 10);
+                    } catch (InterruptedException ie) {
+                    }
+                    continue;
+/*
+
                         WrongEpochException we = (WrongEpochException) e.getCause();
                         return cmdlet.err("Exception during invoke",
                                 e.getCause().toString(),
                                 "correctEpoch: " + we.getCorrectEpoch(),
                                 "stack: " + ExceptionUtils.getStackTrace(e));
+*/
                 } else {
                     return cmdlet.err("exception", e.getClass().getSimpleName(),
                             "stack: " + ExceptionUtils.getStackTrace(e),
