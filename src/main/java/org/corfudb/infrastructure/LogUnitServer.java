@@ -21,10 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.File;
 import java.lang.invoke.MethodHandles;
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -256,22 +253,45 @@ public class LogUnitServer extends AbstractServer {
         String d = serverContext.getDataStore().getLogDir();
         localLog.close();
         if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d);
-            String prefixes[] = new String[]{"log"};
+            Path dir1 = FileSystems.getDefault().getPath(d);
+            Path dir2 = FileSystems.getDefault().getPath(d + "/log");
+            String glob1 = "log,*";
+            String glob2 = "*-*-*-*-*,*";
+            String glob3 = "*-*-*-*-*";
+            String report = "";
 
-            for (String pfx : prefixes) {
-                try (DirectoryStream<Path> stream =
-                             Files.newDirectoryStream(dir, pfx + "*")) {
-                    for (Path entry : stream) {
-                        // System.out.println("Deleting " + entry);
-                        Files.delete(entry);
-                    }
-                } catch (IOException e) {
-                    log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
+            // Today I learned that the globbing done by newDirectoryStream does not
+            // handle any subdirectory "*/*" matching.  :-(
+            try {
+                delete_all_matching_files(dir1, glob1);
+            } catch(IOException e){
+                log.error("reset: error deleting prefix " + glob1 + ": " + e.toString());
+            }
+            try {
+                delete_all_matching_files(dir2, glob2);
+            } catch(IOException e){
+                log.error("reset: error deleting prefix " + glob2 + ": " + e.toString());
+            }
+            try {
+                DirectoryStream<Path> stream = Files.newDirectoryStream(dir2, glob3);
+                for (Path entry : stream) {
+                    report = entry.toString();
+                    log.trace("Deleting " + report);
+                    Files.delete(entry);
                 }
+            } catch(IOException e){
+                log.error("reset: error deleting prefix " + report + ": " + e.toString());
             }
         }
         reboot();
+    }
+
+    private void delete_all_matching_files(Path dir, String glob) throws IOException {
+        DirectoryStream<Path> stream = Files.newDirectoryStream(dir, glob);
+        for (Path entry : stream) {
+            log.trace("Deleting " + entry);
+            Files.delete(entry);
+        }
     }
 
     @Override

@@ -115,7 +115,7 @@ public class RollingLog extends AbstractLocalLog {
      */
     private FileHandle getChannelForAddress(long address) {
         return channelMap.computeIfAbsent(address / 10000, a -> {
-            String filePath = logPathDir + a.toString();
+            String filePath = logPathDir + "," + a.toString();
             try {
                 FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
                         EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
