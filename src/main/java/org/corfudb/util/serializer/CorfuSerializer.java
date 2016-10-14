@@ -50,7 +50,7 @@ public class CorfuSerializer implements ISerializer {
             byte[] bytes = (byte[]) o;
             b.writeBytes(bytes);
         } else {
-            throw new RuntimeException("Attempting to serialize unsupported type.");
+            throw new RuntimeException("Attempting to serialize unsupported type " + o.getClass().getName() +".");
         }
     }
     //endregion
