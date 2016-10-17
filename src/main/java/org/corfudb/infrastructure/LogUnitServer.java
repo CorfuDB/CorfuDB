@@ -288,9 +288,9 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     public void reboot() {
-        log.info("reboot() LogUnitServer {} with opts {}", this.toString(), opts.toString());
+        log.trace("reboot() LogUnitServer {} with opts {}", this.toString(), opts.toString());
         if (localLog != null) {
-            log.info("reboot() release localLog {}", localLog.toString());
+            log.trace("reboot() release localLog {}", localLog.toString());
             localLog.close();
         }
         if ((Boolean) opts.get("--memory")) {
@@ -306,16 +306,16 @@ public class LogUnitServer extends AbstractServer {
         }
 
         if (dataCache != null) {
-            log.info("reboot() dataCache mapping {}", dataCache.asMap().values().toString());
+            log.trace("reboot() dataCache mapping {}", dataCache.asMap().values().toString());
             /** Free all references */
             dataCache.asMap().values().stream()
-                    .forEach(m -> { log.info("reboot() release {} data {}", m.toString(), m.getData().toString()); m.getData().release(); });
+                    .forEach(m -> { log.trace("reboot() release {} data {}", m.toString(), m.getData().toString()); m.getData().release(); });
         }
 
         if (streamLogs != null) {
-            log.info("reboot() streamLogs mapping {}", streamLogs.values().toString());
+            log.trace("reboot() streamLogs mapping {}", streamLogs.values().toString());
             streamLogs.values().stream()
-                    .forEach(m -> { log.info("reboot() release streamLog {}", m.toString()); m.close(); });
+                    .forEach(m -> { log.trace("reboot() release streamLog {}", m.toString()); m.close(); });
         }
         streamLogs = new ConcurrentHashMap<>();
 
