@@ -253,34 +253,26 @@ public class LogUnitServer extends AbstractServer {
         String d = serverContext.getDataStore().getLogDir();
         localLog.close();
         if (d != null) {
-            Path dir1 = FileSystems.getDefault().getPath(d);
-            Path dir2 = FileSystems.getDefault().getPath(d + "/log");
-            String glob1 = "log,*";
-            String glob2 = "*-*-*-*-*,*";
-            String glob3 = "*-*-*-*-*";
+            Path dir1 = FileSystems.getDefault().getPath(d + "/log");
             String report = "";
 
             // Today I learned that the globbing done by newDirectoryStream does not
             // handle any subdirectory "*/*" matching.  :-(
             try {
-                delete_all_matching_files(dir1, glob1);
-            } catch(IOException e){
-                log.error("reset: error deleting prefix " + glob1 + ": " + e.toString());
-            }
-            try {
-                delete_all_matching_files(dir2, glob2);
-            } catch(IOException e){
-                log.error("reset: error deleting prefix " + glob2 + ": " + e.toString());
-            }
-            try {
-                DirectoryStream<Path> stream = Files.newDirectoryStream(dir2, glob3);
+                DirectoryStream<Path> stream = Files.newDirectoryStream(dir1, "*-*-*-*-*");
                 for (Path entry : stream) {
                     report = entry.toString();
-                    log.trace("Deleting " + report);
+                    log.trace("Deleting recursively " + report);
+                    delete_all_matching_files(entry, "*");
                     Files.delete(entry);
                 }
             } catch(IOException e){
                 log.error("reset: error deleting prefix " + report + ": " + e.toString());
+            }
+            try {
+                delete_all_matching_files(dir1, "*");
+            } catch(IOException e){
+                log.error("reset: error deleting prefix " + dir1 + "/*: " + e.toString());
             }
         }
         reboot();
