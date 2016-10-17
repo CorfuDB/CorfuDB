@@ -69,7 +69,16 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 gen_mbox(#state{endpoint=Endpoint, reg_names=RegNames}) ->
-    noshrink( ?LET(RegName, oneof(RegNames),
+    case get({?MODULE,gen_mbox}) of
+        undefined ->
+            put({?MODULE,gen_mbox}, true),
+            io:format(user, "\n\tGenerator WARNING: only single endpoint used\n", []);
+        true ->
+            ok
+    end,
+    %% noshrink( ?LET(RegName, oneof(RegNames),
+    %%                {RegName, qc_java:endpoint2nodename(Endpoint)} )).
+    noshrink( ?LET(RegName, hd(RegNames),
                    {RegName, qc_java:endpoint2nodename(Endpoint)} )).
 
 gen_key() ->
@@ -102,6 +111,13 @@ command(S=#state{endpoint=Endpoint, reset_p=false}) ->
     {call, ?MODULE, reset, [gen_mbox(S), Endpoint]};
 command(S=#state{map_type=MapType,
                  endpoint=Endpoint, stream=Stream, reset_p=true}) ->
+    case get({?MODULE,command}) of
+        undefined ->
+            put({?MODULE,command}, true),
+            io:format(user, "\n\tGenerator WARNING: clear() command is disabled\n", []);
+        true ->
+            ok
+    end,
     frequency(
       [
        {20, {call, ?MODULE, put, [gen_mbox(S), Endpoint, Stream, MapType,
@@ -119,7 +135,7 @@ command(S=#state{map_type=MapType,
                                             non_empty(gen_val())]}},
        { 5, {call, ?MODULE, remove, [gen_mbox(S), Endpoint, Stream, MapType,
                                      gen_key()]}},
-       { 3, {call, ?MODULE, clear, [gen_mbox(S), Endpoint, Stream, MapType]}},
+       %% { 3, {call, ?MODULE, clear, [gen_mbox(S), Endpoint, Stream, MapType]}},
        { 3, {call, ?MODULE, keySet, [gen_mbox(S), Endpoint, Stream, MapType]}},
        { 3, {call, ?MODULE, values, [gen_mbox(S), Endpoint, Stream, MapType]}},
        { 3, {call, ?MODULE, entrySet, [gen_mbox(S), Endpoint, Stream, MapType]}}
@@ -239,9 +255,15 @@ next_state(S, _V, _NoSideEffectCall) ->
 
 reset(Mbox, Endpoint) ->
     %% io:format(user, "R", []),
+
+    %% Reset the LayoutServer.
     layout_qc:reset(),
+    %% Reset the SequencerServer and LogUnitServers.
     Res = rpc(Mbox, reset, Endpoint),
-    LayoutJSON = "{\"layoutServers\":[\"sfritchie-m01:8000\"],\"sequencers\":[\"sfritchie-m01:8000\"],\"segments\":[{\"replicationMode\":\"REPLEX\",\"start\":0,\"end\":-1,\"stripes\":[{\"logServers\":[\"sfritchie-m01:8000\"]}],\"replexes\":[{\"logServers\":[\"sfritchie-m01:8000\"]}]}],\"epoch\":1}",
+
+    %% Create & commit a Replex-style layout.
+    EP = lists:flatten(io_lib:format("\"~s\"", [Endpoint])),
+    LayoutJSON = "{\"layoutServers\":[" ++ EP ++ "],\"sequencers\":[" ++ EP ++ "],\"segments\":[{\"replicationMode\":\"REPLEX\",\"start\":0,\"end\":-1,\"stripes\":[{\"logServers\":[" ++ EP ++ "]}],\"replexes\":[{\"logServers\":[" ++ EP ++ "]}]}],\"epoch\":1}",
     layout_qc:commit(0, 1, LayoutJSON),
     Res.
 
@@ -296,6 +318,8 @@ prop(MapType, MoreCmds) ->
 prop(MapType, MoreCmds, Mboxes, Endpoint)
   when MapType == smrmap; MapType == fgmap ->
     %% Hmmmm, more_commands() doesn't appear to work correctly with Proper.
+    erase({?MODULE,command}),
+    erase({?MODULE,gen_mbox}),
     ?FORALL(Cmds, more_commands(MoreCmds,
                                 commands(?MODULE,
                                          initial_state(MapType,
