@@ -35,7 +35,7 @@ public class corfu_reset implements ICmdlet {
 
 
     @Override
-    public void main(String[] args) {
+    public String[] main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
@@ -55,14 +55,13 @@ public class corfu_reset implements ICmdlet {
         System.out.println(ansi().a("RESET ").fg(WHITE).a(host + ":" + port).reset().a(":"));
         try {
             if (router.getClient(BaseClient.class).reset().get()) {
-                System.out.println(ansi().fg(WHITE).a("ACK").reset());
+                return cmdlet.ok("ACK");
             }
             else {
-                System.out.println(ansi().fg(RED).a("NACK").reset());
+                return cmdlet.err("NACK");
             }
         } catch (Exception ex) {
-            System.out.println(ansi().fg(RED).a("ERROR").reset().a(":"));
-            System.out.println(ex.toString());
+            return cmdlet.err("Exception", ex.toString(), ex.getCause().toString());
         }
     }
 }

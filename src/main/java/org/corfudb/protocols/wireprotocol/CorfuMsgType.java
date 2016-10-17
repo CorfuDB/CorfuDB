@@ -34,13 +34,13 @@ public enum CorfuMsgType {
     // Layout Messages
     LAYOUT_REQUEST(10, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
     LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), LayoutServer.class, true),
-    LAYOUT_PREPARE(12, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+    LAYOUT_PREPARE(12, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
     LAYOUT_PREPARE_REJECT(13, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-    LAYOUT_PROPOSE(14, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+    LAYOUT_PROPOSE(14, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
     LAYOUT_PROPOSE_REJECT(15, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-    LAYOUT_COMMITTED(16, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
+    LAYOUT_COMMITTED(16, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
     LAYOUT_QUERY(17, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-    LAYOUT_BOOTSTRAP(18, TypeToken.of(LayoutMsg.class), LayoutServer.class),
+    LAYOUT_BOOTSTRAP(18, TypeToken.of(LayoutMsg.class), LayoutServer.class, true),
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
 
     // Sequencer Messages

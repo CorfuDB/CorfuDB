@@ -7,11 +7,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.util.serializer.SerializerType;
+import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.io.File;
@@ -24,12 +26,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -41,7 +38,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public class RollingLog extends AbstractLocalLog {
 
-    private final Map<Long, FileHandle> channelMap;
+    private Map<Long, FileHandle> channelMap;
 
     public RollingLog(long start, long end, String path, boolean sync) {
         super(start, end, path, sync);
@@ -258,20 +255,23 @@ public class RollingLog extends AbstractLocalLog {
     @Data
     class FileHandle {
         final AtomicLong filePointer;
-        final FileChannel channel;
-        final Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
-        @Getter(lazy = true)
-        private final MappedByteBuffer byteBuffer = getMappedBuffer();
+        @NonNull
+        private FileChannel channel;
+        private Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        private MappedByteBuffer byteBuffer;
 
         public ByteBuffer getMapForRegion(int offset, int size) {
-            ByteBuffer o = getByteBuffer().duplicate();
+            if (byteBuffer == null) {
+                byteBuffer = getMappedBuffer();
+            }
+            ByteBuffer o = byteBuffer.duplicate();
             o.position(offset);
             return o.slice();
         }
 
         private MappedByteBuffer getMappedBuffer() {
             try {
-                return channel.map(FileChannel.MapMode.READ_WRITE, 0L, Integer.MAX_VALUE);
+                return channel.map(FileChannel.MapMode.READ_WRITE, 0L, LogUnitServer.maxLogFileSize);
             } catch (IOException ie) {
                 log.error("Failed to map buffer for channel.");
                 throw new RuntimeException(ie);
@@ -309,4 +309,29 @@ public class RollingLog extends AbstractLocalLog {
             return b;
         }
     }
+
+    public void close() {
+        Iterator<Long> it = channelMap.keySet().iterator();
+        while (it.hasNext()) {
+            Long key = it.next();
+            FileHandle fh = channelMap.get(key);
+            try {
+                fh.getChannel().close();
+                fh.channel = null;
+                fh.knownAddresses = null;
+                fh.byteBuffer = null;
+                // We need to call System.gc() to force the unmapping of the file.
+                // Without unmapping, the file remains open & leaks space. {sadpanda}
+                //
+                // OS X + HFS+ makes an additional hassle because HFS+ doesn't support
+                // sparse files, so if the mapping is 2GB, then the OS will write 2GB
+                // of data at unmap time, whether we like it or not.
+                System.gc();
+            } catch (IOException e) {
+                log.warn("Error closing fh {}: {}", fh.toString(), e.toString());
+            }
+        }
+        channelMap = new HashMap<>();
+    }
+
 }

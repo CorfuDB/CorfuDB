@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -50,10 +51,18 @@ public class SequencerServer extends AbstractServer {
     @Getter
     long epoch;
     AtomicLong globalIndex;
+
     /**
      * The file channel.
      */
-    FileChannel fc;
+    private FileChannel fc;
+    private Object fcLock = new Object();
+
+    /**
+     * Our options
+     */
+    private Map<String, Object> opts;
+
     /**
      * A simple map of the most recently issued token for any given stream.
      */
@@ -67,42 +76,42 @@ public class SequencerServer extends AbstractServer {
         lastIssuedMap = new ConcurrentHashMap<>();
         lastLocalOffsetMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
+        this.opts = opts;
 
         try {
             if (!(Boolean) opts.get("--memory")) {
-                fc = FileChannel.open(FileSystems.getDefault().getPath(opts.get("--log-path")
-                                + File.separator + "sequencer_checkpoint"),
-                        EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
-                                StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+                synchronized (fcLock) {
+                    open_fc();
+                }
                 // schedule checkpointing.
                 scheduler.scheduleAtFixedRate(this::checkpointState,
                         Utils.parseLong(opts.get("--checkpoint")),
                         Utils.parseLong(opts.get("--checkpoint")),
                         TimeUnit.SECONDS);
             }
+            reboot();
 
-            long newIndex = Utils.parseLong(opts.get("--initial-token"));
-            if (newIndex == -1) {
-                if (!(Boolean) opts.get("--memory")) {
-                    ByteBuffer b = ByteBuffer.allocate((int) fc.size());
-                    fc.read(b);
-                    if (fc.size() >= 8) {
-                        globalIndex.set(b.getLong(0));
-                    } else {
-                        log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
-                        globalIndex.set(0);
-                    }
-                } else {
-                    log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
-                    globalIndex.set(0);
-                }
-            } else {
-                globalIndex.set(newIndex);
-            }
             log.info("Sequencer initial token set to {}", globalIndex.get());
         } catch (Exception ex) {
             log.warn("Exception parsing initial token, default to 0.", ex);
+            ex.printStackTrace();
         }
+    }
+
+    private void open_fc() {
+        try {
+            fc = FileChannel.open(make_checkpoint_path(),
+                    EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
+                            StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+        } catch (IOException e) {
+            log.warn("Error opening " + make_checkpoint_path() + ": " + e);
+            fc = null;
+        }
+    }
+
+    private java.nio.file.Path make_checkpoint_path() {
+        return FileSystems.getDefault().getPath(opts.get("--log-path")
+                + File.separator + "sequencer_checkpoint");
     }
 
     /**
@@ -113,12 +122,16 @@ public class SequencerServer extends AbstractServer {
         long checkpointAddress = globalIndex.get();
         b.putLong(globalIndex.get());
         b.flip();
-        try {
-            fc.write(b, 0L);
-            fc.force(true);
-            log.debug("Sequencer state successfully checkpointed at {}", checkpointAddress);
-        } catch (IOException ie) {
-            log.warn("Sequencer checkpoint failed due to exception", ie);
+        synchronized (fcLock) {
+            if (fc != null) {
+                try {
+                    fc.write(b, 0L);
+                    fc.force(true);
+                    log.debug("Sequencer state successfully checkpointed at {}", checkpointAddress);
+                } catch (IOException ie) {
+                    log.warn("Sequencer checkpoint failed due to exception", ie);
+                }
+            }
         }
     }
 
@@ -228,7 +241,47 @@ public class SequencerServer extends AbstractServer {
 
     @Override
     public void reset() {
-        globalIndex.set(0L);
+        if (fc != null) {
+            synchronized (fcLock) {
+                try { fc.close(); } catch (IOException e) { /* Not a fatal problem, right? */ }
+                try {
+                    Files.delete(make_checkpoint_path());
+                } catch (IOException e) {
+                    log.warn("Error deleting " + make_checkpoint_path() + ":" + e);
+                }
+                open_fc();
+            }
+        }
+        reboot();
+    }
+
+    @Override
+    public void reboot() {
+        lastIssuedMap = new ConcurrentHashMap<>();
+        globalIndex = new AtomicLong();
+        long newIndex = Utils.parseLong(opts.get("--initial-token"));
+        if (newIndex == -1) {
+            if (!(Boolean) opts.get("--memory")) {
+                try {
+                    ByteBuffer b = ByteBuffer.allocate((int) fc.size());
+                    fc.read(b);
+                    if (fc.size() >= 8) {
+                        globalIndex.set(b.getLong(0));
+                    } else {
+                        log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
+                        globalIndex.set(0);
+                    }
+                } catch (IOException e) {
+                    log.warn("Reboot to zero.  Sequencer checkpoint read & parse: " + e);
+                    globalIndex.set(0);
+                }
+            } else {
+                log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
+                globalIndex.set(0);
+            }
+        } else {
+            globalIndex.set(newIndex);
+        }
     }
 
     /**
@@ -239,7 +292,9 @@ public class SequencerServer extends AbstractServer {
         try {
             scheduler.shutdownNow();
             checkpointState();
-            fc.close();
+            synchronized (fcLock) {
+                if (fc != null) fc.close();
+            }
         } catch (IOException ie) {
             log.warn("Error checkpointing server during shutdown!", ie);
         }
