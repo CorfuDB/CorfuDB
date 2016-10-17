@@ -172,7 +172,6 @@ public class corfu_smrobject implements ICmdlet {
             try {
                 ret = m.invoke(o, splitz);
             } catch (WrongEpochException we) {
-                System.err.printf("correctEpoch A: %d\n", we.getCorrectEpoch());
                 rt.getLayoutView();
                 try {
                     Thread.sleep((i * i) * 10);
@@ -200,11 +199,8 @@ public class corfu_smrobject implements ICmdlet {
                     continue;
                 } else if (e.getCause().getClass() == WrongEpochException.class) {
                     WrongEpochException we = (WrongEpochException) e.getCause();
-                    System.err.printf("correctEpoch B: %d\n", we.getCorrectEpoch());
                     LayoutView qq = rt.getLayoutView();
-                    System.err.printf("qq epoch = %d\n", qq.getLayout().getEpoch());
                     AddressSpaceView yy = rt.getAddressSpaceView();
-                    System.err.printf("yy foo = %s\n", yy.getCurrentLayout().toString());
                     try {
                         Thread.sleep((i * i) * 10);
                     } catch (InterruptedException ie) {

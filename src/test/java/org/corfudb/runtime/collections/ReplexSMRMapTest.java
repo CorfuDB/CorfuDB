@@ -29,8 +29,6 @@ public class ReplexSMRMapTest extends SMRMapTest {
         newLayout.getSegment(0L).setReplexes(Collections.singletonList(
                 new Layout.LayoutStripe(Collections.singletonList(defaultConfigurationString))));
         newLayout.setEpoch(1);
-        System.err.printf("\n\n\nREPLEX LAYOUT:\n%s\n\n", newLayout.toString());
-        System.err.printf("\n\n\nREPLEX JSON:\n%s\n\n", newLayout.asJSONString());
         r.getLayoutView().committed(0L, newLayout);
         r.invalidateLayout();
     }
