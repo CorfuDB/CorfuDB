@@ -200,55 +200,60 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
     public void start(long c) {
         shutdown = false;
-        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-            final AtomicInteger threadNum = new AtomicInteger(0);
+        if (workerGroup == null
+                || workerGroup.isShutdown()
+                || !channel.isOpen()
+                ) {
+            workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+                final AtomicInteger threadNum = new AtomicInteger(0);
 
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("worker-" + threadNum.getAndIncrement());
-                t.setDaemon(true);
-                return t;
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r);
+                    t.setName("worker-" + threadNum.getAndIncrement());
+                    t.setDaemon(true);
+                    return t;
+                }
+            });
+
+            ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
+
+                final AtomicInteger threadNum = new AtomicInteger(0);
+
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r);
+                    t.setName(this.getClass().getName() + "event-" + threadNum.getAndIncrement());
+                    t.setDaemon(true);
+                    return t;
+                }
+            });
+
+
+            Bootstrap b = new Bootstrap();
+            b.group(workerGroup);
+            b.channel(NioSocketChannel.class);
+            b.option(ChannelOption.SO_KEEPALIVE, true);
+            b.option(ChannelOption.SO_REUSEADDR, true);
+            b.option(ChannelOption.TCP_NODELAY, true);
+            NettyClientRouter router = this;
+            b.handler(new ChannelInitializer<SocketChannel>() {
+                @Override
+                public void initChannel(SocketChannel ch) throws Exception {
+                    ch.pipeline().addLast(new LengthFieldPrepender(4));
+                    ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+                    ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
+                    ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
+                    ch.pipeline().addLast(ee, router);
+                }
+            });
+
+            try {
+                connectChannel(b, c);
+            } catch (Exception e) {
+                throw new NetworkException(e.getClass().getSimpleName() +
+                        " connecting to endpoint", host + ":" + port, e);
             }
-        });
-
-        ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new ThreadFactory() {
-
-            final AtomicInteger threadNum = new AtomicInteger(0);
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName(this.getClass().getName() + "event-" + threadNum.getAndIncrement());
-                t.setDaemon(true);
-                return t;
-            }
-        });
-
-
-        Bootstrap b = new Bootstrap();
-        b.group(workerGroup);
-        b.channel(NioSocketChannel.class);
-        b.option(ChannelOption.SO_KEEPALIVE, true);
-        b.option(ChannelOption.SO_REUSEADDR, true);
-        b.option(ChannelOption.TCP_NODELAY, true);
-        NettyClientRouter router = this;
-        b.handler(new ChannelInitializer<SocketChannel>() {
-            @Override
-            public void initChannel(SocketChannel ch) throws Exception {
-                ch.pipeline().addLast(new LengthFieldPrepender(4));
-                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
-                ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
-                ch.pipeline().addLast(ee, router);
-            }
-        });
-
-        try {
-            connectChannel(b, c);
-        } catch (Exception e) {
-            throw new NetworkException(e.getClass().getSimpleName() +
-                    " connecting to endpoint", host + ":" + port, e);
         }
     }
 

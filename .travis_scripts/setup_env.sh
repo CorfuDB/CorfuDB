@@ -2,7 +2,7 @@
 
 echo -e "Setting up project environment"
 
-mvn -N io.takari:maven:wrapper -Dmaven=3.3.3
+mvn -N io.takari:maven:wrapper -Dmaven=3.3.9
 
 # replace SNAPSHOT with actual version
 export PROJECT_VERSION="$(mvn exec:exec -Dexec.executable="echo" \

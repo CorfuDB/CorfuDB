@@ -87,9 +87,10 @@ public class NettyCommTest extends AbstractCorfuTest {
         int port = findRandomOpenPort();
 
         NettyServerData d = new NettyServerData(port);
-        NettyClientRouter ncr = new NettyClientRouter("localhost", port);
+        NettyClientRouter ncr = null;
         try {
             d.bootstrapServer();
+            ncr = new NettyClientRouter("localhost", port);
             ncr.addClient(new BaseClient());
             ncr.start();
             actionFn.runTest(ncr, d);
@@ -98,7 +99,7 @@ public class NettyCommTest extends AbstractCorfuTest {
             throw ex;
         } finally {
             try {
-                ncr.stop();
+                if (ncr != null) {ncr.stop();}
             } catch (Exception ex) {
                 log.warn("Error shutting down client...", ex);
             }
