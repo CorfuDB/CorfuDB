@@ -73,8 +73,6 @@ public class SequencerServer extends AbstractServer {
 
     public SequencerServer(ServerContext serverContext) {
         Map<String, Object> opts = serverContext.getServerConfig();
-        lastIssuedMap = new ConcurrentHashMap<>();
-        lastLocalOffsetMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
         this.opts = opts;
 
@@ -258,6 +256,7 @@ public class SequencerServer extends AbstractServer {
     @Override
     public void reboot() {
         lastIssuedMap = new ConcurrentHashMap<>();
+        lastLocalOffsetMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
         long newIndex = Utils.parseLong(opts.get("--initial-token"));
         if (newIndex == -1) {
