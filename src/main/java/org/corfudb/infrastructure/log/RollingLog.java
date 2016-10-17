@@ -43,6 +43,7 @@ public class RollingLog extends AbstractLocalLog {
     public RollingLog(long start, long end, String path, boolean sync) {
         super(start, end, path, sync);
         channelMap = new HashMap<>();
+        log.trace("RollingLog() this {}", this.toString());
     }
 
     /**
@@ -193,7 +194,7 @@ public class RollingLog extends AbstractLocalLog {
                     });
                 }
             } else {
-                throw new Exception("overwrite");
+                throw new Exception("overwrite in this " + this.toString());
             }
             log.info("Disk_write[{}]: Written to disk.", address);
         } catch (Exception e) {

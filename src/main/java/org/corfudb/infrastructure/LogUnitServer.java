@@ -204,7 +204,7 @@ public class LogUnitServer extends AbstractServer {
 
     public static long maxLogFileSize = Integer.MAX_VALUE;  // 2GB by default
 
-    private final ConcurrentHashMap<UUID, AbstractLocalLog> streamLogs = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<UUID, AbstractLocalLog> streamLogs = null;
 
     private AbstractLocalLog getLog(UUID stream) {
         if (stream == null) return localLog;
@@ -296,6 +296,7 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     public void reboot() {
+        log.info("reboot() LogUnitServer {} with opts {}", this.toString(), opts.toString());
         if ((Boolean) opts.get("--memory")) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). " +
                     "This should be run for testing purposes only. " +
@@ -305,13 +306,21 @@ public class LogUnitServer extends AbstractServer {
         } else {
             String logdir = opts.get("--log-path") + File.separator + "log";
             localLog = new RollingLog(0, Long.MAX_VALUE, logdir, (Boolean) opts.get("--sync"));
+            log.trace("reboot() LogUnitServer with logdir {} localLog {}", logdir, localLog.toString());
         }
 
         if (dataCache != null) {
+            log.info("reboot() dataCache mapping");
             /** Free all references */
-            dataCache.asMap().values().parallelStream()
-                    .map(m -> m.getData().release());
+            dataCache.asMap().values().stream()
+                    .map(m -> { log.trace("reboot() release {} data {}", m.toString(), m.getData().toString()); return m.getData().release(); });
         }
+
+        if (streamLogs != null) {
+            streamLogs.values().stream()
+                    .map(m -> { log.trace("reboot() release streamLog {}", m.toString()); m.close(); return m; });
+        }
+        streamLogs = new ConcurrentHashMap<>();
 
         dataCache = Caffeine.<LogAddress,LogData>newBuilder()
                 .<LogAddress,LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().readableBytes())
