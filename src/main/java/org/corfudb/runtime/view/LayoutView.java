@@ -1,8 +1,8 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LayoutPrepareResponse;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -46,6 +46,7 @@ public class LayoutView extends AbstractView {
      * Drives the consensus protocol for persisting the new Layout.
      * TODO currently the code can drive only one Layout change. If it has to drive a previously incomplete round
      * TODO it will drop it's own set of changes. Need to revisit this.
+     *
      * @param layout
      * @param rank
      * @throws QuorumUnreachableException
@@ -55,18 +56,22 @@ public class LayoutView extends AbstractView {
     @SuppressWarnings("unchecked")
     public void updateLayout(Layout layout, long rank)
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
+        // Note this step is done because we have added the layout to the Epoch.
+        long epoch = layout.getEpoch();
+        Layout layoutToPropose = layout;
         //phase 1: prepare with a given rank.
-        Layout alreadyProposedLayout = prepare(rank);
-        Layout layoutToPropose = alreadyProposedLayout != null ? alreadyProposedLayout : layout;
+        Layout alreadyProposedLayout = prepare(epoch, rank, layout);
+        layoutToPropose = alreadyProposedLayout != null ? alreadyProposedLayout : layout;
         //phase 2: propose the new layout.
-        propose(rank, layoutToPropose);
+        propose(epoch, rank, layoutToPropose);
         //phase 3: commited
-        committed(rank, layoutToPropose);
+        committed(epoch, layoutToPropose);
     }
 
     /**
      * Sends prepare to the current layout and can proceed only if it is accepted by a quorum.
      * // TODO Gets stuck if quorum is not achieved. Need to figure out if this is the correct solution.
+     *
      * @param rank
      * @return
      * @throws QuorumUnreachableException
@@ -74,60 +79,57 @@ public class LayoutView extends AbstractView {
      * @throws WrongEpochException
      */
     @SuppressWarnings("unchecked")
-    public Layout prepare(long rank)
+    public Layout prepare(long epoch, long rank, Layout layout)
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
-        return layoutHelper(
-                (LayoutFunction<Layout, Layout, QuorumUnreachableException, OutrankedException, WrongEpochException, RuntimeException>)
-                        l -> {
-                            CompletableFuture<LayoutPrepareResponse>[] prepareList = l.getLayoutClientStream()
-                                    .map(x -> x.prepare(rank))
-                                    .toArray(CompletableFuture[]::new);
-                            LayoutPrepareResponse[] acceptList;
-                            long timeouts = 0L;
-                            while (true) {
-                                // do we still have enough for a quorum?
-                                if (prepareList.length < getQuorumNumber()) {
-                                    log.debug("Quorum unreachable, remaining={}, required={}", prepareList, getQuorumNumber());
-                                    throw new QuorumUnreachableException(prepareList.length, getQuorumNumber());
-                                }
 
-                                // wait for someone to complete.
-                                try {
-                                    CFUtils.getUninterruptibly(CompletableFuture.anyOf(prepareList),
-                                            OutrankedException.class, TimeoutException.class);
-                                } catch (TimeoutException te) {
-                                    timeouts++;
-                                }
+        CompletableFuture<LayoutPrepareResponse>[] prepareList = layout.getLayoutClientStream()
+                .map(x -> x.prepare(epoch, rank))
+                .toArray(CompletableFuture[]::new);
+        LayoutPrepareResponse[] acceptList;
+        long timeouts = 0L;
+        while (true) {
+            // do we still have enough for a quorum?
+            if (prepareList.length < getQuorumNumber()) {
+                log.debug("Quorum unreachable, remaining={}, required={}", prepareList, getQuorumNumber());
+                throw new QuorumUnreachableException(prepareList.length, getQuorumNumber());
+            }
 
-                                // remove errors.
-                                prepareList = stream(prepareList)
-                                        .filter(x -> !x.isCompletedExceptionally())
-                                        .toArray(CompletableFuture[]::new);
+            // wait for someone to complete.
+            try {
+                CFUtils.getUninterruptibly(CompletableFuture.anyOf(prepareList),
+                        OutrankedException.class, TimeoutException.class);
+            } catch (TimeoutException te) {
+                timeouts++;
+            }
 
-                                // count successes.
-                                acceptList = stream(prepareList)
-                                        .map(x -> x.getNow(new LayoutPrepareResponse(false, null)))
-                                        .filter(x -> x.isAccepted())
-                                        .toArray(LayoutPrepareResponse[]::new);
+            // remove errors.
+            prepareList = stream(prepareList)
+                    .filter(x -> !x.isCompletedExceptionally())
+                    .toArray(CompletableFuture[]::new);
+            // count successes.
+            acceptList = stream(prepareList)
+                    .map(x -> x.getNow(null))
+                    .filter(x -> x != null)
+                    .toArray(LayoutPrepareResponse[]::new);
 
-                                log.debug("Successful responses={}, needed={}, timeouts={}", acceptList.length, getQuorumNumber(), timeouts);
+            log.debug("Successful responses={}, needed={}, timeouts={}", acceptList.length, getQuorumNumber(), timeouts);
 
-                                if (acceptList.length >= getQuorumNumber()) {
-                                    break;
-                                }
-                            }
-                            // Return any layouts that have been proposed before.
-                            List<LayoutPrepareResponse> list = Arrays.stream(acceptList)
-                                    .filter(x -> x.getLayout() != null)
-                                    .limit(1)
-                                    .collect(Collectors.toList());
-                            return !list.isEmpty() ? list.get(0).getLayout() : null;
-                        });
+            if (acceptList.length >= getQuorumNumber()) {
+                break;
+            }
+        }
+        // Return any layouts that have been proposed before.
+        List<LayoutPrepareResponse> list = Arrays.stream(acceptList)
+                .filter(x -> x.getLayout() != null)
+                .limit(1)
+                .collect(Collectors.toList());
+        return !list.isEmpty() ? list.get(0).getLayout() : null;
     }
 
     /**
      * Proposes new layout to all the servers in the current layout.
      * // TODO Gets stuck if quorum is not achieved. Need to figure out if this is the correct solution.
+     *
      * @param rank
      * @param layout
      * @return
@@ -135,51 +137,47 @@ public class LayoutView extends AbstractView {
      * @throws OutrankedException
      */
     @SuppressWarnings("unchecked")
-    public Layout propose(long rank, Layout layout)
+    public Layout propose(long epoch, long rank, Layout layout)
             throws QuorumUnreachableException, OutrankedException {
-        return layoutHelper(
-                (LayoutFunction<Layout, Layout, QuorumUnreachableException, OutrankedException, WrongEpochException, RuntimeException>)
-                        l -> {
-                            CompletableFuture<Boolean>[] proposeList = l.getLayoutClientStream()
-                                    .map(x -> x.propose(rank, layout))
-                                    .toArray(CompletableFuture[]::new);
+        CompletableFuture<Boolean>[] proposeList = layout.getLayoutClientStream()
+                .map(x -> x.propose(epoch, rank, layout))
+                .toArray(CompletableFuture[]::new);
 
-                            long timeouts = 0L;
-                            while (true) {
-                                // do we still have enough for a quorum?
-                                if (proposeList.length < getQuorumNumber()) {
-                                    log.debug("Quorum unreachable, remaining={}, required={}", proposeList, getQuorumNumber());
-                                    throw new QuorumUnreachableException(proposeList.length, getQuorumNumber());
-                                }
+        long timeouts = 0L;
+        while (true) {
+            // do we still have enough for a quorum?
+            if (proposeList.length < getQuorumNumber()) {
+                log.debug("Quorum unreachable, remaining={}, required={}", proposeList, getQuorumNumber());
+                throw new QuorumUnreachableException(proposeList.length, getQuorumNumber());
+            }
 
-                                // wait for someone to complete.
-                                try {
-                                    CFUtils.getUninterruptibly(CompletableFuture.anyOf(proposeList),
-                                            OutrankedException.class, TimeoutException.class);
-                                } catch (TimeoutException te) {
-                                    timeouts++;
-                                }
+            // wait for someone to complete.
+            try {
+                CFUtils.getUninterruptibly(CompletableFuture.anyOf(proposeList),
+                        OutrankedException.class, TimeoutException.class);
+            } catch (TimeoutException te) {
+                timeouts++;
+            }
 
-                                // remove errors.
-                                proposeList = stream(proposeList)
-                                        .filter(x -> !x.isCompletedExceptionally())
-                                        .toArray(CompletableFuture[]::new);
+            // remove errors.
+            proposeList = stream(proposeList)
+                    .filter(x -> !x.isCompletedExceptionally())
+                    .toArray(CompletableFuture[]::new);
 
-                                // count successes.
-                                long count = stream(proposeList)
-                                        .map(x -> x.getNow(false))
-                                        .filter(x -> true)
-                                        .count();
+            // count successes.
+            long count = stream(proposeList)
+                    .map(x -> x.getNow(false))
+                    .filter(x -> true)
+                    .count();
 
-                                log.debug("Successful responses={}, needed={}, timeouts={}", count, getQuorumNumber(), timeouts);
+            log.debug("Successful responses={}, needed={}, timeouts={}", count, getQuorumNumber(), timeouts);
 
-                                if (count >= getQuorumNumber()) {
-                                    break;
-                                }
-                            }
+            if (count >= getQuorumNumber()) {
+                break;
+            }
+        }
 
-                            return layout;
-                        });
+        return layout;
     }
 
     /**
@@ -187,33 +185,28 @@ public class LayoutView extends AbstractView {
      * TODO Current policy is to send the committed layout once. Need to revisit this in order to drive the
      * TODO new layout to all the involved LayoutServers.
      * TODO The new layout servers are not bootstrapped and will reject committed messages. Need to fix this.
-     * @param rank
+     *
      * @param layout
      * @throws WrongEpochException
      */
-    public void committed(long rank, Layout layout)
+    public void committed(long epoch, Layout layout)
             throws WrongEpochException {
-        layoutHelper(
-                (LayoutFunction<Layout, Void, WrongEpochException, RuntimeException, RuntimeException, RuntimeException>)
-                        l -> {
-                            CompletableFuture<Boolean>[] commitList = layout.getLayoutClientStream()
-                                    .map(x -> x.committed(rank, layout))
-                                    .toArray(CompletableFuture[]::new);
+        CompletableFuture<Boolean>[] commitList = layout.getLayoutClientStream()
+                .map(x -> x.committed(epoch, layout))
+                .toArray(CompletableFuture[]::new);
 
-                            int timeouts = 0;
-                            int responses = 0;
-                            while (responses < commitList.length) {
-                                // wait for someone to complete.
-                                try {
-                                    CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
-                                            WrongEpochException.class, TimeoutException.class);
-                                } catch (TimeoutException te) {
-                                    timeouts++;
-                                }
-                                responses++;
-                                log.debug("Successful responses={}, timeouts={}", responses, timeouts);
-                            }
-                            return null;
-                        });
+        int timeouts = 0;
+        int responses = 0;
+        while (responses < commitList.length) {
+            // wait for someone to complete.
+            try {
+                CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
+                        WrongEpochException.class, TimeoutException.class);
+            } catch (TimeoutException te) {
+                timeouts++;
+            }
+            responses++;
+            log.debug("Successful responses={}, timeouts={}", responses, timeouts);
+        }
     }
 }

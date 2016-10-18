@@ -29,7 +29,7 @@ public class ReplexSMRMapTest extends SMRMapTest {
         newLayout.getSegment(0L).setReplexes(Collections.singletonList(
                 new Layout.LayoutStripe(Collections.singletonList(defaultConfigurationString))));
         newLayout.setEpoch(1);
-        r.getLayoutView().committed(0L, newLayout);
+        r.getLayoutView().committed(1, newLayout);
         r.invalidateLayout();
     }
 }

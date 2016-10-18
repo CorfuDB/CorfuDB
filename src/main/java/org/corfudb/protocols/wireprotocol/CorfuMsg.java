@@ -82,6 +82,7 @@ public class CorfuMsg {
         long epoch = buffer.readLong();
         CorfuMsgType message = typeMap.get(buffer.readByte());
         CorfuMsg msg = message.getConstructor().construct();
+
         msg.clientID = clientID;
         msg.requestID = requestID;
         msg.epoch = epoch;

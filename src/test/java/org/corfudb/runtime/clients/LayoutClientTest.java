@@ -79,70 +79,77 @@ public class LayoutClientTest extends AbstractClientTest {
     @Test
     public void prepareRejectsLowerRanks()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
+        Layout layout = TestLayoutBuilder.single(9000);
+        assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
-
-        assertThat(client.prepare(10L).get().isAccepted())
+        long epoch = layout.getEpoch();
+        assertThat(client.prepare(epoch, 10L).get() != null)
                 .isEqualTo(true);
 
         assertThatThrownBy(() -> {
-            client.prepare(5L).get();
+            client.prepare(epoch, 5L).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
         assertThatThrownBy(() -> {
-            client.prepare(2L).get();
+            client.prepare(epoch, 2L).get();
         }).hasCauseInstanceOf(OutrankedException.class);
     }
 
     @Test
     public void proposeRejectsLowerRanks()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
+        Layout layout = TestLayoutBuilder.single(9000);
+        long epoch = layout.getEpoch();
+        assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get().isAccepted())
+        assertThat(client.prepare(epoch, 10L).get() != null)
                 .isEqualTo(true);
 
         assertThatThrownBy(() -> {
-            client.propose(5L, TestLayoutBuilder.single(9000)).get();
+            client.propose(epoch, 5L, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
-        assertThat(client.propose(10L, TestLayoutBuilder.single(9000)).get())
+        assertThat(client.propose(epoch, 10L, TestLayoutBuilder.single(9000)).get())
                 .isEqualTo(true);
     }
 
     @Test
     public void proposeRejectsAlreadyProposed()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
+        Layout layout = TestLayoutBuilder.single(9000);
+        long epoch = layout.getEpoch();
+        assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get().isAccepted())
+        assertThat(client.prepare(epoch, 10L).get() != null)
                 .isEqualTo(true);
 
-        client.propose(10L, TestLayoutBuilder.single(9000)).get();
+        client.propose(epoch, 10L, layout).get();
 
         assertThatThrownBy(() -> {
-            client.propose(5L, TestLayoutBuilder.single(9000)).get();
+            client.propose(epoch, 5L, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
         assertThatThrownBy(() -> {
-            client.propose(10L, TestLayoutBuilder.single(9000)).get();
+            client.propose(epoch, 10L, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
     }
 
     @Test
     public void commitReturnsAck()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
-                .isEqualTo(true);
-
-        assertThat(client.prepare(10L).get().isAccepted())
-                .isEqualTo(true);
-
         Layout layout = TestLayoutBuilder.single(9000);
-        layout.setEpoch(777);
-        assertThat(client.committed(10L, layout).get())
+        long epoch = layout.getEpoch();
+        assertThat(client.bootstrapLayout(layout).get())
+                .isEqualTo(true);
+
+        assertThat(client.prepare(epoch, 10L).get() != null)
+                .isEqualTo(true);
+        long newEpoch = 777;
+        layout.setEpoch(newEpoch);
+
+        assertThat(client.committed(newEpoch, layout).get())
                 .isEqualTo(true);
     }
 

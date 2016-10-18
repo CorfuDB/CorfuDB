@@ -81,7 +81,7 @@ public class Layout implements Cloneable {
      */
     public void moveServersToEpoch()
             throws WrongEpochException {
-        log.debug("Requested move of servers to new epoch {}", epoch);
+        log.debug("Requested move of servers to new epoch {} servers are {}", epoch, getAllServers());
         // Collect a list of all servers in the system.
         getAllServers().stream()
                 .map(runtime::getRouter)
