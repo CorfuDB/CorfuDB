@@ -79,32 +79,34 @@ public class LayoutClientTest extends AbstractClientTest {
     @Test
     public void prepareRejectsLowerRanks()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
+        Layout layout = TestLayoutBuilder.single(9000);
+        assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get().isAccepted())
+        assertThat(client.prepare(layout, 10L).get().isAccepted())
                 .isEqualTo(true);
 
         assertThatThrownBy(() -> {
-            client.prepare(5L).get();
+            client.prepare(layout, 5L).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
         assertThatThrownBy(() -> {
-            client.prepare(2L).get();
+            client.prepare(layout, 2L).get();
         }).hasCauseInstanceOf(OutrankedException.class);
     }
 
     @Test
     public void proposeRejectsLowerRanks()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
+        Layout layout = TestLayoutBuilder.single(9000);
+        assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get().isAccepted())
+        assertThat(client.prepare(layout, 10L).get().isAccepted())
                 .isEqualTo(true);
 
         assertThatThrownBy(() -> {
-            client.propose(5L, TestLayoutBuilder.single(9000)).get();
+            client.propose(5L, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
         assertThat(client.propose(10L, TestLayoutBuilder.single(9000)).get())
@@ -114,34 +116,36 @@ public class LayoutClientTest extends AbstractClientTest {
     @Test
     public void proposeRejectsAlreadyProposed()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
+        Layout layout = TestLayoutBuilder.single(9000);
+        assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(10L).get().isAccepted())
+        assertThat(client.prepare(layout, 10L).get().isAccepted())
                 .isEqualTo(true);
 
-        client.propose(10L, TestLayoutBuilder.single(9000)).get();
+        client.propose(10L, layout).get();
 
         assertThatThrownBy(() -> {
-            client.propose(5L, TestLayoutBuilder.single(9000)).get();
+            client.propose(5L, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
         assertThatThrownBy(() -> {
-            client.propose(10L, TestLayoutBuilder.single(9000)).get();
+            client.propose(10L, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
     }
 
     @Test
     public void commitReturnsAck()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(9000)).get())
-                .isEqualTo(true);
-
-        assertThat(client.prepare(10L).get().isAccepted())
-                .isEqualTo(true);
-
         Layout layout = TestLayoutBuilder.single(9000);
+        assertThat(client.bootstrapLayout(layout).get())
+                .isEqualTo(true);
+
+        assertThat(client.prepare(layout, 10L).get().isAccepted())
+                .isEqualTo(true);
+
         layout.setEpoch(777);
+
         assertThat(client.committed(10L, layout).get())
                 .isEqualTo(true);
     }

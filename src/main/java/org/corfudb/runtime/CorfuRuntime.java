@@ -17,10 +17,7 @@ import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
@@ -64,7 +61,7 @@ public class CorfuRuntime {
     /**
      * A list of known layout servers.
      */
-    public List<String> layoutServers;
+    private List<String> layoutServers;
 
     //endregion Address Space Options
     /**
@@ -272,9 +269,12 @@ public class CorfuRuntime {
      */
     private CompletableFuture<Layout> fetchLayout() {
         return CompletableFuture.<Layout>supplyAsync(() -> {
+
             while (true) {
+                List<String> layoutServersCopy =  layoutServers.stream().collect(Collectors.toList());
+                Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServers) {
+                for (String s : layoutServersCopy) {
                     log.debug("Trying connection to layout server {}", s);
                     try {
                         IClientRouter router = getRouter(s);
@@ -287,10 +287,16 @@ public class CorfuRuntime {
                         // completely constructed and initialized. For example, assigning this.layout = l
                         // before setting the layout's runtime can result in other threads trying to access a layout
                         // with  a null runtime.
+                        //FIXME Synchronization START
+                        // We are updating multiple variables and we need the update to be synchronized across all variables.
+                        // Since the variable layoutServers is used only locally within the class it is acceptable
+                        // (at least the code on 10/13/2016 does not have issues)
+                        // but setEpoch of routers needs to be synchronized as those variables are not local.
+                        l.getAllServers().stream().map(getRouterFunction).forEach(x -> x.setEpoch(l.getEpoch()));
+                        layoutServers.retainAll(l.getLayoutServers());
                         layout = layoutFuture;
-                        l.getAllServers().stream()
-                                .map(getRouterFunction)
-                                .forEach(x -> x.setEpoch(l.getEpoch()));
+                        //FIXME Synchronization END
+
                         log.debug("Layout server {} responded with layout {}", s, l);
                         return l;
                     } catch (Exception e) {
@@ -301,6 +307,7 @@ public class CorfuRuntime {
                 try {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
         });

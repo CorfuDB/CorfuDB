@@ -70,8 +70,8 @@ public enum CorfuMsgType {
     ERROR_REPLEX_OVERWRITE(56, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
 
     // EXTRA CODES
-    LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class),
-    LAYOUT_PREPARE_ACK(61, TypeToken.of(LayoutRankMsg.class), LayoutServer.class);
+    LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
+    LAYOUT_PREPARE_ACK(61, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true);
 
 
     public final int type;

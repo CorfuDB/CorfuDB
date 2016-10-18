@@ -13,6 +13,7 @@ import org.junit.Before;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -111,7 +112,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param config    The configuration to use for the server.
      */
     public void addServer(int port, Map<String, Object> config) {
-        addServer(port, new ServerContext(config, new TestServerRouter()));
+        addServer(port, new ServerContext(config, new TestServerRouter(port)));
     }
 
     /**
@@ -128,7 +129,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port      The port to use.
      */
     public void addServer(int port) {
-        new TestServer(new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter()).setPort(port).build()).addToTest(port, this);
+        new TestServer(new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(port)).setPort(port).build()).addToTest(port, this);
     }
 
 
@@ -210,6 +211,16 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             addSingleServer(9000);
         }
         return getRuntime().connect();
+    }
+
+    /**
+     * Create a runtime based on the provided layout.
+     * @param l
+     * @return
+     */
+    public CorfuRuntime getRuntime(Layout l) {
+        String cfg = l.getLayoutServers().stream().collect(Collectors.joining(","));
+        return new CorfuRuntime(cfg);
     }
 
     /** Clear installed rules for the default runtime.

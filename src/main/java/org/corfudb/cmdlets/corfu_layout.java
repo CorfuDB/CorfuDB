@@ -164,9 +164,12 @@ public class corfu_layout implements ICmdlet {
             }
         } else if ((Boolean) opts.get("prepare")) {
             long rank = Long.parseLong((String) opts.get("--rank"));
+            Layout l = getLayout(opts);
             log.debug("Prepare with new rank={}", rank);
             try {
-                if (router.getClient(LayoutClient.class).prepare(rank).get().isAccepted()) {
+                if (router.getClient(LayoutClient.class).prepare(l, rank).get().isAccepted()) {
+                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                            .reset().fg(GREEN).a(": ACK"));
                     return cmdlet.ok();
                 } else {
                     return cmdlet.err("ACK");

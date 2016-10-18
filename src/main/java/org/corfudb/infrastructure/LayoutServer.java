@@ -277,10 +277,6 @@ public class LayoutServer extends AbstractServer {
                 (Boolean) opts.get("--single") && (Boolean) opts.get("--memory")) {
             reset_part_2();
         }
-        Layout currentLayout = getCurrentLayout();
-        if (currentLayout != null) {
-            setServerEpoch(currentLayout.getEpoch());
-        }
     }
 
     // Helper Methods
@@ -289,12 +285,15 @@ public class LayoutServer extends AbstractServer {
         if (msg.getEpoch() <= serverContext.getServerEpoch()) {
             r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsgType.LAYOUT_RESPONSE));
             return;
+        } else {
+            // else the client is somehow ahead of the server.
+            //TODO figure out a strategy to deal with this situation
+            // Very odd ... if we don't send any response here, we hang the OTP mailbox thread.
+            long serverEpoch = serverContext.getServerEpoch();
+            r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
+            log.warn("Message Epoch {} ahead of Server epoch {}", msg.getEpoch(), serverContext.getServerConfig());
         }
-        // else the client is somehow ahead of the server.
-        //TODO figure out a strategy to deal with this situation
-        // Very odd ... if we don't send any response here, we hang the OTP mailbox thread.
-        long serverEpoch = serverContext.getServerEpoch();
-        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
+
     }
 
     /**
@@ -345,16 +344,19 @@ public class LayoutServer extends AbstractServer {
     // TODO this can work under a separate lock for this step as it does not change the global components
     public synchronized void handleMessageLayoutPrepare(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         // Check if the prepare is for the correct epoch
+        Layout prepareLayout = msg.getLayout();
+        Rank prepareRank = getRank(msg);
+        Rank phase1Rank = getPhase1Rank();
+        Layout proposedLayout = getProposedLayout();
+
         long serverEpoch = getServerEpoch();
-        if (msg.getEpoch() != serverEpoch) {
+        if (prepareLayout.getEpoch() != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getEpoch(), serverEpoch, msg);
             return;
         }
 
-        Rank prepareRank = getRank(msg);
-        Rank phase1Rank = getPhase1Rank();
-        Layout proposedLayout = getProposedLayout();
+
         // This is a prepare. If the rank is less than or equal to the phase 1 rank, reject.
 
         if (phase1Rank != null && prepareRank.compareTo(phase1Rank) <= 0) {
@@ -376,17 +378,18 @@ public class LayoutServer extends AbstractServer {
      */
     public synchronized void handleMessageLayoutPropose(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         // Check if the propose is for the correct epoch
-        long serverEpoch = getServerEpoch();
-        if (msg.getEpoch() != serverEpoch) {
-            r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
-            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getEpoch(), serverEpoch, msg);
-            return;
-        }
-
         Rank proposeRank = getRank(msg);
         Layout proposeLayout = msg.getLayout();
         Rank phase1Rank = getPhase1Rank();
         Rank phase2Rank = getPhase2Rank();
+
+        long serverEpoch = getServerEpoch();
+
+        if (proposeLayout.getEpoch() != serverEpoch) {
+            r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", proposeLayout.getEpoch(), serverEpoch, msg);
+            return;
+        }
         // This is a propose. If no prepare, reject.
         if (phase1Rank == null) {
             log.debug("Rejected phase 2 propose of rank={}, phase1Rank=none", proposeRank);
@@ -424,12 +427,14 @@ public class LayoutServer extends AbstractServer {
     // TODO How do we handle holes in history if let in layout commit message. Maybe we have a hole filling process
     // TODO how do reject the older epoch commits, should it be an explicit NACK.
     public synchronized void handleMessageLayoutCommit(LayoutRankMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        Layout commitLayout = msg.getLayout();
+
         long serverEpoch = getServerEpoch();
-        if(msg.getLayout().getEpoch() <= serverEpoch) {
+        if(commitLayout.getEpoch() < serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }
-        Layout commitLayout = msg.getLayout();
+
         setCurrentLayout(commitLayout);
         setServerEpoch(commitLayout.getEpoch());
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
