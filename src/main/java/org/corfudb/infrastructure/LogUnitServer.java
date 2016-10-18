@@ -258,8 +258,8 @@ public class LogUnitServer extends AbstractServer {
 
             // Today I learned that the globbing done by newDirectoryStream does not
             // handle any subdirectory "*/*" matching.  :-(
-            try {
-                DirectoryStream<Path> stream = Files.newDirectoryStream(dir1, "*-*-*-*-*");
+            // Use try-with-resources to avoid leaking file descriptor on the directory.
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir1, "*-*-*-*-*")) {
                 for (Path entry : stream) {
                     report = entry.toString();
                     log.trace("Deleting recursively " + report);
@@ -279,10 +279,12 @@ public class LogUnitServer extends AbstractServer {
     }
 
     private void delete_all_matching_files(Path dir, String glob) throws IOException {
-        DirectoryStream<Path> stream = Files.newDirectoryStream(dir, glob);
-        for (Path entry : stream) {
-            log.trace("Deleting " + entry);
-            Files.delete(entry);
+        // Use try-with-resources to avoid leaking file descriptor on the directory.
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, glob)) {
+            for (Path entry : stream) {
+                log.trace("Deleting " + entry);
+                Files.delete(entry);
+            }
         }
     }
 
