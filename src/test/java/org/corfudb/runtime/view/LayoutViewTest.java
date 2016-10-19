@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -99,17 +100,15 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToSegment()
                 .addToLayout()
                 .build();
-        r.invalidateLayout();
+        l2.setRuntime(r);
+        r.getLayoutView().updateLayout(l2, 1L);
+
         try {
             r.getLayoutView().updateLayout(l2, 1L);
+        } catch (WrongEpochException we) {
+            assertThat(we.getCorrectEpoch()).isEqualTo(2);
         } finally {
-            // System.err.printf("\nYo5zzzz\n");
-        }
-        try {
-            // Bug: second attempt to call updateLayout() with same layout fails.  Bug fixed?
-            r.getLayoutView().updateLayout(l2, 1L);
-        } finally {
-            // System.err.printf("\nYo 7\n");
+            // System.err.printf("\nYo 7zzzz\n");
         }
     }
 
