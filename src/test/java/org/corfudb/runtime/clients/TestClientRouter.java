@@ -152,6 +152,8 @@ public class TestClientRouter implements IClientRouter {
         // Set the message fields.
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
+        message.setEpoch(epoch);
+
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
@@ -185,6 +187,8 @@ public class TestClientRouter implements IClientRouter {
         final long thisRequest = requestID.getAndIncrement();
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
+        message.setEpoch(epoch);
+
         // Evaluate rules.
         if (rules.stream()
                 .map(x -> x.evaluate(message, this))
