@@ -278,16 +278,17 @@ public class corfu_layout implements ICmdlet {
             // the lower-level Paxos protocol.
 
             LayoutView lv;
+            CorfuRuntime rt = configureRuntimeAddrPort(opts);
             if ((lv = layoutViews.get(addressportPrefix + addressport)) == null) {
                 log.trace("Creating LayoutView for {} ++ {}:{}", addressportPrefix, port);
                 System.out.printf("opts = %s\n", opts.toString());
-                CorfuRuntime rt = configureRuntimeAddrPort(opts);
                 lv = new LayoutView(rt);
                 layoutViews.putIfAbsent(addressportPrefix + addressport, lv);
             }
             lv = layoutViews.get(addressportPrefix + addressport);
 
             Layout l = getLayout(opts);
+            l.setRuntime(rt);
             long rank = Long.parseLong((String) opts.get("--rank"));
             log.debug("update_layout with layout={}, rank={}, ", l, rank);
             try {
@@ -295,7 +296,6 @@ public class corfu_layout implements ICmdlet {
                 // If we don't, then we'll get a NullPointerException deep in the
                 // guts of LayoutView.committed() which tries to use the layout's
                 // runtime member.
-                CorfuRuntime rt = configureRuntimeAddrPort(opts);
                 log.trace("Specify (2) router's epoch as " + clientEpoch);
                 rt.getRouter((String) opts.get("<address>:<port>")).setEpoch(clientEpoch);
                 l.setRuntime(rt);
@@ -303,12 +303,12 @@ public class corfu_layout implements ICmdlet {
                 return cmdlet.ok();
             } catch (WrongEpochException we) {
                 return cmdlet.err("Exception (1) during updateLayout",
-                        we.getCause().toString(),
+                        we.getCause() == null ? "null cause" : we.getCause().toString(),
                         "correctEpoch: " + we.getCorrectEpoch(),
                         "stack: " + ExceptionUtils.getStackTrace(we));
             } catch (OutrankedException oe) {
                 return cmdlet.err("Exception (2) during updateLayout",
-                    oe.getCause().toString(),
+                    oe.getCause() == null ? "null cause" : oe.getCause().toString(),
                     "newRank: " + Long.toString(oe.getNewRank()),
                     "stack: " + ExceptionUtils.getStackTrace(oe));
             } catch (QuorumUnreachableException ue) {
