@@ -68,10 +68,8 @@ public abstract class AbstractView {
             throws A, B, C, D {
         while (true) {
             try {
-                System.err.printf("\nYo ZZ %s derp layoutHelper with %s\n", java.lang.Thread.currentThread().getName(), runtime.layout.get().toString());
                 return function.apply(runtime.layout.get());
             } catch (RuntimeException re) {
-                System.err.printf("\nYo ZZ derp layoutHelper re %s\n", re.toString());
                 if (re.getCause() instanceof TimeoutException) {
                     log.warn("Timeout executing remote call, invalidating view and retrying in {}s", runtime.retryRate);
                     runtime.invalidateLayout();
@@ -83,7 +81,6 @@ public abstract class AbstractView {
                     throw re;
                 }
             } catch (InterruptedException | ExecutionException ex) {
-                System.err.printf("\nYo ZZ derp layoutHelper re %s\n", ex.toString());
                 log.warn("Error executing remote call, invalidating view and retrying in {}s", runtime.retryRate, ex);
                 runtime.invalidateLayout();
                 try {

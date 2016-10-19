@@ -57,21 +57,15 @@ public class LayoutView extends AbstractView {
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
         runtime.invalidateLayout();
         Layout lNow = runtime.getLayoutView().getLayout();
-        System.err.printf("updateLayout: lNow = %s\n", lNow.toString());
 
         //phase 1: prepare with a given rank.
         Layout alreadyProposedLayout = prepare(rank);
-        System.err.printf("updateLayout: 2\n");
         Layout layoutToPropose = alreadyProposedLayout != null ? alreadyProposedLayout : layout;
-        System.err.printf("updateLayout: 3\n");
         //phase 2: propose the new layout.
         propose(rank, layoutToPropose);
-        System.err.printf("updateLayout: 4\n");
 
         //phase 3: commited
         committed(rank, layoutToPropose);
-        System.err.printf("updateLayout: 5\n");
-
     }
 
     /**
@@ -86,7 +80,6 @@ public class LayoutView extends AbstractView {
     @SuppressWarnings("unchecked")
     public Layout prepare(long rank)
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
-        System.err.printf("\nYo ZZ derp gonna go prepare here!\n");
         return layoutHelper(
                 (LayoutFunction<Layout, Layout, QuorumUnreachableException, OutrankedException, WrongEpochException, RuntimeException>)
                         l -> {

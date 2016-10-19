@@ -316,7 +316,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * or a timeout in the case there is no response.
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
-        System.err.printf("\nYo ZZ derp epoch = %d of message %s\n", epoch, message.toString());
         if (!connected_p) {
             log.trace("Disconnected endpoint " + host + ":" + port);
             throw new NetworkException("Disconnected endpoint", host + ":" + port);
