@@ -281,7 +281,6 @@ public class corfu_layout implements ICmdlet {
             CorfuRuntime rt = configureRuntimeAddrPort(opts);
             if ((lv = layoutViews.get(addressportPrefix + addressport)) == null) {
                 log.trace("Creating LayoutView for {} ++ {}:{}", addressportPrefix, port);
-                System.out.printf("opts = %s\n", opts.toString());
                 lv = new LayoutView(rt);
                 layoutViews.putIfAbsent(addressportPrefix + addressport, lv);
             }

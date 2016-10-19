@@ -312,7 +312,7 @@ public class CorfuRuntime {
      */
     public synchronized CorfuRuntime connect() {
         if (layout == null) {
-            log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
+            log.trace("Connecting to Corfu server instance, layout servers={}", layoutServers);
             // Fetch the current layout and save the future.
             layout = fetchLayout();
             try {

@@ -55,8 +55,7 @@ public class LayoutView extends AbstractView {
     @SuppressWarnings("unchecked")
     public void updateLayout(Layout layout, long rank)
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
-        runtime.invalidateLayout();
-        Layout lNow = runtime.getLayoutView().getLayout();
+        runtime.invalidateLayout(); // Force our runtime to adopt latest epoch prior to updating
 
         //phase 1: prepare with a given rank.
         Layout alreadyProposedLayout = prepare(rank);

@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -23,7 +22,6 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public abstract class AbstractView {
 
-    @Getter
     CorfuRuntime runtime;
 
     public AbstractView(CorfuRuntime runtime) {

@@ -348,7 +348,6 @@ public class LayoutServer extends AbstractServer {
         long serverEpoch = getServerEpoch();
         if (msg.getEpoch() != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
-            System.err.printf("Incoming message with wrong epoch, got %d, expected %d, message was: %s\n", msg.getEpoch(), serverEpoch, msg.toString());
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getEpoch(), serverEpoch, msg);
             return;
         }
