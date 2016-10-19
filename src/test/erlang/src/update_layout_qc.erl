@@ -32,7 +32,7 @@
 -endif.
 
 -define(QUICK_MBOX, qc_java:quick_mbox_endpoint()).
--define(TIMEOUT, 2*1000).
+-define(TIMEOUT, 10*1000).
 
 -include("qc_java.hrl").
 
@@ -43,7 +43,8 @@
           endpoint :: string(),
           reg_names :: list(),
           committed_layout="",
-          committed_epoch=0    % Must match server's epoch after reset()!
+          committed_epoch=0,   % Must match server's epoch after reset()!
+          attempted_rank=0
          }).
 
 -record(layout, {
@@ -134,18 +135,23 @@ postcondition2(#state{committed_layout=CommittedLayout,
             %% equal to the committed epoch.
             CorrectEpoch == CommittedEpoch
             andalso
-            C_Epoch =< CommittedEpoch;
+            C_Epoch /= CommittedEpoch;
+            %% old: C_Epoch =< CommittedEpoch;
         Else ->
             io:format(user, "Q ~p\n", [Else]),
             false
     end;
-postcondition2(#state{committed_epoch=CommittedEpoch},
-              {call,_,update_layout,[_Mbox, _EP, Layout, _Rank]}, RetStr) ->
+postcondition2(#state{committed_epoch=CommittedEpoch, attempted_rank=ARank},
+              {call,_,update_layout,[_Mbox, _EP, Layout, Rank]}, RetStr) ->
     case termify(RetStr) of
         ok ->
+            Rank > ARank
+            andalso
             Layout#layout.epoch > CommittedEpoch;
         {error, wrongEpochException, CorrectEpoch} ->
             CorrectEpoch == CommittedEpoch;
+        {error, outrankedException, NewRank} ->
+            NewRank >= ARank;
         Else ->
             io:format("OUCH ~p\n", [{update_layout, Else}]),
             false
@@ -153,13 +159,16 @@ postcondition2(#state{committed_epoch=CommittedEpoch},
 
 next_state(S, _V, {call,_,reset,[_Mbox, _EP]}) ->
     S#state{reset_p=true};
-next_state(S=#state{committed_epoch=CommittedEpoch}, _V,
-           {call,_,update_layout,[_Mbox, _EP, Layout, _Rank]}) ->
-    if Layout#layout.epoch > CommittedEpoch ->
+next_state(S=#state{committed_epoch=CommittedEpoch, attempted_rank=ARank}, _V,
+           {call,_,update_layout,[_Mbox, _EP, Layout, Rank]}) ->
+    if Rank > ARank
+       andalso
+       Layout#layout.epoch > CommittedEpoch ->
             S#state{committed_layout=Layout,
-                    committed_epoch=Layout#layout.epoch};
+                    committed_epoch=Layout#layout.epoch,
+                    attempted_rank=0};
        true ->
-            S
+            S#state{attempted_rank=erlang:max(Rank, ARank)}
     end;
 next_state(S, _V, _NoSideEffectCall) ->
     S.
@@ -302,7 +311,7 @@ prop_parallel(MoreCmds, Mboxes, Endpoint) ->
                            non_empty(
                              parallel_commands(?MODULE,
                                       initial_state(Mboxes, Endpoint)))),
-            ?WRAP_ALWAYS(10,
+            ?WRAP_ALWAYS(1,
             begin
                 {H, S_or_Hs, Res} = run_parallel_commands(?MODULE, Cmds),
                 aggregate(command_names(Cmds),
