@@ -303,12 +303,12 @@ public class corfu_layout implements ICmdlet {
                 return cmdlet.ok();
             } catch (WrongEpochException we) {
                 return cmdlet.err("Exception (1) during updateLayout",
-                        we.getCause() == null ? "null cause" : we.getCause().toString(),
+                        we.getCause() == null ? "WrongEpochException" : we.getCause().toString(),
                         "correctEpoch: " + we.getCorrectEpoch(),
                         "stack: " + ExceptionUtils.getStackTrace(we));
             } catch (OutrankedException oe) {
                 return cmdlet.err("Exception (2) during updateLayout",
-                    oe.getCause() == null ? "null cause" : oe.getCause().toString(),
+                    oe.getCause() == null ? "OutrankedException" : oe.getCause().toString(),
                     "newRank: " + Long.toString(oe.getNewRank()),
                     "stack: " + ExceptionUtils.getStackTrace(oe));
             } catch (QuorumUnreachableException ue) {

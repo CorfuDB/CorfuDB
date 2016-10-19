@@ -214,7 +214,7 @@ termify(["OK", JSON_perhaps]) ->
 termify(["ERROR", "NACK"]) ->
     {error, nack};
 termify(["ERROR", "Exception " ++ _E1, E2|Rest] = _L) ->
-    case string:str(E2, "OutrankedException:") of
+    case string:str(E2, "OutrankedException") of
         I when I > 0 ->
             NewRank = parse_newrank(Rest),
             {error, outrankedException, NewRank};
