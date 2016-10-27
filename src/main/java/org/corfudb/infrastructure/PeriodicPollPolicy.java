@@ -23,7 +23,6 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class PeriodicPollPolicy implements IFailureDetectorPolicy {
 
-    private CorfuRuntime corfuRuntime;
     /**
      * list of layout servers that we monitor.
      */
@@ -60,10 +59,9 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
     @Override
     public void executePolicy(Layout layout, CorfuRuntime corfuRuntime) {
 
-        this.corfuRuntime = corfuRuntime;
         String[] allServers = layout.getAllServers().stream().toArray(String[]::new);
         // Performs setup and checks for changes in the layout to update failure count
-        checkForChanges(allServers);
+        checkForChanges(allServers, corfuRuntime);
         // Perform polling of all servers in historyServers
         pollOnce();
 
@@ -73,9 +71,10 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
      * Checks for changes in the layout.
      * Fetches corfu runtime router to be able to ping a node.
      *
-     * @param allServers List of all servers in teh layout
+     * @param allServers   List of all servers in teh layout
+     * @param corfuRuntime A connected corfu runtime
      */
-    private void checkForChanges(String[] allServers) {
+    private void checkForChanges(String[] allServers, CorfuRuntime corfuRuntime) {
 
         Arrays.sort(allServers);
 
