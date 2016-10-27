@@ -17,20 +17,9 @@ import java.util.Set;
 public class LayoutWorkflowManager {
 
     /**
-     * Layout Servers to be modified.
+     * Updated layout
      */
-    private List<String> layoutServers;
-
-    /**
-     * Layout Segments to be modified.
-     */
-    private List<Layout.LayoutSegment> layoutSegments;
-
-    /**
-     * Sequencer Servers to be modified.
-     */
-    private List<String> sequencerServers;
-
+    private Layout layout;
     /**
      * Stores the epoch of the layout.
      */
@@ -41,10 +30,8 @@ public class LayoutWorkflowManager {
      *
      * @param layout Base layout to be modified.
      */
-    public LayoutWorkflowManager(Layout layout) {
-        this.layoutServers = new ArrayList<>(layout.getLayoutServers());
-        this.layoutSegments = new ArrayList<>(layout.getSegments());
-        this.sequencerServers = new ArrayList<>(layout.getSequencers());
+    public LayoutWorkflowManager(Layout layout) throws CloneNotSupportedException {
+        this.layout = (Layout) layout.clone();
         this.epoch = layout.getEpoch();
     }
 
@@ -57,6 +44,8 @@ public class LayoutWorkflowManager {
      */
     public LayoutWorkflowManager removeLayoutServer(String endpoint)
             throws LayoutModificationException {
+
+        List<String> layoutServers = layout.getLayoutServers();
         for (int i = 0; i < layoutServers.size(); i++) {
             if (layoutServers.get(i).equals(endpoint)) {
                 if (layoutServers.size() == 1) {
@@ -81,18 +70,18 @@ public class LayoutWorkflowManager {
 
         // Not making changes in the original list in case of exceptions.
         // Copy the list so that we can have an atomic result and no partial removals
-        List<String> layoutServers = new ArrayList<>(this.layoutServers);
-        for (int i = 0; i < layoutServers.size(); ) {
-            if (endpoints.contains(layoutServers.get(i))) {
-                if (layoutServers.size() == 1) {
+        List<String> modifiedLayoutServers = new ArrayList<>(layout.getLayoutServers());
+        for (int i = 0; i < modifiedLayoutServers.size(); ) {
+            if (endpoints.contains(modifiedLayoutServers.get(i))) {
+                if (modifiedLayoutServers.size() == 1) {
                     throw new LayoutModificationException("Attempting to remove all layout servers.");
                 }
-                layoutServers.remove(i);
+                modifiedLayoutServers.remove(i);
             } else {
                 i++;
             }
         }
-        this.layoutServers = layoutServers;
+        layout.getLayoutServers().retainAll(modifiedLayoutServers);
         return this;
     }
 
@@ -105,6 +94,8 @@ public class LayoutWorkflowManager {
      */
     public LayoutWorkflowManager removeSequencerServer(String endpoint)
             throws LayoutModificationException {
+
+        List<String> sequencerServers = layout.getSequencers();
         for (int i = 0; i < sequencerServers.size(); i++) {
             if (sequencerServers.get(i).equals(endpoint)) {
                 if (sequencerServers.size() == 1) {
@@ -129,20 +120,19 @@ public class LayoutWorkflowManager {
 
         // Not making changes in the original list in case of exceptions.
         // Copy the list so that we can have an atomic result and no partial removals
-        List<String> sequencerServers = new ArrayList<>(this.sequencerServers);
-
-        for (int i = 0; i < sequencerServers.size(); ) {
-            String sequencerServer = sequencerServers.get(i);
+        List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
+        for (int i = 0; i < modifiedSequencerServers.size(); ) {
+            String sequencerServer = modifiedSequencerServers.get(i);
             if (endpoints.contains(sequencerServer)) {
-                if (sequencerServers.size() == 1) {
+                if (modifiedSequencerServers.size() == 1) {
                     throw new LayoutModificationException("Attempting to remove all sequencers.");
                 }
-                sequencerServers.remove(i);
+                modifiedSequencerServers.remove(i);
             } else {
                 i++;
             }
         }
-        this.sequencerServers = sequencerServers;
+        layout.getSequencers().retainAll(modifiedSequencerServers);
         return this;
     }
 
@@ -156,6 +146,7 @@ public class LayoutWorkflowManager {
     public LayoutWorkflowManager removeLogunitServer(String endpoint)
             throws LayoutModificationException {
 
+        List<Layout.LayoutSegment> layoutSegments = layout.getSegments();
         for (Layout.LayoutSegment layoutSegment : layoutSegments) {
             for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
 
@@ -190,9 +181,9 @@ public class LayoutWorkflowManager {
 
         // Not making changes in the original list in case of exceptions.
         // Copy the list so that we can have an atomic result and no partial removals
-        List<Layout.LayoutSegment> layoutSegments = new ArrayList<>(this.layoutSegments);
+        List<Layout.LayoutSegment> modifiedLayoutSegments = new ArrayList<>(layout.getSegments());
 
-        for (Layout.LayoutSegment layoutSegment : layoutSegments) {
+        for (Layout.LayoutSegment layoutSegment : modifiedLayoutSegments) {
             for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
 
                 List<String> loguintServers = layoutStripe.getLogServers();
@@ -211,7 +202,7 @@ public class LayoutWorkflowManager {
                 }
             }
         }
-        this.layoutSegments = layoutSegments;
+        layout.getSegments().retainAll(modifiedLayoutSegments);
         return this;
     }
 
@@ -222,9 +213,9 @@ public class LayoutWorkflowManager {
      */
     public Layout build() {
         return new Layout(
-                this.layoutServers,
-                this.sequencerServers,
-                this.layoutSegments,
+                layout.getLayoutServers(),
+                layout.getSequencers(),
+                layout.getSegments(),
                 this.epoch);
     }
 
