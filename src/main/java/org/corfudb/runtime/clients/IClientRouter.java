@@ -121,4 +121,25 @@ public interface IClientRouter {
      * Set the current epoch.
      */
     void setEpoch(long newEpoch);
+
+    /**
+     * Set the Connect timeout
+     *
+     * @param timeoutConnect timeout for connection in milliseconds.
+     */
+    void setTimeoutConnect(long timeoutConnect);
+
+    /**
+     * Set the retry timeout
+     *
+     * @param timeoutRetry timeout to make a retry in milliseconds.
+     */
+    void setTimeoutRetry(long timeoutRetry);
+
+    /**
+     * Set the Response timeout
+     *
+     * @param timeoutResponse Response timeout in milliseconds.
+     */
+    void setTimeoutResponse(long timeoutResponse);
 }
