@@ -5,7 +5,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Range;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
@@ -25,7 +24,6 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -90,9 +88,6 @@ public class LogUnitServer extends AbstractServer {
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
                 return;
             } else {
-                // In replex stream mode, we allocate a local token first, and use it as the
-                // stream address.
-                //Long token = getLog(msg.getPayload().getStreamID()).getToken(1);
                 for (UUID streamID : msg.getPayload().getStreamAddresses().keySet()) {
                     dataCache.put(new LogAddress(msg.getPayload().getStreamAddresses().get(streamID), streamID),
                             msg.getPayload().getData());
@@ -139,11 +134,6 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type=CorfuMsgType.STREAM_TOKEN)
-    private void stream_token(CorfuPayloadMsg<UUID> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        r.sendResponse(ctx, msg, CorfuMsgType.STREAM_TOKEN_RESPONSE.payloadMsg(getLog(msg.getPayload()).getToken(0)));
-    }
-
     @ServerHandler(type=CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log read: {} {}", msg.getPayload().getStreamID(), msg.getPayload().getRange());
@@ -163,19 +153,19 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type=CorfuMsgType.GC_INTERVAL)
-    private void gc_interval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         gcRetry.setRetryInterval(msg.getPayload());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type=CorfuMsgType.FORCE_GC)
-    private void force_gc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         gcThread.interrupt();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type=CorfuMsgType.FILL_HOLE)
-    private void fill_hole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         dataCache.get(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), x -> LogData.HOLE);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
@@ -203,22 +193,22 @@ public class LogUnitServer extends AbstractServer {
     LoadingCache<LogAddress, LogData> dataCache;
     long maxCacheSize;
 
-    private AbstractLocalLog localLog;
+    private StreamLog localLog;
 
     public static long maxLogFileSize = Integer.MAX_VALUE;  // 2GB by default
 
-    private final ConcurrentHashMap<UUID, AbstractLocalLog> streamLogs = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, StreamLog> streamLogs = new ConcurrentHashMap<>();
 
-    private AbstractLocalLog getLog(UUID stream) {
+    private StreamLog getLog(UUID stream) {
         if (stream == null) return localLog;
         else {
             return streamLogs.computeIfAbsent(stream, x-> {
                 if ((Boolean) opts.get("--memory")) {
-                    return new InMemoryLog(0, Long.MAX_VALUE);
+                    return new InMemoryStreamLog();
                 }
                 else {
                     String logdir = opts.get("--log-path") + File.separator + "log" + File.separator + stream;
-                    return new RollingLog(0, Long.MAX_VALUE, logdir, (Boolean) opts.get("--sync"));
+                    return new StreamLogFiles(logdir, (Boolean) opts.get("--sync"));
                 }
             });
         }
@@ -235,7 +225,7 @@ public class LogUnitServer extends AbstractServer {
             // support sparse files.  If we use the default 2GB file size, then
             // every time that a sparse file is closed, the OS will always
             // write 2GB of data to disk.  {sadpanda}  Use this static class
-            // var to signal to RollingLog to use a smaller file size.
+            // var to signal to StreamLogFiles to use a smaller file size.
             maxLogFileSize = 4_000_000;
         }
 
@@ -263,7 +253,6 @@ public class LogUnitServer extends AbstractServer {
                 try (DirectoryStream<Path> stream =
                              Files.newDirectoryStream(dir, pfx + "*")) {
                     for (Path entry : stream) {
-                        // System.out.println("Deleting " + entry);
                         Files.delete(entry);
                     }
                 } catch (IOException e) {
@@ -281,10 +270,10 @@ public class LogUnitServer extends AbstractServer {
                     "This should be run for testing purposes only. " +
                     "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
                     "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
-            localLog = new InMemoryLog(0, Long.MAX_VALUE);
+            localLog = new InMemoryStreamLog();
         } else {
             String logdir = opts.get("--log-path") + File.separator + "log";
-            localLog = new RollingLog(0, Long.MAX_VALUE, logdir, (Boolean) opts.get("--sync"));
+            localLog = new StreamLogFiles(logdir, (Boolean) opts.get("--sync"));
         }
 
         if (dataCache != null) {
@@ -306,10 +295,10 @@ public class LogUnitServer extends AbstractServer {
                         //TODO - persisted entries should be of type PersistedLogData
                         //if (!entry.isPersisted) { //don't persist an entry twice.
                         if (address.getStream() != null) {
-                            getLog(address.getStream()).write(address.getAddress(), entry);
+                            getLog(address.getStream()).append(address.getAddress(), entry);
                         }
                         else {
-                            localLog.write(address.getAddress(), entry);
+                            localLog.append(address.getAddress(), entry);
                         }
                         //    }
                     }

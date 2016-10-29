@@ -56,8 +56,6 @@ public enum CorfuMsgType {
     FORCE_GC(35, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     GC_INTERVAL(36, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
-    STREAM_TOKEN(38, new TypeToken<CorfuPayloadMsg<UUID>>() {}, LogUnitServer.class),
-    STREAM_TOKEN_RESPONSE(39, new TypeToken<CorfuPayloadMsg<Long>>() {}, LogUnitServer.class),
     COMMIT(40, new TypeToken<CorfuPayloadMsg<CommitRequest>>() {}, LogUnitServer.class),
 
     // Logging Unit Error Codes
