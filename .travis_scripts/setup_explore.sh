@@ -18,3 +18,17 @@ kerl install 17.5 ~/e
 . ~/e/activate
 which erl
 erl -s erlang halt
+
+## Alright, try TravisCI plan B.
+mkdir ~/otp
+cd ~/otp
+wget https://s3.amazonaws.com/travis-otp-releases/ubuntu/12.04/erlang-17.5-x86_64.tar.bz2
+tar xf ~/otp/erlang-17.5-x86_64.tar.bz2 -C ~/otp
+. ~/otp/17.5/activate
+which erl
+erl -s erlang halt
+
+cd ~/otp
+git clone git://github.com/manopapad/proper.git
+cd proper
+make
