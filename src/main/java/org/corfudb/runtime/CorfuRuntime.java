@@ -91,6 +91,13 @@ public class CorfuRuntime {
      */
     @Getter
     public boolean backpointersDisabled = false;
+    /**
+     * To prevent livelock condition in fetchLayout.
+     * Notifies that the runtime is no longer used
+     * and retries to fetch the layout can be stopped.
+     */
+    @Getter
+    public volatile boolean isShutdown = false;
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
@@ -301,6 +308,9 @@ public class CorfuRuntime {
                         return l;
                     } catch (Exception e) {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
+                        if (isShutdown) {
+                            return null;
+                        }
                     }
                 }
                 log.warn("Couldn't connect to any layout servers, retrying in {}s.", retryRate);
@@ -308,6 +318,9 @@ public class CorfuRuntime {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
+                    if (isShutdown) {
+                        return null;
+                    }
                 }
             }
         });

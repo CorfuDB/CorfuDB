@@ -54,6 +54,9 @@ public class CorfuServer {
     @Getter
     private static LogUnitServer logUnitServer;
 
+    @Getter
+    private static ManagementServer managementServer;
+
     public static boolean serverRunning_p = false;
 
     /**
@@ -180,6 +183,8 @@ public class CorfuServer {
         router.addServer(layoutServer);
         logUnitServer = new LogUnitServer(serverContext);
         router.addServer(logUnitServer);
+        managementServer = new ManagementServer(serverContext, layoutServer);
+        router.addServer(managementServer);
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.

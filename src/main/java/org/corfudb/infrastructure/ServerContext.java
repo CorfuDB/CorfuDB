@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Collections;
@@ -34,10 +35,15 @@ public class ServerContext {
     @Getter
     private IServerRouter serverRouter;
 
+    @Getter
+    @Setter
+    private IFailureDetectorPolicy failureDetectorPolicy;
+
     public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
         this.serverConfig = serverConfig;
         resetDataStore();
         this.serverRouter = serverRouter;
+        this.failureDetectorPolicy = new PeriodicPollPolicy();
     }
 
     public void resetDataStore() {
