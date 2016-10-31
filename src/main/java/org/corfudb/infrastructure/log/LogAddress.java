@@ -1,12 +1,9 @@
 package org.corfudb.infrastructure.log;
 
-import io.netty.buffer.ByteBuf;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.RequiredArgsConstructor;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
-
 import java.util.UUID;
+
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Created by mwei on 8/8/16.

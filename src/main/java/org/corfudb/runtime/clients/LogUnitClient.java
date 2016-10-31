@@ -147,19 +147,6 @@ public class LogUnitClient implements IClient {
         return msg.getPayload();
     }
 
-    /** Handle a STREAM_TOKEN_RESPONSE message.
-     *
-     * @param msg   Incoming Message
-     * @param ctx   Context
-     * @param r     Router
-     */
-    @ClientHandler(type=CorfuMsgType.STREAM_TOKEN_RESPONSE)
-    private static Object handleStreamTokenResponse(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IClientRouter r)
-    {
-        return msg.getPayload();
-    }
-
-
     /**
      * Asynchronously write to the logging unit.
      *
@@ -279,15 +266,6 @@ public class LogUnitClient implements IClient {
      */
     public void forceCompact() {
         router.sendMessage(CorfuMsgType.FORCE_COMPACT.msg());
-    }
-
-    /**
-     * Get the current token for a stream.
-     *
-     * @param stream The current token for the stream.
-     */
-    public CompletableFuture<Long> getStreamToken(UUID stream) {
-        return router.sendMessageAndGetCompletable(CorfuMsgType.STREAM_TOKEN.payloadMsg(stream));
     }
 
     /**

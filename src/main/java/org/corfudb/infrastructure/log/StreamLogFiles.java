@@ -1,48 +1,69 @@
 package org.corfudb.infrastructure.log;
 
-import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
-import com.google.common.collect.TreeRangeSet;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import lombok.Data;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.util.serializer.SerializerType;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.util.serializer.Serializers;
-
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.*;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
+import lombok.Data;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.ICorfuPayload;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.infrastructure.LogUnitServer;
+
 /**
- * Created by maithem on 7/15/16.
+ * This class implements the StreamLog by persisting the stream log in multiple files.
+ *
+ * StreamLogFiles:
+ *     Header StreamEntryList
+ *
+ * Header: {@LogFileHeader}
+ *
+ * StreamEntryList: StreamEntry || StreamEntry StreamEntryList
+ *
+ * StreamEntryList: {
+ *     checksum 4 bytes
+ *     StreamEntry Size 4 bytes
+ *     StreamEntry arbitrary number of bytes
+ * }
+ *
+ * Created by maithem on 10/28/16.
  */
 
 @Slf4j
-public class RollingLog extends AbstractLocalLog {
+public class StreamLogFiles implements StreamLog {
 
+    private String logDir;
+    private boolean sync;
     private Map<Long, FileHandle> channelMap;
 
-    public RollingLog(long start, long end, String path, boolean sync) {
-        super(start, end, path, sync);
+    public StreamLogFiles(String logDir, boolean sync) {
+        this.logDir = logDir;
+        this.sync = sync;
         channelMap = new HashMap<>();
+    }
+
+    @Override
+    public void sync(){
+        //Todo(Maithem) flush writes to disk.
     }
 
     /**
@@ -115,7 +136,7 @@ public class RollingLog extends AbstractLocalLog {
      */
     private FileHandle getChannelForAddress(long address) {
         return channelMap.computeIfAbsent(address / 10000, a -> {
-            String filePath = logPathDir + a.toString();
+            String filePath = logDir + a.toString();
             try {
                 FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
                         EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
@@ -136,17 +157,6 @@ public class RollingLog extends AbstractLocalLog {
         });
     }
 
-    /**
-     * Read the header for a Corfu log file.
-     *
-     * @param fc The filechannel to use.
-     * @throws IOException
-     */
-    private LogFileHeader readHeader(FileChannel fc)
-            throws IOException {
-        ByteBuffer b = fc.map(FileChannel.MapMode.READ_ONLY, 0, 64);
-        return LogFileHeader.fromBuffer(b);
-    }
 
     /**
      * Write a log entry to a file.
@@ -173,7 +183,8 @@ public class RollingLog extends AbstractLocalLog {
         o.flip();
     }
 
-    protected void backendWrite(long address, LogData entry) {
+    @Override
+    public void append(long address, LogData entry) {
         //evict the data by getting the next pointer.
         try {
             // make sure the entry doesn't currently exist...
@@ -202,7 +213,8 @@ public class RollingLog extends AbstractLocalLog {
         }
     }
 
-    protected LogData backendRead(long address) {
+    @Override
+    public LogData read(long address) {
         try {
             return readEntry(getChannelForAddress(address), address);
         } catch (Exception e) {
@@ -210,47 +222,6 @@ public class RollingLog extends AbstractLocalLog {
         }
     }
 
-    protected void initializeLog() {
-
-    }
-
-    protected void backendStreamWrite(UUID streamID, RangeSet<Long> entry){
-        try {
-            ByteBuf b = Unpooled.buffer();
-            Set<Range<Long>> rs = entry.asRanges();
-            b.writeInt(rs.size());
-            for (Range<Long> r : rs) {
-                Serializers
-                        .getSerializer(SerializerType.JAVA).serialize(r, b);
-            }
-            com.google.common.io.Files.write(b.array(), new File(logPathDir + File.pathSeparator +
-                    "stream" + streamID.toString()));
-        } catch (IOException ie) {
-            log.error("IOException while writing stream range for stream {}", streamID);
-        }
-    }
-
-    protected RangeSet<Long> backendStreamRead(UUID streamID) {
-        Path p = FileSystems.getDefault().getPath(logPathDir + File.pathSeparator +
-                "stream" + streamID.toString());
-        try {
-            if (Files.exists(p)) {
-                ByteBuf b = Unpooled.wrappedBuffer(Files.readAllBytes(p));
-                RangeSet rs = TreeRangeSet.create();
-                int ranges = b.readInt();
-                for (int i = 0; i < ranges; i++) {
-                    Range r = (Range) Serializers
-                            .getSerializer(SerializerType.JAVA).deserialize(b, null);
-                    rs.add(r);
-                }
-                return rs;
-            }
-        } catch (IOException ie) {
-            log.error("IO Exception reading from stream file {}", p);
-        }
-
-        return TreeRangeSet.create();
-    }
 
     @Data
     class FileHandle {
@@ -310,6 +281,7 @@ public class RollingLog extends AbstractLocalLog {
         }
     }
 
+    @Override
     public void close() {
         Iterator<Long> it = channelMap.keySet().iterator();
         while (it.hasNext()) {

@@ -1,23 +1,13 @@
 package org.corfudb.util;
 
-import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.InsnList;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
-import lombok.extern.slf4j.Slf4j;
-import net.bytebuddy.agent.ByteBuddyAgent;
-import net.bytebuddy.description.type.TypeDescription;
-import net.bytebuddy.dynamic.ClassFileLocator;
-
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.instrument.Instrumentation;
-import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -27,6 +17,28 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.hash.HashCode;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
+
+import jdk.internal.org.objectweb.asm.ClassReader;
+import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.InsnList;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
+import jdk.internal.org.objectweb.asm.util.Printer;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
+
+import lombok.extern.slf4j.Slf4j;
+
+import net.bytebuddy.agent.ByteBuddyAgent;
+import net.bytebuddy.description.type.TypeDescription;
+import net.bytebuddy.dynamic.ClassFileLocator;
+
 
 /**
  * Created by crossbach on 5/22/15.
@@ -75,7 +87,7 @@ public class Utils {
     /**
      * A fancy parser which parses suffixes.
      *
-     * @param toParse
+     * @param toParseObj
      * @return
      */
     public static long parseLong(final Object toParseObj) {
@@ -340,5 +352,11 @@ public class Utils {
             } catch (InterruptedException ie) {
             }
         }
+    }
+
+    public static Checksum getChecksum(byte[] bytes){
+        HashFunction hashFunction = Hashing.crc32c();
+        HashCode code = hashFunction.hashBytes(bytes);
+        return new BufferChecksum(code.asBytes());
     }
 }
