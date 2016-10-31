@@ -5,6 +5,9 @@ import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Utils;
 import org.docopt.Docopt;
@@ -16,6 +19,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -167,6 +171,13 @@ public class corfu_smrobject implements ICmdlet {
         for (int i = 0; i < 10; i++) {
             try {
                 ret = m.invoke(o, splitz);
+            } catch (WrongEpochException we) {
+                rt.getLayoutView();
+                try {
+                    Thread.sleep((i * i) * 10);
+                } catch (InterruptedException ie) {
+                }
+                continue;
             } catch (InvocationTargetException e) {
                 Throwable c = ExceptionUtils.getCause(e);
                 if (c.getClass() == org.corfudb.runtime.exceptions.NetworkException.class &&
@@ -175,7 +186,19 @@ public class corfu_smrobject implements ICmdlet {
                     // caused by a disconnection with the remote endpoint.  That kind
                     // of non-determinism is evil.  Just retry a few times via 'for' loop.
                     log.warn("WHOA, 'Disconnected endpoint', looping...\n");
-                    try { Thread.sleep(50); } catch (InterruptedException ie){};
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException ie) {
+                    }
+                    continue;
+                } else if (e.getCause().getClass() == WrongEpochException.class) {
+                    WrongEpochException we = (WrongEpochException) e.getCause();
+                    LayoutView qq = rt.getLayoutView();
+                    AddressSpaceView yy = rt.getAddressSpaceView();
+                    try {
+                        Thread.sleep((i * i) * 10);
+                    } catch (InterruptedException ie) {
+                    }
                     continue;
                 } else {
                     return cmdlet.err("exception", e.getClass().getSimpleName(),

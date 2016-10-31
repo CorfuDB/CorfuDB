@@ -22,10 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,10 +36,17 @@ import java.util.concurrent.atomic.AtomicLong;
 public class RollingLog extends AbstractLocalLog {
 
     private Map<Long, FileHandle> channelMap;
+    private String pathSeparator;
 
     public RollingLog(long start, long end, String path, boolean sync) {
         super(start, end, path, sync);
         channelMap = new HashMap<>();
+        if (File.pathSeparator.equals(":")) {
+            pathSeparator = "/";     // OS X ... use slash, please
+        } else {
+            pathSeparator = File.pathSeparator;
+        }
+        log.trace("RollingLog() this {}", this.toString());
     }
 
     /**
@@ -115,25 +119,36 @@ public class RollingLog extends AbstractLocalLog {
      */
     private FileHandle getChannelForAddress(long address) {
         return channelMap.computeIfAbsent(address / 10000, a -> {
-            String filePath = logPathDir + a.toString();
-            try {
-                FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
-                        EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
-                                StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
-
-                AtomicLong fp = new AtomicLong();
-                writeHeader(fc, fp, 1, 0);
-                log.info("Opened new log file at {}", filePath);
-                FileHandle fh = new FileHandle(fp, fc);
-                // The first time we open a file we should read to the end, to load the
-                // map of entries we already have.
-                readEntry(fh, -1);
-                return fh;
-            } catch (IOException e) {
-                log.error("Error opening file {}", a, e);
-                throw new RuntimeException(e);
-            }
+            String filePath = logPathDir + pathSeparator + a.toString();
+            return inner(filePath);
         });
+    }
+
+    private FileHandle inner(String filePath) throws RuntimeException {
+        FileHandle fh = null;
+        try {
+            FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
+                    EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
+                            StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+
+            AtomicLong fp = new AtomicLong();
+            writeHeader(fc, fp, 1, 0);
+            log.trace("Opened new log file at {}", filePath);
+            fh = new FileHandle(fp, fc);
+            // The first time we open a file we should read to the end, to load the
+            // map of entries we already have.
+            readEntry(fh, -1);
+        } catch (NoSuchFileException nsf) {
+            File dir = new File(logPathDir);
+            if (dir.mkdirs()) {
+                log.info("Created dir {}", logPathDir);
+                return inner(filePath);
+            }
+        } catch (IOException e) {
+            log.error("Error opening file {}", e);
+            throw new RuntimeException(e);
+        }
+        return fh;
     }
 
     /**
@@ -193,9 +208,9 @@ public class RollingLog extends AbstractLocalLog {
                     });
                 }
             } else {
-                throw new Exception("overwrite");
+                throw new Exception("overwrite in this " + this.toString());
             }
-            log.info("Disk_write[{}]: Written to disk.", address);
+            log.trace("Disk_write[{}]: Written to disk.", address);
         } catch (Exception e) {
             log.error("Disk_write[{}]: Exception", address, e);
             throw new RuntimeException(e);
@@ -211,7 +226,16 @@ public class RollingLog extends AbstractLocalLog {
     }
 
     protected void initializeLog() {
+        File serviceDir = new File(logPathDir);
 
+        if (!serviceDir.exists()) {
+            if (serviceDir.mkdirs()) {
+                log.trace("Created new rolling log service directory at {}.", serviceDir);
+            }
+        } else if (!serviceDir.isDirectory()) {
+            log.error("Rolling log service directory {} does not point to a directory. Aborting.", serviceDir);
+            throw new RuntimeException("Rolling log service directory must be a directory!");
+        }
     }
 
     protected void backendStreamWrite(UUID streamID, RangeSet<Long> entry){
@@ -223,7 +247,7 @@ public class RollingLog extends AbstractLocalLog {
                 Serializers
                         .getSerializer(SerializerType.JAVA).serialize(r, b);
             }
-            com.google.common.io.Files.write(b.array(), new File(logPathDir + File.pathSeparator +
+            com.google.common.io.Files.write(b.array(), new File(logPathDir + pathSeparator +
                     "stream" + streamID.toString()));
         } catch (IOException ie) {
             log.error("IOException while writing stream range for stream {}", streamID);
@@ -231,7 +255,7 @@ public class RollingLog extends AbstractLocalLog {
     }
 
     protected RangeSet<Long> backendStreamRead(UUID streamID) {
-        Path p = FileSystems.getDefault().getPath(logPathDir + File.pathSeparator +
+        Path p = FileSystems.getDefault().getPath(logPathDir + pathSeparator +
                 "stream" + streamID.toString());
         try {
             if (Files.exists(p)) {
@@ -315,6 +339,7 @@ public class RollingLog extends AbstractLocalLog {
         while (it.hasNext()) {
             Long key = it.next();
             FileHandle fh = channelMap.get(key);
+            log.trace("close(): channelMap({}) fh {}", key, fh.toString());
             try {
                 fh.getChannel().close();
                 fh.channel = null;

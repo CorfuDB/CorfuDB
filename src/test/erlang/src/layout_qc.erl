@@ -382,6 +382,8 @@ parse_correctepoch(["correctEpoch: " ++ NR|_]) ->
 parse_correctepoch([_|T]) ->
     parse_correctepoch(T).
 
+layout_to_json(Str) when is_list(Str) ->
+    Str;
 layout_to_json(#layout{ls=Ls, ss=Seqs, segs=Segs, epoch=Epoch}) ->
     "{\n  \"layoutServers\": " ++
         string_ify_list(Ls) ++

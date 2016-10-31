@@ -21,10 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.File;
 import java.lang.invoke.MethodHandles;
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -203,11 +200,11 @@ public class LogUnitServer extends AbstractServer {
     LoadingCache<LogAddress, LogData> dataCache;
     long maxCacheSize;
 
-    private AbstractLocalLog localLog;
+    private AbstractLocalLog localLog = null;
 
     public static long maxLogFileSize = Integer.MAX_VALUE;  // 2GB by default
 
-    private final ConcurrentHashMap<UUID, AbstractLocalLog> streamLogs = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<UUID, AbstractLocalLog> streamLogs = null;
 
     private AbstractLocalLog getLog(UUID stream) {
         if (stream == null) return localLog;
@@ -256,26 +253,48 @@ public class LogUnitServer extends AbstractServer {
         String d = serverContext.getDataStore().getLogDir();
         localLog.close();
         if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d);
-            String prefixes[] = new String[]{"log"};
+            Path dir1 = FileSystems.getDefault().getPath(d + "/log");
+            String report = "";
 
-            for (String pfx : prefixes) {
-                try (DirectoryStream<Path> stream =
-                             Files.newDirectoryStream(dir, pfx + "*")) {
-                    for (Path entry : stream) {
-                        // System.out.println("Deleting " + entry);
-                        Files.delete(entry);
-                    }
-                } catch (IOException e) {
-                    log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
+            // Today I learned that the globbing done by newDirectoryStream does not
+            // handle any subdirectory "*/*" matching.  :-(
+            // Use try-with-resources to avoid leaking file descriptor on the directory.
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir1, "*-*-*-*-*")) {
+                for (Path entry : stream) {
+                    report = entry.toString();
+                    log.trace("Deleting recursively " + report);
+                    delete_all_matching_files(entry, "*");
+                    Files.delete(entry);
                 }
+            } catch(IOException e){
+                log.error("reset: error deleting prefix " + report + ": " + e.toString());
+            }
+            try {
+                delete_all_matching_files(dir1, "*");
+            } catch(IOException e){
+                log.error("reset: error deleting prefix " + dir1 + "/*: " + e.toString());
             }
         }
         reboot();
     }
 
+    private void delete_all_matching_files(Path dir, String glob) throws IOException {
+        // Use try-with-resources to avoid leaking file descriptor on the directory.
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, glob)) {
+            for (Path entry : stream) {
+                log.trace("Deleting " + entry);
+                Files.delete(entry);
+            }
+        }
+    }
+
     @Override
     public void reboot() {
+        log.trace("reboot() LogUnitServer {} with opts {}", this.toString(), opts.toString());
+        if (localLog != null) {
+            log.trace("reboot() release localLog {}", localLog.toString());
+            localLog.close();
+        }
         if ((Boolean) opts.get("--memory")) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). " +
                     "This should be run for testing purposes only. " +
@@ -285,13 +304,22 @@ public class LogUnitServer extends AbstractServer {
         } else {
             String logdir = opts.get("--log-path") + File.separator + "log";
             localLog = new RollingLog(0, Long.MAX_VALUE, logdir, (Boolean) opts.get("--sync"));
+            log.trace("reboot() LogUnitServer with logdir {} localLog {}", logdir, localLog.toString());
         }
 
         if (dataCache != null) {
+            log.trace("reboot() dataCache mapping {}", dataCache.asMap().values().toString());
             /** Free all references */
-            dataCache.asMap().values().parallelStream()
-                    .map(m -> m.getData().release());
+            dataCache.asMap().values().stream()
+                    .forEach(m -> { log.trace("reboot() release {} data {}", m.toString(), m.getData().toString()); m.getData().release(); });
         }
+
+        if (streamLogs != null) {
+            log.trace("reboot() streamLogs mapping {}", streamLogs.values().toString());
+            streamLogs.values().stream()
+                    .forEach(m -> { log.trace("reboot() release streamLog {}", m.toString()); m.close(); });
+        }
+        streamLogs = new ConcurrentHashMap<>();
 
         dataCache = Caffeine.<LogAddress,LogData>newBuilder()
                 .<LogAddress,LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().readableBytes())
