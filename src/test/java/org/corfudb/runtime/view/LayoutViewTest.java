@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,4 +71,45 @@ public class LayoutViewTest extends AbstractViewTest {
 
         r.getStreamsView().get(CorfuRuntime.getStreamID("hi")).check();
     }
+
+    @Test
+    public void canAvoidNullException()
+            throws Exception {
+        CorfuRuntime r = getDefaultRuntime().connect();
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        l.setRuntime(r);
+        r.getLayoutView().updateLayout(l, 1L);
+        r.invalidateLayout();
+
+        Layout l2 = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(9000)
+                .addSequencer(9000)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(9000)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        l2.setRuntime(r);
+        r.getLayoutView().updateLayout(l2, 1L);
+
+        try {
+            r.getLayoutView().updateLayout(l2, 1L);
+        } catch (WrongEpochException we) {
+            assertThat(we.getCorrectEpoch()).isEqualTo(2);
+        } finally {
+            // System.err.printf("\nYo 7zzzz\n");
+        }
+    }
+
 }
