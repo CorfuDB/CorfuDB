@@ -27,17 +27,17 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
 
     public LayoutServerAssertions isInEpoch(long epoch) {
         isNotNull();
-        if (actual.getCurrentLayout().getEpoch() != epoch) {
+        if (actual.getServerContext().getServerEpoch() != epoch) {
             failWithMessage("Expected server to be in epoch <%d> but it was in epoch <%d>", epoch,
-                    actual.getCurrentLayout().getEpoch());
+                    actual.getServerContext().getServerEpoch());
         }
         return this;
     }
 
     public LayoutServerAssertions isPhase1Rank(Rank phase1Rank) {
         isNotNull();
-        if (actual.getPhase1Rank().compareTo(phase1Rank) != 0) {
-            failWithMessage("Expected server to be in phase1Rank <%d> but it was in phase1Rank <%d>", phase1Rank,
+        if (!actual.getPhase1Rank().equals(phase1Rank)) {
+            failWithMessage("Expected server to be in phase1Rank <%s> but it was in phase1Rank <%s>", phase1Rank,
                     actual.getPhase1Rank());
         }
         return this;
@@ -45,8 +45,8 @@ public class LayoutServerAssertions extends AbstractAssert<LayoutServerAssertion
 
     public LayoutServerAssertions isPhase2Rank(Rank phase2Rank) {
         isNotNull();
-        if (actual.getPhase2Rank().compareTo(phase2Rank) != 0) {
-            failWithMessage("Expected server to be in phase2Rank <%d> but it was in phase2Rank <%d>", phase2Rank,
+        if (!actual.getPhase2Rank().equals(phase2Rank)) {
+            failWithMessage("Expected server to be in phase2Rank <%s> but it was in phase2Rank <%s>", phase2Rank,
                     actual.getPhase2Rank());
         }
         return this;

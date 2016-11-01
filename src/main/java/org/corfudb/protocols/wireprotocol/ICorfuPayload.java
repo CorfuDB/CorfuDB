@@ -6,11 +6,14 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocator;
 import org.corfudb.infrastructure.CorfuMsgHandler;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.JSONUtils;
 
 import java.lang.invoke.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -38,6 +41,14 @@ public interface ICorfuPayload<T> {
                     byte[] bytes = new byte[numBytes];
                     x.readBytes(bytes);
                     return new String(bytes);
+                })
+                .put(Layout.class, x -> {
+                    int length = x.readInt();
+                    byte[] byteArray = new byte[length];
+                    x.readBytes(byteArray, 0, length);
+                    String str = new String(byteArray, StandardCharsets.UTF_8);
+                    Layout layout = JSONUtils.parser.fromJson(str, Layout.class);
+                    return layout;
                 })
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                 .put(ByteBuf.class, x -> {
@@ -289,8 +300,15 @@ public interface ICorfuPayload<T> {
                 serialize(buffer, x);
             });
         }
+        else if (payload instanceof Layout) {
+            byte[] b = JSONUtils.parser.toJson(payload).getBytes();
+            buffer.writeInt(b.length);
+            buffer.writeBytes(b);
+
+        }
         // and if its a bytebuf
         else if (payload instanceof ByteBuf) {
+
             ByteBuf b = ((ByteBuf) payload).slice();
             b.resetReaderIndex();
             int bytes = b.readableBytes();

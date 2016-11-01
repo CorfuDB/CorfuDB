@@ -2,11 +2,9 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.*;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.LayoutMsg;
-import org.corfudb.protocols.wireprotocol.LayoutRankMsg;
+import lombok.Getter;
+import lombok.Setter;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -60,23 +58,24 @@ public class LayoutClient implements IClient {
                 router.completeRequest(msg.getRequestID(), ((LayoutMsg) msg).getLayout());
                 break;
             case LAYOUT_NOBOOTSTRAP:
-                router.completeExceptionally(msg.getRequestID(),
-                        new NoBootstrapException());
+                router.completeExceptionally(msg.getRequestID(), new NoBootstrapException());
                 break;
-            case LAYOUT_PREPARE_ACK:
-                router.completeRequest(msg.getRequestID(), new LayoutPrepareResponse(true, ((LayoutRankMsg)msg ).getLayout()));
+            case LAYOUT_PREPARE_ACK: {
+                router.completeRequest(msg.getRequestID(), ((CorfuPayloadMsg<LayoutPrepareResponse>) msg).getPayload());
+            }
                 break;
-            case LAYOUT_PREPARE_REJECT:
-                router.completeExceptionally(msg.getRequestID(),
-                        new OutrankedException(((LayoutRankMsg) msg).getRank(), ((LayoutRankMsg) msg).getLayout()));
+            case LAYOUT_PREPARE_REJECT: {
+                LayoutPrepareResponse response = ((CorfuPayloadMsg<LayoutPrepareResponse>) msg).getPayload();
+                router.completeExceptionally(msg.getRequestID(), new OutrankedException(response.getRank(), response.getLayout()));
+            }
                 break;
-            case LAYOUT_PROPOSE_REJECT:
-                router.completeExceptionally(msg.getRequestID(),
-                        new OutrankedException(((LayoutRankMsg) msg).getRank()));
+            case LAYOUT_PROPOSE_REJECT: {
+                LayoutProposeResponse response = ((CorfuPayloadMsg<LayoutProposeResponse>) msg).getPayload();
+                router.completeExceptionally(msg.getRequestID(), new OutrankedException(response.getRank()));
+            }
                 break;
             case LAYOUT_ALREADY_BOOTSTRAP:
-                router.completeExceptionally(msg.getRequestID(),
-                        new AlreadyBootstrappedException());
+                router.completeExceptionally(msg.getRequestID(), new AlreadyBootstrappedException());
                 break;
         }
     }
@@ -88,8 +87,7 @@ public class LayoutClient implements IClient {
      * @return A future which will be completed with the current layout.
      */
     public CompletableFuture<Layout> getLayout() {
-        return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
+        return router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_REQUEST.payloadMsg(router.getEpoch()));
     }
 
     /**
@@ -100,26 +98,25 @@ public class LayoutClient implements IClient {
      */
     public CompletableFuture<Boolean>  bootstrapLayout(Layout l)
     {
-        return router.sendMessageAndGetCompletable(
-                new LayoutMsg(l, CorfuMsgType.LAYOUT_BOOTSTRAP));
+        return router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)));
     }
 
     /**
      * Begins phase 1 of a Paxos round with a prepare message.
+     * @param epoch epoch for which the paxos rounds are being run
      * @param rank  The rank to use for the prepare.
      * @return      True, if the prepare was successful.
      *              Otherwise, the completablefuture completes exceptionally
      *              with OutrankedException.
      */
-    public CompletableFuture<LayoutPrepareResponse> prepare(long rank)
+    public CompletableFuture<LayoutPrepareResponse> prepare(long epoch, long rank)
     {
-        return router.sendMessageAndGetCompletable(
-                new LayoutRankMsg(null, rank, CorfuMsgType.LAYOUT_PREPARE)
-        );
+        return router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_PREPARE.payloadMsg(new LayoutPrepareRequest(epoch, rank)));
     }
 
     /**
      * Begins phase 2 of a Paxos round with a propose message.
+     * @param epoch     epoch for which the paxos rounds are being run
      * @param rank      The rank to use for the propose. It should be the same
      *                  rank from a successful prepare (phase 1).
      * @param layout    The layout to install for phase 2.
@@ -127,25 +124,21 @@ public class LayoutClient implements IClient {
      *                  Otherwise, the completablefuture completes exceptionally
      *                  with OutrankedException.
      */
-    public CompletableFuture<Boolean> propose(long rank, Layout layout)
+    public CompletableFuture<Boolean> propose(long epoch, long rank, Layout layout)
     {
-        return router.sendMessageAndGetCompletable(
-                new LayoutRankMsg(layout, rank, CorfuMsgType.LAYOUT_PROPOSE)
-        );
+        return router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_PROPOSE.payloadMsg(new LayoutProposeRequest(epoch, rank, layout)));
+
     }
 
     /**
-     * Informs the server that the rank has been committed to a quorum.
-     * @param rank  The rank to use for the prepare.
-     * @return      True, if the commit was successful.
-     *              Otherwise, the completablefuture completes exceptionally
-     *              with OutrankedException.
+     * Informs the server that the proposal (layout) has been committed to a quorum.
+     * @param epoch epoch affiliated with the layout.
+     * @param layout
+     * @return True, if the commit was successful.
      */
-    public CompletableFuture<Boolean> committed(long rank, Layout layout)
+    public CompletableFuture<Boolean> committed(long epoch, Layout layout)
     {
-        return router.sendMessageAndGetCompletable(
-                new LayoutRankMsg(layout, rank, CorfuMsgType.LAYOUT_COMMITTED)
-        );
+        return router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_COMMITTED.payloadMsg(new LayoutCommittedRequest(epoch, layout)));
     }
 
 }

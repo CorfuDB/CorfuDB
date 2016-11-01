@@ -29,7 +29,8 @@ public class ReplexStreamViewTest extends StreamViewTest {
         newLayout.getSegment(0L).setReplexes(Collections.singletonList(
                 new Layout.LayoutStripe(Collections.singletonList(defaultConfigurationString))));
         newLayout.setEpoch(1);
-        r.getLayoutView().committed(0L, newLayout);
+        r.getLayoutView().committed(1L, newLayout);
         r.invalidateLayout();
     }
+
 }

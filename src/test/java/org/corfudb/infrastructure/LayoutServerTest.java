@@ -1,12 +1,19 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.io.Files;
-import org.corfudb.protocols.wireprotocol.*;
-import com.google.common.util.concurrent.ExecutionError;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
+import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
+import org.corfudb.protocols.wireprotocol.LayoutMsg;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
+import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
-import java.io.File;
+
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,6 +22,7 @@ import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 /**
  * Created by mwei on 12/14/15.
  */
+@Slf4j
 public class LayoutServerTest extends AbstractServerTest {
 
     @Override
@@ -23,167 +31,195 @@ public class LayoutServerTest extends AbstractServerTest {
         return getDefaultServer(serviceDir);
     }
 
-    private LayoutServer getDefaultServer(String serviceDir) {
-        LayoutServer s1 = new LayoutServer(new ServerContextBuilder().setSingle(false).setMemory(false).setLogPath(serviceDir).setServerRouter(getRouter()).build());
-        setServer(s1);
-        return s1;
-    }
 
-    private void bootstrapServer(Layout l) {
-        sendMessage(new LayoutMsg(l, CorfuMsgType.LAYOUT_BOOTSTRAP));
-    }
-
-    // memoryLayoutServerReadsLayout() test is no longer valid.
-
+    /**
+     * Verifies that a server that is not yet bootstrap does not respond with
+     * a layout.
+     */
     @Test
     public void nonBootstrappedServerNoLayout() {
-        sendMessage(new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_NOBOOTSTRAP);
+        requestLayout(0);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_NOBOOTSTRAP);
     }
 
+    /**
+     * Verifies that a server responds with a layout that the server was bootstrapped with.
+     * There are no layout changes between bootstrap and layout request.
+     */
     @Test
     public void bootstrapServerInstallsNewLayout() {
-        Layout testLayout = TestLayoutBuilder.single(9000);
-        sendMessage(new LayoutMsg(testLayout, CorfuMsgType.LAYOUT_BOOTSTRAP));
-        sendMessage(new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
-        assertThat(((LayoutMsg) getLastMessage()).getLayout())
-                .isEqualTo(testLayout);
+        Layout layout = TestLayoutBuilder.single(9000);
+        bootstrapServer(layout);
+        requestLayout(layout.getEpoch());
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
+        assertThat(((LayoutMsg) getLastMessage()).getLayout()).isEqualTo(layout);
     }
 
+    /**
+     * Verifies that a server cannot be bootstrapped multiple times.
+     */
     @Test
     public void cannotBootstrapServerTwice() {
-        Layout testLayout = TestLayoutBuilder.single(9000);
-        sendMessage(new LayoutMsg(testLayout, CorfuMsgType.LAYOUT_BOOTSTRAP));
-        sendMessage(new LayoutMsg(testLayout, CorfuMsgType.LAYOUT_BOOTSTRAP));
+        Layout layout = TestLayoutBuilder.single(9000);
+        bootstrapServer(layout);
+        bootstrapServer(layout);
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP);
     }
 
 
+    /**
+     * Verifies that once a prepare with a rank has been accepted,
+     * any subsequent prepares with lower ranks are rejected.
+     * Note: This is in the scope of same epoch.
+     */
     @Test
     public void prepareRejectsLowerRanks() {
-        bootstrapServer(TestLayoutBuilder.single(9000));
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-        sendMessage(new LayoutRankMsg(null, 10, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PREPARE_REJECT);
+        Layout layout = TestLayoutBuilder.single(9000);
+        long epoch = layout.getEpoch();
+        bootstrapServer(layout);
+        sendPrepare(epoch, 100);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
+        sendPrepare(epoch, 10);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_REJECT);
     }
 
-    @Test
-    public void prepareRejectsLowerRanksWithLastProposal() {
-
-    }
-
+    /**
+     * Verifies that once a prepare with a rank has been accepted,
+     * any propose with a lower rank is rejected.
+     * Note: This is in the scope of same epoch.
+     */
     @Test
     public void proposeRejectsLowerRanks() {
-        bootstrapServer(TestLayoutBuilder.single(9000));
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsgType.LAYOUT_PROPOSE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
+        Layout layout = TestLayoutBuilder.single(9000);
+        long epoch = layout.getEpoch();
+        bootstrapServer(layout);
+        sendPrepare(epoch, 100);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
+        sendPropose(epoch, 10, layout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
     }
 
+    /**
+     * Verifies that once a proposal has been accepted, the same proposal is not accepted again.
+     * Note: This is in the scope of same epoch.
+     */
     @Test
     public void proposeRejectsAlreadyProposed() {
-        bootstrapServer(TestLayoutBuilder.single(9000));
-        sendMessage(new LayoutRankMsg(null, 10, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsgType.LAYOUT_PROPOSE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(TestLayoutBuilder.single(9000), 10, CorfuMsgType.LAYOUT_PROPOSE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
+        Layout layout = TestLayoutBuilder.single(9000);
+        long epoch = layout.getEpoch();
+        bootstrapServer(layout);
+        sendPrepare(epoch, 10);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
+        sendPropose(epoch, 10, layout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+        sendPropose(epoch, 10, layout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
     }
 
+    /**
+     * Verifies all phases set epoch, prepare, propose, commit.
+     * Note: this is in the scope of a single epoch.
+     */
     @Test
     public void commitReturnsAck() {
         Layout layout = TestLayoutBuilder.single(9000);
+        bootstrapServer(layout);
+
+        long newEpoch = layout.getEpoch() + 1;
+        Layout newLayout = TestLayoutBuilder.single(9000);
+        newLayout.setEpoch(newEpoch);
+
+        // set epoch on servers
+        setEpoch(newEpoch);
+
+        sendPrepare(newEpoch, 100);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
+
+        sendPropose(newEpoch, 100, newLayout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+
+        sendCommitted(newEpoch, newLayout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+    }
+
+    /**
+     * Verifies that once set the epoch cannot regress.
+     * Note: it does not verify that epoch is a dense monotonically increasing integer
+     * sequence.
+     */
+    @Test
+    public void checkServerEpochDoesNotRegress() {
+        Layout layout = TestLayoutBuilder.single(9000);
+        long epoch = layout.getEpoch();
 
         bootstrapServer(layout);
-        layout.setEpoch(layout.getEpoch() + 1);
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-        sendMessage(new LayoutRankMsg(layout, 100, CorfuMsgType.LAYOUT_PROPOSE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.ACK);
-        sendMessage(new LayoutRankMsg(layout, 1000, CorfuMsgType.LAYOUT_COMMITTED));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.ACK);
-    }
 
-    @Test
-    public void checkServerEpochPersisted() {
-        String serviceDir = getTempDir();
-        LayoutServer s1 = getDefaultServer(serviceDir);
+        setEpoch(2);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
 
-        bootstrapServer(TestLayoutBuilder.single(9000));
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, 2L));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.ACK);
-        sendMessage(new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
+        requestLayout(epoch);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
         assertThat(getLastMessage().getEpoch()).isEqualTo(2);
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, 1L));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.WRONG_EPOCH);
+
+        setEpoch(1);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.WRONG_EPOCH);
 
     }
 
+    /**
+     * Verifies that a layout is persisted across server reboots.
+     *
+     * @throws Exception
+     */
     @Test
-    public void checkLayoutPersisted()
-            throws Exception {
+    public void checkLayoutPersisted() throws Exception {
+        //serviceDirectory from which all instances of corfu server are to be booted.
         String serviceDir = getTempDir();
 
         LayoutServer s1 = getDefaultServer(serviceDir);
-        bootstrapServer(TestLayoutBuilder.single(9000));
-        Layout l100 = TestLayoutBuilder.single(9000);
-        l100.setEpoch(100);
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-        sendMessage(new LayoutRankMsg(l100, 100, CorfuMsgType.LAYOUT_PROPOSE));
 
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.ACK);
-        assertThat(s1)
-                .isInEpoch(0);
-        assertThat(s1)
-                .isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
-        assertThat(s1)
-                .isPhase2Rank(new Rank(100L, AbstractServerTest.testClientId));
+        Layout layout = TestLayoutBuilder.single(9000);
+        bootstrapServer(layout);
+
+        Layout newLayout = TestLayoutBuilder.single(9000);
+        long newEpoch = 100;
+        newLayout.setEpoch(newEpoch);
+        setEpoch(newEpoch);
+
+        // Start the process of electing a new layout. But that layout will not take effect
+        // till it is committed.
+        sendPrepare(newEpoch, 1);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
+
+        sendPropose(newEpoch, 1, newLayout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+        assertThat(s1).isInEpoch(newEpoch);
+        assertThat(s1).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
+        assertThat(s1).isPhase2Rank(new Rank(1L, AbstractServerTest.testClientId));
         s1.shutdown();
 
         LayoutServer s2 = getDefaultServer(serviceDir);
         this.router.reset();
         this.router.addServer(s2);
 
-        assertThat(s2)
-                .isInEpoch(0);  // SLF: TODO: rebase conflict: new is 0, old was 100
-        assertThat(s2)
-                .isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
-        assertThat(s2)
-                .isPhase2Rank(new Rank(100L, AbstractServerTest.testClientId));
+        assertThat(s2).isInEpoch(newEpoch);  // SLF: TODO: rebase conflict: new is 0, old was 100
+        assertThat(s2).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
+        assertThat(s2).isPhase2Rank(new Rank(1L, AbstractServerTest.testClientId));
 
-        sendMessage(new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
-        assertThat(((LayoutMsg) getLastMessage()).getLayout().getEpoch())
-                .isEqualTo(0);
+        // request layout using the old epoch.
+        requestLayout(0);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
+        assertThat(((LayoutMsg) getLastMessage()).getLayout().getEpoch()).isEqualTo(0);
+
+        // request layout using the new epoch.
+        requestLayout(newEpoch);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
+        assertThat(((LayoutMsg) getLastMessage()).getLayout().getEpoch()).isEqualTo(0);
     }
 
     /**
-     * The test validates that the data in accepted phase1 and phase2 messages
+     * The test verifies that the data in accepted phase1 and phase2 messages
      * is persisted to disk and survives layout server restarts.
      *
      * @throws Exception
@@ -191,38 +227,42 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void checkPaxosPhasesPersisted() throws Exception {
         String serviceDir = getTempDir();
-
         LayoutServer s1 = getDefaultServer(serviceDir);
-        Layout l100 = TestLayoutBuilder.single(9000);
-        bootstrapServer(l100);
 
-        l100.setEpoch(100);
+        Layout layout = TestLayoutBuilder.single(9000);
+        bootstrapServer(layout);
+
+        long newEpoch = layout.getEpoch() + 1;
+        Layout newLayout = TestLayoutBuilder.single(9000);
+        newLayout.setEpoch(newEpoch);
+
+        setEpoch(newEpoch);
 
         // validate phase 1
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
+        sendPrepare(newEpoch, 1);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-
-//        assertThat(s1).isInEpoch(0);
-        assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
+        assertThat(s1).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
+       //shutdown this instance of server
         s1.shutdown();
-
+        //bring up a new instance of server with the previously persisted data
         LayoutServer s2 = getDefaultServer(serviceDir);
 
-        assertThat(s2).isInEpoch(0);
-        assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
+        assertThat(s2).isInEpoch(newEpoch);
+        assertThat(s2).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
 
         // validate phase2 data persistence
-
-        sendMessage(new LayoutRankMsg(l100, 100, CorfuMsgType.LAYOUT_PROPOSE));
+        sendPropose(newEpoch, 1, newLayout);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+        //shutdown this instance of server
         s2.shutdown();
 
+        //bring up a new instance of server with the previously persisted data
         LayoutServer s3 = getDefaultServer(serviceDir);
 
-        assertThat(s3).isInEpoch(0);
-        assertThat(s3).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
-        assertThat(s3).isPhase2Rank(new Rank(100L, AbstractServerTest.testClientId));
-        assertThat(s3).isProposedLayout(l100);
+        assertThat(s3).isInEpoch(newEpoch);
+        assertThat(s3).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
+        assertThat(s3).isPhase2Rank(new Rank(1L, AbstractServerTest.testClientId));
+        assertThat(s3).isProposedLayout(newLayout);
 
     }
 
@@ -235,31 +275,34 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void checkMessagesValidatedAgainstPhase1PersistedData() throws Exception {
         String serviceDir = getTempDir();
-
         LayoutServer s1 = getDefaultServer(serviceDir);
-        Layout l100 = TestLayoutBuilder.single(9000);
-        bootstrapServer(l100);
+        Layout layout = TestLayoutBuilder.single(9000);
+        bootstrapServer(layout);
 
+        long newEpoch = layout.getEpoch() + 1;
+        Layout newLayout = TestLayoutBuilder.single(9000);
+        newLayout.setEpoch(newEpoch);
+
+        setEpoch(newEpoch);
         // validate phase 1
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
+        sendPrepare(newEpoch, 100);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-
-        assertThat(s1).isInEpoch(0);
+        assertThat(s1).isInEpoch(newEpoch);
         assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
+
         s1.shutdown();
-
+        // reboot
         LayoutServer s2 = getDefaultServer(serviceDir);
-
-        assertThat(s2).isInEpoch(0);
+        assertThat(s2).isInEpoch(newEpoch);
         assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
         //new LAYOUT_PREPARE message with a lower phase1 rank should be rejected
-        sendMessage(new LayoutRankMsg(null, 99, CorfuMsgType.LAYOUT_PREPARE));
+        sendPrepare(newEpoch, 99);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_REJECT);
 
 
         //new LAYOUT_PREPARE message with a higher phase1 rank should be accepted
-        sendMessage(new LayoutRankMsg(null, 101, CorfuMsgType.LAYOUT_PREPARE));
+        sendPrepare(newEpoch, 101);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
     }
 
@@ -276,45 +319,48 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void checkMessagesValidatedAgainstPhase2PersistedData() throws Exception {
         String serviceDir = getTempDir();
-
         LayoutServer s1 = getDefaultServer(serviceDir);
-        Layout l100 = TestLayoutBuilder.single(9000);
-        bootstrapServer(l100);
-        l100.setEpoch(100);
-        // validate phase 1
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
+        Layout layout = TestLayoutBuilder.single(9000);
+        bootstrapServer(layout);
 
-        // the epoch should not change yet.
-//        assertThat(s1).isInEpoch(0);
+        long newEpoch = layout.getEpoch() + 1;
+        Layout newLayout = TestLayoutBuilder.single(9000);
+        newLayout.setEpoch(newEpoch);
+
+        setEpoch(newEpoch);
+        assertThat(s1).isInEpoch(newEpoch);
+
+        // validate phase 1
+        sendPrepare(newEpoch, 100);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
         assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
+
         s1.shutdown();
 
         LayoutServer s2 = getDefaultServer(serviceDir);
-
-        assertThat(s2).isInEpoch(0);
+        assertThat(s2).isInEpoch(newEpoch);
         assertThat(s2).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
         //new LAYOUT_PROPOSE message with a lower phase2 rank should be rejected
-        sendMessage(new LayoutRankMsg(l100, 99, CorfuMsgType.LAYOUT_PROPOSE));
+        sendPropose(newEpoch, 99, newLayout);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
 
 
-        //new LAYOUT_PREPARE message with a higher phase2 rank should be rejected
-        sendMessage(new LayoutRankMsg(l100, 101, CorfuMsgType.LAYOUT_PROPOSE));
+        //new LAYOUT_PROPOSE message with a rank that does not match LAYOUT_PREPARE should be rejected
+        sendPropose(newEpoch, 101, newLayout);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
 
-        //new LAYOUT_PREPARE message with same phase2 rank should be accepted
-        sendMessage(new LayoutRankMsg(l100, 100, CorfuMsgType.LAYOUT_PROPOSE));
+        //new LAYOUT_PROPOSE message with same rank as phase1 should be accepted
+        sendPropose(newEpoch, 100, newLayout);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+        assertThat(s2).isProposedLayout(newLayout);
+
         s2.shutdown();
-
+        // data should survive the reboot.
         LayoutServer s3 = getDefaultServer(serviceDir);
-
-        // the epoch should have changed by now.
-        assertThat(s3).isInEpoch(0);
+        assertThat(s3).isInEpoch(newEpoch);
         assertThat(s3).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
-        assertThat(s3).isProposedLayout(l100);
+        assertThat(s3).isProposedLayout(newLayout);
     }
 
     /**
@@ -327,59 +373,61 @@ public class LayoutServerTest extends AbstractServerTest {
      *
      * @throws Exception
      */
-    // SLF TODO: put me back: @Test
+    @Test
     public void checkPhase1AndPhase2MessagesFromMultipleClients() throws Exception {
         String serviceDir = getTempDir();
 
         LayoutServer s1 = getDefaultServer(serviceDir);
-        Layout l100 = TestLayoutBuilder.single(9000);
-        bootstrapServer(l100);
-        l100.setEpoch(100);
-        /* validate phase 1 */
-        sendMessage(new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
+        Layout layout = TestLayoutBuilder.single(9000);
+        bootstrapServer(layout);
 
-        // the epoch should not change yet.
-//        assertThat(s1).isInEpoch(0);
+        long newEpoch = layout.getEpoch() + 1;
+        Layout newLayout = TestLayoutBuilder.single(9000);
+        newLayout.setEpoch(newEpoch);
+
+        setEpoch(newEpoch);
+
+        /* validate phase 1 */
+        sendPrepare(newEpoch, 100);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
         assertThat(s1).isPhase1Rank(new Rank(100L, AbstractServerTest.testClientId));
 
         // message from a different client with same rank should be rejected or accepted based on
         // whether the uuid is greater of smaller.
-        sendMessage(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
+        sendPrepare(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), newEpoch, 100);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_REJECT);
 
-        sendMessage(UUID.nameUUIDFromBytes("TEST_CLIENT_OTHER".getBytes()), new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
+        sendPrepare(UUID.nameUUIDFromBytes("TEST_CLIENT_OTHER".getBytes()), newEpoch, 100);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_REJECT);
 
         // message from a different client but with a higher rank gets accepted
-        sendMessage(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), new LayoutRankMsg(null, 101, CorfuMsgType.LAYOUT_PREPARE));
+        sendPrepare(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), newEpoch, 101);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
         assertThat(s1).isPhase1Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
-//        assertThat(s1).isInEpoch(0);
 
         // testing behaviour after server restart
         s1.shutdown();
         LayoutServer s2 = getDefaultServer(serviceDir);
-        assertThat(s2).isInEpoch(0);
+        assertThat(s2).isInEpoch(newEpoch);
         assertThat(s2).isPhase1Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
         //duplicate message to be rejected
-        sendMessage(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), new LayoutRankMsg(null, 101, CorfuMsgType.LAYOUT_PREPARE));
+        sendPrepare(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), newEpoch, 101);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_REJECT);
 
         /* validate phase 2 */
 
         //phase2 message from a different client than the one whose phase1 was last accepted is rejected
-        sendMessage(new LayoutRankMsg(null, 101, CorfuMsgType.LAYOUT_PROPOSE));
+        sendPropose(newEpoch, 101, newLayout);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PROPOSE_REJECT);
 
         // phase2 from same client with same rank as in phase1 gets accepted
-        sendMessage(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), new LayoutRankMsg(l100, 101, CorfuMsgType.LAYOUT_PROPOSE));
+        sendPropose(UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes()), newEpoch, 101, newLayout);
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
 
-        assertThat(s2).isInEpoch(0);
+        assertThat(s2).isInEpoch(newEpoch);
         assertThat(s2).isPhase1Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
         assertThat(s2).isPhase2Rank(new Rank(101L, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
-        assertThat(s2).isProposedLayout(l100);
+        assertThat(s2).isProposedLayout(newLayout);
 
         s2.shutdown();
     }
@@ -387,22 +435,20 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void testReboot() throws Exception {
         String serviceDir = getTempDir();
-
         LayoutServer s1 = getDefaultServer(serviceDir);
-
         setServer(s1);
-        Layout l99 = TestLayoutBuilder.single(9000);
-        l99.setEpoch(99);
-        bootstrapServer(l99);
+
+        Layout layout = TestLayoutBuilder.single(9000);
+        layout.setEpoch(99);
+        bootstrapServer(layout);
 
         // Reboot, then check that our epoch 100 layout is still there.
         s1.reboot();
 
-        sendMessage(new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
+        requestLayout(99);
         assertThat(getLastMessage().getMsgType())
                 .isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
-        assertThat(((LayoutMsg) getLastMessage()).getLayout().getEpoch())
-                .isEqualTo(99);
+        assertThat(((LayoutMsg) getLastMessage()).getLayout().getEpoch()).isEqualTo(99);
         s1.shutdown();
 
         for (int i = 0; i < 16; i++) {
@@ -417,41 +463,86 @@ public class LayoutServerTest extends AbstractServerTest {
     // between each step.
 
     private void commitReturnsAck(LayoutServer s1, Integer reboot, long baseEpoch) {
-        if ((reboot & 1) > 0) { s1.reboot(); }
 
-        LayoutRankMsg lrm1 = new LayoutRankMsg(null, 100, CorfuMsgType.LAYOUT_PREPARE);
-        lrm1.setEpoch(baseEpoch + reboot - 1);
-        sendMessage(lrm1);
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
-        if ((reboot & 2) > 0) { s1.reboot(); }
+        if ((reboot & 1) > 0) {
+            s1.reboot();
+        }
+        long newEpoch = baseEpoch + reboot;
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch));
 
         Layout layout = TestLayoutBuilder.single(9000);
-        layout.setEpoch(baseEpoch + reboot);
-        LayoutRankMsg lrm2 = new LayoutRankMsg(layout, 100, CorfuMsgType.LAYOUT_PROPOSE);
-        lrm2.setEpoch(baseEpoch + reboot - 1);
-        sendMessage(lrm2);
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.ACK);
-        if ((reboot & 4) > 0) { s1.reboot(); }
+        layout.setEpoch(newEpoch);
 
-        LayoutRankMsg lrm3 = new LayoutRankMsg(layout, 1000, CorfuMsgType.LAYOUT_COMMITTED);
-        lrm3.setEpoch(baseEpoch + reboot - 1);
-        sendMessage(lrm3);
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.ACK);
-        if ((reboot & 8) > 0) {s1.reboot(); }
-        lrm3.setEpoch(baseEpoch + reboot);
-        sendMessage(lrm3);
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.WRONG_EPOCH);
+        sendPrepare(newEpoch, 100);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
 
-        sendMessage(new CorfuMsg(CorfuMsgType.LAYOUT_REQUEST));
-        assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
-        assertThat(((LayoutMsg) getLastMessage()).getLayout())
-                .isEqualTo(layout);
+        if ((reboot & 2) > 0) {
+            log.debug("Rebooted server because reboot & 2 {}", reboot & 2);
+            s1.reboot();
+        }
+
+        sendPropose(newEpoch, 100, layout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+
+        if ((reboot & 4) > 0) {
+            s1.reboot();
+        }
+
+        sendCommitted(newEpoch, layout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+
+        if ((reboot & 8) > 0) {
+            s1.reboot();
+        }
+
+        sendCommitted(newEpoch, layout);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+
+        requestLayout(newEpoch);
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
+        assertThat(((LayoutMsg) getLastMessage()).getLayout()).isEqualTo(layout);
 
     }
 
+    private LayoutServer getDefaultServer(String serviceDir) {
+        LayoutServer s1 = new LayoutServer(new ServerContextBuilder().setSingle(false).setMemory(false).setLogPath(serviceDir).setServerRouter(getRouter()).build());
+        setServer(s1);
+        return s1;
+    }
+
+    private void bootstrapServer(Layout l) {
+        sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)));
+    }
+
+    private void requestLayout(long epoch) {
+        sendMessage(CorfuMsgType.LAYOUT_REQUEST.payloadMsg(epoch));
+    }
+
+    private void setEpoch(long epoch) {
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, epoch));
+    }
+
+    private void sendPrepare(long epoch, long rank) {
+        sendMessage(CorfuMsgType.LAYOUT_PREPARE.payloadMsg(new LayoutPrepareRequest(epoch, rank)));
+    }
+
+    private void sendPropose(long epoch, long rank, Layout layout) {
+        sendMessage(CorfuMsgType.LAYOUT_PROPOSE.payloadMsg(new LayoutProposeRequest(epoch, rank, layout)));
+    }
+
+    private void sendCommitted(long epoch, Layout layout) {
+        sendMessage(CorfuMsgType.LAYOUT_COMMITTED.payloadMsg(new LayoutCommittedRequest(epoch, layout)));
+    }
+
+    private void sendPrepare(UUID clientId, long epoch, long rank) {
+        sendMessage(clientId, CorfuMsgType.LAYOUT_PREPARE.payloadMsg(new LayoutPrepareRequest(epoch, rank)));
+    }
+
+    private void sendPropose(UUID clientId, long epoch, long rank, Layout layout) {
+        sendMessage(clientId, CorfuMsgType.LAYOUT_PROPOSE.payloadMsg(new LayoutProposeRequest(epoch, rank, layout)));
+    }
+
+    private void sendCommitted(UUID clientId, long epoch, Layout layout) {
+        sendMessage(clientId, CorfuMsgType.LAYOUT_COMMITTED.payloadMsg(new LayoutCommittedRequest(epoch, layout)));
+    }
 }

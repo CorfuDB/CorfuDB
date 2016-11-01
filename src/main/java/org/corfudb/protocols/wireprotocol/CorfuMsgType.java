@@ -1,7 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.reflect.TypeToken;
-import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -32,15 +31,15 @@ public enum CorfuMsgType {
     VERSION_RESPONSE(8, new TypeToken<JSONPayloadMsg<VersionInfo>>() {}, BaseServer.class, true),
 
     // Layout Messages
-    LAYOUT_REQUEST(10, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
+    LAYOUT_REQUEST(10, new TypeToken<CorfuPayloadMsg<Long>>(){}, LayoutServer.class, true),
     LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), LayoutServer.class, true),
-    LAYOUT_PREPARE(12, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
-    LAYOUT_PREPARE_REJECT(13, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-    LAYOUT_PROPOSE(14, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
-    LAYOUT_PROPOSE_REJECT(15, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-    LAYOUT_COMMITTED(16, TypeToken.of(LayoutRankMsg.class), LayoutServer.class, true),
-    LAYOUT_QUERY(17, TypeToken.of(LayoutRankMsg.class), LayoutServer.class),
-    LAYOUT_BOOTSTRAP(18, TypeToken.of(LayoutMsg.class), LayoutServer.class, true),
+    LAYOUT_PREPARE(12, new TypeToken<CorfuPayloadMsg<LayoutPrepareRequest>>(){}, LayoutServer.class, true),
+    LAYOUT_PREPARE_REJECT(13, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, LayoutServer.class),
+    LAYOUT_PROPOSE(14, new TypeToken<CorfuPayloadMsg<LayoutProposeRequest>>(){}, LayoutServer.class, true),
+    LAYOUT_PROPOSE_REJECT(15, new TypeToken<CorfuPayloadMsg<LayoutProposeResponse>>(){}, LayoutServer.class),
+    LAYOUT_COMMITTED(16, new TypeToken<CorfuPayloadMsg<LayoutCommittedRequest>>(){}, LayoutServer.class, true),
+    LAYOUT_QUERY(17, new TypeToken<CorfuPayloadMsg<Long>>(){}, LayoutServer.class),
+    LAYOUT_BOOTSTRAP(18, new TypeToken<CorfuPayloadMsg<LayoutBootstrapRequest>>(){}, LayoutServer.class, true),
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
 
     // Sequencer Messages
@@ -68,8 +67,8 @@ public enum CorfuMsgType {
     ERROR_REPLEX_OVERWRITE(56, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
 
     // EXTRA CODES
-    LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class),
-    LAYOUT_PREPARE_ACK(61, TypeToken.of(LayoutRankMsg.class), LayoutServer.class);
+    LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
+    LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, LayoutServer.class, true);
 
 
     public final int type;

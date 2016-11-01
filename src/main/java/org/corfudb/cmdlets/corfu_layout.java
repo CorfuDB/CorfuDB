@@ -164,9 +164,12 @@ public class corfu_layout implements ICmdlet {
             }
         } else if ((Boolean) opts.get("prepare")) {
             long rank = Long.parseLong((String) opts.get("--rank"));
+            Layout l = getLayout(opts);
             log.debug("Prepare with new rank={}", rank);
             try {
-                if (router.getClient(LayoutClient.class).prepare(rank).get().isAccepted()) {
+                if (router.getClient(LayoutClient.class).prepare(l.getEpoch(), rank).get() != null) {
+                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
+                            .reset().fg(GREEN).a(": ACK"));
                     return cmdlet.ok();
                 } else {
                     return cmdlet.err("ACK");
@@ -197,7 +200,7 @@ public class corfu_layout implements ICmdlet {
             Layout l = getLayout(opts);
             log.debug("Propose with new rank={}, layout={}", rank, l);
             try {
-                if (router.getClient(LayoutClient.class).propose(rank, l).get()) {
+                if (router.getClient(LayoutClient.class).propose(l.getEpoch(), rank, l).get()) {
                     return cmdlet.ok();
                 } else {
                     return cmdlet.err("NACK");
@@ -230,7 +233,7 @@ public class corfu_layout implements ICmdlet {
             Layout l = getLayout(opts);
             log.debug("Propose with new rank={}", rank);
             try {
-                if (router.getClient(LayoutClient.class).committed(rank, l).get()) {
+                if (router.getClient(LayoutClient.class).committed(l.getEpoch(), l).get()) {
                     return cmdlet.ok();
                 } else {
                     return cmdlet.err("NACK");

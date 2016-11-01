@@ -44,6 +44,13 @@ public class TestServerRouter implements IServerRouter {
     public TestServerRouter() {
         reset();
     }
+    @Getter
+    int port;
+
+    public TestServerRouter(int port) {
+        reset();
+        this.port = port;
+    }
 
     public void reset() {
         this.responseMessages = new ArrayList<>();

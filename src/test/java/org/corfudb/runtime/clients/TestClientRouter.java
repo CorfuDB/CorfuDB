@@ -44,11 +44,17 @@ public class TestClientRouter implements IClientRouter {
      */
     public Map<Long, CompletableFuture> outstandingRequests;
 
-    public AtomicLong requestID;
+    public volatile AtomicLong requestID;
 
-    @Getter
-    @Setter
-    public long epoch;
+
+    private long epoch;
+
+    public synchronized long getEpoch() {
+        return epoch;
+    }
+    public synchronized void setEpoch(long epoch) {
+        this.epoch = epoch;
+    }
 
     @Getter
     @Setter
@@ -171,6 +177,7 @@ public class TestClientRouter implements IClientRouter {
         // Set the message fields.
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
+        message.setEpoch(getEpoch());
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
@@ -179,7 +186,7 @@ public class TestClientRouter implements IClientRouter {
                 .map(x -> x.evaluate(message, this))
                 .allMatch(x -> x)) {
             // Write the message out to the channel
-                log.trace("Sent message: {}", message);
+                log.trace(Thread.currentThread().getId() + ":Sent message: {}", message);
                 routeMessage(message);
         }
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
@@ -204,6 +211,7 @@ public class TestClientRouter implements IClientRouter {
         final long thisRequest = requestID.getAndIncrement();
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
+        message.setEpoch(getEpoch());
         // Evaluate rules.
         if (rules.stream()
                 .map(x -> x.evaluate(message, this))
@@ -248,13 +256,12 @@ public class TestClientRouter implements IClientRouter {
             return false;
         }
         // Check if the message is in the right epoch.
-        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != epoch) {
+        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != getEpoch()) {
             CorfuMsg m = new CorfuMsg();
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), epoch, msg);
-
-            /* If this message was pending a completion, complete it with an error. */
-            completeExceptionally(msg.getRequestID(), new WrongEpochException(epoch));
+                    msg.getEpoch(), getEpoch(), msg);
+             /* If this message was pending a completion, complete it with an error. */
+            completeExceptionally(msg.getRequestID(), new WrongEpochException(getEpoch()));
             return false;
         }
         return true;
@@ -318,7 +325,8 @@ public class TestClientRouter implements IClientRouter {
         ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
         message.serialize(oBuf);
         oBuf.resetReaderIndex();
-        return CorfuMsg.deserialize(oBuf);
+        CorfuMsg msg = CorfuMsg.deserialize(oBuf);
+        return msg;
     }
 
 }
