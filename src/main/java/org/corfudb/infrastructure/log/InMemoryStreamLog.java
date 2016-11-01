@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.exceptions.OverwriteException;
 
 /**
  * This class implements the StreamLog interface using a Java hash map. The stream log is only stored in-memory and not
@@ -21,7 +22,10 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
-    public void append(long address, LogData entry) {
+    public synchronized void append(long address, LogData entry) {
+        if(cache.containsKey(address)) {
+            throw new OverwriteException();
+        }
         cache.put(address, entry);
     }
 

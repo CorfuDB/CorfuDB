@@ -69,19 +69,6 @@ public class LogUnitClientTest extends AbstractClientTest {
     }
 
     @Test
-    public void holeFillDoesNotOverwrite()
-            throws Exception {
-        byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
-        client.fillHole(0).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
-        assertThat(r.getType())
-                .isEqualTo(DataType.DATA);
-        assertThat(r.getPayload(new CorfuRuntime()))
-                .isEqualTo(testString);
-    }
-
-    @Test
     public void holeFillCannotBeOverwritten()
             throws Exception {
         byte[] testString = "hello world".getBytes();
@@ -91,6 +78,21 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .isEqualTo(DataType.HOLE);
 
         assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get())
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseInstanceOf(OverwriteException.class);
+    }
+
+    @Test
+    public void holeFillCannotOverwrite()
+            throws Exception {
+        byte[] testString = "hello world".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
+
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+
+        assertThatThrownBy(() -> client.fillHole(0).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }

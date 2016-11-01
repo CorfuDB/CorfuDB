@@ -7,17 +7,17 @@ import lombok.RequiredArgsConstructor;
 import java.util.UUID;
 
 /**
- * Created by mwei on 8/8/16.
+ * Created by Maithem on 10/13/2016
  */
 @CorfuPayload
 @Data
 @RequiredArgsConstructor
-public class TrimRequest implements ICorfuPayload<TrimRequest> {
+public class FillHoleRequest implements ICorfuPayload<FillHoleRequest> {
 
     final UUID stream;
     final Long prefix;
 
-    public TrimRequest(ByteBuf buf) {
+    public FillHoleRequest(ByteBuf buf) {
         if (ICorfuPayload.fromBuffer(buf, Boolean.class))
             stream = ICorfuPayload.fromBuffer(buf, UUID.class);
         else stream = null;
