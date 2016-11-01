@@ -92,12 +92,11 @@ public class CorfuRuntime {
     @Getter
     public boolean backpointersDisabled = false;
     /**
-     * To prevent livelock condition in fetchLayout.
      * Notifies that the runtime is no longer used
-     * and retries to fetch the layout can be stopped.
+     * and async retries to fetch the layout can be stopped.
      */
     @Getter
-    public volatile boolean isShutdown = false;
+    private volatile boolean isShutdown = false;
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
@@ -142,6 +141,23 @@ public class CorfuRuntime {
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
         log.debug("Corfu runtime version {} initialized.", getVersionString());
+    }
+
+    /**
+     * Shuts down the CorfuRuntime.
+     * Stops async tasks from fetching the layout.
+     * Cannot reuse the runtime once shutdown is called.
+     */
+    public void shutdown() {
+
+        // Stopping async task from fetching layout.
+        isShutdown = true;
+        if (layout != null) {
+            try {
+                layout.get();
+            } catch (Exception e) {
+            }
+        }
     }
 
     /**
@@ -300,7 +316,7 @@ public class CorfuRuntime {
                         // (at least the code on 10/13/2016 does not have issues)
                         // but setEpoch of routers needs to be synchronized as those variables are not local.
                         l.getAllServers().stream().map(getRouterFunction).forEach(x -> x.setEpoch(l.getEpoch()));
-                        layoutServers.retainAll(l.getLayoutServers());
+                        layoutServers = l.getLayoutServers();
                         layout = layoutFuture;
                         //FIXME Synchronization END
 
@@ -308,9 +324,6 @@ public class CorfuRuntime {
                         return l;
                     } catch (Exception e) {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
-                        if (isShutdown) {
-                            return null;
-                        }
                     }
                 }
                 log.warn("Couldn't connect to any layout servers, retrying in {}s.", retryRate);
@@ -318,9 +331,9 @@ public class CorfuRuntime {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
-                    if (isShutdown) {
-                        return null;
-                    }
+                }
+                if (isShutdown) {
+                    return null;
                 }
             }
         });

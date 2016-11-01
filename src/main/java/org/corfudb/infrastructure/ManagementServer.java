@@ -1,21 +1,30 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
+
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Instantiates and performs failure detection adn handling asynchronously.
+ * Instantiates and performs failure detection and handling asynchronously.
+ * <p>
+ * Failure Detector:
+ * Executes detection policy (eg. PeriodicPollingPolicy).
+ * It then checks for status of the nodes. If the result map is not empty,
+ * there are failed nodes to be addressed. This then triggers the failure
+ * handler which then responds to these failures based on a policy.
  * <p>
  * Created by zlokhandwala on 9/28/16.
  */
@@ -36,19 +45,11 @@ public class ManagementServer extends AbstractServer {
     private Map<String, Object> opts;
     private ServerContext serverContext;
 
-    private IFailureDetectorPolicy failureDetectorPolicy;
     private CorfuRuntime corfuRuntime;
-
     /**
-     * Flag to notify management server of shutdown
+     * Policy to be used to detect failures.
      */
-    @Getter
-    private boolean isShutdown = false;
-    /**
-     * Stores this current node's address
-     */
-    @Getter
-    private String localEndpoint;
+    private IFailureDetectorPolicy failureDetectorPolicy;
     /**
      * Used for initial bootstrap only.
      */
@@ -62,8 +63,8 @@ public class ManagementServer extends AbstractServer {
     /**
      * To schedule failure detection.
      */
-    private final ExecutorService schedulerService;
-
+    @Getter
+    private final ScheduledExecutorService failureDetectorService;
 
     public ManagementServer(ServerContext serverContext, LayoutServer layoutServer) {
 
@@ -72,19 +73,21 @@ public class ManagementServer extends AbstractServer {
         this.layoutServer = layoutServer;
 
         this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
-        this.localEndpoint = getLocalEndpoint();
 
-        this.schedulerService = Executors.newSingleThreadExecutor(
+        this.failureDetectorService = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat("Fault-Detector-" + this.localEndpoint)
+                        .setNameFormat("Fault-Detector-" + getLocalEndpoint())
                         .build());
 
         try {
-            schedulerService.submit(this::taskScheduler);
+            failureDetectorService.scheduleAtFixedRate(
+                    this::taskScheduler,
+                    0,
+                    policyExecuteInterval,
+                    TimeUnit.MILLISECONDS);
         } catch (RejectedExecutionException err) {
-            log.error("Error scheduling failure detection task");
-            err.printStackTrace();
+            log.error("Error scheduling failure detection task, {}", err);
         }
     }
 
@@ -97,11 +100,9 @@ public class ManagementServer extends AbstractServer {
             try {
                 Thread.sleep(1000);
                 currentLayout = layoutServer.getCurrentLayout();
-            } catch (InterruptedException err) {
-                log.warn("Thread interrupted.");
-                if (isShutdown) {
-                    return null;
-                }
+            } catch (InterruptedException ie) {
+                log.warn("Thread interrupted : {}", ie);
+                return null;
             }
         }
         log.info("Node bootstrapped. Layout received by management server.");
@@ -123,7 +124,7 @@ public class ManagementServer extends AbstractServer {
             // If no persisted layout present, wait for bootstrap. (Rely on local layout server)
 
             Layout bootstrapLayout = waitForBootstrap();
-            if (bootstrapLayout == null || isShutdown) {
+            if (bootstrapLayout == null) {
                 return null;
             }
 
@@ -167,70 +168,41 @@ public class ManagementServer extends AbstractServer {
         LayoutView layoutView;
         CorfuRuntime corfuRuntime;
 
-        do {
-            corfuRuntime = getCorfuRuntime();
-            if (isShutdown) return;
-        } while (corfuRuntime == null);
+        corfuRuntime = getCorfuRuntime();
+        if (corfuRuntime == null) return;
 
+        corfuRuntime.invalidateLayout();
 
-        while (true) {
-            try {
-                corfuRuntime.invalidateLayout();
+        // Fetch the latest layout view through the runtime.
+        layoutView = corfuRuntime.getLayoutView();
+        currentLayout = layoutView.getLayout();
+        //TODO: Store this layout on disk for persistence.
 
-                // Fetch the latest layout view through the runtime.
-                layoutView = corfuRuntime.getLayoutView();
-                currentLayout = layoutView.getLayout();
-                //TODO: Store this layout on disk for persistence.
+        // Execute the failure detection policy once.
+        failureDetectorPolicy.executePolicy(currentLayout, corfuRuntime);
 
-                // Execute the failure detection policy once.
-                failureDetectorPolicy.executePolicy(currentLayout, corfuRuntime);
-
-                // Get the server status from the policy and check for failures.
-                HashMap<String, Boolean> map = failureDetectorPolicy.getServerStatus();
-                if (!map.isEmpty()) {
-                    // Failure present. Triggering the handler.
-                    triggerHandlerDispatcher(currentLayout, map.keySet());
-                }
-
-                Thread.sleep(policyExecuteInterval);
-
-            } catch (InterruptedException err) {
-                log.debug("Sleep interrupted.");
-                if (isShutdown) {
-                    return;
-                }
-            }
-        }
+        // Get the server status from the policy and check for failures.
+        HashMap<String, Boolean> map = failureDetectorPolicy.getServerStatus();
+        // If map not empty, failures present. Trigger handler.
     }
 
     /**
+     * Management Server shutdown:
      * Shuts down the fault detector service.
      */
     public void shutdown() {
-        isShutdown = true;
+        // Shutting the fault detector.
+        failureDetectorService.shutdownNow();
 
         // Shut down the Corfu Runtime.
         if (corfuRuntime != null) {
-            corfuRuntime.isShutdown = true;
-            if (corfuRuntime.layout != null) {
-                corfuRuntime.layout.cancel(true);
-            }
+            corfuRuntime.shutdown();
         }
 
-        // Shutting the fault detector.
-        schedulerService.shutdownNow();
-        while (!schedulerService.isShutdown()) {
-            schedulerService.shutdownNow();
+        try {
+            failureDetectorService.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException ie) {
+            log.debug("failureDetectorService awaitTermination interrupted : {}", ie);
         }
-    }
-
-    /**
-     * Triggers the handler dispatcher.
-     *
-     * @param layout        Current layout with failed nodes.
-     * @param failedServers Set of server nodes to be removed from the layout.
-     */
-    private void triggerHandlerDispatcher(Layout layout, Set<String> failedServers) {
-        //TODO: Code to trigger and handle the failures.
     }
 }
