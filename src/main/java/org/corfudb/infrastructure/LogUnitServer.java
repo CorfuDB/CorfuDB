@@ -1,22 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.github.benmanes.caffeine.cache.CacheWriter;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.netty.channel.ChannelHandlerContext;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-import lombok.val;
-import org.corfudb.infrastructure.log.*;
-import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.util.Utils;
-import org.corfudb.util.retry.IRetry;
-import org.corfudb.util.retry.IntervalAndSentinelRetry;
-
-import javax.annotation.Nonnull;
 import java.io.File;
 import java.lang.invoke.MethodHandles;
 import java.io.IOException;
@@ -33,6 +16,43 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.annotation.Nonnull;
+
+import com.github.benmanes.caffeine.cache.CacheWriter;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import io.netty.channel.ChannelHandlerContext;
+
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import lombok.val;
+
+import org.corfudb.infrastructure.log.InMemoryStreamLog;
+import org.corfudb.infrastructure.log.LogAddress;
+import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.wireprotocol.CommitRequest;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadRequest;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.TrimRequest;
+import org.corfudb.protocols.wireprotocol.WriteMode;
+import org.corfudb.protocols.wireprotocol.WriteRequest;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.Utils;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
 /**
  * Created by mwei on 12/10/15.
@@ -94,7 +114,7 @@ public class LogUnitServer extends AbstractServer {
                 }
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
             }
-        } catch (Exception ex) {
+        } catch (OverwriteException ex) {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM)
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
             else
@@ -166,8 +186,13 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type=CorfuMsgType.FILL_HOLE)
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        dataCache.get(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), x -> LogData.HOLE);
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        try {
+            dataCache.put(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), LogData.HOLE);
+            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+
+        } catch (OverwriteException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+        }
     }
 
     @ServerHandler(type=CorfuMsgType.TRIM)
@@ -289,18 +314,11 @@ public class LogUnitServer extends AbstractServer {
                 .writer(new CacheWriter<LogAddress, LogData>() {
                     @Override
                     public void write(@Nonnull LogAddress address, @Nonnull LogData entry) {
-                        if (dataCache.getIfPresent(address) != null) {
-                            throw new RuntimeException("overwrite");
-                        }
-                        //TODO - persisted entries should be of type PersistedLogData
-                        //if (!entry.isPersisted) { //don't persist an entry twice.
                         if (address.getStream() != null) {
                             getLog(address.getStream()).append(address.getAddress(), entry);
-                        }
-                        else {
+                        } else {
                             localLog.append(address.getAddress(), entry);
                         }
-                        //    }
                     }
 
                     @Override

@@ -28,6 +28,7 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.runtime.exceptions.OverwriteException;
 
 /**
  * This class implements the StreamLog by persisting the stream log in multiple files.
@@ -204,7 +205,7 @@ public class StreamLogFiles implements StreamLog {
                     });
                 }
             } else {
-                throw new Exception("overwrite");
+                throw new OverwriteException();
             }
             log.info("Disk_write[{}]: Written to disk.", address);
         } catch (Exception e) {
