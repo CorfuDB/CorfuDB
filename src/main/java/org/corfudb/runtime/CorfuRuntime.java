@@ -156,6 +156,7 @@ public class CorfuRuntime {
             try {
                 layout.get();
             } catch (Exception e) {
+                log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
             }
         }
     }

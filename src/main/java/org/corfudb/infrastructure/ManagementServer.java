@@ -61,6 +61,11 @@ public class ManagementServer extends AbstractServer {
     @Getter
     private long policyExecuteInterval = 1000;
     /**
+     * Boolean flag denoting whether the server is shutdown or not.
+     */
+    @Getter
+    private volatile boolean isShutdown = false;
+    /**
      * To schedule failure detection.
      */
     @Getter
@@ -96,12 +101,15 @@ public class ManagementServer extends AbstractServer {
      */
     private Layout waitForBootstrap() {
         Layout currentLayout = null;
+        log.debug("Waiting for bootstrap");
         while (currentLayout == null) {
             try {
                 Thread.sleep(1000);
                 currentLayout = layoutServer.getCurrentLayout();
             } catch (InterruptedException ie) {
                 log.warn("Thread interrupted : {}", ie);
+            }
+            if (isShutdown) {
                 return null;
             }
         }
@@ -183,7 +191,12 @@ public class ManagementServer extends AbstractServer {
 
         // Get the server status from the policy and check for failures.
         HashMap<String, Boolean> map = failureDetectorPolicy.getServerStatus();
-        // If map not empty, failures present. Trigger handler.
+        if (!map.isEmpty()) {
+            // If map not empty, failures present. Trigger handler.
+            log.info("Failures detected. Failed nodes : {}", map.keySet());
+        } else {
+            log.debug("No failures present.");
+        }
     }
 
     /**
@@ -192,6 +205,7 @@ public class ManagementServer extends AbstractServer {
      */
     public void shutdown() {
         // Shutting the fault detector.
+        isShutdown = true;
         failureDetectorService.shutdownNow();
 
         // Shut down the Corfu Runtime.

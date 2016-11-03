@@ -7,7 +7,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.util.Utils;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
@@ -25,7 +24,7 @@ public interface ICmdlet {
     String[] main(String[] args);
 
     default void configureBase(Map<String, Object> opts) {
-        if (CorfuServer.serverRunning_p) {
+        if (CorfuServer.serverRunning) {
             return;
         }
         Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
