@@ -15,6 +15,17 @@ import java.io.ObjectOutputStream;
  */
 @Slf4j
 public class JavaSerializer implements ISerializer {
+    final private byte type;
+
+    public JavaSerializer(byte type) {
+        this.type = type;
+    }
+
+    @Override
+    public byte getType() {
+        return type;
+    }
+
     /**
      * Deserialize an object from a given byte buffer.
      *

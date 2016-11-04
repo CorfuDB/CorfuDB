@@ -238,7 +238,7 @@ public class LockingTransactionalContext extends AbstractTransactionalContext {
                         log.warn("Error constructing SMR object", ex);
                     }
                 }
-                smrObjectClone = (T) Serializers.getSerializer(proxy.getSerializer())
+                smrObjectClone = (T) Serializers.getSerializer(proxy.getSerializer().getType())
                         .clone(proxy.getSmrObject(), proxy.getRuntime());
             }
             return smrObjectClone;

@@ -19,9 +19,19 @@ import java.util.UUID;
  */
 @Slf4j
 public class JSONSerializer implements ISerializer {
+    final private byte type;
 
     private static final Gson gson = new GsonBuilder()
             .create();
+
+    public JSONSerializer(byte type) {
+        this.type = type;
+    }
+
+    @Override
+    public byte getType() {
+        return type;
+    }
 
     /**
      * Deserialize an object from a given byte buffer.

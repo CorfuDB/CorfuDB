@@ -1,15 +1,10 @@
 package org.corfudb.runtime.view;
 
-import lombok.Getter;
-import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.logprotocol.TXEntry;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.util.serializer.SerializerType;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -129,7 +124,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
         StreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
         smrMap.put("a", "b");
-        streamB.write(new SMREntry("hi", new Object[]{"hello"}, SerializerType.PRIMITIVE));
+        streamB.write(new SMREntry("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
 
         //this TX should not conflict
         assertThat(smrMap)

@@ -18,9 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
-import static org.corfudb.util.serializer.SerializerType.CORFU;
 
 /**
  * A client to a LogUnit.
@@ -161,7 +159,7 @@ public class LogUnitClient implements IClient {
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
                                             Object writeObject, Map<UUID, Long> backpointerMap) {
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
-        Serializers.getSerializer(CORFU).serialize(writeObject, payload);
+        Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
         wr.setStreams(streams);
         wr.setRank(rank);
@@ -194,7 +192,7 @@ public class LogUnitClient implements IClient {
     public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
                                                   Object object) {
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
-        Serializers.getSerializer(CORFU).serialize(object, payload);
+        Serializers.CORFU.serialize(object, payload);
         return writeStream(address, streamAddresses, payload);
     }
 

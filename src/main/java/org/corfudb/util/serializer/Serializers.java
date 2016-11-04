@@ -15,25 +15,23 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public class Serializers {
-    public static final Map<Byte, SerializerType> typeMap =
-            Arrays.stream(SerializerType.values())
-                    .collect(Collectors.toMap(SerializerType::asByte, Function.identity()));
 
+    public static final ISerializer CORFU = new CorfuSerializer((byte) 0);
+    public static final ISerializer JAVA = new JavaSerializer((byte) 1);
+    public static final ISerializer JSON = new JSONSerializer((byte) 2);
+    public static final ISerializer PRIMITIVE = new PrimitiveSerializer((byte) 3);
 
-    public static final Map<SerializerType, ISerializer> serializerCache = new HashMap<>();
-
-    public static synchronized void setCustomSerializer (Class<? extends ISerializer> serializer) {
-        SerializerType.CUSTOM.setSerializer(serializer);
+    private static final Map<Byte, ISerializer> serializersMap;
+    static
+    {
+        serializersMap = new HashMap();
+        serializersMap.put(CORFU.getType(), CORFU);
+        serializersMap.put(JAVA.getType(), JAVA);
+        serializersMap.put(JSON.getType(), JSON);
+        serializersMap.put(PRIMITIVE.getType(), PRIMITIVE);
     }
 
-    public static ISerializer getSerializer(SerializerType type) {
-        return serializerCache.computeIfAbsent(type, x -> {
-            try {
-                return type.getSerializer().newInstance();
-            } catch (InstantiationException | IllegalAccessException ie) {
-                log.error("Error creating a serializer for {}", type.name());
-                throw new RuntimeException(ie);
-            }
-        });
+    public static ISerializer getSerializer(Byte type) {
+        return serializersMap.get(type);
     }
 }

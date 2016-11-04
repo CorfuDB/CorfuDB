@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.serializer.SerializerType;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Arrays;
@@ -37,9 +37,9 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      * The serializer used to serialize the SMR arguments.
      */
     @Getter
-    private SerializerType serializerType;
+    private ISerializer serializerType;
 
-    public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, SerializerType serializer) {
+    public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, ISerializer serializer) {
         super(LogEntryType.SMR);
         this.SMRMethod = SMRMethod;
         this.SMRArguments = SMRArguments;
@@ -59,13 +59,13 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         byte[] methodBytes = new byte[methodLength];
         b.readBytes(methodBytes, 0, methodLength);
         SMRMethod = new String(methodBytes);
-        serializerType = Serializers.typeMap.get(b.readByte());
+        serializerType = Serializers.getSerializer(b.readByte());
         byte numArguments = b.readByte();
         Object[] arguments = new Object[numArguments];
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            arguments[arg] = Serializers.getSerializer(serializerType).deserialize(objBuf, rt);
+            arguments[arg] = serializerType.deserialize(objBuf, rt);
             b.skipBytes(len);
         }
         SMRArguments = arguments;
@@ -76,13 +76,13 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         super.serialize(b);
         b.writeShort(SMRMethod.length());
         b.writeBytes(SMRMethod.getBytes());
-        b.writeByte(serializerType.asByte());
+        b.writeByte(serializerType.getType());
         b.writeByte(SMRArguments.length);
         Arrays.stream(SMRArguments)
                 .forEach(x -> {
                     int lengthIndex = b.writerIndex();
                     b.writeInt(0);
-                    Serializers.getSerializer(serializerType).serialize(x, b);
+                    serializerType.serialize(x, b);
                     int length = b.writerIndex() - lengthIndex - 4;
                     b.writerIndex(lengthIndex);
                     b.writeInt(length);

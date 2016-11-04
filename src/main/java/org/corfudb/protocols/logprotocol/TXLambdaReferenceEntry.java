@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.ICorfuObject;
 import org.corfudb.util.ReflectionUtils;
-import org.corfudb.util.serializer.SerializerType;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.reflect.InvocationTargetException;
@@ -36,10 +36,10 @@ public class TXLambdaReferenceEntry extends LogEntry {
     @Getter
     Object[] lambdaArguments;
     @Getter
-    SerializerType serializerType;
+    ISerializer serializerType;
 
     public TXLambdaReferenceEntry(Method lambdaReference, ICorfuObject transactionalObject,
-                                  Object[] lambdaArguments, SerializerType serializer) {
+                                  Object[] lambdaArguments, ISerializer serializer) {
         super(LogEntryType.TX_LAMBDAREF);
         this.method = lambdaReference;
         this.lambdaArguments = lambdaArguments;
@@ -84,13 +84,13 @@ public class TXLambdaReferenceEntry extends LogEntry {
             b.writeLong(streamID.getMostSignificantBits());
             b.writeLong(streamID.getLeastSignificantBits());
         }
-        b.writeByte(serializerType.asByte());
+        b.writeByte(serializerType.getType());
         b.writeByte(lambdaArguments.length);
         Arrays.stream(lambdaArguments)
                 .forEach(x -> {
                     int lengthIndex = b.writerIndex();
                     b.writeInt(0);
-                    Serializers.getSerializer(serializerType).serialize(x, b);
+                    serializerType.serialize(x, b);
                     int length = b.writerIndex() - lengthIndex - 4;
                     b.writerIndex(lengthIndex);
                     b.writeInt(length);
@@ -124,13 +124,13 @@ public class TXLambdaReferenceEntry extends LogEntry {
         }
 
         method = ReflectionUtils.getMethodFromToString(methodName);
-        serializerType = Serializers.typeMap.get(b.readByte());
+        serializerType = Serializers.getSerializer(b.readByte());
         byte numArguments = b.readByte();
         Object[] arguments = new Object[numArguments];
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            arguments[arg] = Serializers.getSerializer(serializerType).deserialize(objBuf, rt);
+            arguments[arg] = serializerType.deserialize(objBuf, rt);
             b.skipBytes(len);
         }
         lambdaArguments = arguments;

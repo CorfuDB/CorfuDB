@@ -20,7 +20,6 @@ import org.corfudb.util.serializer.Serializers;
 import java.util.*;
 import java.util.function.Function;
 
-import static org.corfudb.util.serializer.SerializerType.CORFU;
 
 /** A view of address space with Replex replication.
  *
@@ -50,8 +49,7 @@ public class ReplexReplicationView extends AbstractReplicationView {
         // when we go down the chain.
         try (AutoCloseableByteBuf b =
                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
-            Serializers.getSerializer(CORFU)
-                    .serialize(data, b);
+            Serializers.CORFU.serialize(data, b);
             payloadBytes = b.readableBytes();
 
             // Need this for txns to work, in particular, TXEntry.java requires this info.
@@ -126,8 +124,7 @@ public class ReplexReplicationView extends AbstractReplicationView {
                     if (partial.equals(data)) {
                         try (AutoCloseableByteBuf tempbuf =
                                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
-                            Serializers.getSerializer(CORFU)
-                                    .serialize(partial, tempbuf);
+                            Serializers.CORFU.serialize(partial, tempbuf);
 
                             CFUtils.getUninterruptibly(
                                     getLayout().getReplexLogUnitClient(0, getLayout().getReplexUnitIndex(0, streamID))

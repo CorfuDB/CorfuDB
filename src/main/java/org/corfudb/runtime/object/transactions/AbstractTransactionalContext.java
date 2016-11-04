@@ -6,8 +6,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
 import org.corfudb.runtime.view.TransactionStrategy;
-import org.corfudb.util.serializer.SerializerType;
-import org.corfudb.util.serializer.Serializers;
+import org.corfudb.util.serializer.ISerializer;
 
 import java.util.UUID;
 
@@ -64,7 +63,7 @@ public abstract class AbstractTransactionalContext implements AutoCloseable {
     abstract public boolean hasNoWriteSet();
 
     public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
-                                       Object[] SMRArguments, SerializerType serializer, boolean writeOnly) {
+                                       Object[] SMRArguments, ISerializer serializer, boolean writeOnly) {
     }
 
     abstract public <T> void resetObject(CorfuSMRObjectProxy<T> proxy);

@@ -7,7 +7,7 @@ import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
-import org.corfudb.util.serializer.SerializerType;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
@@ -92,7 +92,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     @Override
     public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
-                                       Object[] SMRArguments, SerializerType serializer, boolean writeOnly) {
+                                       Object[] SMRArguments, ISerializer serializer, boolean writeOnly) {
         objectMap
                 .compute(proxy, (k, v) ->
                 {
@@ -261,7 +261,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         log.warn("Error constructing SMR object", ex);
                     }
                 }
-                smrObjectClone = (T) Serializers.getSerializer(proxy.getSerializer())
+                smrObjectClone = (T) Serializers.getSerializer(proxy.getSerializer().getType())
                         .clone(proxy.getSmrObject(), proxy.getRuntime());
             }
             return smrObjectClone;
