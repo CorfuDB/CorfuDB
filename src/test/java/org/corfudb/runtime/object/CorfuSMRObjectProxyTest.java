@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.corfudb.CustomSerializer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -197,7 +198,8 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canUseCustomSerializer() throws Exception {
         //Register a custom serializer and use it with an SMR object
-        ISerializer customSerializer = Serializers.JSON;
+        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 1));
+        Serializers.registerSerializer(customSerializer);
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> test = r.getObjectsView().build()
