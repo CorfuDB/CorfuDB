@@ -2,17 +2,12 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
-import org.corfudb.infrastructure.log.LogUnitEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.serializer.ICorfuSerializable;
-import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.corfudb.util.serializer.SerializerType.CORFU;
 
 /**
  * Created by mwei on 8/15/16.
@@ -41,8 +36,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                     }
                     else {
                         data.resetReaderIndex();
-                        final Object actualValue = Serializers.getSerializer(CORFU)
-                                .deserialize(data, runtime);
+                        final Object actualValue = Serializers.CORFU.deserialize(data, runtime);
                         // TODO: Possibly fix some dependencies here.
                         if (actualValue instanceof LogEntry) {
                             ((LogEntry) actualValue).setEntry(this);

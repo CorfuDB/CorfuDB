@@ -32,6 +32,8 @@ public interface ISerializer {
         ;
     };
 
+    byte getType();
+
     /**
      * Deserialize an object from a given byte buffer.
      *

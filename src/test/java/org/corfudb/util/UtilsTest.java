@@ -1,13 +1,10 @@
-package org.corfudb.utils;
+package org.corfudb.util;
 
 import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.Test;
-
-import org.corfudb.util.Checksum;
-import org.corfudb.util.Utils;
 
 public class UtilsTest {
 

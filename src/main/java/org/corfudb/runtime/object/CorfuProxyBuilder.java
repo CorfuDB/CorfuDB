@@ -9,15 +9,13 @@ import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.matcher.ElementMatchers;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.ObjectExistsException;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.ReflectionUtils;
-import org.corfudb.util.serializer.SerializerType;
-import org.corfudb.util.serializer.Serializers;
+import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -190,7 +188,7 @@ public class CorfuProxyBuilder {
 
     public static <T, R extends ISMRInterface>
     T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull StreamView sv, @NonNull CorfuRuntime runtime,
-               SerializerType serializer, Set<ObjectOpenOptions> options, Object... constructorArgs) {
+               ISerializer serializer, Set<ObjectOpenOptions> options, Object... constructorArgs) {
         try {
             CorfuObjectProxy<T> proxy;
 

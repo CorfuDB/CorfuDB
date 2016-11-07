@@ -4,7 +4,7 @@ import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.util.serializer.SerializerType;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.corfudb.CustomSerializer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -197,13 +198,14 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canUseCustomSerializer() throws Exception {
         //Register a custom serializer and use it with an SMR object
-        Serializers.setCustomSerializer(SerializerType.JSON.getSerializer());
+        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 1));
+        Serializers.registerSerializer(customSerializer);
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> test = r.getObjectsView().build()
                 .setType(SMRMap.class)
                 .setStreamName("test")
-                .setSerializer(SerializerType.CUSTOM)
+                .setSerializer(customSerializer)
                 .open();
 
         test.put("a", "b");

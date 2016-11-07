@@ -13,7 +13,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamView;
-import org.corfudb.util.serializer.SerializerType;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.reflect.Method;
@@ -45,7 +45,7 @@ public class CorfuObjectProxy<P> {
      * The serializer used by this proxy when it is written to the log.
      */
     @Getter
-    SerializerType serializer;
+    ISerializer serializer;
 
     /**
      * The runtime used to create this proxy.
@@ -74,7 +74,7 @@ public class CorfuObjectProxy<P> {
     Class<? extends P> generatedClass;
 
     public CorfuObjectProxy(CorfuRuntime runtime, StreamView sv,
-                            Class<P> originalClass, SerializerType serializer) {
+                            Class<P> originalClass, ISerializer serializer) {
         this.runtime = runtime;
         this.sv = sv;
         this.originalClass = originalClass;
@@ -116,7 +116,7 @@ public class CorfuObjectProxy<P> {
             // write the transaction to the log
             log.trace("TX Method: {}, Affected streams: {}", method.getName(), affectedStreams);
             TXLambdaReferenceEntry tlre = new TXLambdaReferenceEntry(method, obj,
-                    arguments, SerializerType.JSON);
+                    arguments, Serializers.JSON);
             // if the TX returns something, we need to join on a completable future.
             if (!method.getReturnType().getName().equals("void")) {
                 CompletableFuture cf = new CompletableFuture();

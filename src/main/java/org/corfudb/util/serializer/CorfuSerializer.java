@@ -9,12 +9,19 @@ import org.corfudb.runtime.CorfuRuntime;
  */
 public class CorfuSerializer implements ISerializer {
 
-    //region Constants
+    final private byte type;
+
         /* The magic that denotes this is a corfu payload */
     final byte CorfuPayloadMagic = 0x42;
-    //endregion
 
-    //region Serializer
+    public CorfuSerializer(byte type) {
+        this.type = type;
+    }
+
+    @Override
+    public byte getType() {
+        return type;
+    }
 
     /**
      * Deserialize an object from a given byte buffer.
@@ -53,6 +60,4 @@ public class CorfuSerializer implements ISerializer {
             throw new RuntimeException("Attempting to serialize unsupported type " + o.getClass().getName() +".");
         }
     }
-    //endregion
-
 }

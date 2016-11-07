@@ -3,22 +3,15 @@ package org.corfudb.protocols.logprotocol;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.serializer.ICorfuSerializable;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
-import static org.corfudb.util.serializer.SerializerType.CORFU;
 
 /**
  * Created by amytai on 9/16/16.
@@ -49,9 +42,7 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         updates = new ArrayList<>();
         for (short i = 0; i < numUpdates; i++) {
             updates.add(
-                    (SMREntry) Serializers
-                            .getSerializer(CORFU)
-                            .deserialize(b, rt));
+                    (SMREntry) Serializers.CORFU.deserialize(b, rt));
         }
     }
 
@@ -60,9 +51,7 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         super.serialize(b);
         b.writeShort(updates.size());
         updates.stream()
-                .forEach(x -> Serializers
-                        .getSerializer(CORFU)
-                        .serialize(x, b));
+                .forEach(x -> Serializers.CORFU.serialize(x, b));
     }
 
     @Override

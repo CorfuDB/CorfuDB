@@ -20,11 +20,21 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class PrimitiveSerializer implements ISerializer {
+    final private byte type;
 
     public static final Map<Byte, DeserializerFunction> DeserializerMap =
             Arrays.stream(Primitives.values())
                     .collect(Collectors.toMap(Primitives::getTypeNum, Primitives::getDeserializer));
     public static final Map<Class, SerializerFunction> SerializerMap = getSerializerMap();
+
+    public PrimitiveSerializer(byte type) {
+        this.type = type;
+    }
+
+    @Override
+    public byte getType() {
+        return type;
+    }
 
     @SuppressWarnings("unchecked")
     private static Map<Class, SerializerFunction> getSerializerMap() {
