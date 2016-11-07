@@ -24,6 +24,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class AddressSpaceViewTest extends AbstractViewTest {
 
+    /** This test checks to see if stale cache misses time out,
+     *  That is, if a cache read returns EMPTY, after the timeout period
+     *  the cache should retry the read, and get the correct result.
+     *
+     *  In this case, the cache miss initially misses, but we fill a hole.
+     *  After the timeout, the client should see the hole, rather than
+     *  empty again.
+     */
     @Test
     public void cacheMissTimesOut() {
         getDefaultRuntime().setCacheDisabled(false).connect();
@@ -33,7 +41,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .isEqualTo(DataType.EMPTY);
         getRuntime().getLayoutView().getLayout().getLogUnitClient(0, 0).fillHole(0);
         try {
-            Thread.sleep(100);
+            Thread.sleep(1000);
         } catch (InterruptedException e) {// don't do anything
         }
         assertThat(getRuntime().getAddressSpaceView().read(0).getType())
