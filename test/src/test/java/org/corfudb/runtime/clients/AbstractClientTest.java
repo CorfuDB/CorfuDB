@@ -9,7 +9,6 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Before;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 

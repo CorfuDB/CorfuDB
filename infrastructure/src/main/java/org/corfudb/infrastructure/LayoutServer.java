@@ -73,6 +73,55 @@ public class LayoutServer extends AbstractServer {
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
+<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b:infrastructure/src/main/java/org/corfudb/infrastructure/LayoutServer.java
+=======
+
+    private int reboots = 0;
+
+    /**
+     * Configuration manager: disable polling loop
+     */
+    public static boolean disableConfigMgrPolling = false; // QQQ debugging only, put me back to false!!!!
+
+    /**
+     * Configuration manager: client runtime
+     */
+    private CorfuRuntime rt = null;
+
+    /**
+     * Configuration manager: layout view
+     */
+    private LayoutView lv = null;
+
+    /**
+     * Configuration manager: my endpoint name
+     */
+    private String my_endpoint;
+
+    /**
+     * Configuration manager: list of layout servers that we monitor for ping'ability.
+     */
+    private String[] history_servers = null;
+    private NettyClientRouter[] history_routers = null;
+
+    /**
+     * Configuration manager: polling history
+     */
+    private int[] history_poll_failures = null;
+    private int   history_poll_count = 0;
+    private HashMap<String,Boolean> history_status = null;
+
+    /**
+     * Configuration manager: future handle thingie to cancel periodic polling
+     */
+    public static ScheduledFuture<?> pollFuture = null;
+    private static Object pollFutureLock = new Object();
+
+    /**
+     * TODO DELETE ME.
+     */
+    Layout todo_layout_source_kludge = null;
+>>>>>>> substantial refactoring of codebase into modules:infrastructure/src/main/java/org/corfudb/infrastructure/LayoutServer.java
 
     private int reboots = 0;
 

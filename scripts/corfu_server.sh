@@ -41,7 +41,7 @@ CORFUDB_HEAP="${CORFUDB_HEAP:-1000}"
 export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
 while true; do
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS org.corfudb.infrastructure.CorfuServer $*
+"$JAVA" -cp "$CLASSPATH" $JVMFLAGS CorfuServer $*
 if [ $? -ne 100 ]; then
 break
 fi

@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class BaseServerTest extends AbstractServerTest {
 
+<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b:test/src/test/java/org/corfudb/infrastructure/BaseServerTest.java
     BaseServer bs;
 
     @Override
@@ -20,6 +21,18 @@ public class BaseServerTest extends AbstractServerTest {
         if (bs == null) {
             bs = new BaseServer();
         }
+=======
+    BaseServer bs = new BaseServer();
+
+    @Before
+    public void resetServer() {
+        bs = new BaseServer();
+        setServer(bs);
+    }
+
+    @Override
+    public AbstractServer getDefaultServer() {
+>>>>>>> substantial refactoring of codebase into modules:test/src/test/java/org/corfudb/infrastructure/BaseServerTest.java
         return bs;
     }
 

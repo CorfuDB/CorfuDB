@@ -4,7 +4,11 @@ import com.google.common.reflect.TypeToken;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b:runtime/src/main/java/org/corfudb/protocols/wireprotocol/CorfuMsgType.java
 import org.corfudb.runtime.view.Layout;
+=======
+
+>>>>>>> substantial refactoring of codebase into modules:runtime/src/main/java/org/corfudb/protocols/wireprotocol/CorfuMsgType.java
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -55,6 +59,10 @@ public enum CorfuMsgType {
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class)),
     COMMIT(40, new TypeToken<CorfuPayloadMsg<CommitRequest>>() {}),
 
+<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b:runtime/src/main/java/org/corfudb/protocols/wireprotocol/CorfuMsgType.java
+=======
+    // Logging Unit Error Codes
+>>>>>>> substantial refactoring of codebase into modules:runtime/src/main/java/org/corfudb/protocols/wireprotocol/CorfuMsgType.java
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
     ERROR_OVERWRITE(52, TypeToken.of(CorfuMsg.class)),
@@ -62,11 +70,18 @@ public enum CorfuMsgType {
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
     ERROR_REPLEX_OVERWRITE(56, TypeToken.of(CorfuMsg.class)),
+<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b:runtime/src/main/java/org/corfudb/protocols/wireprotocol/CorfuMsgType.java
     ERROR_DATA_CORRUPTION(57, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
 
     // EXTRA CODES
     LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true),
     LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, true),
+=======
+
+    // EXTRA CODES
+    LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true),
+    LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, true);
+>>>>>>> substantial refactoring of codebase into modules:runtime/src/main/java/org/corfudb/protocols/wireprotocol/CorfuMsgType.java
 
     // Management Codes
     MANAGEMENT_BOOTSTRAP(62, new TypeToken<CorfuPayloadMsg<Layout>>(){}, true),
