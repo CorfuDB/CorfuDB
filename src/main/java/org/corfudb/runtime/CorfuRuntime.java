@@ -3,11 +3,7 @@ package org.corfudb.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
@@ -128,6 +124,7 @@ public class CorfuRuntime {
             router.addClient(new LayoutClient())
                     .addClient(new SequencerClient())
                     .addClient(new LogUnitClient())
+                    .addClient(new ManagementClient())
                     .start();
             nodeRouters.put(address, router);
         } catch (Exception e) {

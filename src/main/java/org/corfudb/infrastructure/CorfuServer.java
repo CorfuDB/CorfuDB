@@ -181,7 +181,7 @@ public class CorfuServer {
         router.addServer(layoutServer);
         logUnitServer = new LogUnitServer(serverContext);
         router.addServer(logUnitServer);
-        managementServer = new ManagementServer(serverContext, layoutServer);
+        managementServer = new ManagementServer(serverContext);
         router.addServer(managementServer);
         router.baseServer.setOptionsMap(opts);
 

@@ -11,7 +11,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
-import java.util.UUID;
 
 /**
  * Created by mwei on 8/8/16.
@@ -68,7 +67,11 @@ public enum CorfuMsgType {
 
     // EXTRA CODES
     LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),
-    LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, LayoutServer.class, true);
+    LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, LayoutServer.class, true),
+
+    // Management Codes
+    MANAGEMENT_BOOTSTRAP(62, new TypeToken<CorfuPayloadMsg<ManagementBootstrapRequest>>(){}, ManagementServer.class, true),
+    FAILURE_DETECTED(63, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, ManagementServer.class, true);
 
 
     public final int type;

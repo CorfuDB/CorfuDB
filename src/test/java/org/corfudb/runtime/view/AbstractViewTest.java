@@ -6,7 +6,7 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
-import org.corfudb.protocols.wireprotocol.LayoutMsg;
+import org.corfudb.protocols.wireprotocol.ManagementBootstrapRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.junit.After;
@@ -81,7 +81,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                     tcn.addClient(new BaseClient())
                             .addClient(new SequencerClient())
                             .addClient(new LayoutClient())
-                            .addClient(new LogUnitClient());
+                            .addClient(new LogUnitClient())
+                            .addClient(new ManagementClient());
                     return tcn;
                 }
         );
@@ -209,6 +210,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                     e.getValue().layoutServer
                             .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
                                     null, e.getValue().serverRouter);
+                    e.getValue().managementServer
+                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(new ManagementBootstrapRequest(l)),
+                                    null, e.getValue().serverRouter);
                 });
     }
 
@@ -335,7 +339,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
-            this.managementServer = new ManagementServer(serverContext, this.layoutServer);
+            this.managementServer = new ManagementServer(serverContext);
 
             this.serverRouter.addServer(baseServer);
             this.serverRouter.addServer(sequencerServer);

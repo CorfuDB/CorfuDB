@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -153,6 +154,7 @@ public class corfu_layout implements ICmdlet {
             log.debug("Bootstrapping with layout {}", l);
             try {
                 if (router.getClient(LayoutClient.class).bootstrapLayout(l).get()) {
+                    router.getClient(ManagementClient.class).bootstrapManagement(l).get();
                     return cmdlet.ok();
                 } else {
                     return cmdlet.err("NACK");

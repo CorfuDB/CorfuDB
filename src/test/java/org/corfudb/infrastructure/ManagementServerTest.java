@@ -18,7 +18,7 @@ public class ManagementServerTest extends AbstractServerTest {
                 .setSingle(false)
                 .setServerRouter(getRouter())
                 .build();
-        return new ManagementServer(serverContext, new LayoutServer(serverContext));
+        return new ManagementServer(serverContext);
     }
 
     /**
