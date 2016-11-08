@@ -14,7 +14,7 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
         cd $HOME
         git config --global user.email "travis@travis-ci.org"
         git config --global user.name "travis-ci"
-        git clone --quiet --branch=mvn-repo https://${GH_TOKEN}@github.com/CorfuDB/CorfuDB mvn-repo > /dev/null
+        git clone --quiet --branch=mvn-repo https://${GH_TOKEN}@github.com/CorfuDB/Corfu-Repos mvn-repo > /dev/null
 
         cd mvn-repo
         cp -Rf $HOME/mvn-repo-current/* .
