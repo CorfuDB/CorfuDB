@@ -13,7 +13,7 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
         cd $HOME
         git config --global user.email "travis@travis-ci.org"
         git config --global user.name "travis-ci"
-        git clone --quiet --branch=debian https://${GH_TOKEN}@github.com/CorfuDB/CorfuDB debian > /dev/null
+        git clone --quiet --branch=debian https://${GH_TOKEN}@github.com/CorfuDB/Corfu-Repos debian > /dev/null
 
         cd debian
         reprepro -b . includedeb trusty $HOME/$DEBNAME
