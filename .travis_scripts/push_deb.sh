@@ -4,7 +4,7 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
     if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
         echo -e "Shipping deb package..."
         mvn -N io.takari:maven:wrapper -Dmaven=3.3.9
-        mvn deploy -DskipTests=true
+        ./mvnw deploy -DskipTests=true
         gpg --import public.key private.key
 #this is fragile and needs to account for changes in the filename
         DEBNAME="corfu_0.1+${TRAVIS_BUILD_NUMBER}_all.deb"
