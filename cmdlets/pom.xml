@@ -16,16 +16,11 @@
             <groupId>org.corfudb</groupId>
             <artifactId>runtime</artifactId>
             <version>${project.version}</version>
-<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b
-=======
-            <scope>provided</scope>
->>>>>>> substantial refactoring of codebase into modules
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>infrastructure</artifactId>
             <version>${project.version}</version>
-<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b
         </dependency>
 
 
@@ -69,6 +64,47 @@
 =======
             <scope>provided</scope>
         </dependency>
+
+
+        <!-- External Dependencies -->
+        <dependency>
+            <groupId>org.erlang.otp</groupId>
+            <artifactId>jinterface</artifactId>
+            <version>1.6.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.clojure</groupId>
+            <artifactId>clojure</artifactId>
+            <version>1.8.0</version>
+        </dependency>
+        <dependency>
+            <groupId>reply</groupId>
+            <artifactId>reply</artifactId>
+            <version>0.3.7</version>
+        </dependency>
     </dependencies>
+<<<<<<< 3db3bdb3f657e88ea233e78663ebf66aaa3e552e
 >>>>>>> substantial refactoring of codebase into modules
+=======
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>com.theoryinpractise</groupId>
+                <artifactId>clojure-maven-plugin</artifactId>
+                <version>1.8.1</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <id>compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+>>>>>>> fix broken synchronization of sequencer, remove excessive deps
 </project>
