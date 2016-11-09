@@ -21,6 +21,7 @@
             <groupId>org.corfudb</groupId>
             <artifactId>infrastructure</artifactId>
             <version>${project.version}</version>
+<<<<<<< 6a06eac85175cc0a2d9b342d972db9d56b6e756f
         </dependency>
 
 
@@ -63,6 +64,8 @@
     </build>
 =======
             <scope>provided</scope>
+=======
+>>>>>>> fix corfu_server script, set dependency scope
         </dependency>
 
 

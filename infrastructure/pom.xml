@@ -16,19 +16,11 @@
             <groupId>org.corfudb</groupId>
             <artifactId>runtime</artifactId>
             <version>${project.version}</version>
-<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b
-=======
-            <scope>provided</scope>
->>>>>>> substantial refactoring of codebase into modules
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>format</artifactId>
             <version>${project.version}</version>
-<<<<<<< 170b77d1b1f8b9788fa9f552ce63e0c21bee784b
-=======
-            <scope>provided</scope>
->>>>>>> substantial refactoring of codebase into modules
         </dependency>
     </dependencies>
 
