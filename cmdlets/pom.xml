@@ -24,5 +24,43 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
+
+
+        <!-- External Dependencies -->
+        <dependency>
+            <groupId>org.erlang.otp</groupId>
+            <artifactId>jinterface</artifactId>
+            <version>1.6.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.clojure</groupId>
+            <artifactId>clojure</artifactId>
+            <version>1.8.0</version>
+        </dependency>
+        <dependency>
+            <groupId>reply</groupId>
+            <artifactId>reply</artifactId>
+            <version>0.3.7</version>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>com.theoryinpractise</groupId>
+                <artifactId>clojure-maven-plugin</artifactId>
+                <version>1.8.1</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <id>compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
