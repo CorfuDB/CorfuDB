@@ -16,13 +16,11 @@
             <groupId>org.corfudb</groupId>
             <artifactId>runtime</artifactId>
             <version>${project.version}</version>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>infrastructure</artifactId>
             <version>${project.version}</version>
-            <scope>provided</scope>
         </dependency>
 
 
