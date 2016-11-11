@@ -192,7 +192,9 @@ postcondition(#state{d=D}, {call,_,keySet,[_Mbox, _EP, _Str, _MT]}, Ret) ->
         ["OK", X] ->
             X2 = string:strip(string:strip(X, left, $[), right, $]),
             Ks = string:tokens(X2, ", "),
-            lists:sort(Ks) == lists:sort([K || {K,_V} <- orddict:to_list(D)])
+            lists:sort(Ks) == lists:sort([K || {K,_V} <- orddict:to_list(D)]);
+        _Else ->
+            ?ELSE({got, _Else})
     end;
 postcondition(#state{d=D}, {call,_,values,[_Mbox, _EP, _Str, MT]}, Ret) ->
     case Ret of
@@ -221,7 +223,9 @@ postcondition(#state{d=D}, {call,_,entrySet,[_Mbox, _EP, _Str, _MT]}, Ret) ->
                            [K]    -> {K, ""}
                        end
                    end || Pair <- Ps],
-            lists:sort(KVs) == lists:sort(orddict:to_list(D))
+            lists:sort(KVs) == lists:sort(orddict:to_list(D));
+        _Else ->
+            ?ELSE({got, _Else})
     end.
 
 next_state(S, _V, {call,_,reset,[_Mbox, _EP]}) ->
@@ -317,7 +321,7 @@ prop_parallel(MapType, MoreCmds) ->
     prop_parallel(MapType, MoreCmds, qc_java:local_mboxes(), qc_java:local_endpoint()).
 
 prop_parallel(MapType, MoreCmds, Mboxes, Endpoint) ->
-    AlwaysNum = 20,
+    AlwaysNum = 2,
     io:format(user, "NOTE: parallel cmds are executed ~w times to try to detect non-determinism\n", [AlwaysNum]),
     ?FORALL(Cmds, more_commands(MoreCmds,
                                 parallel_commands(?MODULE,
@@ -377,23 +381,8 @@ classify_exception(String) ->
               Class
       end, unknown, RsCs).
 
-res_contains_known_exceptions(S_or_Hs) ->
-    %% TODO: Checking in PropEr style.
-    ToCheck = [{Except, classify_exception(What)} ||
-                     #eqc_statem_history{
-                        result={normal,
-                                ["ERROR","exception",Except,What|_]}
-                       } <- lists:append(S_or_Hs)],
-    case lists:filter(fun({_,unknown}) -> true;
-                         (_)           -> false
-                      end, ToCheck) of
-        [_|_] ->
-            false;                              % One unknown is too many
-        [] ->
-            io:format(user, "Bug 212? ", []),
-            [io:format(user, "~s -> ~w,", [Ex, Class]) || {Ex, Class} <- ToCheck],
-            true
-    end.
+res_contains_known_exceptions(_S_or_Hs) ->
+    false.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

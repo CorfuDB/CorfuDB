@@ -292,7 +292,9 @@ public class LayoutServer extends AbstractServer {
 
         long serverEpoch = getServerEpoch();
 
-        if (msg.getPayload().getEpoch() != serverEpoch) {
+        // If both epoch numbers in the msg aren't equal, then the request is malformed.
+        if (msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch() ||
+                msg.getPayload().getEpoch() != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", proposeLayout.getEpoch(), serverEpoch, msg);
             return;
@@ -338,7 +340,9 @@ public class LayoutServer extends AbstractServer {
         Layout commitLayout = msg.getPayload().getLayout();
         if (!checkBootstrap(msg, ctx, r)) { return; }
         long serverEpoch = getServerEpoch();
-        if(msg.getPayload().getEpoch() < serverEpoch) {
+        // If both epoch numbers in the msg aren't equal, then the request is malformed.
+        if(msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch() ||
+                msg.getPayload().getEpoch() < serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }

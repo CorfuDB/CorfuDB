@@ -197,6 +197,35 @@ public class QCLayout {
             } catch (Exception e) {
                 return replyErr("Exception during set_epoch", e.toString(), ExceptionUtils.getStackTrace(e));
             }
+        } else if ((Boolean) opts.get("set_epoch")) {
+            log.debug("Set epoch with new epoch={}", epoch);
+            try {
+                CorfuRuntime rt;
+                if ((rt = setEpochRTs.get(addressport)) == null) {
+                    log.trace("Creating CorfuRuntime for set_epoch for {} ", addressport);
+                    rt = new CorfuRuntime().addLayoutServer(addressport);
+                    setEpochRTs.putIfAbsent(addressport, rt);
+                }
+                rt = setEpochRTs.get(addressport);
+
+                // Construct a layout that contains just enough to allow .moveServersToEpoch()
+                // to send SET_EPOCH to our desired endpoint.
+                List<String> ls = new ArrayList(1);
+                ls.add(addressport);
+                List<String> none1 = new ArrayList(0);
+                List<Layout.LayoutSegment> none2 = new ArrayList(0);
+                Layout tmpLayout = new Layout(ls, none1, none2, epoch);
+                tmpLayout.setRuntime(rt);
+                tmpLayout.moveServersToEpoch();
+                return replyOk();
+            } catch (WrongEpochException we) {
+                return replyErr("Exception during set_epoch",
+                        we.getCause() == null ? "WrongEpochException" : we.getCause().toString(),
+                        "correctEpoch: " + we.getCorrectEpoch(),
+                        "stack: " + ExceptionUtils.getStackTrace(we));
+            } catch (Exception e) {
+                return replyErr("Exception during set_epoch", e.toString(), ExceptionUtils.getStackTrace(e));
+            }
         } else if ((Boolean) opts.get("prepare")) {
             long rank = Long.parseLong((String) opts.get("--rank"));
             log.debug("Prepare with new rank={}", rank);
