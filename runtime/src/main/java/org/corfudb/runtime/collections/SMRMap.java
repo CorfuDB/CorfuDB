@@ -1,10 +1,10 @@
 package org.corfudb.runtime.collections;
 
 
-import org.corfudb.runtime.object.Accessor;
+import org.corfudb.annotations.Accessor;
 import org.corfudb.runtime.object.ICorfuSMRObject;
-import org.corfudb.runtime.object.Mutator;
-import org.corfudb.runtime.object.MutatorAccessor;
+import org.corfudb.annotations.Mutator;
+import org.corfudb.annotations.MutatorAccessor;
 
 import java.util.Collection;
 import java.util.HashMap;

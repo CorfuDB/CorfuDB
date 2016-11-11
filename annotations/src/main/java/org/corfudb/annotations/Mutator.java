@@ -1,4 +1,4 @@
-package org.corfudb.runtime.object;
+package org.corfudb.annotations;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;

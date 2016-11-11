@@ -9,25 +9,32 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>runtime</artifactId>
+    <artifactId>annotationProcessor</artifactId>
 
     <dependencies>
-        <dependency>
-            <groupId>org.corfudb</groupId>
-            <artifactId>format</artifactId>
-            <version>${project.version}</version>
-            <scope>provided</scope>
-        </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>annotations</artifactId>
             <version>${project.version}</version>
         </dependency>
+
+        <!-- External Dependencies -->
         <dependency>
-            <groupId>org.corfudb</groupId>
-            <artifactId>annotationProcessor</artifactId>
-            <version>${project.version}</version>
+            <groupId>com.squareup</groupId>
+            <artifactId>javapoet</artifactId>
+            <version>1.7.0</version>
         </dependency>
     </dependencies>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <compilerArgument>-proc:none</compilerArgument>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -1,5 +1,10 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.annotations.ConstructorType;
+import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.ObjectType;
+import org.corfudb.annotations.StateSource;
+
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
