@@ -1,11 +1,11 @@
 package org.corfudb.runtime.collections;
 
 import lombok.Getter;
-import org.corfudb.runtime.object.ConstructorType;
-import org.corfudb.runtime.object.CorfuObject;
+import org.corfudb.annotations.ConstructorType;
+import org.corfudb.annotations.CorfuObject;
 import org.corfudb.runtime.object.ICorfuObject;
-import org.corfudb.runtime.object.ObjectType;
-import org.corfudb.runtime.object.TransactionalMethod;
+import org.corfudb.annotations.ObjectType;
+import org.corfudb.annotations.TransactionalMethod;
 import sun.misc.CRC16;
 
 import java.util.Collection;

@@ -1,4 +1,4 @@
-package org.corfudb.runtime.object;
+package org.corfudb.annotations;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Inherited;
@@ -9,8 +9,8 @@ import java.lang.annotation.Target;
 /**
  * Created by mwei on 2/17/16.
  */
-@Target(ElementType.TYPE)
+@Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
-public @interface InstrumentedCorfuObject {
+public @interface DontInstrument {
 }

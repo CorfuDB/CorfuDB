@@ -1,5 +1,8 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.annotations.Accessor;
+import org.corfudb.annotations.Mutator;
+
 /**
  * Created by mwei on 2/18/16.
  */
