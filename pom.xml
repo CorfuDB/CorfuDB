@@ -12,6 +12,8 @@
         <module>format</module>
         <module>cmdlets</module>
         <module>test</module>
+        <module>annotationProcessor</module>
+        <module>annotations</module>
     </modules>
 
     <packaging>pom</packaging>
@@ -237,7 +239,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.3</version>
+                <version>3.5.1</version> <!-- version < 3.5.1 has issue with annotation incremental compile-->
                 <configuration>
                     <compilerVersion>1.8</compilerVersion>
                     <source>1.8</source>

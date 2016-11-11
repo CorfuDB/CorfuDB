@@ -1,4 +1,4 @@
-package org.corfudb.runtime.object;
+package org.corfudb.annotations;
 
 /**
  * Created by mwei on 3/29/16.
