@@ -7,22 +7,18 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuProxyBuilder;
-import org.corfudb.runtime.object.CorfuSMRObjectProxy;
-import org.corfudb.runtime.object.ICorfuObject;
-import org.corfudb.runtime.object.ICorfuSMRObject;
+import org.corfudb.runtime.object.*;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.object.transactions.LockingTransactionalContext;
-import org.corfudb.runtime.object.transactions.OptimisticTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionBuilder;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.LambdaUtils;
+import org.corfudb.util.serializer.Serializers;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,9 +43,6 @@ public class ObjectsView extends AbstractView {
 
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
-    LoadingCache<StackTraceElement, CallSiteData> callSiteDataCache = Caffeine.newBuilder()
-            .maximumSize(10000)
-            .build(stackTraceElement -> new CallSiteData());
 
     public ObjectsView(CorfuRuntime runtime) {
         super(runtime);
@@ -116,14 +109,33 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
-        CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
-        ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
-        return (T) objectCache.computeIfAbsent(oid, x -> {
-            StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
-                    destination, proxy.getTimestamp());
-            return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
-                    proxy.getSerializer(), Collections.emptySet());
-        });
+        try {
+            // to be deprecated
+            CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
+            ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
+            return (T) objectCache.computeIfAbsent(oid, x -> {
+                StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
+                        destination, proxy.getTimestamp());
+                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
+                        proxy.getSerializer(), Collections.emptySet());
+            });
+        } catch (Exception e) {
+            // new code path
+            ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
+            ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType(), null);
+            return (T) objectCache.computeIfAbsent(oid, x -> {
+                StreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
+                        destination, proxy.getCorfuSMRProxy().getVersion());
+                try {
+                    return
+                            CorfuCompileProxyBuilder.getProxy(proxy.getCorfuSMRProxy().getObjectType(),
+                                    runtime, sv.getStreamID(), null, Serializers.JSON);
+                }
+                catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            });
+        }
     }
 
     /**
@@ -146,59 +158,17 @@ public class ObjectsView extends AbstractView {
      * to other threads or clients until TXEnd is called.
      */
     public void TXBegin() {
-        TXBegin(TransactionStrategy.AUTOMATIC);
+        TXBuild()
+                .setType(TransactionType.OPTIMISTIC) // TODO:default needs to be configurable
+                .begin();
     }
 
-    /**
-     * Determine the call site for the transaction.
-     *
-     * @return The call site where TXBegin(); was called.
+    /** Builds a new transaction using the transaction
+     * builder.
+     * @return  A transaction builder to build a transaction with.
      */
-    public StackTraceElement getCallSite() {
-        StackTraceElement[] st = new Exception().getStackTrace();
-        for (int i = 1; i < st.length; i++) {
-            if (!st[i].getClassName().equals(this.getClass().getName())) {
-                return st[i];
-            }
-        }
-        throw new RuntimeException("Couldn't get call site!");
-    }
-
-    public void TXBegin(TransactionStrategy strategy, Object... writeSet) {
-        if (strategy == TransactionStrategy.LOCKING) {
-            LockingTransactionalContext context = new LockingTransactionalContext(runtime);
-            context.setWriteSet(writeSet);
-            context.setStartTime(System.currentTimeMillis());
-            TransactionalContext.newContext(context);
-
-            log.trace("Entering transactional context {}.", context.getTransactionID());
-        } else {
-            TXBegin(strategy);
-        }
-    }
-
-    /**
-     * Begins a transaction on the current thread.
-     * Modifications to objects will not be visible
-     * to other threads or clients until TXEnd is called.
-     */
-    public void TXBegin(TransactionStrategy strategy) {
-
-        if (strategy == TransactionStrategy.AUTOMATIC) {
-            //StackTraceElement st = getCallSite();
-            //log.trace("Determined call site to be {}", st);
-            //CallSiteData csd = callSiteDataCache.get(st);
-            //strategy = csd.getNextStrategy();
-            //log.trace("Selecting transaction strategy {} based on call site.", strategy);
-            strategy = TransactionStrategy.OPTIMISTIC;
-        }
-
-
-        AbstractTransactionalContext context = TransactionalContext.newContext(runtime);
-        context.setStrategy(strategy);
-        context.setStartTime(System.currentTimeMillis());
-
-        log.trace("Entering transactional context {}.", context.getTransactionID());
+    public TransactionBuilder TXBuild() {
+        return new TransactionBuilder(runtime);
     }
 
     /**
@@ -207,11 +177,13 @@ public class ObjectsView extends AbstractView {
      * context will be discarded.
      */
     public void TXAbort() {
-        AbstractTransactionalContext context = TransactionalContext.removeContext();
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         if (context == null) {
             log.warn("Attempted to abort a transaction, but no transaction active!");
         } else {
             log.trace("Aborting transactional context {}.", context.getTransactionID());
+            context.abortTransaction();
+            TransactionalContext.removeContext();
         }
     }
 
@@ -229,110 +201,26 @@ public class ObjectsView extends AbstractView {
      * End a transaction on the current thread.
      *
      * @throws TransactionAbortedException If the transaction could not be executed successfully.
+     *
+     * @return The address of the transaction, if it commits.
      */
-    public void TXEnd()
+    public long TXEnd()
             throws TransactionAbortedException {
         AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         if (context == null) {
             log.warn("Attempted to end a transaction, but no transaction active!");
+            return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
         } else {
             long totalTime = System.currentTimeMillis() - context.getStartTime();
             log.trace("Exiting (committing) transactional context {} (time={} ms).",
                     context.getTransactionID(), totalTime);
-            if (context.hasNoWriteSet()) {
-                log.trace("Transactional context {} was read-only, exiting context without commit.",
-                        context.getTransactionID());
-                TransactionalContext.removeContext();
-                return;
-            }
 
-            if (TransactionalContext.getTransactionStack().size() > 1) {
-                TransactionalContext.removeContext();
-                log.trace("Transaction {} within context {}, writing to context.", context.getTransactionID(),
-                        TransactionalContext.getCurrentContext().getTransactionID());
-                TransactionalContext.getCurrentContext().addTransaction(context);
-            } else {
-                //TXEntry entry = ((OptimisticTransactionalContext) context).getEntry();
-                //Set<UUID> affectedStreams = entry.getAffectedStreams();
-                //if(transactionLogging) {
-                //    affectedStreams.add(TRANSACTION_STREAM_ID);
-                //    log.trace("TX entry {} will be writted to transaction stream : {}", entry, TRANSACTION_STREAM_ID);
-                //}
-                //long address = runtime.getStreamsView().write(affectedStreams, entry);
                 try {
-                    TransactionalContext.getCurrentContext().commitTransaction();
+                    return TransactionalContext.getCurrentContext().commitTransaction();
                 } finally {
                     TransactionalContext.removeContext();
                 }
-                //log.trace("TX entry {} written at address {}", entry, address);
-                //now check if the TX will be an abort...
-                //if (entry.isAborted()) {
-                //    throw new TransactionAbortedException();
-                //}
-                //otherwise fire the handlers.
-                TransactionalContext.getCompletionMethods().parallelStream()
-                        .forEach(x -> x.handle(context));
-            }
         }
-    }
-
-    /**
-     * Executes the supplied function transactionally.
-     *
-     * @param txFunction The function to execute transactionally.
-     * @param <T>        The return type of the function to execute.
-     * @return The return value of the function.
-     * @throws TransactionAbortedException If the transaction could not be executed successfully.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T executeTX(Supplier<T> txFunction)
-            throws TransactionAbortedException {
-        return (T) executeTX(txFunction, TransactionStrategy.AUTOMATIC, null);
-    }
-
-    /**
-     * Executes the supplied function transactionally.
-     *
-     * @param txFunction The function to execute transactionally.
-     * @param <T>        The return type of the function to execute.
-     * @return The return value of the function.
-     * @throws TransactionAbortedException If the transaction could not be executed successfully.
-     */
-    @SuppressWarnings("unchecked")
-    public <T, R> R executeTX(Function<T, R> txFunction, T arg0)
-            throws TransactionAbortedException {
-        return (R) executeTX(txFunction, TransactionStrategy.AUTOMATIC, arg0);
-    }
-
-    /**
-     * Executes the supplied function transactionally.
-     *
-     * @param txFunction The function to execute transactionally.
-     * @return The return value of the function.
-     * @throws TransactionAbortedException If the transaction could not be executed successfully.
-     */
-    public Object executeTX(Object txFunction, TransactionStrategy strategy, Object... arguments)
-            throws TransactionAbortedException {
-        if (strategy == TransactionStrategy.AUTOMATIC) {
-            strategy = findTransactionStrategyForLambda(txFunction);
-            log.trace("Automatically determined transaction strategy={}", strategy);
-        }
-
-        switch (strategy) {
-            case OPTIMISTIC:
-                TXBegin();
-                Object result = LambdaUtils.executeUnknownLambda(txFunction, arguments);
-                TXEnd();
-                return result;
-        }
-
-        throw new UnsupportedOperationException("Unsupported transaction strategy " + strategy.toString());
-    }
-
-    public <T> TransactionStrategy findTransactionStrategyForLambda(Object txFunction) {
-        //log.info("TXtype={}, TXLength={}", txFunction.getClass(), Utils.getByteCodeOf(txFunction.getClass()).length);
-        //System.out.print(Utils.printByteCode(Utils.getByteCodeOf(txFunction.getClass())));
-        return TransactionStrategy.OPTIMISTIC;
     }
 
     @Data
@@ -340,13 +228,5 @@ public class ObjectsView extends AbstractView {
         final UUID streamID;
         final Class<T> type;
         final Class<R> overlay;
-    }
-
-    @Data
-    class CallSiteData {
-
-        TransactionStrategy getNextStrategy() {
-            return TransactionStrategy.OPTIMISTIC;
-        }
     }
 }

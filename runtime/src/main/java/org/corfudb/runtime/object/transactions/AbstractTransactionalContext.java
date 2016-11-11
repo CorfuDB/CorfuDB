@@ -1,137 +1,158 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.Data;
 import lombok.Getter;
-import lombok.Setter;
+
+import lombok.RequiredArgsConstructor;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuSMRObjectProxy;
-import org.corfudb.runtime.view.TransactionStrategy;
-import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.runtime.object.*;
 
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 /**
+ * Represents a transactional context. Transactional contexts
+ * manage per-thread transaction state.
+ *
  * Created by mwei on 4/4/16.
  */
-public abstract class AbstractTransactionalContext implements AutoCloseable {
+public abstract class AbstractTransactionalContext {
 
+    /** Constant for the address of an uncommitted log entry.
+     *
+     */
+    public static final long UNCOMMITTED_ADDRESS = -1L;
+
+    /** Constant for a transaction which has been folded into
+     * another transaction.
+     */
+    public static final long FOLDED_ADDRESS = -2L;
+
+    /** Constant for a transaction which has been aborted.
+     *
+     */
+    public static final long ABORTED_ADDRESS = -3L;
+
+    /** The ID of the transaction. This is used for tracking only, it is
+     * NOT recorded in the log.
+     */
     @Getter
     public UUID transactionID;
 
-    /**
-     * The runtime used to create this transaction.
+    /** The builder used to create this transaction.
+     *
      */
     @Getter
-    public CorfuRuntime runtime;
+    public final TransactionBuilder builder;
 
     /**
      * The start time of the context.
      */
     @Getter
-    @Setter
     public long startTime;
 
-    /**
-     * The transaction strategy to employ for this transaction.
+    /** The address that the transaction was committed at.
      */
     @Getter
-    @Setter
-    public TransactionStrategy strategy;
+    public long commitAddress = AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
 
-    /**
-     * Whether or not the tx is doing a first sync and therefore writes should not be
-     * redirected.
+    /** The parent context of this transaction, if in a nested transaction.*/
+    @Getter
+    AbstractTransactionalContext parentContext;
+
+    /** A wrapper which combines SMREntries with
+     * their upcall result.
+     */
+    @Data
+    @RequiredArgsConstructor
+    public static class UpcallWrapper {
+        final SMREntry entry;
+        Object upcallResult;
+        boolean haveUpcallResult;
+    }
+
+    abstract public Set<ICorfuSMRProxyInternal> getModifiedProxies();
+
+    /** Return the write set for this transaction
      *
-     * @return Whether or not the TX is in sync.
+     * @return  The write set, which contains all modifications this
+     *          transaction will make.
+     */
+    abstract public Map<UUID, List<UpcallWrapper>> getWriteSet();
+
+    /** Return the read set for this transaction
+     *
+     * @return  The read set, which contains all objects read by this
+     *          transaction.
+     */
+    abstract public Set<UUID> getReadSet();
+
+    /**
+     * A future which gets completed when this transaction commits.
+     * It is completed exceptionally when the transaction aborts.
      */
     @Getter
-    @Setter
-    public boolean inSyncMode;
+    public CompletableFuture<Boolean> completionFuture = new CompletableFuture<>();
 
-    AbstractTransactionalContext(CorfuRuntime runtime) {
+    AbstractTransactionalContext(TransactionBuilder builder) {
         transactionID = UUID.randomUUID();
-        this.runtime = runtime;
+        this.builder = builder;
+        this.startTime = System.currentTimeMillis();
+        this.parentContext = TransactionalContext.getCurrentContext();
     }
 
-    abstract public long getFirstReadTimestamp();
-
-    /**
-     * Check if there was nothing to write.
+    /** Access the state of the object.
      *
-     * @return Return true, if there was no write set.
+     * @param proxy             The proxy to access the state for.
+     * @param accessFunction    The function to execute, which will be provided with the state
+     *                          of the object.
+     * @param <R>               The return type of the access function.
+     * @param <T>               The type of the proxy's underlying object.
+     * @return                  The return value of the access function.
      */
-    abstract public boolean hasNoWriteSet();
+    abstract public <R,T> R access(ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R,T> accessFunction);
 
-    public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
-                                       Object[] SMRArguments, ISerializer serializer, boolean writeOnly) {
-    }
+    /** Get the result of an upcall.
+     *
+     * @param proxy             The proxy to retrieve the upcall for.
+     * @param timestamp         The timestamp to return the upcall for.
+     * @param <T>               The type of the proxy's underlying object.
+     * @return                  The result of the upcall.
+     */
+    abstract public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy, long timestamp);
 
-    abstract public <T> void resetObject(CorfuSMRObjectProxy<T> proxy);
+    /** Log an SMR update to the Corfu log.
+     *
+     * @param proxy             The proxy which generated the update.
+     * @param updateEntry       The entry which we are writing to the log.
+     * @param <T>               The type of the proxy's underlying object.
+     * @return                  The address the update was written at.
+     */
+    abstract public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
+                              SMREntry updateEntry);
 
+    /** Add a given transaction to this transactional context, merging
+     * the read and write sets.
+     * @param tc    The transactional context to merge.
+     */
     abstract public void addTransaction(AbstractTransactionalContext tc);
 
-    /**
-     * Add to the read set
+    /** Commit the transaction to the log.
      *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
+     * @throws TransactionAbortedException  If the transaction is aborted.
      */
-    abstract public <T> void addReadSet(CorfuSMRObjectProxy<T> proxy, String SMRMethod, Object result);
-
-    /**
-     * Open an object for reading. The implementation will avoid creating a copy of the object
-     * if it has not already been done.
-     *
-     * @param proxy The SMR Object proxy to get an object for reading.
-     * @param <T>   The type of object to get for reading.
-     * @return An object for reading.
-     */
-    @SuppressWarnings("unchecked")
-    abstract public <T> T getObjectRead(CorfuSMRObjectProxy<T> proxy);
-
-    /**
-     * Open an object for writing. For opacity, the implementation will create a clone of the
-     * object.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
-     */
-    @SuppressWarnings("unchecked")
-    abstract public <T> T getObjectWrite(CorfuSMRObjectProxy<T> proxy);
-
-    /**
-     * Open an object for reading and writing. For opacity, the implementation will create a clone of the
-     * object.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
-     */
-    @SuppressWarnings("unchecked")
-    abstract public <T> T getObjectReadWrite(CorfuSMRObjectProxy<T> proxy);
-
-    /**
-     * Check if the object is cloned.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> boolean isObjectCloned(CorfuSMRObjectProxy<T> proxy) {
-        return false;
+    public long commitTransaction() throws TransactionAbortedException {
+        completionFuture.complete(true);
+        return 0L;
     }
 
-    public boolean transactionRequiresReadLock() { return false; }
-
-
-    public void commitTransaction() throws TransactionAbortedException {
-    }
-
-    @Override
-    public void close() {
-
+    /** Forcefully abort the transaction.
+     */
+    public void abortTransaction() {
+        commitAddress = ABORTED_ADDRESS;
+        completionFuture
+                .completeExceptionally(new TransactionAbortedException());
     }
 }

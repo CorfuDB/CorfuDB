@@ -8,6 +8,7 @@ import net.bytebuddy.implementation.bind.annotation.Origin;
 import net.bytebuddy.implementation.bind.annotation.RuntimeType;
 import net.bytebuddy.implementation.bind.annotation.SuperCall;
 import net.bytebuddy.implementation.bind.annotation.This;
+import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.protocols.logprotocol.TXLambdaReferenceEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -89,12 +90,12 @@ public class CorfuObjectProxy<P> {
                                             @AllArguments Object[] arguments,
                                             @This ICorfuObject obj)
             throws Exception {
-        if (TransactionalContext.isInOptimisticTransaction()) {
+        //if (TransactionalContext.isInOptimisticTransaction()) {
             // TODO: in an optimistic TX, insert a Lambda TXn entry instead of converting everything
             // into a writeset
-            log.debug("Optimistic TXn, flatten TX into write set.");
-            return originalCall.call();
-        }
+         //   log.debug("Optimistic TXn, flatten TX into write set.");
+        //    return originalCall.call();
+        //}
         // TODO: can we get rid of this origin based call?
         boolean invoked = Arrays.stream(new Exception().getStackTrace())
                 .map(StackTraceElement::getClassName)
