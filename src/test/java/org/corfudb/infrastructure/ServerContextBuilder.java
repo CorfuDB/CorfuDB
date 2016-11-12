@@ -19,6 +19,7 @@ public class ServerContextBuilder {
     boolean memory = true;
     String logPath = null;
     boolean sync = false;
+    boolean noVerify = false;
     int maxCache = 1000000;
     int checkpoint = 100;
     String address = "test";
@@ -40,6 +41,7 @@ public class ServerContextBuilder {
         }
          builder
                 .put("--sync", sync)
+                .put("--no-verify", noVerify)
                 .put("--max-cache", maxCache)
                 .put("--checkpoint", checkpoint)
                 .put("--address", address)

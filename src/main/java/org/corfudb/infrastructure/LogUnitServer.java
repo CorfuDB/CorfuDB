@@ -233,7 +233,7 @@ public class LogUnitServer extends AbstractServer {
                 }
                 else {
                     String logdir = opts.get("--log-path") + File.separator + "log" + File.separator + stream;
-                    return new StreamLogFiles(logdir, (Boolean) opts.get("--sync"));
+                    return new StreamLogFiles(logdir, (Boolean) opts.get("--sync"), (Boolean) opts.get("--no-verify"));
                 }
             });
         }
@@ -298,7 +298,7 @@ public class LogUnitServer extends AbstractServer {
             localLog = new InMemoryStreamLog();
         } else {
             String logdir = opts.get("--log-path") + File.separator + "log";
-            localLog = new StreamLogFiles(logdir, (Boolean) opts.get("--sync"));
+            localLog = new StreamLogFiles(logdir, (Boolean) opts.get("--sync"), (Boolean) opts.get("--no-verify"));
         }
 
         if (dataCache != null) {
