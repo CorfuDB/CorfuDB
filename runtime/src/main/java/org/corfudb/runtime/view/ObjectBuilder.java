@@ -5,7 +5,9 @@ import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.CorfuCompileProxyBuilder;
 import org.corfudb.runtime.object.CorfuProxyBuilder;
 import org.corfudb.runtime.object.ISMRInterface;
 import org.corfudb.util.serializer.ISerializer;
@@ -20,23 +22,33 @@ import java.util.UUID;
  */
 @Accessors(chain = true)
 @Data
+@Slf4j
 public class ObjectBuilder<T> {
 
     final CorfuRuntime runtime;
 
     Class<T> type;
+
     @Setter
     Class<? extends ISMRInterface> overlay = null;
+
     @Setter
     UUID streamID;
+
     @Setter
     String streamName;
+
     @Setter
     ISerializer serializer = Serializers.JSON;
+
     @Setter
     Set<ObjectOpenOptions> options = EnumSet.noneOf(ObjectOpenOptions.class);
+
     @Setter(AccessLevel.NONE)
     Object[] arguments = new Object[0];
+
+    @Setter
+    boolean useCompiledClass = true;
 
     @SuppressWarnings("unchecked")
     public <R> ObjectBuilder<R> setType(Class<R> type) {
@@ -75,17 +87,28 @@ public class ObjectBuilder<T> {
             streamID = CorfuRuntime.getStreamID(streamName);
         }
 
+        final StreamView sv = runtime.getStreamsView().get(streamID);
+
+        if (useCompiledClass)
+        {
+            try {
+                return CorfuCompileProxyBuilder.getProxy(type, runtime, sv);
+            } catch (Exception ex) {
+                log.error("Couldn't use compiled class for {}, using runtime instrumentation.", type);
+            }
+        }
+
+
         // CREATE_ONLY implies no cache
         if (options.contains(ObjectOpenOptions.NO_CACHE) || options.contains(ObjectOpenOptions.CREATE_ONLY)) {
-            StreamView sv = runtime.getStreamsView().get(streamID);
             return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer, options, arguments);
         }
 
         ObjectsView.ObjectID<T, ?> oid = new ObjectsView.ObjectID(streamID, type, overlay);
         return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-            StreamView sv = runtime.getStreamsView().get(streamID);
             return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer, options, arguments);
         });
+
     }
 
 

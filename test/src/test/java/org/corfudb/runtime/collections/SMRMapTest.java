@@ -66,7 +66,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void loadsFollowedByGets()
             throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), WrappedMap.class);
         testMap.clear();
         for (int i = 0; i < 100; i++) {
             assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
@@ -123,7 +123,7 @@ public class SMRMapTest extends AbstractViewTest {
             throws Exception {
         r.setBackpointersDisabled(true);
 
-        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), WrappedMap.class);
 
         final int num_threads = 5;
         final int num_records = 100;
@@ -192,7 +192,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void multipleTXesAreApplied()
             throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), WrappedMap.class);
         IntStream.range(0, 10).asLongStream()
                 .forEach(l -> {
                     try {
@@ -312,7 +312,7 @@ public class SMRMapTest extends AbstractViewTest {
     public void modificationDuringTransactionCausesAbort()
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView()
-                .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
+                .open(CorfuRuntime.getStreamID("A"), WrappedMap.class);
         assertThat(testMap.put("a", "z"));
         getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a", "a"))
@@ -323,7 +323,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .isEqualTo("b");
         CompletableFuture cf = CompletableFuture.runAsync(() -> {
             Map<String, String> testMap2 = getRuntime().getObjectsView()
-                    .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class, null,
+                    .open(UUID.nameUUIDFromBytes("A".getBytes()), WrappedMap.class, null,
                             EnumSet.of(ObjectOpenOptions.NO_CACHE), Serializers.JSON);
             testMap2.put("a", "f");
         });
@@ -388,7 +388,7 @@ public class SMRMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void concurrentAbortTest()
             throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), WrappedMap.class);
 
         final int num_threads = 5;
         final int num_records = 100;
@@ -428,7 +428,7 @@ public class SMRMapTest extends AbstractViewTest {
                                                         getRuntime()
                                                                 .getObjectsView().build()
                                                                 .setStreamName("map-" + x)
-                                                                .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {})
+                                                                .setTypeToken(new TypeToken<WrappedMap<Integer, Integer>>() {})
                                                                 .open()
                                                     )
                                                     .collect(Collectors.toList());
