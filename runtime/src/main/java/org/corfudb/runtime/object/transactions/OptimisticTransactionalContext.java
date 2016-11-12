@@ -51,6 +51,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         for (TransactionalObjectData od : objectMap.values()) {
             if (od.bufferedWrites.size() > 0) return false;
         }
+        if (updateLog.size() > 0) {
+            return false;
+        }
         return true;
     }
 
@@ -76,6 +79,21 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         objectMap.entrySet().stream()
                 .forEach(x -> entryMap.put(x.getKey().getSv().getStreamID(),
                         new TXEntry.TXObjectEntry(x.getValue().bufferedWrites, x.getValue().objectIsRead)));
+
+        // new TX stuff.
+        updateMap.entrySet().stream()
+                .forEach(x -> entryMap.put(x.getKey(),
+                        new TXEntry.TXObjectEntry(x.getValue(), false)));
+        readProxies
+                .forEach(x -> {
+                    if (entryMap.containsKey(x.getStreamID())) {
+                        entryMap.get(x.getStreamID()).setRead(true);
+                    }
+                    else {
+                        entryMap.put(x.getStreamID(), new TXEntry.TXObjectEntry(Collections.emptyList(),
+                                true));
+                    }
+                });
         return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L);
     }
 
@@ -221,10 +239,15 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         TXEntry entry = getEntry();
         Set<UUID> affectedStreams = entry.getAffectedStreams();
         //TODO:: refactor commitTransaction into here...
-        if (runtime.getStreamsView().write(affectedStreams, entry) == -1L) {
+        long address = runtime.getStreamsView().write(affectedStreams, entry);
+        if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
+            getPostAbortActions()
+                    .forEach(x -> x.accept(this));
             throw new TransactionAbortedException();
         }
+        getPostCommitActions()
+                .forEach(x -> x.accept(this, address));
     }
 
     @SuppressWarnings("unchecked")

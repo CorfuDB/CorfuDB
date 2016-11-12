@@ -1,14 +1,22 @@
 package org.corfudb.runtime.object.transactions;
 
+import io.netty.util.internal.ConcurrentSet;
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.annotations.Accessor;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.view.TransactionStrategy;
 import org.corfudb.util.serializer.ISerializer;
 
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Created by mwei on 4/4/16.
@@ -65,6 +73,54 @@ public abstract class AbstractTransactionalContext implements AutoCloseable {
     public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
                                        Object[] SMRArguments, ISerializer serializer, boolean writeOnly) {
     }
+
+    /** New tx methods */
+
+    // We keep a list of read proxies, because multiple proxies
+    // may be subscribed to the same stream.
+    Set<ICorfuSMRProxy> readProxies = new HashSet<>();
+
+    Map<UUID, List<SMREntry>> updateMap = new HashMap<>();
+    List<SMREntry> updateLog = new LinkedList<>();
+
+    @Getter
+    Set<BiConsumer<AbstractTransactionalContext, Long>> postCommitActions = new HashSet<>();
+
+    @Getter
+    Set<Consumer<AbstractTransactionalContext>> postAbortActions = new HashSet<>();
+
+    public long bufferUpdate(UUID stream, String SMRMethod, Object[] SMRArguments, ISerializer serializer) {
+        updateMap.putIfAbsent(stream, new LinkedList<>());
+        SMREntry entry = new SMREntry(SMRMethod, SMRArguments, serializer);
+        //future optimization might not keep two redundant structures.
+        updateMap.get(stream).add(entry);
+        updateLog.add(entry);
+        return updateLog.size() - 1;
+    }
+
+    public <T> boolean markProxyRead(ICorfuSMRProxy<T> proxy) {
+        if (readProxies.contains(proxy)){
+            return true;
+        }
+        readProxies.add(proxy);
+        return false;
+    }
+
+    public void addPostCommitAction(BiConsumer<AbstractTransactionalContext, Long> action) {
+        postCommitActions.add(action);
+    }
+    public void addPostAbortAction(Consumer<AbstractTransactionalContext> action) {
+        postAbortActions.add(action);
+    }
+
+    public SMREntry[] readTransactionLog(int readFrom) {
+        ArrayList<SMREntry> list = new ArrayList<>();
+        for (int i = readFrom; i < updateLog.size(); i++){
+            list.add(updateLog.get(i));
+        }
+        return list.toArray(new SMREntry[list.size()]);
+    }
+    /** */
 
     abstract public <T> void resetObject(CorfuSMRObjectProxy<T> proxy);
 
