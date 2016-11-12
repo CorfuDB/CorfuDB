@@ -242,6 +242,8 @@ public class ObjectsView extends AbstractView {
             if (context.hasNoWriteSet()) {
                 log.trace("Transactional context {} was read-only, exiting context without commit.",
                         context.getTransactionID());
+                context.getPostCommitActions()
+                        .forEach(x -> x.accept(context, -1L));
                 TransactionalContext.removeContext();
                 return;
             }

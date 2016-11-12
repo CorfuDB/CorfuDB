@@ -5,12 +5,13 @@ package org.corfudb.runtime.object;
  * Created by mwei on 11/10/16.
  */
 @FunctionalInterface
-public interface ICorfuSMRUpcallTarget {
+public interface ICorfuSMRUpcallTarget<R> {
 
     /** Do the upcall.
-     *
+     * @param obj   The upcall target.
      * @param args  The arguments to the upcall.
+     *
      * @return      The return value of the upcall.
      */
-    Object upcall(Object[] args);
+    Object upcall(R obj, Object[] args);
 }
