@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
 
@@ -52,6 +53,12 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         b.writeShort(updates.size());
         updates.stream()
                 .forEach(x -> Serializers.CORFU.serialize(x, b));
+    }
+
+    @Override
+    public void setEntry(LogData entry) {
+        super.setEntry(entry);
+        this.getUpdates().forEach(x -> x.setEntry(entry));
     }
 
     @Override

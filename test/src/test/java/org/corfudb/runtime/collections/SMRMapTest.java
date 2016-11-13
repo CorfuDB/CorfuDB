@@ -7,8 +7,11 @@ import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ICorfuObject;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
@@ -32,6 +35,7 @@ public class SMRMapTest extends AbstractViewTest {
     final String defaultConfigurationString = getDefaultEndpoint();
 
     public CorfuRuntime r;
+
 
     @Before
     public void setRuntime() throws Exception {
@@ -57,9 +61,9 @@ public class SMRMapTest extends AbstractViewTest {
     public void canGetID()
             throws Exception {
         UUID id = UUID.randomUUID();
-        ICorfuSMRObject testMap = getRuntime().getObjectsView().open(id, SMRMap.class);
+        ICorfuSMR testMap = (ICorfuSMR) getRuntime().getObjectsView().open(id, SMRMap.class);
         assertThat(id)
-                .isEqualTo(testMap.getStreamID());
+                .isEqualTo(testMap.getCorfuStreamID());
     }
 
     @Test
@@ -118,12 +122,15 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void loadsFollowedByGetsConcurrent()
             throws Exception {
         r.setBackpointersDisabled(true);
 
-        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), WrappedMap.class);
+        Map<String, String> testMap = getRuntime().getObjectsView()
+                .build()
+                .setStreamID(UUID.randomUUID())
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
 
         final int num_threads = 5;
         final int num_records = 100;
@@ -165,7 +172,8 @@ public class SMRMapTest extends AbstractViewTest {
         if (testMap.values().stream().anyMatch(x -> x.equals("c"))) {
             throw new Exception("test");
         }
-        testMap.compute("b", (k, v) -> "c");
+        testMap.compute("b",
+                (k, v) -> "c");
         getRuntime().getObjectsView().TXEnd();
         assertThat(testMap)
                 .containsEntry("b", "c");

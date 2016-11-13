@@ -1,9 +1,6 @@
 package org.corfudb.runtime.object;
 
-import org.corfudb.annotations.ConstructorType;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.ObjectType;
-import org.corfudb.annotations.StateSource;
+import org.corfudb.annotations.*;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -22,18 +19,22 @@ public class TestClassUsingAnnotation {
         a1 = new AtomicInteger();
     }
 
+    @PassThrough
     public boolean testFn1() {
         return true;
     }
 
+    @MutatorAccessor
     public boolean testIncrement() {
         return a1.incrementAndGet() != 0;
     }
 
+    @Accessor
     public int getValue() {
         return a1.get();
     }
 
+    @Mutator
     public void reset() {
         a1.set(0);
     }

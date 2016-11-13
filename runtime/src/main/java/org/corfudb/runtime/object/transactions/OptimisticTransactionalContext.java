@@ -162,6 +162,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                             objectMap.put(e.getKey(), e.getValue());
                         }
                     });
+            // Flatten new Tx Maps
+            updateLog.addAll(tc.updateLog);
+            tc.updateMap.entrySet().stream().forEach(e -> {
+                updateMap.putIfAbsent(e.getKey(), new LinkedList<>());
+                updateMap.get(e.getKey()).addAll(e.getValue());
+            });
+            // and force each proxy to update (by asking for the last upcall)
+            readProxies.forEach(x -> x.access(Long.MAX_VALUE, null));
         }
     }
 
