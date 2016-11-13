@@ -8,6 +8,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.view.TransactionStrategy;
 import org.corfudb.util.serializer.ISerializer;
@@ -78,9 +79,13 @@ public abstract class AbstractTransactionalContext implements AutoCloseable {
 
     // We keep a list of read proxies, because multiple proxies
     // may be subscribed to the same stream.
+    @Getter
     Set<ICorfuSMRProxy> readProxies = new HashSet<>();
 
+    @Getter
     Map<UUID, List<SMREntry>> updateMap = new HashMap<>();
+
+    @Getter
     List<SMREntry> updateLog = new LinkedList<>();
 
     @Getter
@@ -103,8 +108,20 @@ public abstract class AbstractTransactionalContext implements AutoCloseable {
             return true;
         }
         readProxies.add(proxy);
+        setProxyPointer(proxy, 0);
         return false;
     }
+
+    Map<ICorfuSMRProxy<?>, Integer> proxyAddressPointers = new HashMap<>();
+
+    public void setProxyPointer(ICorfuSMRProxy<?> proxy, Integer pointer) {
+        proxyAddressPointers.put(proxy, pointer);
+    }
+
+    public Integer getProxyPointer(ICorfuSMRProxy<?> proxy) {
+        return proxyAddressPointers.get(proxy);
+    }
+
 
     public void addPostCommitAction(BiConsumer<AbstractTransactionalContext, Long> action) {
         postCommitActions.add(action);
@@ -113,12 +130,18 @@ public abstract class AbstractTransactionalContext implements AutoCloseable {
         postAbortActions.add(action);
     }
 
-    public SMREntry[] readTransactionLog(int readFrom) {
+    public SMREntry[] readTransactionLog(UUID streamID, int readFrom) {
+        if (!updateMap.containsKey(streamID)) {return new SMREntry[0]; }
         ArrayList<SMREntry> list = new ArrayList<>();
-        for (int i = readFrom; i < updateLog.size(); i++){
-            list.add(updateLog.get(i));
+        for (int i = readFrom; i < updateMap.get(streamID).size(); i++){
+            list.add(updateMap.get(streamID).get(i));
         }
         return list.toArray(new SMREntry[list.size()]);
+    }
+
+    public int getTransactionLogSize(UUID streamID) {
+        if (!updateMap.containsKey(streamID)) {return 0; }
+        return updateMap.get(streamID).size();
     }
     /** */
 

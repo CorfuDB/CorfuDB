@@ -2,8 +2,11 @@ package org.corfudb.annotations;
 
 import com.google.common.collect.ImmutableMap;
 import com.squareup.javapoet.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
+import org.corfudb.runtime.object.ICorfuSMRProxyContainer;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 
 import javax.annotation.processing.*;
@@ -17,10 +20,7 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -88,8 +88,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     public void processClass(TypeElement classElement) {
         // Does the class contain annotated elements? If so,
         // generate a new proxy file and process
-        if (classElement.getEnclosedElements().stream()
-                .filter(x -> x.getAnnotation(Accessor.class) != null)
+        if (    classElement.getAnnotation(CorfuObject.class) != null ||
+                classElement.getEnclosedElements().stream()
+                .filter(x -> x.getAnnotation(Accessor.class) != null ||
+                        x.getAnnotation(MutatorAccessor.class) != null ||
+                        x.getAnnotation(Mutator.class) != null)
                 .count() > 0) {
 
             try {
@@ -112,6 +115,17 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         return  (mutator != null && !mutator.name().equals("")) ? mutator.name() :
                 (mutatorAccessor != null && !mutatorAccessor.name().equals("")) ?
                 mutatorAccessor.name() : smrMethod.getSimpleName().toString();
+    }
+
+    /** Class to hold data about SMR Methods. */
+    class SMRMethodInfo {
+        ExecutableElement method;
+        TypeElement interfaceOverride;
+
+        public SMRMethodInfo(ExecutableElement method, TypeElement interfaceOverride) {
+            this.method = method;
+            this.interfaceOverride = interfaceOverride;
+        }
     }
 
     /** Generate a proxy file.
@@ -144,10 +158,28 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .superclass(originalName)
                 .addModifiers(Modifier.PUBLIC);
 
-        // Generate a constructor. We assume that we have a no args constructor,
-        // though that could change in the future.
-        typeSpecBuilder.addMethod(MethodSpec.constructorBuilder()
-                .addModifiers(Modifier.PUBLIC).build());
+        // But we also will want a wrapper for every public constructor as well.
+        classElement.getEnclosedElements().stream()
+                .filter(x -> x.getKind() == ElementKind.CONSTRUCTOR)
+                .map(x -> (ExecutableElement) x)
+                .forEach(x -> {
+                    typeSpecBuilder.addMethod(MethodSpec.constructorBuilder()
+                            .addModifiers(Modifier.PUBLIC)
+                            .addParameters(x.getParameters().stream()
+                                                .map(param -> ParameterSpec.builder(
+                                                        TypeName.get(param.asType()),
+                                                        param.getSimpleName().toString()
+                                                ).build())
+                                            .collect(Collectors.toSet())
+                            )
+                            .addStatement("super($L)",
+                                    x.getParameters().stream()
+                                            .map(param -> param.getSimpleName().toString())
+                                            .collect(Collectors.joining(", "))
+                                    )
+                        .build()
+                    );
+                });
 
         // Add the proxy field and an accessor/setter, which manages the state of the object.
         typeSpecBuilder.addField(ParameterizedTypeName.get(ClassName.get(ICorfuSMRProxy.class),
@@ -167,10 +199,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .build());
 
         // Gather the set of methods for from this class.
-        final Set<ExecutableElement> methodSet = classElement.getEnclosedElements().stream()
+        final Set<SMRMethodInfo> methodSet = classElement.getEnclosedElements().stream()
                 .filter(x -> x.getKind() == ElementKind.METHOD)
                 .map(x -> (ExecutableElement) x)
                 .filter(x -> !x.getModifiers().contains(Modifier.STATIC)) // don't want static methods
+                .map(x -> new SMRMethodInfo(x, null))
                 .collect(Collectors.toCollection(HashSet::new));
 
         // Deal with the inheritance tree for this class.
@@ -181,7 +214,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
             superClassElement = ((TypeElement)((DeclaredType)superClassElement.getSuperclass()).asElement());
             boolean samePackage = ClassName.get(superClassElement).packageName().equals(
                                         ClassName.get(classElement).packageName());
-            // If this method is not present in classElement, we need to override it.
+
             superClassElement.getEnclosedElements().stream()
                     .filter(x -> x.getKind() == ElementKind.METHOD)
                     .map(x -> (ExecutableElement) x)
@@ -196,38 +229,105 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         if (methodSet.stream().noneMatch(y ->
                             // If this method is present in the parent, the string
                             // will match.
-                            y.toString().equals(x.toString()))) {
-                            methodSet.add(x);
+                            y.method.toString().equals(x.toString()))) {
+                            methodSet.add(new SMRMethodInfo(x, null));
                         }
                     });
 
             // Terminate if the current superClass is java.lang.Object.
         } while (!ClassName.get(superClassElement).equals(ClassName.OBJECT));
 
+        // Deal with interfaces.
+        List<TypeMirror> allInterfaces = new ArrayList<>();
+        List<TypeMirror> visitedInterfaces = new ArrayList<>();
 
+        allInterfaces.addAll(classElement.getInterfaces());
+
+        while (allInterfaces.stream()
+                .filter(x -> !visitedInterfaces.contains(x))
+                .map(x -> (TypeElement) ((DeclaredType)x).asElement())
+                .filter(x -> x.getInterfaces().size() > 0)
+                .count() > 0
+                ) {
+            List<TypeMirror> tInterfaces = new ArrayList<>();
+            allInterfaces.stream()
+                    .filter(x -> !visitedInterfaces.contains(x))
+                    .filter(x -> ((TypeElement) ((DeclaredType)x).asElement()).getInterfaces().size() > 0)
+                    .forEach(x -> {
+                        TypeElement t = (TypeElement) ((DeclaredType)x).asElement();
+                        tInterfaces.addAll(t.getInterfaces());
+                        visitedInterfaces.add(x);
+                    });
+            allInterfaces.addAll(tInterfaces);
+        }
+
+        Set<TypeName> interfacesToAdd = new HashSet<>();
+
+        allInterfaces.forEach(iface -> {
+            TypeElement ifaceElement = (TypeElement) ((DeclaredType)iface).asElement();
+            // need to traverse the interface inheritance tree.
+            ifaceElement.getEnclosedElements().stream()
+                    .filter(x -> x.getKind() == ElementKind.METHOD)
+                    .map(x -> (ExecutableElement) x)
+                    .forEach(method -> {
+                        Optional<SMRMethodInfo> overwrite =
+                                methodSet.stream()
+                                        .filter(x -> method.toString().equals(x.method.toString()))
+                                        .findFirst();
+                            if (method.getAnnotation(Accessor.class) != null ||
+                                method.getAnnotation(Mutator.class) != null ||
+                                method.getAnnotation(MutatorAccessor.class) != null ||
+                                method.getAnnotation(PassThrough.class) != null) {
+                                if (overwrite.isPresent()) {
+                                    methodSet.remove(overwrite.get());
+                                    methodSet.add(new SMRMethodInfo(method, null));
+                                }
+                            }
+                            if (method.getAnnotation(InterfaceOverride.class) != null) {
+                                interfacesToAdd.add(ParameterizedTypeName.get(ifaceElement.asType()));
+                                if (overwrite.isPresent()) {
+                                    methodSet.remove(overwrite.get());
+                                }
+                                methodSet.add(new SMRMethodInfo(method,
+                                        ifaceElement));
+                            }
+                    });
+        });
+
+        // Add interfaces to the type
+        typeSpecBuilder.addSuperinterfaces(interfacesToAdd);
+
+        // remove any methods which end with $CORFUSMR
+        methodSet.removeIf(x -> x.method.getSimpleName()
+                .toString().endsWith(ICorfuSMR.CORFUSMR_SUFFIX));
 
         // Generate wrapper classes.
         methodSet
-                .forEach(smrMethod -> {
+                .forEach(m -> {
+
+                    ExecutableElement smrMethod = m.method;
 
                     // Extract each annotation
                     Accessor accessor = smrMethod.getAnnotation(Accessor.class);
                     MutatorAccessor mutatorAccessor = smrMethod.getAnnotation(MutatorAccessor.class);
                     Mutator mutator = smrMethod.getAnnotation(Mutator.class);
+                    TransactionalMethod transactional = smrMethod.getAnnotation(TransactionalMethod.class);
 
                     // Override the method we will proxy.
                     MethodSpec.Builder ms = MethodSpec.overriding(smrMethod);
 
                     // This is a hack, but necessary since the modifier list is immutable
-                    // and we need to remove the "native" modifier.
+                    // and we need to remove the "native" and "default" modifiers.
                     try {
                         Field f = ms.getClass().getDeclaredField("modifiers");
                         f.setAccessible(true);
                         ((List<Modifier>)f.get(ms)).remove(Modifier.NATIVE);
+                        ((List<Modifier>)f.get(ms)).remove(Modifier.DEFAULT);
                     } catch (Exception e) {
                         messager.printMessage(Diagnostic.Kind.ERROR, "error trying to change methodspec"
                                 + e.getMessage());
                     }
+
 
                     // If a mutator, then log the update.
                     if (mutator != null || mutatorAccessor != null) {
@@ -250,7 +350,48 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                             ms.addStatement("return proxy" + CORFUSMR_FIELD + ".access(address"
                                     + CORFUSMR_FIELD + ", null)");
                         }
-                    } else if (mutator == null) {
+                    }
+                    // If transactional, begin the transaction
+                    else if (transactional != null) {
+                        ms.addCode(smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
+                                "proxy" + CORFUSMR_FIELD + ".TXExecute(() -> {":
+                                "return proxy" + CORFUSMR_FIELD + ".TXExecute(() -> {"
+                        );
+                        ms.addStatement("$Lsuper.$L($L)",
+                         smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
+                                                "":
+                                                "return ",
+                                smrMethod.getSimpleName(),
+                                smrMethod.getParameters().stream()
+                                        .map(VariableElement::getSimpleName)
+                                        .collect(Collectors.joining(", ")));
+                        ms.addCode(smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
+                                "return null; });":
+                                "});"
+                        );
+                    }
+                    else if (smrMethod.getAnnotation(PassThrough.class) != null) {
+                        ms.addStatement("$L super.$L($L)",
+                                smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
+                                        "" : "return ",
+                                smrMethod.getSimpleName(),
+                                smrMethod.getParameters().stream()
+                                        .map(VariableElement::getSimpleName)
+                                        .collect(Collectors.joining(", "))
+                                );
+                    }
+                    else if (smrMethod.getAnnotation(InterfaceOverride.class) != null) {
+                        ms.addStatement("$L$T.super.$L($L)",
+                                    smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
+                                            "" : "return ",
+                                    ClassName.get(m.interfaceOverride),
+                                    smrMethod.getSimpleName(),
+                                    smrMethod.getParameters().stream()
+                                            .map(VariableElement::getSimpleName)
+                                            .collect(Collectors.joining(", "))
+                            );
+                    }
+                    else if (mutator == null) {
                         // Otherwise, just force the access to access the underlying call.
                         ms.addStatement((smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ? "" :
                                         "return ") +"proxy" + CORFUSMR_FIELD + ".access(Long.MAX_VALUE" +
@@ -265,23 +406,22 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                         "return null;" : ""
                         );
                     }
-
                     typeSpecBuilder.addMethod(ms.build());
                 });
 
-        String upcallString = classElement.getEnclosedElements().stream()
-                .filter(x -> x.getAnnotation(MutatorAccessor.class) != null ||
-                            x.getAnnotation(Mutator.class) != null)
-                .map(x -> (ExecutableElement) x)
-                .map(x -> "\n.put(\"" + getSMRFunctionName(x) + "\", " +
-                        "(obj, args) -> { " + (x.getReturnType().getKind().equals(TypeKind.VOID)
-                        ? "" : "return ") + "obj." + x.getSimpleName() + "(" +
-                        IntStream.range(0, x.getParameters().size())
+        // Generate the upcall string and associated map.
+        String upcallString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null ||
+                            x.method.getAnnotation(Mutator.class) != null)
+                .map(x -> "\n.put(\"" + getSMRFunctionName(x.method) + "\", " +
+                        "(obj, args) -> { " + (x.method.getReturnType().getKind().equals(TypeKind.VOID)
+                        ? "" : "return ") + "obj." + x.method.getSimpleName() + "(" +
+                        IntStream.range(0, x.method.getParameters().size())
                                 .mapToObj(i ->
-                                        "(" + x.getParameters().get(i).asType().toString() + ")" +
+                                        "(" + x.method.getParameters().get(i).asType().toString() + ")" +
                                         " args[" + i + "]")
                                 .collect(Collectors.joining(", "))
-                        + ");" + (x.getReturnType().getKind().equals(TypeKind.VOID)
+                        + ");" + (x.method.getReturnType().getKind().equals(TypeKind.VOID)
                         ? "return null;" : "") + "})")
                 .collect(Collectors.joining());
 

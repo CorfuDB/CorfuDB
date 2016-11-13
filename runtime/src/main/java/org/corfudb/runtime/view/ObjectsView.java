@@ -10,15 +10,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuProxyBuilder;
-import org.corfudb.runtime.object.CorfuSMRObjectProxy;
-import org.corfudb.runtime.object.ICorfuObject;
-import org.corfudb.runtime.object.ICorfuSMRObject;
+import org.corfudb.runtime.object.*;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.LockingTransactionalContext;
 import org.corfudb.runtime.object.transactions.OptimisticTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.LambdaUtils;
+import org.corfudb.util.serializer.Serializers;
 
 import java.util.Collections;
 import java.util.Map;
@@ -116,14 +114,33 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
-        CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
-        ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
-        return (T) objectCache.computeIfAbsent(oid, x -> {
-            StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
-                    destination, proxy.getTimestamp());
-            return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
-                    proxy.getSerializer(), Collections.emptySet());
-        });
+        try {
+            // to be deprecated
+            CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
+            ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
+            return (T) objectCache.computeIfAbsent(oid, x -> {
+                StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
+                        destination, proxy.getTimestamp());
+                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
+                        proxy.getSerializer(), Collections.emptySet());
+            });
+        } catch (Exception e) {
+            // new code path
+            ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
+            ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType(), null);
+            return (T) objectCache.computeIfAbsent(oid, x -> {
+                StreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
+                        destination, proxy.getCorfuSMRProxy().getVersion());
+                try {
+                    return
+                            CorfuCompileProxyBuilder.getProxy(proxy.getCorfuSMRProxy().getObjectType(),
+                                    runtime, sv.getStreamID(), null, Serializers.JSON);
+                }
+                catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            });
+        }
     }
 
     /**

@@ -6,9 +6,12 @@ import lombok.Data;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.annotations.ConstructorType;
+import org.corfudb.annotations.CorfuObject;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuCompileProxyBuilder;
 import org.corfudb.runtime.object.CorfuProxyBuilder;
+import org.corfudb.runtime.object.IObjectBuilder;
 import org.corfudb.runtime.object.ISMRInterface;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -23,7 +26,7 @@ import java.util.UUID;
 @Accessors(chain = true)
 @Data
 @Slf4j
-public class ObjectBuilder<T> {
+public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
     final CorfuRuntime runtime;
 
@@ -92,7 +95,21 @@ public class ObjectBuilder<T> {
         if (useCompiledClass)
         {
             try {
-                return CorfuCompileProxyBuilder.getProxy(type, runtime, sv);
+                if (options.contains(ObjectOpenOptions.NO_CACHE)) {
+                    return CorfuCompileProxyBuilder.getProxy(type, runtime, streamID,
+                            arguments, serializer);
+                }
+                else {
+                    ObjectsView.ObjectID<T, ?> oid = new ObjectsView.ObjectID(streamID, type, overlay);
+                    return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
+                        try {
+                            return CorfuCompileProxyBuilder.getProxy(type, runtime, streamID,
+                                    arguments, serializer);
+                        } catch (Exception ex) {
+                            throw new RuntimeException(ex);
+                        }}
+                    );
+                }
             } catch (Exception ex) {
                 log.error("Couldn't use compiled class for {}, using runtime instrumentation.", type);
             }
