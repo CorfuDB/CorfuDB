@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 /** An interface for accessing a proxy, which
  * manages an SMR object.
@@ -33,4 +34,30 @@ public interface ICorfuSMRProxy<T> {
      * @return  The UUID of the stream this proxy is subscribed to.
      */
     UUID getStreamID();
+
+    /** Run in a transactional context.
+     *
+     * @param txFunction    The function to run in a transactional context.
+     * @param <R>           The return type.
+     * @return              The value supplied by the function.
+     */
+    <R> R TXExecute(Supplier<R> txFunction);
+
+    /** Get an object builder to build new objects.
+     *
+     * @return  An object which permits the construction of new objects.
+     */
+    IObjectBuilder<?> getObjectBuilder();
+
+    /** Return the type of the object being replicated.
+     *
+     * @return              The type of the replicated object.
+     */
+    Class<T> getObjectType();
+
+    /** Get the latest version read by the proxy.
+     *
+     * @return              The latest version read by the proxy.
+     */
+    long getVersion();
 }

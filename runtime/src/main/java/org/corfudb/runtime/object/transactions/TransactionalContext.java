@@ -23,6 +23,7 @@ public class TransactionalContext {
         completionMethods.add(completionMethod);
     }
 
+    public static boolean isInNestedTransaction() {return threadStack.get().size() > 1;}
     /**
      * Returns the transaction stack for the calling thread.
      *

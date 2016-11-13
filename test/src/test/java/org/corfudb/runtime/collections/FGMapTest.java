@@ -134,7 +134,7 @@ public class FGMapTest extends AbstractViewTest {
         }
         testMap.clear();
         assertThat(testMap)
-                .isEmpty();
+                .hasSize(0);
         getRuntime().getObjectsView().TXEnd();
 
         assertThat(testMap)

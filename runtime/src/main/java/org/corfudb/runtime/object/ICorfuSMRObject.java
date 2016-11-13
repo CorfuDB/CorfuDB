@@ -29,10 +29,6 @@ public interface ICorfuSMRObject<T> extends ICorfuObject {
         throw new UnprocessedException();
     }
 
-    default void registerPostHandler(SMRHandlerMethod postHandler) {
-        throw new UnprocessedException();
-    }
-
     @FunctionalInterface
     interface SMRHandlerMethod {
         void handle(String method, Object[] args, Object state);
