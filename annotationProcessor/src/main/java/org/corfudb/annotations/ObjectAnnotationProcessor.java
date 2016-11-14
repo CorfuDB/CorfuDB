@@ -4,10 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import com.squareup.javapoet.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
-import org.corfudb.runtime.object.ICorfuSMRProxyContainer;
-import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
+import org.corfudb.runtime.object.*;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
@@ -121,10 +118,17 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     class SMRMethodInfo {
         ExecutableElement method;
         TypeElement interfaceOverride;
+        boolean doNotAdd = false;
 
         public SMRMethodInfo(ExecutableElement method, TypeElement interfaceOverride) {
             this.method = method;
             this.interfaceOverride = interfaceOverride;
+        }
+
+        public SMRMethodInfo(ExecutableElement method, TypeElement interfaceOverride, boolean doNotAdd) {
+            this.method = method;
+            this.interfaceOverride = interfaceOverride;
+            this.doNotAdd = doNotAdd;
         }
     }
 
@@ -283,7 +287,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                     methodSet.add(new SMRMethodInfo(method, null));
                                 }
                             }
-                            if (method.getAnnotation(InterfaceOverride.class) != null) {
+                            else if (method.getAnnotation(InterfaceOverride.class) != null) {
                                 interfacesToAdd.add(ParameterizedTypeName.get(ifaceElement.asType()));
                                 if (overwrite.isPresent()) {
                                     methodSet.remove(overwrite.get());
@@ -291,18 +295,25 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 methodSet.add(new SMRMethodInfo(method,
                                         ifaceElement));
                             }
+                            // if we have a implementation, and we aren't already
+                            // implemented by the object.
+                            else if (
+                             method.getModifiers().contains(Modifier.DEFAULT) &&
+                             methodSet.stream().noneMatch(x -> x.method.getSimpleName()
+                            .equals(method.getSimpleName()))){
+                                methodSet.add(new SMRMethodInfo(method,
+                                        ifaceElement, true));
+                            }
                     });
         });
-
-        // Add interfaces to the type
-        typeSpecBuilder.addSuperinterfaces(interfacesToAdd);
 
         // remove any methods which end with $CORFUSMR
         methodSet.removeIf(x -> x.method.getSimpleName()
                 .toString().endsWith(ICorfuSMR.CORFUSMR_SUFFIX));
 
         // Generate wrapper classes.
-        methodSet
+        methodSet.stream()
+                .filter(x -> !x.doNotAdd)
                 .forEach(m -> {
 
                     ExecutableElement smrMethod = m.method;
@@ -437,6 +448,9 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 originalName)), upcallString)
                 .build();
 
+        typeSpecBuilder
+                .addField(upcallMap);
+
         typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuSMRUpcallMap")
                 .addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
@@ -446,10 +460,168 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .addStatement("return $L", "upcallMap" + CORFUSMR_FIELD)
                 .build());
 
+        // And generate a map for the undoRecord and undo functions, if available.
+        // We may have to add additional interfaces during this process.
+
+        // Generate the undo string and associated map.
+        String undoRecordString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null ||
+                        x.method.getAnnotation(Mutator.class) != null)
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) == null ||
+                        !x.method.getAnnotation(MutatorAccessor.class).undoRecordFunction().equals(""))
+                .filter(x -> x.method.getAnnotation(Mutator.class) == null ||
+                        !x.method.getAnnotation(Mutator.class).undoRecordFunction().equals(""))
+                .map(x -> {
+                        MutatorAccessor mutatorAccessor = x.method.getAnnotation(MutatorAccessor.class);
+                        Mutator mutator = x.method.getAnnotation(Mutator.class);
+                        String undoRecordFunction = mutator == null ? mutatorAccessor.undoRecordFunction() :
+                                mutator.undoRecordFunction();
+
+                        Optional<SMRMethodInfo> mi = methodSet.stream()
+                            .filter(y ->
+                                    y.method.getSimpleName().toString().equals(undoRecordFunction))
+                            .findFirst();
+
+                        // Don't generate a record since we don't have a matching method
+                        if (!mi.isPresent())
+                        {
+                            messager.printMessage(Diagnostic.Kind.MANDATORY_WARNING, "No undoRecord" +
+                                    " method found for "
+                                + x.method.getSimpleName() + " named " +undoRecordFunction);
+                            return "";
+                        }
+
+                        // Check that the signature matches what we expect. (1+original)
+                        if (mi.get().method.getParameters().size() !=
+                                x.method.getParameters().size() + 1) {
+                            messager.printMessage(Diagnostic.Kind.ERROR, "undoRecord method "
+                            + undoRecordFunction + " contained the wrong number of parameters");
+                        }
+
+                        // Add the interface, if present.
+                        if (mi.get().interfaceOverride != null) {
+                            interfacesToAdd.add(ParameterizedTypeName
+                                    .get(mi.get().interfaceOverride.asType()));
+                        }
+                        String callingConvention = mi.get().interfaceOverride == null ? "this." :
+                                mi.get().interfaceOverride.getSimpleName() + ".super.";
+
+                        return "\n.put(\"" + getSMRFunctionName(x.method) + "\", " +
+                        "(obj, args) -> { return "
+                                + callingConvention + undoRecordFunction + "(obj," +
+                        IntStream.range(0, x.method.getParameters().size())
+                                .mapToObj(i ->
+                                        "(" + x.method.getParameters().get(i).asType().toString() + ")" +
+                                                " args[" + i + "]")
+                                .collect(Collectors.joining(", "))
+                        + ");" + "})";})
+                .collect(Collectors.joining());
+
+        FieldSpec undoRecordMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
+                ClassName.get(String.class),
+                ParameterizedTypeName.get(ClassName.get(IUndoRecordFunction.class),
+                        originalName)), "undoRecordMap" + CORFUSMR_FIELD,
+                Modifier.PUBLIC, Modifier.FINAL)
+                .initializer("new $T()$L.build()",
+                        ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
+                                ClassName.get(String.class),
+                                ParameterizedTypeName.get(ClassName.get(IUndoRecordFunction.class),
+                                        originalName)), undoRecordString)
+                .build();
+
+        typeSpecBuilder.addField(undoRecordMap);
+
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuUndoRecordMap")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
+                        ClassName.get(String.class),
+                        ParameterizedTypeName.get(ClassName.get(IUndoRecordFunction.class),
+                                originalName)))
+                .addStatement("return $L", "undoRecordMap" + CORFUSMR_FIELD)
+                .build());
+
+        // Generate the undo string and associated map.
+        String undoString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null ||
+                        x.method.getAnnotation(Mutator.class) != null)
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) == null ||
+                        !x.method.getAnnotation(MutatorAccessor.class).undoRecordFunction().equals(""))
+                .filter(x -> x.method.getAnnotation(Mutator.class) == null ||
+                        !x.method.getAnnotation(Mutator.class).undoRecordFunction().equals(""))
+                .map(x -> {
+                    MutatorAccessor mutatorAccessor = x.method.getAnnotation(MutatorAccessor.class);
+                    Mutator mutator = x.method.getAnnotation(Mutator.class);
+                    String undoFunction = mutator == null ? mutatorAccessor.undoFunction() :
+                            mutator.undoFunction();
+
+                    Optional<SMRMethodInfo> mi = methodSet.stream()
+                            .filter(y ->
+                                    y.method.getSimpleName().toString().equals(undoFunction))
+                            .findFirst();
+
+                    // Don't generate a record since we don't have a matching method
+                    if (!mi.isPresent())
+                    {
+                        messager.printMessage(Diagnostic.Kind.MANDATORY_WARNING, "No undo method found for "
+                                + x.method.getSimpleName() + " named " +undoFunction);
+                        return "";
+                    }
+
+                    // Check that the signature matches what we expect. (2+original)
+                    if (mi.get().method.getParameters().size() !=
+                            x.method.getParameters().size() + 2) {
+                        messager.printMessage(Diagnostic.Kind.ERROR, "undoRecord method "
+                                + undoFunction + " contained the wrong number of parameters");
+                    }
+
+                    // Add the interface, if present.
+                    if (mi.get().interfaceOverride != null) {
+                        interfacesToAdd.add(ParameterizedTypeName
+                                .get(mi.get().interfaceOverride.asType()));
+                    }
+                    String callingConvention = mi.get().interfaceOverride == null ? "this." :
+                            mi.get().interfaceOverride.getSimpleName() + ".super.";
+
+                    return "\n.put(\"" + getSMRFunctionName(x.method) + "\", " +
+                            "(obj, undoRecord, args) -> {" + callingConvention
+                            + undoFunction + "(obj, (" +
+                            ParameterizedTypeName.get(mi.get().method.getParameters().get(1).asType())
+                            + ") undoRecord, " +
+                            IntStream.range(0, x.method.getParameters().size())
+                                    .mapToObj(i ->
+                                            "(" + x.method.getParameters().get(i).asType().toString() + ")" +
+                                                    " args[" + i + "]")
+                                    .collect(Collectors.joining(", "))
+                            + ");})";
+                })
+                .collect(Collectors.joining());
+
+        FieldSpec undoMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
+                ClassName.get(String.class),
+                ParameterizedTypeName.get(ClassName.get(IUndoFunction.class),
+                        originalName)), "undoMap" + CORFUSMR_FIELD,
+                Modifier.PUBLIC, Modifier.FINAL)
+                .initializer("new $T()$L.build()",
+                        ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
+                                ClassName.get(String.class),
+                                ParameterizedTypeName.get(ClassName.get(IUndoFunction.class),
+                                        originalName)), undoString)
+                .build();
+
+        typeSpecBuilder.addField(undoMap);
+
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuUndoMap")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
+                        ClassName.get(String.class),
+                        ParameterizedTypeName.get(ClassName.get(IUndoFunction.class),
+                                originalName)))
+                .addStatement("return $L", "undoMap" + CORFUSMR_FIELD)
+                .build());
+
+
         typeSpecBuilder
-                .addField(upcallMap);
-
-
+                .addSuperinterfaces(interfacesToAdd);
         // Mark the object as instrumented, so we don't instrument it again.
         typeSpecBuilder
                 .addAnnotation(AnnotationSpec.builder(InstrumentedCorfuObject.class).build());
