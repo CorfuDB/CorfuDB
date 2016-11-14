@@ -14,4 +14,6 @@ import java.lang.annotation.Target;
 @Inherited
 public @interface MutatorAccessor {
     String name() default "";
+    String undoFunction() default "";
+    String undoRecordFunction() default "";
 }
