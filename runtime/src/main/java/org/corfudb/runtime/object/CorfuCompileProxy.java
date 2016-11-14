@@ -38,6 +38,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxy<T> {
     Class<T> type;
     ISerializer serializer;
     Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
+    Map<String, IUndoFunction<T>> undoTargetMap;
+    Map<String, IUndoRecordFunction<T>> undoRecordTargetMap;
+
     Object[] args;
     Set<Long> pendingUpcalls;
 
@@ -52,13 +55,20 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxy<T> {
 
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                              ISerializer serializer,
-                             Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
+                             Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
+                             Map<String, IUndoFunction<T>> undoTargetMap,
+                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap
+                             ) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
         this.args = args;
         this.serializer = serializer;
+
         this.upcallTargetMap = upcallTargetMap;
+        this.undoTargetMap = undoTargetMap;
+        this.undoRecordTargetMap = undoRecordTargetMap;
+
         this.pendingUpcalls = new ConcurrentSet<>();
         this.upcallResults = new ConcurrentHashMap<>();
 
@@ -95,6 +105,25 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxy<T> {
     }
 
     private void rollback(AbstractTransactionalContext txContext) {
+        try {
+            // Let's inspect the transaction log to see if we can roll back...
+            if (txContext.getUpdateMap().get(streamID)
+                    .stream()
+                    .allMatch(SMREntry::isUndoable)) {
+                //Okay, let's apply each undo record (in reverse order)
+                List<SMREntry> entryList = txContext.getUpdateMap().get(streamID);
+                for (int i = entryList.size() - 1; i >= 0; i--) {
+                    SMREntry entry = entryList.get(i);
+                    undoTargetMap.get(entry.getSMRMethod())
+                            .doUndo(underlyingObject.getObjectUnsafe(),
+                            entry.getUndoRecord(),
+                            entry.getSMRArguments());
+                }
+                return;
+            }
+        } catch (Exception e) {
+            log.error("Unexpected error rolling back, re-creating object from scratch", e);
+        }
         // Well, it's always safe to just create the object from scratch.
         try {
             VersionLockedObject<T> obj = getNewObject();
@@ -197,8 +226,18 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxy<T> {
                                 .getProxyPointer(this)))
                         .forEachOrdered(x -> {
                             try {
+                                // Find the upcall...
                                 ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(x.getSMRMethod());
                                 if (target == null) {throw new Exception("Unknown upcall " + x.getSMRMethod());}
+                                // Can we generate an undo record?
+                                IUndoRecordFunction<T> undoRecordTarget =
+                                        undoRecordTargetMap.get(x.getSMRMethod());
+                                if (undoRecordTarget != null) {
+                                    x.setUndoRecord(undoRecordTarget
+                                            .getUndoRecord(underlyingObject.getObjectUnsafe(),
+                                            x.getSMRArguments()));
+                                    x.setUndoable(true);
+                                }
                                 lastTransactionalUpcallResult = target
                                         .upcall(underlyingObject.getObjectUnsafe(),
                                         x.getSMRArguments());

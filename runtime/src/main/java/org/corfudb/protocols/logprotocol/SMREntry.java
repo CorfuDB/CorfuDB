@@ -1,10 +1,7 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.ToString;
+import lombok.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -38,6 +35,20 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      */
     @Getter
     private ISerializer serializerType;
+
+    /** An undo record, which can be used to undo this method.
+     *
+     */
+    @Getter
+    @Setter
+    public transient Object undoRecord;
+
+    /** A boolean - true if this record can be undone.
+     *
+     */
+    @Getter
+    @Setter
+    public transient boolean undoable = false;
 
     public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, ISerializer serializer) {
         super(LogEntryType.SMR);

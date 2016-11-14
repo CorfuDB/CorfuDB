@@ -42,7 +42,10 @@ public class CorfuCompileProxyBuilder {
         // Now we create the proxy, which actually manages
         // instances of this object.
         proxyObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
-                type, args, serializer, proxyObject.getCorfuSMRUpcallMap()));
+                type, args, serializer,
+                proxyObject.getCorfuSMRUpcallMap(),
+                proxyObject.getCorfuUndoMap(),
+                proxyObject.getCorfuUndoRecordMap()));
 
         if (proxyObject instanceof ICorfuSMRProxyContainer) {
             ((ICorfuSMRProxyContainer) proxyObject)
