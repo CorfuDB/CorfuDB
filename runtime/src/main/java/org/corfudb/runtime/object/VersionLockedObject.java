@@ -1,8 +1,11 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamView;
 
 import java.util.ConcurrentModificationException;
+import java.util.Deque;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -18,6 +21,7 @@ public class VersionLockedObject<T> {
     long globalVersion;
     StampedLock lock;
     StreamView sv;
+    Deque<AbstractTransactionalContext> txContext;
 
     public VersionLockedObject(T obj, long version, StreamView sv) {
         this.object = obj;
@@ -77,6 +81,26 @@ public class VersionLockedObject<T> {
 
     public long getGlobalVersionUnsafe() {
         return globalVersion;
+    }
+
+    public void setTXContextUnsafe
+            (Deque<AbstractTransactionalContext> context) {
+        this.txContext = context;
+    }
+
+    public Deque<AbstractTransactionalContext> getTXContextUnsafe() {
+        return txContext;
+    }
+
+    /** Returns whether this object is owned transactionally by this
+     * thread. This is always safe because only the owning thread
+     * can acquire/release its own TX lock.
+     * @return  True, if this thread owns this object and is
+     *          executing transactionally.
+     */
+    public boolean isTXOwnedByThisThread() {
+        return TransactionalContext.getTransactionStack()
+                == this.txContext;
     }
 
     public StreamView getStreamViewUnsafe() { return sv; }
