@@ -320,7 +320,7 @@ public class SMRMapTest extends AbstractViewTest {
     public void modificationDuringTransactionCausesAbort()
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView()
-                .open(CorfuRuntime.getStreamID("A"), WrappedMap.class);
+                .open(CorfuRuntime.getStreamID("A"), SMRMap.class);
         assertThat(testMap.put("a", "z"));
         getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a", "a"))
@@ -331,7 +331,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .isEqualTo("b");
         CompletableFuture cf = CompletableFuture.runAsync(() -> {
             Map<String, String> testMap2 = getRuntime().getObjectsView()
-                    .open(UUID.nameUUIDFromBytes("A".getBytes()), WrappedMap.class, null,
+                    .open(UUID.nameUUIDFromBytes("A".getBytes()), SMRMap.class, null,
                             EnumSet.of(ObjectOpenOptions.NO_CACHE), Serializers.JSON);
             testMap2.put("a", "f");
         });

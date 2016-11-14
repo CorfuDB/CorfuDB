@@ -16,6 +16,9 @@ public interface ICorfuSMR<T> {
     void setCorfuSMRProxy(ICorfuSMRProxy<T> proxy);
 
     Map<String, ICorfuSMRUpcallTarget<T>> getCorfuSMRUpcallMap();
+    Map<String, IUndoFunction<T>> getCorfuUndoMap();
+    Map<String, IUndoRecordFunction<T>> getCorfuUndoRecordMap();
+
 
     default UUID getCorfuStreamID() {
         return getCorfuSMRProxy().getStreamID();
