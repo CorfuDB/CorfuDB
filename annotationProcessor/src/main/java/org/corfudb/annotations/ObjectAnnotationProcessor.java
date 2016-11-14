@@ -299,8 +299,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                             // implemented by the object.
                             else if (
                              method.getModifiers().contains(Modifier.DEFAULT) &&
-                             methodSet.stream().noneMatch(x -> x.method.getSimpleName()
-                            .equals(method.getSimpleName()))){
+                             methodSet.stream().noneMatch(x -> x.method.toString()
+                            .equals(method.toString()))){
                                 methodSet.add(new SMRMethodInfo(method,
                                         ifaceElement, true));
                             }
@@ -511,7 +511,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 + callingConvention + undoRecordFunction + "(obj," +
                         IntStream.range(0, x.method.getParameters().size())
                                 .mapToObj(i ->
-                                        "(" + x.method.getParameters().get(i).asType().toString() + ")" +
+                                        "(" + mi.get().method.getParameters().get(i+1).asType().toString() + ")" +
                                                 " args[" + i + "]")
                                 .collect(Collectors.joining(", "))
                         + ");" + "})";})
@@ -589,7 +589,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                             + ") undoRecord, " +
                             IntStream.range(0, x.method.getParameters().size())
                                     .mapToObj(i ->
-                                            "(" + x.method.getParameters().get(i).asType().toString() + ")" +
+                                            "(" + mi.get().method.getParameters().get(i+2).asType().toString() + ")" +
                                                     " args[" + i + "]")
                                     .collect(Collectors.joining(", "))
                             + ");})";
