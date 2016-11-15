@@ -5,11 +5,17 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.LogUnitEntry;
+import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
@@ -130,5 +136,51 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .matchesDataAtAddress(10000000, "10000000".getBytes());
     }
 
+    private String createLogFile(String path, int version, boolean noVerify) throws IOException {
+        // Generate a log file and manually change the version
+        File logDir = new File(path + File.separator + "log");
+        logDir.mkdir();
+
+        // Create a log file with an invalid log version
+        String logFilePath = logDir.getAbsolutePath() + File.separator + 0 + ".log";
+        File logFile = new File(logFilePath);
+        logFile.createNewFile();
+        RandomAccessFile file = new RandomAccessFile(logFile, "rw");
+        StreamLogFiles.writeHeader(file.getChannel(), new AtomicLong(), version, noVerify);
+        file.close();
+
+        return logFile.getAbsolutePath();
+    }
+
+    @Test (expected = RuntimeException.class)
+    public void testInvalidLogVersion() throws Exception {
+        // Create a log file with an invalid version
+        String tempDir = getTempDir();
+        createLogFile(tempDir, StreamLogFiles.VERSION + 1, false);
+
+        // Start a new logging version
+        ServerContextBuilder builder = new ServerContextBuilder();
+        builder.setMemory(false);
+        builder.setLogPath(tempDir);
+        ServerContext context = builder.build();
+        LogUnitServer logunit = new LogUnitServer(context);
+    }
+
+    @Test (expected = RuntimeException.class)
+    public void testVerifyWithNoVerifyLog() throws Exception {
+        boolean noVerify = true;
+
+        // Generate a log file without computing the checksum for log entries
+        String tempDir = getTempDir();
+        createLogFile(tempDir, StreamLogFiles.VERSION + 1, noVerify);
+
+        // Start a new logging version
+        ServerContextBuilder builder = new ServerContextBuilder();
+        builder.setMemory(false);
+        builder.setLogPath(tempDir);
+        builder.setNoVerify(!noVerify);
+        ServerContext context = builder.build();
+        LogUnitServer logunit = new LogUnitServer(context);
+    }
 }
 

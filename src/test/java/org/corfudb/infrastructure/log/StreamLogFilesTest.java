@@ -7,7 +7,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.io.File;
 import java.io.RandomAccessFile;
+import java.util.concurrent.atomic.AtomicLong;
+
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -23,6 +26,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     private String getDirPath() {
         return getTempDir() + File.separator;
     }
+
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then write and read the same entry
@@ -81,10 +85,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.close();
 
         // Re-open stream log with checksum enabled
-        StreamLog log2 = new StreamLogFiles(logDir, true, false);
-        assertThatThrownBy(() -> log2.read(0))
-                .isInstanceOf(RuntimeException.class)
-                .hasCauseInstanceOf(DataCorruptionException.class);
+        assertThatThrownBy(() -> new StreamLogFiles(logDir, true, false))
+                .isInstanceOf(RuntimeException.class);
     }
 
     @Test
@@ -103,7 +105,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.close();
 
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
-        String logFilePath = logDir+ 0;
+        String logFilePath = logDir + 0 + ".log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
         file.seek(StreamLogFiles.LogFileHeader.size + 4);
         file.writeInt(0xffff);

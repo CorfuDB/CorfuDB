@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.log;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
@@ -7,6 +9,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
 import java.nio.file.StandardOpenOption;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -17,7 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.google.common.hash.HashCode;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import io.netty.buffer.ByteBuf;
@@ -27,6 +30,7 @@ import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -59,10 +63,10 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 public class StreamLogFiles implements StreamLog {
 
     static public final short RECORD_DELIMITER = 0x4C45;
-    private int logVersion = 1;
+    static public int VERSION = 1;
 
     private final boolean noVerify;
-    private String logDir;
+    public final String logDir;
     private boolean sync;
     private Map<Long, FileHandle> channelMap;
 
@@ -71,6 +75,44 @@ public class StreamLogFiles implements StreamLog {
         this.sync = sync;
         channelMap = new HashMap<>();
         this.noVerify = noVerify;
+
+        verifyLogs();
+    }
+
+    private void verifyLogs() {
+        String[] extension = {"log"};
+        File dir = new File(logDir);
+
+        if(dir.exists()) {
+            Collection<File> files = FileUtils.listFiles(dir, extension, true);
+
+            for(File file : files){
+                try {
+                    FileInputStream fIn = new FileInputStream(file);
+                    FileChannel fc = fIn.getChannel();
+                    ByteBuffer buf = ByteBuffer.allocate(LogFileHeader.size);
+                    fc.read(buf);
+                    buf.rewind();
+
+                    LogFileHeader header = LogFileHeader.fromBuffer(buf);
+
+                    if(header.getVersion() != VERSION) {
+                        String msg = String.format("Log version {} for {} should match the logunit log version {}",
+                                header.getVersion(), file.getAbsoluteFile(), VERSION);
+                        throw new RuntimeException(msg);
+                    }
+
+                    if (noVerify == false && header.verify == false) {
+                        String msg = String.format("Log file {} not generated with checksums, can't verify!",
+                                file.getAbsoluteFile());
+                        throw new RuntimeException(msg);
+                    }
+
+                } catch (IOException e) {
+                    throw new RuntimeException(e.getMessage(), e.getCause());
+                }
+            }
+        }
     }
 
     @Override
@@ -87,7 +129,7 @@ public class StreamLogFiles implements StreamLog {
      * @param verify  Checksum verify flag
      * @throws IOException
      */
-    private void writeHeader(FileChannel fc, AtomicLong pointer, int version, byte verify)
+    static public void writeHeader(FileChannel fc, AtomicLong pointer, int version, boolean verify)
             throws IOException {
         LogFileHeader lfg = new LogFileHeader(version, verify);
         ByteBuffer b = lfg.getBuffer();
@@ -165,20 +207,20 @@ public class StreamLogFiles implements StreamLog {
      */
     private FileHandle getChannelForAddress(long address) {
         return channelMap.computeIfAbsent(address / 10000, a -> {
-            String filePath = logDir + a.toString();
+            String filePath = logDir + a.toString() + ".log";
             try {
                 FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
                         EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
                                 StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
 
                 AtomicLong fp = new AtomicLong();
-                byte verify = 0xf;
+                boolean verify = true;
 
                 if(noVerify){
-                    verify = 0;
+                    verify = false;
                 }
 
-                writeHeader(fc, fp, logVersion, verify);
+                writeHeader(fc, fp, VERSION, verify);
                 log.info("Opened new log file at {}", filePath);
                 FileHandle fh = new FileHandle(fp, fc);
                 // The first time we open a file we should read to the end, to load the
@@ -320,7 +362,7 @@ public class StreamLogFiles implements StreamLog {
         static final String magic = "CORFULOG";
         static final int size = 64;
         final int version;
-        final byte verify;
+        final boolean verify;
 
         static LogFileHeader fromBuffer(ByteBuffer buffer) {
             byte[] bMagic = new byte[8];
@@ -329,7 +371,16 @@ public class StreamLogFiles implements StreamLog {
                 log.warn("Encountered invalid magic, expected {}, got {}", magic, new String(bMagic));
                 throw new RuntimeException("Invalid header magic!");
             }
-            return new LogFileHeader(buffer.getInt(), buffer.get());
+
+            int version = buffer.getInt();
+            byte verifyByte = buffer.get();
+            boolean verify = true;
+
+            if(verifyByte == 0x0) {
+                verify = false;
+            }
+
+            return new LogFileHeader(version, verify);
         }
 
         ByteBuffer getBuffer() {
@@ -339,7 +390,11 @@ public class StreamLogFiles implements StreamLog {
             // 8: Version number(4)
             b.putInt(version);
             // 12: Flags (8)
-            b.put(verify);
+            if(verify) {
+                b.put((byte) 0xf);
+            } else {
+                b.put((byte) 0x0);
+            }
             b.put((byte) 0);
             b.putShort((short) 0);
             b.putInt(0);
@@ -374,5 +429,4 @@ public class StreamLogFiles implements StreamLog {
         }
         channelMap = new HashMap<>();
     }
-
 }
