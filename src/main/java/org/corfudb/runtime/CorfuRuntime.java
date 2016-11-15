@@ -3,11 +3,7 @@ package org.corfudb.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
@@ -91,6 +87,12 @@ public class CorfuRuntime {
      */
     @Getter
     public boolean backpointersDisabled = false;
+    /**
+     * Notifies that the runtime is no longer used
+     * and async retries to fetch the layout can be stopped.
+     */
+    @Getter
+    private volatile boolean isShutdown = false;
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
@@ -122,6 +124,7 @@ public class CorfuRuntime {
             router.addClient(new LayoutClient())
                     .addClient(new SequencerClient())
                     .addClient(new LogUnitClient())
+                    .addClient(new ManagementClient())
                     .start();
             nodeRouters.put(address, router);
         } catch (Exception e) {
@@ -135,6 +138,24 @@ public class CorfuRuntime {
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
         log.debug("Corfu runtime version {} initialized.", getVersionString());
+    }
+
+    /**
+     * Shuts down the CorfuRuntime.
+     * Stops async tasks from fetching the layout.
+     * Cannot reuse the runtime once shutdown is called.
+     */
+    public void shutdown() {
+
+        // Stopping async task from fetching layout.
+        isShutdown = true;
+        if (layout != null) {
+            try {
+                layout.get();
+            } catch (Exception e) {
+                log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
+            }
+        }
     }
 
     /**
@@ -293,7 +314,7 @@ public class CorfuRuntime {
                         // (at least the code on 10/13/2016 does not have issues)
                         // but setEpoch of routers needs to be synchronized as those variables are not local.
                         l.getAllServers().stream().map(getRouterFunction).forEach(x -> x.setEpoch(l.getEpoch()));
-                        layoutServers.retainAll(l.getLayoutServers());
+                        layoutServers = l.getLayoutServers();
                         layout = layoutFuture;
                         //FIXME Synchronization END
 
@@ -308,6 +329,9 @@ public class CorfuRuntime {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
+                }
+                if (isShutdown) {
+                    return null;
                 }
             }
         });

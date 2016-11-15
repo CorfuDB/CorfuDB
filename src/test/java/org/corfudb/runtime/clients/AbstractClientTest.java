@@ -65,7 +65,8 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
                     tcn.addClient(new BaseClient())
                             .addClient(new SequencerClient())
                             .addClient(new LayoutClient())
-                            .addClient(new LogUnitClient());
+                            .addClient(new LogUnitClient())
+                            .addClient(new ManagementClient());
                     return tcn;
                 }
         );

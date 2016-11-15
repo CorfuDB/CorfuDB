@@ -13,8 +13,6 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.handler.logging.LogLevel;
-import io.netty.handler.logging.LoggingHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
@@ -54,7 +52,10 @@ public class CorfuServer {
     @Getter
     private static LogUnitServer logUnitServer;
 
-    public static boolean serverRunning_p = false;
+    @Getter
+    private static ManagementServer managementServer;
+
+    public static boolean serverRunning = false;
 
     /**
      * This string defines the command line arguments,
@@ -110,7 +111,7 @@ public class CorfuServer {
     }
 
     public static void main(String[] args) {
-        serverRunning_p = true;
+        serverRunning = true;
 
         // Parse the options given, using docopt.
         Map<String, Object> opts =
@@ -180,6 +181,8 @@ public class CorfuServer {
         router.addServer(layoutServer);
         logUnitServer = new LogUnitServer(serverContext);
         router.addServer(logUnitServer);
+        managementServer = new ManagementServer(serverContext);
+        router.addServer(managementServer);
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.

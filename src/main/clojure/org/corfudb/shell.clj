@@ -89,6 +89,7 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
    (add-client (new org.corfudb.runtime.clients.LayoutClient))
    (add-client (new org.corfudb.runtime.clients.LogUnitClient))
    (add-client (new org.corfudb.runtime.clients.SequencerClient))
+   (add-client (new org.corfudb.runtime.clients.ManagementClient))
   *o)
 (defn connect-runtime ([] (.. *r (connect)))
                           ([runtime] (.. runtime (connect))))
@@ -102,6 +103,8 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
   ([router] (.. router (getClient org.corfudb.runtime.clients.LogUnitClient))))
 (defn get-sequencer-client ([] (.. *o (getClient org.corfudb.runtime.clients.SequencerClient)))
   ([router] (.. router (getClient org.corfudb.runtime.clients.SequencerClient))))
+(defn get-management-client ([] (.. *o (getClient org.corfudb.runtime.clients.ManagementClient)))
+  ([router] (.. router (getClient org.corfudb.runtime.clients.ManagementClient))))
 
 ; Functions to interact with a runtime.
 (defn get-stream ([stream] (.. (.. *r (getStreamsView)) (get stream))))
