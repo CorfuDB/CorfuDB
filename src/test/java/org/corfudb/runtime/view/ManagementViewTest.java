@@ -5,6 +5,11 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.clients.TestRule;
 import org.junit.Test;
 
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
  * Test to verify the Management Server functionality.
  * <p>
@@ -16,7 +21,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message
      * is sent by the Management client to its server.
      */
-    private static volatile boolean failureDetectorMsgRecd;
+    private static final Semaphore failureDetected = new Semaphore(1, true);
 
     /**
      * Scenario with 3 nodes: 9000, 9001 and 9002.
@@ -47,7 +52,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
 
-        ManagementViewTest.failureDetectorMsgRecd = false;
+        failureDetected.acquire();
 
         // Adding a rule on 9000 to drop all packets
         addServerRule(9000, new TestRule().always().drop());
@@ -56,13 +61,11 @@ public class ManagementViewTest extends AbstractViewTest {
         // MANAGEMENT_FAILURE_DETECTED message.
         addClientRule(getManagementServer(9001).getCorfuRuntime(), new TestRule().matches(corfuMsg -> {
             if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
-                ManagementViewTest.failureDetectorMsgRecd = true;
+                failureDetected.release();
             }
             return true;
         }));
 
-        // Wait in loop until failures have been reported.
-        while (!ManagementViewTest.failureDetectorMsgRecd)
-            Thread.sleep(500);
+        assertThat(failureDetected.tryAcquire(15, TimeUnit.SECONDS)).isEqualTo(true);
     }
 }
