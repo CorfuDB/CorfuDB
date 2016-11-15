@@ -6,7 +6,6 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
-import org.corfudb.protocols.wireprotocol.ManagementBootstrapRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.junit.After;
@@ -211,7 +210,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                             .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
                                     null, e.getValue().serverRouter);
                     e.getValue().managementServer
-                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(new ManagementBootstrapRequest(l)),
+                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(l),
                                     null, e.getValue().serverRouter);
                 });
     }

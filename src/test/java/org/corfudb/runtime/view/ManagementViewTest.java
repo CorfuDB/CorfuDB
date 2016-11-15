@@ -13,7 +13,7 @@ import org.junit.Test;
 public class ManagementViewTest extends AbstractViewTest {
 
     /**
-     * Boolean flag turned to true when the FAILURE_DETECTED message
+     * Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message
      * is sent by the Management client to its server.
      */
     private static volatile boolean failureDetectorMsgRecd;
@@ -53,9 +53,9 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(9000, new TestRule().always().drop());
 
         // Adding a rule on 9001 to toggle the flag when it sends the
-        // FAILURE_DETECTED message.
+        // MANAGEMENT_FAILURE_DETECTED message.
         addClientRule(getManagementServer(9001).getCorfuRuntime(), new TestRule().matches(corfuMsg -> {
-            if (corfuMsg.getMsgType().equals(CorfuMsgType.FAILURE_DETECTED)) {
+            if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
                 ManagementViewTest.failureDetectorMsgRecd = true;
             }
             return true;

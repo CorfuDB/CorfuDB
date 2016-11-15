@@ -13,7 +13,7 @@ import java.util.Map;
 @Data
 @AllArgsConstructor
 public class FailureDetectorMsg implements ICorfuPayload<FailureDetectorMsg> {
-    private Map nodes;
+    private Map<String, Boolean> nodes;
 
     public FailureDetectorMsg(ByteBuf buf) {
         nodes = ICorfuPayload.mapFromBuffer(buf, String.class, Boolean.class);

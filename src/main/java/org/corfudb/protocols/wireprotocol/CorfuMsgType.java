@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.infrastructure.*;
+import org.corfudb.runtime.view.Layout;
 
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -70,8 +71,8 @@ public enum CorfuMsgType {
     LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, LayoutServer.class, true),
 
     // Management Codes
-    MANAGEMENT_BOOTSTRAP(62, new TypeToken<CorfuPayloadMsg<ManagementBootstrapRequest>>(){}, ManagementServer.class, true),
-    FAILURE_DETECTED(63, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, ManagementServer.class, true);
+    MANAGEMENT_BOOTSTRAP(62, new TypeToken<CorfuPayloadMsg<Layout>>(){}, ManagementServer.class, true),
+    MANAGEMENT_FAILURE_DETECTED(63, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, ManagementServer.class, true);
 
 
     public final int type;
