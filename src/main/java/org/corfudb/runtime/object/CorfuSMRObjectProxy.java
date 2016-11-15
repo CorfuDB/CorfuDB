@@ -401,7 +401,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     }
 
     @Override
-    public void sync(P obj, long maxPos) {
+    public synchronized void sync(P obj, long maxPos) {
         try (LockUtils.AutoCloseRWLock writeLock = new LockUtils.AutoCloseRWLock(rwLock).writeLock()) {
             LogData[] entries = sv.readTo(maxPos);
             log.trace("Object[{}] sync to pos {}, read {} entries",

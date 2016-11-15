@@ -178,6 +178,43 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     }
 
     @Test
+    public void deadLockTest() throws Exception {
+        CorfuRuntime runtime = getDefaultRuntime().connect();
+        Map<String, Integer> map =
+                runtime.getObjectsView()
+                        .build()
+                        .setStreamName("M")
+                        .setType(SMRMap.class)
+                        .open();
+
+        for(int x = 0; x < 100; x++) {
+            // thread 1: update "a" and "b" atomically
+            Thread t1 = new Thread(() -> {
+                runtime.getObjectsView().TXBegin();
+                map.put("a", 1);
+                map.put("b", 1);
+                runtime.getObjectsView().TXEnd();
+            }
+            );
+            t1.start();
+
+            // thread 2: read "a", then "b"
+            Thread t2 = new Thread(() -> {
+                map.get("a");
+                map.get("b");
+            });
+            t2.start();
+
+            // Wait for 5 seconds
+            t1.join(5000);
+            t2.join(5000);
+
+            assertThat(t1.isAlive()).isFalse();
+            assertThat(t2.isAlive()).isFalse();
+        }
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     public void canUsePrimitiveSerializer()
             throws Exception {
@@ -186,7 +223,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         TestClassWithPrimitives test = r.getObjectsView().build()
                 .setType(TestClassWithPrimitives.class)
                 .setStreamName("test")
-                .setSerializer(null)
+                .setSerializer(Serializers.PRIMITIVE)
                 .open();
 
         test.setPrimitive("hello world".getBytes());
