@@ -4,8 +4,6 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.infrastructure.log.LogAddress;
-import org.corfudb.infrastructure.log.LogUnitEntry;
-import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;

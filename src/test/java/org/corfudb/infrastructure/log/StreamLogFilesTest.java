@@ -7,10 +7,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.io.File;
 import java.io.RandomAccessFile;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;

@@ -8,6 +8,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ReplexOverwriteException;
@@ -140,9 +141,22 @@ public class LogUnitClient implements IClient {
      * @param r     Router
      */
     @ClientHandler(type=CorfuMsgType.READ_RESPONSE)
-    private static Object handleReadResponse(CorfuPayloadMsg<ReadResponse> msg, ChannelHandlerContext ctx, IClientRouter r)
-    {
+    private static Object handleReadResponse(CorfuPayloadMsg<ReadResponse> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
+    }
+
+    /**
+     * Handle a ERROR_DATA_CORRUPTION message
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_DATA_CORRUPTION)
+    private static Object handleReadDataCorruption(CorfuPayloadMsg<ReadResponse> msg,
+                                                   ChannelHandlerContext ctx, IClientRouter r)
+    {
+        throw new DataCorruptionException();
     }
 
     /**
