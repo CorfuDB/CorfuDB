@@ -271,7 +271,7 @@ public class CorfuRuntime {
      * If the layout has been previously invalidated and a new layout has not yet been retrieved,
      * this function does nothing.
      */
-    public void invalidateLayout() {
+    public synchronized void invalidateLayout() {
         // Is there a pending request to retrieve the layout?
         if (!layout.isDone()) {
             // Don't create a new request for a layout if there is one pending.
