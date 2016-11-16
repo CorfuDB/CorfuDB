@@ -344,7 +344,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     if (mutator != null || mutatorAccessor != null) {
                         ms.addStatement(
                                 (mutatorAccessor != null ? "long address" + CORFUSMR_FIELD + " = " : "") +
-                                "proxy" + CORFUSMR_FIELD + ".logUpdate($S$L$L)",
+                                "proxy" + CORFUSMR_FIELD + ".logUpdate(false, $S$L$L)",
                                 getSMRFunctionName(smrMethod),
                                 smrMethod.getParameters().size() > 0 ? "," : "",
                                 smrMethod.getParameters().stream()
@@ -358,8 +358,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         // If the return to the mutatorAcessor is void, we don't need
                         // to do anything...
                         if (!smrMethod.getReturnType().getKind().equals(TypeKind.VOID)) {
-                            ms.addStatement("return proxy" + CORFUSMR_FIELD + ".access(address"
-                                    + CORFUSMR_FIELD + ", null)");
+                            ms.addStatement("return (" +
+                                    ParameterizedTypeName.get(smrMethod.getReturnType())
+                                    + ") proxy" + CORFUSMR_FIELD
+                                    + ".getUpcallResult(false, address"
+                                    + CORFUSMR_FIELD + ")");
                         }
                     }
                     // If transactional, begin the transaction
@@ -405,8 +408,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     else if (mutator == null) {
                         // Otherwise, just force the access to access the underlying call.
                         ms.addStatement((smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ? "" :
-                                        "return ") +"proxy" + CORFUSMR_FIELD + ".access(Long.MAX_VALUE" +
-                                        ", o" + CORFUSMR_FIELD + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L})",
+                                        "return ") +"proxy" + CORFUSMR_FIELD + ".access(false, " +
+                                        "o" + CORFUSMR_FIELD + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L})",
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
                                         "" : "return ",
                                 smrMethod.getSimpleName(),
