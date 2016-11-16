@@ -23,6 +23,7 @@ public class VersionLockedObject<T> {
     StampedLock lock;
     StreamView sv;
     Deque<AbstractTransactionalContext> txContext;
+    AbstractTransactionalContext modifyingContext;
 
     public VersionLockedObject(T obj, long version, StreamView sv) {
         this.object = obj;
@@ -158,6 +159,15 @@ public class VersionLockedObject<T> {
     public void setTXContextUnsafe
             (Deque<AbstractTransactionalContext> context) {
         this.txContext = context;
+        if (context == null) {
+            this.modifyingContext = null;
+        } else {
+            this.modifyingContext = context.getFirst();
+        }
+    }
+
+    public AbstractTransactionalContext getModifyingContext() {
+        return this.modifyingContext;
     }
 
     public Deque<AbstractTransactionalContext> getTXContextUnsafe() {

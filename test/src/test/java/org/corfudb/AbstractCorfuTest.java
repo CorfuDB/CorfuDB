@@ -1,5 +1,7 @@
 package org.corfudb;
 
+import org.assertj.core.api.AbstractObjectAssert;
+import org.assertj.core.api.AssertProvider;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
 import org.junit.Before;
@@ -9,16 +11,8 @@ import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
 
 import java.io.File;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -207,5 +201,116 @@ public class AbstractCorfuTest {
          * @throws Exception The exception to be called.
          */
         void accept(Integer threadNumber) throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ExceptionFunction<T> {
+        T run() throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface VoidExceptionFunction {
+        void run() throws Exception;
+    }
+
+    class TestThread {
+
+        Thread t;
+        Semaphore s = new Semaphore(0);
+        volatile ExceptionFunction runFunction;
+        volatile CompletableFuture<Object> result;
+        volatile boolean running = true;
+
+        public TestThread(int threadNum) {
+            t = new Thread(() -> {
+                while (running) {
+                    try {
+                        s.acquire();
+                        try {
+                            Object res = runFunction.run();
+                            result.complete(res);
+                        } catch (Exception e) {
+                            result.completeExceptionally(e);
+                        }
+                    } catch (InterruptedException ie) {
+                        // check if running flag is active.
+                    }
+                }
+            });
+            t.setName("test-" + threadNum);
+            t.start();
+        }
+
+        public Object run(ExceptionFunction function)
+        throws Throwable
+        {
+            runFunction = function;
+            result = new CompletableFuture<>();
+            s.release();
+            try {
+                return result.get();
+            } catch (ExecutionException e) {
+                throw e.getCause();
+            } catch (InterruptedException ie){
+                throw new RuntimeException(ie);
+            }
+        }
+
+        public void shutdown() {
+            running = false;
+            t.interrupt();
+            try {
+                t.join();
+            } catch (InterruptedException ie) {
+                // weird, continue shutdown.
+            }
+        }
+
+    }
+
+    Map<Integer, TestThread> threadsMap = new ConcurrentHashMap<>();
+
+    @Before
+    public void resetThreadingTest() {
+        threadsMap.clear();
+    }
+
+    @After
+    public void shutdownThreadingTest() {
+        threadsMap.entrySet().forEach(x -> {
+            x.getValue().shutdown();
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private  <T> T runThread(int threadNum, ExceptionFunction<T> e)
+    throws Throwable
+    {
+        threadsMap.putIfAbsent(threadNum, new TestThread(threadNum));
+        return (T) threadsMap.get(threadNum).run(e);
+    }
+
+    public static class AssertableObject<T> {
+        T obj;
+
+        public AssertableObject(T obj) {this.obj = obj;}
+
+        public AbstractObjectAssert<?, T> assertResult() {
+            return assertThat(obj);
+        }
+
+        public T result() {
+            return obj;
+        }
+    }
+
+    public <T> AssertableObject<T> t(int threadNum, ExceptionFunction<T> toRun)
+    throws Throwable {
+        return new AssertableObject<T>(runThread(threadNum, toRun));
+    }
+
+    public void t(int threadNum, VoidExceptionFunction toRun)
+            throws Throwable {
+        runThread(threadNum, () -> {toRun.run(); return null;});
     }
 }
