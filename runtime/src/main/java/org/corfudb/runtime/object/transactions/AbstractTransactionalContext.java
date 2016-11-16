@@ -7,17 +7,17 @@ import org.corfudb.annotations.Accessor;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuSMRObjectProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
+import org.corfudb.runtime.object.*;
 import org.corfudb.runtime.view.TransactionStrategy;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Created by mwei on 4/4/16.
@@ -74,6 +74,34 @@ public abstract class AbstractTransactionalContext implements AutoCloseable {
     public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
                                        Object[] SMRArguments, ISerializer serializer, boolean writeOnly) {
     }
+
+    /** Even newer tx methods */
+
+    public <R,T> R access(ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R,T> accessFunction) {
+        return proxy.access(true, accessFunction);
+    }
+
+
+    public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy, long timestamp) {
+        return proxy.getUpcallResult(true, timestamp);
+    }
+
+    public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
+                              SMREntry updateEntry) {
+        return proxy.logUpdate(true, updateEntry.getSMRMethod(),
+                updateEntry.getSMRArguments());
+    }
+
+    public <T> void rollbackUnsafe(ICorfuSMRProxyInternal<T> proxy) {
+        throw new UnsupportedOperationException();
+    }
+
+    public <T> void syncUnsafe(ICorfuSMRProxyInternal<T> proxy) {
+
+    }
+
+    @Getter
+    public CompletableFuture<Boolean> completionFuture = new CompletableFuture<>();
 
     /** New tx methods */
 
@@ -207,6 +235,15 @@ public abstract class AbstractTransactionalContext implements AutoCloseable {
 
 
     public void commitTransaction() throws TransactionAbortedException {
+        completionFuture.complete(true);
+    }
+
+    public void abortTransaction() {
+        completionFuture.completeExceptionally(new TransactionAbortedException());
+    }
+
+    public boolean canUndoTransaction(UUID stream) {
+        return false;
     }
 
     @Override

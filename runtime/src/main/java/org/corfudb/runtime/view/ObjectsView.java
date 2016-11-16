@@ -224,11 +224,13 @@ public class ObjectsView extends AbstractView {
      * context will be discarded.
      */
     public void TXAbort() {
-        AbstractTransactionalContext context = TransactionalContext.removeContext();
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         if (context == null) {
             log.warn("Attempted to abort a transaction, but no transaction active!");
         } else {
             log.trace("Aborting transactional context {}.", context.getTransactionID());
+            context.abortTransaction();
+            TransactionalContext.removeContext();
         }
     }
 

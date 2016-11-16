@@ -67,7 +67,14 @@ public class TransactionalContext {
         if (getCurrentContext() != null) {
             getCurrentContext().close();
         }
-        return getTransactionStack().pollFirst();
+        AbstractTransactionalContext r = getTransactionStack().pollFirst();
+        if (getTransactionStack().isEmpty()) {
+            synchronized (getTransactionStack())
+            {
+                getTransactionStack().notifyAll();
+            }
+        }
+        return r;
     }
 
     public static boolean isInOptimisticTransaction() {
