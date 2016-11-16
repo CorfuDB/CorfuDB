@@ -21,8 +21,10 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /** The streams which are affected by this token request. */
     final Set<UUID> streams;
 
+    /* True if the Replex protocol encountered an overwrite at the global log layer. */
     final Boolean overwrite;
 
+    /* True if the Replex protocol encountered an overwrite at the local stream layer. */
     final Boolean replexOverwrite;
 
     final Boolean txnResolution;
