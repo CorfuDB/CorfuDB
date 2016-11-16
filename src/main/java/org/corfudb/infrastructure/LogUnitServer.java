@@ -49,6 +49,7 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
@@ -158,18 +159,22 @@ public class LogUnitServer extends AbstractServer {
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log read: {} {}", msg.getPayload().getStreamID(), msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
-        for (Long l = msg.getPayload().getRange().lowerEndpoint();
-             l < msg.getPayload().getRange().upperEndpoint()+1L; l++) {
-            LogData e = dataCache.get(new LogAddress(l, msg.getPayload().getStreamID()));
-            if (e == null) {
-                rr.put(l, LogData.EMPTY);
-            } else if (e.getType() == DataType.HOLE) {
-                rr.put(l, LogData.HOLE);
-            } else {
-                rr.put(l, e);
+        try {
+            for (Long l = msg.getPayload().getRange().lowerEndpoint();
+                 l < msg.getPayload().getRange().upperEndpoint()+1L; l++) {
+                LogData e = dataCache.get(new LogAddress(l, msg.getPayload().getStreamID()));
+                if (e == null) {
+                    rr.put(l, LogData.EMPTY);
+                } else if (e.getType() == DataType.HOLE) {
+                    rr.put(l, LogData.HOLE);
+                } else {
+                    rr.put(l, e);
+                }
             }
+            r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+        } catch (DataCorruptionException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
         }
-        r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
     }
 
     @ServerHandler(type=CorfuMsgType.GC_INTERVAL)
@@ -233,7 +238,7 @@ public class LogUnitServer extends AbstractServer {
                 }
                 else {
                     String logdir = opts.get("--log-path") + File.separator + "log" + File.separator + stream;
-                    return new StreamLogFiles(logdir, (Boolean) opts.get("--sync"));
+                    return new StreamLogFiles(logdir, (Boolean) opts.get("--sync"), (Boolean) opts.get("--no-verify"));
                 }
             });
         }
@@ -298,7 +303,7 @@ public class LogUnitServer extends AbstractServer {
             localLog = new InMemoryStreamLog();
         } else {
             String logdir = opts.get("--log-path") + File.separator + "log";
-            localLog = new StreamLogFiles(logdir, (Boolean) opts.get("--sync"));
+            localLog = new StreamLogFiles(logdir, (Boolean) opts.get("--sync"), (Boolean) opts.get("--no-verify"));
         }
 
         if (dataCache != null) {

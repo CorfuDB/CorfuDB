@@ -65,6 +65,7 @@ public enum CorfuMsgType {
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
     ERROR_REPLEX_OVERWRITE(56, TypeToken.of(CorfuMsg.class), LogUnitServer.class),
+    ERROR_DATA_CORRUPTION(57, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}, LogUnitServer.class),
 
     // EXTRA CODES
     LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), LayoutServer.class, true),

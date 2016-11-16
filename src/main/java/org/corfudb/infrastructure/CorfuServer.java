@@ -95,6 +95,7 @@ public class CorfuServer {
                     + "                                         ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
                     + " -Q, --quickcheck-test-mode              Run in QuickCheck test mode\n"
                     + " -P <seconds>, --cm-poll-interval        Configuration manager poll interval [default: 1]\n"
+                    + " -n, --no-verify                         Disable checksum computation and verification.\n"
                     + " -h, --help  Show this screen\n"
                     + " --version  Show version\n";
 
