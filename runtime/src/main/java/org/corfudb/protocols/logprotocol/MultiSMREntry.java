@@ -26,7 +26,7 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
     List<SMREntry> updates;
 
     public MultiSMREntry(List<SMREntry> updates) {
-        this.type = LogEntryType.OPT_TX;
+        this.type = LogEntryType.MULTISMR;
         this.updates = updates;
     }
 

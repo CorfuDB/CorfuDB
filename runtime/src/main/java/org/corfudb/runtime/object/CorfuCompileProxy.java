@@ -132,6 +132,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @throws InstantiationException   If the object cannot be instantiated
      * @throws IllegalAccessException   If for some reason the object class was not public
      */
+    @SuppressWarnings("unchecked")
     private T getNewInstance()
         throws InstantiationException, IllegalAccessException {
         T ret = null;

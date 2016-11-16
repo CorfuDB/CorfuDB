@@ -14,6 +14,7 @@ import java.util.LinkedList;
 @Slf4j
 public class TransactionalContext {
 
+
     private static final ThreadLocal<Deque<AbstractTransactionalContext>> threadStack = ThreadLocal.withInitial(
             LinkedList<AbstractTransactionalContext>::new);
     @Getter
@@ -64,9 +65,6 @@ public class TransactionalContext {
     }
 
     public static AbstractTransactionalContext removeContext() {
-        if (getCurrentContext() != null) {
-            getCurrentContext().close();
-        }
         AbstractTransactionalContext r = getTransactionStack().pollFirst();
         if (getTransactionStack().isEmpty()) {
             synchronized (getTransactionStack())
@@ -79,10 +77,6 @@ public class TransactionalContext {
 
     public static boolean isInOptimisticTransaction() {
         return getCurrentContext() instanceof OptimisticTransactionalContext;
-    }
-
-    public static boolean needsReadLock() {
-        return getCurrentContext().transactionRequiresReadLock();
     }
 
     @FunctionalInterface

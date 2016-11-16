@@ -1,9 +1,13 @@
 package org.corfudb.runtime.object.transactions;
 
+import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.annotation.Immutable;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -28,11 +32,9 @@ import java.util.stream.IntStream;
 @Slf4j
 public class OptimisticTransactionalContext extends AbstractTransactionalContext {
 
-    AtomicInteger updateCounter;
-    @Getter
-    Map<CorfuSMRObjectProxy, TransactionalObjectData> objectMap;
     @Getter
     private boolean firstReadTimestampSet = false;
+
     /**
      * The timestamp of the first read in the system.
      *
@@ -41,31 +43,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Getter(lazy = true)
     private final long firstReadTimestamp = fetchFirstTimestamp();
 
-    @Override
-    public boolean transactionRequiresReadLock() { return true; }
-
     public OptimisticTransactionalContext(CorfuRuntime runtime) {
         super(runtime);
-        this.objectMap = new ConcurrentHashMap<>();
-        this.updateCounter = new AtomicInteger();
-    }
-
-    /**
-     * Check if there was nothing to write.
-     *
-     * @return Return true, if there was no write set.
-     */
-    public boolean hasNoWriteSet() {
-        for (TransactionalObjectData od : objectMap.values()) {
-            if (od.bufferedWrites.size() > 0) return false;
-        }
-        if (updateLog.size() > 0) {
-            return false;
-        }
-        if (writeSet.size() >0) {
-            return false;
-        }
-        return true;
     }
 
     /**
@@ -87,24 +66,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     public TXEntry getEntry() {
         Map<UUID, TXEntry.TXObjectEntry> entryMap = new HashMap<>();
-        objectMap.entrySet().stream()
-                .forEach(x -> entryMap.put(x.getKey().getSv().getStreamID(),
-                        new TXEntry.TXObjectEntry(x.getValue().bufferedWrites, x.getValue().objectIsRead)));
-
-        // new TX stuff.
-        updateMap.entrySet().stream()
-                .forEach(x -> entryMap.put(x.getKey(),
-                        new TXEntry.TXObjectEntry(x.getValue(), false)));
-        readProxies
-                .forEach(x -> {
-                    if (entryMap.containsKey(x.getStreamID())) {
-                        entryMap.get(x.getStreamID()).setRead(true);
-                    }
-                    else {
-                        entryMap.put(x.getStreamID(), new TXEntry.TXObjectEntry(Collections.emptyList(),
-                                true));
-                    }
-                });
 
         // newer TX stuff
         writeSet.entrySet().forEach(x -> {
@@ -130,39 +91,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L);
     }
 
-    /**
-     * Buffer away an object update, adding it to the write set that will be generated
-     * in the resulting TXEntry.
-     *
-     * @param proxy        The SMR Object proxy to buffer for.
-     * @param SMRMethod    The method being called.
-     * @param SMRArguments The arguments to that method.
-     * @param serializer   The serializer to use.
-     * @param <T>          The type of the proxy.
+    /** A wrapper which combines SMREntries with
+     * their upcall result.
      */
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T> void bufferObjectUpdate(CorfuSMRObjectProxy<T> proxy, String SMRMethod,
-                                       Object[] SMRArguments, ISerializer serializer, boolean writeOnly) {
-        objectMap
-                .compute(proxy, (k, v) ->
-                {
-                    TransactionalObjectData<T> data = v;
-                    if (v == null) {
-                        data = new TransactionalObjectData<>(proxy);
-                    }
-
-                    if (!writeOnly) {
-                        data.objectIsRead = true;
-                    }
-                    data.bufferedWrites.add(new SMREntry(SMRMethod, SMRArguments, serializer));
-                    return data;
-                });
-    }
-
-
-    /** Overrides of new TX methods. */
-
     @Data
     @RequiredArgsConstructor
     private static class UpcallWrapper {
@@ -171,10 +102,17 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         boolean haveUpcallResult;
     }
 
+    /** The write set for this transaction.*/
     private Map<UUID, List<UpcallWrapper>> writeSet = new ConcurrentHashMap<>();
+
+    /** The read set for this transaction. */
     private Set<UUID> readSet = new HashSet<>();
+
+    /** The write pointers for this transaction.
+     * For each proxy, this map keeps track of the furthest
+     * position each proxy has synced to.
+     */
     private Map<ICorfuSMRProxyInternal, Integer> writeSetPointer = new ConcurrentHashMap<>();
-    private StampedLock lock = new StampedLock();
 
     /** Helper function to get the current write set pointer for a proxy.
      *
@@ -185,6 +123,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return writeSetPointer.getOrDefault(proxy, 0);
     }
 
+    /** Helper function to increment the write set pointer for a proxy.
+     *
+     * @param proxy     The proxy to increment the write set pointer to.
+     */
     private void incrementWriteSetPointer(ICorfuSMRProxyInternal proxy) {
         writeSetPointer.compute(proxy, (k,v) -> {
             if (v == null) return 0;
@@ -192,6 +134,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         });
     }
 
+    /** Helper function to clear the write set pointer.
+     *
+     * @param proxy     The proxy to clear the write set pointer for.
+     */
     private void clearWriteSetPointer(ICorfuSMRProxyInternal proxy) {
         // We have to be careful when clearing, since the
         // writeSetPointer is used to track objects we've
@@ -199,10 +145,21 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         writeSetPointer.computeIfPresent(proxy, (k,v) -> 0);
     }
 
+    /** Helper function to get a write set for a particular stream.
+     *
+     * @param id    The stream to get a write set for.
+     * @return      The write set for that stream, as an ordered list.
+     */
     private List<UpcallWrapper> getWriteSet(UUID id) {
         return writeSet.getOrDefault(id, new LinkedList<>());
     }
 
+    /**
+     * Roll back the optimistic updates we have made to a proxy,
+     * restoring the state of the underlying object.
+     * @param proxy             The proxy which we are rolling back.
+     * @param <T>               The type of the proxy's underlying object.
+     */
     @Override
     public <T> void rollbackUnsafe(ICorfuSMRProxyInternal<T> proxy) {
         // starting at the write pointer, roll back any
@@ -237,6 +194,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
     }
 
+    /**
+     * Sync the state of the proxy to the latest updates in the write
+     * set for a stream.
+     * @param proxy             The proxy which we are playing forward.
+     * @param <T>               The type of the proxy's underlying object.
+     */
     @Override
     public <T> void syncUnsafe(ICorfuSMRProxyInternal<T> proxy) {
         // first, if some other thread owns this object
@@ -417,6 +380,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             proxy.getUnderlyingObject().writeReturnVoid((ver, obj) -> {
                 rollbackUnsafe(proxy);
             }));
+        super.abortTransaction();
     }
 
     /** Determine whether or not we can abort all the writes
@@ -433,25 +397,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 .allMatch(x -> x.getEntry().isUndoable());
     }
 
-
-    @Override
-    public <T> void resetObject(CorfuSMRObjectProxy<T> proxy) {
-        objectMap
-                .compute(proxy, (k, v) ->
-                {
-                    TransactionalObjectData<T> data = v;
-                    if (v == null) {
-                        data = new TransactionalObjectData<>(proxy);
-                    }
-
-                    data.objectIsRead = false;
-
-                    data.bufferedWrites.clear();
-                    data.nextCloneIsReset = true;
-                    return data;
-                });
-    }
-
     /**
      * Commit a transaction into this transaction by merging the read/write sets.
      *
@@ -459,24 +404,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @SuppressWarnings("unchecked")
     public void addTransaction(AbstractTransactionalContext tc) {
-        if (tc instanceof OptimisticTransactionalContext) {
-            ((OptimisticTransactionalContext) tc).getObjectMap().entrySet().stream()
-                    .forEach(e -> {
-                        if (objectMap.containsKey(e.getKey())) {
-                            objectMap.get(e.getKey())
-                                    .bufferedWrites.addAll(e.getValue().bufferedWrites);
-                        } else {
-                            objectMap.put(e.getKey(), e.getValue());
-                        }
-                    });
-            // Flatten new Tx Maps
-            updateLog.addAll(tc.updateLog);
-            tc.updateMap.entrySet().stream().forEach(e -> {
-                updateMap.putIfAbsent(e.getKey(), new LinkedList<>());
-                updateMap.get(e.getKey()).addAll(e.getValue());
-            });
-            // and force each proxy to update
-            readProxies.forEach(x -> x.access(false, y -> null));
             // flatter newer tx maps - for now we only support other optimistic txns
             if (!(tc instanceof OptimisticTransactionalContext)) {
                 throw new RuntimeException("only optimistic txns are supported");
@@ -500,156 +427,52 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     writeSetPointer.put(x, e.getValue().size());
                 });
             });
+    }
+
+    /** Commit the transaction. If it is the last transaction in the stack,
+     * write it to the log, otherwise merge it into a nested transaction.
+     *
+     * @return The address of the committed transaction.
+     * @throws TransactionAbortedException  If the transaction was aborted.
+     */
+    @Override
+    public long commitTransaction() throws TransactionAbortedException {
+
+        // If the transaction is nested, fold the transaction.
+        if (TransactionalContext.isInNestedTransaction()) {
+
+            return AbstractTransactionalContext.FOLDED_ADDRESS;
         }
-    }
 
-    /**
-     * Add to the read set
-     *
-     * @param proxy     The SMR Object proxy to get an object for writing.
-     * @param SMRMethod
-     * @param result    @return          An object for writing.
-     */
-    @Override
-    public <T> void addReadSet(CorfuSMRObjectProxy<T> proxy, String SMRMethod, Object result) {
+        // Otherwise, commit by generating the set of affected streams
+        // and having the sequencer conditionally issue a token.
+        Set<UUID> affectedStreams = writeSet.keySet();
 
-    }
+        // For now, we have to convert our write set into a map
+        // that we can construct a new MultiObjectSMREntry from.
+        ImmutableMap.Builder<UUID, MultiSMREntry> builder =
+                ImmutableMap.builder();
+        writeSet.entrySet()
+                .forEach(x -> builder.put(x.getKey(),
+                                          new MultiSMREntry(x.getValue().stream()
+                                                            .map(UpcallWrapper::getEntry)
+                                                            .collect(Collectors.toList()))));
+        Map<UUID, MultiSMREntry> entryMap = builder.build();
+        MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
 
-    /**
-     * Open an object for reading. The implementation will avoid creating a copy of the object
-     * if it has not already been done.
-     *
-     * @param proxy The SMR Object proxy to get an object for reading.
-     * @param <T>   The type of object to get for reading.
-     * @return An object for reading.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T getObjectRead(CorfuSMRObjectProxy<T> proxy) {
-        return (T) objectMap
-                .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
-                .readObject();
-    }
-
-    /**
-     * Open an object for writing. For opacity, the implementation will create a clone of the
-     * object.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T getObjectWrite(CorfuSMRObjectProxy<T> proxy) {
-        return (T) objectMap
-                .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
-                .writeObject();
-    }
-
-    /**
-     * Open an object for reading and writing. For opacity, the implementation will create a clone of the
-     * object.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T getObjectReadWrite(CorfuSMRObjectProxy<T> proxy) {
-        return (T) objectMap
-                .computeIfAbsent(proxy, x -> new TransactionalObjectData<>(proxy))
-                .readWriteObject();
-    }
-
-    /**
-     * Check if the object is cloned.
-     *
-     * @param proxy The SMR Object proxy to get an object for writing.
-     * @param <T>   The type of object to get for writing.
-     * @return An object for writing.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> boolean isObjectCloned(CorfuSMRObjectProxy<T> proxy) {
-        return objectMap.containsKey(proxy) && objectMap.get(proxy).objectIsCloned();
-    }
-
-    @Override
-    public void commitTransaction() throws TransactionAbortedException {
-        TXEntry entry = getEntry();
-        Set<UUID> affectedStreams = entry.getAffectedStreams();
-        //TODO:: refactor commitTransaction into here...
-        long address = runtime.getStreamsView().write(affectedStreams, entry);
+        // Now we obtain a conditional address from the sequencer.
+        // This step currently happens all at once, and we get an
+        // address of -1L if it is rejected.
+        long address = runtime.getStreamsView()
+                .acquireAndWrite(affectedStreams, entry, t->true, t->true, getFirstReadTimestamp());
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
-            getPostAbortActions()
-                    .forEach(x -> x.accept(this));
             abortTransaction();
             throw new TransactionAbortedException();
         }
-        getPostCommitActions()
-                .forEach(x -> x.accept(this, address));
+
+        super.commitTransaction();
+
+        return address;
     }
-
-
-    @SuppressWarnings("unchecked")
-    class TransactionalObjectData<T> {
-
-        CorfuSMRObjectProxy<T> proxy;
-        T smrObjectClone;
-        long readTimestamp;
-        List<SMREntry> bufferedWrites;
-        boolean objectIsRead;
-        boolean nextCloneIsReset;
-
-        public TransactionalObjectData(CorfuSMRObjectProxy<T> proxy) {
-            this.proxy = proxy;
-            this.bufferedWrites = new ArrayList<>();
-            this.readTimestamp = Long.MIN_VALUE;
-            this.objectIsRead = false;
-            this.nextCloneIsReset = false;
-        }
-
-        public boolean objectIsCloned() {
-            return smrObjectClone != null;
-        }
-
-        T cloneAndGetObject() {
-            if (smrObjectClone == null) {
-                log.debug("Cloning SMR object {} due to transactional write.", proxy.getSv().getStreamID());
-                if (nextCloneIsReset) {
-                    log.trace("SMR object was marked for reset, constructing from scratch.");
-                    try {
-                        smrObjectClone = proxy.constructSMRObject(null);
-                        return smrObjectClone;
-                    } catch (Exception ex) {
-                        log.warn("Error constructing SMR object", ex);
-                    }
-                }
-                smrObjectClone = (T) Serializers.getSerializer(proxy.getSerializer().getType())
-                        .clone(proxy.getSmrObject(), proxy.getRuntime());
-            }
-            return smrObjectClone;
-        }
-
-        public T readObject() {
-            if (bufferedWrites.isEmpty()) {
-                objectIsRead = true;
-            }
-            readTimestamp = proxy.getTimestamp();
-            return (T) (smrObjectClone == null ? proxy.getSmrObject() : smrObjectClone);
-        }
-
-        public T writeObject() {
-            return cloneAndGetObject();
-        }
-
-        public T readWriteObject() {
-            if (bufferedWrites.isEmpty()) {
-                objectIsRead = true;
-            }
-            readTimestamp = proxy.getTimestamp();
-            return cloneAndGetObject();
-        }
-    }
-
-
 }

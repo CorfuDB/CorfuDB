@@ -49,10 +49,9 @@ public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, IS
         short numUpdates = b.readShort();
         entryMap = new HashMap<>();
         for (short i = 0; i < numUpdates; i++) {
-            MultiSMREntry e = ((MultiSMREntry) Serializers.CORFU.deserialize(b, rt));
             entryMap.put(
                     new UUID(b.readLong(), b.readLong()),
-                    e
+                    ((MultiSMREntry) Serializers.CORFU.deserialize(b, rt))
                     );
         }
     }

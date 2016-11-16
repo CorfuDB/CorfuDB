@@ -116,7 +116,8 @@ public class LogEntry implements ICorfuSerializable {
         STREAM_COW(4, StreamCOWEntry.class),
         TX_LAMBDAREF(5, TXLambdaReferenceEntry.class),
         OPT_TX(6, MultiSMREntry.class),
-        MULTIOBJSMR(7, MultiObjectSMREntry.class);
+        MULTIOBJSMR(7, MultiObjectSMREntry.class),
+        MULTISMR(8, MultiSMREntry.class);
 
         public final int type;
         public final Class<? extends LogEntry> entryType;
