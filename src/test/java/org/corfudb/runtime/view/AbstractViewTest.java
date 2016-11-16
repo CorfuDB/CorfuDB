@@ -6,17 +6,14 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
-import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.junit.After;
 import org.junit.Before;
 
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * This class serves as a base class for most higher-level Corfu unit tests
@@ -83,7 +80,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                     tcn.addClient(new BaseClient())
                             .addClient(new SequencerClient())
                             .addClient(new LayoutClient())
-                            .addClient(new LogUnitClient());
+                            .addClient(new LogUnitClient())
+                            .addClient(new ManagementClient());
                     return tcn;
                 }
         );
@@ -104,6 +102,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     public void cleanupBuffers() {
         testServerMap.values().stream().forEach(x -> {
             x.getLogUnitServer().shutdown();
+            x.getManagementServer().shutdown();
         });
     }
 
@@ -179,6 +178,16 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return getServer(port).getLayoutServer();
     }
 
+    /**
+     * Get an instance of the management server, given a port
+     *
+     * @param port The port of the management server to retrieve
+     * @return A management server instance.
+     */
+    public ManagementServer getManagementServer(int port) {
+        return getServer(port).getManagementServer();
+    }
+
     /** Get a instance of base server, given a port.
      *
      * @param port      The port of the base server to retrieve.
@@ -199,6 +208,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                     e.getValue().layoutServer.reset();
                     e.getValue().layoutServer
                             .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
+                                    null, e.getValue().serverRouter);
+                    e.getValue().managementServer
+                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(l),
                                     null, e.getValue().serverRouter);
                 });
     }
@@ -310,6 +322,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         SequencerServer sequencerServer;
         LayoutServer layoutServer;
         LogUnitServer logUnitServer;
+        ManagementServer managementServer;
         IServerRouter serverRouter;
         int port;
 
@@ -325,11 +338,13 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
+            this.managementServer = new ManagementServer(serverContext);
 
             this.serverRouter.addServer(baseServer);
             this.serverRouter.addServer(sequencerServer);
             this.serverRouter.addServer(layoutServer);
             this.serverRouter.addServer(logUnitServer);
+            this.serverRouter.addServer(managementServer);
         }
 
         TestServer(int port)
