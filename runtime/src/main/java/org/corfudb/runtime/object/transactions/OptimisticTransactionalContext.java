@@ -1,18 +1,26 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.Data;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuSMRObjectProxy;
+import org.corfudb.runtime.object.*;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.StampedLock;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Created by mwei on 4/4/16.
@@ -52,6 +60,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             if (od.bufferedWrites.size() > 0) return false;
         }
         if (updateLog.size() > 0) {
+            return false;
+        }
+        if (writeSet.size() >0) {
             return false;
         }
         return true;
@@ -94,6 +105,28 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                 true));
                     }
                 });
+
+        // newer TX stuff
+        writeSet.entrySet().forEach(x -> {
+                        List<SMREntry> entries = x.getValue().stream()
+                                                    .map(UpcallWrapper::getEntry)
+                                                    .collect(Collectors.toList());
+
+                            entryMap.put(x.getKey(),
+                            new TXEntry.TXObjectEntry(entries, false));
+                });
+
+        readSet.forEach(x -> {
+            if (entryMap.containsKey(x)) {
+                entryMap.get(x).setRead(true);
+            }
+            else {
+                entryMap.put(x, new TXEntry.TXObjectEntry(Collections.emptyList(),
+                        true));
+            }
+        });
+
+
         return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L);
     }
 
@@ -126,6 +159,280 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     return data;
                 });
     }
+
+
+    /** Overrides of new TX methods. */
+
+    @Data
+    @RequiredArgsConstructor
+    private static class UpcallWrapper {
+        final SMREntry entry;
+        Object upcallResult;
+        boolean haveUpcallResult;
+    }
+
+    private Map<UUID, List<UpcallWrapper>> writeSet = new ConcurrentHashMap<>();
+    private Set<UUID> readSet = new HashSet<>();
+    private Map<ICorfuSMRProxyInternal, Integer> writeSetPointer = new ConcurrentHashMap<>();
+    private StampedLock lock = new StampedLock();
+
+    /** Helper function to get the current write set pointer for a proxy.
+     *
+     * @param proxy     The proxy to get the write set pointer for
+     * @return          The current write set pointer for the proxy.
+     */
+    private int getWriteSetPointer(ICorfuSMRProxyInternal proxy) {
+        return writeSetPointer.getOrDefault(proxy, 0);
+    }
+
+    private void incrementWriteSetPointer(ICorfuSMRProxyInternal proxy) {
+        writeSetPointer.compute(proxy, (k,v) -> {
+            if (v == null) return 0;
+            return v+1;
+        });
+    }
+
+    private void clearWriteSetPointer(ICorfuSMRProxyInternal proxy) {
+        // We have to be careful when clearing, since the
+        // writeSetPointer is used to track objects we've
+        // modified.
+        writeSetPointer.computeIfPresent(proxy, (k,v) -> 0);
+    }
+
+    private List<UpcallWrapper> getWriteSet(UUID id) {
+        return writeSet.getOrDefault(id, new LinkedList<>());
+    }
+
+    @Override
+    public <T> void rollbackUnsafe(ICorfuSMRProxyInternal<T> proxy) {
+        // starting at the write pointer, roll back any
+        // updates to the object we've applied
+        try {
+            // can we rollback all the updates? if not, abort and sync
+            if (getWriteSet(proxy.getStreamID()).stream()
+                    .anyMatch(x -> !x.getEntry().isUndoable())) {
+                throw new RuntimeException("Some updates were not undoable");
+            }
+            IntStream.range(0, getWriteSetPointer(proxy))
+                    .map(x -> getWriteSetPointer(proxy) - x - 1) // reverse the stream
+                    .mapToObj(x -> getWriteSet(proxy.getStreamID()).get(x))
+                    .forEachOrdered(x -> {
+                        // Undo the operation, if this fails, we'll throw an exception
+                        // and sync.
+                        proxy.getUndoTargetMap().get(x.getEntry().getSMRMethod())
+                            .doUndo(proxy.getUnderlyingObject().getObjectUnsafe(),
+                                    x.getEntry().getUndoRecord(),
+                                    x.getEntry().getSMRArguments());
+                    });
+            // Lift our transactional context
+            clearWriteSetPointer(proxy);
+            proxy.getUnderlyingObject().setTXContextUnsafe(null);
+        } catch (Exception e) {
+            // rolling back failed, so we'll resort to getting fresh state
+            proxy.resetObjectUnsafe(proxy.getUnderlyingObject());
+            proxy.getUnderlyingObject().setTXContextUnsafe(null);
+            clearWriteSetPointer(proxy);
+            proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
+                    proxy.getVersion());
+        }
+    }
+
+    @Override
+    public <T> void syncUnsafe(ICorfuSMRProxyInternal<T> proxy) {
+        // first, if some other thread owns this object
+        // we'll try waiting, but if they take too long
+        // we should steal it from them
+        if (    proxy.getUnderlyingObject()
+                .getTXContextUnsafe() != null &&
+                !proxy.getUnderlyingObject()
+                .isTXOwnedByThisThread())
+        {
+            Deque<AbstractTransactionalContext> otherTXStack =
+                    proxy.getUnderlyingObject()
+                    .getTXContextUnsafe();
+
+            // TODO: this is not going to be effective until
+            // we release the lock. The other tx will not be
+            // able to complete until we do.
+            // There has to be at least one element present here
+            // otherwise we wouldn't be owned by another thread.
+            //try {
+            //    otherTXStack.peek().completionFuture
+            //            .get(100, TimeUnit.MILLISECONDS);
+            //} catch (InterruptedException | ExecutionException |
+            //        TimeoutException e) {
+            //    // We don't care if the tx is aborted or canceled.
+            //}
+
+            // need to rollback but that means we need to have a list
+            // of tx from the other thread!
+            //proxy.getUnderlyingObject().getTXContextUnsafe()
+            //        .forEach(x -> {
+            //            x.rollbackUnsafe(proxy);
+            //        });
+        }
+        // next, if the version is incorrect, we need to
+        // sync.
+        if (proxy.getVersion() != getFirstReadTimestamp()) {
+            proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
+                    getFirstReadTimestamp());
+        }
+        // finally, if we have buffered updates in the write set,
+        // we need to apply them.
+
+        if ((getWriteSet(proxy.getStreamID()).size()
+                != getWriteSetPointer(proxy))) {
+            proxy.getUnderlyingObject()
+                    .setTXContextUnsafe(TransactionalContext.getTransactionStack());
+            IntStream.range(getWriteSetPointer(proxy),
+                    getWriteSet(proxy.getStreamID()).size())
+                    .mapToObj(x -> getWriteSet(proxy.getStreamID()).get(x))
+                    .forEach(wrapper -> {
+                        SMREntry entry  = wrapper.getEntry();
+                        // Find the upcall...
+                        ICorfuSMRUpcallTarget<T> target =
+                                proxy.getUpcallTargetMap().get(entry.getSMRMethod());
+                        incrementWriteSetPointer(proxy);
+                        if (target == null) {
+                            throw new
+                                    RuntimeException("Unknown upcall " + entry.getSMRMethod());
+                        }
+                        // Can we generate an undo record?
+                        IUndoRecordFunction<T> undoRecordTarget =
+                                proxy.getUndoRecordTargetMap().get(entry.getSMRMethod());
+                        if (undoRecordTarget != null) {
+                            entry.setUndoRecord(undoRecordTarget
+                                    .getUndoRecord(proxy.getUnderlyingObject()
+                                                    .getObjectUnsafe(),
+                                            entry.getSMRArguments()));
+                            entry.setUndoable(true);
+                        }
+
+                        try {
+                             wrapper.setUpcallResult(target.upcall(proxy.getUnderlyingObject()
+                                    .getObjectUnsafe(), entry.getSMRArguments()));
+                             wrapper.setHaveUpcallResult(true);
+                        }
+                        catch (Exception e) {
+                            log.error("Error: Couldn't execute upcall due to {}", e);
+                            throw new RuntimeException(e);
+                        }
+                    });
+        }
+    }
+
+    /** Access the underlying state of the object.
+     *
+     * @param proxy             The proxy making the state request.
+     * @param accessFunction    The access function to execute.
+     * @param <R>               The return type of the access function.
+     * @param <T>               The type of the proxy.
+     * @return                  The result of the access.
+     */
+    @Override
+    public <R, T> R access(ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R, T> accessFunction) {
+        // First, we add this access to the read set.
+        readSet.add(proxy.getStreamID());
+
+        // Next, we check if the write set has any
+        // outstanding modifications.
+        // This will determine whether or not we need
+        // a write lock.
+        if (getWriteSet(proxy.getStreamID()).size() == getWriteSetPointer(proxy)) {
+            // If the version is correct, now we can try
+            // to service the read by taking a read lock.
+            try {
+                return proxy.getUnderlyingObject().optimisticallyReadAndRetry((v, o) -> {
+                    // to ensure snapshot isolation, we should only read from
+                    // the first read timestamp.
+                    if (v == getFirstReadTimestamp()) {
+                        return accessFunction.access(o);
+                    }
+                    throw new ConcurrentModificationException();
+                });
+            } catch (ConcurrentModificationException cme) {
+                // It turned out version was wrong, so we're going to have to do
+                // some work.
+            }
+        }
+
+        // Now we're going to do some work to modify the object, so take the write
+        // lock.
+        return proxy.getUnderlyingObject().write((v, o) -> {
+            syncUnsafe(proxy);
+            return accessFunction.access(o);
+        });
+    }
+
+    /** Obtain the result for an upcall. Since we are executing on a single thread,
+     * The result of the upcall is just the last one stored.
+     * @param proxy         The proxy making the request.
+     * @param timestamp     The timestamp of the request.
+     * @param <T>           The type of the proxy.
+     * @return              The result of the upcall.
+     */
+    @Override
+    public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy, long timestamp) {
+        // if we have a result, return it.
+        UpcallWrapper wrapper = writeSet.get(proxy.getStreamID()).get((int) timestamp);
+        if (wrapper != null && wrapper.isHaveUpcallResult()){
+            return wrapper.getUpcallResult();
+        }
+        // Otherwise, we need to sync the object
+        return proxy.getUnderlyingObject().write((v,o) -> {
+            syncUnsafe(proxy);
+            UpcallWrapper wrapper2 = writeSet.get(proxy.getStreamID()).get((int) timestamp);
+            if (wrapper2 != null && wrapper2.isHaveUpcallResult()){
+                return wrapper2.getUpcallResult();
+            }
+            // If we still don't have the upcall, this must be a bug.
+            throw new RuntimeException("Tried to get upcall during a transaction but" +
+            "we don't have it even after an optimistic sync");
+        });
+    }
+
+    /** Logs an update. In the case of an optimistic transaction, this update
+     * is logged to the write set for the transaction.
+     * @param proxy         The proxy making the request.
+     * @param updateEntry   The timestamp of the request.
+     * @param <T>           The type of the proxy.
+     * @return              The "address" that the update was written to.
+     */
+    @Override
+    public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry) {
+        writeSet.putIfAbsent(proxy.getStreamID(), new LinkedList<>());
+        writeSet.get(proxy.getStreamID()).add(new UpcallWrapper(updateEntry));
+        return writeSet.get(proxy.getStreamID()).size() - 1;
+    }
+
+    /** Abort this transaction context, restoring the state
+     * of any object we've touched.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public void abortTransaction() {
+        // Every object with a write set will have
+        // an active write set pointer.
+        writeSetPointer.keySet().forEach(proxy ->
+            proxy.getUnderlyingObject().writeReturnVoid((ver, obj) -> {
+                rollbackUnsafe(proxy);
+            }));
+    }
+
+    /** Determine whether or not we can abort all the writes
+     * in this transactions write set.
+     * @param streamID  The stream to check
+     * @return  True, if all writes can be aborted.
+     */
+    @Override
+    public boolean canUndoTransaction(UUID streamID) {
+        // This is safe, because the thread checking
+        // if a transaction will be undone will hold
+        // the write lock - for that object.
+        return writeSet.get(streamID).stream()
+                .allMatch(x -> x.getEntry().isUndoable());
+    }
+
 
     @Override
     public <T> void resetObject(CorfuSMRObjectProxy<T> proxy) {
@@ -168,8 +475,31 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 updateMap.putIfAbsent(e.getKey(), new LinkedList<>());
                 updateMap.get(e.getKey()).addAll(e.getValue());
             });
-            // and force each proxy to update (by asking for the last upcall)
-            readProxies.forEach(x -> x.access(Long.MAX_VALUE, null));
+            // and force each proxy to update
+            readProxies.forEach(x -> x.access(false, y -> null));
+            // flatter newer tx maps - for now we only support other optimistic txns
+            if (!(tc instanceof OptimisticTransactionalContext)) {
+                throw new RuntimeException("only optimistic txns are supported");
+            }
+            OptimisticTransactionalContext opt = (OptimisticTransactionalContext)
+                    tc;
+            // make sure the txn is syncd for all proxies
+            readSet.addAll(opt.readSet);
+            opt.writeSet.entrySet().stream().forEach(e-> {
+                writeSet.putIfAbsent(e.getKey(), new LinkedList<>());
+                writeSet.get(e.getKey()).addAll(e.getValue());
+                // also update all the pointers
+                Set<ICorfuSMRProxyInternal> proxies = writeSetPointer
+                        .keySet().stream()
+                        .filter(x -> x.getStreamID().equals(e.getKey()))
+                        .collect(Collectors.toSet());;
+                proxies.forEach(x -> {
+                    x.getUnderlyingObject().writeReturnVoid((v,o) -> {
+                        opt.syncUnsafe(x);
+                    });
+                    writeSetPointer.put(x, e.getValue().size());
+                });
+            });
         }
     }
 
@@ -252,11 +582,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             log.debug("Transaction aborted due to sequencer rejecting request");
             getPostAbortActions()
                     .forEach(x -> x.accept(this));
+            abortTransaction();
             throw new TransactionAbortedException();
         }
         getPostCommitActions()
                 .forEach(x -> x.accept(this, address));
     }
+
 
     @SuppressWarnings("unchecked")
     class TransactionalObjectData<T> {
