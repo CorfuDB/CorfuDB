@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.annotation.Immutable;
@@ -170,8 +171,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     .anyMatch(x -> !x.getEntry().isUndoable())) {
                 throw new RuntimeException("Some updates were not undoable");
             }
-            IntStream.range(0, getWriteSetPointer(proxy))
-                    .map(x -> getWriteSetPointer(proxy) - x - 1) // reverse the stream
+            IntStream.range(0, getWriteSetPointer(proxy) + 1 )
+                    .map(x -> getWriteSetPointer(proxy) - x) // reverse the stream
                     .mapToObj(x -> getWriteSet(proxy.getStreamID()).get(x))
                     .forEachOrdered(x -> {
                         // Undo the operation, if this fails, we'll throw an exception
@@ -233,6 +234,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             //        .forEach(x -> {
             //            x.rollbackUnsafe(proxy);
             //        });
+
+            // Ran out of ways to roll back, so we sync
+            // from beginning again.
+            proxy.getUnderlyingObject().getModifyingContext()
+                    .rollbackUnsafe(proxy);
+            proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
+                    getFirstReadTimestamp());
+            proxy.getUnderlyingObject().setTXContextUnsafe
+                    (TransactionalContext
+                            .getTransactionStack());
         }
         // next, if the version is incorrect, we need to
         // sync.
@@ -307,8 +318,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             try {
                 return proxy.getUnderlyingObject().optimisticallyReadAndRetry((v, o) -> {
                     // to ensure snapshot isolation, we should only read from
-                    // the first read timestamp.
-                    if (v == getFirstReadTimestamp()) {
+                    // the first read timestamp, and make sure no other transaction
+                    // attempted to modify the object.
+                    if (v == getFirstReadTimestamp() && //either first read
+                            (!proxy.getUnderlyingObject()
+                                    .isTransactionallyModifiedUnsafe() ||   // and not TX
+                            proxy.getUnderlyingObject()
+                                    .isTXOwnedByThisThread())) {   // or if TX, our TX
                         return accessFunction.access(o);
                     }
                     throw new ConcurrentModificationException();
