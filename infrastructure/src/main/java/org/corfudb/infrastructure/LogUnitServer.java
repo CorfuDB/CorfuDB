@@ -225,7 +225,8 @@ public class LogUnitServer extends AbstractServer {
 
     private StreamLog localLog;
 
-    public static long maxLogFileSize = Integer.MAX_VALUE;  // 2GB by default
+    // This shouldn't be a max. This should be the size of the mapping window.
+    public static long maxLogFileSize = Integer.MAX_VALUE >> 4;  // 512MB by default
 
     private final ConcurrentHashMap<UUID, StreamLog> streamLogs = new ConcurrentHashMap<>();
 

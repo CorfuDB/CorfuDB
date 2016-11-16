@@ -151,7 +151,7 @@ public class CorfuRuntime {
         isShutdown = true;
         if (layout != null) {
             try {
-                layout.get();
+                layout.cancel(true);
             } catch (Exception e) {
                 log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
             }

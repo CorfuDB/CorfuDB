@@ -68,11 +68,11 @@ public class SMRMapTest extends AbstractViewTest {
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
-        for (int i = 0; i < 1_000; i++) {
+        for (int i = 0; i < 100; i++) {
             assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
                     .isNull();
         }
-        for (int i = 0; i < 1_000; i++) {
+        for (int i = 0; i < 100; i++) {
             assertThat(testMap.get(Integer.toString(i)))
                     .isEqualTo(Integer.toString(i));
         }
@@ -126,7 +126,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 1_000;
+        final int num_records = 100;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -391,7 +391,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 1_000;
+        final int num_records = 100;
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();
 
@@ -433,7 +433,7 @@ public class SMRMapTest extends AbstractViewTest {
                                                     )
                                                     .collect(Collectors.toList());
         final int num_threads = 5;
-        final int num_records = 1_000;
+        final int num_records = 100;
         AtomicInteger aborts = new AtomicInteger();
 
         scheduleConcurrently(num_threads, threadNumber -> {
