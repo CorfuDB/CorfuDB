@@ -23,21 +23,61 @@ import java.util.function.Supplier;
 @Slf4j
 public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
+    /** The underlying object. This object stores the actual
+        state as well as the version of the object. It also
+        provides locks to access the object safely from a
+        multi-threaded context. */
     @Getter
     VersionLockedObject<T> underlyingObject;
 
+    /** The CorfuRuntime. This allows us to interact with the
+     * Corfu log.
+     */
     CorfuRuntime rt;
+
+    /** The ID of the stream of the log.
+     */
     UUID streamID;
+
+    /** The type of the underlying object. We use this to instantiate
+     * new instances of the underlying object.
+     */
     Class<T> type;
+
+    /** The serializer SMR entries will use to serialize their
+     * arguments.
+     */
     ISerializer serializer;
+
+    /** A map containing upcall targets. This takes a SMRMethod string
+     * and converts it to an upcall function which transitions an object
+     * to a new state given arguments.
+     */
     @Getter
     Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
+
+    /** An undo target map. This map contains functions which take a
+     * SMRMethod string and arguments and reverses a transition given
+     * an undoRecord.
+     */
     @Getter
     Map<String, IUndoFunction<T>> undoTargetMap;
+
+    /** An undo record target map. This map contains functions which
+     * take a SMRMethod string and arguments and generates an undoRecord
+     * which is used by the undo functions.
+     */
     @Getter
     Map<String, IUndoRecordFunction<T>> undoRecordTargetMap;
 
+    /** The arguments this proxy was created with.
+     *
+     */
     Object[] args;
+
+    /** A list of upcalls pending in the system. The proxy keeps this
+     * set so it can remember to save the upcalls for pending requests.
+     */
     Set<Long> pendingUpcalls;
 
     // This enum is necessary because null cannot be inserted
@@ -46,8 +86,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         NULL_VALUE
     }
 
+    /** A list of upcall results, keyed by the address they were
+     * requested.
+     */
     Map<Long, Object> upcallResults;
-    StampedLock txLock;
 
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                              ISerializer serializer,
@@ -68,11 +110,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.pendingUpcalls = new ConcurrentSet<>();
         this.upcallResults = new ConcurrentHashMap<>();
 
-        this.txLock = new StampedLock();
-
         underlyingObject = getNewVersionLockedObject();
     }
 
+    /**
+     * Get a new version locked object, with a fresh stream view.
+     * @return  A new version locked object.
+     */
     @SuppressWarnings("unchecked")
     private VersionLockedObject<T> getNewVersionLockedObject() {
         try {
@@ -82,6 +126,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         }
     }
 
+    /** Get a new instance of the real underlying object.
+     *
+     * @return An instance of the real underlying object
+     * @throws InstantiationException   If the object cannot be instantiated
+     * @throws IllegalAccessException   If for some reason the object class was not public
+     */
     private T getNewInstance()
         throws InstantiationException, IllegalAccessException {
         T ret = null;
@@ -103,38 +153,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             ((ICorfuSMRProxyContainer<T>) ret).setProxy$CORFUSMR(this);
         }
         return ret;
-    }
-
-    private void rollback(AbstractTransactionalContext txContext) {
-        try {
-            // Let's inspect the transaction log to see if we can roll back...
-            if (txContext.getUpdateMap().get(streamID)
-                    .stream()
-                    .allMatch(SMREntry::isUndoable)) {
-                //Okay, let's apply each undo record (in reverse order)
-                List<SMREntry> entryList = txContext.getUpdateMap().get(streamID);
-                for (int i = entryList.size() - 1; i >= 0; i--) {
-                    SMREntry entry = entryList.get(i);
-                    undoTargetMap.get(entry.getSMRMethod())
-                            .doUndo(underlyingObject.getObjectUnsafe(),
-                            entry.getUndoRecord(),
-                            entry.getSMRArguments());
-                }
-                return;
-            }
-        } catch (Exception e) {
-            log.error("Unexpected error rolling back, re-creating object from scratch", e);
-        }
-        // Well, it's always safe to just create the object from scratch.
-        try {
-            VersionLockedObject<T> obj = getNewVersionLockedObject();
-            long latestToken = rt.getSequencerView()
-                    .nextToken(Collections.singleton(streamID), 0).getToken();
-            syncObjectUnsafe(underlyingObject, latestToken);
-            underlyingObject = obj;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /**
