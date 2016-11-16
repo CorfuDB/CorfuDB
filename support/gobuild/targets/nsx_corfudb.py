@@ -20,7 +20,7 @@ MIRROR = specs.constants.UBUNTU_MIRROR
 APT_MIRROR = specs.constants.APT_MIRROR
 BUILDROOT = "%(buildroot)"
 BUILDNUMBER = "%(buildnumber)"
-DIST = "trusty_amd64"
+DIST = "xenial_amd64"
 
 
 class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
