@@ -44,7 +44,6 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .setMemory(false)
                 .setLogPath(dirPath)
                 .setMaxCache(256000000)
-                .setSync(false)
                 .setServerRouter(serverRouter)
                 .build();
         server = new LogUnitServer(serverContext);

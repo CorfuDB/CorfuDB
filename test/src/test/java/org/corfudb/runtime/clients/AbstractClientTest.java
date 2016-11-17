@@ -82,7 +82,6 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
                 .setMemory(true)
                 .setSingle(false)
                 .setMaxCache(256000000)
-                .setSync(false)
                 .setServerRouter(serverRouter)
                 .build();
     }
