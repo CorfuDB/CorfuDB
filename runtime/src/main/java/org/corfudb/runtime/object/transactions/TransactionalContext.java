@@ -18,14 +18,9 @@ public class TransactionalContext {
 
     private static final ThreadLocal<Deque<AbstractTransactionalContext>> threadStack = ThreadLocal.withInitial(
             LinkedList<AbstractTransactionalContext>::new);
-    @Getter
-    private static final LinkedHashSet<TXCompletionMethod> completionMethods = new LinkedHashSet<>();
-
-    public static void addCompletionMethod(TXCompletionMethod completionMethod) {
-        completionMethods.add(completionMethod);
-    }
 
     public static boolean isInNestedTransaction() {return threadStack.get().size() > 1;}
+
     /**
      * Returns the transaction stack for the calling thread.
      *
@@ -89,8 +84,4 @@ public class TransactionalContext {
         return getCurrentContext() instanceof OptimisticTransactionalContext;
     }
 
-    @FunctionalInterface
-    public interface TXCompletionMethod {
-        void handle(AbstractTransactionalContext context);
-    }
 }

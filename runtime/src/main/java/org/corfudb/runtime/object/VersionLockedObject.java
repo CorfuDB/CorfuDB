@@ -1,11 +1,11 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamView;
 
-import java.util.ConcurrentModificationException;
-import java.util.Deque;
+import java.util.*;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -24,12 +24,58 @@ public class VersionLockedObject<T> {
     StreamView sv;
     Deque<AbstractTransactionalContext> txContext;
     AbstractTransactionalContext modifyingContext;
+    Deque<SMREntry> undoLog;
+    int optimisticUndoPointer;
+    // maybe this shouldn't be constant.
+    static final int MAX_UNDO_SIZE = 50;
 
     public VersionLockedObject(T obj, long version, StreamView sv) {
         this.object = obj;
         this.version = version;
         this.sv = sv;
+        this.undoLog = new LinkedList<>();
+        this.optimisticUndoPointer = 0;
         lock = new StampedLock();
+    }
+
+    public void addUndoRecord(SMREntry record) {
+        undoLog.push(record);
+        if (undoLog.size() > MAX_UNDO_SIZE) {
+            undoLog.pollLast();
+        }
+    }
+
+    public void addOptimisticUndoRecord(SMREntry record) {
+        // If the optimistic pointer is at -1, we
+        // stop logging because we can't undo the optimistic
+        // write anymore.
+        if (optimisticUndoPointer != -1) {
+            undoLog.push(record);
+            if (undoLog.size() > MAX_UNDO_SIZE) {
+                undoLog.pollLast();
+            }
+            optimisticUndoPointer++;
+            if (optimisticUndoPointer > MAX_UNDO_SIZE) {
+                optimisticUndoPointer = -1;
+            }
+        }
+    }
+
+    public List<SMREntry> removeOptimisticUndoRecords() {
+        List<SMREntry> result = new ArrayList<>();
+        while (optimisticUndoPointer > 0) {
+            result.add(undoLog.removeLast());
+            optimisticUndoPointer--;
+        }
+        return result;
+    }
+
+    public void setNotOptimisticallyUndoable() {
+        optimisticUndoPointer = -1;
+    }
+
+    public boolean isOptimisticallyUndoable() {
+        return optimisticUndoPointer != -1;
     }
 
     public void writeReturnVoid(BiConsumer<Long, T> writeFunction) {

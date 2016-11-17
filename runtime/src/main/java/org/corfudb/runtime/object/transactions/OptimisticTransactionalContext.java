@@ -141,24 +141,18 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // updates to the object we've applied
         try {
             // can we rollback all the updates? if not, abort and sync
-            if (getWriteSet(proxy.getStreamID()).stream()
-                    .anyMatch(x -> !x.getEntry().isUndoable())) {
-                throw new RuntimeException("Some updates were not undoable");
+            if (proxy.getUnderlyingObject().isOptimisticallyUndoable()) {
+                proxy.getUnderlyingObject()
+                        .removeOptimisticUndoRecords()
+                        .forEach(entry ->
+                            proxy.getUndoTargetMap().get(entry.getSMRMethod())
+                                .doUndo(proxy.getUnderlyingObject().getObjectUnsafe(),
+                                        entry.getUndoRecord(), entry.getSMRArguments()));
+                // Lift our transactional context
+                clearWriteSetPointer(proxy);
+                proxy.getUnderlyingObject().setTXContextUnsafe(null);
             }
-            IntStream.range(0, getWriteSetPointer(proxy) + 1 )
-                    .map(x -> getWriteSetPointer(proxy) - x) // reverse the stream
-                    .mapToObj(x -> getWriteSet(proxy.getStreamID()).get(x))
-                    .forEachOrdered(x -> {
-                        // Undo the operation, if this fails, we'll throw an exception
-                        // and sync.
-                        proxy.getUndoTargetMap().get(x.getEntry().getSMRMethod())
-                            .doUndo(proxy.getUnderlyingObject().getObjectUnsafe(),
-                                    x.getEntry().getUndoRecord(),
-                                    x.getEntry().getSMRArguments());
-                    });
-            // Lift our transactional context
-            clearWriteSetPointer(proxy);
-            proxy.getUnderlyingObject().setTXContextUnsafe(null);
+            throw new UnsupportedOperationException("Couldn't undo...");
         } catch (Exception e) {
             // rolling back failed, so we'll resort to getting fresh state
             proxy.resetObjectUnsafe(proxy.getUnderlyingObject());
@@ -207,7 +201,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
             // Ran out of ways to roll back, so we sync
             // from beginning again.
-            proxy.resetObjectUnsafe(proxy.getUnderlyingObject());
+            rollbackUnsafe(proxy);
             proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
                     getFirstReadTimestamp());
             proxy.getUnderlyingObject().setTXContextUnsafe
@@ -264,9 +258,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         if (undoRecordTarget != null) {
                             entry.setUndoRecord(undoRecordTarget
                                     .getUndoRecord(proxy.getUnderlyingObject()
-                                                    .getObjectUnsafe(),
-                                            entry.getSMRArguments()));
+                                                    .getObjectUnsafe(), entry.getSMRArguments()));
                             entry.setUndoable(true);
+                            proxy.getUnderlyingObject()
+                                    .addOptimisticUndoRecord(entry);
+                        } else {
+                            proxy.getUnderlyingObject()
+                                    .setNotOptimisticallyUndoable();
                         }
 
                         try {
