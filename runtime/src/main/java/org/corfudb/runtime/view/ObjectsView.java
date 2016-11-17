@@ -228,8 +228,6 @@ public class ObjectsView extends AbstractView {
                 } finally {
                     TransactionalContext.removeContext();
                 }
-                TransactionalContext.getCompletionMethods().parallelStream()
-                        .forEach(x -> x.handle(context));
             }
         }
     }

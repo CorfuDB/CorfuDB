@@ -166,7 +166,7 @@ public class VersionLockedObject<T> {
         }
     }
 
-    public AbstractTransactionalContext getModifyingContext() {
+    public AbstractTransactionalContext getModifyingContextUnsafe() {
         return this.modifyingContext;
     }
 

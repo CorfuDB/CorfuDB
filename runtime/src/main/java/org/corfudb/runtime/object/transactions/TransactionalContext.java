@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 
@@ -41,6 +42,15 @@ public class TransactionalContext {
      */
     public static AbstractTransactionalContext getCurrentContext() {
         return getTransactionStack().peekFirst();
+    }
+
+    /**
+     * Returns the last transactional context (parent/root) for the calling thread.
+     *
+     * @return The last transactional context for the calling thread.
+     */
+    public static AbstractTransactionalContext getRootContext() {
+        return getTransactionStack().peekLast();
     }
 
     /**

@@ -184,7 +184,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // If not in a transaction, check if the version is
             // at least that of the linearized read requested.
             if (ver >= timestamp
-                    && underlyingObject.isTransactionallyModifiedUnsafe()) {
+                    // but if we are in a transaction...
+                    && (!underlyingObject.isTransactionallyModifiedUnsafe() ||
+                        TransactionalContext.isInTransaction() &&
+                         // make sure it's OUR transaction.
+                        underlyingObject.getModifyingContextUnsafe() ==
+                        TransactionalContext.getCurrentContext())) {
                 return accessMethod.access(underlyingObject.getObjectUnsafe());
             }
             // We don't have the right version, so we need to write
@@ -197,7 +202,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // In the off chance that someone updated the version
             // for us.
             if (ver >= timestamp
-                    && underlyingObject.isTransactionallyModifiedUnsafe()) {
+                    // but if we are in a transaction...
+                    && (!underlyingObject.isTransactionallyModifiedUnsafe() ||
+                    TransactionalContext.isInTransaction() &&
+                            // make sure it's OUR transaction.
+                            underlyingObject.getModifyingContextUnsafe() ==
+                                    TransactionalContext.getCurrentContext())) {
                 return accessMethod.access(underlyingObject.getObjectUnsafe());
             }
 
@@ -206,29 +216,33 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             if (!underlyingObject.isTransactionallyModifiedUnsafe()) {
                 syncObjectUnsafe(underlyingObject, timestamp);
                 return accessMethod.access(underlyingObject.getObjectUnsafe());
+
             } else {
-                // Otherwise, see if we can use the undo log to temporarily
-                // undo and then redo the operations.
-                if (TransactionalContext.getTransactionStack().stream()
-                        .allMatch(x -> x.canUndoTransaction(streamID))) {
-                    // starting at the most recent transaction,
-                    // undo all operations
-                    TransactionalContext.getTransactionStack()
-                        .forEach(x -> x.rollbackUnsafe(this));
+                // Make sure it's OUR transaction stack
+                if (underlyingObject.getTXContextUnsafe() ==
+                        TransactionalContext.getCurrentContext()) {
+                    // see if we can use the undo log to temporarily
+                    // undo and then redo the operations.
+                    if (TransactionalContext.getTransactionStack().stream()
+                            .allMatch(x -> x.canUndoTransaction(streamID))) {
+                        // starting at the most recent transaction,
+                        // undo all operations
+                        TransactionalContext.getTransactionStack()
+                                .forEach(x -> x.rollbackUnsafe(this));
 
-                    // do the access
-                    R ret = accessMethod
-                            .access(underlyingObject.getObjectUnsafe());
+                        // do the access
+                        R ret = accessMethod
+                                .access(underlyingObject.getObjectUnsafe());
 
-                    // redo all operations, starting with the oldest
-                    // transaction
-                    TransactionalContext.getTransactionStack()
-                            .descendingIterator()
-                            .forEachRemaining(x -> x.syncUnsafe(this));
+                        // redo all operations, starting with the oldest
+                        // transaction
+                        TransactionalContext.getTransactionStack()
+                                .descendingIterator()
+                                .forEachRemaining(x -> x.syncUnsafe(this));
 
-                    return ret;
+                        return ret;
+                    }
                 }
-
                 // As a last resort, we'll have to generate a new object
                 // and replay. The object will be disposed.
                 VersionLockedObject<T> temp = getNewVersionLockedObject();

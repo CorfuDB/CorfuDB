@@ -88,6 +88,99 @@ public class OptimisticTransactionContextTest extends AbstractViewTest {
                 .containsEntry("k", "v1");
     }
 
+    /** This test makes sure that a single thread can read
+     * its own nested transactions after they have committed,
+     * and that nested transactions are committed with the
+     * parent transaction.
+     */
+    @Test
+    public void nestedTransactionsCanBeReadDuringCommit() {
+        // We start without a transaction and put k,v1
+        t(1, () -> put("k", "v1"));
+        // Now we start a transaction and put k,v2
+        t(1, () -> getRuntime().getObjectsView().TXBegin());
+        t(1, () -> put("k", "v2"))
+                    .assertResult() // put should return the previous value
+                    .isEqualTo("v1"); // which is v1.
+        // Now we start a nested transaction. It should
+        // read v2.
+        t(1, () -> getRuntime().getObjectsView().TXBegin());
+        t(1, () -> get("k"))
+                    .assertResult()
+                    .isEqualTo("v2");
+        // Now we put k,v3
+        t(1, () -> put("k", "v3"))
+                    .assertResult()
+                    .isEqualTo("v2");   // previous value = v2
+        // And then we commit.
+        t(1, () -> getRuntime().getObjectsView().TXEnd());
+        // And we should be able to read the nested put
+        t(1, () -> get("k"))
+                .assertResult()
+                .isEqualTo("v3");
+        // And we commit the parent transaction.
+        t(1, () -> getRuntime().getObjectsView().TXEnd());
+
+        // And now k,v3 should be in the map.
+        assertThat(getMap())
+                .containsEntry("k", "v3");
+    }
+
+    /** This test makes sure that the nested transactions
+     * of two threads are not visible to each other.
+     */
+    @Test
+    public void nestedTransactionsAreIsolatedAcrossThreads() {
+        // Start a transaction on both threads.
+        t(1, () -> getRuntime().getObjectsView().TXBegin());
+        t(2, () -> getRuntime().getObjectsView().TXBegin());
+        // Put k, v1 on T1 and k, v2 on T2.
+        t(1, () -> put("k", "v1"));
+        t(2, () -> put("k", "v2"));
+        // Now, start a nested transaction on both threads.
+        t(1, () -> getRuntime().getObjectsView().TXBegin());
+        t(2, () -> getRuntime().getObjectsView().TXBegin());
+        // T1 should see v1 and T2 should see v2.
+        t(1, () -> get("k"))
+                .assertResult()
+                .isEqualTo("v1");
+        t(2, () -> get("k"))
+                .assertResult()
+                .isEqualTo("v2");
+        // Now we put k,v3 on T1 and k,v4 on T2
+        t(1, () -> put("k", "v3"));
+        t(2, () -> put("k", "v4"));
+        // And each thread should only see its own modifications.
+        t(1, () -> get("k"))
+                .assertResult()
+                .isEqualTo("v3");
+        t(2, () -> get("k"))
+                .assertResult()
+                .isEqualTo("v4");
+        // Now we exit the nested transaction. They should both
+        // commit, because they are in optimistic mode.
+        t(1, () -> getRuntime().getObjectsView().TXEnd());
+        t(2, () -> getRuntime().getObjectsView().TXEnd());
+        // Check that the parent transaction can only
+        // see the correct modifications.
+        t(1, () -> get("k"))
+                .assertResult()
+                .isEqualTo("v3");
+        t(2, () -> get("k"))
+                .assertResult()
+                .isEqualTo("v4");
+        // Commit the parent transactions. T2 should abort
+        // due to concurrent modification with T1.
+        t(1, () -> getRuntime().getObjectsView().TXEnd());
+        /*
+        t(2, () -> getRuntime().getObjectsView().TXEnd())
+                .assertThrows()
+                .isInstanceOf(TransactionAbortedException.class);
+*/
+        // And the map should contain k,v3 - T1's update.
+        assertThat(getMap())
+                .containsEntry("k", "v3");
+    }
 
     // Helpers
 

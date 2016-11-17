@@ -3,27 +3,17 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.http.annotation.Immutable;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
-import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.Serializers;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.StampedLock;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -32,9 +22,6 @@ import java.util.stream.IntStream;
  */
 @Slf4j
 public class OptimisticTransactionalContext extends AbstractTransactionalContext {
-
-    @Getter
-    private boolean firstReadTimestampSet = false;
 
     /**
      * The timestamp of the first read in the system.
@@ -48,48 +35,35 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         super(runtime);
     }
 
+    /** Get the root context (the first context of a nested txn)
+     * which must be an optimistic transactional context.
+     * @return  The root context.
+     */
+    private OptimisticTransactionalContext getRootContext() {
+        AbstractTransactionalContext atc = TransactionalContext.getRootContext();
+        if (!(atc instanceof OptimisticTransactionalContext)) {
+            throw new RuntimeException("Attempted to nest two different transactional context types");
+        }
+        return (OptimisticTransactionalContext)atc;
+    }
+
     /**
      * Get the first timestamp for this transaction.
      *
      * @return The first timestamp to be used for this transaction.
      */
     public synchronized long fetchFirstTimestamp() {
-        firstReadTimestampSet = true;
-        long token = runtime.getSequencerView().nextToken(Collections.emptySet(), 0).getToken();
-        log.trace("Set first read timestamp for tx {} to {}", transactionID, token);
-        return token;
-    }
-
-    /**
-     * Compute and write a TXEntry for this transaction to insert into the log.
-     *
-     * @return A TXEntry which represents this transactional context.
-     */
-    public TXEntry getEntry() {
-        Map<UUID, TXEntry.TXObjectEntry> entryMap = new HashMap<>();
-
-        // newer TX stuff
-        writeSet.entrySet().forEach(x -> {
-                        List<SMREntry> entries = x.getValue().stream()
-                                                    .map(UpcallWrapper::getEntry)
-                                                    .collect(Collectors.toList());
-
-                            entryMap.put(x.getKey(),
-                            new TXEntry.TXObjectEntry(entries, false));
-                });
-
-        readSet.forEach(x -> {
-            if (entryMap.containsKey(x)) {
-                entryMap.get(x).setRead(true);
-            }
-            else {
-                entryMap.put(x, new TXEntry.TXObjectEntry(Collections.emptyList(),
-                        true));
-            }
-        });
-
-
-        return new TXEntry(entryMap, isFirstReadTimestampSet() ? getFirstReadTimestamp() : -1L);
+        if (TransactionalContext.isInNestedTransaction()) {
+            // If we're in a nested transaction, the first read timestamp
+            // needs to come from the root.
+            return getRootContext().getFirstReadTimestamp();
+        } else {
+            // Otherwise, fetch a read token from the sequencer the linearize
+            // ourselves against.
+            long token = runtime.getSequencerView().nextToken(Collections.emptySet(), 0).getToken();
+            log.trace("Set first read timestamp for tx {} to {}", transactionID, token);
+            return token;
+        }
     }
 
     /** A wrapper which combines SMREntries with
@@ -211,10 +185,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 !proxy.getUnderlyingObject()
                 .isTXOwnedByThisThread())
         {
-            Deque<AbstractTransactionalContext> otherTXStack =
-                    proxy.getUnderlyingObject()
-                    .getTXContextUnsafe();
-
             // TODO: this is not going to be effective until
             // we release the lock. The other tx will not be
             // able to complete until we do.
@@ -237,8 +207,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
             // Ran out of ways to roll back, so we sync
             // from beginning again.
-            proxy.getUnderlyingObject().getModifyingContext()
-                    .rollbackUnsafe(proxy);
+            proxy.resetObjectUnsafe(proxy.getUnderlyingObject());
             proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
                     getFirstReadTimestamp());
             proxy.getUnderlyingObject().setTXContextUnsafe
@@ -250,6 +219,24 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         if (proxy.getVersion() != getFirstReadTimestamp()) {
             proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
                     getFirstReadTimestamp());
+        }
+
+        // if we're in a nested transaction, we need to make
+        // sure to play back the transactions of all the parents
+        if (TransactionalContext.isInNestedTransaction()) {
+            Iterator<AbstractTransactionalContext> iterator =
+                    TransactionalContext
+                        .getTransactionStack().descendingIterator();
+            for (AbstractTransactionalContext ctx = iterator.next();
+                    iterator.hasNext(); iterator.next()) {
+                if (ctx == this) {
+                    // if ourselves, then break
+                    break;
+                }
+                // Sync. This will recursively go up the stack,
+                // unfortunately, until we add a flag to not sync parents.
+                ctx.syncUnsafe(proxy);
+            }
         }
         // finally, if we have buffered updates in the write set,
         // we need to apply them.
@@ -318,13 +305,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             try {
                 return proxy.getUnderlyingObject().optimisticallyReadAndRetry((v, o) -> {
                     // to ensure snapshot isolation, we should only read from
-                    // the first read timestamp, and make sure no other transaction
-                    // attempted to modify the object.
-                    if (v == getFirstReadTimestamp() && //either first read
-                            (!proxy.getUnderlyingObject()
-                                    .isTransactionallyModifiedUnsafe() ||   // and not TX
-                            proxy.getUnderlyingObject()
-                                    .isTXOwnedByThisThread())) {   // or if TX, our TX
+                    // the first read timestamp.
+                            // Either not in a TX
+                    if ( (!proxy.getUnderlyingObject().isTransactionallyModifiedUnsafe() ||
+                            // Or we are the TX
+                            proxy.getUnderlyingObject().getModifyingContextUnsafe() == this) &&
+                            v == getFirstReadTimestamp()) {
                         return accessFunction.access(o);
                     }
                     throw new ConcurrentModificationException();
@@ -339,7 +325,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // lock.
         return proxy.getUnderlyingObject().write((v, o) -> {
             syncUnsafe(proxy);
-            return accessFunction.access(o);
+            // We might have ended up with a _different_ object
+            return accessFunction.access(proxy.getUnderlyingObject()
+                    .getObjectUnsafe());
         });
     }
 
