@@ -1,6 +1,7 @@
 package org.corfudb;
 
 import org.assertj.core.api.AbstractObjectAssert;
+import org.assertj.core.api.AbstractThrowableAssert;
 import org.assertj.core.api.AssertProvider;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
@@ -16,6 +17,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.fusesource.jansi.Ansi.ansi;
 
 /**
@@ -242,7 +244,7 @@ public class AbstractCorfuTest {
         }
 
         public Object run(ExceptionFunction function)
-        throws Throwable
+        throws Exception
         {
             runFunction = function;
             result = new CompletableFuture<>();
@@ -250,7 +252,7 @@ public class AbstractCorfuTest {
             try {
                 return result.get();
             } catch (ExecutionException e) {
-                throw e.getCause();
+                throw (Exception) e.getCause();
             } catch (InterruptedException ie){
                 throw new RuntimeException(ie);
             }
@@ -284,33 +286,65 @@ public class AbstractCorfuTest {
 
     @SuppressWarnings("unchecked")
     private  <T> T runThread(int threadNum, ExceptionFunction<T> e)
-    throws Throwable
+    throws Exception
     {
         threadsMap.putIfAbsent(threadNum, new TestThread(threadNum));
         return (T) threadsMap.get(threadNum).run(e);
     }
 
+    // Not the best factoring, but we need to throw an exception whenever
+    // one has not been caught. (becuase the user)
+    static volatile Exception lastException;
+
     public static class AssertableObject<T> {
+
         T obj;
+        Exception ex;
 
-        public AssertableObject(T obj) {this.obj = obj;}
+        public AssertableObject(ExceptionFunction<T> objProvider) {
+            try {
+                this.obj = objProvider.run();
+            } catch (Exception e) {
+                this.ex = e;
+                lastException = e;
+            }
+        }
 
-        public AbstractObjectAssert<?, T> assertResult() {
+        public AbstractObjectAssert<?, T> assertResult()
+        throws Exception {
+            if (ex != null) {
+                throw ex;
+            }
             return assertThat(obj);
         }
 
-        public T result() {
+        public AbstractThrowableAssert<?, ? extends Throwable> assertThrows() {
+            lastException = null;
+            return assertThatThrownBy(() -> {throw ex;});
+        }
+
+        public T result()
+        throws Exception {
+            if (ex != null) {
+                throw ex;
+            }
             return obj;
         }
     }
 
     public <T> AssertableObject<T> t(int threadNum, ExceptionFunction<T> toRun)
-    throws Throwable {
-        return new AssertableObject<T>(runThread(threadNum, toRun));
+    throws Exception {
+        if (lastException != null) {
+            throw new Exception("Uncaught exception from previous statement", lastException);
+        }
+        return new AssertableObject<T>(() -> runThread(threadNum, toRun));
     }
 
-    public void t(int threadNum, VoidExceptionFunction toRun)
-            throws Throwable {
-        runThread(threadNum, () -> {toRun.run(); return null;});
+    public <T> AssertableObject<T> t(int threadNum, VoidExceptionFunction toRun)
+            throws Exception {
+        if (lastException != null) {
+            throw new Exception("Uncaught exception from previous statement", lastException);
+        }
+        return new AssertableObject<T>(() -> runThread(threadNum, () -> {toRun.run(); return null;}));
     }
 }
