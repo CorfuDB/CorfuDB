@@ -22,7 +22,6 @@ public class OptimisticTransactionContextTest extends AbstractViewTest {
      */
     @Test
     public void readOwnWrites()
-    throws Throwable
     {
         t(1, () -> getRuntime().getObjectsView().TXBegin());
         t(1, () -> put("k" , "v"));
@@ -37,24 +36,31 @@ public class OptimisticTransactionContextTest extends AbstractViewTest {
      */
     @Test
     public void otherThreadCannotReadOptimisticWrites()
-            throws Throwable
     {
         t(1, () -> getRuntime().getObjectsView().TXBegin());
         t(2, () -> getRuntime().getObjectsView().TXBegin());
+        // T1 inserts k,v1 optimistically. Other threads
+        // should not see this optimistic put.
         t(1, () -> put("k", "v1"));
-        t(2, () ->
-                get("k"))
+        // T2 now reads k. It should not see T1's write.
+        t(2, () -> get("k"))
                             .assertResult()
                             .isNull();
+        // T2 inserts k,v2 optimistically. T1 should not
+        // be able to see this write.
         t(2, () -> put("k", "v2"));
+        // T1 now reads "k". It should not see T2's write.
         t(1, () -> get("k"))
                             .assertResult()
                             .isNotEqualTo("v2");
     }
 
+    /** Threads that start a transaction at the same time
+     * (with the same timestamp) should cause one thread
+     * to abort while the other succeeds.
+     */
     @Test
     public void threadShouldAbortAfterConflict()
-    throws Exception
     {
         // T1 starts non-transactionally.
         t(1, () -> put("k", "v0"));

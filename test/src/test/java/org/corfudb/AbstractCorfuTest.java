@@ -311,9 +311,9 @@ public class AbstractCorfuTest {
         }
 
         public AbstractObjectAssert<?, T> assertResult()
-        throws Exception {
+        throws RuntimeException {
             if (ex != null) {
-                throw ex;
+                throw new RuntimeException(ex);
             }
             return assertThat(obj);
         }
@@ -324,26 +324,26 @@ public class AbstractCorfuTest {
         }
 
         public T result()
-        throws Exception {
+        throws RuntimeException {
             if (ex != null) {
-                throw ex;
+                throw new RuntimeException(ex);
             }
             return obj;
         }
     }
 
     public <T> AssertableObject<T> t(int threadNum, ExceptionFunction<T> toRun)
-    throws Exception {
+    throws RuntimeException {
         if (lastException != null) {
-            throw new Exception("Uncaught exception from previous statement", lastException);
+            throw new RuntimeException("Uncaught exception from previous statement", lastException);
         }
         return new AssertableObject<T>(() -> runThread(threadNum, toRun));
     }
 
     public <T> AssertableObject<T> t(int threadNum, VoidExceptionFunction toRun)
-            throws Exception {
+            throws RuntimeException {
         if (lastException != null) {
-            throw new Exception("Uncaught exception from previous statement", lastException);
+            throw new RuntimeException("Uncaught exception from previous statement", lastException);
         }
         return new AssertableObject<T>(() -> runThread(threadNum, () -> {toRun.run(); return null;}));
     }
