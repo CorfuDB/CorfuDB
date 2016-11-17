@@ -67,12 +67,10 @@ public class StreamLogFiles implements StreamLog {
 
     private final boolean noVerify;
     public final String logDir;
-    private boolean sync;
     private Map<Long, FileHandle> channelMap;
 
-    public StreamLogFiles(String logDir, boolean sync, boolean noVerify) {
+    public StreamLogFiles(String logDir, boolean noVerify) {
         this.logDir = logDir;
-        this.sync = sync;
         channelMap = new HashMap<>();
         this.noVerify = noVerify;
 
@@ -299,17 +297,8 @@ public class StreamLogFiles implements StreamLog {
             FileHandle fh = getChannelForAddress(address);
             if (!fh.getKnownAddresses().contains(address)) {
                 fh.getKnownAddresses().add(address);
-                if (sync) {
-                    writeRecord(fh, address, entry);
-                } else {
-                    CompletableFuture.runAsync(() -> {
-                        try {
-                            writeRecord(fh, address, entry);
-                        } catch (Exception e) {
-                            log.error("Disk_write[{}]: Exception", address, e);
-                        }
-                    });
-                }
+                writeRecord(fh, address, entry);
+
             } else {
                 throw new OverwriteException();
             }
