@@ -23,6 +23,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -79,8 +80,30 @@ public class ManagementServer extends AbstractServer {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
 
-        // Restoring state of last layout if present.
-        safeUpdateLayout(getCurrentLayout());
+        if((Boolean) opts.get("--single")) {
+            String localAddress = opts.get("--address") + ":" + opts.get("<port>");
+
+            Layout singleLayout = new Layout(
+                    Collections.singletonList(localAddress),
+                    Collections.singletonList(localAddress),
+                    Collections.singletonList(new Layout.LayoutSegment(
+                            Layout.ReplicationMode.CHAIN_REPLICATION,
+                            0L,
+                            -1L,
+                            Collections.singletonList(
+                                    new Layout.LayoutStripe(
+                                            Collections.singletonList(localAddress)
+                                    )
+                            )
+                    )),
+                    0L
+            );
+
+            safeUpdateLayout(singleLayout);
+        } else {
+            safeUpdateLayout(getCurrentLayout());
+        }
+        
         this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
         this.failureDetectorService = Executors.newScheduledThreadPool(
                 2,
