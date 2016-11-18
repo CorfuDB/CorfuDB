@@ -1,6 +1,6 @@
 package org.corfudb.tutorials;
 
-import org.corfudb.annotations.*;
+import org.corfudb.runtime.object.*;
 import org.corfudb.runtime.CorfuRuntime;
 
 /**
@@ -21,9 +21,10 @@ import org.corfudb.runtime.CorfuRuntime;
 /**
  * Annotate this as Corfu object
  */
-@CorfuObject(constructorType = ConstructorType.RUNTIME,
-        objectType = ObjectType.STATELESS)
-public class FirstCustomCorfuObject  {
+// @CorfuObject(constructorType = ConstructorType.RUNTIME,
+//        objectType = ObjectType.STATELESS)
+public class FirstCustomCorfuObject
+    implements ICorfuSMRObject<FirstCustomCorfuObject> {
     Integer value;
 
     public FirstCustomCorfuObject() { value = new Integer(0); }
