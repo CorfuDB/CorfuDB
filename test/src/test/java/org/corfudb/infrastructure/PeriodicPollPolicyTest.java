@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -46,7 +48,16 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
                 .addToSegment()
                 .addToLayout()
                 .build();
-        bootstrapAllServers(layout);
+
+        // Bootstrapping only the layout servers.
+        // Failure-correction/updateLayout will cause test to give a non-deterministic output.
+
+        getLayoutServer(9000).handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)),
+                null, getServerRouter(9000));
+        getLayoutServer(9001).handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)),
+                null, getServerRouter(9001));
+        getLayoutServer(9002).handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)),
+                null, getServerRouter(9002));
 
         corfuRuntime = new CorfuRuntime();
         layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
@@ -95,15 +106,17 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
             Thread.sleep(100);
         }
 
-        // A little more than responseTimeout for periodicPolling
-        Thread.sleep(1100);
-
-        Map<String, Boolean> actualResult = failureDetectorPolicy.getServerStatus();
-
         Map<String, Boolean> expectedResult = new HashMap<>();
         expectedResult.put(getEndpoint(9000), false);
         expectedResult.put(getEndpoint(9001), false);
         expectedResult.put(getEndpoint(9002), false);
+
+        Map<String, Boolean> actualResult = new HashMap<>();
+        for (int i = 0; i < 20; i++) {
+            failureDetectorPolicy.getServerStatus().forEach(actualResult::putIfAbsent);
+            Thread.sleep(200);
+            if (actualResult.equals(expectedResult)) break;
+        }
 
         assertThat(actualResult).isEqualTo(expectedResult);
 
@@ -120,10 +133,15 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
             Thread.sleep(100);
         }
 
-        Thread.sleep(1100);
-
-        actualResult = failureDetectorPolicy.getServerStatus();
         expectedResult.remove(getEndpoint(9000));
+
+        actualResult = new HashMap<>();
+        for (int i = 0; i < 20; i++) {
+            failureDetectorPolicy.getServerStatus().forEach(actualResult::putIfAbsent);
+            Thread.sleep(200);
+            if (actualResult.equals(expectedResult)) break;
+        }
+
         // Has only 9001 & 9002
         assertThat(actualResult).isEqualTo(expectedResult);
 
