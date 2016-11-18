@@ -212,6 +212,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return getServer(port).getBaseServer();
     }
 
+    public IServerRouter getServerRouter(int port) {
+        return getServer(port).getServerRouter();
+    }
+
     /** Bootstraps all servers with a particular layout.
      *
      * @param l         The layout to bootstrap all servers with.
