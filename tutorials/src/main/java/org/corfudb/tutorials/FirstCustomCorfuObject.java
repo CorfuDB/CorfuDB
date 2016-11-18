@@ -19,15 +19,11 @@ import org.corfudb.runtime.CorfuRuntime;
  */
 
 /**
- * Annotate this as Corfu object
+ * Implement ICorfuSMRObject turns this into a Corfu object
  */
-// @CorfuObject(constructorType = ConstructorType.RUNTIME,
-//        objectType = ObjectType.STATELESS)
 public class FirstCustomCorfuObject
     implements ICorfuSMRObject<FirstCustomCorfuObject> {
-    Integer value;
-
-    public FirstCustomCorfuObject() { value = new Integer(0); }
+    Integer value = 0;
 
     /**
      * Increment() method is annotated as a TransactionalMethod.
@@ -60,8 +56,6 @@ public class FirstCustomCorfuObject
                 .setStreamName("cntr")
                 .setType(FirstCustomCorfuObject.class)
                 .open();
-
-        // System.out.println("current offset: " + runtime.getSequencerView().nextToken(Collections.EMPTY_SET, 0).getToken() );
 
         System.out.println("Counter value before increment: " + cntr.Get());
         System.out.println("Counter value before increment: " + cntr.Increment());
