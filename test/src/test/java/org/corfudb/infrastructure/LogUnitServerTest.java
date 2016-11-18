@@ -63,7 +63,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setSync(true)
                 .build());
 
         this.router.reset();
@@ -119,7 +118,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setSync(true)
                 .build());
         this.router.reset();
         this.router.addServer(s2);

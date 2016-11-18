@@ -28,7 +28,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then write and read the same entry
-        StreamLog log = new StreamLogFiles(getDirPath(), true, false);
+        StreamLog log = new StreamLogFiles(getDirPath(), false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
         b.writeBytes(streamEntry);
@@ -36,14 +36,14 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.read(0).getPayload(null)).isEqualTo(streamEntry);
 
         // Disable checksum, then write and read then same entry
-        log = new StreamLogFiles(getDirPath(), true, true);
+        log = new StreamLogFiles(getDirPath(), true);
         log.append(0, new LogData(DataType.DATA, b));
         assertThat(log.read(0).getPayload(null)).isEqualTo(streamEntry);
     }
 
     @Test
     public void testOverwriteException() {
-        StreamLog log = new StreamLogFiles(getDirPath(), true, false);
+        StreamLog log = new StreamLogFiles(getDirPath(), false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
         b.writeBytes(streamEntry);
@@ -56,7 +56,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testReadingUnknownAddress() {
-        StreamLog log = new StreamLogFiles(getDirPath(), true, false);
+        StreamLog log = new StreamLogFiles(getDirPath(), false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
         b.writeBytes(streamEntry);
@@ -72,7 +72,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // behaviour is to throw a DataCorruptionException because a checksum cannot
         // be computed for stream entries that haven't been written with a checksum
         String logDir = getDirPath();
-        StreamLog log = new StreamLogFiles(logDir, true, true);
+        StreamLog log = new StreamLogFiles(logDir, true);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
         b.writeBytes(streamEntry);
@@ -83,7 +83,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.close();
 
         // Re-open stream log with checksum enabled
-        assertThatThrownBy(() -> new StreamLogFiles(logDir, true, false))
+        assertThatThrownBy(() -> new StreamLogFiles(logDir, false))
                 .isInstanceOf(RuntimeException.class);
     }
 
@@ -93,7 +93,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // log records by overwriting some parts of the record simulating
         // different data corruption scenarios
         String logDir = getDirPath();
-        StreamLog log = new StreamLogFiles(logDir, true, false);
+        StreamLog log = new StreamLogFiles(logDir, false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
         b.writeBytes(streamEntry);
@@ -109,7 +109,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         file.writeInt(0xffff);
         file.close();
 
-        StreamLog log2 = new StreamLogFiles(logDir, true, false);
+        StreamLog log2 = new StreamLogFiles(logDir, false);
         assertThatThrownBy(() -> log2.read(0))
                 .isInstanceOf(RuntimeException.class)
                 .hasCauseInstanceOf(DataCorruptionException.class);
@@ -121,7 +121,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         file.writeInt(0xffff);
         file.close();
 
-        StreamLog log3 = new StreamLogFiles(logDir, true, false);
+        StreamLog log3 = new StreamLogFiles(logDir, false);
         assertThat(log3.read(0)).isNull();
     }
 }
