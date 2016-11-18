@@ -106,9 +106,6 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
             Thread.sleep(100);
         }
 
-        // A little more than responseTimeout for periodicPolling
-        Thread.sleep(1100);
-
         Map<String, Boolean> expectedResult = new HashMap<>();
         expectedResult.put(getEndpoint(9000), false);
         expectedResult.put(getEndpoint(9001), false);
@@ -135,8 +132,6 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
             failureDetectorPolicy.executePolicy(layout, corfuRuntime);
             Thread.sleep(100);
         }
-
-        Thread.sleep(1100);
 
         expectedResult.remove(getEndpoint(9000));
 
