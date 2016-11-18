@@ -177,7 +177,6 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                 .isNotZero();
     }
 
-    /** Disabled pending resolution of issue #285
     @Test
     public void deadLockTest() throws Exception {
         CorfuRuntime runtime = getDefaultRuntime().connect();
@@ -231,7 +230,6 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         assertThat(test.getPrimitive())
                 .isEqualTo("hello world".getBytes());
     }
-     **/
 
     @Test
     @SuppressWarnings("unchecked")
@@ -250,6 +248,26 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         test.put("a", "b");
         test.get("a");
         assertThat(test.get("a")).isEqualTo("b");
+    }
+
+    @Test
+    public void postHandlersFire() throws Exception {
+        CorfuRuntime r = getDefaultRuntime();
+
+        Map<String, String> test = r.getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamName("test")
+                .open();
+
+        ICorfuSMRObject cObj = (ICorfuSMRObject) test;
+        final AtomicInteger ai = new AtomicInteger(0);
+        cObj.registerPostHandler((String method, Object[] args, Object state) -> {
+            ai.incrementAndGet();
+        });
+        test.put("a", "b");
+        test.get("a");
+        assertThat(ai.get())
+                .isEqualTo(1);
     }
 
 }

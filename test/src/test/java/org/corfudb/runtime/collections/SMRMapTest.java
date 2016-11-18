@@ -154,54 +154,6 @@ public class SMRMapTest extends AbstractViewTest {
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void loadsFollowedByGetsConcurrentMultiView()
-            throws Exception {
-        r.setBackpointersDisabled(true);
-
-        final int num_threads = 5;
-        final int num_records = 1000;
-
-        Map<String, String>[] testMap =
-                IntStream.range(0, num_threads)
-                .mapToObj(i -> {
-                    return getRuntime().getObjectsView()
-                            .build()
-                            .setStreamID(UUID.randomUUID())
-                            .setTypeToken(new TypeToken<SMRMap<String, String>>() {
-                            })
-                            .addOption(ObjectOpenOptions.NO_CACHE)
-                            .open();
-                })
-                .toArray(Map[]::new);
-
-        scheduleConcurrently(num_threads, threadNumber -> {
-            int base = threadNumber * num_records;
-            for (int i = base; i < base + num_records; i++) {
-                assertThat(testMap[threadNumber].put(Integer.toString(i), Integer.toString(i)))
-                        .isEqualTo(null);
-            }
-        });
-
-        long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
-        calculateRequestsPerSecond("WPS", num_records * num_threads, startTime);
-
-        scheduleConcurrently(num_threads, threadNumber -> {
-            int base = threadNumber * num_records;
-            for (int i = base; i < base + num_records; i++) {
-                assertThat(testMap[threadNumber].get(Integer.toString(i)))
-                        .isEqualTo(Integer.toString(i));
-            }
-        });
-
-        startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
-        calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
-    }
-
     @Test
     @SuppressWarnings("unchecked")
     public void collectionsStreamInterface()
@@ -464,50 +416,6 @@ public class SMRMapTest extends AbstractViewTest {
         calculateAbortRate(aborts.get(), num_records * num_threads);
     }
 
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void concurrentAbortMultiViewTest()
-            throws Exception {
-        final int num_threads = 5;
-        final int num_keys = 100;
-        final int num_records = 1_000;
-        AtomicInteger aborts = new AtomicInteger();
-
-        Map<String, String>[] testMap =
-            IntStream.range(0, num_threads)
-                    .mapToObj(i -> {
-                        return getRuntime().getObjectsView()
-                                .build()
-                                .setStreamID(UUID.randomUUID())
-                                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
-                                })
-                                .addOption(ObjectOpenOptions.NO_CACHE)
-                                .open();
-                    })
-                    .toArray(Map[]::new);
-
-        Random r = new Random();
-        scheduleConcurrently(num_threads, threadNumber -> {
-            int base = threadNumber * num_records;
-            for (int i = base; i < base + num_records; i++) {
-                try {
-                    getRuntime().getObjectsView().TXBegin();
-                    testMap[threadNumber].put(Integer.toString(r.nextInt(num_keys)),
-                            testMap[threadNumber].get(Integer.toString(r.nextInt(num_keys))));
-                    getRuntime().getObjectsView().TXEnd();
-                } catch (TransactionAbortedException tae) {
-                    aborts.incrementAndGet();
-                }
-            }
-        });
-
-        long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
-        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
-
-        calculateAbortRate(aborts.get(), num_records * num_threads);
-    }
 
     @Test
     @SuppressWarnings("unchecked")
