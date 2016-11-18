@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
 
@@ -50,7 +51,8 @@ public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, IS
         for (short i = 0; i < numUpdates; i++) {
             entryMap.put(
                     new UUID(b.readLong(), b.readLong()),
-                    (MultiSMREntry) Serializers.CORFU.deserialize(b, rt));
+                    ((MultiSMREntry) Serializers.CORFU.deserialize(b, rt))
+                    );
         }
     }
 
@@ -68,5 +70,18 @@ public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, IS
     @Override
     public List<SMREntry> getSMRUpdates(UUID id) {
         return entryMap.get(id).getUpdates();
+    }
+
+    /**
+     * An underlying log entry, if present.
+     *
+     * @param entry
+     */
+    @Override
+    public void setEntry(LogData entry) {
+        super.setEntry(entry);
+        this.getEntryMap().values().forEach(x -> {
+            x.setEntry(entry);
+        });
     }
 }

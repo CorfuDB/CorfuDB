@@ -13,13 +13,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class BaseServerTest extends AbstractServerTest {
 
-    BaseServer bs;
+    BaseServer bs = new BaseServer();
+
+    @Before
+    public void resetServer() {
+        bs = new BaseServer();
+        setServer(bs);
+    }
 
     @Override
     public AbstractServer getDefaultServer() {
-        if (bs == null) {
-            bs = new BaseServer();
-        }
         return bs;
     }
 

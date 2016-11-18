@@ -23,7 +23,7 @@ import java.util.stream.Stream;
  */
 @Slf4j
 @ToString(exclude = {"runtime", "replicationViewCache"})
-@EqualsAndHashCode(exclude = {"runtime", "replicationViewCache"})
+@EqualsAndHashCode
 public class Layout implements Cloneable {
     /**
      * A Gson parser.

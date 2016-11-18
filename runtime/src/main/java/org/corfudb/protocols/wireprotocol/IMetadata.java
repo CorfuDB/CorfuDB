@@ -107,6 +107,13 @@ public interface IMetadata {
         return (Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS);
     }
 
+    @SuppressWarnings("unchecked")
+    default Long getStreamAddress(UUID stream) {
+        return ((Map<UUID,Long>) getMetadataMap().get(LogUnitMetadataType.STREAM_ADDRESSES)) == null ? null :
+                ((Map<UUID,Long>) getMetadataMap().get(LogUnitMetadataType.STREAM_ADDRESSES)).get(stream);
+    }
+
+
     default void clearCommit() {
         getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
     }
