@@ -5,6 +5,7 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.junit.After;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -21,12 +22,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ManagementClientTest extends AbstractClientTest {
 
     ManagementClient client;
+    ManagementServer server;
 
     @Override
     Set<AbstractServer> getServersForTest() {
         ServerContext serverContext = defaultServerContext();
+        server = new ManagementServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new ManagementServer(serverContext))
+                .add(server)
                 .build();
     }
 
@@ -40,7 +43,16 @@ public class ManagementClientTest extends AbstractClientTest {
     }
 
     /**
+     * Need to shutdown the servers after test.
+     */
+    @After
+    public void cleanUp() {
+        server.shutdown();
+    }
+
+    /**
      * Tests the bootstrapping of the management server.
+     *
      * @throws Exception
      */
     @Test
@@ -52,6 +64,7 @@ public class ManagementClientTest extends AbstractClientTest {
 
     /**
      * Tests the msg handler for failure detection.
+     *
      * @throws Exception
      */
     @Test
