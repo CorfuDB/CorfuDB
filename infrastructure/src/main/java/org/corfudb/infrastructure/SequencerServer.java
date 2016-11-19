@@ -152,10 +152,11 @@ public class SequencerServer extends AbstractServer {
      */
     public boolean txnResolution(long timestamp, Set<UUID> streams) {
         // If the timestamp is -1L, then the transaction automatically commits.
+        log.trace("txn resolution, timestamp: {}, streams: {}", timestamp, streams);
         if (timestamp != -1L) {
-            AtomicBoolean abort = new AtomicBoolean(false);
+            AtomicBoolean commit = new AtomicBoolean(true);
             for (UUID id : streams) {
-                if (abort.get())
+                if (!commit.get())
                     break;
                 lastGlobalOffsetMap.compute(id, (k, v) -> {
                     if (v == null) {
@@ -163,15 +164,13 @@ public class SequencerServer extends AbstractServer {
                     } else {
                         if (v > timestamp) {
                             log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
-                            abort.set(true);
+                            commit.set(false);
                         }
                     }
                     return v;
                 });
             }
-            if (abort.get()) {
-                return false;
-            }
+            return commit.get();
         }
         return true;
     }
@@ -180,8 +179,7 @@ public class SequencerServer extends AbstractServer {
                                     ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
         // If no streams are specified in the request, this value returns the last global token issued.
-        long latestGlobalOffset = 0L;
-        boolean hit = false;
+        long latestGlobalOffset = -1L;
         // Collect the latest local offset for every stream in the request.
         ImmutableMap.Builder<UUID, Long> requestLatestStreamOffsets = ImmutableMap.builder();
         for (UUID id : req.getStreams()) {
@@ -195,13 +193,7 @@ public class SequencerServer extends AbstractServer {
             });
             // Compute the latest global offset across all streams.
             Long lastIssued = lastGlobalOffsetMap.get(id);
-            if (lastIssued != null) {
-                hit = true;
-            }
             latestGlobalOffset = Math.max(latestGlobalOffset, lastIssued == null ? Long.MIN_VALUE : lastIssued);
-        }
-        if (!hit) {
-            latestGlobalOffset = -1L; //no token ever issued
         }
         if (req.getStreams().size() == 0) {
             latestGlobalOffset = globalIndex.get() - 1;
@@ -217,25 +209,25 @@ public class SequencerServer extends AbstractServer {
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
+        log.trace("req txn reso: {}", req.getTxnResolution());
         if (req.getNumTokens() == 0) {
             returnLatestOffsets(msg, ctx, r);
         } else {
-            long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
             if (req.getStreams() == null) {
                 r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                        new TokenResponse(thisIssue, Collections.emptyMap(), Collections.emptyMap())));
+                        new TokenResponse(globalIndex.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
                 return;
             }
             // If the request is a transaction resolution request, then check if it should abort.
             if (req.getTxnResolution()) {
                 if (!txnResolution(req.getReadTimestamp(), req.getReadSet())) {
                     // If the txn aborts, then DO NOT hand out a token.
-                    globalIndex.getAndAdd(-req.getNumTokens());
                     r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                             new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
                     return;
                 }
             }
+            long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
 
             // If the txn can commit, or if the request is for a non-txn entry, then proceed normally to
             // hand out local stream offsets.
