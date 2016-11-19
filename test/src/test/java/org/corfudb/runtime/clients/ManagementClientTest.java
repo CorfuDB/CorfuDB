@@ -1,10 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
-import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.ManagementServer;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.*;
 import org.junit.After;
 import org.junit.Test;
 
@@ -26,10 +23,17 @@ public class ManagementClientTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
-        ServerContext serverContext = defaultServerContext();
+        ServerContext serverContext = new ServerContextBuilder()
+                .setInitialToken(0)
+                .setMemory(true)
+                .setSingle(true)
+                .setMaxCache(256000000)
+                .setServerRouter(serverRouter)
+                .build();
         server = new ManagementServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
+                .add(new LayoutServer(serverContext))
                 .build();
     }
 
