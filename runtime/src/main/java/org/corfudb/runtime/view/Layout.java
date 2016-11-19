@@ -22,6 +22,7 @@ import java.util.stream.Stream;
  * Created by mwei on 12/8/15.
  */
 @Slf4j
+@Data
 @ToString(exclude = {"runtime", "replicationViewCache"})
 @EqualsAndHashCode(exclude = {"runtime", "replicationViewCache"})
 public class Layout implements Cloneable {
