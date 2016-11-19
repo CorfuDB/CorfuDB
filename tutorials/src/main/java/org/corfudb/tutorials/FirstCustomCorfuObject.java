@@ -1,5 +1,8 @@
 package org.corfudb.tutorials;
 
+import org.corfudb.annotations.Accessor;
+import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.runtime.object.*;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -21,8 +24,8 @@ import org.corfudb.runtime.CorfuRuntime;
 /**
  * Implement ICorfuSMRObject turns this into a Corfu object
  */
-public class FirstCustomCorfuObject
-    implements ICorfuSMRObject<FirstCustomCorfuObject> {
+//@CorfuObject
+public class FirstCustomCorfuObject {
     Integer value = 0;
 
     /**
@@ -31,14 +34,16 @@ public class FirstCustomCorfuObject
      *
      * @return the old value
      */
-    @MutatorAccessor
+/*
+    @MutatorAccessor(name="Increment")
     public int Increment() {
         int tmp = value;
         value++;
         return tmp;
     }
+*/
 
-    @Accessor
+//    @Accessor
     public int Get() { return value; }
 
     static CorfuRuntime getRuntimeAndConnect(String configurationString) {
@@ -58,8 +63,8 @@ public class FirstCustomCorfuObject
                 .open();
 
         System.out.println("Counter value before increment: " + cntr.Get());
-        System.out.println("Counter value before increment: " + cntr.Increment());
-        System.out.println("Counter value before increment: " + cntr.Increment());
+        //System.out.println("Counter value before increment: " + cntr.Increment());
+        //System.out.println("Counter value before increment: " + cntr.Increment());
     }
 
     public static void main(String[] args) {
