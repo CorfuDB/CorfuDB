@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 
@@ -14,14 +15,11 @@ import java.util.LinkedList;
 @Slf4j
 public class TransactionalContext {
 
+
     private static final ThreadLocal<Deque<AbstractTransactionalContext>> threadStack = ThreadLocal.withInitial(
             LinkedList<AbstractTransactionalContext>::new);
-    @Getter
-    private static final LinkedHashSet<TXCompletionMethod> completionMethods = new LinkedHashSet<>();
 
-    public static void addCompletionMethod(TXCompletionMethod completionMethod) {
-        completionMethods.add(completionMethod);
-    }
+    public static boolean isInNestedTransaction() {return threadStack.get().size() > 1;}
 
     /**
      * Returns the transaction stack for the calling thread.
@@ -39,6 +37,15 @@ public class TransactionalContext {
      */
     public static AbstractTransactionalContext getCurrentContext() {
         return getTransactionStack().peekFirst();
+    }
+
+    /**
+     * Returns the last transactional context (parent/root) for the calling thread.
+     *
+     * @return The last transactional context for the calling thread.
+     */
+    public static AbstractTransactionalContext getRootContext() {
+        return getTransactionStack().peekLast();
     }
 
     /**
@@ -63,22 +70,18 @@ public class TransactionalContext {
     }
 
     public static AbstractTransactionalContext removeContext() {
-        if (getCurrentContext() != null) {
-            getCurrentContext().close();
+        AbstractTransactionalContext r = getTransactionStack().pollFirst();
+        if (getTransactionStack().isEmpty()) {
+            synchronized (getTransactionStack())
+            {
+                getTransactionStack().notifyAll();
+            }
         }
-        return getTransactionStack().pollFirst();
+        return r;
     }
 
     public static boolean isInOptimisticTransaction() {
         return getCurrentContext() instanceof OptimisticTransactionalContext;
     }
 
-    public static boolean needsReadLock() {
-        return getCurrentContext().transactionRequiresReadLock();
-    }
-
-    @FunctionalInterface
-    public interface TXCompletionMethod {
-        void handle(AbstractTransactionalContext context);
-    }
 }

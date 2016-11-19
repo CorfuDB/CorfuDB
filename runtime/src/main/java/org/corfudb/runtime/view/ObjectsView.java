@@ -7,22 +7,16 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuProxyBuilder;
-import org.corfudb.runtime.object.CorfuSMRObjectProxy;
-import org.corfudb.runtime.object.ICorfuObject;
-import org.corfudb.runtime.object.ICorfuSMRObject;
+import org.corfudb.runtime.object.*;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.object.transactions.LockingTransactionalContext;
-import org.corfudb.runtime.object.transactions.OptimisticTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.LambdaUtils;
+import org.corfudb.util.serializer.Serializers;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,9 +41,6 @@ public class ObjectsView extends AbstractView {
 
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
-    LoadingCache<StackTraceElement, CallSiteData> callSiteDataCache = Caffeine.newBuilder()
-            .maximumSize(10000)
-            .build(stackTraceElement -> new CallSiteData());
 
     public ObjectsView(CorfuRuntime runtime) {
         super(runtime);
@@ -116,14 +107,33 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
-        CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
-        ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
-        return (T) objectCache.computeIfAbsent(oid, x -> {
-            StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
-                    destination, proxy.getTimestamp());
-            return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
-                    proxy.getSerializer(), Collections.emptySet());
-        });
+        try {
+            // to be deprecated
+            CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
+            ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
+            return (T) objectCache.computeIfAbsent(oid, x -> {
+                StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
+                        destination, proxy.getTimestamp());
+                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
+                        proxy.getSerializer(), Collections.emptySet());
+            });
+        } catch (Exception e) {
+            // new code path
+            ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
+            ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType(), null);
+            return (T) objectCache.computeIfAbsent(oid, x -> {
+                StreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
+                        destination, proxy.getCorfuSMRProxy().getVersion());
+                try {
+                    return
+                            CorfuCompileProxyBuilder.getProxy(proxy.getCorfuSMRProxy().getObjectType(),
+                                    runtime, sv.getStreamID(), null, Serializers.JSON);
+                }
+                catch (Exception ex) {
+                    throw new RuntimeException(ex);
+                }
+            });
+        }
     }
 
     /**
@@ -149,32 +159,8 @@ public class ObjectsView extends AbstractView {
         TXBegin(TransactionStrategy.AUTOMATIC);
     }
 
-    /**
-     * Determine the call site for the transaction.
-     *
-     * @return The call site where TXBegin(); was called.
-     */
-    public StackTraceElement getCallSite() {
-        StackTraceElement[] st = new Exception().getStackTrace();
-        for (int i = 1; i < st.length; i++) {
-            if (!st[i].getClassName().equals(this.getClass().getName())) {
-                return st[i];
-            }
-        }
-        throw new RuntimeException("Couldn't get call site!");
-    }
-
     public void TXBegin(TransactionStrategy strategy, Object... writeSet) {
-        if (strategy == TransactionStrategy.LOCKING) {
-            LockingTransactionalContext context = new LockingTransactionalContext(runtime);
-            context.setWriteSet(writeSet);
-            context.setStartTime(System.currentTimeMillis());
-            TransactionalContext.newContext(context);
-
-            log.trace("Entering transactional context {}.", context.getTransactionID());
-        } else {
             TXBegin(strategy);
-        }
     }
 
     /**
@@ -184,19 +170,8 @@ public class ObjectsView extends AbstractView {
      */
     public void TXBegin(TransactionStrategy strategy) {
 
-        if (strategy == TransactionStrategy.AUTOMATIC) {
-            //StackTraceElement st = getCallSite();
-            //log.trace("Determined call site to be {}", st);
-            //CallSiteData csd = callSiteDataCache.get(st);
-            //strategy = csd.getNextStrategy();
-            //log.trace("Selecting transaction strategy {} based on call site.", strategy);
-            strategy = TransactionStrategy.OPTIMISTIC;
-        }
-
-
-        AbstractTransactionalContext context = TransactionalContext.newContext(runtime);
-        context.setStrategy(strategy);
-        context.setStartTime(System.currentTimeMillis());
+        AbstractTransactionalContext context =
+                TransactionalContext.newContext(runtime);
 
         log.trace("Entering transactional context {}.", context.getTransactionID());
     }
@@ -207,11 +182,13 @@ public class ObjectsView extends AbstractView {
      * context will be discarded.
      */
     public void TXAbort() {
-        AbstractTransactionalContext context = TransactionalContext.removeContext();
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         if (context == null) {
             log.warn("Attempted to abort a transaction, but no transaction active!");
         } else {
             log.trace("Aborting transactional context {}.", context.getTransactionID());
+            context.abortTransaction();
+            TransactionalContext.removeContext();
         }
     }
 
@@ -239,12 +216,6 @@ public class ObjectsView extends AbstractView {
             long totalTime = System.currentTimeMillis() - context.getStartTime();
             log.trace("Exiting (committing) transactional context {} (time={} ms).",
                     context.getTransactionID(), totalTime);
-            if (context.hasNoWriteSet()) {
-                log.trace("Transactional context {} was read-only, exiting context without commit.",
-                        context.getTransactionID());
-                TransactionalContext.removeContext();
-                return;
-            }
 
             if (TransactionalContext.getTransactionStack().size() > 1) {
                 TransactionalContext.removeContext();
@@ -252,26 +223,11 @@ public class ObjectsView extends AbstractView {
                         TransactionalContext.getCurrentContext().getTransactionID());
                 TransactionalContext.getCurrentContext().addTransaction(context);
             } else {
-                //TXEntry entry = ((OptimisticTransactionalContext) context).getEntry();
-                //Set<UUID> affectedStreams = entry.getAffectedStreams();
-                //if(transactionLogging) {
-                //    affectedStreams.add(TRANSACTION_STREAM_ID);
-                //    log.trace("TX entry {} will be writted to transaction stream : {}", entry, TRANSACTION_STREAM_ID);
-                //}
-                //long address = runtime.getStreamsView().write(affectedStreams, entry);
                 try {
                     TransactionalContext.getCurrentContext().commitTransaction();
                 } finally {
                     TransactionalContext.removeContext();
                 }
-                //log.trace("TX entry {} written at address {}", entry, address);
-                //now check if the TX will be an abort...
-                //if (entry.isAborted()) {
-                //    throw new TransactionAbortedException();
-                //}
-                //otherwise fire the handlers.
-                TransactionalContext.getCompletionMethods().parallelStream()
-                        .forEach(x -> x.handle(context));
             }
         }
     }
@@ -340,13 +296,5 @@ public class ObjectsView extends AbstractView {
         final UUID streamID;
         final Class<T> type;
         final Class<R> overlay;
-    }
-
-    @Data
-    class CallSiteData {
-
-        TransactionStrategy getNextStrategy() {
-            return TransactionStrategy.OPTIMISTIC;
-        }
     }
 }

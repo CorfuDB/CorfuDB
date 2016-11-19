@@ -188,6 +188,7 @@ public class TXEntry extends LogEntry implements ISMRConsumable {
         List<SMREntry> updates;
 
         @Getter
+        @Setter
         boolean read;
 
         public TXObjectEntry(List<SMREntry> updates, boolean read) {
