@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.io.File;
@@ -69,7 +70,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.addServer(s1);
         //write at 0
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
-        b.writeBytes("0".getBytes());
+        Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
@@ -81,7 +82,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
         //100
         b = ByteBufAllocator.DEFAULT.buffer();
-        b.writeBytes("100".getBytes());
+        Serializers.CORFU.serialize("100".getBytes(), b);
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
@@ -93,7 +94,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
         //and 10000000
         b = ByteBufAllocator.DEFAULT.buffer();
-        b.writeBytes("10000000".getBytes());
+        Serializers.CORFU.serialize("10000000".getBytes(), b);
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))

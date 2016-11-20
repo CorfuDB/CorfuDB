@@ -13,6 +13,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 
@@ -31,7 +32,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLog log = new StreamLogFiles(getDirPath(), false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
-        b.writeBytes(streamEntry);
+        Serializers.CORFU.serialize(streamEntry, b);
         log.append(0, new LogData(DataType.DATA, b));
         assertThat(log.read(0).getPayload(null)).isEqualTo(streamEntry);
 
@@ -46,7 +47,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLog log = new StreamLogFiles(getDirPath(), false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
-        b.writeBytes(streamEntry);
+        Serializers.CORFU.serialize(streamEntry, b);
         log.append(0, new LogData(DataType.DATA, b));
 
         assertThatThrownBy(() -> log.append(0, new LogData(DataType.DATA, b)))
@@ -59,7 +60,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLog log = new StreamLogFiles(getDirPath(), false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
-        b.writeBytes(streamEntry);
+        Serializers.CORFU.serialize(streamEntry, b);
         log.append(0, new LogData(DataType.DATA, b));
         log.append(2, new LogData(DataType.DATA, b));
         assertThat(log.read(1)).isNull();
@@ -75,7 +76,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLog log = new StreamLogFiles(logDir, true);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
-        b.writeBytes(streamEntry);
+        Serializers.CORFU.serialize(streamEntry, b);
         log.append(0, new LogData(DataType.DATA, b));
 
         assertThat(log.read(0).getPayload(null)).isEqualTo(streamEntry);
@@ -96,7 +97,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLog log = new StreamLogFiles(logDir, false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
-        b.writeBytes(streamEntry);
+        Serializers.CORFU.serialize(streamEntry, b);
         log.append(0, new LogData(DataType.DATA, b));
 
         assertThat(log.read(0).getPayload(null)).isEqualTo(streamEntry);
