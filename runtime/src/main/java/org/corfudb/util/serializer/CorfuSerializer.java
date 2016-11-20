@@ -31,9 +31,7 @@ public class CorfuSerializer implements ISerializer {
      */
     @Override
     public Object deserialize(ByteBuf b, CorfuRuntime rt) {
-        byte magic;
-        if ((magic = b.readByte()) != CorfuPayloadMagic) {
-            b.resetReaderIndex();
+        if (b.readByte() != CorfuPayloadMagic) {
             byte[] bytes = new byte[b.readableBytes()];
             b.readBytes(bytes);
             return bytes;
@@ -54,6 +52,8 @@ public class CorfuSerializer implements ISerializer {
             ICorfuSerializable c = (ICorfuSerializable) o;
             c.serialize(b);
         } else if (o instanceof byte[]) {
+            // Reserve byte for an empty magic byte
+            b.writeByte(0);
             byte[] bytes = (byte[]) o;
             b.writeBytes(bytes);
         } else {
