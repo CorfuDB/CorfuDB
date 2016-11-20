@@ -12,6 +12,7 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
         rm target/mvn-repo/org/corfudb/corfu/${PROJECT_VERSION}/*.deb.md5
         rm target/mvn-repo/org/corfudb/corfu/${PROJECT_VERSION}/*.deb.sha1
         cp -R target/mvn-repo $HOME/mvn-repo-current
+        cp -R runtime/target/mvn-repo $HOME/mvn-repo-current
         cd $HOME
         git config --global user.email "travis@travis-ci.org"
         git config --global user.name "travis-ci"
