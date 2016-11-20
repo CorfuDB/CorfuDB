@@ -7,12 +7,14 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.io.File;
 import java.io.RandomAccessFile;
+import java.util.concurrent.TimeUnit;
 
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -124,5 +126,34 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         StreamLog log3 = new StreamLogFiles(logDir, false);
         assertThat(log3.read(0)).isNull();
+    }
+
+    @Test
+    public void multiThreadedReadWrite() throws Exception {
+        String logDir = getDirPath();
+        StreamLog log = new StreamLogFiles(logDir, false);
+
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+
+        final int num_threads = 2;
+        final int num_entries = 100;
+
+        scheduleConcurrently(num_threads, threadNumber -> {
+            int base = threadNumber * num_entries;
+            for (int i = base; i < base + num_entries; i++) {
+                log.append(i, new LogData(DataType.DATA, b));
+            }
+        });
+
+        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+
+        // verify that addresses 0 to 2000 have been used up
+        for (int x = 0; x < num_entries * num_threads; x++) {
+            LogData data = log.read(x);
+            byte[] bytes = (byte[]) data.getPayload(null);
+            assertThat(bytes).isEqualTo(streamEntry);
+        }
     }
 }

@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
@@ -16,11 +15,10 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import io.netty.buffer.ByteBuf;
@@ -32,7 +30,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
@@ -64,14 +61,15 @@ public class StreamLogFiles implements StreamLog {
 
     static public final short RECORD_DELIMITER = 0x4C45;
     static public int VERSION = 1;
+    static public int RECORDS_PER_LOG_FILE = 10000;
 
     private final boolean noVerify;
     public final String logDir;
-    private Map<Long, FileHandle> channelMap;
+    private Map<Long, FileHandle> writeChannels;
 
     public StreamLogFiles(String logDir, boolean noVerify) {
         this.logDir = logDir;
-        channelMap = new HashMap<>();
+        writeChannels = new HashMap<>();
         this.noVerify = noVerify;
 
         verifyLogs();
@@ -121,17 +119,15 @@ public class StreamLogFiles implements StreamLog {
     /**
      * Write the header for a Corfu log file.
      *
-     * @param fc      The filechannel to use.
-     * @param pointer The pointer to increment to the start position.
+     * @param fc      The file channel to use.
      * @param version The version number to write to the header.
      * @param verify  Checksum verify flag
      * @throws IOException
      */
-    static public void writeHeader(FileChannel fc, AtomicLong pointer, int version, boolean verify)
+    static public void writeHeader(FileChannel fc, int version, boolean verify)
             throws IOException {
         LogFileHeader lfg = new LogFileHeader(version, verify);
         ByteBuffer b = lfg.getBuffer();
-        pointer.getAndAdd(b.remaining());
         fc.write(b);
         fc.force(true);
     }
@@ -145,7 +141,28 @@ public class StreamLogFiles implements StreamLog {
      */
     private LogData readRecord(FileHandle fh, long address)
             throws IOException {
-        ByteBuffer o = fh.getMapForRegion(LogFileHeader.size, (int) fh.getChannel().size());
+
+        // A channel lock is required to read the file size because the channel size can change
+        // when it is written to, so when we read the size we need to guarantee that the size only
+        // includes fully written records.
+        long logFileSize = 0;
+
+        synchronized (fh.lock) {
+            logFileSize = fh.channel.size();
+        }
+
+        FileChannel fc = getChannel(fh.fileName, true);
+
+        if(fc == null) {
+            return null;
+        }
+
+        fc.position(LogFileHeader.size);
+        ByteBuffer o = ByteBuffer.allocate((int) logFileSize - LogFileHeader.size);
+        fc.read(o);
+        fc.close();
+        o.flip();
+
         while (o.hasRemaining()) {
 
             short magic = o.getShort();
@@ -153,7 +170,6 @@ public class StreamLogFiles implements StreamLog {
             if (magic != RECORD_DELIMITER) {
                 return null;
             }
-
 
             int checksum = o.getInt();
             ByteBuffer checksumBuf = o.slice();
@@ -196,6 +212,28 @@ public class StreamLogFiles implements StreamLog {
         return null;
     }
 
+    private FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
+        try {
+
+            if(readOnly) {
+                if(!new File(filePath).exists()) {
+                    return null;
+                } else {
+                    return FileChannel.open(FileSystems.getDefault().getPath(filePath),
+                            EnumSet.of(StandardOpenOption.READ));
+                }
+            } else {
+                return FileChannel.open(FileSystems.getDefault().getPath(filePath),
+                        EnumSet.of(StandardOpenOption.APPEND, StandardOpenOption.WRITE,
+                                StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+            }
+        } catch (IOException e) {
+            log.error("Error opening file {}", filePath, e);
+            throw new RuntimeException(e);
+        }
+
+    }
+
     /**
      * Gets the file channel for a particular address, creating it
      * if is not present in the map.
@@ -203,24 +241,22 @@ public class StreamLogFiles implements StreamLog {
      * @param address The address to open.
      * @return The FileChannel for that address.
      */
-    private FileHandle getChannelForAddress(long address) {
-        return channelMap.computeIfAbsent(address / 10000, a -> {
-            String filePath = logDir + a.toString() + ".log";
-            try {
-                FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath),
-                        EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
-                                StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+    private synchronized FileHandle getFileHandleForAddress(long address) {
+        return writeChannels.computeIfAbsent(address / RECORDS_PER_LOG_FILE, a -> {
 
-                AtomicLong fp = new AtomicLong();
+            try {
+                String filePath = logDir + a.toString() + ".log";
+                FileChannel fc = getChannel(filePath, false);
+
                 boolean verify = true;
 
                 if(noVerify){
                     verify = false;
                 }
 
-                writeHeader(fc, fp, VERSION, verify);
+                writeHeader(fc, VERSION, verify);
                 log.info("Opened new log file at {}", filePath);
-                FileHandle fh = new FileHandle(fp, fc);
+                FileHandle fh = new FileHandle(fc, filePath);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 readRecord(fh, -1);
@@ -281,10 +317,10 @@ public class StreamLogFiles implements StreamLog {
         recordBuf.readerIndex(0);
         recordBuf.writerIndex(recordBufLastInd);
 
-        long pos = fh.getFilePointer().getAndAdd(recordBuf.writerIndex());
-        ByteBuffer o = fh.getMapForRegion((int) pos, recordBuf.writerIndex());
-        o.put(recordBuf.nioBuffer());
-        o.flip();
+        synchronized (fh.lock) {
+            fh.channel.write(recordBuf.nioBuffer());
+        }
+
         recordBuf.release();
     }
 
@@ -294,7 +330,7 @@ public class StreamLogFiles implements StreamLog {
         try {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
-            FileHandle fh = getChannelForAddress(address);
+            FileHandle fh = getFileHandleForAddress(address);
             if (!fh.getKnownAddresses().contains(address)) {
                 writeRecord(fh, address, entry);
                 fh.getKnownAddresses().add(address);
@@ -311,7 +347,7 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public LogData read(long address) {
         try {
-            return readRecord(getChannelForAddress(address), address);
+            return readRecord(getFileHandleForAddress(address), address);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -320,29 +356,12 @@ public class StreamLogFiles implements StreamLog {
 
     @Data
     class FileHandle {
-        final AtomicLong filePointer;
         @NonNull
         private FileChannel channel;
+        @NonNull
+        private String fileName;
         private Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
-        private MappedByteBuffer byteBuffer;
-
-        public ByteBuffer getMapForRegion(int offset, int size) {
-            if (byteBuffer == null) {
-                byteBuffer = getMappedBuffer();
-            }
-            ByteBuffer o = byteBuffer.duplicate();
-            o.position(offset);
-            return o.slice();
-        }
-
-        private MappedByteBuffer getMappedBuffer() {
-            try {
-                return channel.map(FileChannel.MapMode.READ_WRITE, 0L, LogUnitServer.maxLogFileSize);
-            } catch (IOException ie) {
-                log.error("Failed to map buffer for channel.");
-                throw new RuntimeException(ie);
-            }
-        }
+        private final Lock lock = new ReentrantLock();
     }
 
     @Data
@@ -395,26 +414,19 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void close() {
-        Iterator<Long> it = channelMap.keySet().iterator();
+        Iterator<Long> it = writeChannels.keySet().iterator();
         while (it.hasNext()) {
             Long key = it.next();
-            FileHandle fh = channelMap.get(key);
+            FileHandle fh = writeChannels.get(key);
             try {
+                fh.getChannel().force(true);
                 fh.getChannel().close();
                 fh.channel = null;
                 fh.knownAddresses = null;
-                fh.byteBuffer = null;
-                // We need to call System.gc() to force the unmapping of the file.
-                // Without unmapping, the file remains open & leaks space. {sadpanda}
-                //
-                // OS X + HFS+ makes an additional hassle because HFS+ doesn't support
-                // sparse files, so if the mapping is 2GB, then the OS will write 2GB
-                // of data at unmap time, whether we like it or not.
-                System.gc();
             } catch (IOException e) {
                 log.warn("Error closing fh {}: {}", fh.toString(), e.toString());
             }
         }
-        channelMap = new HashMap<>();
+        writeChannels = new HashMap<>();
     }
 }
