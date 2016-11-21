@@ -68,7 +68,7 @@ public class SequencerServer extends AbstractServer {
             .generateHandlers(MethodHandles.lookup(), this);
 
     /**
-     * A simple map of the most recently issued global offset for any given stream.
+     * A simple map of the most recently issued global offset for any given stream; used for backpointers.
      */
     ConcurrentHashMap<UUID, Long> lastGlobalOffsetMap;
 
@@ -263,8 +263,8 @@ public class SequencerServer extends AbstractServer {
                     // Collect the stream offsets for this token request.
                     lastLocalOffsetMap.compute(id, (k, v) -> {
                         if (v == null) {
-                            requestStreamTokens.put(k, 0L);
-                            return 0L;
+                            requestStreamTokens.put(k, req.getNumTokens());
+                            return req.getNumTokens();
                         }
                         requestStreamTokens.put(k, v + req.getNumTokens());
                         return v + req.getNumTokens();
