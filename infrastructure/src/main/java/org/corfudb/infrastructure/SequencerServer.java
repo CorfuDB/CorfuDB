@@ -297,6 +297,7 @@ public class SequencerServer extends AbstractServer {
     @Override
     public void reboot() {
         lastGlobalOffsetMap = new ConcurrentHashMap<>();
+        lastLocalOffsetMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
         long newIndex = Utils.parseLong(opts.get("--initial-token"));
         if (newIndex == -1) {
