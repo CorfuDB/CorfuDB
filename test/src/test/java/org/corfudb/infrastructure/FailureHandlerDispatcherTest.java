@@ -55,7 +55,8 @@ public class FailureHandlerDispatcherTest extends AbstractViewTest {
         failedServers.add(getEndpoint(9002));
 
         FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
-        failureHandlerDispatcher.dispatchHandler(originalLayout, corfuRuntime, failedServers);
+        IFailureHandlerPolicy failureHandlerPolicy = new PurgeFailurePolicy();
+        failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, originalLayout, corfuRuntime, failedServers);
 
         Layout expectedLayout = new TestLayoutBuilder()
                 .setEpoch(2L)
