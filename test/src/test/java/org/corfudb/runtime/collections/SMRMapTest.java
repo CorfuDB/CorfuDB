@@ -173,6 +173,31 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void readSetDiffFromWriteSet()
+            throws Exception {
+        Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+        Map<String, String> testMap2 = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
+
+        testMap.put("a", "b");
+        testMap2.put("a", "c");
+
+        scheduleConcurrently(1, threadNumber -> {
+            Thread.sleep(1000);
+            testMap2.put("c", "d");
+        });
+
+        scheduleConcurrently(1, threadNumber -> {
+            getRuntime().getObjectsView().TXBegin();
+            testMap.compute("b", (k, v) -> testMap2.get("a"));
+            Thread.sleep(2000); // Wait for the other thread to finish;
+            assertThatThrownBy(() -> getRuntime().getObjectsView().TXEnd())
+                    .isInstanceOf(TransactionAbortedException.class);
+        });
+        executeScheduled(2, 10, TimeUnit.SECONDS);
+    }
+
+   @Test
+    @SuppressWarnings("unchecked")
     public void canUpdateSingleObjectTransacationally()
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);

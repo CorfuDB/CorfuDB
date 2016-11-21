@@ -119,13 +119,15 @@ public class StreamsView {
                 long token;
                 if (overwrite) {
                     TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false, true, ((TXEntry) object).getReadTimestamp());
+                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false,
+                                    true, ((TXEntry) object).getReadTimestamp(), ((TXEntry) object).getReadSet());
                     token = temp.getToken();
                     tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
                     log.trace("object is instance of TXEntry! readTimestamp: {}", ((TXEntry) object).getReadTimestamp());
                     tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false, true, ((TXEntry) object).getReadTimestamp());
+                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false,
+                                    true, ((TXEntry) object).getReadTimestamp(), ((TXEntry) object).getReadSet());
                     token = tokenResponse.getToken();
                 }
                 log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);

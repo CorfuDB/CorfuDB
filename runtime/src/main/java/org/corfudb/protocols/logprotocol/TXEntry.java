@@ -117,6 +117,13 @@ public class TXEntry extends LogEntry implements ISMRConsumable {
                 .anyMatch(e -> checkIfStreamAborts(e.getKey()));
     }
 
+    public Set<UUID> getReadSet() {
+        return txMap.entrySet().stream()
+                .filter(e -> e.getValue().isRead())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+    }
+
     /**
      * Get the set of streams which will be affected by this
      * TX entry.
