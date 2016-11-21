@@ -264,8 +264,8 @@ public class SequencerServer extends AbstractServer {
                     // Collect the stream offsets for this token request.
                     lastLocalOffsetMap.compute(id, (k, v) -> {
                         if (v == null) {
-                            requestStreamTokens.put(k, req.getNumTokens());
-                            return req.getNumTokens();
+                            requestStreamTokens.put(k, req.getNumTokens() - 1L);
+                            return req.getNumTokens() - 1L;
                         }
                         requestStreamTokens.put(k, v + req.getNumTokens());
                         return v + req.getNumTokens();
