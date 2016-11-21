@@ -50,6 +50,7 @@ public class SequencerServer extends AbstractServer {
     @Getter
     long epoch;
     AtomicLong globalIndex;
+    private Object tokenMetadataLock = new Object(); // locks access to globalIndex, last[Global|Local]OffsetMaps.
 
     /**
      * The file channel.
@@ -126,7 +127,7 @@ public class SequencerServer extends AbstractServer {
     public void checkpointState() {
         ByteBuffer b = ByteBuffer.allocate(8);
         long checkpointAddress = globalIndex.get();
-        b.putLong(globalIndex.get());
+        b.putLong(checkpointAddress);
         b.flip();
         synchronized (fcLock) {
             if (fc != null) {
@@ -182,21 +183,24 @@ public class SequencerServer extends AbstractServer {
         long latestGlobalOffset = -1L;
         // Collect the latest local offset for every stream in the request.
         ImmutableMap.Builder<UUID, Long> requestLatestStreamOffsets = ImmutableMap.builder();
-        for (UUID id : req.getStreams()) {
-            lastLocalOffsetMap.compute(id, (k, v) -> {
-                if (v == null) {
-                    requestLatestStreamOffsets.put(k, -1L);
-                    return null;
-                }
-                requestLatestStreamOffsets.put(k, v);
-                return v;
-            });
-            // Compute the latest global offset across all streams.
-            Long lastIssued = lastGlobalOffsetMap.get(id);
-            latestGlobalOffset = Math.max(latestGlobalOffset, lastIssued == null ? Long.MIN_VALUE : lastIssued);
-        }
-        if (req.getStreams().size() == 0) {
-            latestGlobalOffset = globalIndex.get() - 1;
+
+        synchronized(tokenMetadataLock) {
+            for (UUID id : req.getStreams()) {
+                lastLocalOffsetMap.compute(id, (k, v) -> {
+                    if (v == null) {
+                        requestLatestStreamOffsets.put(k, -1L);
+                        return null;
+                    }
+                    requestLatestStreamOffsets.put(k, v);
+                    return v;
+                });
+                // Compute the latest global offset across all streams.
+                Long lastIssued = lastGlobalOffsetMap.get(id);
+                latestGlobalOffset = Math.max(latestGlobalOffset, lastIssued == null ? Long.MIN_VALUE : lastIssued);
+            }
+            if (req.getStreams().size() == 0) {
+                latestGlobalOffset = globalIndex.get() - 1;
+            }
         }
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(latestGlobalOffset, Collections.emptyMap(), requestLatestStreamOffsets.build())));
@@ -218,30 +222,31 @@ public class SequencerServer extends AbstractServer {
                         new TokenResponse(globalIndex.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
                 return;
             }
-            // If the request is a transaction resolution request, then check if it should abort.
-            if (req.getTxnResolution()) {
-                if (!txnResolution(req.getReadTimestamp(), req.getReadSet())) {
-                    // If the txn aborts, then DO NOT hand out a token.
-                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                            new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
-                    return;
-                }
-            }
-            long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
-
-            // If the txn can commit, or if the request is for a non-txn entry, then proceed normally to
-            // hand out local stream offsets.
-            ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
-            ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
-            for (UUID id : req.getStreams()) {
-                lastGlobalOffsetMap.compute(id, (k, v) -> {
-                    if (v == null) {
-                        backPointerMap.put(k, -1L);
-                        return thisIssue + req.getNumTokens() - 1;
+            synchronized (tokenMetadataLock) {
+                // If the request is a transaction resolution request, then check if it should abort.
+                if (req.getTxnResolution()) {
+                    if (!txnResolution(req.getReadTimestamp(), req.getReadSet())) {
+                        // If the txn aborts, then DO NOT hand out a token.
+                        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                                new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
+                        return;
                     }
-                    backPointerMap.put(k, v);
-                    return Math.max(thisIssue + req.getNumTokens() - 1, v);
-                });
+                }
+                long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
+
+                // If the txn can commit, or if the request is for a non-txn entry, then proceed normally to
+                // hand out local stream offsets.
+                ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
+                ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
+                for (UUID id : req.getStreams()) {
+                    lastGlobalOffsetMap.compute(id, (k, v) -> {
+                        if (v == null) {
+                            backPointerMap.put(k, -1L);
+                            return thisIssue + req.getNumTokens() - 1;
+                        }
+                        backPointerMap.put(k, v);
+                        return Math.max(thisIssue + req.getNumTokens() - 1, v);
+                    });
                 /*
                  * Action table for (overwrite, replexOverwrite) pairs:
                  * overwrite | replexOverwrite | Action
@@ -258,23 +263,25 @@ public class SequencerServer extends AbstractServer {
                 /* TODO: In the (F,T) case, hole-filling (or some other mechanism, perhaps the same writer),
                  * needs to mark the hanging entry in the global log with a false commit bit.
                  */
-                if (msg.getPayload().getReplexOverwrite() ||
-                        !msg.getPayload().getOverwrite()) {
-                    // Collect the stream offsets for this token request.
-                    lastLocalOffsetMap.compute(id, (k, v) -> {
-                        if (v == null) {
-                            requestStreamTokens.put(k, req.getNumTokens());
-                            return req.getNumTokens();
-                        }
-                        requestStreamTokens.put(k, v + req.getNumTokens());
-                        return v + req.getNumTokens();
-                    });
+                    if (msg.getPayload().getReplexOverwrite() ||
+                            !msg.getPayload().getOverwrite()) {
+                        // Collect the stream offsets for this token request.
+                        lastLocalOffsetMap.compute(id, (k, v) -> {
+                            if (v == null) {
+                                requestStreamTokens.put(k, req.getNumTokens());
+                                return req.getNumTokens();
+                            }
+                            requestStreamTokens.put(k, v + req.getNumTokens());
+                            return v + req.getNumTokens();
+                        });
+                    }
                 }
+
+                r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                        new TokenResponse(thisIssue,
+                                backPointerMap.build(),
+                                requestStreamTokens.build())));
             }
-            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                    new TokenResponse(thisIssue,
-                            backPointerMap.build(),
-                            requestStreamTokens.build())));
         }
     }
 
@@ -296,31 +303,30 @@ public class SequencerServer extends AbstractServer {
 
     @Override
     public void reboot() {
-        lastGlobalOffsetMap = new ConcurrentHashMap<>();
-        lastLocalOffsetMap = new ConcurrentHashMap<>();
-        globalIndex = new AtomicLong();
-        long newIndex = Utils.parseLong(opts.get("--initial-token"));
-        if (newIndex == -1) {
-            if (!(Boolean) opts.get("--memory")) {
-                try {
-                    ByteBuffer b = ByteBuffer.allocate((int) fc.size());
-                    fc.read(b);
-                    if (fc.size() >= 8) {
-                        globalIndex.set(b.getLong(0));
-                    } else {
-                        log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
-                        globalIndex.set(0);
+        synchronized(tokenMetadataLock) {
+            lastGlobalOffsetMap = new ConcurrentHashMap<>();
+            lastLocalOffsetMap = new ConcurrentHashMap<>();
+            globalIndex = new AtomicLong(0L);
+            long newIndex = Utils.parseLong(opts.get("--initial-token"));
+            if (newIndex == -1) {
+                if (!(Boolean) opts.get("--memory")) {
+                    try {
+                        ByteBuffer b = ByteBuffer.allocate((int) fc.size());
+                        fc.read(b);
+                        if (fc.size() >= 8) {
+                            globalIndex.set(b.getLong(0));
+                        } else {
+                            log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
+                        }
+                    } catch (IOException e) {
+                        log.warn("Reboot to zero.  Sequencer checkpoint read & parse: " + e);
                     }
-                } catch (IOException e) {
-                    log.warn("Reboot to zero.  Sequencer checkpoint read & parse: " + e);
-                    globalIndex.set(0);
+                } else {
+                    log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
                 }
             } else {
-                log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
-                globalIndex.set(0);
+                globalIndex.set(newIndex);
             }
-        } else {
-            globalIndex.set(newIndex);
         }
     }
 
