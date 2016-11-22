@@ -224,7 +224,7 @@ To write your first program that uses Corfu, you will want to add Corfu as a dep
 ```xml
  <dependency>
     <groupId>org.corfudb</groupId>
-    <artifactId>corfu</artifactId>
+    <artifactId>runtime</artifactId>
     <version>0.1-SNAPSHOT</version>
     <scope>compile</scope>
 </dependency>

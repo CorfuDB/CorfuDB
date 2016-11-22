@@ -139,6 +139,19 @@ public class SequencerServerTest extends AbstractServerTest {
 
             assertThat(thisTokenA + 4)
                     .isEqualTo(checkTokenA);
+
+            // check the requesting multiple tokens does not break the back-pointer for the multi-entry
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singleton(streamA), false, false)));
+            thisTokenA = getLastPayloadMessageAs(TokenResponse.class).getToken();
+
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(5L, Collections.singleton(streamA), false, false)));
+            checkTokenA = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
+
+            assertThat(thisTokenA)
+                    .isEqualTo(checkTokenA);
+
         }
     }
 
