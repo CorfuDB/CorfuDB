@@ -49,6 +49,9 @@
                 <artifactId>clojure-maven-plugin</artifactId>
                 <version>1.8.1</version>
                 <extensions>true</extensions>
+                <configuration>
+                    <temporaryOutputDirectory>true</temporaryOutputDirectory>
+                </configuration>
                 <executions>
                     <execution>
                         <id>compile</id>
