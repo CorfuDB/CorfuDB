@@ -112,7 +112,7 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 ; Functions to interact with a runtime.
 (defn get-objects-view ([] (.. *r (getObjectsView)))
   ([runtime] (.. runtime (getObjectsView))))
-(defn get-address-view ([] (.. *r (getAddressSpaceView)))
+(defn get-address-space-view ([] (.. *r (getAddressSpaceView)))
   ([runtime] (.. runtime (getAddressSpaceView))))
 (defn get-sequencer-view ([] (.. *r (getSequencerView)))
   ([runtime] (.. runtime (getSequencerView))))
