@@ -18,8 +18,8 @@ public class SequencerServerAssertions extends AbstractAssert<SequencerServerAss
     public SequencerServerAssertions tokenIsAt(long address) {
         isNotNull();
 
-        if (actual.globalIndex.get() != address) {
-            failWithMessage("Expected token to be at <%d> but got <%d>!", address, actual.globalIndex.get());
+        if (actual.globalLogTail.get() != address) {
+            failWithMessage("Expected token to be at <%d> but got <%d>!", address, actual.globalLogTail.get());
         }
 
         return this;

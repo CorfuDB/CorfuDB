@@ -49,7 +49,7 @@ public class SequencerServer extends AbstractServer {
                             .build());
     @Getter
     long epoch;
-    AtomicLong globalIndex;
+    AtomicLong globalLogTail;
 
     /**
      * The file channel.
@@ -68,20 +68,20 @@ public class SequencerServer extends AbstractServer {
             .generateHandlers(MethodHandles.lookup(), this);
 
     /**
-     * A simple map of the most recently issued global offset for any given stream; used for backpointers.
+     * map from stream-trails to global-log tails. used for backpointers.
      */
-    ConcurrentHashMap<UUID, Long> lastGlobalOffsetMap;
+    ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap;
 
     /**
-     * A simple map of the most recently issued local offset for any given stream.
+     * map of stream tails.
      */
-    ConcurrentHashMap<UUID, Long> lastLocalOffsetMap;
+    ConcurrentHashMap<UUID, Long> streamTailMap;
 
     public SequencerServer(ServerContext serverContext) {
         Map<String, Object> opts = serverContext.getServerConfig();
-        lastGlobalOffsetMap = new ConcurrentHashMap<>();
-        lastLocalOffsetMap = new ConcurrentHashMap<>();
-        globalIndex = new AtomicLong();
+        streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+        streamTailMap = new ConcurrentHashMap<>();
+        globalLogTail = new AtomicLong();
         this.opts = opts;
 
         try {
@@ -97,7 +97,7 @@ public class SequencerServer extends AbstractServer {
             }
             reboot();
 
-            log.info("Sequencer initial token set to {}", globalIndex.get());
+            log.info("Sequencer initial token set to {}", globalLogTail.get());
         } catch (Exception ex) {
             log.warn("Exception parsing initial token, default to 0.", ex);
             ex.printStackTrace();
@@ -125,7 +125,7 @@ public class SequencerServer extends AbstractServer {
      */
     public void checkpointState() {
         ByteBuffer b = ByteBuffer.allocate(8);
-        long checkpointAddress = globalIndex.get();
+        long checkpointAddress = globalLogTail.get();
         b.putLong(checkpointAddress);
         b.flip();
         synchronized (fcLock) {
@@ -153,54 +153,55 @@ public class SequencerServer extends AbstractServer {
     public boolean txnResolution(long timestamp, Set<UUID> streams) {
         // If the timestamp is -1L, then the transaction automatically commits.
         log.trace("txn resolution, timestamp: {}, streams: {}", timestamp, streams);
-        if (timestamp != -1L) {
-            AtomicBoolean commit = new AtomicBoolean(true);
-            for (UUID id : streams) {
-                if (!commit.get())
-                    break;
-                lastGlobalOffsetMap.compute(id, (k, v) -> {
-                    if (v == null) {
-                        return null;
-                    } else {
-                        if (v > timestamp) {
-                            log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
-                            commit.set(false);
-                        }
+        if (timestamp == -1L)
+            return true;
+
+        AtomicBoolean commit = new AtomicBoolean(true);
+        for (UUID id : streams) {
+            if (!commit.get())
+                break;
+            streamTailToGlobalTailMap.compute(id, (k, v) -> {
+                if (v == null) {
+                    return null;
+                } else {
+                    if (v > timestamp) {
+                        log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
+                        commit.set(false);
                     }
-                    return v;
-                });
-            }
-            return commit.get();
+                }
+                return v;
+            });
         }
-        return true;
+        return commit.get();
     }
 
     public void returnLatestOffsets(CorfuPayloadMsg<TokenRequest> msg,
                                     ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
-        // If no streams are specified in the request, this value returns the last global token issued.
-        long latestGlobalOffset = -1L;
+
+        long maxStreamGlobalTails = -1L;
+
         // Collect the latest local offset for every stream in the request.
-        ImmutableMap.Builder<UUID, Long> requestLatestStreamOffsets = ImmutableMap.builder();
+        ImmutableMap.Builder<UUID, Long> responseStreamTails = ImmutableMap.builder();
 
         for (UUID id : req.getStreams()) {
-            lastLocalOffsetMap.compute(id, (k, v) -> {
+            streamTailMap.compute(id, (k, v) -> {
                 if (v == null) {
-                    requestLatestStreamOffsets.put(k, -1L);
+                    responseStreamTails.put(k, -1L);
                     return null;
                 }
-                requestLatestStreamOffsets.put(k, v);
+                responseStreamTails.put(k, v);
                 return v;
             });
             // Compute the latest global offset across all streams.
-            Long lastIssued = lastGlobalOffsetMap.get(id);
-            latestGlobalOffset = Math.max(latestGlobalOffset, lastIssued == null ? Long.MIN_VALUE : lastIssued);
+            Long lastIssued = streamTailToGlobalTailMap.get(id);
+            maxStreamGlobalTails = Math.max(maxStreamGlobalTails, lastIssued == null ? Long.MIN_VALUE : lastIssued);
         }
-        if (req.getStreams().size() == 0) {
-            latestGlobalOffset = globalIndex.get() - 1;
-        }
+
+        // If no streams are specified in the request, this value returns the last global token issued.
+        long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 : maxStreamGlobalTails;
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                new TokenResponse(latestGlobalOffset, Collections.emptyMap(), requestLatestStreamOffsets.build())));
+                new TokenResponse(responseGlobalTail, Collections.emptyMap(), responseStreamTails.build())));
     }
 
     /**
@@ -211,73 +212,79 @@ public class SequencerServer extends AbstractServer {
                                           ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
         log.trace("req txn reso: {}", req.getTxnResolution());
+
+        // if requested number of tokens is zero, it is just a query of current tail(s)
         if (req.getNumTokens() == 0) {
             returnLatestOffsets(msg, ctx, r);
-        } else {
-            if (req.getStreams() == null) {
+            return;
+        }
+
+        // if no streams, simply allocate a position at the tail of the global log
+        if (req.getStreams() == null) {
+            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                    new TokenResponse(globalLogTail.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
+            return;
+        }
+
+        // If the request is a transaction resolution request, then check if it should abort.
+        if (req.getTxnResolution()) {
+            if (!txnResolution(req.getReadTimestamp(), req.getReadSet())) {
+                // If the txn aborts, then DO NOT hand out a token.
                 r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                        new TokenResponse(globalIndex.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
+                        new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
                 return;
             }
-            // If the request is a transaction resolution request, then check if it should abort.
-            if (req.getTxnResolution()) {
-                if (!txnResolution(req.getReadTimestamp(), req.getReadSet())) {
-                    // If the txn aborts, then DO NOT hand out a token.
-                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                            new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
-                    return;
-                }
-            }
-            long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
-
-            // If the txn can commit, or if the request is for a non-txn entry, then proceed normally to
-            // hand out local stream offsets.
-            ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
-            ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
-            for (UUID id : req.getStreams()) {
-                lastGlobalOffsetMap.compute(id, (k, v) -> {
-                    if (v == null) {
-                        backPointerMap.put(k, -1L);
-                        return thisIssue + req.getNumTokens() - 1;
-                    }
-                    backPointerMap.put(k, v);
-                    return Math.max(thisIssue + req.getNumTokens() - 1, v);
-                });
-                /*
-                 * Action table for (overwrite, replexOverwrite) pairs:
-                 * overwrite | replexOverwrite | Action
-                 *   F              F            Hand out tokens as requested
-                 *   F              T            There was an overwrite in the local stream layer, so allocate
-                 *                               a new global token AND increment local stream offsets. The
-                 *                               action should be identical to the (F,F) case.
-                 *   T              F            There was an overwrite in the global log layer, so ONLY
-                 *                               allocate a new global token, and DO NOT increment local
-                 *                               stream offsets.
-                 *   T              T            This should never happen, because the Replex write protocol
-                 *                               terminates immediately if it encounters a global log overwrite.
-                 */
-                /* TODO: In the (F,T) case, hole-filling (or some other mechanism, perhaps the same writer),
-                 * needs to mark the hanging entry in the global log with a false commit bit.
-                 */
-                if (msg.getPayload().getReplexOverwrite() ||
-                        !msg.getPayload().getOverwrite()) {
-                    // Collect the stream offsets for this token request.
-                    lastLocalOffsetMap.compute(id, (k, v) -> {
-                        if (v == null) {
-                            requestStreamTokens.put(k, req.getNumTokens() - 1L);
-                            return req.getNumTokens() - 1L;
-                        }
-                        requestStreamTokens.put(k, v + req.getNumTokens());
-                        return v + req.getNumTokens();
-                    });
-                }
-            }
-
-            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                    new TokenResponse(thisIssue,
-                            backPointerMap.build(),
-                            requestStreamTokens.build())));
         }
+
+        long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
+
+        // If the txn can commit, or if the request is for a non-txn entry, then proceed normally to
+        // hand out local stream offsets.
+        ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
+        ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
+        for (UUID id : req.getStreams()) {
+            streamTailToGlobalTailMap.compute(id, (k, v) -> {
+                if (v == null) {
+                    backPointerMap.put(k, -1L);
+                    return currentTail + req.getNumTokens() - 1;
+                }
+                backPointerMap.put(k, v);
+                return Math.max(currentTail + req.getNumTokens() - 1, v);
+            });
+            /*
+             * Action table for (overwrite, replexOverwrite) pairs:
+             * overwrite | replexOverwrite | Action
+             *   F              F            Hand out tokens as requested
+             *   F              T            There was an overwrite in the local stream layer, so allocate
+             *                               a new global token AND increment local stream offsets. The
+             *                               action should be identical to the (F,F) case.
+             *   T              F            There was an overwrite in the global log layer, so ONLY
+             *                               allocate a new global token, and DO NOT increment local
+             *                               stream offsets.
+             *   T              T            This should never happen, because the Replex write protocol
+             *                               terminates immediately if it encounters a global log overwrite.
+             */
+            /* TODO: In the (F,T) case, hole-filling (or some other mechanism, perhaps the same writer),
+             * needs to mark the hanging entry in the global log with a false commit bit.
+             */
+            if (msg.getPayload().getReplexOverwrite() ||
+                    !msg.getPayload().getOverwrite()) {
+                // Collect the stream offsets for this token request.
+                streamTailMap.compute(id, (k, v) -> {
+                    if (v == null) {
+                        requestStreamTokens.put(k, req.getNumTokens() - 1L);
+                        return req.getNumTokens() - 1L;
+                    }
+                    requestStreamTokens.put(k, v + req.getNumTokens());
+                    return v + req.getNumTokens();
+                });
+            }
+        }
+
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                new TokenResponse(currentTail,
+                        backPointerMap.build(),
+                        requestStreamTokens.build())));
     }
 
     @Override
@@ -298,9 +305,9 @@ public class SequencerServer extends AbstractServer {
 
     @Override
     public synchronized void reboot() {
-            lastGlobalOffsetMap = new ConcurrentHashMap<>();
-            lastLocalOffsetMap = new ConcurrentHashMap<>();
-            globalIndex = new AtomicLong(0L);
+            streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+            streamTailMap = new ConcurrentHashMap<>();
+            globalLogTail = new AtomicLong(0L);
             long newIndex = Utils.parseLong(opts.get("--initial-token"));
             if (newIndex == -1) {
                 if (!(Boolean) opts.get("--memory")) {
@@ -308,7 +315,7 @@ public class SequencerServer extends AbstractServer {
                         ByteBuffer b = ByteBuffer.allocate((int) fc.size());
                         fc.read(b);
                         if (fc.size() >= 8) {
-                            globalIndex.set(b.getLong(0));
+                            globalLogTail.set(b.getLong(0));
                         } else {
                             log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
                         }
@@ -319,7 +326,7 @@ public class SequencerServer extends AbstractServer {
                     log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
                 }
             } else {
-                globalIndex.set(newIndex);
+                globalLogTail.set(newIndex);
             }
     }
 
