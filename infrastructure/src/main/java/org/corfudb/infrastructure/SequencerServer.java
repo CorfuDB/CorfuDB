@@ -153,7 +153,7 @@ public class SequencerServer extends AbstractServer {
     public boolean txnResolution(long timestamp, Set<UUID> streams) {
         // If the timestamp is -1L, then the transaction automatically commits.
         log.trace("txn resolution, timestamp: {}, streams: {}", timestamp, streams);
-        if (timestamp == 1L)
+        if (timestamp == -1L)
             return true;
 
         AtomicBoolean commit = new AtomicBoolean(true);
@@ -182,15 +182,15 @@ public class SequencerServer extends AbstractServer {
         long maxStreamGlobalTails = -1L;
 
         // Collect the latest local offset for every stream in the request.
-        ImmutableMap.Builder<UUID, Long> currentStreamTails = ImmutableMap.builder();
+        ImmutableMap.Builder<UUID, Long> responseStreamTails = ImmutableMap.builder();
 
         for (UUID id : req.getStreams()) {
             streamTailMap.compute(id, (k, v) -> {
                 if (v == null) {
-                    currentStreamTails.put(k, -1L);
+                    responseStreamTails.put(k, -1L);
                     return null;
                 }
-                currentStreamTails.put(k, v);
+                responseStreamTails.put(k, v);
                 return v;
             });
             // Compute the latest global offset across all streams.
@@ -201,7 +201,7 @@ public class SequencerServer extends AbstractServer {
         // If no streams are specified in the request, this value returns the last global token issued.
         long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 : maxStreamGlobalTails;
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                new TokenResponse(responseGlobalTail, Collections.emptyMap(), currentStreamTails.build())));
+                new TokenResponse(responseGlobalTail, Collections.emptyMap(), responseStreamTails.build())));
     }
 
     /**
