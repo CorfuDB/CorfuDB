@@ -39,8 +39,8 @@ public class SequencerView extends AbstractView {
     }
 
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens, boolean overwrite, boolean replexOverwrite,
-                                                        boolean txnResolution, long readTimestamp) {
+                                                        boolean txnResolution, long readTimestamp, Set<UUID> readSet) {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(
-                streamIDs, numTokens, overwrite, replexOverwrite, txnResolution, readTimestamp)));
+                streamIDs, numTokens, overwrite, replexOverwrite, txnResolution, readTimestamp, readSet)));
     }
 }

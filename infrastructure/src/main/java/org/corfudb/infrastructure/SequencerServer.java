@@ -17,10 +17,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -71,16 +68,18 @@ public class SequencerServer extends AbstractServer {
             .generateHandlers(MethodHandles.lookup(), this);
 
     /**
-     * A simple map of the most recently issued token for any given stream.
+     * A simple map of the most recently issued global offset for any given stream; used for backpointers.
      */
-    ConcurrentHashMap<UUID, Long> lastIssuedMap;
+    ConcurrentHashMap<UUID, Long> lastGlobalOffsetMap;
 
-    // A map of stream local addresses
+    /**
+     * A simple map of the most recently issued local offset for any given stream.
+     */
     ConcurrentHashMap<UUID, Long> lastLocalOffsetMap;
 
     public SequencerServer(ServerContext serverContext) {
         Map<String, Object> opts = serverContext.getServerConfig();
-        lastIssuedMap = new ConcurrentHashMap<>();
+        lastGlobalOffsetMap = new ConcurrentHashMap<>();
         lastLocalOffsetMap = new ConcurrentHashMap<>();
         globalIndex = new AtomicLong();
         this.opts = opts;
@@ -127,7 +126,7 @@ public class SequencerServer extends AbstractServer {
     public void checkpointState() {
         ByteBuffer b = ByteBuffer.allocate(8);
         long checkpointAddress = globalIndex.get();
-        b.putLong(globalIndex.get());
+        b.putLong(checkpointAddress);
         b.flip();
         synchronized (fcLock) {
             if (fc != null) {
@@ -143,102 +142,141 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
+     * Returns true if the txn commits.
+     * If the request submits a timestamp (a global offset) that is less than one of the
+     * global offsets of a stream specified in the request, then abort; otherwise commit.
+     *
+     * @param timestamp Read timestamp of the txn; in order to commit, no writes may be made past this
+     *                  (global) timestamp on any streams touched by the txn.
+     * @param streams   Read set of the txn.
+     */
+    public boolean txnResolution(long timestamp, Set<UUID> streams) {
+        // If the timestamp is -1L, then the transaction automatically commits.
+        log.trace("txn resolution, timestamp: {}, streams: {}", timestamp, streams);
+        if (timestamp != -1L) {
+            AtomicBoolean commit = new AtomicBoolean(true);
+            for (UUID id : streams) {
+                if (!commit.get())
+                    break;
+                lastGlobalOffsetMap.compute(id, (k, v) -> {
+                    if (v == null) {
+                        return null;
+                    } else {
+                        if (v > timestamp) {
+                            log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
+                            commit.set(false);
+                        }
+                    }
+                    return v;
+                });
+            }
+            return commit.get();
+        }
+        return true;
+    }
+
+    public void returnLatestOffsets(CorfuPayloadMsg<TokenRequest> msg,
+                                    ChannelHandlerContext ctx, IServerRouter r) {
+        TokenRequest req = msg.getPayload();
+        // If no streams are specified in the request, this value returns the last global token issued.
+        long latestGlobalOffset = -1L;
+        // Collect the latest local offset for every stream in the request.
+        ImmutableMap.Builder<UUID, Long> requestLatestStreamOffsets = ImmutableMap.builder();
+
+        for (UUID id : req.getStreams()) {
+            lastLocalOffsetMap.compute(id, (k, v) -> {
+                if (v == null) {
+                    requestLatestStreamOffsets.put(k, -1L);
+                    return null;
+                }
+                requestLatestStreamOffsets.put(k, v);
+                return v;
+            });
+            // Compute the latest global offset across all streams.
+            Long lastIssued = lastGlobalOffsetMap.get(id);
+            latestGlobalOffset = Math.max(latestGlobalOffset, lastIssued == null ? Long.MIN_VALUE : lastIssued);
+        }
+        if (req.getStreams().size() == 0) {
+            latestGlobalOffset = globalIndex.get() - 1;
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                new TokenResponse(latestGlobalOffset, Collections.emptyMap(), requestLatestStreamOffsets.build())));
+    }
+
+    /**
      * Service an incoming token request.
      */
     @ServerHandler(type=CorfuMsgType.TOKEN_REQ)
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
+        log.trace("req txn reso: {}", req.getTxnResolution());
         if (req.getNumTokens() == 0) {
-            long max = 0L;
-            boolean hit = false;
-            ImmutableMap.Builder<UUID, Long> streamsLastIssued = ImmutableMap.builder();
-            for (UUID id : req.getStreams()) {
-                lastLocalOffsetMap.compute(id, (k, v) -> {
-                    if (v == null) {
-                        streamsLastIssued.put(k, -1L);
-                        return null;
-                    }
-                    streamsLastIssued.put(k, v);
-                    return v;
-                });
-                Long lastIssued = lastIssuedMap.get(id);
-                if (lastIssued != null) {
-                    hit = true;
-                }
-                max = Math.max(max, lastIssued == null ? Long.MIN_VALUE : lastIssued);
-            }
-            if (!hit) {
-                max = -1L; //no token ever issued
-            }
-            if (req.getStreams().size() == 0) {
-                max = globalIndex.get() - 1;
-            }
-            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                    new TokenResponse(max, Collections.emptyMap(), streamsLastIssued.build())));
+            returnLatestOffsets(msg, ctx, r);
         } else {
-            long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
             if (req.getStreams() == null) {
                 r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                        new TokenResponse(thisIssue, Collections.emptyMap(), Collections.emptyMap())));
+                        new TokenResponse(globalIndex.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
                 return;
             }
+            // If the request is a transaction resolution request, then check if it should abort.
             if (req.getTxnResolution()) {
-                // Then also need a read timestamp.
-                long timestamp = req.getReadTimestamp();
-                if (timestamp != -1L) {
-                    AtomicBoolean abort = new AtomicBoolean(false);
-                    for (UUID id : req.getStreams()) {
-                        if (abort.get())
-                            break;
-                        lastIssuedMap.compute(id, (k, v) -> {
-                            if (v == null) {
-                                return null;
-                            } else {
-                                if (v > timestamp) {
-                                    log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
-                                    abort.set(true);
-                                }
-                            }
-                            return v;
-                        });
-                    }
-                    if (abort.get()) {
-                        globalIndex.getAndAdd(-req.getNumTokens());
-                        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                                new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
-                        return;
-                    }
+                if (!txnResolution(req.getReadTimestamp(), req.getReadSet())) {
+                    // If the txn aborts, then DO NOT hand out a token.
+                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                            new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
+                    return;
                 }
             }
+            long thisIssue = globalIndex.getAndAdd(req.getNumTokens());
 
-            ImmutableMap.Builder<UUID, Long> mb = ImmutableMap.builder();
-            ImmutableMap.Builder<UUID, Long> localAddresses = ImmutableMap.builder();
+            // If the txn can commit, or if the request is for a non-txn entry, then proceed normally to
+            // hand out local stream offsets.
+            ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
+            ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
             for (UUID id : req.getStreams()) {
-                lastIssuedMap.compute(id, (k, v) -> {
+                lastGlobalOffsetMap.compute(id, (k, v) -> {
                     if (v == null) {
-                        mb.put(k, -1L);
+                        backPointerMap.put(k, -1L);
                         return thisIssue + req.getNumTokens() - 1;
                     }
-                    mb.put(k, v);
+                    backPointerMap.put(k, v);
                     return Math.max(thisIssue + req.getNumTokens() - 1, v);
                 });
+                /*
+                 * Action table for (overwrite, replexOverwrite) pairs:
+                 * overwrite | replexOverwrite | Action
+                 *   F              F            Hand out tokens as requested
+                 *   F              T            There was an overwrite in the local stream layer, so allocate
+                 *                               a new global token AND increment local stream offsets. The
+                 *                               action should be identical to the (F,F) case.
+                 *   T              F            There was an overwrite in the global log layer, so ONLY
+                 *                               allocate a new global token, and DO NOT increment local
+                 *                               stream offsets.
+                 *   T              T            This should never happen, because the Replex write protocol
+                 *                               terminates immediately if it encounters a global log overwrite.
+                 */
+                /* TODO: In the (F,T) case, hole-filling (or some other mechanism, perhaps the same writer),
+                 * needs to mark the hanging entry in the global log with a false commit bit.
+                 */
                 if (msg.getPayload().getReplexOverwrite() ||
                         !msg.getPayload().getOverwrite()) {
+                    // Collect the stream offsets for this token request.
                     lastLocalOffsetMap.compute(id, (k, v) -> {
                         if (v == null) {
-                            localAddresses.put(k, 0L);
-                            return 0L;
+                            requestStreamTokens.put(k, req.getNumTokens() - 1L);
+                            return req.getNumTokens() - 1L;
                         }
-                        localAddresses.put(k, v + req.getNumTokens());
+                        requestStreamTokens.put(k, v + req.getNumTokens());
                         return v + req.getNumTokens();
                     });
                 }
             }
+
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                     new TokenResponse(thisIssue,
-                            mb.build(),
-                            localAddresses.build())));
+                            backPointerMap.build(),
+                            requestStreamTokens.build())));
         }
     }
 
@@ -259,32 +297,30 @@ public class SequencerServer extends AbstractServer {
     }
 
     @Override
-    public void reboot() {
-        lastIssuedMap = new ConcurrentHashMap<>();
-        globalIndex = new AtomicLong();
-        long newIndex = Utils.parseLong(opts.get("--initial-token"));
-        if (newIndex == -1) {
-            if (!(Boolean) opts.get("--memory")) {
-                try {
-                    ByteBuffer b = ByteBuffer.allocate((int) fc.size());
-                    fc.read(b);
-                    if (fc.size() >= 8) {
-                        globalIndex.set(b.getLong(0));
-                    } else {
-                        log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
-                        globalIndex.set(0);
+    public synchronized void reboot() {
+            lastGlobalOffsetMap = new ConcurrentHashMap<>();
+            lastLocalOffsetMap = new ConcurrentHashMap<>();
+            globalIndex = new AtomicLong(0L);
+            long newIndex = Utils.parseLong(opts.get("--initial-token"));
+            if (newIndex == -1) {
+                if (!(Boolean) opts.get("--memory")) {
+                    try {
+                        ByteBuffer b = ByteBuffer.allocate((int) fc.size());
+                        fc.read(b);
+                        if (fc.size() >= 8) {
+                            globalIndex.set(b.getLong(0));
+                        } else {
+                            log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
+                        }
+                    } catch (IOException e) {
+                        log.warn("Reboot to zero.  Sequencer checkpoint read & parse: " + e);
                     }
-                } catch (IOException e) {
-                    log.warn("Reboot to zero.  Sequencer checkpoint read & parse: " + e);
-                    globalIndex.set(0);
+                } else {
+                    log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
                 }
             } else {
-                log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
-                globalIndex.set(0);
+                globalIndex.set(newIndex);
             }
-        } else {
-            globalIndex.set(newIndex);
-        }
     }
 
     /**
