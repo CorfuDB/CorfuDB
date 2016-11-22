@@ -151,15 +151,14 @@ public class SequencerServer extends AbstractServer {
      * @param streams   Read set of the txn.
      */
     public boolean txnResolution(long timestamp, Set<UUID> streams) {
-        // If the timestamp is -1L, then the transaction automatically commits.
         log.trace("txn resolution, timestamp: {}, streams: {}", timestamp, streams);
-        if (timestamp == -1L)
-            return true;
 
         AtomicBoolean commit = new AtomicBoolean(true);
         for (UUID id : streams) {
             if (!commit.get())
                 break;
+
+
             streamTailToGlobalTailMap.compute(id, (k, v) -> {
                 if (v == null) {
                     return null;
