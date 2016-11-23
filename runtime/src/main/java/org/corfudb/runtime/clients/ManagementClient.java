@@ -8,6 +8,8 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Map;
@@ -31,6 +33,8 @@ public class ManagementClient implements IClient {
     public final Set<CorfuMsgType> HandledTypes =
             new ImmutableSet.Builder<CorfuMsgType>()
                     .add(CorfuMsgType.MANAGEMENT_BOOTSTRAP)
+                    .add(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP)
+                    .add(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP)
                     .add(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)
                     .build();
 
@@ -50,8 +54,14 @@ public class ManagementClient implements IClient {
             case MANAGEMENT_BOOTSTRAP:
                 router.completeRequest(msg.getRequestID(), ((CorfuPayloadMsg<Layout>) msg).getPayload());
                 break;
+            case MANAGEMENT_NOBOOTSTRAP:
+                router.completeExceptionally(msg.getRequestID(), new NoBootstrapException());
+                break;
             case MANAGEMENT_FAILURE_DETECTED:
                 router.completeRequest(msg.getRequestID(), ((CorfuPayloadMsg<FailureDetectorMsg>) msg).getPayload());
+                break;
+            case MANAGEMENT_ALREADY_BOOTSTRAP:
+                router.completeExceptionally(msg.getRequestID(), new AlreadyBootstrappedException());
                 break;
         }
     }
