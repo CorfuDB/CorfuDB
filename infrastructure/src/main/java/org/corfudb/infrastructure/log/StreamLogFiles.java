@@ -348,7 +348,7 @@ public class StreamLogFiles implements StreamLog {
                 throw new OverwriteException();
             }
             log.info("Disk_write[{}]: Written to disk.", logAddress);
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.error("Disk_write[{}]: Exception", logAddress, e);
             throw new RuntimeException(e);
         }
