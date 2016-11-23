@@ -3,7 +3,6 @@ package org.corfudb.runtime.object;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.collections.WrappedMap;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
@@ -24,7 +23,7 @@ public class CompileProxyTest extends AbstractViewTest {
                                     .getObjectsView().build()
                                     .setStreamName("my stream")
                                     .setUseCompiledClass(true)
-                                    .setTypeToken(new TypeToken<WrappedMap<String,String>>() {})
+                                    .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
                                     .open();
 
         getDefaultRuntime().getObjectsView().TXBegin();

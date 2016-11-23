@@ -659,7 +659,7 @@ public class SMRMapTest extends AbstractViewTest {
                                                         getRuntime()
                                                                 .getObjectsView().build()
                                                                 .setStreamName("map-" + x)
-                                                                .setTypeToken(new TypeToken<WrappedMap<Integer, Integer>>() {})
+                                                                .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {})
                                                                 .open()
                                                     )
                                                     .collect(Collectors.toList());
