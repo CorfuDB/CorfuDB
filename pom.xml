@@ -313,14 +313,6 @@
                     <workingDirectory>${project.build.directory}</workingDirectory>
                 </configuration>
                 <version>2.19.1</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>pl.project13.maven</groupId>
