@@ -8,8 +8,10 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests the Management client.
@@ -62,8 +64,8 @@ public class ManagementClientTest extends AbstractClientTest {
     @Test
     public void handleBootstrap()
             throws Exception {
-
-        assertThat(client.bootstrapManagement(TestLayoutBuilder.single(9000)).get()).isEqualTo(true);
+        // Since the servers are started as single nodes thus already bootstrapped.
+        assertThatThrownBy(() -> client.bootstrapManagement(TestLayoutBuilder.single(9000)).get()).isInstanceOf(ExecutionException.class);
     }
 
     /**
@@ -75,7 +77,7 @@ public class ManagementClientTest extends AbstractClientTest {
     public void handleFailure()
             throws Exception {
 
-        client.bootstrapManagement(TestLayoutBuilder.single(9000)).get();
+        // Since the servers are started as single nodes thus already bootstrapped.
         Map map = new HashMap<String, Boolean>();
         map.put("Key", true);
         assertThat(client.handleFailure(map).get()).isEqualTo(true);

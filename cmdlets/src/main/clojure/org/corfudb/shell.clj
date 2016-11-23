@@ -31,9 +31,10 @@
 (def *args nil)
 (def usage "The Corfu Shell.
 Usage:
-  shell
-  shell run-script [-n] <script> [<args>...]
+  shell [-p <port>]
+  shell run-script [-n] [-p <port>] <script> [<args>...]
 Options:
+  -p --port      Listens on the specified port.
   -n --no-exit   When used with a script, does not terminate automatically.
   -h, --help     Show this screen.
 ")
@@ -72,6 +73,8 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
   (if (and (.. cmd (get "run-script"))
       (not (.. cmd (get "--no-exit"))))
             (def repl-args (assoc repl-args :caught '(do (System/exit 0)))) ())
+  (if (nil? (.. cmd (get "--port"))) ()
+      (def repl-args (assoc repl-args :port (.. cmd (get "<port>")))))
   (if (.. cmd (get "run-script")) (def repl-args (assoc repl-args :custom-eval '(do (in-ns 'org.corfudb.shell)))) ())
   (if (.. cmd (get "run-script")) (def repl-args (assoc repl-args :custom-init
      (org.corfudb.shell/-formify-file (.. cmd (get "<script>")) (.. cmd (get "--no-exit"))))) ())
