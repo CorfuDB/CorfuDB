@@ -296,9 +296,8 @@ public class StreamLogFiles implements StreamLog {
             // (probably need a faster way to do this - high watermark?)
             FileHandle fh = getChannelForAddress(address);
             if (!fh.getKnownAddresses().contains(address)) {
-                fh.getKnownAddresses().add(address);
                 writeRecord(fh, address, entry);
-
+                fh.getKnownAddresses().add(address);
             } else {
                 throw new OverwriteException();
             }
