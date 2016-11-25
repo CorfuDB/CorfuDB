@@ -143,7 +143,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         File logFile = new File(logFilePath);
         logFile.createNewFile();
         RandomAccessFile file = new RandomAccessFile(logFile, "rw");
-        StreamLogFiles.writeHeader(file.getChannel(), new AtomicLong(), version, noVerify);
+        StreamLogFiles.writeHeader(file.getChannel(), version, noVerify);
         file.close();
 
         return logFile.getAbsolutePath();
