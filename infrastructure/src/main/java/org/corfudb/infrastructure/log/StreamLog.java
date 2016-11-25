@@ -15,14 +15,14 @@ public interface StreamLog {
      * @param address
      * @param entry
      */
-    void append(long address, LogData entry);
+    void append(LogAddress address, LogData entry);
 
     /**
      * Given an address, read the corresponding stream entry.
      * @param address
      * @return Stream entry if it exists, otherwise return null
      */
-    LogData read(long address);
+    LogData read(LogAddress address);
 
     /**
      * Sync the stream log file to secondary storage.

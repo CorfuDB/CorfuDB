@@ -222,27 +222,11 @@ public class LogUnitServer extends AbstractServer {
     LoadingCache<LogAddress, LogData> dataCache;
     long maxCacheSize;
 
-    private StreamLog localLog;
+    private StreamLog streamLog;
 
     // This shouldn't be a max. This should be the size of the mapping window.
     public static long maxLogFileSize = Integer.MAX_VALUE >> 4;  // 512MB by default
 
-    private final ConcurrentHashMap<UUID, StreamLog> streamLogs = new ConcurrentHashMap<>();
-
-    private StreamLog getLog(UUID stream) {
-        if (stream == null) return localLog;
-        else {
-            return streamLogs.computeIfAbsent(stream, x-> {
-                if ((Boolean) opts.get("--memory")) {
-                    return new InMemoryStreamLog();
-                }
-                else {
-                    String logdir = opts.get("--log-path") + File.separator + "log" + File.separator + stream;
-                    return new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
-                }
-            });
-        }
-    }
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
@@ -274,7 +258,7 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void reset() {
         String d = serverContext.getDataStore().getLogDir();
-        localLog.close();
+        streamLog.close();
         if (d != null) {
             Path dir = FileSystems.getDefault().getPath(d);
             String prefixes[] = new String[]{"log"};
@@ -300,10 +284,14 @@ public class LogUnitServer extends AbstractServer {
                     "This should be run for testing purposes only. " +
                     "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
                     "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
-            localLog = new InMemoryStreamLog();
+            streamLog = new InMemoryStreamLog();
         } else {
             String logdir = opts.get("--log-path") + File.separator + "log";
-            localLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
+            File dir = new File(logdir);
+            if(!dir.exists()){
+                dir.mkdir();
+            }
+            streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
         }
 
         if (dataCache != null) {
@@ -319,11 +307,7 @@ public class LogUnitServer extends AbstractServer {
                 .writer(new CacheWriter<LogAddress, LogData>() {
                     @Override
                     public void write(@Nonnull LogAddress address, @Nonnull LogData entry) {
-                        if (address.getStream() != null) {
-                            getLog(address.getStream()).append(address.getAddress(), entry);
-                        } else {
-                            localLog.append(address.getAddress(), entry);
-                        }
+                            streamLog.append(address, entry);
                     }
 
                     @Override
@@ -340,21 +324,15 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Retrieve the LogUnitEntry from disk, given an address.
      *
-     * @param address The address to retrieve the entry from.
+     * @param logAddress The address to retrieve the entry from.
      * @return The log unit entry to retrieve into the cache.
      * This function should not care about trimmed addresses, as that is handled in
      * the read() and write(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
-    public synchronized LogData handleRetrieval(LogAddress address) {
-        LogData entry;
-        if (address.getStream() != null) {
-            entry = getLog(address.getStream()).read(address.getAddress());
-        }
-        else {
-            entry = localLog.read(address.getAddress());
-        }
-        log.trace("Retrieved[{} : {}]", address, entry);
+    public synchronized LogData handleRetrieval(LogAddress logAddress) {
+        LogData entry = streamLog.read(logAddress);
+        log.trace("Retrieved[{} : {}]", logAddress, entry);
         return entry;
     }
 

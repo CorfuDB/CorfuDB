@@ -65,7 +65,7 @@ public class StreamLogFiles implements StreamLog {
 
     private final boolean noVerify;
     public final String logDir;
-    private Map<Long, FileHandle> writeChannels;
+    private Map<String, FileHandle> writeChannels;
 
     public StreamLogFiles(String logDir, boolean noVerify) {
         this.logDir = logDir;
@@ -238,15 +238,25 @@ public class StreamLogFiles implements StreamLog {
      * Gets the file channel for a particular address, creating it
      * if is not present in the map.
      *
-     * @param address The address to open.
+     * @param logAddress The address to open.
      * @return The FileChannel for that address.
      */
-    private synchronized FileHandle getFileHandleForAddress(long address) {
-        return writeChannels.computeIfAbsent(address / RECORDS_PER_LOG_FILE, a -> {
+    private synchronized FileHandle getFileHandleForAddress(LogAddress logAddress) {
+        String filePath = logDir + File.separator;
+        long segment = logAddress.address / RECORDS_PER_LOG_FILE;
+
+        if(logAddress.getStream() == null) {
+            filePath += segment;
+        } else {
+            filePath += logAddress.getStream().toString() + "-" + segment;
+        }
+
+        filePath +=  ".log";
+
+        return writeChannels.computeIfAbsent(filePath, a -> {
 
             try {
-                String filePath = logDir + a.toString() + ".log";
-                FileChannel fc = getChannel(filePath, false);
+                FileChannel fc = getChannel(a, false);
 
                 boolean verify = true;
 
@@ -255,8 +265,8 @@ public class StreamLogFiles implements StreamLog {
                 }
 
                 writeHeader(fc, VERSION, verify);
-                log.info("Opened new log file at {}", filePath);
-                FileHandle fh = new FileHandle(fc, filePath);
+                log.info("Opened new log file at {}", a);
+                FileHandle fh = new FileHandle(fc, a);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 readRecord(fh, -1);
@@ -325,29 +335,29 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public void append(long address, LogData entry) {
+    public void append(LogAddress logAddress, LogData entry) {
         //evict the data by getting the next pointer.
         try {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
-            FileHandle fh = getFileHandleForAddress(address);
-            if (!fh.getKnownAddresses().contains(address)) {
-                writeRecord(fh, address, entry);
-                fh.getKnownAddresses().add(address);
+            FileHandle fh = getFileHandleForAddress(logAddress);
+            if (!fh.getKnownAddresses().contains(logAddress.address)) {
+                writeRecord(fh, logAddress.address, entry);
+                fh.getKnownAddresses().add(logAddress.address);
             } else {
                 throw new OverwriteException();
             }
-            log.info("Disk_write[{}]: Written to disk.", address);
+            log.info("Disk_write[{}]: Written to disk.", logAddress);
         } catch (Exception e) {
-            log.error("Disk_write[{}]: Exception", address, e);
+            log.error("Disk_write[{}]: Exception", logAddress, e);
             throw new RuntimeException(e);
         }
     }
 
     @Override
-    public LogData read(long address) {
+    public LogData read(LogAddress logAddress) {
         try {
-            return readRecord(getFileHandleForAddress(address), address);
+            return readRecord(getFileHandleForAddress(logAddress), logAddress.address);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -414,10 +424,7 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void close() {
-        Iterator<Long> it = writeChannels.keySet().iterator();
-        while (it.hasNext()) {
-            Long key = it.next();
-            FileHandle fh = writeChannels.get(key);
+        for (FileHandle fh : writeChannels.values()) {
             try {
                 fh.getChannel().force(true);
                 fh.getChannel().close();
@@ -427,6 +434,7 @@ public class StreamLogFiles implements StreamLog {
                 log.warn("Error closing fh {}: {}", fh.toString(), e.toString());
             }
         }
+
         writeChannels = new HashMap<>();
     }
 }
