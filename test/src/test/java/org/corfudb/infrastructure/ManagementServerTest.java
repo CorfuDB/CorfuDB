@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.runtime.view.Layout;
+import org.junit.After;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -18,13 +19,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class ManagementServerTest extends AbstractServerTest {
 
+    private ManagementServer managementServer;
+
     @Override
     public ManagementServer getDefaultServer() {
         ServerContext serverContext = new ServerContextBuilder()
                 .setSingle(false)
                 .setServerRouter(getRouter())
                 .build();
-        return new ManagementServer(serverContext);
+        managementServer = new ManagementServer(serverContext);
+        return managementServer;
+    }
+
+    @After
+    public void cleanUp() {
+        managementServer.shutdown();
     }
 
     /**
