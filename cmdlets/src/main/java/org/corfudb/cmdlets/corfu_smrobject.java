@@ -3,6 +3,7 @@ package org.corfudb.cmdlets;
 import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
@@ -50,6 +51,10 @@ public class corfu_smrobject implements ICmdlet {
             SequencerServer ss = CorfuServer.getSequencerServer();
             if (ls != null && ss != null) {
 
+                // Reset the local management server.
+                ManagementServer ms = CorfuServer.getManagementServer();
+                ms.reset();
+
                 // Reset the local log server.
                 ls.reset();
 
@@ -79,6 +84,8 @@ public class corfu_smrobject implements ICmdlet {
             }
         }
         if (args != null && args.length > 0 && args[0].contentEquals("reboot")) {
+            ManagementServer ms = CorfuServer.getManagementServer();
+            ms.reboot();
             LogUnitServer ls = CorfuServer.getLogUnitServer();
             if (ls != null) {
                 ls.reboot();
