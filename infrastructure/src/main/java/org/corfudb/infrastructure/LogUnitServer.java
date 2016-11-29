@@ -224,24 +224,10 @@ public class LogUnitServer extends AbstractServer {
 
     private StreamLog streamLog;
 
-    // This shouldn't be a max. This should be the size of the mapping window.
-    public static long maxLogFileSize = Integer.MAX_VALUE >> 4;  // 512MB by default
-
-
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
-
         maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
-        if (opts.get("--quickcheck-test-mode") != null &&
-            (Boolean) opts.get("--quickcheck-test-mode")) {
-            // It's really annoying when using OS X + HFS+ that HFS+ does not
-            // support sparse files.  If we use the default 2GB file size, then
-            // every time that a sparse file is closed, the OS will always
-            // write 2GB of data to disk.  {sadpanda}  Use this static class
-            // var to signal to StreamLogFiles to use a smaller file size.
-            maxLogFileSize = 4_000_000;
-        }
 
         reboot();
 
