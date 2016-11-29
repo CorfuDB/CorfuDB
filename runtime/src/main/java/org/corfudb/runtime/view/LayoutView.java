@@ -62,6 +62,10 @@ public class LayoutView extends AbstractView {
         //phase 1: prepare with a given rank.
         Layout alreadyProposedLayout = prepare(epoch, rank, layout);
         layoutToPropose = alreadyProposedLayout != null ? alreadyProposedLayout : layout;
+        // For some reason, the alreadyProposedLayout sometimes doesn't have a runtime
+        // we need to remove runtime from the layout, but for now, let's manually take
+        // it from the original layout.
+        layoutToPropose.setRuntime(layout.getRuntime());
         //phase 2: propose the new layout.
         propose(epoch, rank, layoutToPropose);
         //phase 3: commited

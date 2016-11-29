@@ -144,13 +144,6 @@ public class LogUnitClientTest extends AbstractClientTest {
         assertThat(r.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT));
 
         UUID streamA = CorfuRuntime.getStreamID("streamA");
-        // Create log directories for streams
-        String streamLogDir = (String) serverContext.getServerConfig().get("--log-path");
-        streamLogDir = streamLogDir + File.separator + "log";
-        File streamDir = new File(streamLogDir);
-
-        assertThat(streamDir.mkdir()).isTrue();
-
         client.writeStream(1, Collections.singletonMap(streamA, 0L), testString).get();
         client.writeCommit(Collections.singletonMap(streamA, 0L), 10L, true).get(); // 10L shouldn't matter
 
@@ -176,7 +169,7 @@ public class LogUnitClientTest extends AbstractClientTest {
 
         // Corrupt the written log entry
         String logDir = (String) serverContext.getServerConfig().get("--log-path");
-        String logFilePath = logDir + File.separator + "log0.log";
+        String logFilePath = logDir + File.separator + "log/0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
         file.seek(64 + 2); // File header + delimiter
         file.writeInt(0xffff);

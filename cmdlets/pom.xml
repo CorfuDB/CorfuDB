@@ -40,6 +40,16 @@
             <artifactId>reply</artifactId>
             <version>0.3.7</version>
         </dependency>
+        <dependency>
+            <groupId>com.offbytwo</groupId>
+            <artifactId>docopt</artifactId>
+            <version>0.6.0.20150202</version>
+        </dependency>
+        <dependency>
+            <groupId>org.fusesource.jansi</groupId>
+            <artifactId>jansi</artifactId>
+            <version>1.11</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -49,6 +59,9 @@
                 <artifactId>clojure-maven-plugin</artifactId>
                 <version>1.8.1</version>
                 <extensions>true</extensions>
+                <configuration>
+                    <temporaryOutputDirectory>true</temporaryOutputDirectory>
+                </configuration>
                 <executions>
                     <execution>
                         <id>compile</id>

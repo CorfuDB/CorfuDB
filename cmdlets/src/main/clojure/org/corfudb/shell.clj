@@ -31,9 +31,10 @@
 (def *args nil)
 (def usage "The Corfu Shell.
 Usage:
-  shell
-  shell run-script [-n] <script> [<args>...]
+  shell [-p <port>]
+  shell run-script [-n] [-p <port>] <script> [<args>...]
 Options:
+  -p --port      Listens on the specified port.
   -n --no-exit   When used with a script, does not terminate automatically.
   -h, --help     Show this screen.
 ")
@@ -47,7 +48,7 @@ Options:
   (read-string (-formify-file-exit (-formify-file-base f) noexit)))
 
 
-(defn -main [& args]
+(defn -main [args]
   (def cmd (.. (.. (new Docopt usage) (withOptionsFirst true))
                (parse (if (nil? args) (make-array String 0) args))))
   (require 'reply.main)
@@ -69,7 +70,11 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
                                        (in-ns 'org.corfudb.shell))
                   :color true
                   :skip-default-init true})
-  (if (.. cmd (get "run-script")) (def repl-args (assoc repl-args :caught '(do (System/exit 0)))) ())
+  (if (and (.. cmd (get "run-script"))
+      (not (.. cmd (get "--no-exit"))))
+            (def repl-args (assoc repl-args :caught '(do (System/exit 0)))) ())
+  (if (nil? (.. cmd (get "--port"))) ()
+      (def repl-args (assoc repl-args :port (.. cmd (get "<port>")))))
   (if (.. cmd (get "run-script")) (def repl-args (assoc repl-args :custom-eval '(do (in-ns 'org.corfudb.shell)))) ())
   (if (.. cmd (get "run-script")) (def repl-args (assoc repl-args :custom-init
      (org.corfudb.shell/-formify-file (.. cmd (get "<script>")) (.. cmd (get "--no-exit"))))) ())
@@ -106,10 +111,31 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 (defn get-management-client ([] (.. *o (getClient org.corfudb.runtime.clients.ManagementClient)))
   ([router] (.. router (getClient org.corfudb.runtime.clients.ManagementClient))))
 
+
 ; Functions to interact with a runtime.
+(defn get-objects-view ([] (.. *r (getObjectsView)))
+  ([runtime] (.. runtime (getObjectsView))))
+(defn get-address-space-view ([] (.. *r (getAddressSpaceView)))
+  ([runtime] (.. runtime (getAddressSpaceView))))
+(defn get-sequencer-view ([] (.. *r (getSequencerView)))
+  ([runtime] (.. runtime (getSequencerView))))
+(defn get-layout-view ([] (.. *r (getLayoutView)))
+  ([runtime] (.. runtime (getLayoutView))))
 (defn get-stream ([stream] (.. (.. *r (getStreamsView)) (get stream))))
 
 ; Helper functions
 (defn uuid-from-string "Takes a string and parses it to UUID if it is not a UUID"
   [string-param] (try (java.util.UUID/fromString string-param)
    (catch Exception e (org.corfudb.runtime.CorfuRuntime/getStreamID string-param))))
+(defn pprint-json "Pretty prints a JSON string. Used because of issues due to AOT compilation."
+  [string] (println (org.corfudb.util.JSONUtils/prettyPrint string)))
+(defn edit-file
+  "Open a file in an editor, blocking until completion"
+  [path]
+  (let [editor-path (or (System/getenv "VISUAL")
+                        "vi")]
+    (let [editor (new ProcessBuilder (into-array String [editor-path path]))]
+      (do (.redirectOutput editor java.lang.ProcessBuilder$Redirect/INHERIT)
+          (.redirectInput editor java.lang.ProcessBuilder$Redirect/INHERIT)
+          (.redirectError editor java.lang.ProcessBuilder$Redirect/INHERIT)
+          (.waitFor (.start editor))))))

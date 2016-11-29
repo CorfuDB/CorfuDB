@@ -353,10 +353,4 @@ public class Utils {
             }
         }
     }
-
-    public static Checksum getChecksum(byte[] bytes){
-        HashFunction hashFunction = Hashing.crc32c();
-        HashCode code = hashFunction.hashBytes(bytes);
-        return new BufferChecksum(code.asBytes());
-    }
 }
