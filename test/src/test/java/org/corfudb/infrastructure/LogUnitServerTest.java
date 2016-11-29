@@ -15,7 +15,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Collections;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
 
@@ -52,6 +51,14 @@ public class LogUnitServerTest extends AbstractServerTest {
         sendMessage(CorfuMsgType.WRITE.payloadMsg(wr));
 
         LoadingCache<LogAddress, LogData> dataCache = s1.getDataCache();
+
+        for(int x = 0; x < 4; x++) {
+            if(dataCache.get(new LogAddress(address, null)) != null) {
+                break;
+            }
+            Thread.sleep(500);
+        }
+
         // Make sure that extra bytes are truncated from the payload byte buf
         Assertions.assertThat(dataCache.get(new LogAddress(address, null)).getData().capacity()).isEqualTo(1);
     }
@@ -104,6 +111,15 @@ public class LogUnitServerTest extends AbstractServerTest {
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+
+        for(int x = 0; x < 4; x++) {
+            if (s1.dataCache.get(new LogAddress(0L, null)) != null
+                    && s1.dataCache.get(new LogAddress(100L, null)) != null
+                    && s1.dataCache.get(new LogAddress(10000000L, null)) != null) {
+                break;
+            }
+            Thread.sleep(500);
+        }
 
         assertThat(s1)
                 .containsDataAtAddress(0)
