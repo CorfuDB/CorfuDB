@@ -20,6 +20,7 @@ import java.io.RandomAccessFile;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -80,7 +81,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
         assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), 0,
                 testString, Collections.emptyMap()).get())
-                .isInstanceOf(RuntimeException.class)
+                .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }
 
@@ -94,7 +95,7 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .isEqualTo(DataType.HOLE);
 
         assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get())
-                .isInstanceOf(RuntimeException.class)
+                .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }
 
@@ -109,7 +110,7 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .isEqualTo(DataType.DATA);
 
         assertThatThrownBy(() -> client.fillHole(0).get())
-                .isInstanceOf(RuntimeException.class)
+                .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }
 
