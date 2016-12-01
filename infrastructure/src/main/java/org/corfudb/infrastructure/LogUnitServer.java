@@ -246,18 +246,18 @@ public class LogUnitServer extends AbstractServer {
         String d = serverContext.getDataStore().getLogDir();
         streamLog.close();
         if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d);
-            String prefixes[] = new String[]{"log"};
-
-            for (String pfx : prefixes) {
-                try (DirectoryStream<Path> stream =
-                             Files.newDirectoryStream(dir, pfx + "*")) {
-                    for (Path entry : stream) {
+            Path dir = FileSystems.getDefault().getPath(d + File.separator + "log");
+            try (DirectoryStream<Path> stream =
+                         Files.newDirectoryStream(dir, "*")) {
+                for (Path entry : stream) {
+                    try {
                         Files.delete(entry);
+                    } catch (IOException ie) {
+                        log.error("reset: error deleting " + entry.toString() + ": " + entry.toString());
                     }
-                } catch (IOException e) {
-                    log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
                 }
+            } catch (IOException e) {
+                log.error("reset: error for dir " + dir + ": " + e.toString());
             }
         }
         reboot();
