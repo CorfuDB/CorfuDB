@@ -59,6 +59,27 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    public void testSync() throws Exception {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        long seg1 = StreamLogFiles.RECORDS_PER_LOG_FILE * 0 + 1;
+        long seg2 = StreamLogFiles.RECORDS_PER_LOG_FILE * 1 + 1;
+        long seg3 = StreamLogFiles.RECORDS_PER_LOG_FILE * 2 + 1;
+
+        log.append(new LogAddress(seg1, null), new LogData(DataType.DATA, b));
+        log.append(new LogAddress(seg2, null), new LogData(DataType.DATA, b));
+        log.append(new LogAddress(seg3, null), new LogData(DataType.DATA, b));
+
+        assertThat(log.getChannelsToSync().size()).isEqualTo(3);
+
+        log.sync();
+
+        assertThat(log.getChannelsToSync().size()).isEqualTo(0);
+    }
+
+    @Test
     public void testReadingUnknownAddress() {
         StreamLog log = new StreamLogFiles(getDirPath(), false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
