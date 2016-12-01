@@ -59,7 +59,7 @@ public class StreamViewTest extends AbstractViewTest {
 
         scheduleConcurrently(100, i -> assertThat(sv.read().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes()));
-        executeScheduled(8, 10, TimeUnit.SECONDS);
+        executeScheduled(8, 25, TimeUnit.SECONDS);
         assertThat(sv.read())
                 .isEqualTo(null);
     }
