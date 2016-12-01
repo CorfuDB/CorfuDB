@@ -55,8 +55,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(address0, new LogData(DataType.DATA, b));
 
         assertThatThrownBy(() -> log.append(address0, new LogData(DataType.DATA, b)))
-                .isInstanceOf(RuntimeException.class)
-                .hasCauseInstanceOf(OverwriteException.class);
+                .isInstanceOf(OverwriteException.class);
     }
 
     @Test
