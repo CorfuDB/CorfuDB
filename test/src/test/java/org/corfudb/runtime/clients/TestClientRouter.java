@@ -69,19 +69,19 @@ public class TestClientRouter implements IClientRouter {
      */
     @Getter
     @Setter
-    public long timeoutConnect = 5000L;
+    public long timeoutConnect = 50L;
     /**
      * Sync call response timeout (milliseconds)
      */
     @Getter
     @Setter
-    public long timeoutResponse = 5000L;
+    public long timeoutResponse = 50L;
     /**
      * Retry interval after timeout (milliseconds)
      */
     @Getter
     @Setter
-    public long timeoutRetry = 5000L;
+    public long timeoutRetry = 50L;
 
     public List<TestRule> rules;
 
