@@ -14,7 +14,7 @@ See the "Prerequisites" section for details.
 
 We assume that you already have the development prerequisites
 installed for Java development for CorfuDB: Java JDK version 8 and
-also `maven`.
+also Maven.
 
 ## 2.1 Erlang/OTP
 
@@ -89,7 +89,7 @@ into a shell to execute it:
     
 ## 2.3 Compiling CorfuDB
 
-    cd /path/to/CorfudB
+    cd /path/to/CorfuDB
     mvn install
 
 # 3. Running CorfuDB in QuickCheck testing mode
@@ -115,11 +115,6 @@ If you wish to change the server's command line arguments, adjust the
 
 Flags are explained below:
 
-* `-Q` for QuickCheck testing mode.  The CorfuDB "cmdlet" API is
-  (ab)used by the QuickCheck framework for Erlang<->Java
-  communication.
-  Do not omit this flag.
-
 * `-l /some/path` is very strongly recommended because we want to test
   stateful persistence with the file system.  In memory-only mode, we
   won't be able to test persistence, and also the `reboot` testing
@@ -129,9 +124,7 @@ Flags are explained below:
 * `-s` flag, to start the server in single-node mode.
   Do not omit this flag.
 
-* `--cm-poll-interval=99999` can reduce the amount of spammy error
-  messages on the server's console & log file by making the
-  "configuration manager" polling interval very large.
+* `-d ERROR` Log messages at `ERROR` level or higher.
 
 * `8000` The TCP port number used by the server.  This port number
   must also be shared with QuickCheck.
@@ -147,8 +140,8 @@ The documentation here describes running the `layout_qc` test model,
 which is a single server SUT (System Under Test) to exercise the Paxos
 protocol primitive operations used by the CorfuDB layout manager.  The
 method is very similar for testing other test models, e.g., the
-`smrmap_qc` model for testing the state machine replicated map
-`SMRMap`.
+`map_qc` model for testing the state machine replicated maps
+`SMRMap` and `FGMap`.
 
 First, set an environment variable to point to the top of the local
 PropEr source code repository.
@@ -240,8 +233,10 @@ The reference documentation for PropEr can be found at
 
 ## Erlang<->Java message passing
 
-The CorfuDB JVM process, when running with the `corfu_server -Q`
-flag, will run the Erlang distributed messaging protocol.  From the
+The CorfuDB JVM process, when running with an
+`org.corfudb.cmdlets.QuickCheckMode` object instantiated,
+will run the Erlang distributed messaging protocol in addition to
+CorfuDB's protocol.  From the
 network's point of view, the JVM *is* an Erlang VM.
 
 The `Build.sh` script uses the following assumptions about the

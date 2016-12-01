@@ -97,6 +97,11 @@ public class LayoutServer extends AbstractServer {
 
     @Override
     public synchronized void reset() {
+        // File system state surrounding server epoch will be deleted later in this function.
+        // However, we must also re-set live object state in the server router.
+        // getServerContext().getServerRouter().setServerEpoch(0);
+        setServerEpoch(0);
+
         String d = serverContext.getDataStore().getLogDir();
         if (d != null) {
             Path dir = FileSystems.getDefault().getPath(d);
@@ -114,16 +119,6 @@ public class LayoutServer extends AbstractServer {
                     log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
                 }
             }
-            /*
-            try (DirectoryStream<Path> stream =
-                         Files.newDirectoryStream(dir, "*")) {
-                for (Path entry : stream) {
-                    System.out.println("Remaining file " + entry);
-                }
-            } catch (IOException e) {
-                log.error("reset: error deleting prefix: " + e.toString());
-            }
-            */
         }
         reset_part_2();
         reboot();

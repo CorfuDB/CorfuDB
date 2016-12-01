@@ -18,14 +18,33 @@
 %%
 %% -------------------------------------------------------------------
 
+-define(QUICK_MBOX, qc_java:quick_mbox_endpoint()).
+
 -ifdef(PROPER).
+
+%% Automagically import generator functions like choose(), frequency(), etc.
+-include_lib("proper/include/proper.hrl").
+
+%% Proper doesn't like postcondition() return values that are not
+%% boolean().  So, for non-true return values, we wrap in ?ELSE() so
+%% that EQC QuickCheck can be slightly more helpful in reporting
+%% postcondition() failures.
+-define(ELSE(_X), false).
 
 -define(WRAP_ALWAYS(Num, Test),
         conjunction([{list_to_atom("always"++integer_to_list(Xqq__)), (Test)} ||
                         Xqq__ <- lists:seq(1, Num)])).
 
--define(PRETTY_FAIL(_Mod, _Cmds, H, S_or_Hs,Res, Check),
-        ?WHENFAIL(io:format("H: ~p~nS: ~p~nR: ~p~n", [H,S_or_Hs,Res]),
+-define(PRETTY_FAIL(Mod, _Cmds, H, S_or_Hs,Res, Check),
+        ?WHENFAIL(io:format("History:~n~s~n~nState(s):~n~s~n~nResult:~n~s~n~n~s~n~s~n",
+                            [
+                             qc_java:pf(H, Mod),
+                             qc_java:pf(S_or_Hs, Mod),
+                             qc_java:pf(Res, Mod),
+                             "To fetch Erlang counterexample: proper:counterexample().",
+                             ("To pretty print counterexample: " ++ atom_to_list(Mod) ++ ":pp(proper:counterexample()).")
+                            ]
+                           ),
                   Check)).
 
 -define(COMMANDS_LENGTH(Cmds),
@@ -41,6 +60,12 @@
 -endif.
 
 -ifdef(EQC).
+
+%% Automagically import generator functions like choose(), frequency(), etc.
+-include_lib("eqc/include/eqc.hrl").
+-include_lib("eqc/include/eqc_statem.hrl").
+
+-define(ELSE(X), (X)).
 
 -define(WRAP_ALWAYS(Num, Test),
         begin

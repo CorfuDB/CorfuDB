@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 

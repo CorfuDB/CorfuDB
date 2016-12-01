@@ -22,24 +22,12 @@
 
 %% See the README.md file for instructions for compiling & running.
 
--ifdef(PROPER).
-%% Automagically import generator functions like choose(), frequency(), etc.
--include_lib("proper/include/proper.hrl").
--endif.
+-include("qc_java.hrl").
 
--ifdef(EQC).
-%% Automagically import generator functions like choose(), frequency(), etc.
--include_lib("eqc/include/eqc.hrl").
--include_lib("eqc/include/eqc_statem.hrl").
--endif.
-
--define(QUICK_MBOX, qc_java:quick_mbox_endpoint()).
 -define(TIMEOUT, 15*1000).
 
 -define(NO_PREPARED_RANK, -999).
 -define(NO_PROPOSED_RANK, -999).
-
--include("qc_java.hrl").
 
 -compile(export_all).
 
@@ -63,6 +51,13 @@
           last_epoch_set=0,    % Must match server's epoch after reset()!
           clientIDs=orddict:new()
          }).
+
+-record(exec, {step,func,args}).                % exec step: {set,{var,_},...}
+-record(s, {epoch}).                            % set_epoch
+-record(l_out, {epoch, seqs}).
+-record(p1, {c_epoch, rank}).                   % prepare
+-record(p2, {c_epoch, rank, l}).                % propose
+-record(c, {c_epoch, rank, l}).                 % commit
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -363,10 +358,7 @@ next_state(S=#state{committed_layout=CL,
     if Layout#layout.epoch >= LastEpochSet
        andalso
        Layout#layout.epoch >= CommittedEpoch ->
-            S#state{prepared_rank={?NO_PREPARED_RANK,""},
-                    proposed_rank={?NO_PROPOSED_RANK,""},
-                    proposed_layout=layout_not_proposed,
-                    committed_layout=Layout,
+            S#state{committed_layout=Layout,
                     %% A committed layout also updates the server's
                     %% epoch in the same manner that the sealing
                     %% behavior of SET_EPOCH does.
@@ -402,7 +394,7 @@ prepare(Mbox, Endpoint, C_Epoch, Rank) ->
 
 propose(Mbox, Endpoint, C_Epoch, Rank, Layout) ->
     JSON = layout_to_json(Layout),
-    TmpPath = lists:flatten(io_lib:format("/tmp/layout.~w", [now()])),
+    TmpPath = lists:flatten(io_lib:format("/tmp/layout.~w", [seed()])),
     ok = file:write_file(TmpPath, JSON),
     try
         rpc(Mbox, "propose", Endpoint, C_Epoch,
@@ -414,7 +406,7 @@ propose(Mbox, Endpoint, C_Epoch, Rank, Layout) ->
 commit(Mbox, Endpoint, C_Epoch, Rank, Layout) ->
     %% ["OK"].  %% intentional failure testing
     JSON = layout_to_json(Layout),
-    TmpPath = lists:flatten(io_lib:format("/tmp/layout.~w", [now()])),
+    TmpPath = lists:flatten(io_lib:format("/tmp/layout.~w", [seed()])),
     ok = file:write_file(TmpPath, JSON),
     try
         rpc(Mbox, "committed", Endpoint, C_Epoch,
@@ -521,6 +513,8 @@ parse_correctepoch(["correctEpoch: " ++ NR|_]) ->
 parse_correctepoch([_|T]) ->
     parse_correctepoch(T).
 
+layout_to_json(Str) when is_list(Str) ->
+    Str;
 layout_to_json(#layout{ls=Ls, ss=Seqs, segs=Segs, epoch=Epoch}) ->
     "{\n  \"layoutServers\": " ++
         string_ify_list(Ls) ++
@@ -558,6 +552,24 @@ compare_rank({R1, ID1}, {R2, ID2}) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% cmd_prop() and cmd_prop_parallel() for use by TravisCI
+
+cmd_prop() ->
+    io:format(user, "Sanity check: ~p\n", [sanity()]),
+    cmd_inner(proper:quickcheck(prop())).
+
+cmd_prop_parallel() ->
+    cmd_inner(proper:quickcheck(prop_parallel())).
+
+cmd_inner(true) ->
+    erlang:halt(0);
+cmd_inner(Else) ->
+    io:format("\nError: ~p\n", [Else]),
+    Counter = proper:counterexample(),
+    io:format("\nCounterexample:\n~p\n", [Counter]),
+    io:format("\nCounterexample (pretty):\n~s\n\n", [pf(Counter)]),
+    erlang:halt(1).
+
 prop() ->
     prop(1).
 
@@ -565,7 +577,7 @@ prop(MoreCmds) ->
     prop(MoreCmds, qc_java:local_mboxes(), qc_java:local_endpoint()).
 
 prop(MoreCmds, Mboxes, Endpoint) ->
-    random:seed(now()),
+    random:seed(seed()),
     %% Hmmmm, more_commands() doesn't appear to work correctly with Proper.
     ?FORALL(Cmds, more_commands(MoreCmds,
                                 commands(?MODULE,
@@ -595,7 +607,7 @@ prop_parallel(MoreCmds) ->
 -define(PAR_CMDS_LIMIT, 6). % worst case so far @ 7 = 52 seconds!
 
 prop_parallel(MoreCmds, Mboxes, Endpoint) ->
-    random:seed(now()),
+    random:seed(seed()),
     ?FORALL(Cmds,
             more_commands(MoreCmds,
                            non_empty(
@@ -616,6 +628,57 @@ prop_parallel(MoreCmds, Mboxes, Endpoint) ->
                 )))
             end)).
 
+%% pretty print
+
+pp(Term) ->
+    io:format("~s\n", [pf(Term)]).
+
+%% pretty format
+
+pf(Term) ->
+    Mod = ?MODULE,
+    try
+        lists:flatten(qc_java:pp_format(qc_java:pretty_filter(Term, Mod), Mod))
+    catch
+        _:_ ->
+            lists:flatten(io_lib:format("~p", [Term]))
+    end.
+
+pretty_filter(S = #state{}) ->
+    S2 = S#state{reg_names='...omitted...',
+                 clientIDs='...omitted...'},
+    S2;
+pretty_filter({set,{var,Var},{call,?MODULE,Func,[{A1,_},_A2|Args]}}) ->
+    RT = list_to_atom("runtime" ++ [lists:last(atom_to_list(A1))]),
+    if Args == [] ->
+                #exec{step=Var, func=Func, args=[RT]};
+       true ->
+            ArgsRec = args_to_record(Func, Args),
+            #exec{step=Var, func=Func,
+                  args=[RT,qc_java:pretty_filter(ArgsRec, ?MODULE)]}
+    end;
+pretty_filter(Term) ->
+    Term.
+
+args_to_record(set_epoch, [E]) ->
+    #s{epoch=E};
+args_to_record(prepare, [C_Epoch, R]) ->
+    #p1{c_epoch=C_Epoch, rank=R};
+args_to_record(propose, [C_Epoch, R, #layout{epoch=E, ss=SS}]) ->
+    #p2{c_epoch=C_Epoch, rank=R, l=#l_out{epoch=E, seqs=SS}};
+args_to_record(commit, [C_Epoch, R, #layout{epoch=E, ss=SS}]) ->
+    #c{c_epoch=C_Epoch, rank=R, l=#l_out{epoch=E, seqs=SS}};
+args_to_record(_Else, Term) ->
+    Term.
+
+flat(Fmt, Args) ->
+    lists:flatten(io_lib:format(Fmt, Args)).
+
+seed() ->
+    {erlang:phash2([node()]),
+     erlang:monotonic_time(),
+     erlang:unique_integer()}.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 rpc(Mbox, reset, Endpoint) ->
@@ -631,3 +694,4 @@ rpc({_RegName, _NodeName} = Mbox, CmdName, Endpoint, C_Epoch, Args) ->
         ["-p", lists:flatten(io_lib:format("~w", [Mbox])) ] ++
         ["-e", integer_to_list(C_Epoch)] ++ Args,
     qc_java:rpc_call(Mbox, AllArgs, ?TIMEOUT).
+
