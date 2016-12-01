@@ -20,20 +20,15 @@
 %%
 %% -------------------------------------------------------------------
 
--ifdef(PROPER).
--include_lib("proper/include/proper.hrl").
--endif.
-
--ifdef(EQC).
--include_lib("eqc/include/eqc.hrl").
--endif.
-
 -include("qc_java.hrl").
 
 -export([local_mboxes/0, local_endpoint/0,
          local_endpoint_port/0, local_endpoint_host/0,
          endpoint2nodename/1,
          quick_mbox_endpoint/0,
+         %% pretty format, pretty print
+         pf/2, pp/2,
+         pretty_filter/2, pp_format/2,
          rpc_call/3]).
 
 local_mboxes() ->
@@ -69,6 +64,42 @@ endpoint2nodename(Endpoint) ->
 quick_mbox_endpoint() ->
     Endpoint = local_endpoint(),
     [{hd(local_mboxes()), endpoint2nodename(Endpoint)}, Endpoint].
+
+pp(Term, Mod) ->
+    io:format("~s\n", [pf(Term, Mod)]).
+
+pf(Term, Mod) ->
+    try
+        lists:flatten(pp_format(pretty_filter(Term, Mod), Mod))
+    catch _:_ ->
+            lists:flatten(io_lib:format("~p", [Term]))
+    end.
+
+pretty_filter([{
+                [{init,State}|Sequential],
+                 ParCmds
+               }], Mod) ->
+    PrettyState = pretty_filter(State, Mod),
+    PrettySequential = pretty_filter(Sequential, Mod),
+    PrettyParallel = [pretty_filter(Seq, Mod) || Seq <- ParCmds],
+    PrettyParallel2 = [{parallel, X} || X <- PrettyParallel, X /= []],
+    [PrettyState, {seq, PrettySequential}] ++ PrettyParallel2;
+pretty_filter(L, Mod) when is_list(L) ->
+    [pretty_filter(X, Mod) || X <- L];
+pretty_filter(T, Mod) when is_tuple(T) ->
+    case Mod:pretty_filter(T) of
+        T ->
+            list_to_tuple(pretty_filter(tuple_to_list(T), Mod));
+        Res ->
+            Res
+    end;
+pretty_filter(Term, Mod) ->
+    Mod:pretty_filter(Term).
+
+pp_format(Term, Mod) ->
+    {ok, Defs} = pp_record:read("./src/" ++ atom_to_list(Mod) ++ ".erl"),
+    NewTerm = pretty_filter(Term, Mod),
+    lists:flatten(io_lib:format("~s", [pp_record:print(NewTerm, Defs)])).
 
 rpc_call(Mbox, AllArgs, Timeout) ->
     ID = make_ref(),

@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
@@ -66,10 +67,18 @@ public class corfu_smrobject implements ICmdlet {
                 while (it.hasNext()) {
                     String key = it.next();
                     CorfuRuntime rt = (CorfuRuntime) rtMap.get(key);
-                    // Brrrrr, state needs resetting in rt's ObjectsView
+                    // State needs resetting in rt's ObjectsView
                     rt.getObjectsView().getObjectCache().clear();
-                    // Brrrrr, state needs resetting in rt's AddressSpaceView
+                    // State needs resetting in rt's AddressSpaceView
                     rt.getAddressSpaceView().resetCaches();
+                    /*
+                    // Reset router's view of epoch
+                    Iterator<String> itR = rt.nodeRouters.keySet().iterator();
+                    while (itR.hasNext()) {
+                        String routerName = itR.next();
+                        rt.getRouter(routerName).setEpoch(0L);
+                    }
+                    */
                     // Stop the router, sortof.  false means don't really shutdown,
                     // but disconnect any existing connection.
                     rt.stop(false);
