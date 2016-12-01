@@ -103,7 +103,7 @@ public class ManagementServer extends AbstractServer {
         } else {
             safeUpdateLayout(getCurrentLayout());
         }
-        
+
         this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
         this.failureDetectorService = Executors.newScheduledThreadPool(
                 2,
