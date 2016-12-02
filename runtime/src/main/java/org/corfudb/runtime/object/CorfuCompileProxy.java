@@ -216,8 +216,11 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                             }
                             underlyingObject.setGlobalVersionUnsafe(logData.getGlobalAddress());
 
-                        upcallResults.put(underlyingObject.getGlobalVersionUnsafe(), res == null ?
+                            if (pendingUpcalls.contains(logData.getGlobalAddress())) {
+                                upcallResults.put(underlyingObject.getGlobalVersionUnsafe(), res == null ?
                                         NullValue.NULL_VALUE : res);
+                                pendingUpcalls.remove(logData.getGlobalAddress());
+                            }
                         } catch (Exception e) {
                             log.error("Error: Couldn't execute upcall due to {}", e);
                             throw new RuntimeException(e);
