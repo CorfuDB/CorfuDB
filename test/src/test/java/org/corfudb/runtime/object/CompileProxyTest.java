@@ -66,7 +66,7 @@ public class CompileProxyTest extends AbstractViewTest {
     }
 
     @Test
-    public void testCorfuSharedCounterConcurrent() throws Exception {
+    public void testCorfuSharedCounterConcurrentWrites() throws Exception {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
@@ -117,16 +117,57 @@ public class CompileProxyTest extends AbstractViewTest {
 
         int curValue = sharedCounter.getValue();
         AtomicInteger casSucceeded = new AtomicInteger(0);
-        scheduleConcurrently(100, t -> {
+        scheduleConcurrently(concurrencylevel, t -> {
                     if (sharedCounter.CAS(curValue, t) == curValue)
                         casSucceeded.incrementAndGet();
         });
-        executeScheduled(100, 1000, TimeUnit.MILLISECONDS);
+        executeScheduled(concurrencylevel, 1000, TimeUnit.MILLISECONDS);
         assertThat(sharedCounter.getValue())
-                .isBetween(0, 100);
+                .isBetween(0, concurrencylevel);
         assertThat(casSucceeded.get())
                 .isEqualTo(1);
     }
+
+    @Test
+    public void testCorfuSharedCounterConcurrentMixedReadsWrites() throws Exception {
+        CorfuSharedCounter sharedCounter = getDefaultRuntime()
+                .getObjectsView().build()
+                .setStreamName("my stream")
+                .setUseCompiledClass(true)
+                .setTypeToken(new TypeToken<CorfuSharedCounter>() {
+                })
+                .open();
+
+        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>)  sharedCounter;
+        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
+        StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+
+        for (int repetition = 0; repetition < 1000; repetition += 2) {
+            final int r = repetition;
+            t(1, () -> sharedCounter.setValue(r+1));
+            t(2, () -> {
+                assertThat(objStream.check())
+                        .isEqualTo(r);
+
+                // before sync'ing the in-memory object, the in-memory copy does not get updated
+                assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
+                        .isEqualTo(r);
+            });
+            t(1, () -> sharedCounter.setValue(r+2));
+            t(2, () -> {
+                assertThat(objStream.check())
+                        .isEqualTo(r+1);
+
+                // before sync'ing the in-memory object, the in-memory copy does not get updated
+                assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
+                        .isEqualTo(r);
+
+                assertThat(sharedCounter.getValue())
+                        .isEqualTo(r+2);
+            });
+        }
+    }
+
 
     @Test
     public void testCorfuMapConcurrency() throws Exception {
