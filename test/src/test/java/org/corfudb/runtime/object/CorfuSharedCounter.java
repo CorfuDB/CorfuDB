@@ -12,6 +12,13 @@ import org.corfudb.annotations.MutatorAccessor;
 public class CorfuSharedCounter {
     int value = 0;
 
+    // currently, this is invisible to Corfu applications, cannot be used
+    public CorfuSharedCounter(int initvalue) { value = initvalue; }
+
+    // there must be an empty constructor;
+    // because of the non-empty one above, we must explicitly provide an empty one as well
+    public CorfuSharedCounter() { this(0); }
+
     @Accessor
     int getValue() { return value; }
 

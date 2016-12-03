@@ -19,16 +19,13 @@ public class CorfuCompoundObj {
 
     }
 
-    @Setter
     Inner user;
-
-    @Setter
     int ID;
 
     @Mutator
     public void set(Inner in, int id) {
-        setUser(in);
-        setID(id);
+        this.user = in;
+        this.ID = id;
     }
 
     @Accessor
