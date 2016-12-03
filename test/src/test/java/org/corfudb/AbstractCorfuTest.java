@@ -295,7 +295,10 @@ public class AbstractCorfuTest {
     private  <T> T runThread(int threadNum, ExceptionFunction<T> e)
     throws Exception
     {
-        threadsMap.putIfAbsent(threadNum, new TestThread(threadNum));
+        // do not invoke putIfAbsent without checking first
+        // the second to putIfAbsent gets evaluated, causing a thread to be created and be left orphan. 
+        if (! threadsMap.containsKey(threadNum))
+            threadsMap.putIfAbsent(threadNum, new TestThread(threadNum));
         return (T) threadsMap.get(threadNum).run(e);
     }
 
