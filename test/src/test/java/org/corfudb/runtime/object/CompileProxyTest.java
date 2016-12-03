@@ -139,19 +139,20 @@ public class CompileProxyTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<CorfuSharedCounter>() {
                 })
                 .open();
-        int concurrency = 10;
-        int writerwork = 10000;
+        int concurrency = 3;
+        int writeconcurrency = 2;
+        int writerwork = 50000;
 
         sharedCounter.setValue(-1);
         assertThat(sharedCounter.getValue())
                 .isEqualTo(-1);
 
-        scheduleConcurrently(5, t -> {
+        scheduleConcurrently(writeconcurrency, t -> {
                     for (int i = 0; i < writerwork; i++)
                         sharedCounter.setValue(t*writerwork + i);
                 }
         );
-        scheduleConcurrently(concurrency-1, t -> {
+        scheduleConcurrently(concurrency-writeconcurrency, t -> {
                     int lastread = -1;
                     for (int i = 0; i < 1000; i++) {
                         int res = sharedCounter.getValue();

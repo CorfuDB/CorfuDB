@@ -8,6 +8,8 @@ import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -27,6 +29,44 @@ public class LogUnitServerTest extends AbstractServerTest {
     @Override
     public AbstractServer getDefaultServer() {
         return new LogUnitServer(new ServerContextBuilder().build());
+    }
+
+    @Test
+    public void checkOverwritesFail() throws Exception {
+        String serviceDir = getTempDir();
+
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(s1);
+
+        //write at 0
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        Serializers.CORFU.serialize("0".getBytes(), b);
+        WriteRequest m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        m.setGlobalAddress(0L);
+        // m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setStreams(Collections.EMPTY_SET);
+        m.setRank(0L);
+        m.setBackpointerMap(Collections.emptyMap());
+        t(1, () -> sendMessage(CorfuMsgType.WRITE.payloadMsg(m)) );
+
+        assertThat(s1)
+                .containsDataAtAddress(0);
+        assertThat(s1)
+                .isEmptyAtAddress(100);
+
+
+        // repeat: this should throw an exception
+        t(1, () -> sendMessage(CorfuMsgType.WRITE.payloadMsg(m)) )
+                .assertThrows()
+                .isInstanceOf(OverwriteException.class);
     }
 
     @Test

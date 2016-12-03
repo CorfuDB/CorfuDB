@@ -54,6 +54,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
+import sun.jvm.hotspot.utilities.BitMap;
 
 /**
  * Created by mwei on 12/10/15.
@@ -267,8 +268,8 @@ public class LogUnitServer extends AbstractServer {
                 Utils.getOption(opts, "--compact", Long.class, 60L),
                 TimeUnit.SECONDS);*/
 
-        gcThread = new Thread(this::runGC);
-        gcThread.start();
+        //gcThread = new Thread(this::runGC);
+        //gcThread.start();
     }
 
     @Override
@@ -358,8 +359,31 @@ public class LogUnitServer extends AbstractServer {
         return entry;
     }
 
+    BitMap bm = new BitMap(1000000);
+
     public synchronized void handleEviction(LogAddress address, LogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
+
+        synchronized (bm)
+        {
+            if (bm.at(address.getAddress().intValue())) {
+                System.out.println("!!!!!!!!!!!!help " + address.getAddress().intValue() + " !!!!!!!!!!!!!");
+                if (entry.getData() != null && entry.getData().refCnt() <= 0) {
+                    System.out.println("handleEviction called with refCnt zero: " + address + "");
+                    return;
+                }
+                return;
+            }
+            bm.atPut(address.getAddress().intValue(), true);
+        }
+
+/*
+        if (entry.getData() != null && entry.getData().refCnt() <= 0) {
+            System.out.println("handleEviction called with refCnt zero: " + address + "");
+            return;
+        }
+*/
+
         if (entry.getData() != null) {
             // Free the internal buffer once the data has been evicted (in the case the server is not sync).
             entry.getData().release();
