@@ -23,11 +23,9 @@ public class ManagementServerTest extends AbstractServerTest {
 
     @Override
     public ManagementServer getDefaultServer() {
-        ServerContext serverContext = new ServerContextBuilder()
-                .setSingle(false)
-                .setServerRouter(getRouter())
-                .build();
-        managementServer = new ManagementServer(serverContext);
+        // Adding layout server for management server runtime to connect to.
+        router.addServer(new LayoutServer(new ServerContextBuilder().setSingle(true).setServerRouter(getRouter()).build()));
+        managementServer = new ManagementServer(new ServerContextBuilder().setSingle(false).setServerRouter(getRouter()).build());
         return managementServer;
     }
 
@@ -41,8 +39,6 @@ public class ManagementServerTest extends AbstractServerTest {
      */
     @Test
     public void checkFailureDetectorStatus() {
-        ManagementServer managementServer = getDefaultServer();
-
         assertThat(!managementServer.getFailureDetectorService().isShutdown());
         managementServer.shutdown();
         assertThat(managementServer.getFailureDetectorService().isShutdown());
