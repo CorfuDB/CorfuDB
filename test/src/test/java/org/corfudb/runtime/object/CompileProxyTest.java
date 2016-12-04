@@ -120,7 +120,7 @@ public class CompileProxyTest extends AbstractViewTest {
         int curValue = sharedCounter.getValue();
         AtomicInteger casSucceeded = new AtomicInteger(0);
         scheduleConcurrently(concurrency, t -> {
-                    if (sharedCounter.CAS(curValue, t) == curValue)
+                    if (sharedCounter.CAS(curValue, t+1) == curValue)
                         casSucceeded.incrementAndGet();
         });
         executeScheduled(concurrency, 1000, TimeUnit.MILLISECONDS);

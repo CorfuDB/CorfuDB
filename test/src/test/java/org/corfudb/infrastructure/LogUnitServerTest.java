@@ -64,9 +64,18 @@ public class LogUnitServerTest extends AbstractServerTest {
 
 
         // repeat: this should throw an exception
-        t(1, () -> sendMessage(CorfuMsgType.WRITE.payloadMsg(m)) )
+        WriteRequest m2 = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        m2.setGlobalAddress(0L);
+        // m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m2.setStreams(Collections.EMPTY_SET);
+        m2.setRank(0L);
+        m2.setBackpointerMap(Collections.emptyMap());
+        t(1, () -> sendMessage(CorfuMsgType.WRITE.payloadMsg(m2)) )
                 .assertThrows()
-                .isInstanceOf(OverwriteException.class);
+                .isInstanceOf(RuntimeException.class);
     }
 
     @Test
