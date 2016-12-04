@@ -72,4 +72,9 @@ public class InMemoryStreamLog implements StreamLog {
         logCache = new HashMap();
         streamCache = new HashMap();
     }
+
+    @Override
+    public void release(LogAddress logAddress, LogData entry) {
+        // in memory, do nothing
+    }
 }

@@ -161,7 +161,8 @@ public class LogUnitServer extends AbstractServer {
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
                  l < msg.getPayload().getRange().upperEndpoint()+1L; l++) {
-                LogData e = dataCache.get(new LogAddress(l, msg.getPayload().getStreamID()));
+                LogAddress logAddress = new LogAddress(l, msg.getPayload().getStreamID());
+                LogData e = dataCache.get(logAddress);
                 if (e == null) {
                     rr.put(l, LogData.EMPTY);
                 } else if (e.getType() == DataType.HOLE) {
@@ -324,10 +325,8 @@ public class LogUnitServer extends AbstractServer {
 
     public synchronized void handleEviction(LogAddress address, LogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
-        if (entry.getData() != null) {
-            // Free the internal buffer once the data has been evicted (in the case the server is not sync).
-            entry.getData().release();
-        }
+
+        streamLog.release(address, entry);
     }
 
 
