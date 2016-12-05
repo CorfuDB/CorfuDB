@@ -8,17 +8,12 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
 import java.nio.file.StandardOpenOption;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import io.netty.buffer.ByteBuf;
@@ -66,10 +61,12 @@ public class StreamLogFiles implements StreamLog {
     private final boolean noVerify;
     public final String logDir;
     private Map<String, FileHandle> writeChannels;
+    private Set<FileChannel> channelsToSync;
 
     public StreamLogFiles(String logDir, boolean noVerify) {
         this.logDir = logDir;
         writeChannels = new HashMap<>();
+        channelsToSync = new HashSet<>();
         this.noVerify = noVerify;
 
         verifyLogs();
@@ -112,8 +109,13 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public void sync(){
+    public void sync() throws IOException {
         //Todo(Maithem) flush writes to disk.
+        for(FileChannel ch : channelsToSync) {
+            ch.force(true);
+        }
+        log.debug("Sync'd {} channels", channelsToSync.size());
+        channelsToSync.clear();
     }
 
     /**
@@ -329,6 +331,7 @@ public class StreamLogFiles implements StreamLog {
 
         synchronized (fh.lock) {
             fh.channel.write(recordBuf.nioBuffer());
+            channelsToSync.add(fh.channel);
         }
 
         recordBuf.release();
@@ -436,5 +439,10 @@ public class StreamLogFiles implements StreamLog {
         }
 
         writeChannels = new HashMap<>();
+    }
+
+    @VisibleForTesting
+    Set<FileChannel> getChannelsToSync() {
+        return channelsToSync;
     }
 }

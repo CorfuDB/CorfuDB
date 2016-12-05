@@ -7,19 +7,17 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import javax.annotation.Nonnull;
-
-import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -83,6 +81,7 @@ public class LogUnitServer extends AbstractServer {
                             .setDaemon(true)
                             .setNameFormat("LogUnit-Maintenance-%d")
                             .build());
+
     /**
      * The options map.
      */
@@ -93,6 +92,11 @@ public class LogUnitServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
                                             .generateHandlers(MethodHandles.lookup(), this);
 
+    final ExecutorService writerService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+            .setDaemon(false)
+            .setNameFormat("LogUnit-Write-Processor-%d")
+            .build());
+
     /**
      * Service an incoming write request.
      */
@@ -102,24 +106,8 @@ public class LogUnitServer extends AbstractServer {
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
         // clear any commit record (or set initially to false).
         msg.getPayload().clearCommit();
-        try {
-            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
-                dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
-                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                return;
-            } else {
-                for (UUID streamID : msg.getPayload().getStreamAddresses().keySet()) {
-                    dataCache.put(new LogAddress(msg.getPayload().getStreamAddresses().get(streamID), streamID),
-                            msg.getPayload().getData());
-                }
-                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-            }
-        } catch (OverwriteException ex) {
-            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM)
-                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
-            else
-                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_REPLEX_OVERWRITE.msg());
-        }
+        WriteOperation op = new WriteOperation(msg, ctx, r);
+        writeQueue.add(op);
     }
 
     /**
@@ -190,12 +178,24 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type=CorfuMsgType.FILL_HOLE)
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        try {
-            dataCache.put(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), LogData.HOLE);
-            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
-        } catch (OverwriteException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+        if(msg.getPayload().getStream() == null) {
+            WriteRequest req = new WriteRequest(WriteMode.NORMAL, null, LogData.HOLE);
+            req.setGlobalAddress(msg.getPayload().getPrefix());
+            CorfuPayloadMsg dmsg = new CorfuPayloadMsg<>(CorfuMsgType.WRITE, req);
+            dmsg.setClientID(msg.getClientID());
+            dmsg.setEpoch(msg.getEpoch());
+            dmsg.setRequestID(msg.getRequestID());
+            writeQueue.add(new WriteOperation(dmsg, ctx, r));
+        } else {
+            Map<UUID, Long> streamAddresses = new HashMap();
+            streamAddresses.put(msg.getPayload().getStream(), msg.getPayload().getPrefix());
+            WriteRequest req = new WriteRequest(WriteMode.REPLEX_STREAM, streamAddresses, LogData.HOLE);
+            CorfuPayloadMsg dmsg = new CorfuPayloadMsg<>(CorfuMsgType.WRITE, req);
+            dmsg.setClientID(msg.getClientID());
+            dmsg.setEpoch(msg.getEpoch());
+            dmsg.setRequestID(msg.getRequestID());
+            writeQueue.add(new WriteOperation(dmsg, ctx, r));
         }
     }
 
@@ -224,6 +224,8 @@ public class LogUnitServer extends AbstractServer {
 
     private StreamLog streamLog;
 
+    private BlockingQueue<WriteOperation> writeQueue;
+
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
@@ -239,6 +241,8 @@ public class LogUnitServer extends AbstractServer {
 
         gcThread = new Thread(this::runGC);
         gcThread.start();
+
+        writerService.submit(this::writeProcessor);
     }
 
     @Override
@@ -265,6 +269,12 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     public void reboot() {
+
+        if (writeQueue != null) {
+            writeQueue.add(WriteOperation.REBOOT);
+        }
+        writeQueue = new LinkedBlockingQueue<>();
+
         if ((Boolean) opts.get("--memory")) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). " +
                     "This should be run for testing purposes only. " +
@@ -280,6 +290,8 @@ public class LogUnitServer extends AbstractServer {
             streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
         }
 
+        writeQueue.clear();
+
         if (dataCache != null) {
             /** Free all references */
             dataCache.asMap().values().parallelStream()
@@ -290,21 +302,111 @@ public class LogUnitServer extends AbstractServer {
                 .<LogAddress,LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().readableBytes())
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
-                .writer(new CacheWriter<LogAddress, LogData>() {
-                    @Override
-                    public void write(@Nonnull LogAddress address, @Nonnull LogData entry) {
-                            streamLog.append(address, entry);
-                    }
-
-                    @Override
-                    public void delete(LogAddress aLong, LogData logUnitEntry, RemovalCause removalCause) {
-                        // never need to delete
-                    }
-                }).<LogAddress,LogData>build(this::handleRetrieval);
+                .build(this::handleRetrieval);
 
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
         trimMap = new ConcurrentHashMap<>();
+    }
+
+    private void writeProcessor() {
+        try {
+            WriteOperation lastOp = null;
+            int batchSize = 100;
+            int processed = 0;
+            BlockingQueue<WriteOperation> wq = writeQueue;
+
+            List<WriteOperation> writeAck = new LinkedList();
+            List<WriteOperation> overwrite = new LinkedList();
+
+            while (true) {
+                WriteOperation currOp;
+                wq = writeQueue;
+
+                if (lastOp == null) {
+                    currOp = wq.take();
+                } else {
+                    currOp = wq.poll();
+
+                    if (currOp == null || processed == batchSize ||
+                            currOp == WriteOperation.SHUTDOWN || currOp == WriteOperation.REBOOT) {
+                        streamLog.sync();
+
+                        log.info("Sync'd {} writes", processed);
+
+                        // Send responses
+                        for (WriteOperation op : writeAck) {
+                            op.getR().sendResponse(op.getCtx(), op.getMsg(), CorfuMsgType.WRITE_OK.msg());
+                        }
+
+                        writeAck.clear();
+
+                        for (WriteOperation op : overwrite) {
+                            if (op.getMsg().getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
+                                op.getR().sendResponse(op.getCtx(), op.getMsg(),
+                                        CorfuMsgType.ERROR_OVERWRITE.msg());
+                            } else {
+                                op.getR().sendResponse(op.getCtx(), op.getMsg(),
+                                        CorfuMsgType.ERROR_REPLEX_OVERWRITE.msg());
+                            }
+                        }
+
+                        overwrite.clear();
+                        processed = 0;
+                    }
+                }
+
+                if (currOp == WriteOperation.SHUTDOWN) {
+                    log.info("Shutting down the write processor");
+                    break;
+                }
+                if (currOp == WriteOperation.REBOOT) {
+                    while (writeQueue == wq) {
+                        Thread.sleep(0, 100);
+                    }
+                    continue;
+                }
+                if (currOp == null) {
+                    lastOp = null;
+                    continue;
+                }
+
+                try {
+                    if (currOp.getMsg().getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
+                        streamLog.append(new LogAddress(currOp.getMsg().getPayload().getGlobalAddress(), null),
+                                currOp.getMsg().getPayload().getData());
+                        writeAck.add(currOp);
+                        dataCache.put(new LogAddress(currOp.getMsg().getPayload().getGlobalAddress(), null),
+                                currOp.getMsg().getPayload().getData());
+                    } else {
+                        for (UUID streamID : currOp.getMsg().getPayload().getStreamAddresses().keySet()) {
+                            streamLog.append(new LogAddress(currOp.getMsg()
+                                            .getPayload()
+                                            .getStreamAddresses()
+                                            .get(streamID), streamID),
+                                    currOp.getMsg().getPayload().getData());
+                            dataCache.put(new LogAddress(currOp.getMsg()
+                                            .getPayload()
+                                            .getStreamAddresses()
+                                            .get(streamID), streamID),
+                                    currOp.getMsg().getPayload().getData());
+                        }
+                        writeAck.add(currOp);
+
+                    }
+                } catch (OverwriteException e) {
+                    log.info("Overwrite Exception, global address {}, stream addresses",
+                            currOp.getMsg().getPayload().getGlobalAddress(),
+                            currOp.getMsg().getPayload().getStreamAddresses());
+                    overwrite.add(currOp);
+                }
+
+                processed++;
+                lastOp = currOp;
+            }
+        } catch (Exception e) {
+            log.error("Caught exception in the write processor {}", e);
+        }
     }
 
     /**
@@ -400,6 +502,10 @@ public class LogUnitServer extends AbstractServer {
     public void shutdown() {
         scheduler.shutdownNow();
         dataCache.invalidateAll(); //should evict all entries
+
+        // Wait for the writer thread to finish
+        writeQueue.add(WriteOperation.SHUTDOWN);
+        writerService.shutdown();
     }
 
     @VisibleForTesting
