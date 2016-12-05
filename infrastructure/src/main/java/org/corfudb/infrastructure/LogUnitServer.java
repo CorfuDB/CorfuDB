@@ -270,6 +270,9 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void reboot() {
 
+        if (writeQueue != null) {
+            writeQueue.add(WriteOperation.REBOOT);
+        }
         writeQueue = new LinkedBlockingQueue<>();
 
         if ((Boolean) opts.get("--memory")) {
@@ -311,19 +314,22 @@ public class LogUnitServer extends AbstractServer {
             WriteOperation lastOp = null;
             int batchSize = 100;
             int processed = 0;
+            BlockingQueue<WriteOperation> wq = writeQueue;
 
             List<WriteOperation> writeAck = new LinkedList();
             List<WriteOperation> overwrite = new LinkedList();
 
             while (true) {
                 WriteOperation currOp;
+                wq = writeQueue;
 
                 if (lastOp == null) {
-                    currOp = writeQueue.take();
+                    currOp = wq.take();
                 } else {
-                    currOp = writeQueue.poll();
+                    currOp = wq.poll();
 
-                    if (currOp == null || processed == batchSize || currOp == WriteOperation.SHUTDOWN) {
+                    if (currOp == null || processed == batchSize ||
+                            currOp == WriteOperation.SHUTDOWN || currOp == WriteOperation.REBOOT) {
                         streamLog.sync();
 
                         log.info("Sync'd {} writes", processed);
@@ -353,6 +359,12 @@ public class LogUnitServer extends AbstractServer {
                 if (currOp == WriteOperation.SHUTDOWN) {
                     log.info("Shutting down the write processor");
                     break;
+                }
+                if (currOp == WriteOperation.REBOOT) {
+                    while (writeQueue == wq) {
+                        Thread.sleep(0, 100);
+                    }
+                    continue;
                 }
                 if (currOp == null) {
                     lastOp = null;

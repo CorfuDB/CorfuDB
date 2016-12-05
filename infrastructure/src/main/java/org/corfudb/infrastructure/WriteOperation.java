@@ -15,4 +15,6 @@ public class WriteOperation {
     private final IServerRouter r;
 
     public static WriteOperation SHUTDOWN = new WriteOperation(null, null, null);
+    public static WriteOperation REBOOT = new WriteOperation(null, null, null);
+
 }
