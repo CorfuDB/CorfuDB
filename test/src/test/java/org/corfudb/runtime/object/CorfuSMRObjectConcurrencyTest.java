@@ -21,15 +21,6 @@ public class CorfuSMRObjectConcurrencyTest extends AbstractViewTest {
     public void testCorfuSharedCounterConcurrentReads() throws Exception {
         getDefaultRuntime();
 
-/*
-        TestClass sharedCounter = getRuntime().getObjectsView().
-                build().
-                setStreamName("test")
-                .setType(TestClass.class)
-                .open();
-        sharedCounter.set(55);
-*/
-
         CorfuSharedCounter sharedCounter = getRuntime().getObjectsView().
                 build().
                 setStreamName("test")
@@ -39,7 +30,7 @@ public class CorfuSMRObjectConcurrencyTest extends AbstractViewTest {
 
         int concurrency = 10;
         int writeconcurrency = 5;
-        int writerwork = 50000;
+        int writerwork = 5000;
 
         sharedCounter.setValue(-1);
         assertThat(sharedCounter.getValue())
