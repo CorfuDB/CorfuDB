@@ -55,7 +55,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         m.setStreams(Collections.EMPTY_SET);
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
-        t(1, () -> sendMessage(CorfuMsgType.WRITE.payloadMsg(m)) );
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
 
         assertThat(s1)
                 .containsDataAtAddress(0);
@@ -73,9 +73,11 @@ public class LogUnitServerTest extends AbstractServerTest {
         m2.setStreams(Collections.EMPTY_SET);
         m2.setRank(0L);
         m2.setBackpointerMap(Collections.emptyMap());
-        t(1, () -> sendMessage(CorfuMsgType.WRITE.payloadMsg(m2)) )
-                .assertThrows()
-                .isInstanceOf(RuntimeException.class);
+
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m2));
+        Assertions.assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsgType.ERROR_OVERWRITE);
+
     }
 
     @Test
