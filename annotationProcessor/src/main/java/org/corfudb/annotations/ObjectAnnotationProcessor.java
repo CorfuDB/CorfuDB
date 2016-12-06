@@ -2,8 +2,6 @@ package org.corfudb.annotations;
 
 import com.google.common.collect.ImmutableMap;
 import com.squareup.javapoet.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import org.corfudb.runtime.object.*;
 
 import javax.annotation.processing.*;
@@ -21,7 +19,13 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-/**
+/** The annotation processor, which takes annotated Corfu objects and
+ * generates a class which can be used by the runtime instead of requiring
+ * runtime instrumentation.
+ *
+ * See README.md for details on how the annotation processor works and how to
+ * use it.
+ *
  * Created by mwei on 11/9/16.
  */
 @SupportedAnnotationTypes("org.corfudb.annotations.*")
@@ -85,12 +89,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     public void processClass(TypeElement classElement) {
         // Does the class contain annotated elements? If so,
         // generate a new proxy file and process
-        if (    classElement.getAnnotation(CorfuObject.class) != null ||
-                classElement.getEnclosedElements().stream()
-                .filter(x -> x.getAnnotation(Accessor.class) != null ||
-                        x.getAnnotation(MutatorAccessor.class) != null ||
-                        x.getAnnotation(Mutator.class) != null)
-                .count() > 0) {
+        if (    classElement.getAnnotation(CorfuObject.class) != null) {
 
             try {
                 generateProxy(classElement);
@@ -116,8 +115,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
     /** Class to hold data about SMR Methods. */
     class SMRMethodInfo {
+        /** The method itself. */
         ExecutableElement method;
+        /** The interface, if present, which provided the element. */
         TypeElement interfaceOverride;
+        /** If the element should be excluded from instrumentation. */
         boolean doNotAdd = false;
 
         public SMRMethodInfo(ExecutableElement method, TypeElement interfaceOverride) {
@@ -425,18 +427,39 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     typeSpecBuilder.addMethod(ms.build());
                 });
 
+        addUpcallMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addUndoRecordMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addUndoMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+
+        typeSpecBuilder
+                .addSuperinterfaces(interfacesToAdd);
+        // Mark the object as instrumented, so we don't instrument it again.
+        typeSpecBuilder
+                .addAnnotation(AnnotationSpec.builder(InstrumentedCorfuObject.class).build());
+
+        JavaFile javaFile = JavaFile
+                .builder(packageName,
+                        typeSpecBuilder.build())
+                .build();
+
+        javaFile.writeTo(filer);
+    }
+
+    private void addUpcallMap(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                              Set<TypeName> interfacesToAdd, Set<SMRMethodInfo> methodSet) {
+
         // Generate the upcall string and associated map.
         String upcallString = methodSet.stream()
                 .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null ||
                         (x.method.getAnnotation(Mutator.class) != null &&
-                        !x.method.getAnnotation(Mutator.class).noUpcall()))
+                                !x.method.getAnnotation(Mutator.class).noUpcall()))
                 .map(x -> "\n.put(\"" + getSMRFunctionName(x.method) + "\", " +
                         "(obj, args) -> { " + (x.method.getReturnType().getKind().equals(TypeKind.VOID)
                         ? "" : "return ") + "obj." + x.method.getSimpleName() + "(" +
                         IntStream.range(0, x.method.getParameters().size())
                                 .mapToObj(i ->
                                         "(" + x.method.getParameters().get(i).asType().toString() + ")" +
-                                        " args[" + i + "]")
+                                                " args[" + i + "]")
                                 .collect(Collectors.joining(", "))
                         + ");" + (x.method.getReturnType().getKind().equals(TypeKind.VOID)
                         ? "return null;" : "") + "})")
@@ -451,7 +474,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
                                 ClassName.get(String.class),
                                 ParameterizedTypeName.get(ClassName.get(ICorfuSMRUpcallTarget.class),
-                                originalName)), upcallString)
+                                        originalName)), upcallString)
                 .build();
 
         typeSpecBuilder
@@ -465,6 +488,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 originalName)))
                 .addStatement("return $L", "upcallMap" + CORFUSMR_FIELD)
                 .build());
+    }
+
+    /** Generate the undo record map for this type. */
+    private void addUndoRecordMap(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                                  Set<TypeName> interfacesToAdd, Set<SMRMethodInfo> methodSet)
+    {
 
         // And generate a map for the undoRecord and undo functions, if available.
         // We may have to add additional interfaces during this process.
@@ -478,49 +507,49 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .filter(x -> x.method.getAnnotation(Mutator.class) == null ||
                         !x.method.getAnnotation(Mutator.class).undoRecordFunction().equals(""))
                 .map(x -> {
-                        MutatorAccessor mutatorAccessor = x.method.getAnnotation(MutatorAccessor.class);
-                        Mutator mutator = x.method.getAnnotation(Mutator.class);
-                        String undoRecordFunction = mutator == null ? mutatorAccessor.undoRecordFunction() :
-                                mutator.undoRecordFunction();
+                    MutatorAccessor mutatorAccessor = x.method.getAnnotation(MutatorAccessor.class);
+                    Mutator mutator = x.method.getAnnotation(Mutator.class);
+                    String undoRecordFunction = mutator == null ? mutatorAccessor.undoRecordFunction() :
+                            mutator.undoRecordFunction();
 
-                        Optional<SMRMethodInfo> mi = methodSet.stream()
+                    Optional<SMRMethodInfo> mi = methodSet.stream()
                             .filter(y ->
                                     y.method.getSimpleName().toString().equals(undoRecordFunction))
                             .findFirst();
 
-                        // Don't generate a record since we don't have a matching method
-                        if (!mi.isPresent())
-                        {
-                            messager.printMessage(Diagnostic.Kind.MANDATORY_WARNING, "No undoRecord" +
-                                    " method found for "
+                    // Don't generate a record since we don't have a matching method
+                    if (!mi.isPresent())
+                    {
+                        messager.printMessage(Diagnostic.Kind.MANDATORY_WARNING, "No undoRecord" +
+                                " method found for "
                                 + x.method.getSimpleName() + " named " +undoRecordFunction);
-                            return "";
-                        }
+                        return "";
+                    }
 
-                        // Check that the signature matches what we expect. (1+original)
-                        if (mi.get().method.getParameters().size() !=
-                                x.method.getParameters().size() + 1) {
-                            messager.printMessage(Diagnostic.Kind.ERROR, "undoRecord method "
-                            + undoRecordFunction + " contained the wrong number of parameters");
-                        }
+                    // Check that the signature matches what we expect. (1+original)
+                    if (mi.get().method.getParameters().size() !=
+                            x.method.getParameters().size() + 1) {
+                        messager.printMessage(Diagnostic.Kind.ERROR, "undoRecord method "
+                                + undoRecordFunction + " contained the wrong number of parameters");
+                    }
 
-                        // Add the interface, if present.
-                        if (mi.get().interfaceOverride != null) {
-                            interfacesToAdd.add(ParameterizedTypeName
-                                    .get(mi.get().interfaceOverride.asType()));
-                        }
-                        String callingConvention = mi.get().interfaceOverride == null ? "this." :
-                                mi.get().interfaceOverride.getSimpleName() + ".super.";
+                    // Add the interface, if present.
+                    if (mi.get().interfaceOverride != null) {
+                        interfacesToAdd.add(ParameterizedTypeName
+                                .get(mi.get().interfaceOverride.asType()));
+                    }
+                    String callingConvention = mi.get().interfaceOverride == null ? "this." :
+                            mi.get().interfaceOverride.getSimpleName() + ".super.";
 
-                        return "\n.put(\"" + getSMRFunctionName(x.method) + "\", " +
-                        "(obj, args) -> { return "
-                                + callingConvention + undoRecordFunction + "(obj," +
-                        IntStream.range(0, x.method.getParameters().size())
-                                .mapToObj(i ->
-                                        "(" + mi.get().method.getParameters().get(i+1).asType().toString() + ")" +
-                                                " args[" + i + "]")
-                                .collect(Collectors.joining(", "))
-                        + ");" + "})";})
+                    return "\n.put(\"" + getSMRFunctionName(x.method) + "\", " +
+                            "(obj, args) -> { return "
+                            + callingConvention + undoRecordFunction + "(obj," +
+                            IntStream.range(0, x.method.getParameters().size())
+                                    .mapToObj(i ->
+                                            "(" + mi.get().method.getParameters().get(i+1).asType().toString() + ")" +
+                                                    " args[" + i + "]")
+                                    .collect(Collectors.joining(", "))
+                            + ");" + "})";})
                 .collect(Collectors.joining());
 
         FieldSpec undoRecordMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
@@ -546,7 +575,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .addStatement("return $L", "undoRecordMap" + CORFUSMR_FIELD)
                 .build());
 
-        // Generate the undo string and associated map.
+    }
+
+    /** Generate the undo string and associated map for the type. */
+    private void addUndoMap(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                       Set<TypeName> interfacesToAdd, Set<SMRMethodInfo> methodSet) {
         String undoString = methodSet.stream()
                 .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null ||
                         x.method.getAnnotation(Mutator.class) != null)
@@ -602,6 +635,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 })
                 .collect(Collectors.joining());
 
+
         FieldSpec undoMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
                 ClassName.get(String.class),
                 ParameterizedTypeName.get(ClassName.get(IUndoFunction.class),
@@ -625,18 +659,5 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .addStatement("return $L", "undoMap" + CORFUSMR_FIELD)
                 .build());
 
-
-        typeSpecBuilder
-                .addSuperinterfaces(interfacesToAdd);
-        // Mark the object as instrumented, so we don't instrument it again.
-        typeSpecBuilder
-                .addAnnotation(AnnotationSpec.builder(InstrumentedCorfuObject.class).build());
-
-        JavaFile javaFile = JavaFile
-                .builder(packageName,
-                        typeSpecBuilder.build())
-                .build();
-
-        javaFile.writeTo(filer);
     }
 }

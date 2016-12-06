@@ -6,7 +6,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
+/** An accessor marks a method which which accesses
+ * the state of a Corfu object.
  * Created by mwei on 1/7/16.
  */
 @Target(ElementType.METHOD)
