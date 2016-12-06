@@ -30,7 +30,7 @@ public class CorfuSMRObjectConcurrencyTest extends AbstractViewTest {
 
         int concurrency = 10;
         int writeconcurrency = 5;
-        int writerwork = 5000;
+        int writerwork = 50;
 
         sharedCounter.setValue(-1);
         assertThat(sharedCounter.getValue())
