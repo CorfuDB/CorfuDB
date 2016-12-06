@@ -79,10 +79,10 @@ public class StreamLogFiles implements StreamLog {
         String[] extension = {"log"};
         File dir = new File(logDir);
 
-        if(dir.exists()) {
+        if (dir.exists()) {
             Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
-            for(File file : files){
+            for (File file : files) {
                 try {
                     FileInputStream fIn = new FileInputStream(file);
                     FileChannel fc = fIn.getChannel();
@@ -92,7 +92,7 @@ public class StreamLogFiles implements StreamLog {
 
                     LogFileHeader header = LogFileHeader.fromBuffer(buf);
 
-                    if(header.getVersion() != VERSION) {
+                    if (header.getVersion() != VERSION) {
                         String msg = String.format("Log version {} for {} should match the logunit log version {}",
                                 header.getVersion(), file.getAbsoluteFile(), VERSION);
                         throw new RuntimeException(msg);
@@ -112,7 +112,7 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public void sync(){
+    public void sync() {
         //Todo(Maithem) flush writes to disk.
     }
 
@@ -153,7 +153,7 @@ public class StreamLogFiles implements StreamLog {
 
         FileChannel fc = getChannel(fh.fileName, true);
 
-        if(fc == null) {
+        if (fc == null) {
             return null;
         }
 
@@ -176,18 +176,18 @@ public class StreamLogFiles implements StreamLog {
             long entryAddress = o.getLong();
             int entryLen = o.getInt();
 
-            if(!noVerify) {
+            if (!noVerify) {
                 Hasher computedChecksum = Hashing.crc32c().newHasher();
 
                 int recordLen = Long.BYTES     // Size of address
-                              + Integer.BYTES  // Size of entry length
-                              + entryLen;      // entry size
+                        + Integer.BYTES  // Size of entry length
+                        + entryLen;      // entry size
 
-                for(int x = 0; x < recordLen; x++) {
+                for (int x = 0; x < recordLen; x++) {
                     computedChecksum.putByte(checksumBuf.get());
                 }
 
-                if(checksum != computedChecksum.hash().asInt()) {
+                if (checksum != computedChecksum.hash().asInt()) {
                     log.error("Checksum mismatch detected while trying to read address {}", address);
                     throw new DataCorruptionException();
                 }
@@ -215,8 +215,8 @@ public class StreamLogFiles implements StreamLog {
     private FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
         try {
 
-            if(readOnly) {
-                if(!new File(filePath).exists()) {
+            if (readOnly) {
+                if (!new File(filePath).exists()) {
                     return null;
                 } else {
                     return FileChannel.open(FileSystems.getDefault().getPath(filePath),
@@ -245,13 +245,13 @@ public class StreamLogFiles implements StreamLog {
         String filePath = logDir + File.separator;
         long segment = logAddress.address / RECORDS_PER_LOG_FILE;
 
-        if(logAddress.getStream() == null) {
+        if (logAddress.getStream() == null) {
             filePath += segment;
         } else {
             filePath += logAddress.getStream().toString() + "-" + segment;
         }
 
-        filePath +=  ".log";
+        filePath += ".log";
 
         return writeChannels.computeIfAbsent(filePath, a -> {
 
@@ -260,7 +260,7 @@ public class StreamLogFiles implements StreamLog {
 
                 boolean verify = true;
 
-                if(noVerify){
+                if (noVerify) {
                     verify = false;
                 }
 
@@ -306,7 +306,7 @@ public class StreamLogFiles implements StreamLog {
         // Restore writer index
         recordBuf.writerIndex(recordBufLastInd);
 
-        if(!noVerify){
+        if (!noVerify) {
             // Checksum is only computed over the address and the entry, so the reader
             // index needs to skip the delimiter and checksum
             recordBuf.readShort();
@@ -393,7 +393,7 @@ public class StreamLogFiles implements StreamLog {
             byte verifyByte = buffer.get();
             boolean verify = true;
 
-            if(verifyByte == 0x0) {
+            if (verifyByte == 0x0) {
                 verify = false;
             }
 
@@ -407,7 +407,7 @@ public class StreamLogFiles implements StreamLog {
             // 8: Version number(4)
             b.putInt(version);
             // 12: Flags (8)
-            if(verify) {
+            if (verify) {
                 b.put((byte) 0xf);
             } else {
                 b.put((byte) 0x0);
@@ -436,5 +436,11 @@ public class StreamLogFiles implements StreamLog {
         }
 
         writeChannels = new HashMap<>();
+    }
+
+    @Override
+    public void release(LogAddress logAddress, LogData entry) {
+        if (entry != null && entry.getData() != null && entry.getData().refCnt() > 0)
+            entry.getData().release();
     }
 }

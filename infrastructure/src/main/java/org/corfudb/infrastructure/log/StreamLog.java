@@ -33,4 +33,11 @@ public interface StreamLog {
      * Close the stream log.
      */
     void close();
+
+    /**
+     * unmap/release the memory for entry
+     *
+     * @param address
+     */
+    void release(LogAddress address, LogData entry);
 }
