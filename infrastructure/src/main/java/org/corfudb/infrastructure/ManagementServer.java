@@ -103,7 +103,7 @@ public class ManagementServer extends AbstractServer {
         } else {
             safeUpdateLayout(getCurrentLayout());
         }
-        
+
         this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
         this.failureDetectorService = Executors.newScheduledThreadPool(
                 2,
@@ -191,6 +191,15 @@ public class ManagementServer extends AbstractServer {
         return serverContext.getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
     }
 
+    boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (latestLayout == null) {
+            log.warn("Received message but not bootstrapped! Message={}", msg);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP));
+            return false;
+        }
+        return true;
+    }
+
     /**
      * Bootstraps the management server.
      * The msg contains the layout to be bootstrapped.
@@ -201,9 +210,16 @@ public class ManagementServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.MANAGEMENT_BOOTSTRAP)
     public synchronized void handleManagementBootstrap(CorfuPayloadMsg<Layout> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.info("Received Bootstrap Layout : {}", msg.getPayload());
-        safeUpdateLayout(msg.getPayload());
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        if (latestLayout != null) {
+            // We are already bootstrapped, bootstrap again is not allowed.
+            log.warn("Got a request to bootstrap a server which is already bootstrapped, rejecting!");
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP));
+        }
+        else {
+            log.info("Received Bootstrap Layout : {}", msg.getPayload());
+            safeUpdateLayout(msg.getPayload());
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        }
     }
 
     /**
@@ -222,11 +238,8 @@ public class ManagementServer extends AbstractServer {
             return;
         }
         // This server has not been bootstrapped yet, ignore all requests.
-        if (latestLayout == null) {
-            log.warn("Received message but not bootstrapped! Message={}", msg);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-            return;
-        }
+        if (!checkBootstrap(msg, ctx, r)) { return; }
+
         log.info("Received Failures : {}", msg.getPayload().getNodes());
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }

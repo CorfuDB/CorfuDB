@@ -70,7 +70,9 @@ public enum CorfuMsgType {
 
     // Management Codes
     MANAGEMENT_BOOTSTRAP(62, new TypeToken<CorfuPayloadMsg<Layout>>(){}, true),
-    MANAGEMENT_FAILURE_DETECTED(63, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, true);
+    MANAGEMENT_FAILURE_DETECTED(63, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, true),
+    MANAGEMENT_NOBOOTSTRAP(64, TypeToken.of(CorfuMsg.class), true),
+    MANAGEMENT_ALREADY_BOOTSTRAP(65, TypeToken.of(CorfuMsg.class), true);
 
     public final int type;
     public final TypeToken<? extends CorfuMsg> messageType;

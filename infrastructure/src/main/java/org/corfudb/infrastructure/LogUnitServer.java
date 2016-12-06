@@ -161,7 +161,8 @@ public class LogUnitServer extends AbstractServer {
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
                  l < msg.getPayload().getRange().upperEndpoint()+1L; l++) {
-                LogData e = dataCache.get(new LogAddress(l, msg.getPayload().getStreamID()));
+                LogAddress logAddress = new LogAddress(l, msg.getPayload().getStreamID());
+                LogData e = dataCache.get(logAddress);
                 if (e == null) {
                     rr.put(l, LogData.EMPTY);
                 } else if (e.getType() == DataType.HOLE) {
@@ -222,42 +223,12 @@ public class LogUnitServer extends AbstractServer {
     LoadingCache<LogAddress, LogData> dataCache;
     long maxCacheSize;
 
-    private StreamLog localLog;
-
-    // This shouldn't be a max. This should be the size of the mapping window.
-    public static long maxLogFileSize = Integer.MAX_VALUE >> 4;  // 512MB by default
-
-    private final ConcurrentHashMap<UUID, StreamLog> streamLogs = new ConcurrentHashMap<>();
-
-    private StreamLog getLog(UUID stream) {
-        if (stream == null) return localLog;
-        else {
-            return streamLogs.computeIfAbsent(stream, x-> {
-                if ((Boolean) opts.get("--memory")) {
-                    return new InMemoryStreamLog();
-                }
-                else {
-                    String logdir = opts.get("--log-path") + File.separator + "log" + File.separator + stream;
-                    return new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
-                }
-            });
-        }
-    }
+    private StreamLog streamLog;
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
-
         maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
-        if (opts.get("--quickcheck-test-mode") != null &&
-            (Boolean) opts.get("--quickcheck-test-mode")) {
-            // It's really annoying when using OS X + HFS+ that HFS+ does not
-            // support sparse files.  If we use the default 2GB file size, then
-            // every time that a sparse file is closed, the OS will always
-            // write 2GB of data to disk.  {sadpanda}  Use this static class
-            // var to signal to StreamLogFiles to use a smaller file size.
-            maxLogFileSize = 4_000_000;
-        }
 
         reboot();
 
@@ -274,20 +245,20 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void reset() {
         String d = serverContext.getDataStore().getLogDir();
-        localLog.close();
+        streamLog.close();
         if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d);
-            String prefixes[] = new String[]{"log"};
-
-            for (String pfx : prefixes) {
-                try (DirectoryStream<Path> stream =
-                             Files.newDirectoryStream(dir, pfx + "*")) {
-                    for (Path entry : stream) {
+            Path dir = FileSystems.getDefault().getPath(d + File.separator + "log");
+            try (DirectoryStream<Path> stream =
+                         Files.newDirectoryStream(dir, "*")) {
+                for (Path entry : stream) {
+                    try {
                         Files.delete(entry);
+                    } catch (IOException ie) {
+                        log.error("reset: error deleting " + entry.toString() + ": " + entry.toString());
                     }
-                } catch (IOException e) {
-                    log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
                 }
+            } catch (IOException e) {
+                log.error("reset: error for dir " + dir + ": " + e.toString());
             }
         }
         reboot();
@@ -300,10 +271,14 @@ public class LogUnitServer extends AbstractServer {
                     "This should be run for testing purposes only. " +
                     "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
                     "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
-            localLog = new InMemoryStreamLog();
+            streamLog = new InMemoryStreamLog();
         } else {
             String logdir = opts.get("--log-path") + File.separator + "log";
-            localLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
+            File dir = new File(logdir);
+            if(!dir.exists()){
+                dir.mkdir();
+            }
+            streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
         }
 
         if (dataCache != null) {
@@ -319,11 +294,7 @@ public class LogUnitServer extends AbstractServer {
                 .writer(new CacheWriter<LogAddress, LogData>() {
                     @Override
                     public void write(@Nonnull LogAddress address, @Nonnull LogData entry) {
-                        if (address.getStream() != null) {
-                            getLog(address.getStream()).append(address.getAddress(), entry);
-                        } else {
-                            localLog.append(address.getAddress(), entry);
-                        }
+                            streamLog.append(address, entry);
                     }
 
                     @Override
@@ -340,53 +311,22 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Retrieve the LogUnitEntry from disk, given an address.
      *
-     * @param address The address to retrieve the entry from.
+     * @param logAddress The address to retrieve the entry from.
      * @return The log unit entry to retrieve into the cache.
      * This function should not care about trimmed addresses, as that is handled in
      * the read() and write(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
-    public synchronized LogData handleRetrieval(LogAddress address) {
-        LogData entry;
-        if (address.getStream() != null) {
-            entry = getLog(address.getStream()).read(address.getAddress());
-        }
-        else {
-            entry = localLog.read(address.getAddress());
-        }
-        log.trace("Retrieved[{} : {}]", address, entry);
+    public synchronized LogData handleRetrieval(LogAddress logAddress) {
+        LogData entry = streamLog.read(logAddress);
+        log.trace("Retrieved[{} : {}]", logAddress, entry);
         return entry;
     }
 
-//    BitMap bm = new BitMap(1000000);
 
     public synchronized void handleEviction(LogAddress address, LogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
-
-        /*
-        synchronized (bm)
-        {
-            if (bm.at(address.getAddress().intValue())) {
-                System.out.println("!!!!!!!!!!!!help " + address.getAddress().intValue() + " !!!!!!!!!!!!!");
-                if (entry.getData() != null && entry.getData().refCnt() <= 0) {
-                    System.out.println("handleEviction called with refCnt zero: " + address + "");
-                    return;
-                }
-                return;
-            }
-            bm.atPut(address.getAddress().intValue(), true);
-        }
-        */
-
-        if (entry.getData() != null && entry.getData().refCnt() <= 0) {
-            return;
-        }
-
-
-        if (entry.getData() != null) {
-            // Free the internal buffer once the data has been evicted (in the case the server is not sync).
-            entry.getData().release();
-        }
+        streamLog.release(address, entry);
     }
 
 
