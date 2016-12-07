@@ -2,7 +2,6 @@ package org.corfudb.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 
@@ -27,12 +26,12 @@ public class FailureHandlerDispatcher {
      * @param corfuRuntime  Connected corfu runtime instance
      * @param failedServers Set of failed server addresses
      */
-    public void dispatchHandler(Layout currentLayout, CorfuRuntime corfuRuntime, Set<String> failedServers) {
+    public void dispatchHandler(IFailureHandlerPolicy failureHandlerPolicy, Layout currentLayout, CorfuRuntime corfuRuntime, Set<String> failedServers) {
 
         try {
 
             // Generates a new layout by removing the failed nodes from the existing layout
-            Layout newLayout = generateLayout(currentLayout, corfuRuntime, failedServers);
+            Layout newLayout = failureHandlerPolicy.generateLayout(currentLayout, corfuRuntime, failedServers);
             // Seals and increments the epoch.
             sealEpoch(newLayout);
             // Attempts to update all the layout servers with the modified layout.
@@ -49,29 +48,6 @@ public class FailureHandlerDispatcher {
         } catch (Exception e) {
             log.error("Error: dispatchHandler: {}", e);
         }
-    }
-
-    /**
-     * Modifies the layout by removing the set failed nodes.
-     *
-     * @param originalLayout Original Layout which needs to be modified.
-     * @param corfuRuntime   Connected runtime to attach to the new layout.
-     * @param failedServers  Set of all failed/defected servers.
-     * @return The new and modified layout.
-     * @throws LayoutModificationException Thrown if attempt to create an invalid layout.
-     * @throws CloneNotSupportedException  Clone not supported for layout.
-     */
-    private Layout generateLayout(Layout originalLayout, CorfuRuntime corfuRuntime, Set<String> failedServers)
-            throws LayoutModificationException, CloneNotSupportedException {
-
-        LayoutWorkflowManager layoutManager = new LayoutWorkflowManager(originalLayout);
-        Layout newLayout = layoutManager
-                .removeLayoutServers(failedServers)
-                .removeSequencerServers(failedServers)
-                .removeLogunitServers(failedServers)
-                .build();
-        newLayout.setRuntime(corfuRuntime);
-        return newLayout;
     }
 
     /**
