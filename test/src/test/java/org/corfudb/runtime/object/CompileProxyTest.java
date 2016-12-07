@@ -141,7 +141,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 .open();
         int concurrency = 3;
         int writeconcurrency = 2;
-        int writerwork = 50000;
+        int writerwork = 50;
 
         sharedCounter.setValue(-1);
         assertThat(sharedCounter.getValue())
@@ -154,7 +154,7 @@ public class CompileProxyTest extends AbstractViewTest {
         );
         scheduleConcurrently(concurrency-writeconcurrency, t -> {
                     int lastread = -1;
-                    for (int i = 0; i < 1000; i++) {
+                    for (int i = 0; i < 10; i++) {
                         int res = sharedCounter.getValue();
                         boolean assertflag =
                                 (
