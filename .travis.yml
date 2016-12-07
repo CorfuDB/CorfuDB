@@ -6,6 +6,7 @@ jdk:
 before_install:
 - .travis_scripts/generate_keys.sh $encrypted_026743b97986_key $encrypted_026743b97986_iv
 - .travis_scripts/setup_env.sh
+- .travis_scripts/setup_explore.sh
 after_success:
 - mvn jacoco:report coveralls:report
 - .travis_scripts/javadocs.sh
