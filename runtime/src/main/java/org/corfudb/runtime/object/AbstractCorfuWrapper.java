@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object;
 
-import org.corfudb.runtime.CorfuRuntime;
-
 import java.util.UUID;
 
 /** A Corfu container object is a container for other Corfu objects.
@@ -11,7 +9,7 @@ import java.util.UUID;
  * Created by mwei on 11/12/16.
  */
 
-public abstract class AbstractCorfuContainer<T> implements ICorfuSMRProxyContainer<T> {
+public abstract class AbstractCorfuWrapper<T> implements ICorfuSMRProxyWrapper<T> {
 
     ICorfuSMRProxy<T> proxy;
 

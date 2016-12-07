@@ -1,11 +1,9 @@
 package org.corfudb.runtime.object;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.StreamView;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.Constructor;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -47,8 +45,8 @@ public class CorfuCompileProxyBuilder {
                 proxyObject.getCorfuUndoMap(),
                 proxyObject.getCorfuUndoRecordMap()));
 
-        if (proxyObject instanceof ICorfuSMRProxyContainer) {
-            ((ICorfuSMRProxyContainer) proxyObject)
+        if (proxyObject instanceof ICorfuSMRProxyWrapper) {
+            ((ICorfuSMRProxyWrapper) proxyObject)
                     .setProxy$CORFUSMR(proxyObject.getCorfuSMRProxy());
         }
 

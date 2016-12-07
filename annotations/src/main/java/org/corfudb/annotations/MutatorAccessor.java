@@ -15,16 +15,19 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 public @interface MutatorAccessor {
-    /** The name of the mutator, which will be written to the log. */
+    /** The name of the mutator, which will be written to the log.
+     * @return The name of the mutator. */
     String name() default "";
 
     /** The name of the function to undo this mutation, which needs to belong
      * to the same object.
+     * @return The name of the undo functino.
      */
     String undoFunction() default "";
 
     /** The name of the function which will be called prior to applying this
      * mutator, which will be used to generate an undo record.
+     * @return The name of the undoRecord function.
      */
     String undoRecordFunction() default "";
 }

@@ -1,11 +1,11 @@
 package org.corfudb.runtime.object;
 
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 /** An interface for accessing a proxy, which
  * manages an SMR object.
+ * @param <T>   The type of the SMR object.
  * Created by mwei on 11/10/16.
  */
 public interface ICorfuSMRProxy<T> {
@@ -15,7 +15,7 @@ public interface ICorfuSMRProxy<T> {
      * @param <R>               The type to return.
      * @return                  The result of the accessMethod
      */
-    <R> R access(ICorfuSMRAccess<R,T> accessMethod);
+    <R> R access(ICorfuSMRAccess<R, T> accessMethod);
 
     /**
      * Record an SMR function to the log before returning.
@@ -30,7 +30,7 @@ public interface ICorfuSMRProxy<T> {
      * Return the result of an upcall at the given timestamp.
      * @param timestamp             The timestamp to request the upcall for.
      * @param <R>                   The type of the upcall to return.
-     * @return
+     * @return                      The result of the upcall.
      */
     <R> R getUpcallResult(long timestamp);
 

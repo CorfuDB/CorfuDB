@@ -8,14 +8,12 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.Constructor;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.StampedLock;
 import java.util.function.Supplier;
 
 /**
@@ -434,8 +432,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 }
             }
         }
-        if (ret instanceof ICorfuSMRProxyContainer) {
-            ((ICorfuSMRProxyContainer<T>) ret).setProxy$CORFUSMR(this);
+        if (ret instanceof ICorfuSMRProxyWrapper) {
+            ((ICorfuSMRProxyWrapper<T>) ret).setProxy$CORFUSMR(this);
         }
         return ret;
     }

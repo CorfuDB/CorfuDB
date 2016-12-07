@@ -6,10 +6,9 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Marks an object which should exist in the Corfu log.
+/** <p>Marks an object which should exist in the Corfu log.
  * Objects marked with the CorfuObject annotation are targeted for
- * instrumentation by the annotation processor.
- *
+ * instrumentation by the annotation processor.</p>
  * Created by mwei on 3/30/16.
  */
 @Target(ElementType.TYPE)
@@ -17,15 +16,15 @@ import java.lang.annotation.Target;
 @Inherited
 public @interface CorfuObject {
 
-    /** Whether the constructor is persisted in the log or not. */
+    /** @return Whether the constructor is persisted in the log or not. */
     ConstructorType constructorType() default ConstructorType.RUNTIME;
 
-    /** Whether or not the object holds state or not. Deprecated. */
+    /** @return Whether or not the object holds state or not. Deprecated. */
     ObjectType objectType() default ObjectType.STATELESS;
 
-    /** Where the state of the object is stored. Deprecated. */
+    /** @return Where the state of the object is stored. Deprecated. */
     StateSource stateSource() default StateSource.SELF;
 
-    /** What the state source is. Deprecated. */
+    /** @return What the state source is. Deprecated. */
     Class stateType() default StaticMappingObject.class;
 }

@@ -13,11 +13,13 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 public @interface TransactionalMethod {
-    /** Whether or not this method modifies any objects. */
+    /** Whether or not this method modifies any objects.
+     * @return True, if the transaction is read only. */
     boolean readOnly() default false;
 
     /** The name of a function that calculates which streams will
      * be affected as a result of this transaction. Optional.
+     * @return The name of the function which calculates stream affected.
      */
     String modifiedStreamsFunction() default "";
 }

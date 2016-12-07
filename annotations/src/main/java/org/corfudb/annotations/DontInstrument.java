@@ -7,8 +7,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks that a method should not be instrumented by the runtime.
- *
+ * <p>Marks that a method should not be instrumented by the runtime.</p>
  * Created by mwei on 2/17/16.
  */
 @Target(ElementType.METHOD)

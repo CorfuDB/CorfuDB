@@ -3,8 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.annotations.*;
-import org.corfudb.runtime.object.AbstractCorfuContainer;
-import org.corfudb.runtime.object.ICorfuObject;
+import org.corfudb.runtime.object.AbstractCorfuWrapper;
 import sun.misc.CRC16;
 
 import java.util.*;
@@ -17,7 +16,7 @@ import java.util.zip.CRC32;
  */
 @CorfuObject(constructorType = ConstructorType.PERSISTED,
         objectType = ObjectType.STATELESS)
-public class FGMap<K, V> extends AbstractCorfuContainer<FGMap<K,V>>
+public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>>
         implements Map<K, V>
 {
 
