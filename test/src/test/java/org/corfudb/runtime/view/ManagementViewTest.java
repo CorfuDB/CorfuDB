@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.clients.TestRule;
@@ -49,6 +50,13 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
 
+        // Reduce test execution time from 15+ seconds to about 8 seconds:
+        // Set aggressive timeouts for surviving MS that polls the dead MS.
+        ManagementServer ms = getManagementServer(9001);
+        ms.getCorfuRuntime().getRouter("test:9000").setTimeoutConnect(50L);
+        ms.getCorfuRuntime().getRouter("test:9000").setTimeoutResponse(50L);
+        ms.getCorfuRuntime().getRouter("test:9000").setTimeoutRetry(50L);
+
         failureDetected.acquire();
 
         // Adding a rule on 9000 to drop all packets
@@ -64,7 +72,7 @@ public class ManagementViewTest extends AbstractViewTest {
             return true;
         }));
 
-        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toNanos(),
+        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_LONG.toNanos(),
                 TimeUnit.NANOSECONDS)).isEqualTo(true);
     }
 }
