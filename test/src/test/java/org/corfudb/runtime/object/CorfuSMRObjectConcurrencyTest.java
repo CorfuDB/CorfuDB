@@ -55,7 +55,7 @@ public class CorfuSMRObjectConcurrencyTest extends AbstractViewTest {
                     }
                 }
         );
-        executeScheduled(concurrency, 50000, TimeUnit.MILLISECONDS);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_LONG);
 
     }
 }

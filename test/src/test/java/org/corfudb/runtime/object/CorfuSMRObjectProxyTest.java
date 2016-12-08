@@ -83,14 +83,14 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
         testMap.clear();
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
                     .isNull();
         }
 
         Map<String, String> testMap2 = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(testMap2.get(Integer.toString(i)))
                     .isEqualTo(Integer.toString(i));
         }
@@ -107,7 +107,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
         testMap.clear();
         int num_threads = 5;
-        int num_records = 100;
+        int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
@@ -116,7 +116,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                         .isEqualTo(null);
             }
         });
-        executeScheduled(num_threads, 50, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
 
         Map<String, String> testMap2 = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
@@ -128,7 +128,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                         .isEqualTo(Integer.toString(i));
             }
         });
-        executeScheduled(num_threads, 50, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
     }
 
     @Test
@@ -187,7 +187,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                         .setType(SMRMap.class)
                         .open();
 
-        for(int x = 0; x < 100; x++) {
+        for(int x = 0; x < PARAMETERS.NUM_ITERATIONS_LOW; x++) {
             // thread 1: update "a" and "b" atomically
             Thread t1 = new Thread(() -> {
                 runtime.getObjectsView().TXBegin();
@@ -205,9 +205,8 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
             });
             t2.start();
 
-            // Wait for 5 seconds
-            t1.join(5000);
-            t2.join(5000);
+            t1.join(PARAMETERS.TIMEOUT_NORMAL.toMillis());
+            t2.join(PARAMETERS.TIMEOUT_NORMAL.toMillis());
 
             assertThat(t1.isAlive()).isFalse();
             assertThat(t2.isAlive()).isFalse();

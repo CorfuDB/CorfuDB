@@ -16,6 +16,7 @@ import org.junit.Test;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -68,11 +69,11 @@ public class SMRMapTest extends AbstractViewTest {
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
         testMap.clear();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
                     .isNull();
         }
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(testMap.get(Integer.toString(i)))
                     .isEqualTo(Integer.toString(i));
         }
@@ -125,8 +126,8 @@ public class SMRMapTest extends AbstractViewTest {
 
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
-        final int num_threads = 5;
-        final int num_records = 100;
+        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -138,7 +139,7 @@ public class SMRMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("WPS", num_records * num_threads, startTime);
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -150,7 +151,7 @@ public class SMRMapTest extends AbstractViewTest {
         });
 
         startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
@@ -181,19 +182,25 @@ public class SMRMapTest extends AbstractViewTest {
         testMap.put("a", "b");
         testMap2.put("a", "c");
 
+        Semaphore s1 = new Semaphore(0);
+        Semaphore s2 = new Semaphore(0);
         scheduleConcurrently(1, threadNumber -> {
-            Thread.sleep(1000);
+            s1.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(),
+                    TimeUnit.MILLISECONDS);
             testMap2.put("c", "d");
+            s2.release();
         });
 
         scheduleConcurrently(1, threadNumber -> {
             getRuntime().getObjectsView().TXBegin();
             testMap.compute("b", (k, v) -> testMap2.get("a"));
-            Thread.sleep(2000); // Wait for the other thread to finish;
+            s1.release();
+            s2.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(),
+                    TimeUnit.MILLISECONDS);
             assertThatThrownBy(() -> getRuntime().getObjectsView().TXEnd())
                     .isInstanceOf(TransactionAbortedException.class);
         });
-        executeScheduled(2, 10, TimeUnit.SECONDS);
+        executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_NORMAL);
     }
 
    @Test
@@ -218,7 +225,7 @@ public class SMRMapTest extends AbstractViewTest {
     public void multipleTXesAreApplied()
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
-        IntStream.range(0, 10).asLongStream()
+        IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).asLongStream()
                 .forEach(l -> {
                     try {
                         assertThat(testMap)
@@ -237,7 +244,7 @@ public class SMRMapTest extends AbstractViewTest {
                 });
 
         assertThat(testMap)
-                .hasSize(10);
+                .hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
     }
 
     @Test
@@ -245,7 +252,7 @@ public class SMRMapTest extends AbstractViewTest {
     public void multipleTXesAreAppliedWOAccessors()
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
-        IntStream.range(0, 10).asLongStream()
+        IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).asLongStream()
                 .forEach(l -> {
                     try {
                         getRuntime().getObjectsView().TXBegin();
@@ -258,7 +265,7 @@ public class SMRMapTest extends AbstractViewTest {
                 });
 
         assertThat(testMap)
-                .hasSize(10);
+                .hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
     }
 
 
@@ -377,7 +384,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, TestObject> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(),
                 SMRMap.class);
 
-        IntStream.range(0, 10)
+        IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW)
                 .forEach(l -> {
                     try {
                         getRuntime().getObjectsView().TXBegin();
@@ -416,7 +423,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView().open(UUID.randomUUID(), SMRMap.class);
 
         final int num_threads = 5;
-        final int num_records = 100;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();
 
@@ -435,7 +442,7 @@ public class SMRMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
         calculateAbortRate(aborts.get(), num_records * num_threads);
@@ -457,8 +464,8 @@ public class SMRMapTest extends AbstractViewTest {
                                                                 .open()
                                                     )
                                                     .collect(Collectors.toList());
-        final int num_threads = 5;
-        final int num_records = 100;
+        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
         AtomicInteger aborts = new AtomicInteger();
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -477,7 +484,7 @@ public class SMRMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
         calculateAbortRate(aborts.get(), num_records * num_threads);
@@ -490,7 +497,7 @@ public class SMRMapTest extends AbstractViewTest {
         UUID stream = UUID.randomUUID();
         Map<String, String> testMap = getRuntime().getObjectsView().open(stream, SMRMap.class);
         testMap.clear();
-        for (int i = 0; i < 1_000; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
                     .isNull();
         }
