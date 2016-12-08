@@ -206,8 +206,8 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
             t2.start();
 
             // Wait for 5 seconds
-            t1.join(8000);
-            t2.join(8000);
+            t1.join(5000);
+            t2.join(5000);
 
             assertThat(t1.isAlive()).isFalse();
             assertThat(t2.isAlive()).isFalse();

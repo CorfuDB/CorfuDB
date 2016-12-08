@@ -2,8 +2,6 @@ package org.corfudb.infrastructure.log;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 
-import java.io.IOException;
-
 /**
  * An interface definition that specifies an api to interact with a StreamLog.
  *
@@ -29,7 +27,7 @@ public interface StreamLog {
     /**
      * Sync the stream log file to secondary storage.
      */
-    void sync() throws IOException;
+    void sync();
 
     /**
      * Close the stream log.
