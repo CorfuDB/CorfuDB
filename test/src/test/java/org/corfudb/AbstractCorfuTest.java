@@ -9,6 +9,7 @@ import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,8 +32,10 @@ public class AbstractCorfuTest {
 
     public Set<Callable<Object>> scheduledThreads;
     public Set<String> temporaryDirectories;
-
     public String testStatus = "";
+
+    public static final CorfuTestParameters PARAMETERS =
+            new CorfuTestParameters();
 
     @Rule
     public TestRule watcher = new TestWatcher() {
@@ -41,16 +44,19 @@ public class AbstractCorfuTest {
             if (!testStatus.equals("")) {
                 testStatus = " [" + testStatus + "]";
             }
-            System.out.print(ansi().a("[").fg(Ansi.Color.GREEN).a("PASS").reset().a("]" + testStatus).newline());
+            System.out.print(ansi().a("[").fg(Ansi.Color.GREEN).a("PASS")
+                    .reset().a("]" + testStatus).newline());
         }
 
         @Override
         protected void failed(Throwable e, Description description) {
-            System.out.print(ansi().a("[").fg(Ansi.Color.RED).a("FAIL").reset().a("]").newline());
+            System.out.print(ansi().a("[").fg(Ansi.Color.RED)
+                    .a("FAIL").reset().a("]").newline());
         }
 
         protected void starting(Description description) {
-            System.out.print(String.format("%-60s", description.getMethodName()));
+            System.out.print(String.format("%-60s", description
+                    .getMethodName()));
             System.out.flush();
         }
     };
@@ -146,6 +152,22 @@ public class AbstractCorfuTest {
                 return null;
             });
         }
+    }
+
+    /**
+     * Execute any threads which were scheduled to run.
+     *
+     * @param maxConcurrency The maximum amount of concurrency to allow when
+     *                       running the threads
+     * @param duration       The maximum length to run the tests before timing
+     *                       out.
+     * @throws Exception     Any exception that was thrown by any thread while
+     *                       tests were run.
+     */
+    public void executeScheduled(int maxConcurrency, Duration duration)
+        throws Exception {
+        executeScheduled(maxConcurrency, duration.getNano(),
+                TimeUnit.NANOSECONDS);
     }
 
     /**

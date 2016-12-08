@@ -55,11 +55,11 @@ public class StreamViewTest extends AbstractViewTest {
 
         StreamView sv = r.getStreamsView().get(streamA);
         scheduleConcurrently(100, i -> sv.write(testPayload));
-        executeScheduled(8, 10, TimeUnit.SECONDS);
+        executeScheduled(8, PARAMETERS.TIMEOUT_NORMAL);
 
         scheduleConcurrently(100, i -> assertThat(sv.read().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes()));
-        executeScheduled(8, 10, TimeUnit.SECONDS);
+        executeScheduled(8, PARAMETERS.TIMEOUT_NORMAL);
         assertThat(sv.read())
                 .isEqualTo(null);
     }
@@ -75,11 +75,11 @@ public class StreamViewTest extends AbstractViewTest {
 
         StreamView sv = r.getStreamsView().get(streamA);
         scheduleConcurrently(100, i -> sv.write(testPayload));
-        executeScheduled(8, 10, TimeUnit.SECONDS);
+        executeScheduled(8, PARAMETERS.TIMEOUT_NORMAL);
 
         scheduleConcurrently(100, i -> assertThat(sv.read().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes()));
-        executeScheduled(8, 10, TimeUnit.SECONDS);
+        executeScheduled(8, PARAMETERS.TIMEOUT_NORMAL);
         assertThat(sv.read())
                 .isEqualTo(null);
     }

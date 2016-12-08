@@ -196,7 +196,7 @@ public class FGMapTest extends AbstractViewTest {
         });
 
         startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
@@ -228,7 +228,7 @@ public class FGMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
         calculateAbortRate(aborts.get(), num_records * num_threads);
@@ -256,7 +256,7 @@ public class FGMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("OPS", num_records * num_threads, startTime);
     }
 }

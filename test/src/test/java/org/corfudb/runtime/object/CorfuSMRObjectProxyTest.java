@@ -116,7 +116,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                         .isEqualTo(null);
             }
         });
-        executeScheduled(num_threads, 50, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
 
         Map<String, String> testMap2 = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
@@ -128,7 +128,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                         .isEqualTo(Integer.toString(i));
             }
         });
-        executeScheduled(num_threads, 50, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
     }
 
     @Test

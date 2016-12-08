@@ -21,7 +21,7 @@ public class AbstractCorfuConcurrencyTest extends AbstractCorfuTest {
             throws Exception {
         final AtomicLong l = new AtomicLong();
         scheduleConcurrently(5, t -> l.getAndIncrement());
-        executeScheduled(5, 1000, TimeUnit.MILLISECONDS);
+        executeScheduled(5, PARAMETERS.TIMEOUT_SHORT);
         assertThat(l.get())
                 .isEqualTo(5);
     }
@@ -32,7 +32,8 @@ public class AbstractCorfuConcurrencyTest extends AbstractCorfuTest {
         scheduleConcurrently(5, t -> {
             throw new IOException("hi");
         });
-        assertThatThrownBy(() -> executeScheduled(5, 1000, TimeUnit.MILLISECONDS))
+        assertThatThrownBy(() -> executeScheduled(5,
+                PARAMETERS.TIMEOUT_SHORT))
                 .isInstanceOf(IOException.class);
     }
 
@@ -40,7 +41,8 @@ public class AbstractCorfuConcurrencyTest extends AbstractCorfuTest {
     public void concurrentTestsTimeout()
             throws Exception {
         scheduleConcurrently(5, t -> Thread.sleep(10000));
-        assertThatThrownBy(() -> executeScheduled(5, 1, TimeUnit.MILLISECONDS))
+        assertThatThrownBy(() -> executeScheduled(5,
+                PARAMETERS.TIMEOUT_VERY_SHORT))
                 .isInstanceOf(CancellationException.class);
     }
 
