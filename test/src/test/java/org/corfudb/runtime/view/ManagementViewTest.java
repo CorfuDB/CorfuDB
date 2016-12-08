@@ -64,7 +64,7 @@ public class ManagementViewTest extends AbstractViewTest {
             return true;
         }));
 
-        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.getNano(),
+        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toNanos(),
                 TimeUnit.NANOSECONDS)).isEqualTo(true);
     }
 }

@@ -22,6 +22,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static java.time.temporal.ChronoUnit.MILLIS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.fusesource.jansi.Ansi.ansi;
 
@@ -166,8 +167,8 @@ public class AbstractCorfuTest {
      */
     public void executeScheduled(int maxConcurrency, Duration duration)
         throws Exception {
-        executeScheduled(maxConcurrency, duration.getNano(),
-                TimeUnit.NANOSECONDS);
+        executeScheduled(maxConcurrency, duration.toMillis(),
+                TimeUnit.MILLISECONDS);
     }
 
     /**
