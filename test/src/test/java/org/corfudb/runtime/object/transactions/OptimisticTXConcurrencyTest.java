@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
 import lombok.Getter;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSharedCounter;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
@@ -80,11 +81,14 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
             );
         }
 
-
-        // try to commit all transactions; at most one should succeed
-        for (int i = 0; i < n; i++) {
+        // try to commit all transactions; only first one should should succeed
+        t(0, this::TXEnd);
+        for (int i = 1; i < n; i++) {
             final int threadind = i;
-            t(threadind, this::TXEnd);
+            t(threadind, this::TXEnd)
+                    .assertThrows()
+                    .isInstanceOf(TransactionAbortedException.class);
+            ;
         }
     }
 
