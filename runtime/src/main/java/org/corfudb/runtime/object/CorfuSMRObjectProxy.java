@@ -38,6 +38,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * Created by mwei on 1/7/16.
  */
 @Slf4j
+@Deprecated
 public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
     P smrObject;

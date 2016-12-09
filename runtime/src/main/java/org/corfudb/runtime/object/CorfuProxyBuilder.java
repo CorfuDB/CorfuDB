@@ -26,6 +26,7 @@ import java.util.Set;
  * Created by mwei on 3/30/16.
  */
 @Slf4j
+@Deprecated
 public class CorfuProxyBuilder {
 
     final static AnnotationDescription instrumentedDescription =

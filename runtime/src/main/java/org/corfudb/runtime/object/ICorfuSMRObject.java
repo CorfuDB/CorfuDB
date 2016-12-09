@@ -5,6 +5,7 @@ import org.corfudb.runtime.exceptions.UnprocessedException;
 /**
  * Created by mwei on 1/7/16.
  */
+@Deprecated
 public interface ICorfuSMRObject<T> extends ICorfuObject {
 
     // These calls are dynamically overridden by the proxy, and should not be

@@ -28,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
  * Created by mwei on 3/30/16.
  */
 @Slf4j
+@Deprecated
 public class CorfuObjectProxy<P> {
 
     /**
