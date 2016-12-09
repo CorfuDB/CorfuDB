@@ -112,7 +112,7 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
         expectedResult.put(getEndpoint(SERVERS.PORT_2), false);
 
         Map<String, Boolean> actualResult = new HashMap<>();
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             failureDetectorPolicy.getServerStatus().forEach(actualResult::putIfAbsent);
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
             if (actualResult.equals(expectedResult)) break;
@@ -136,7 +136,7 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
         expectedResult.remove(getEndpoint(SERVERS.PORT_0));
 
         actualResult = new HashMap<>();
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             failureDetectorPolicy.getServerStatus().forEach(actualResult::putIfAbsent);
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
             if (actualResult.equals(expectedResult)) break;
