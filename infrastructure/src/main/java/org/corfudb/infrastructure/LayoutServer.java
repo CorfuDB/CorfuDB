@@ -99,7 +99,6 @@ public class LayoutServer extends AbstractServer {
     public synchronized void reset() {
         // File system state surrounding server epoch will be deleted later in this function.
         // However, we must also re-set live object state in the server router.
-        // getServerContext().getServerRouter().setServerEpoch(0);
         setServerEpoch(0);
 
         String d = serverContext.getDataStore().getLogDir();
