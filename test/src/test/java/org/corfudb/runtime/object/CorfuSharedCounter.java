@@ -20,10 +20,10 @@ public class CorfuSharedCounter {
     public CorfuSharedCounter() { this(0); }
 
     @Accessor
-    int getValue() { return value; }
+    public int getValue() { return value; }
 
     @Mutator
-    void setValue(int newValue) { value = newValue; }
+    public void setValue(int newValue) { value = newValue; }
 
     @MutatorAccessor
     int CAS(int testValue, int newValue) {
