@@ -30,6 +30,13 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- External Dependencies -->
+        <dependency>
+            <groupId>org.erlang.otp</groupId>
+            <artifactId>jinterface</artifactId>
+            <version>1.6.1</version>
+        </dependency>
     </dependencies>
 
 </project>
