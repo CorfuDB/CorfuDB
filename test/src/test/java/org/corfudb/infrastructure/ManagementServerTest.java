@@ -49,7 +49,7 @@ public class ManagementServerTest extends AbstractServerTest {
      */
     @Test
     public void bootstrapManagementServer() {
-        Layout layout = TestLayoutBuilder.single(9000);
+        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(layout));
@@ -61,7 +61,7 @@ public class ManagementServerTest extends AbstractServerTest {
      */
     @Test
     public void triggerFailureHandler() {
-        Layout layout = TestLayoutBuilder.single(9000);
+        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         Map<String, Boolean> map = new HashMap<>();
         map.put("key", true);
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(new FailureDetectorMsg(map)));

@@ -50,15 +50,16 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
             throws Exception {
         getDefaultRuntime();
 
+        final int TEST_VALUE = 42;
         TestClass testClass = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
                 .setType(TestClass.class)
                 .open();
 
-        testClass.set(52);
+        testClass.set(TEST_VALUE);
         assertThat(testClass.get())
-                .isEqualTo(52);
+                .isEqualTo(TEST_VALUE);
 
         CorfuRuntime runtime2 = new CorfuRuntime(getDefaultEndpoint());
         runtime2.connect();
@@ -70,7 +71,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                 .open();
 
         assertThat(testClass2.get())
-                .isEqualTo(52);
+                .isEqualTo(TEST_VALUE);
     }
 
     @Test
@@ -106,7 +107,7 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView().open(
                 CorfuRuntime.getStreamID("test"), TreeMap.class);
         testMap.clear();
-        int num_threads = 5;
+        int num_threads = PARAMETERS.CONCURRENCY_SOME;
         int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
 
         scheduleConcurrently(num_threads, threadNumber -> {

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import org.apache.bcel.generic.NEW;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.TestServerRouter;
@@ -54,7 +55,8 @@ public class TestClientRouterTest extends AbstractCorfuTest {
         assertThat(bc.pingSync())
                 .isTrue();
 
-        assertThatThrownBy(() -> bc.setRemoteEpoch(9L).get())
+        final long NEW_EPOCH = 9L;
+        assertThatThrownBy(() -> bc.setRemoteEpoch(NEW_EPOCH).get())
                 .hasCauseInstanceOf(TimeoutException.class);
     }
 }

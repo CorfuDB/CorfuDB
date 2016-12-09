@@ -27,6 +27,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * Created by mwei on 12/13/15.
  */
 @Slf4j
+// this class does not have access to parameters and is
+// scheduled to be deprecated anyway.
+@SuppressWarnings("checkstyle:magicnumber")
 public class TestClientRouter implements IClientRouter {
 
     /**
