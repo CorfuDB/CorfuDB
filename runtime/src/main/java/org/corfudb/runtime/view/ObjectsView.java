@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
@@ -14,7 +12,6 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Collections;
@@ -22,8 +19,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 /**
  * A view of the objects inside a Corfu instance.
@@ -128,7 +123,7 @@ public class ObjectsView extends AbstractView {
                         destination, proxy.getCorfuSMRProxy().getVersion());
                 try {
                     return
-                            CorfuCompileProxyBuilder.getProxy(proxy.getCorfuSMRProxy().getObjectType(),
+                            CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy().getObjectType(),
                                     runtime, sv.getStreamID(), null, Serializers.JSON);
                 }
                 catch (Exception ex) {

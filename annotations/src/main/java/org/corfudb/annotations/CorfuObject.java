@@ -20,11 +20,14 @@ public @interface CorfuObject {
     ConstructorType constructorType() default ConstructorType.RUNTIME;
 
     /** @return Whether or not the object holds state or not. Deprecated. */
+    @Deprecated
     ObjectType objectType() default ObjectType.STATELESS;
 
     /** @return Where the state of the object is stored. Deprecated. */
+    @Deprecated
     StateSource stateSource() default StateSource.SELF;
 
     /** @return What the state source is. Deprecated. */
+    @Deprecated
     Class stateType() default StaticMappingObject.class;
 }
