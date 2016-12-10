@@ -106,8 +106,6 @@ public class AbstractCorfuTest {
     }
 
     /** Clean the per test temporary directory (PARAMETERS.TEST_TEMP_DIR)
-     * This is different than deleteTempDirs because it does not remove
-     * the directory itself.
      */
     @After
     public void cleanPerTestTempDir() {
