@@ -28,7 +28,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
     @Override
     public LayoutServer getDefaultServer() {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         return getDefaultServer(serviceDir);
     }
 
@@ -178,7 +178,7 @@ public class LayoutServerTest extends AbstractServerTest {
     @Test
     public void checkLayoutPersisted() throws Exception {
         //serviceDirectory from which all instances of corfu server are to be booted.
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
         LayoutServer s1 = getDefaultServer(serviceDir);
 
@@ -232,7 +232,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void checkPaxosPhasesPersisted() throws Exception {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
@@ -280,7 +280,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void checkMessagesValidatedAgainstPhase1PersistedData() throws Exception {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
@@ -324,7 +324,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void checkMessagesValidatedAgainstPhase2PersistedData() throws Exception {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
@@ -381,7 +381,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void checkPhase1AndPhase2MessagesFromMultipleClients() throws Exception {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
         LayoutServer s1 = getDefaultServer(serviceDir);
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
@@ -440,7 +440,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
     @Test
     public void testReboot() throws Exception {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
         setServer(s1);
 

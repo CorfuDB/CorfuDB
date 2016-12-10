@@ -65,18 +65,20 @@ public class AbstractCorfuTest {
         }
     };
 
-    public static void deleteFolder(File folder) {
+    public static void deleteFolder(File folder, boolean deleteSelf) {
         File[] files = folder.listFiles();
         if (files != null) { //some JVMs return null for empty dirs
             for (File f : files) {
                 if (f.isDirectory()) {
-                    deleteFolder(f);
+                    deleteFolder(f, true);
                 } else {
                     f.delete();
                 }
             }
         }
-        folder.delete();
+        if (deleteSelf) {
+            folder.delete();
+        }
     }
 
     @Before
@@ -102,6 +104,12 @@ public class AbstractCorfuTest {
         scheduledThreads.clear();
     }
 
+    @After
+    public void cleanPerTestTempDir() {
+        deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR),
+                false);
+    }
+
     public String getTempDir() {
         String tempdir = com.google.common.io.Files.createTempDir().getAbsolutePath();
         temporaryDirectories.add(tempdir);
@@ -112,7 +120,7 @@ public class AbstractCorfuTest {
     public void deleteTempDirs() {
         for (String s : temporaryDirectories) {
             File folder = new File(s);
-            deleteFolder(folder);
+            deleteFolder(folder, true);
         }
     }
 

@@ -25,7 +25,7 @@ import org.junit.Test;
 public class StreamLogFilesTest extends AbstractCorfuTest {
 
     private String getDirPath() {
-        return getTempDir() + File.separator;
+        return PARAMETERS.TEST_TEMP_DIR + File.separator;
     }
 
     @Test
@@ -40,8 +40,12 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
 
         // Disable checksum, then write and read then same entry
-        log = new StreamLogFiles(getDirPath(), true);
-        log.append(address0, new LogData(DataType.DATA, b));
+        // An overwrite exception should occur, since we are writing the
+        // same entry.
+        final StreamLog newLog = new StreamLogFiles(getDirPath(), true);
+        assertThatThrownBy(() -> { newLog
+                .append(address0, new LogData(DataType.DATA, b)); })
+                .isInstanceOf(OverwriteException.class);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
     }
 
