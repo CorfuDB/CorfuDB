@@ -53,10 +53,10 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Reduce test execution time from 15+ seconds to about 8 seconds:
         // Set aggressive timeouts for surviving MS that polls the dead MS.
-        ManagementServer ms = getManagementServer(9001);
-        ms.getCorfuRuntime().getRouter("test:9000").setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-        ms.getCorfuRuntime().getRouter("test:9000").setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-        ms.getCorfuRuntime().getRouter("test:9000").setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        ManagementServer ms = getManagementServer(SERVERS.PORT_1);
+        ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
 
         failureDetected.acquire();
 
