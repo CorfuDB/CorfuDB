@@ -402,7 +402,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             return new VersionLockedObject<T>(getNewInstance(),
                     -1L,
                     rt.getStreamsView().get(streamID),
-                    this);
+                    getUpcallTargetMap(), getUndoRecordTargetMap(),
+                    getUndoTargetMap());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

@@ -76,12 +76,21 @@ public class VersionLockedObject<T> {
      */
     private int optimisticVersion;
 
-    /** The proxy which created this object.
-     *
-     */
-    private ICorfuSMRProxyInternal<T> proxy;
 
-    public VersionLockedObject(T obj, long version, StreamView sv, ICorfuSMRProxyInternal<T> proxy) {
+    /** The upcall map for this object. */
+    private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
+
+    /** The undo record function map for this object. */
+    private final Map<String, IUndoRecordFunction<T>> undoRecordFunctionMap;
+
+    /** The undo target map for this object. */
+    private final Map<String, IUndoFunction<T>> undoFunctionMap;
+
+    public VersionLockedObject(T obj, long version, StreamView sv,
+                  Map<String, ICorfuSMRUpcallTarget<T>> upcallTargets,
+                  Map<String, IUndoRecordFunction<T>> undoRecordTargets,
+                  Map<String, IUndoFunction<T>> undoTargets)
+    {
         this.object = obj;
         this.version = version;
         this.sv = sv;
@@ -93,7 +102,10 @@ public class VersionLockedObject<T> {
         this.optimisticallyModified = false;
 
         this.optimisticVersion = 0;
-        this.proxy = proxy;
+
+        this.upcallTargetMap = upcallTargets;
+        this.undoRecordFunctionMap = undoRecordTargets;
+        this.undoFunctionMap = undoTargets;
         lock = new StampedLock();
     }
 
@@ -139,7 +151,7 @@ public class VersionLockedObject<T> {
                     if (!x.isUndoable()) {
                         throw new NoRollbackException(x);
                     }
-                    proxy.getUndoTargetMap().get(x.getSMRMethod())
+                    undoFunctionMap.get(x.getSMRMethod())
                             .doUndo(object, x.getUndoRecord(), x.getSMRArguments());
                 });
         optimisticUndoLog.clear();
@@ -159,14 +171,15 @@ public class VersionLockedObject<T> {
         // TODO: validate the caller actually has a write lock.
         try {
             ICorfuSMRUpcallTarget<T> target =
-                    proxy.getUpcallTargetMap()
+                    upcallTargetMap
                             .get(entry.getSMRMethod());
             if (target == null) {
                 throw new Exception("Unknown upcall " + entry.getSMRMethod());
             }
             // Can we generate an undo record?
             IUndoRecordFunction<T> undoRecordTarget =
-                    proxy.getUndoRecordTargetMap().get(entry.getSMRMethod());
+                    undoRecordFunctionMap
+                            .get(entry.getSMRMethod());
             if (undoRecordTarget != null) {
                 entry.setUndoRecord(undoRecordTarget
                         .getUndoRecord(object, entry.getSMRArguments()));
