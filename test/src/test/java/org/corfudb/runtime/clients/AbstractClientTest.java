@@ -77,11 +77,12 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     abstract Set<IClient> getClientsForTest();
 
     public ServerContext defaultServerContext() {
+        final int MAX_CACHE = 256_000_000;
         return new ServerContextBuilder()
                 .setInitialToken(0)
                 .setMemory(true)
                 .setSingle(false)
-                .setMaxCache(256000000)
+                .setMaxCache(MAX_CACHE)
                 .setServerRouter(serverRouter)
                 .build();
     }

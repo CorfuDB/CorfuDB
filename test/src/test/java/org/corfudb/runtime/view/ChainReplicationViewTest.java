@@ -54,7 +54,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                         Integer.toString(i).getBytes(), Collections.emptyMap(), Collections.emptyMap());
             }
         });
-        executeScheduled(numberThreads, 50, TimeUnit.SECONDS);
+        executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
 
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
@@ -63,7 +63,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                         .isEqualTo(Integer.toString(i).getBytes());
             }
         });
-        executeScheduled(numberThreads, 50, TimeUnit.SECONDS);
+        executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
     }
 
     @Test
@@ -71,19 +71,19 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     public void canReadWriteToMultiple()
             throws Exception {
 
-        addServer(9000);
-        addServer(9001);
-        addServer(9002);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
 
         bootstrapAllServers(new TestLayoutBuilder()
-                .addLayoutServer(9000)
-                .addSequencer(9000)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
                 .buildSegment()
                     .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
                     .buildStripe()
-                        .addLogUnit(9000)
-                        .addLogUnit(9001)
-                        .addLogUnit(9002)
+                        .addLogUnit(SERVERS.PORT_0)
+                        .addLogUnit(SERVERS.PORT_1)
+                        .addLogUnit(SERVERS.PORT_2)
                     .addToSegment()
                 .addToLayout()
                 .build());
@@ -112,19 +112,19 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     public void ensureAllUnitsContainData()
             throws Exception {
 
-        addServer(9000);
-        addServer(9001);
-        addServer(9002);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
 
         bootstrapAllServers(new TestLayoutBuilder()
-                .addLayoutServer(9000)
-                .addSequencer(9000)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
                 .buildSegment()
                     .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
                     .buildStripe()
-                        .addLogUnit(9000)
-                        .addLogUnit(9001)
-                        .addLogUnit(9002)
+                        .addLogUnit(SERVERS.PORT_0)
+                        .addLogUnit(SERVERS.PORT_1)
+                        .addLogUnit(SERVERS.PORT_2)
                     .addToSegment()
                 .addToLayout()
                 .build());
@@ -146,11 +146,11 @@ public class ChainReplicationViewTest extends AbstractViewTest {
                 .contains(streamA);
 
         // Ensure that the data was written to each logunit.
-        assertThat(getLogUnit(9000))
+        assertThat(getLogUnit(SERVERS.PORT_0))
                 .matchesDataAtAddress(0, testPayload);
-        assertThat(getLogUnit(9001))
+        assertThat(getLogUnit(SERVERS.PORT_1))
                 .matchesDataAtAddress(0, testPayload);
-        assertThat(getLogUnit(9002))
+        assertThat(getLogUnit(SERVERS.PORT_2))
                 .matchesDataAtAddress(0, testPayload);
     }
 }

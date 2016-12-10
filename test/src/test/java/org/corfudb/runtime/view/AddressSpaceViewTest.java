@@ -35,12 +35,12 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     public void cacheMissTimesOut() {
         getDefaultRuntime().setCacheDisabled(false).connect();
 
-        getRuntime().getAddressSpaceView().setEmptyDuration(Duration.ofNanos(10));
+        getRuntime().getAddressSpaceView().setEmptyDuration(PARAMETERS.TIMEOUT_VERY_SHORT);
         assertThat(getRuntime().getAddressSpaceView().read(0).getType())
                 .isEqualTo(DataType.EMPTY);
         getRuntime().getLayoutView().getLayout().getLogUnitClient(0, 0).fillHole(0);
         try {
-            Thread.sleep(1000);
+            Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
         } catch (InterruptedException e) {// don't do anything
         }
         assertThat(getRuntime().getAddressSpaceView().read(0).getType())
@@ -51,24 +51,24 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingWorks()
             throws Exception {
-        addServer(9000);
-        addServer(9001);
-        addServer(9002);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
 
         //configure the layout accordingly
         bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addSequencer(9000)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
                     .buildSegment()
                         .buildStripe()
-                            .addLogUnit(9000)
+                            .addLogUnit(SERVERS.PORT_0)
                             .addToSegment()
                         .buildStripe()
-                            .addLogUnit(9001)
+                            .addLogUnit(SERVERS.PORT_1)
                             .addToSegment()
                         .buildStripe()
-                            .addLogUnit(9002)
+                            .addLogUnit(SERVERS.PORT_2)
                             .addToSegment()
                     .addToLayout()
                 .build());
@@ -89,20 +89,20 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .contains(streamA);
 
         // Ensure that the data was written to each logunit.
-        LogUnitServerAssertions.assertThat(getLogUnit(9000))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
                 .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(getLogUnit(9001))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_1))
                 .isEmptyAtAddress(0);
-        LogUnitServerAssertions.assertThat(getLogUnit(9002))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
                 .isEmptyAtAddress(0);
 
         r.getAddressSpaceView().write(1, Collections.singleton(streamA),
                 "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
-        LogUnitServerAssertions.assertThat(getLogUnit(9000))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
                 .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(getLogUnit(9001))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_1))
                 .matchesDataAtAddress(1, "1".getBytes());
-        LogUnitServerAssertions.assertThat(getLogUnit(9002))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
                 .isEmptyAtAddress(0);
     }
 
@@ -110,23 +110,23 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingReadAllWorks()
             throws Exception {
-        addServer(9000);
-        addServer(9001);
-        addServer(9002);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
 
         bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addSequencer(9000)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
                     .buildSegment()
                         .buildStripe()
-                            .addLogUnit(9000)
+                            .addLogUnit(SERVERS.PORT_0)
                             .addToSegment()
                         .buildStripe()
-                            .addLogUnit(9001)
+                            .addLogUnit(SERVERS.PORT_1)
                             .addToSegment()
                         .buildStripe()
-                            .addLogUnit(9002)
+                            .addLogUnit(SERVERS.PORT_2)
                             .addToSegment()
                     .addToLayout()
                 .build());
@@ -137,28 +137,31 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(0, Collections.singleton(streamA),
+        final long ADDRESS_0 = 0;
+        final long ADDRESS_1 = 1;
+        final long ADDRESS_2 = 3;
+        r.getAddressSpaceView().write(ADDRESS_0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap(), Collections.emptyMap());
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        assertThat(r.getAddressSpaceView().read(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
 
-        r.getAddressSpaceView().write(1, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(ADDRESS_1, Collections.singleton(streamA),
                 "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
-        r.getAddressSpaceView().write(3, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(ADDRESS_2, Collections.singleton(streamA),
                 "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
         RangeSet<Long> rs = TreeRangeSet.create();
-        rs.add(Range.closed(0L, 3L));
+        rs.add(Range.closed(0L, ADDRESS_2));
         Map<Long, LogData> m = r.getAddressSpaceView().read(rs);
 
-        assertThat(m.get(0L).getPayload(getRuntime()))
+        assertThat(m.get(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
-        assertThat(m.get(1L).getPayload(getRuntime()))
+        assertThat(m.get(ADDRESS_1).getPayload(getRuntime()))
                 .isEqualTo("1".getBytes());
-        assertThat(m.get(3L).getPayload(getRuntime()))
+        assertThat(m.get(ADDRESS_2).getPayload(getRuntime()))
                 .isEqualTo("3".getBytes());
     }
 
@@ -167,23 +170,23 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void ensureStripingStreamReadAllWorks()
             throws Exception {
-        addServer(9000);
-        addServer(9001);
-        addServer(9002);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
 
         bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addSequencer(9000)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
                     .buildSegment()
                         .buildStripe()
-                            .addLogUnit(9000)
+                            .addLogUnit(SERVERS.PORT_0)
                             .addToSegment()
                         .buildStripe()
-                            .addLogUnit(9001)
+                            .addLogUnit(SERVERS.PORT_1)
                             .addToSegment()
                         .buildStripe()
-                            .addLogUnit(9002)
+                            .addLogUnit(SERVERS.PORT_2)
                             .addToSegment()
                     .addToLayout()
                 .build());
@@ -195,20 +198,26 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(0, Collections.singleton(streamA),
+        final int ADDRESS_0 = 0;
+        final int ADDRESS_1 = 1;
+        final int ADDRESS_2 = 2;
+        final int ADDRESS_3 = 3;
+        final int ADDRESS_4 = 5;
+
+        r.getAddressSpaceView().write(ADDRESS_0, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap(), Collections.emptyMap());
 
 
-        r.getAddressSpaceView().write(1, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(ADDRESS_1, Collections.singleton(streamA),
                 "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
-        r.getAddressSpaceView().write(2, Collections.singleton(streamB),
+        r.getAddressSpaceView().write(ADDRESS_2, Collections.singleton(streamB),
                 "2".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
-        r.getAddressSpaceView().write(3, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(ADDRESS_3, Collections.singleton(streamA),
                 "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
-        r.getAddressSpaceView().write(5, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(ADDRESS_4, Collections.singleton(streamA),
                 "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
     }

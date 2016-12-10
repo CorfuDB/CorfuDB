@@ -21,16 +21,17 @@ public class CorfuSMRObjectConcurrencyTest extends AbstractViewTest {
     public void testCorfuSharedCounterConcurrentReads() throws Exception {
         getDefaultRuntime();
 
+        final int COUNTER_INITIAL = 55;
         CorfuSharedCounter sharedCounter = getRuntime().getObjectsView().
                 build().
                 setStreamName("test")
                 .setType(CorfuSharedCounter.class)
                 .open();
-        sharedCounter.setValue(55);
+        sharedCounter.setValue(COUNTER_INITIAL);
 
-        int concurrency = 10;
-        int writeconcurrency = 5;
-        int writerwork = 50;
+        int concurrency = PARAMETERS.CONCURRENCY_SOME * 2;
+        int writeconcurrency = PARAMETERS.CONCURRENCY_SOME;
+        int writerwork = PARAMETERS.NUM_ITERATIONS_LOW;
 
         sharedCounter.setValue(-1);
         assertThat(sharedCounter.getValue())
@@ -43,7 +44,7 @@ public class CorfuSMRObjectConcurrencyTest extends AbstractViewTest {
         );
         scheduleConcurrently(concurrency-writeconcurrency, t -> {
                     int lastread = -1;
-                    for (int i = 0; i < 1000; i++) {
+                    for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
                         int res = sharedCounter.getValue();
                         boolean assertflag =
                                 (

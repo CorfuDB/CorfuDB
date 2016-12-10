@@ -57,10 +57,10 @@ public class PutIfAbsentMapTest extends AbstractViewTest {
                 .open();
 
         ConcurrentLinkedQueue<Boolean> resultList = new ConcurrentLinkedQueue<>();
-        scheduleConcurrently(100, x -> {
+        scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, x -> {
             resultList.add(stringMap.putIfAbsent("a", Integer.toString(x)));
         });
-        executeScheduled(4, 30, TimeUnit.SECONDS);
+        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
         long trueCount = resultList.stream()
                 .filter(x -> x)

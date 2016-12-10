@@ -38,6 +38,9 @@ public class AbstractCorfuTest {
     public static final CorfuTestParameters PARAMETERS =
             new CorfuTestParameters();
 
+    public static final CorfuTestServers SERVERS =
+            new CorfuTestServers();
+
     @Rule
     public TestRule watcher = new TestWatcher() {
         @Override
@@ -114,15 +117,19 @@ public class AbstractCorfuTest {
     }
 
     public void calculateAbortRate(int aborts, int transactions) {
+        final float FRACTION_TO_PERCENT = 100.0F;
         if (!testStatus.equals("")) {
             testStatus += ";";
         }
-        testStatus += "Aborts=" + String.format("%.2f", ((float) aborts / transactions) * 100.0f) + "%";
+        testStatus += "Aborts=" + String.format("%.2f",
+                ((float) aborts / transactions) * FRACTION_TO_PERCENT) + "%";
     }
 
     public void calculateRequestsPerSecond(String name, int totalRequests, long startTime) {
+        final float MILLISECONDS_TO_SECONDS = 1000.0F;
         long endTime = System.currentTimeMillis();
-        float timeInSeconds = ((float) (endTime - startTime)) / 1000.0F;
+        float timeInSeconds = ((float) (endTime - startTime))
+                / MILLISECONDS_TO_SECONDS;
         float rps = (float) totalRequests / timeInSeconds;
         if (!testStatus.equals("")) {
             testStatus += ";";
