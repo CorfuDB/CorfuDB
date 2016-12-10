@@ -32,7 +32,6 @@ import static org.fusesource.jansi.Ansi.ansi;
 public class AbstractCorfuTest {
 
     public Set<Callable<Object>> scheduledThreads;
-    public Set<String> temporaryDirectories;
     public String testStatus = "";
 
     public static final CorfuTestParameters PARAMETERS =
@@ -116,35 +115,6 @@ public class AbstractCorfuTest {
                 false);
     }
 
-    /** Get a new temporary directory. This temporary directory will be
-     * deleted at the conclusion of this test.
-     * @return  The path to the new temporary directory
-     */
-    public String getNewTempDir() {
-        String tempdir = com.google.common.io.Files.createTempDir()
-                                                    .getAbsolutePath();
-        temporaryDirectories.add(tempdir);
-        return tempdir;
-    }
-
-    /** Setup the temporary directory list by creating a new directory set.
-     *
-     */
-    @Before
-    public void setupTempDirs() {
-        temporaryDirectories = new HashSet<>();
-    }
-
-    /** Cleanup the temporary directories by going through the directory
-     * set and deleting each one.
-     */
-    @After
-    public void deleteTempDirs() {
-        for (String s : temporaryDirectories) {
-            File folder = new File(s);
-            deleteFolder(folder, true);
-        }
-    }
 
     public void calculateAbortRate(int aborts, int transactions) {
         final float FRACTION_TO_PERCENT = 100.0F;
