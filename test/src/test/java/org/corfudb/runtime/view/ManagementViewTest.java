@@ -21,7 +21,8 @@ public class ManagementViewTest extends AbstractViewTest {
      * Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message
      * is sent by the Management client to its server.
      */
-    private static final Semaphore failureDetected = new Semaphore(1, true);
+    private static final Semaphore failureDetected = new Semaphore(1,
+            true);
 
     /**
      * Scenario with 2 nodes: SERVERS.PORT_0 and SERVERS.PORT_1.
@@ -57,14 +58,17 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Adding a rule on SERVERS.PORT_1 to toggle the flag when it sends the
         // MANAGEMENT_FAILURE_DETECTED message.
-        addClientRule(getManagementServer(SERVERS.PORT_1).getCorfuRuntime(), new TestRule().matches(corfuMsg -> {
-            if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
+        addClientRule(getManagementServer(SERVERS.PORT_1).getCorfuRuntime(),
+                new TestRule().matches(corfuMsg -> {
+            if (corfuMsg.getMsgType().equals(CorfuMsgType
+                    .MANAGEMENT_FAILURE_DETECTED)) {
                 failureDetected.release();
             }
             return true;
         }));
 
-        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toNanos(),
+        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL
+                        .toNanos(),
                 TimeUnit.NANOSECONDS)).isEqualTo(true);
     }
 }
