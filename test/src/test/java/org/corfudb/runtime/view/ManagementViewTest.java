@@ -21,29 +21,30 @@ public class ManagementViewTest extends AbstractViewTest {
      * Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message
      * is sent by the Management client to its server.
      */
-    private static final Semaphore failureDetected = new Semaphore(1, true);
+    private static final Semaphore failureDetected = new Semaphore(1,
+            true);
 
     /**
-     * Scenario with 2 nodes: 9000 and 9001.
-     * We fail 9000 and then listen to intercept the message
-     * sent by 9001's client to the server to handle the failure.
+     * Scenario with 2 nodes: SERVERS.PORT_0 and SERVERS.PORT_1.
+     * We fail SERVERS.PORT_0 and then listen to intercept the message
+     * sent by SERVERS.PORT_1's client to the server to handle the failure.
      *
      * @throws Exception
      */
     @Test
     public void invokeFailureHandler()
             throws Exception {
-        addServer(9000);
-        addServer(9001);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addLayoutServer(9001)
-                .addSequencer(9000)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(9000)
-                .addLogUnit(9001)
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
                 .addToSegment()
                 .addToLayout()
                 .build();
@@ -51,19 +52,23 @@ public class ManagementViewTest extends AbstractViewTest {
 
         failureDetected.acquire();
 
-        // Adding a rule on 9000 to drop all packets
-        addServerRule(9000, new TestRule().always().drop());
-        getManagementServer(9000).shutdown();
+        // Adding a rule on SERVERS.PORT_0 to drop all packets
+        addServerRule(SERVERS.PORT_0, new TestRule().always().drop());
+        getManagementServer(SERVERS.PORT_0).shutdown();
 
-        // Adding a rule on 9001 to toggle the flag when it sends the
+        // Adding a rule on SERVERS.PORT_1 to toggle the flag when it sends the
         // MANAGEMENT_FAILURE_DETECTED message.
-        addClientRule(getManagementServer(9001).getCorfuRuntime(), new TestRule().matches(corfuMsg -> {
-            if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
+        addClientRule(getManagementServer(SERVERS.PORT_1).getCorfuRuntime(),
+                new TestRule().matches(corfuMsg -> {
+            if (corfuMsg.getMsgType().equals(CorfuMsgType
+                    .MANAGEMENT_FAILURE_DETECTED)) {
                 failureDetected.release();
             }
             return true;
         }));
 
-        assertThat(failureDetected.tryAcquire(15, TimeUnit.SECONDS)).isEqualTo(true);
+        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL
+                        .toNanos(),
+                TimeUnit.NANOSECONDS)).isEqualTo(true);
     }
 }

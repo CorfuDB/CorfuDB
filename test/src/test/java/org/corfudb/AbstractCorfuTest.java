@@ -2,7 +2,6 @@ package org.corfudb;
 
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
-import org.assertj.core.api.AssertProvider;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
 import org.junit.Before;
@@ -14,6 +13,18 @@ import org.junit.runner.Description;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.*;
+import java.time.Duration;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,8 +38,13 @@ public class AbstractCorfuTest {
 
     public Set<Callable<Object>> scheduledThreads;
     public Set<String> temporaryDirectories;
-
     public String testStatus = "";
+
+    public static final CorfuTestParameters PARAMETERS =
+            new CorfuTestParameters();
+
+    public static final CorfuTestServers SERVERS =
+            new CorfuTestServers();
 
     @Rule
     public TestRule watcher = new TestWatcher() {
@@ -37,16 +53,19 @@ public class AbstractCorfuTest {
             if (!testStatus.equals("")) {
                 testStatus = " [" + testStatus + "]";
             }
-            System.out.print(ansi().a("[").fg(Ansi.Color.GREEN).a("PASS").reset().a("]" + testStatus).newline());
+            System.out.print(ansi().a("[").fg(Ansi.Color.GREEN).a("PASS")
+                    .reset().a("]" + testStatus).newline());
         }
 
         @Override
         protected void failed(Throwable e, Description description) {
-            System.out.print(ansi().a("[").fg(Ansi.Color.RED).a("FAIL").reset().a("]").newline());
+            System.out.print(ansi().a("[").fg(Ansi.Color.RED)
+                    .a("FAIL").reset().a("]").newline());
         }
 
         protected void starting(Description description) {
-            System.out.print(String.format("%-60s", description.getMethodName()));
+            System.out.print(String.format("%-60s", description
+                    .getMethodName()));
             System.out.flush();
         }
     };
@@ -103,15 +122,19 @@ public class AbstractCorfuTest {
     }
 
     public void calculateAbortRate(int aborts, int transactions) {
+        final float FRACTION_TO_PERCENT = 100.0F;
         if (!testStatus.equals("")) {
             testStatus += ";";
         }
-        testStatus += "Aborts=" + String.format("%.2f", ((float) aborts / transactions) * 100.0f) + "%";
+        testStatus += "Aborts=" + String.format("%.2f",
+                ((float) aborts / transactions) * FRACTION_TO_PERCENT) + "%";
     }
 
     public void calculateRequestsPerSecond(String name, int totalRequests, long startTime) {
+        final float MILLISECONDS_TO_SECONDS = 1000.0F;
         long endTime = System.currentTimeMillis();
-        float timeInSeconds = ((float) (endTime - startTime)) / 1000.0F;
+        float timeInSeconds = ((float) (endTime - startTime))
+                / MILLISECONDS_TO_SECONDS;
         float rps = (float) totalRequests / timeInSeconds;
         if (!testStatus.equals("")) {
             testStatus += ";";
@@ -142,6 +165,22 @@ public class AbstractCorfuTest {
                 return null;
             });
         }
+    }
+
+    /**
+     * Execute any threads which were scheduled to run.
+     *
+     * @param maxConcurrency The maximum amount of concurrency to allow when
+     *                       running the threads
+     * @param duration       The maximum length to run the tests before timing
+     *                       out.
+     * @throws Exception     Any exception that was thrown by any thread while
+     *                       tests were run.
+     */
+    public void executeScheduled(int maxConcurrency, Duration duration)
+        throws Exception {
+        executeScheduled(maxConcurrency, duration.toMillis(),
+                TimeUnit.MILLISECONDS);
     }
 
     /**

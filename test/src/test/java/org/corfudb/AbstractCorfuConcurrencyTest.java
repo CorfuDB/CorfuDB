@@ -20,27 +20,31 @@ public class AbstractCorfuConcurrencyTest extends AbstractCorfuTest {
     public void concurrentTestsExecute()
             throws Exception {
         final AtomicLong l = new AtomicLong();
-        scheduleConcurrently(5, t -> l.getAndIncrement());
-        executeScheduled(5, 1000, TimeUnit.MILLISECONDS);
+        scheduleConcurrently(PARAMETERS.CONCURRENCY_SOME, t ->
+                l.getAndIncrement());
+        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_SHORT);
         assertThat(l.get())
-                .isEqualTo(5);
+                .isEqualTo(PARAMETERS.CONCURRENCY_SOME);
     }
 
     @Test
     public void concurrentTestsThrowExceptions()
             throws Exception {
-        scheduleConcurrently(5, t -> {
+        scheduleConcurrently(PARAMETERS.CONCURRENCY_SOME, t -> {
             throw new IOException("hi");
         });
-        assertThatThrownBy(() -> executeScheduled(5, 1000, TimeUnit.MILLISECONDS))
+        assertThatThrownBy(() -> executeScheduled(PARAMETERS.CONCURRENCY_SOME,
+                PARAMETERS.TIMEOUT_SHORT))
                 .isInstanceOf(IOException.class);
     }
 
     @Test
     public void concurrentTestsTimeout()
             throws Exception {
-        scheduleConcurrently(5, t -> Thread.sleep(10000));
-        assertThatThrownBy(() -> executeScheduled(5, 1, TimeUnit.MILLISECONDS))
+        scheduleConcurrently(PARAMETERS.CONCURRENCY_SOME,
+                t -> Thread.sleep(PARAMETERS.TIMEOUT_LONG.toMillis()));
+        assertThatThrownBy(() -> executeScheduled(PARAMETERS.CONCURRENCY_SOME,
+                PARAMETERS.TIMEOUT_VERY_SHORT))
                 .isInstanceOf(CancellationException.class);
     }
 

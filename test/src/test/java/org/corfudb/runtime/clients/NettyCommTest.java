@@ -62,19 +62,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .isTrue();
             d.shutdownServer();
             d.bootstrapServer();
-            // We are now racing with the server's startup.  Immediate attempts
-            // to ping the server will fail immediately due to client-side
-            // rejection because the TCP session isn't yet connected.  Retry
-            // for up to 60 seconds before giving up: TravisCI can be truly
-            // unpredictably slow.
-            int sleep_incr = 10;
-            for (int i = 0; i < 60000; i += sleep_incr) {
-                if (r.getClient(BaseClient.class).pingSync() == true)
-                    break;
-                Thread.sleep(sleep_incr);
-            }
-            assertThat(r.getClient(BaseClient.class).pingSync())
-                    .isTrue();
+
+            r.getClient(BaseClient.class).pingSync();
         });
     }
 
@@ -160,10 +149,12 @@ public class NettyCommTest extends AbstractCorfuTest {
                 }
             });
 
+            final int SO_BACKLOG = 100;
+            final int FRAME_SIZE = 4;
             b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
-                    .option(ChannelOption.SO_BACKLOG, 100)
+                    .option(ChannelOption.SO_BACKLOG, SO_BACKLOG)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .childOption(ChannelOption.SO_REUSEADDR, true)
                     .childOption(ChannelOption.TCP_NODELAY, true)
@@ -172,8 +163,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(io.netty.channel.socket.SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast(new LengthFieldPrepender(4));
-                            ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+                            ch.pipeline().addLast(new LengthFieldPrepender(FRAME_SIZE));
+                            ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, FRAME_SIZE, 0, FRAME_SIZE));
                             ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
                             ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
                             ch.pipeline().addLast(ee, nsr);

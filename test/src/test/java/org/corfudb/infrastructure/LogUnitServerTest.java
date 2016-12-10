@@ -88,8 +88,9 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
         long address = 0L;
+        final byte TEST_BYTE = 42;
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer(1);
-        b.writeByte(42);
+        b.writeByte(TEST_BYTE);
         WriteRequest wr = WriteRequest.builder()
                             .writeMode(WriteMode.NORMAL)
                             .data(new LogData(DataType.DATA, b))
@@ -119,6 +120,10 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         this.router.reset();
         this.router.addServer(s1);
+
+        final long LOW_ADDRESS = 0L;
+        final long MID_ADDRESS = 100L;
+        final long HIGH_ADDRESS = 10000000L;
         //write at 0
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
@@ -126,7 +131,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
-        m.setGlobalAddress(0L);
+        m.setGlobalAddress(LOW_ADDRESS);
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
@@ -138,7 +143,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
-        m.setGlobalAddress(100L);
+        m.setGlobalAddress(MID_ADDRESS);
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
@@ -150,20 +155,20 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
-        m.setGlobalAddress(10000000L);
+        m.setGlobalAddress(HIGH_ADDRESS);
         m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setRank(0L);
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
 
         assertThat(s1)
-                .containsDataAtAddress(0)
-                .containsDataAtAddress(100)
-                .containsDataAtAddress(10000000);
+                .containsDataAtAddress(LOW_ADDRESS)
+                .containsDataAtAddress(MID_ADDRESS)
+                .containsDataAtAddress(HIGH_ADDRESS);
         assertThat(s1)
-                .matchesDataAtAddress(0, "0".getBytes())
-                .matchesDataAtAddress(100, "100".getBytes())
-                .matchesDataAtAddress(10000000, "10000000".getBytes());
+                .matchesDataAtAddress(LOW_ADDRESS, "0".getBytes())
+                .matchesDataAtAddress(MID_ADDRESS, "100".getBytes())
+                .matchesDataAtAddress(HIGH_ADDRESS, "10000000".getBytes());
 
         s1.shutdown();
 
@@ -175,13 +180,13 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.addServer(s2);
 
         assertThat(s2)
-                .containsDataAtAddress(0)
-                .containsDataAtAddress(100)
-                .containsDataAtAddress(10000000);
+                .containsDataAtAddress(LOW_ADDRESS)
+                .containsDataAtAddress(MID_ADDRESS)
+                .containsDataAtAddress(HIGH_ADDRESS);
         assertThat(s2)
-                .matchesDataAtAddress(0, "0".getBytes())
-                .matchesDataAtAddress(100, "100".getBytes())
-                .matchesDataAtAddress(10000000, "10000000".getBytes());
+                .matchesDataAtAddress(LOW_ADDRESS, "0".getBytes())
+                .matchesDataAtAddress(MID_ADDRESS, "100".getBytes())
+                .matchesDataAtAddress(HIGH_ADDRESS, "10000000".getBytes());
     }
 
     private String createLogFile(String path, int version, boolean noVerify) throws IOException {

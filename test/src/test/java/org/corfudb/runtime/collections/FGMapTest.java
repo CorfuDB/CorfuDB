@@ -79,12 +79,12 @@ public class FGMapTest extends AbstractViewTest {
         assertThat(testMap)
                 .isEmpty();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
 
         assertThat(testMap)
-                .hasSize(100);
+                .hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
     }
 
     @Test
@@ -102,7 +102,7 @@ public class FGMapTest extends AbstractViewTest {
         assertThat(testMap)
                 .isEmpty();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
 
@@ -112,9 +112,9 @@ public class FGMapTest extends AbstractViewTest {
         getRuntime().getObjectsView().TXEnd();
 
         assertThat(testMap.size())
-                .isEqualTo(101);
+                .isEqualTo(PARAMETERS.NUM_ITERATIONS_LOW + 1);
         assertThat(testMap.get("size"))
-                .isEqualTo("100");
+                .isEqualTo(Integer.toString(PARAMETERS.NUM_ITERATIONS_LOW));
     }
 
     @Test
@@ -132,12 +132,12 @@ public class FGMapTest extends AbstractViewTest {
         assertThat(testMap)
                 .isEmpty();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
 
         assertThat(testMap)
-                .hasSize(100);
+                .hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
 
         testMap.put("a", "b");
         testMap.clear();
@@ -161,7 +161,7 @@ public class FGMapTest extends AbstractViewTest {
                 .isEmpty();
 
         getRuntime().getObjectsView().TXBegin();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
         testMap.clear();
@@ -180,6 +180,7 @@ public class FGMapTest extends AbstractViewTest {
     @Test
     public void canVaryBucketCount()
             throws Exception {
+<<<<<<< HEAD
         FGMap<String, String> testMap = getDefaultRuntime().getObjectsView()
                 .build()
                 .setArguments(101)
@@ -187,11 +188,15 @@ public class FGMapTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<FGMap<String, String>>() {})
                 .open();
 
+=======
+        FGMap<String, String> testMap = getDefaultRuntime().getObjectsView().open("hello", FGMap.class,
+                PARAMETERS.NUM_ITERATIONS_LOW + 1);
+>>>>>>> master
         testMap.clear();
         assertThat(testMap)
                 .isEmpty();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             testMap.put(Integer.toString(i), Integer.toString(i));
         }
 
@@ -203,9 +208,9 @@ public class FGMapTest extends AbstractViewTest {
                 .open();
 
         assertThat(testMap2)
-                .hasSize(100);
+                .hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         assertThat(testMap2.getNumBuckets())
-                .isEqualTo(101);
+                .isEqualTo(PARAMETERS.NUM_ITERATIONS_LOW + 1);
     }
     */
 
@@ -221,8 +226,8 @@ public class FGMapTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<FGMap<String, String>>() {})
                 .open();
 
-        final int num_threads = 5;
-        final int num_records = 50;
+        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
         testMap.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -234,7 +239,7 @@ public class FGMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("WPS", num_records * num_threads, startTime);
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -246,7 +251,7 @@ public class FGMapTest extends AbstractViewTest {
         });
 
         startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
@@ -263,8 +268,8 @@ public class FGMapTest extends AbstractViewTest {
                 .open();
 
 
-        final int num_threads = 5;
-        final int num_records = 100;
+        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();
 
@@ -283,7 +288,7 @@ public class FGMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
         calculateAbortRate(aborts.get(), num_records * num_threads);
@@ -295,15 +300,16 @@ public class FGMapTest extends AbstractViewTest {
             throws Exception {
         getDefaultRuntime();
 
+        final int NUM_BUCKETS = 20;
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
-                .setArguments(20)
+                .setArguments(NUM_BUCKETS)
                 .setStreamName("test")
                 .setTypeToken(new TypeToken<FGMap<String, String>>() {})
                 .open();
 
-        final int num_threads = 5;
-        final int num_records = 100;
+        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
@@ -315,7 +321,7 @@ public class FGMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("OPS", num_records * num_threads, startTime);
     }
 }
