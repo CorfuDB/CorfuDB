@@ -25,11 +25,12 @@ public class ManagementClientTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
+        final int MAX_CACHE = 256_000_000;
         ServerContext serverContext = new ServerContextBuilder()
                 .setInitialToken(0)
                 .setMemory(true)
                 .setSingle(true)
-                .setMaxCache(256000000)
+                .setMaxCache(MAX_CACHE)
                 .setServerRouter(serverRouter)
                 .build();
         server = new ManagementServer(serverContext);
@@ -65,7 +66,7 @@ public class ManagementClientTest extends AbstractClientTest {
     public void handleBootstrap()
             throws Exception {
         // Since the servers are started as single nodes thus already bootstrapped.
-        assertThatThrownBy(() -> client.bootstrapManagement(TestLayoutBuilder.single(9000)).get()).isInstanceOf(ExecutionException.class);
+        assertThatThrownBy(() -> client.bootstrapManagement(TestLayoutBuilder.single(SERVERS.PORT_0)).get()).isInstanceOf(ExecutionException.class);
     }
 
     /**

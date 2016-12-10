@@ -21,25 +21,25 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         // Check that access to the CorfuRuntime layout is always valid. Specifically, access to the layout
         // while a new layout is being fetched/set concurrently.
 
-        scheduleConcurrently(10000, (v) -> {
+        scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LARGE, (v) -> {
             rt.invalidateLayout();
 
         });
 
-        scheduleConcurrently(10000, (v) -> {
+        scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LARGE, (v) -> {
             assertThat(rt.layout.get().getRuntime()).isEqualTo(rt);
         });
 
-        executeScheduled(2, 30, TimeUnit.SECONDS);
+        executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_LONG);
 
     }
 
     @Test
     public void canInstantiateRuntimeWithoutTestRef() throws Exception {
 
-        addSingleServer(9000);
+        addSingleServer(SERVERS.PORT_0);
 
-        CorfuRuntime rt = new CorfuRuntime("test:9000");
+        CorfuRuntime rt = new CorfuRuntime(SERVERS.ENDPOINT_0);
         rt.connect();
 
     }

@@ -35,6 +35,12 @@ public class CorfuTestParameters {
      */
     public final Duration TIMEOUT_LONG;
 
+    /** The number of iterations to run for a very small test.
+     * This number will be about 10 by default, and should be used for
+     * operations that need to be repeated just a few times.
+     */
+    public final int NUM_ITERATIONS_VERY_LOW;
+
     /** The number of iterations to run for a small test.
      * This will be about 100 by default, and should be used for operations
      * which perform I/O.
@@ -61,6 +67,8 @@ public class CorfuTestParameters {
      * cause the (un)expected behavior. */
     public final int CONCURRENCY_LOTS;
 
+    // Magic number check disabled to make this constants more readable.
+    @SuppressWarnings("checkstyle:magicnumber")
     public CorfuTestParameters(){
 
         if (isTravisBuild()) {
@@ -78,6 +86,7 @@ public class CorfuTestParameters {
                                         Duration.of(1, MINUTES);
 
         // Iterations
+        NUM_ITERATIONS_VERY_LOW = isTravisBuild() ? 1 : 10;
         NUM_ITERATIONS_LOW = isTravisBuild() ?  10 : 100;
         NUM_ITERATIONS_LARGE = isTravisBuild() ? 1_000 : 10_000;
 

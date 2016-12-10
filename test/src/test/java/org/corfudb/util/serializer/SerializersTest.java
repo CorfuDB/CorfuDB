@@ -12,14 +12,15 @@ public class SerializersTest {
 
     @Test (expected = RuntimeException.class)
     public void registerSerializerWithInvalidTypeTest() {
-        ISerializer customSerializer = new CustomSerializer((byte) 10);
+        final byte SERIALIZER_TYPE0 = 10;
+        ISerializer customSerializer = new CustomSerializer(SERIALIZER_TYPE0);
         Serializers.registerSerializer(customSerializer);
     }
 
     @Test
     public void registerMultipleSerializersTest() {
-        byte type1 = (byte) 11;
-        byte type2 = (byte) 12;
+        final byte type1 = (byte) 11;
+        final byte type2 = (byte) 12;
 
         ISerializer customSerializer1 = new CustomSerializer(type1);
         ISerializer customSerializer2 = new CustomSerializer(type2);

@@ -37,21 +37,26 @@ public class LockingTransactionalContextTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {})
                 .open();
 
+        final int KEY_0 = 0;
+        final int KEY_1 = 100;
 
-        map1.put(0, 100);
-        map2.put(100, 0);
+        final int VAL_0 = 100;
+        final int VAL_1 = 0;
+
+        map1.put(KEY_0, VAL_0);
+        map2.put(KEY_1, VAL_1);
 
         getRuntime().getObjectsView().TXBegin(TransactionStrategy.LOCKING, map1, map2);
-        int temp = map2.get(100);
-        map2.put(100, map1.get(0));
-        map1.put(0, temp);
+        int temp = map2.get(KEY_1);
+        map2.put(KEY_1, map1.get(KEY_0));
+        map1.put(KEY_0, temp);
         getRuntime().getObjectsView().TXEnd();
 
         assertThat(map1)
-                .containsEntry(0, 0);
-        map2.get(100);
+                .containsEntry(KEY_0, VAL_1);
+        map2.get(KEY_1);
         assertThat(map2)
-                .containsEntry(100, 100);
+                .containsEntry(KEY_1, VAL_0);
     }
 
     // Note:: this is for TESTING only, abort rate will be high because of locks inside maps shared by threads.
@@ -75,8 +80,8 @@ public class LockingTransactionalContextTest extends AbstractViewTest {
                 .open();
 
 
-        final int num_threads = 10;
-        final int num_records = 10;
+        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
 
         IntStream.range(0, num_threads * num_records)
                 .forEach(x -> {
@@ -117,7 +122,7 @@ public class LockingTransactionalContextTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_NORMAL);
         calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
         calculateAbortRate(aborts.get(), num_records * num_threads);
     }

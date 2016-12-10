@@ -113,11 +113,14 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
         log.close();
 
+        final int OVERWRITE_DELIMITER = 0xFFFF;
+        final int OVERWRITE_BYTES = 4;
+
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
         String logFilePath = logDir + 0 + ".log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
-        file.seek(StreamLogFiles.LogFileHeader.size + 4);
-        file.writeInt(0xffff);
+        file.seek(StreamLogFiles.LogFileHeader.size + OVERWRITE_BYTES);
+        file.writeInt(OVERWRITE_DELIMITER);
         file.close();
 
         StreamLog log2 = new StreamLogFiles(logDir, false);
@@ -129,7 +132,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Overwrite the delimiter
         file = new RandomAccessFile(logFilePath, "rw");
         file.seek(StreamLogFiles.LogFileHeader.size );
-        file.writeInt(0xffff);
+        file.writeInt(OVERWRITE_DELIMITER);
         file.close();
 
         StreamLog log3 = new StreamLogFiles(logDir, false);
@@ -145,8 +148,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
 
-        final int num_threads = 2;
-        final int num_entries = 100;
+        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
+        final int num_entries = PARAMETERS.NUM_ITERATIONS_LOW;
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_entries;
@@ -156,7 +159,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             }
         });
 
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
 
         // verify that addresses 0 to 2000 have been used up
         for (int x = 0; x < num_entries * num_threads; x++) {

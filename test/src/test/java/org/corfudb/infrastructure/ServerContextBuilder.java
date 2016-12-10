@@ -9,6 +9,8 @@ import lombok.experimental.Accessors;
  */
 @Accessors(chain = true)
 @Data
+// Disable magic number check to make defaults readable
+@SuppressWarnings("checkstyle:magicnumber")
 public class ServerContextBuilder {
 
     long initialToken = 0;
