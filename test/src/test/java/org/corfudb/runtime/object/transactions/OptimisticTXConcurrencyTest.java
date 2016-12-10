@@ -23,9 +23,9 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
     public void before() { getDefaultRuntime(); }
 
     @Test
-    public void testConcurrentTX() throws Exception {
+    public void testOpacity() throws Exception {
 
-        int n = 2;
+        int n = 5;
         assertThat(n).isGreaterThan(1); // don't change concurrency to less than 2, test will break
 
         CorfuSharedCounter[] sharedCounters = new CorfuSharedCounter[n];
@@ -88,9 +88,90 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
             t(threadind, this::TXEnd)
                     .assertThrows()
                     .isInstanceOf(TransactionAbortedException.class);
-            ;
         }
     }
+
+    // test multiple threads optimistically manipulating the same objects concurrently
+    @Test
+    public void testOptimism() throws Exception {
+
+        int n = 5;
+        assertThat(n).isGreaterThan(1); // don't change concurrency to less than 2, test will break
+
+        CorfuSharedCounter[] sharedCounters = new CorfuSharedCounter[n];
+
+        for (int i = 0; i < n; i++)
+            sharedCounters[i] = getRuntime().getObjectsView()
+                    .build()
+                    .setStreamName("test"+i)
+                    .setType(CorfuSharedCounter.class)
+                    .open();
+
+        // initialize all shared counters
+        for (int i = 0; i < n; i++)
+            sharedCounters[i].setValue(32);
+
+        // start concurrent transacstions on all threads
+        for (int i = 0; i < n; i++)
+            t(i, this::TXBegin);
+
+        // modify shared counter per thread
+        for (int i = 0; i < n; i++) {
+            final int threadind = i;
+            t(threadind, () -> sharedCounters[threadind].setValue(33));
+        }
+
+        // each thread reads a shared counter modified by another thread
+        for (int i = 0; i < n; i++) {
+            final int threadind = i;
+            t(threadind, () ->
+                    assertThat(sharedCounters[(threadind+1)%n].getValue())
+                            .isBetween(32, 33)
+            );
+        }
+
+        // each thread modifies a counter written by another thread
+        for (int i = 0; i < n; i++) {
+            final int threadind = i;
+            t(threadind, () -> sharedCounters[(threadind+1)%n].setValue(34) );
+        }
+
+
+        // verify opacity: Each thread reads its own writes,
+        // and reads a version of other objects that it started a transaction with
+        for (int i = 0; i < n; i++) {
+            final int threadind = i;
+            t(threadind, () ->
+                    assertThat(sharedCounters[(threadind+1)%n].getValue())
+                            .isEqualTo(34)
+            );
+            t(threadind, () ->
+                    assertThat(sharedCounters[threadind].getValue())
+                            .isBetween(32, 33)
+            );
+        }
+
+        // try to commit all transactions but the last.
+        // they will succeed in alteration -- one succeed, next one fails (because it reads a counter modified by previous), next one succeeds, etc.
+        int i = 0;
+        while (i < n-1) {
+            final int threadind = i;
+            if (i % 2 == 0) // should succeed
+                t(threadind, this::TXEnd);
+            else {
+                t(threadind, this::TXEnd)
+                        .assertThrows()
+                        .isInstanceOf(TransactionAbortedException.class);
+            }
+            i++;
+        }
+
+        // the last one will always fail, because it reads the counter of the first.
+        t(n-1, this::TXEnd)
+                .assertThrows()
+                .isInstanceOf(TransactionAbortedException.class);
+    }
+
 
     void TXEnd() {
         getRuntime().getObjectsView().TXEnd();
