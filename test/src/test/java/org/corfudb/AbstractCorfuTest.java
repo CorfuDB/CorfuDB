@@ -65,6 +65,12 @@ public class AbstractCorfuTest {
         }
     };
 
+    /** Delete a folder.
+     *
+     * @param folder        The folder, as a File.
+     * @param deleteSelf    True to delete the folder itself,
+     *                      False to delete just the folder contents.
+     */
     public static void deleteFolder(File folder, boolean deleteSelf) {
         File[] files = folder.listFiles();
         if (files != null) { //some JVMs return null for empty dirs
@@ -91,10 +97,6 @@ public class AbstractCorfuTest {
         scheduledThreads = new HashSet<>();
     }
 
-    @Before
-    public void setupTempDirs() {
-        temporaryDirectories = new HashSet<>();
-    }
 
     @After
     public void cleanupScheduledThreads() {
@@ -104,18 +106,38 @@ public class AbstractCorfuTest {
         scheduledThreads.clear();
     }
 
+    /** Clean the per test temporary directory (PARAMETERS.TEST_TEMP_DIR)
+     * This is different than deleteTempDirs because it does not remove
+     * the directory itself.
+     */
     @After
     public void cleanPerTestTempDir() {
         deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR),
                 false);
     }
 
-    public String getTempDir() {
-        String tempdir = com.google.common.io.Files.createTempDir().getAbsolutePath();
+    /** Get a new temporary directory. This temporary directory will be
+     * deleted at the conclusion of this test.
+     * @return  The path to the new temporary directory
+     */
+    public String getNewTempDir() {
+        String tempdir = com.google.common.io.Files.createTempDir()
+                                                    .getAbsolutePath();
         temporaryDirectories.add(tempdir);
         return tempdir;
     }
 
+    /** Setup the temporary directory list by creating a new directory set.
+     *
+     */
+    @Before
+    public void setupTempDirs() {
+        temporaryDirectories = new HashSet<>();
+    }
+
+    /** Cleanup the temporary directories by going through the directory
+     * set and deleting each one.
+     */
     @After
     public void deleteTempDirs() {
         for (String s : temporaryDirectories) {
