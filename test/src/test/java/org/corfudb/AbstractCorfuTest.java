@@ -384,6 +384,168 @@ public class AbstractCorfuTest {
         }
     }
 
+    /** Launch a thread on test thread 1.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t1(ExceptionFunction<T> toRun) {return t(1, toRun);}
+
+    /** Launch a thread on test thread 2.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t2(ExceptionFunction<T> toRun) {return t(2, toRun);}
+
+    /** Launch a thread on test thread 3.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t3(ExceptionFunction<T> toRun) {return t(3, toRun);}
+
+    /** Launch a thread on test thread 4.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t4(ExceptionFunction<T> toRun) {return t(4, toRun);}
+
+    /** Launch a thread on test thread 5.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t5(ExceptionFunction<T> toRun) {return t(5, toRun);}
+
+    /** Launch a thread on test thread 6.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t6(ExceptionFunction<T> toRun) {return t(6, toRun);}
+
+    /** Launch a thread on test thread 7.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t7(ExceptionFunction<T> toRun) {return t(7, toRun);}
+
+    /** Launch a thread on test thread 8.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t8(ExceptionFunction<T> toRun) {return t(8, toRun);}
+
+    /** Launch a thread on test thread 9.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t9(ExceptionFunction<T> toRun) {return t(9, toRun);}
+
+    /** Launch a thread on test thread 1.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t1(VoidExceptionFunction toRun) {return t(1, toRun);}
+
+    /** Launch a thread on test thread 2.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t2(VoidExceptionFunction toRun) {return t(2, toRun);}
+
+    /** Launch a thread on test thread 3.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t3(VoidExceptionFunction toRun) {return t(3, toRun);}
+
+    /** Launch a thread on test thread 4.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t4(VoidExceptionFunction toRun) {return t(4, toRun);}
+
+    /** Launch a thread on test thread 5.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t5(VoidExceptionFunction toRun) {return t(5, toRun);}
+
+    /** Launch a thread on test thread 6.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t6(VoidExceptionFunction toRun) {return t(6, toRun);}
+
+    /** Launch a thread on test thread 7.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t7(VoidExceptionFunction toRun) {return t(7, toRun);}
+
+    /** Launch a thread on test thread 8.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t8(VoidExceptionFunction toRun) {return t(8, toRun);}
+
+    /** Launch a thread on test thread 9.
+     *
+     * @param toRun The function to run.
+     * @param <T>   The return type.
+     * @return      An assertable object the function returns.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public <T> AssertableObject<T> t9(VoidExceptionFunction toRun) {return t(9, toRun);}
+
     public <T> AssertableObject<T> t(int threadNum, ExceptionFunction<T> toRun)
     throws RuntimeException {
         if (lastException != null) {

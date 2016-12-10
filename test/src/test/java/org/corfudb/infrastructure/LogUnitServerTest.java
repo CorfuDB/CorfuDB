@@ -43,6 +43,8 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
 
+        final long ADDRESS_0 = 0L;
+        final long ADDRESS_1 = 100L;
         //write at 0
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
@@ -50,17 +52,17 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
-        m.setGlobalAddress(0L);
+        m.setGlobalAddress(ADDRESS_0);
         // m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m.setStreams(Collections.EMPTY_SET);
-        m.setRank(0L);
+        m.setRank(ADDRESS_0);
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
 
         assertThat(s1)
-                .containsDataAtAddress(0);
+                .containsDataAtAddress(ADDRESS_0);
         assertThat(s1)
-                .isEmptyAtAddress(100);
+                .isEmptyAtAddress(ADDRESS_1);
 
 
         // repeat: this should throw an exception
@@ -68,10 +70,10 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
-        m2.setGlobalAddress(0L);
+        m2.setGlobalAddress(ADDRESS_0);
         // m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
         m2.setStreams(Collections.EMPTY_SET);
-        m2.setRank(0L);
+        m2.setRank(ADDRESS_0);
         m2.setBackpointerMap(Collections.emptyMap());
 
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m2));

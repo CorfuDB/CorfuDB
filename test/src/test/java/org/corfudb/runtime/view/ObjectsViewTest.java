@@ -126,7 +126,7 @@ public class ObjectsViewTest extends AbstractViewTest {
             s2.release();
         });
 
-        executeScheduled(2, 5, TimeUnit.SECONDS);
+        executeScheduled(2, PARAMETERS.TIMEOUT_LONG);
 
         // The result should contain T2s modification.
         assertThat(map)

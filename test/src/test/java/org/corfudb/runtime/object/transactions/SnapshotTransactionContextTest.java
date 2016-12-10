@@ -30,18 +30,18 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
     @Test
     public void snapshotReadableWithConcurrentWrites() {
 
-        t(1, () -> put("k" , "v1"));    // TS = 0
-        t(2, () -> put("k" , "v2"));    // TS = 1
-        t(3, () -> put("k" , "v3"));    // TS = 2
-        t(4, () -> put("k" , "v4"));    // TS = 3
+        t1(() -> put("k" , "v1"));    // TS = 0
+        t2(() -> put("k" , "v2"));    // TS = 1
+        t3(() -> put("k" , "v3"));    // TS = 2
+        t4(() -> put("k" , "v4"));    // TS = 3
 
-        t(2, this::TXBegin);
-        t(2, () -> get("k"))
+        t2(this::TXBegin);
+        t2(() -> get("k"))
                 .assertResult().isEqualTo("v3");
-        t(4, () -> put("k" , "v4"));    // TS = 4
-        t(2, () -> get("k"))
+        t4(() -> put("k" , "v4"));    // TS = 4
+        t2(() -> get("k"))
                 .assertResult().isEqualTo("v3");
-        t(2, this::TXEnd);
+        t2(this::TXEnd);
     }
 
 

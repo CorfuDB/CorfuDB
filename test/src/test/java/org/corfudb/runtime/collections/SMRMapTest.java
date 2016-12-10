@@ -233,7 +233,7 @@ public class SMRMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("WPS", num_records * num_threads, startTime);
 
         scheduleConcurrently(num_threads, threadNumber -> {
@@ -245,7 +245,7 @@ public class SMRMapTest extends AbstractViewTest {
         });
 
         startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
@@ -654,7 +654,7 @@ public class SMRMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
         calculateAbortRate(aborts.get(), num_records * num_threads);

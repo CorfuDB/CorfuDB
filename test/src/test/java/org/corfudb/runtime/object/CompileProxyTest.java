@@ -62,9 +62,10 @@ public class CompileProxyTest extends AbstractViewTest {
                 })
                 .open();
 
-        sharedCounter.setValue(33);
+        final int VALUE = 33;
+        sharedCounter.setValue(VALUE);
         assertThat(sharedCounter.getValue())
-                .isEqualTo(33);
+                .isEqualTo(VALUE);
     }
 
     @Test
@@ -76,7 +77,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<CorfuSharedCounter>() {
                 })
                 .open();
-        int concurrency = 10;
+        int concurrency = PARAMETERS.CONCURRENCY_SOME;
 
         sharedCounter.setValue(-1);
         assertThat(sharedCounter.getValue())
@@ -85,7 +86,7 @@ public class CompileProxyTest extends AbstractViewTest {
         scheduleConcurrently(concurrency, t ->
             sharedCounter.setValue(t)
         );
-        executeScheduled(concurrency, 10000, TimeUnit.MILLISECONDS);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
 
         ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>)  sharedCounter;
         ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
@@ -123,7 +124,7 @@ public class CompileProxyTest extends AbstractViewTest {
                     if (sharedCounter.CAS(curValue, t+1) == curValue)
                         casSucceeded.incrementAndGet();
         });
-        executeScheduled(concurrency, 1000, TimeUnit.MILLISECONDS);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
         assertThat(sharedCounter.getValue())
                 .isBetween(0, concurrency);
         assertThat(casSucceeded.get())
@@ -139,9 +140,10 @@ public class CompileProxyTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<CorfuSharedCounter>() {
                 })
                 .open();
-        int concurrency = 3;
-        int writeconcurrency = 2;
-        int writerwork = 50;
+
+        int writeconcurrency = PARAMETERS.CONCURRENCY_TWO;
+        int concurrency = writeconcurrency + PARAMETERS.CONCURRENCY_ONE;
+        int writerwork = PARAMETERS.NUM_ITERATIONS_LOW;
 
         sharedCounter.setValue(-1);
         assertThat(sharedCounter.getValue())
@@ -154,7 +156,7 @@ public class CompileProxyTest extends AbstractViewTest {
         );
         scheduleConcurrently(concurrency-writeconcurrency, t -> {
                     int lastread = -1;
-                    for (int i = 0; i < 10; i++) {
+                    for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
                         int res = sharedCounter.getValue();
                         boolean assertflag =
                                 (
@@ -166,7 +168,7 @@ public class CompileProxyTest extends AbstractViewTest {
                     }
                 }
         );
-        executeScheduled(concurrency, 50000, TimeUnit.MILLISECONDS);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_LONG);
 
     }
 
@@ -185,10 +187,10 @@ public class CompileProxyTest extends AbstractViewTest {
         ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
         StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
-        for (int repetition = 0; repetition < 1000; repetition += 2) {
+        for (int repetition = 0; repetition < PARAMETERS.NUM_ITERATIONS_LOW; repetition += 2) {
             final int r = repetition;
-            t(3, () -> sharedCounter.setValue(r+1));
-            t(4, () -> {
+            t3(() -> sharedCounter.setValue(r+1));
+            t4(() -> {
                 assertThat(objStream.check())
                         .isEqualTo(r);
 
@@ -196,8 +198,8 @@ public class CompileProxyTest extends AbstractViewTest {
                 assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
                         .isEqualTo(r);
             });
-            t(3, () -> sharedCounter.setValue(r+2));
-            t(4, () -> {
+            t3(() -> sharedCounter.setValue(r+2));
+            t4(() -> {
                 assertThat(objStream.check())
                         .isEqualTo(r+1);
 
@@ -222,12 +224,12 @@ public class CompileProxyTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                 })
                 .open();
-        int concurrency = 10;
+        int concurrency = PARAMETERS.CONCURRENCY_SOME;
 
         scheduleConcurrently(concurrency, t -> {
             map.put(t.toString(), "world");
         });
-        executeScheduled(concurrency, 1000, TimeUnit.MILLISECONDS);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
 
 
         for (int i = 0; i < concurrency; i++)
@@ -249,13 +251,14 @@ public class CompileProxyTest extends AbstractViewTest {
                 })
                 .open();
 
+        final int VALUE = 33;
         CorfuCompoundObj.Inner inner = sharedCorfuCompound.new Inner();
         inner.setFirstName("A");
         inner.setLastName("B");
-        sharedCorfuCompound.set(inner, 33);
+        sharedCorfuCompound.set(inner, VALUE);
 
         assertThat(sharedCorfuCompound.getID())
-                .isEqualTo(33);
+                .isEqualTo(VALUE);
         assertThat(sharedCorfuCompound.getUser().firstName)
                 .isEqualTo("A");
         assertThat(sharedCorfuCompound.getUser().lastName)
@@ -272,7 +275,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 })
                 .open();
 
-        int concurrency = 10;
+        int concurrency = PARAMETERS.CONCURRENCY_SOME;
         CorfuCompoundObj.Inner inner = sharedCorfuCompound.new Inner();
 
         scheduleConcurrently(concurrency, t -> {
@@ -280,7 +283,7 @@ public class CompileProxyTest extends AbstractViewTest {
             inner.setLastName("B" + t);
             sharedCorfuCompound.set(inner, t);
         });
-        executeScheduled(concurrency, 1000, TimeUnit.MILLISECONDS);
+        executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
 
         assertThat(sharedCorfuCompound.getID())
                 .isBetween(0, concurrency);
@@ -313,7 +316,7 @@ public class CompileProxyTest extends AbstractViewTest {
         sharedCorfuCompound.set(inner, 0);
         sharedCorfuCompound.getID();
 
-        for (int repetition = 0; repetition < 1000; repetition += 2) {
+        for (int repetition = 0; repetition < PARAMETERS.NUM_ITERATIONS_LOW; repetition += 2) {
             final int r = repetition;
             CorfuCompoundObj.Inner inn = sharedCorfuCompound.new Inner();
             inn.setFirstName("C" + (r+1));
