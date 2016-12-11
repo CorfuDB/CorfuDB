@@ -196,7 +196,7 @@ public class SequencerServerTest extends AbstractServerTest {
     @Test
     public void checkSequencerCheckpointingWorks()
             throws Exception {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
         SequencerServer s1 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
