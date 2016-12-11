@@ -27,6 +27,9 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.collections.SMRMapTest.TSTATE.TCOMMIT;
+import static org.corfudb.runtime.collections.SMRMapTest.TSTATE.TDONE;
+import static org.corfudb.runtime.collections.SMRMapTest.TSTATE.TPUT;
 
 /**
  * Created by mwei on 1/7/16.
@@ -607,6 +610,84 @@ public class SMRMapTest extends AbstractViewTest {
                 }
             }
         });
+
+        long startTime = System.currentTimeMillis();
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
+        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
+
+        calculateAbortRate(aborts.get(), num_records * num_threads);
+    }
+
+
+    /**
+     * This is used to create a poor-man's randomized scheduler that interleaving among thread-states
+     */
+    public enum TSTATE { TBEGIN, TPUT, TCOMMIT, TDONE};
+
+    @Test
+    public void concurrentAbortTestRefined()
+            throws Exception {
+
+        Map<String, String> testMap = getRuntime().getObjectsView().build()
+                .setStreamID(UUID.randomUUID())
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .addOption(ObjectOpenOptions.NO_CACHE)
+                .open();
+
+        final int num_threads = 5;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
+        TSTATE[] work = new TSTATE[num_threads*num_records];
+        Arrays.fill(work, TSTATE.TBEGIN);
+
+        AtomicInteger aborts = new AtomicInteger();
+        testMap.clear();
+
+        Random r = new Random(System.currentTimeMillis());
+
+        AtomicInteger done = new AtomicInteger(0);
+        while (done.get() < num_threads*num_records) {
+
+            final int nextt = r.nextInt(num_threads);
+            final int nextr = r.nextInt(num_records);
+            final int absolute_index = nextt * num_records + nextr;
+
+            switch (work[nextt * num_records + nextr]) {
+
+                case TBEGIN:
+                    work[nextt * num_records + nextr] = TPUT;
+                    t(nextt, () -> {
+                        getRuntime().getObjectsView().TXBegin();
+                    });
+                    break;
+
+                case TPUT:
+                    work[nextt * num_records + nextr] = TCOMMIT;
+                    t(nextt, () -> {
+                        assertThat(testMap.put(Integer.toString(absolute_index),
+                                Integer.toString(nextt * num_records + nextr)))
+                                .isEqualTo(null);
+                    });
+                    break;
+
+                case TCOMMIT:
+                    work[nextt * num_records + nextr] = TDONE;
+                    done.incrementAndGet();
+                    t(nextt, () -> {
+                        try {
+                            getRuntime().getObjectsView().TXEnd();
+                        } catch (TransactionAbortedException tae) {
+                            aborts.incrementAndGet();
+                        }
+                    });
+                    break;
+
+                case TDONE:
+                    break;
+
+                default:
+                    break;
+            }
+        }
 
         long startTime = System.currentTimeMillis();
         executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
