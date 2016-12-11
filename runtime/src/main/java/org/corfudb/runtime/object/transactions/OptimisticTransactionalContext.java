@@ -184,6 +184,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy, long timestamp) {
+        // Getting an upcall result adds the object to the read set.
+        readSet.add(proxy.getStreamID());
         // if we have a result, return it.
         UpcallWrapper wrapper = getWriteSet(proxy.getStreamID()).get((int)timestamp);
         if (wrapper != null && wrapper.isHaveUpcallResult()){
