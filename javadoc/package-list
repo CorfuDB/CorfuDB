@@ -1,4 +1,3 @@
-org.corfudb.cmdlets
 org.corfudb.infrastructure
 org.corfudb.infrastructure.log
 org.corfudb.protocols.logprotocol
