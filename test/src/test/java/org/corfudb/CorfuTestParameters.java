@@ -76,7 +76,12 @@ public class CorfuTestParameters {
 
     /** Whether or not the build was started on Travis-CI. */
     public final boolean TRAVIS_BUILD;
-    
+
+    /** Used to indicate when determinstic seeding is to be used
+     */
+    public final long RANDOMIZED_SEED;
+    public final long DETERMINISTIC_SEED;
+
     // Magic number check disabled to make this constants more readable.
     @SuppressWarnings("checkstyle:magicnumber")
     public CorfuTestParameters(){
@@ -108,6 +113,7 @@ public class CorfuTestParameters {
         // Concurrency
         CONCURRENCY_ONE = 1;
         CONCURRENCY_TWO = 2;
+<<<<<<< dd4c648ddf8d5b4389aaee6bc4c3dfc1c302c656
         CONCURRENCY_SOME = TRAVIS_BUILD ? 3 : 5;
         CONCURRENCY_LOTS = TRAVIS_BUILD ? 25 : 100;
 
@@ -116,6 +122,13 @@ public class CorfuTestParameters {
                                             .getAbsolutePath();
 
         printParameters();
+
+        CONCURRENCY_SOME = isTravisBuild() ? 3 : 5;
+        CONCURRENCY_LOTS = isTravisBuild() ? 25 : 100;
+
+        // randomized/deterministic seeding
+        DETERMINISTIC_SEED = 45768503L;
+        RANDOMIZED_SEED = System.currentTimeMillis();
     }
 
     /** Print the parameters, using reflection magic

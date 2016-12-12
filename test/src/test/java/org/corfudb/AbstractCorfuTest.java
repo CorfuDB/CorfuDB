@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -680,19 +681,16 @@ public class AbstractCorfuTest {
      * The last state of a state-machine is special, it finishes the task and makes the thread ready for a new task.
 
      * @param numThreads the desired concurrency level, and the number of instances of state-machines
-     * @param function an array of functions to execute at each step. each function call returns boolean to indicate if it reaches a final state.
+     * @param numTasks total number of tasks to execute
+     * @param stateMachine an array of functions to execute at each step.
+     *                     each function call returns boolean to indicate if it reaches a final state.
+     * @param seed for the interleaving engine
      */
-    static final long NOSEED = -1L;
-
-    public void scheduleInterleaved(int numThreads, int numTasks, IntConsumer[] stateMachine) {
-        scheduleInterleaved(numThreads, numTasks, stateMachine, NOSEED);
-    }
-
-    public void scheduleInterleaved(int numThreads, int numTasks, IntConsumer[] stateMachine, long seed) {
+    public void scheduleInterleaved(int numThreads, int numTasks, ArrayList<BiConsumer<Integer, Integer>> stateMachine, long seed) {
         final int NOTASK = -1;
 
-        int numStates = stateMachine.length;
-        Random r = new Random(seed == NOSEED ? System.currentTimeMillis() : seed);
+        int numStates = stateMachine.size();
+        Random r = new Random(seed);
         AtomicInteger nDone = new AtomicInteger(0);
 
         int[] onTask = new int[numThreads];
@@ -714,7 +712,7 @@ public class AbstractCorfuTest {
 
             if (onTask[nextt] != NOTASK) {
                 t(nextt, () -> {
-                    stateMachine[onState[nextt]].accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
+                    stateMachine.get(onState[nextt]).accept(nextt, onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
                     if (++onState[nextt] >= numStates) {
                         onTask[nextt] = NOTASK;
                         nDone.getAndIncrement();
