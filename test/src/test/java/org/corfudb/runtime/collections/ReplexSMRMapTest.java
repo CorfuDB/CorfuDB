@@ -27,6 +27,5 @@ public class ReplexSMRMapTest extends AbstractCorfuTest {
 
     @Test
     public void replexTestsAreDisabled() {
-        testStatus = "TODO";
     }
 }

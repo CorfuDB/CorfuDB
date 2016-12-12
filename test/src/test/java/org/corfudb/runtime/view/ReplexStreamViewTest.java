@@ -26,6 +26,5 @@ public class ReplexStreamViewTest extends AbstractCorfuTest {
 
     @Test
     public void replexTestsAreDisabled() {
-        testStatus = "TODO";
     }
 }
