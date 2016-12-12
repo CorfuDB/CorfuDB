@@ -29,7 +29,6 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.runtime.collections.SMRMapTest.TSTATE.*;
 
 /**
  * Created by mwei on 1/7/16.
@@ -619,62 +618,12 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
 
-    /**
-     * This is used to create a poor-man's randomized scheduler, interleaving among thread-states
-     */
-    public enum TSTATE { TBEGIN, TBEGINNEST1, TBEGINNEST2, TPUT, TCOMMIT, TDONE};
-
-    /**
-     * This utility method is an engine for interleaving thread executions, state by state.
-     *
-     * A state-machine is provided as an array of lambdas to invoke at each state.
-     * This scheduler engine will interleave the execution of numThreads instances of the state machine.
-     * It starts numThreads threads. Each thread goes through the states of the state machine, randomly interleaving.
-     * The last state of a state-machine is special, it shuts-down the thread.
-
-     * @param numThreads the desired concurrency level, and the number of instances of state-machines
-     * @param function an array of functions to execute at each step. each function call returns boolean to indicate if it reaches a final state.
-     */
-    void scheduleInterleaved(int numThreads, int numTasks, IntConsumer[] function) {
-        int numStates = function.length;
-        Random r = new Random(System.currentTimeMillis());
-        AtomicInteger nDone = new AtomicInteger(0);
-
-        int[] onTask = new int[numThreads];
-        Arrays.fill(onTask, -1);
-
-        int[] onState = new int[numThreads];
-        AtomicInteger highTask = new AtomicInteger(0);
-
-        while (nDone.get() < numTasks) {
-            final int nextt = r.nextInt(numThreads);
-
-            if (onTask[nextt] == -1) {
-                int t = highTask.getAndIncrement();
-                if (t < numTasks) {
-                    onTask[nextt] = t;
-                    onState[nextt] = 0;
-                }
-            }
-
-            if (onTask[nextt] >= 0) {
-                t(nextt, () -> {
-                    function[onState[nextt]].accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
-                    if (onState[nextt]++ >= numStates) {
-                        onTask[nextt] = -1;
-                        nDone.getAndIncrement();
-                    }
-                });
-            }
-        }
-    }
-
     @Test
-    public void concurrentWithEngine()
+    public void concurrentAbortTestInterleaved()
         throws Exception
     {
-        int numThreads =  5;
-        int num_records = 5;
+        final int numThreads =  5;
+        final int num_records = 5;
 
         Map<String, String> testMap = getRuntime().getObjectsView().build()
                 .setStreamID(UUID.randomUUID())
@@ -720,123 +669,6 @@ public class SMRMapTest extends AbstractViewTest {
         calculateAbortRate(aborts.get(), num_records * numThreads);
 
     }
-
-    @Test
-    public void concurrentAbortTestRefined()
-            throws Exception {
-
-        Map<String, String> testMap = getRuntime().getObjectsView().build()
-                .setStreamID(UUID.randomUUID())
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                .addOption(ObjectOpenOptions.NO_CACHE)
-                .open();
-
-        final int num_threads = 5;
-        final int num_records = 5; // PARAMETERS.NUM_ITERATIONS_LOW;
-
-        TSTATE[] work = new TSTATE[num_threads];
-        Arrays.fill(work, TSTATE.TBEGIN);
-
-        int[] nextr = new int[num_threads];
-
-        AtomicInteger aborts = new AtomicInteger();
-        testMap.clear();
-
-        Random r = new Random(System.currentTimeMillis());
-
-        AtomicInteger done = new AtomicInteger(0);
-        while (done.get() < num_threads*num_records) {
-
-            final int nextt = r.nextInt(num_threads);
-            final int absolute_index = nextt * num_records + nextr[nextt];
-
-            switch (work[nextt]) {
-
-                case TBEGIN:
-                    System.out.println("TBEGIN thread=" + nextt + " record=" + absolute_index);
-                    work[nextt] = TBEGINNEST1;
-                    t(nextt, () -> {
-                        getRuntime().getObjectsView().TXBegin();
-                    });
-                    t(nextt, () -> {
-                        assertThat(testMap.put(Integer.toString(absolute_index),
-                                Integer.toString(absolute_index)))
-                                .isEqualTo(null);
-                    });
-                    break;
-
-                case TBEGINNEST1:
-                    System.out.println("  TNEST1 thread=" + nextt + " record=" + absolute_index);
-                    work[nextt] = TBEGINNEST2;
-                    t(nextt, () -> {
-                        getRuntime().getObjectsView().TXBegin();
-                    });
-                    t(nextt, () -> {
-                        assertThat(testMap.put(Integer.toString(absolute_index),
-                                Integer.toString(absolute_index)))
-                                .matches(Integer.toString(absolute_index));
-                    });
-                    break;
-
-                case TBEGINNEST2:
-                    System.out.println("    TNEST2 thread=" + nextt + " record=" + absolute_index);
-                    work[nextt] = TPUT;
-                    t(nextt, () -> {
-                        getRuntime().getObjectsView().TXBegin();
-                    });
-                    t(nextt, () -> {
-                        assertThat(testMap.put(Integer.toString(absolute_index),
-                                Integer.toString(absolute_index)))
-                                .matches(Integer.toString(absolute_index));
-                    });
-                    break;
-
-                case TPUT:
-                    System.out.println("      TPUT thread=" + nextt + " record=" + absolute_index);
-                    work[nextt] = TCOMMIT;
-                    t(nextt, () -> {
-                        assertThat(testMap.put(Integer.toString(absolute_index),
-                                Integer.toString(absolute_index)))
-                                .matches(Integer.toString(absolute_index));
-                    });
-                    break;
-
-                case TCOMMIT:
-                    System.out.println("TCOMMIT thread=" + nextt + " record=" + absolute_index);
-
-                    if (++nextr[nextt] < num_records)
-                        work[nextt] = TBEGIN;
-                    else
-                        work[nextt] = TDONE;
-
-                    done.incrementAndGet();
-                    t(nextt, () -> {
-                        try {
-                            getRuntime().getObjectsView().TXEnd();
-                            getRuntime().getObjectsView().TXEnd();
-                            getRuntime().getObjectsView().TXEnd();
-                        } catch (TransactionAbortedException tae) {
-                            System.out.println("** ABORT thread=" + nextt + " record=" + nextr[nextt]);
-                            aborts.incrementAndGet();
-                        }
-                    });
-                    break;
-
-                case TDONE:
-                    break;
-
-                default:
-                    break;
-            }
-        }
-
-        long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
-        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
-
-        calculateAbortRate(aborts.get(), num_records * num_threads);
-    }
-
 
     @Test
     @SuppressWarnings("unchecked")
