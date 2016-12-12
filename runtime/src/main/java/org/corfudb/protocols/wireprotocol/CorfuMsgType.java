@@ -18,6 +18,7 @@ import java.lang.reflect.Constructor;
 @AllArgsConstructor
 public enum CorfuMsgType {
     // Base Messages
+    REJECTED(-1, TypeToken.of(CorfuMsg.class), true),
     PING(0, TypeToken.of(CorfuMsg.class), true),
     PONG(1, TypeToken.of(CorfuMsg.class), true),
     RESET(2, TypeToken.of(CorfuMsg.class), true),

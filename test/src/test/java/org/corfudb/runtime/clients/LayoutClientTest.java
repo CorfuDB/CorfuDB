@@ -4,9 +4,13 @@ import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
+import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.ServerRejectedException;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
@@ -137,6 +141,26 @@ public class LayoutClientTest extends AbstractClientTest {
         assertThatThrownBy(() -> {
             client.propose(epoch, RANK_HIGH, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
+    }
+
+    @Test
+    public void proposeMalformedRejected()
+            throws Exception {
+        Layout layout = TestLayoutBuilder.single(9000);
+        long epoch = layout.getEpoch();
+        assertThat(client.bootstrapLayout(layout).get())
+                .isEqualTo(true);
+
+        assertThat(client.prepare(epoch, 10L).get() != null)
+                .isEqualTo(true);
+
+        long wrongAmount = 1L;    // Any non-zero amount is wrong.
+        assertThatThrownBy(() -> {
+            router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_PROPOSE.payloadMsg(new LayoutProposeRequest(epoch+wrongAmount, 10L, layout))).get();
+        }).hasCauseInstanceOf(ServerRejectedException.class);
+        assertThatThrownBy(() -> {
+            router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_COMMITTED.payloadMsg(new LayoutCommittedRequest(epoch+wrongAmount, layout))).get();
+        }).hasCauseInstanceOf(ServerRejectedException.class);
     }
 
     @Test
