@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import org.corfudb.AbstractCorfuTest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -17,20 +18,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by mwei on 1/8/16.
  */
-public class ReplexStreamViewTest extends StreamViewTest {
+public class ReplexStreamViewTest extends AbstractCorfuTest {
 
-    @Before
-    @Override
-    public void setRuntime() throws Exception {
-        r = getDefaultRuntime().connect();
-        // First commit a layout that uses Replex
-        Layout newLayout = r.layout.get();
-        newLayout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.REPLEX);
-        newLayout.getSegment(0L).setReplexes(Collections.singletonList(
-                new Layout.LayoutStripe(Collections.singletonList(defaultConfigurationString))));
-        newLayout.setEpoch(1);
-        r.getLayoutView().committed(1L, newLayout);
-        r.invalidateLayout();
+    /** Replex tests are disabled until unit tests stabilize
+     * TODO: Restore & fix up test as of commit 3567e2ee6b
+     */
+
+    @Test
+    public void replexTestsAreDisabled() {
     }
-
 }
