@@ -622,8 +622,8 @@ public class SMRMapTest extends AbstractViewTest {
     public void concurrentAbortTestInterleaved()
         throws Exception
     {
-        final int numThreads =  5;
-        final int num_records = 5;
+        final int numThreads =  PARAMETERS.CONCURRENCY_SOME;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
 
         Map<String, String> testMap = getRuntime().getObjectsView().build()
                 .setStreamID(UUID.randomUUID())

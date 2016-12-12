@@ -682,11 +682,17 @@ public class AbstractCorfuTest {
      * @param numThreads the desired concurrency level, and the number of instances of state-machines
      * @param function an array of functions to execute at each step. each function call returns boolean to indicate if it reaches a final state.
      */
-    public void scheduleInterleaved(int numThreads, int numTasks, IntConsumer[] function) {
+    static final long NOSEED = -1L;
+
+    public void scheduleInterleaved(int numThreads, int numTasks, IntConsumer[] stateMachine) {
+        scheduleInterleaved(numThreads, numTasks, stateMachine, NOSEED);
+    }
+
+    public void scheduleInterleaved(int numThreads, int numTasks, IntConsumer[] stateMachine, long seed) {
         final int NOTASK = -1;
 
-        int numStates = function.length;
-        Random r = new Random(System.currentTimeMillis());
+        int numStates = stateMachine.length;
+        Random r = new Random(seed == NOSEED ? System.currentTimeMillis() : seed);
         AtomicInteger nDone = new AtomicInteger(0);
 
         int[] onTask = new int[numThreads];
@@ -708,7 +714,7 @@ public class AbstractCorfuTest {
 
             if (onTask[nextt] != NOTASK) {
                 t(nextt, () -> {
-                    function[onState[nextt]].accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
+                    stateMachine[onState[nextt]].accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
                     if (++onState[nextt] >= numStates) {
                         onTask[nextt] = NOTASK;
                         nDone.getAndIncrement();
