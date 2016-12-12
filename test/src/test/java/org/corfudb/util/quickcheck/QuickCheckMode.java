@@ -1,26 +1,14 @@
-package org.corfudb.cmdlets;
+package org.corfudb.util.quickcheck;
 
-import lombok.extern.slf4j.Slf4j;
 import com.ericsson.otp.erlang.*;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Map;
 
-/**
- * Created by fritchie on 8/29/16.
- */
-@Slf4j
 public class QuickCheckMode {
-    /**
-     * TODO refactor/move to another class
-     */
-    private Thread erlNodeThread;
-
-    /**
-     * TODO refactor/move to another class
-     */
     private static OtpNode otpNode = null;
-    private static Object otpNodeLock = new Object();
+    private static final Object otpNodeLock = new Object();
 
     public QuickCheckMode(Map<String, Object> opts) {
         synchronized (otpNodeLock) {
@@ -30,7 +18,7 @@ public class QuickCheckMode {
                 try {
                     otpNode = new OtpNode(nodename);
 
-                    System.out.println("\n\n***************** Creating lots of OtpNode Threads ************\n\n");
+                    System.out.println("***************** Creating OtpNode Threads ************\n");
                     Thread erlNodeThread0 = new Thread(this::runErlMbox0);
                     erlNodeThread0.start();
                     Thread erlNodeThread1 = new Thread(this::runErlMbox1);
@@ -64,28 +52,30 @@ public class QuickCheckMode {
                     Thread erlNodeThread15 = new Thread(this::runErlMbox15);
                     erlNodeThread15.start();
                 } catch (IOException e) {
-                    log.info("Error creating OtpNode {}: {}", nodename, e);
+                    System.err.printf("Error creating OtpNode %s: %s\n", nodename, e.toString());
                 }
             }
         }
     }
 
-    private void runErlMbox0() { runErlMbox(0); }
-    private void runErlMbox1() { runErlMbox(1); }
-    private void runErlMbox2() { runErlMbox(2); }
-    private void runErlMbox3() { runErlMbox(3); }
-    private void runErlMbox4() { runErlMbox(4); }
-    private void runErlMbox5() { runErlMbox(5); }
-    private void runErlMbox6() { runErlMbox(6); }
-    private void runErlMbox7() { runErlMbox(7); }
-    private void runErlMbox8() { runErlMbox(8); }
-    private void runErlMbox9() { runErlMbox(9); }
-    private void runErlMbox10() { runErlMbox(10); }
-    private void runErlMbox11() { runErlMbox(11); }
-    private void runErlMbox12() { runErlMbox(12); }
-    private void runErlMbox13() { runErlMbox(13); }
-    private void runErlMbox14() { runErlMbox(14); }
-    private void runErlMbox15() { runErlMbox(15); }
+    private final int c0 = 0, c1 = 1, c2 = 2, c3 = 3, c4 = 4, c5 = 5, c6 = 6, c7 = 7, c8 = 8, c9 = 9,
+            c10 = 10, c11 = 11, c12 = 12, c13 = 13, c14 = 14, c15 = 15;
+    private void runErlMbox0() { runErlMbox(c0); }
+    private void runErlMbox1() { runErlMbox(c1); }
+    private void runErlMbox2() { runErlMbox(c2); }
+    private void runErlMbox3() { runErlMbox(c3); }
+    private void runErlMbox4() { runErlMbox(c4); }
+    private void runErlMbox5() { runErlMbox(c5); }
+    private void runErlMbox6() { runErlMbox(c6); }
+    private void runErlMbox7() { runErlMbox(c7); }
+    private void runErlMbox8() { runErlMbox(c8); }
+    private void runErlMbox9() { runErlMbox(c9); }
+    private void runErlMbox10() { runErlMbox(c10); }
+    private void runErlMbox11() { runErlMbox(c11); }
+    private void runErlMbox12() { runErlMbox(c12); }
+    private void runErlMbox13() { runErlMbox(c13); }
+    private void runErlMbox14() { runErlMbox(c14); }
+    private void runErlMbox15() { runErlMbox(c15); }
 
     private void runErlMbox(int num) {
         Thread.currentThread().setName("DistErl-" + num);
@@ -95,12 +85,10 @@ public class QuickCheckMode {
             OtpErlangObject o;
             OtpErlangTuple msg;
             OtpErlangPid from;
-            CmdletRouter cr = new CmdletRouter();
 
             while (true) {
                 try {
                     o = mbox.receive();
-                    // System.err.print("{"); System.err.flush(); // Thread.sleep(100);
                     if (o instanceof OtpErlangTuple) {
                         msg = (OtpErlangTuple) o;
                         from = (OtpErlangPid) msg.elementAt(0);
@@ -111,14 +99,26 @@ public class QuickCheckMode {
                             if (cmd.elementAt(i).getClass() == OtpErlangList.class) {
                                 // We're expecting a string always, but
                                 // the Erlang side will send an empty list
-                                // for a zero length string.
+                                // instead of a zero length string.
                                 sopts[i] = "";
                             } else {
-                                sopts[i] = ((OtpErlangString) cmd.elementAt(i))
-                                        .stringValue();
+                                sopts[i] = ((OtpErlangString) cmd.elementAt(i)).stringValue();
                             }
                         }
-                        String[] res = cr.main2(sopts);
+                        String s0 = sopts[0];
+                        String[] args = Arrays.copyOfRange(sopts, 1, sopts.length);
+                        String[] res;
+                        switch (sopts[0]) {
+                            case "corfu_layout":
+                                res = QCLayout.main(args);
+                                break;
+                            case "corfu_smrobject":
+                                res = QCSMRobject.main(args);
+                                break;
+                            default:
+                                res = QCUtil.replyErr("invocation error");
+                                break;
+                        }
                         OtpErlangObject[] reslist = new OtpErlangObject[res.length];
                         for (int i = 0; i < res.length; i++) {
                             reslist[i] = new OtpErlangString(res[i]);
@@ -126,15 +126,14 @@ public class QuickCheckMode {
                         OtpErlangList reply_reslist = new OtpErlangList(reslist);
                         OtpErlangTuple reply = new OtpErlangTuple(new OtpErlangObject[] { id, reply_reslist });
                         mbox.send(from, reply);
-                        // System.err.print("}"); System.err.flush();
                     }
                 } catch (Exception e) {
-                    log.warn("Bummer " + e);
+                    System.err.printf("runErlMbox interation error: %s\n", e.toString());
                     e.printStackTrace();
                 }
             }
         } catch (Exception e) {
-            log.warn("Yo, bummer: " + e);
+            System.err.printf("runErlMbox error: %s\n", e.toString());
         }
     }
 }

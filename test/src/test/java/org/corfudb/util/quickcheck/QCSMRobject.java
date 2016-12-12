@@ -1,8 +1,9 @@
-package org.corfudb.cmdlets;
+package org.corfudb.util.quickcheck;
 
 import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
@@ -16,19 +17,16 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 
-import lombok.extern.slf4j.Slf4j;
+import static org.corfudb.util.quickcheck.QCUtil.configureRuntime;
+import static org.corfudb.util.quickcheck.QCUtil.replyErr;
+import static org.corfudb.util.quickcheck.QCUtil.replyOk;
 
-
-/**
- * Created by mwei on 1/21/16.
- */
-@Slf4j
-public class corfu_smrobject implements ICmdlet {
+public class QCSMRobject {
 
     static private ConcurrentHashMap rtMap = new ConcurrentHashMap<String,CorfuRuntime>();
 
     private static final String USAGE =
-            "corfu_smrobject, interact with SMR objects in Corfu.\n"
+            "quickcheck interface legacy code.\n"
                     + "\n"
                     + "Usage:\n"
                     + "\tcorfu_smrobject  -c <config> -s <stream-id> <class> <method> [<args>] [-d <level>] [-p <qapp>]\n"
@@ -43,12 +41,15 @@ public class corfu_smrobject implements ICmdlet {
                     + " -h, --help                                     Show this screen\n"
                     + " --version                                      Show version\n";
 
-    @Override
-    public String[] main(String[] args) {
+    public static String[] main(String[] args) {
         if (args != null && args.length > 0 && args[0].contentEquals("reset")) {
             LogUnitServer ls = CorfuServer.getLogUnitServer();
             SequencerServer ss = CorfuServer.getSequencerServer();
             if (ls != null && ss != null) {
+
+                // Reset the local management server.
+                ManagementServer ms = CorfuServer.getManagementServer();
+                ms.reset();
 
                 // Reset the local log server.
                 ls.reset();
@@ -61,39 +62,34 @@ public class corfu_smrobject implements ICmdlet {
                 while (it.hasNext()) {
                     String key = it.next();
                     CorfuRuntime rt = (CorfuRuntime) rtMap.get(key);
-                    // Brrrrr, state needs resetting in rt's ObjectsView
+                    // State needs resetting in rt's ObjectsView
                     rt.getObjectsView().getObjectCache().clear();
-                    // Brrrrr, state needs resetting in rt's AddressSpaceView
+                    // State needs resetting in rt's AddressSpaceView
                     rt.getAddressSpaceView().resetCaches();
-                    // Stop the router, sortof.  false means don't really shutdown,
+                    // Stop the router: false means don't really shutdown,
                     // but disconnect any existing connection.
                     rt.stop(false);
                 }
-                // Avoid leak of Netty Pthread worker pool by reusing routers.
-                // rtMap = new ConcurrentHashMap<String,CorfuRuntime>();
-
-                // Reset all local CorfuRuntime StreamView
-                return cmdlet.ok();
+                return replyOk();
             } else {
-                return cmdlet.err("No active log server or sequencer server");
+                return replyErr("No active log server or sequencer server");
             }
         }
         if (args != null && args.length > 0 && args[0].contentEquals("reboot")) {
+            ManagementServer ms = CorfuServer.getManagementServer();
+            ms.reboot();
             LogUnitServer ls = CorfuServer.getLogUnitServer();
             if (ls != null) {
                 ls.reboot();
-                return cmdlet.ok();
+                return replyOk();
             } else {
-                return cmdlet.err("No active log server");
+                return replyErr("No active log server");
             }
         }
 
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe).parse(args);
-
-        // Configure base options
-        configureBase(opts);
 
         // Get a org.corfudb.runtime instance from the options.
         String config = (String) opts.get("--config");
@@ -111,23 +107,23 @@ public class corfu_smrobject implements ICmdlet {
 
         String argz = ((String) opts.get("<args>"));
         int arity;
-        String[] splitz;
+        String[] split;
 
         if (argz == null) {
-             splitz = new String[0];
+             split = new String[0];
             arity = 0;
         } else {
-            splitz = argz.split(",");
+            split = argz.split(",");
             if (argz.charAt(argz.length() - 1) == ',') {
-                arity = splitz.length + 1;
-                String[] new_splitz = new String[arity];
+                arity = split.length + 1;
+                String[] new_split = new String[arity];
                 for (int i = 0; i < arity - 1; i++) {
-                    new_splitz[i] = splitz[i];
+                    new_split[i] = split[i];
                 }
-                new_splitz[arity - 1] = "";
-                splitz = new_splitz;
+                new_split[arity - 1] = "";
+                split = new_split;
             } else {
-                arity = splitz.length;
+                arity = split.length;
             }
         }
 
@@ -152,50 +148,49 @@ public class corfu_smrobject implements ICmdlet {
                     .filter(x -> x.getParameterCount() == arity)
                     .findFirst().get();
         } catch (NoSuchElementException nsee) {
-            return cmdlet.err("Method " + opts.get("<method>") + " with " +
+            return replyErr("Method " + opts.get("<method>") + " with " +
                     arity
                     + " arguments not found!");
         }
         if (m == null) {
-            return cmdlet.err("Method " + opts.get("<method>") + " with " +
+            return replyErr("Method " + opts.get("<method>") + " with " +
                     arity
                     + " arguments not found!");
         }
 
         Object ret;
-        for (int i = 0; i < 10; i++) {
+        final int c10 = 10, c50 = 50;
+        for (int i = 0; i < c10; i++) {
             try {
-                ret = m.invoke(o, splitz);
+                ret = m.invoke(o, split);
             } catch (InvocationTargetException e) {
                 Throwable c = ExceptionUtils.getCause(e);
                 if (c.getClass() == org.corfudb.runtime.exceptions.NetworkException.class &&
                         c.toString().matches(".*Disconnected endpoint.*")) {
                     // Very occasionally, QuickCheck tests will encounter an exception
-                    // caused by a disconnection with the remote endpoint.  That kind
-                    // of non-determinism is evil.  Just retry a few times via 'for' loop.
-                    log.warn("WHOA, 'Disconnected endpoint', looping...\n");
-                    try { Thread.sleep(50); } catch (InterruptedException ie){};
+                    // caused by a disconnection with the remote endpoint.
+                    try { Thread.sleep(c50); } catch (InterruptedException ie){};
                     continue;
                 } else {
-                    return cmdlet.err("exception", e.getClass().getSimpleName(),
+                    return replyErr("exception", e.getClass().getSimpleName(),
                             "stack: " + ExceptionUtils.getStackTrace(e),
                             "cause: " + ExceptionUtils.getCause(e));
                 }
             } catch (IllegalAccessException e) {
-                return cmdlet.err("exception", e.getClass().getSimpleName(),
+                return replyErr("exception", e.getClass().getSimpleName(),
                         "stack: " + ExceptionUtils.getStackTrace(e));
             } catch (Exception e) {
-                return cmdlet.err("Exception on object: " + e,
+                return replyErr("Exception on object: " + e,
                         "stack: " + ExceptionUtils.getStackTrace(e),
                         "cause: " + ExceptionUtils.getCause(e));
             }
 
             if (ret != null) {
-                return cmdlet.ok(ret.toString());
+                return replyOk(ret.toString());
             } else {
-                return cmdlet.ok();
+                return replyOk();
             }
         }
-        return cmdlet.err("Exhausted for loop retries");
+        return replyErr("Exhausted for loop retries");
     }
 }
