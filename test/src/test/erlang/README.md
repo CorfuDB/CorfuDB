@@ -94,8 +94,8 @@ into a shell to execute it:
 
 # 3. Running CorfuDB in QuickCheck testing mode
 
-Run a single CorfuDB server process using:
-
+We usually start a single CorfuDB server process using the
+`bin/corfu_server` script.
 However, to run QuickCheck, we need to start the server via the
 Clojure CLI shell.  Please add the following text to the file
 `/tmp/start-corfu-server-with-quickcheck`:
