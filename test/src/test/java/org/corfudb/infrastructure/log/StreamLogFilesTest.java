@@ -25,7 +25,7 @@ import org.junit.Test;
 public class StreamLogFilesTest extends AbstractCorfuTest {
 
     private String getDirPath() {
-        return getTempDir() + File.separator;
+        return PARAMETERS.TEST_TEMP_DIR + File.separator;
     }
 
     @Test
@@ -40,8 +40,12 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
 
         // Disable checksum, then write and read then same entry
-        log = new StreamLogFiles(getDirPath(), true);
-        log.append(address0, new LogData(DataType.DATA, b));
+        // An overwrite exception should occur, since we are writing the
+        // same entry.
+        final StreamLog newLog = new StreamLogFiles(getDirPath(), true);
+        assertThatThrownBy(() -> { newLog
+                .append(address0, new LogData(DataType.DATA, b)); })
+                .isInstanceOf(OverwriteException.class);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
     }
 
@@ -113,11 +117,14 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
         log.close();
 
+        final int OVERWRITE_DELIMITER = 0xFFFF;
+        final int OVERWRITE_BYTES = 4;
+
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
         String logFilePath = logDir + 0 + ".log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
-        file.seek(StreamLogFiles.LogFileHeader.size + 4);
-        file.writeInt(0xffff);
+        file.seek(StreamLogFiles.LogFileHeader.size + OVERWRITE_BYTES);
+        file.writeInt(OVERWRITE_DELIMITER);
         file.close();
 
         StreamLog log2 = new StreamLogFiles(logDir, false);
@@ -129,7 +136,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Overwrite the delimiter
         file = new RandomAccessFile(logFilePath, "rw");
         file.seek(StreamLogFiles.LogFileHeader.size );
-        file.writeInt(0xffff);
+        file.writeInt(OVERWRITE_DELIMITER);
         file.close();
 
         StreamLog log3 = new StreamLogFiles(logDir, false);
@@ -145,8 +152,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
 
-        final int num_threads = 2;
-        final int num_entries = 100;
+        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
+        final int num_entries = PARAMETERS.NUM_ITERATIONS_LOW;
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_entries;
@@ -156,7 +163,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             }
         });
 
-        executeScheduled(num_threads, 30, TimeUnit.SECONDS);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
 
         // verify that addresses 0 to 2000 have been used up
         for (int x = 0; x < num_entries * num_threads; x++) {
@@ -165,5 +172,27 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             byte[] bytes = (byte[]) data.getPayload(null);
             assertThat(bytes).isEqualTo(streamEntry);
         }
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testSync() throws Exception {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        long seg1 = StreamLogFiles.RECORDS_PER_LOG_FILE * 0 + 1;
+        long seg2 = StreamLogFiles.RECORDS_PER_LOG_FILE * 1 + 1;
+        long seg3 = StreamLogFiles.RECORDS_PER_LOG_FILE * 2 + 1;
+
+        log.append(new LogAddress(seg1, null), new LogData(DataType.DATA, b));
+        log.append(new LogAddress(seg2, null), new LogData(DataType.DATA, b));
+        log.append(new LogAddress(seg3, null), new LogData(DataType.DATA, b));
+        
+        assertThat(log.getChannelsToSync().size()).isEqualTo(3);
+
+        log.sync();
+
+        assertThat(log.getChannelsToSync().size()).isEqualTo(0);
     }
 }

@@ -48,7 +48,7 @@ public class StreamIT {
 
         // Generate and write random data
         int entrySize = Integer.valueOf(properties.getProperty("largeEntrySize"));
-        int numEntries = 100;
+        final int numEntries = 100;
         byte[][] data = new byte[numEntries][entrySize];
 
         for(int x = 0; x < numEntries; x++) {

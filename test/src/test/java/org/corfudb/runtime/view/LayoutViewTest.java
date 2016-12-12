@@ -29,11 +29,11 @@ public class LayoutViewTest extends AbstractViewTest {
         CorfuRuntime r = getDefaultRuntime().connect();
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1)
-                .addLayoutServer(9000)
-                .addSequencer(9000)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(9000)
+                .addLogUnit(SERVERS.PORT_0)
                 .addToSegment()
                 .addToLayout()
                 .build();
@@ -48,17 +48,17 @@ public class LayoutViewTest extends AbstractViewTest {
     @Test
     public void canTolerateLayoutServerFailure()
             throws Exception {
-        addServer(9000);
-        addServer(9001);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
 
         bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addLayoutServer(9001)
-                .addSequencer(9000)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(9000)
+                .addLogUnit(SERVERS.PORT_0)
                 .addToSegment()
                 .addToLayout()
                 .build());
@@ -66,7 +66,7 @@ public class LayoutViewTest extends AbstractViewTest {
         CorfuRuntime r = getRuntime().connect();
 
         // Fail the network link between the client and test server
-        addServerRule(9001, new TestRule()
+        addServerRule(SERVERS.PORT_1, new TestRule()
                 .always()
                 .drop());
 
@@ -79,8 +79,8 @@ public class LayoutViewTest extends AbstractViewTest {
      * Fail a server and reconfigure
      * while data operations are going on.
      * Details:
-     * Start with a configuration of 3 servers 9000, 9001, 9002.
-     * Perform data operations. Fail 9001 and reconfigure to have only 9000 and 9002.
+     * Start with a configuration of 3 servers SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2.
+     * Perform data operations. Fail SERVERS.PORT_1 and reconfigure to have only SERVERS.PORT_0 and SERVERS.PORT_2.
      * Perform data operations while the reconfiguration is going on. The operations should
      * be stuck till the new configuration is chosen and then complete after that.
      * FIXME: We cannot failover the server with the primary sequencer yet.
@@ -90,22 +90,22 @@ public class LayoutViewTest extends AbstractViewTest {
     @Test
     public void reconfigurationDuringDataOperations()
             throws Exception {
-        addServer(9000);
-        addServer(9001);
-        addServer(9002);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addLayoutServer(9001)
-                .addLayoutServer(9002)
-                .addSequencer(9000)
-                .addSequencer(9001)
-                .addSequencer(9002)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(9000)
-                .addLogUnit(9001)
-                .addLogUnit(9002)
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();
@@ -122,18 +122,18 @@ public class LayoutViewTest extends AbstractViewTest {
                 corfuRuntime.invalidateLayout();
 
                 // Fail the network link between the client and test server
-                addServerRule(9001, new TestRule().always().drop());
-                // New layout removes the failed server 9000
+                addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
+                // New layout removes the failed server SERVERS.PORT_0
                 Layout newLayout = new TestLayoutBuilder()
                         .setEpoch(l.getEpoch() + 1)
-                        .addLayoutServer(9000)
-                        .addLayoutServer(9002)
-                        .addSequencer(9000)
-                        .addSequencer(9002)
+                        .addLayoutServer(SERVERS.PORT_0)
+                        .addLayoutServer(SERVERS.PORT_2)
+                        .addSequencer(SERVERS.PORT_0)
+                        .addSequencer(SERVERS.PORT_2)
                         .buildSegment()
                         .buildStripe()
-                        .addLogUnit(9000)
-                        .addLogUnit(9002)
+                        .addLogUnit(SERVERS.PORT_0)
+                        .addLogUnit(SERVERS.PORT_2)
                         .addToSegment()
                         .addToLayout()
                         .build();

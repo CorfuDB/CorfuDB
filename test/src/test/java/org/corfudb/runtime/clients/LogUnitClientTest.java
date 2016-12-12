@@ -37,14 +37,15 @@ public class LogUnitClientTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
-        dirPath = getTempDir();
+        dirPath = PARAMETERS.TEST_TEMP_DIR;
+        final int MAX_CACHE = 256_000_000;
         serverContext = new ServerContextBuilder()
                 .setInitialToken(0)
                 .setSingle(false)
                 .setNoVerify(false)
                 .setMemory(false)
                 .setLogPath(dirPath)
-                .setMaxCache(256000000)
+                .setMaxCache(MAX_CACHE)
                 .setServerRouter(serverRouter)
                 .build();
         server = new LogUnitServer(serverContext);
@@ -117,18 +118,21 @@ public class LogUnitClientTest extends AbstractClientTest {
     @Test
     public void backpointersCanBeWrittenAndRead()
             throws Exception {
+        final long ADDRESS_0 = 1337L;
+        final long ADDRESS_1 = 1338L;
+
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), 0, testString,
                 ImmutableMap.<UUID, Long>builder()
-                        .put(CorfuRuntime.getStreamID("hello"), 1337L)
-                        .put(CorfuRuntime.getStreamID("hello2"), 1338L)
+                        .put(CorfuRuntime.getStreamID("hello"), ADDRESS_0)
+                        .put(CorfuRuntime.getStreamID("hello2"), ADDRESS_1)
                         .build()).get();
 
         LogData r = client.read(0).get().getReadSet().get(0L);
         assertThat(r.getBackpointerMap())
-                .containsEntry(CorfuRuntime.getStreamID("hello"), 1337L);
+                .containsEntry(CorfuRuntime.getStreamID("hello"), ADDRESS_0);
         assertThat(r.getBackpointerMap())
-                .containsEntry(CorfuRuntime.getStreamID("hello2"), 1338L);
+                .containsEntry(CorfuRuntime.getStreamID("hello2"), ADDRESS_1);
     }
 
     @Test
@@ -144,9 +148,10 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .isEqualTo(testString);
         assertThat(r.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT));
 
+        final long OUTSIDE_ADDRESS = 10L;
         UUID streamA = CorfuRuntime.getStreamID("streamA");
         client.writeStream(1, Collections.singletonMap(streamA, 0L), testString).get();
-        client.writeCommit(Collections.singletonMap(streamA, 0L), 10L, true).get(); // 10L shouldn't matter
+        client.writeCommit(Collections.singletonMap(streamA, 0L), OUTSIDE_ADDRESS, true).get(); // 10L shouldn't matter
 
         r = client.read(streamA, Range.singleton(0L)).get().getReadSet().get(0L);
         assertThat(r.getType())
@@ -172,8 +177,10 @@ public class LogUnitClientTest extends AbstractClientTest {
         String logDir = (String) serverContext.getServerConfig().get("--log-path");
         String logFilePath = logDir + File.separator + "log/0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
-        file.seek(64 + 2); // File header + delimiter
-        file.writeInt(0xffff);
+        final long FILE_HEADER = 64;
+        final int CORRUPT_BYTES = 0xFFFF;
+        file.seek(FILE_HEADER + 2); // File header + delimiter
+        file.writeInt(CORRUPT_BYTES);
         file.close();
 
         // Try to read a corrupted log entry

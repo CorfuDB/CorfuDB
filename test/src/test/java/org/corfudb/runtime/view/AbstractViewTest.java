@@ -239,8 +239,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @return  A default CorfuRuntime
      */
     public CorfuRuntime getDefaultRuntime() {
-        if (!testServerMap.containsKey(getEndpoint(9000))) {
-            addSingleServer(9000);
+        if (!testServerMap.containsKey(getEndpoint(SERVERS.PORT_0))) {
+            addSingleServer(SERVERS.PORT_0);
         }
         return getRuntime().connect();
     }
@@ -316,7 +316,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @return  Returns the default endpoint.
      */
     public String getDefaultEndpoint() {
-        return getEndpoint(9000);
+        return getEndpoint(SERVERS.PORT_0);
     }
 
     /** Get the endpoint string, given a port number.

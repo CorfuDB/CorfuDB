@@ -15,7 +15,7 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     @Test
     public void testPutGet() {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
                 .put("--log-path", serviceDir)
                 .build());
@@ -29,7 +29,7 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     @Test
     public void testPutGetWithRestart() {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
                 .put("--log-path", serviceDir)
                 .build());

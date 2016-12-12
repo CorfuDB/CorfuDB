@@ -23,10 +23,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.corfudb.AbstractCorfuTest.PARAMETERS;
+
 /**
  * Created by mwei on 12/13/15.
  */
 @Slf4j
+// this class does not have access to parameters and is
+// scheduled to be deprecated anyway.
+@SuppressWarnings("checkstyle:magicnumber")
 public class TestClientRouter implements IClientRouter {
 
     /**
@@ -69,19 +74,19 @@ public class TestClientRouter implements IClientRouter {
      */
     @Getter
     @Setter
-    public long timeoutConnect = 50L;
+    public long timeoutConnect = PARAMETERS.TIMEOUT_NORMAL.toMillis();
     /**
      * Sync call response timeout (milliseconds)
      */
     @Getter
     @Setter
-    public long timeoutResponse = 50L;
+    public long timeoutResponse = PARAMETERS.TIMEOUT_NORMAL.toMillis();
     /**
      * Retry interval after timeout (milliseconds)
      */
     @Getter
     @Setter
-    public long timeoutRetry = 50L;
+    public long timeoutRetry = PARAMETERS.TIMEOUT_SHORT.toMillis();
 
     public List<TestRule> rules;
 

@@ -8,17 +8,12 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.file.FileSystems;
 import java.nio.file.StandardOpenOption;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import io.netty.buffer.ByteBuf;
@@ -37,22 +32,22 @@ import org.corfudb.runtime.exceptions.OverwriteException;
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
  * This StreamLog implementation can detect log file corruption, if checksum is enabled, otherwise
  * the checksum field will be ignored.
- *
+ * <p>
  * StreamLogFiles:
- *     Header LogRecords
- *
+ * Header LogRecords
+ * <p>
  * Header: {@LogFileHeader}
- *
+ * <p>
  * LogRecords: LogRecord || LogRecord LogRecords
- *
+ * <p>
  * LogRecord: {
- *     delimiter 2 bytes
- *     checksum 4 bytes
- *     address 8 bytes
- *     LogData size 4 bytes
- *     LogData
+ * delimiter 2 bytes
+ * checksum 4 bytes
+ * address 8 bytes
+ * LogData size 4 bytes
+ * LogData
  * }
- *
+ * <p>
  * Created by maithem on 10/28/16.
  */
 
@@ -66,10 +61,12 @@ public class StreamLogFiles implements StreamLog {
     private final boolean noVerify;
     public final String logDir;
     private Map<String, FileHandle> writeChannels;
+    private Set<FileChannel> channelsToSync;
 
     public StreamLogFiles(String logDir, boolean noVerify) {
         this.logDir = logDir;
         writeChannels = new HashMap<>();
+        channelsToSync = new HashSet<>();
         this.noVerify = noVerify;
 
         verifyLogs();
@@ -112,8 +109,12 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public void sync() {
-        //Todo(Maithem) flush writes to disk.
+    public void sync() throws IOException {
+        for (FileChannel ch : channelsToSync) {
+            ch.force(true);
+        }
+        log.debug("Sync'd {} channels", channelsToSync.size());
+        channelsToSync.clear();
     }
 
     /**
@@ -329,6 +330,7 @@ public class StreamLogFiles implements StreamLog {
 
         synchronized (fh.lock) {
             fh.channel.write(recordBuf.nioBuffer());
+            channelsToSync.add(fh.channel);
         }
 
         recordBuf.release();
@@ -442,5 +444,10 @@ public class StreamLogFiles implements StreamLog {
     public void release(LogAddress logAddress, LogData entry) {
         if (entry != null && entry.getData() != null && entry.getData().refCnt() > 0)
             entry.getData().release();
+    }
+
+    @VisibleForTesting
+    Set<FileChannel> getChannelsToSync() {
+        return channelsToSync;
     }
 }

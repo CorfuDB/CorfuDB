@@ -388,7 +388,9 @@ public class SMRMapTest extends AbstractViewTest {
                 .forEach(l -> {
                     try {
                         getRuntime().getObjectsView().TXBegin();
-                        testMap.put(Integer.toString(l), new TestObject(Integer.toString(l), l, ImmutableMap.of(
+                        testMap.put(Integer.toString(l),
+                                new TestObject(Integer.toString(l), l,
+                                        ImmutableMap.of(
                                 Integer.toString(l), l)));
                         if (l > 0) {
                             assertThat(testMap.get(Integer.toString(l - 1)).getTestInt())
@@ -403,7 +405,7 @@ public class SMRMapTest extends AbstractViewTest {
         assertThat(testMap.get("3").getTestString())
                 .isEqualTo("3");
         assertThat(testMap.get("3").getTestInt())
-                .isEqualTo(3);
+                .isEqualTo(Integer.parseInt("3"));
     }
 
     @Test
@@ -512,10 +514,13 @@ public class SMRMapTest extends AbstractViewTest {
                 .addOption(ObjectOpenOptions.NO_CACHE)
                 .open();
         // Do a get to prompt the sync
-        assertThat(testMap2.get(Integer.toString(0))).isEqualTo(Integer.toString(0));
+        assertThat(testMap2.get(Integer.toString(0)))
+                .isEqualTo(Integer.toString(0));
         long endTime = System.nanoTime();
 
-        testStatus += "Time to sync whole stream=" + String.format("%d us", (endTime - startTime) / 1000);
+        final int MILLISECONDS_TO_MICROSECONDS = 1000;
+        testStatus += "Time to sync whole stream=" + String.format("%d us",
+                (endTime - startTime) / MILLISECONDS_TO_MICROSECONDS);
     }
 
     @Data

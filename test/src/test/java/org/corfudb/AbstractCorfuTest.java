@@ -32,11 +32,13 @@ import static org.fusesource.jansi.Ansi.ansi;
 public class AbstractCorfuTest {
 
     public Set<Callable<Object>> scheduledThreads;
-    public Set<String> temporaryDirectories;
     public String testStatus = "";
 
     public static final CorfuTestParameters PARAMETERS =
             new CorfuTestParameters();
+
+    public static final CorfuTestServers SERVERS =
+            new CorfuTestServers();
 
     @Rule
     public TestRule watcher = new TestWatcher() {
@@ -62,18 +64,26 @@ public class AbstractCorfuTest {
         }
     };
 
-    public static void deleteFolder(File folder) {
+    /** Delete a folder.
+     *
+     * @param folder        The folder, as a File.
+     * @param deleteSelf    True to delete the folder itself,
+     *                      False to delete just the folder contents.
+     */
+    public static void deleteFolder(File folder, boolean deleteSelf) {
         File[] files = folder.listFiles();
         if (files != null) { //some JVMs return null for empty dirs
             for (File f : files) {
                 if (f.isDirectory()) {
-                    deleteFolder(f);
+                    deleteFolder(f, true);
                 } else {
                     f.delete();
                 }
             }
         }
-        folder.delete();
+        if (deleteSelf) {
+            folder.delete();
+        }
     }
 
     @Before
@@ -86,10 +96,6 @@ public class AbstractCorfuTest {
         scheduledThreads = new HashSet<>();
     }
 
-    @Before
-    public void setupTempDirs() {
-        temporaryDirectories = new HashSet<>();
-    }
 
     @After
     public void cleanupScheduledThreads() {
@@ -99,30 +105,29 @@ public class AbstractCorfuTest {
         scheduledThreads.clear();
     }
 
-    public String getTempDir() {
-        String tempdir = com.google.common.io.Files.createTempDir().getAbsolutePath();
-        temporaryDirectories.add(tempdir);
-        return tempdir;
+    /** Clean the per test temporary directory (PARAMETERS.TEST_TEMP_DIR)
+     */
+    @After
+    public void cleanPerTestTempDir() {
+        deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR),
+                false);
     }
 
-    @After
-    public void deleteTempDirs() {
-        for (String s : temporaryDirectories) {
-            File folder = new File(s);
-            deleteFolder(folder);
-        }
-    }
 
     public void calculateAbortRate(int aborts, int transactions) {
+        final float FRACTION_TO_PERCENT = 100.0F;
         if (!testStatus.equals("")) {
             testStatus += ";";
         }
-        testStatus += "Aborts=" + String.format("%.2f", ((float) aborts / transactions) * 100.0f) + "%";
+        testStatus += "Aborts=" + String.format("%.2f",
+                ((float) aborts / transactions) * FRACTION_TO_PERCENT) + "%";
     }
 
     public void calculateRequestsPerSecond(String name, int totalRequests, long startTime) {
+        final float MILLISECONDS_TO_SECONDS = 1000.0F;
         long endTime = System.currentTimeMillis();
-        float timeInSeconds = ((float) (endTime - startTime)) / 1000.0F;
+        float timeInSeconds = ((float) (endTime - startTime))
+                / MILLISECONDS_TO_SECONDS;
         float rps = (float) totalRequests / timeInSeconds;
         if (!testStatus.equals("")) {
             testStatus += ";";

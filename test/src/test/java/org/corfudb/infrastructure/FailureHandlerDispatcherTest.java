@@ -23,36 +23,36 @@ public class FailureHandlerDispatcherTest extends AbstractViewTest {
     @Test
     public void updateLayoutOnFailure() {
 
-        addServer(9000);
-        addServer(9001);
-        addServer(9002);
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
 
         Layout originalLayout = new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(9000)
-                .addLayoutServer(9001)
-                .addLayoutServer(9002)
-                .addSequencer(9000)
-                .addSequencer(9001)
-                .addSequencer(9002)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(9000)
-                .addLogUnit(9001)
-                .addLogUnit(9002)
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();
         bootstrapAllServers(originalLayout);
 
         CorfuRuntime corfuRuntime = new CorfuRuntime();
-        corfuRuntime.addLayoutServer(getEndpoint(9000));
-        corfuRuntime.addLayoutServer(getEndpoint(9001));
-        corfuRuntime.addLayoutServer(getEndpoint(9002));
+        corfuRuntime.addLayoutServer(getEndpoint(SERVERS.PORT_0));
+        corfuRuntime.addLayoutServer(getEndpoint(SERVERS.PORT_1));
+        corfuRuntime.addLayoutServer(getEndpoint(SERVERS.PORT_2));
         corfuRuntime.connect();
 
         Set<String> failedServers = new HashSet<>();
-        failedServers.add(getEndpoint(9002));
+        failedServers.add(getEndpoint(SERVERS.PORT_2));
 
         FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
         IFailureHandlerPolicy failureHandlerPolicy = new PurgeFailurePolicy();
@@ -60,20 +60,20 @@ public class FailureHandlerDispatcherTest extends AbstractViewTest {
 
         Layout expectedLayout = new TestLayoutBuilder()
                 .setEpoch(2L)
-                .addLayoutServer(9000)
-                .addLayoutServer(9001)
-                .addSequencer(9000)
-                .addSequencer(9001)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(9000)
-                .addLogUnit(9001)
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
                 .addToSegment()
                 .addToLayout()
                 .build();
 
-        assertThat(getLayoutServer(9000).getCurrentLayout())
-                .isEqualTo(getLayoutServer(9001).getCurrentLayout())
+        assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout())
+                .isEqualTo(getLayoutServer(SERVERS.PORT_1).getCurrentLayout())
                 .isEqualTo(expectedLayout);
     }
 }
