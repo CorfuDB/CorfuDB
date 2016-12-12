@@ -673,20 +673,24 @@ public class AbstractCorfuTest {
      * This utility method is an engine for interleaving thread executions, state by state.
      *
      * A state-machine is provided as an array of lambdas to invoke at each state.
-     * This scheduler engine will interleave the execution of numThreads instances of the state machine.
+     * The state-machine will be instantiated numTasks times, once per task.
+     *
+     * The engine will interleave the execution of numThreads concurrent instances of the state machine.
      * It starts numThreads threads. Each thread goes through the states of the state machine, randomly interleaving.
-     * The last state of a state-machine is special, it shuts-down the thread.
+     * The last state of a state-machine is special, it finishes the task and makes the thread ready for a new task.
 
      * @param numThreads the desired concurrency level, and the number of instances of state-machines
      * @param function an array of functions to execute at each step. each function call returns boolean to indicate if it reaches a final state.
      */
     public void scheduleInterleaved(int numThreads, int numTasks, IntConsumer[] function) {
+        final int NOTASK = -1;
+
         int numStates = function.length;
         Random r = new Random(System.currentTimeMillis());
         AtomicInteger nDone = new AtomicInteger(0);
 
         int[] onTask = new int[numThreads];
-        Arrays.fill(onTask, -1);
+        Arrays.fill(onTask, NOTASK);
 
         int[] onState = new int[numThreads];
         AtomicInteger highTask = new AtomicInteger(0);
@@ -694,7 +698,7 @@ public class AbstractCorfuTest {
         while (nDone.get() < numTasks) {
             final int nextt = r.nextInt(numThreads);
 
-            if (onTask[nextt] == -1) {
+            if (onTask[nextt] == NOTASK) {
                 int t = highTask.getAndIncrement();
                 if (t < numTasks) {
                     onTask[nextt] = t;
@@ -702,11 +706,11 @@ public class AbstractCorfuTest {
                 }
             }
 
-            if (onTask[nextt] >= 0) {
+            if (onTask[nextt] != NOTASK) {
                 t(nextt, () -> {
                     function[onState[nextt]].accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
                     if (++onState[nextt] >= numStates) {
-                        onTask[nextt] = -1;
+                        onTask[nextt] = NOTASK;
                         nDone.getAndIncrement();
                     }
                 });
