@@ -13,6 +13,8 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 
 /**
@@ -27,6 +29,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
 
     public static final String PREFIX_EPOCH = "SERVER_EPOCH";
     public static final String KEY_EPOCH = "CURRENT";
+
+    ExecutorService handlerWorkers = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
 
     /**
      * This map stores the mapping from message type to netty server handler.
@@ -121,7 +125,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                 if (validateEpoch(m, ctx)) {
                     // Route the message to the handler.
                     log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
-                    handler.handleMessage(m, ctx, this);
+                    handlerWorkers.submit(() -> handler.handleMessage(m, ctx, this));
                 }
             }
         } catch (Exception e) {
