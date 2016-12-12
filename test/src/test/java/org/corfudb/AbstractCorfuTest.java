@@ -29,7 +29,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.IntConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -665,4 +667,52 @@ public class AbstractCorfuTest {
         }
         return new AssertableObject<T>(() -> runThread(threadNum, () -> {toRun.run(); return null;}));
     }
+
+
+    /**
+     * This utility method is an engine for interleaving thread executions, state by state.
+     *
+     * A state-machine is provided as an array of lambdas to invoke at each state.
+     * This scheduler engine will interleave the execution of numThreads instances of the state machine.
+     * It starts numThreads threads. Each thread goes through the states of the state machine, randomly interleaving.
+     * The last state of a state-machine is special, it shuts-down the thread.
+
+     * @param numThreads the desired concurrency level, and the number of instances of state-machines
+     * @param function an array of functions to execute at each step. each function call returns boolean to indicate if it reaches a final state.
+     */
+    public void scheduleInterleaved(int numThreads, int numTasks, IntConsumer[] function) {
+        int numStates = function.length;
+        Random r = new Random(System.currentTimeMillis());
+        AtomicInteger nDone = new AtomicInteger(0);
+
+        int[] onTask = new int[numThreads];
+        Arrays.fill(onTask, -1);
+
+        int[] onState = new int[numThreads];
+        AtomicInteger highTask = new AtomicInteger(0);
+
+        while (nDone.get() < numTasks) {
+            final int nextt = r.nextInt(numThreads);
+
+            if (onTask[nextt] == -1) {
+                int t = highTask.getAndIncrement();
+                if (t < numTasks) {
+                    onTask[nextt] = t;
+                    onState[nextt] = 0;
+                }
+            }
+
+            if (onTask[nextt] >= 0) {
+                t(nextt, () -> {
+                    function[onState[nextt]].accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
+                    if (++onState[nextt] >= numStates) {
+                        onTask[nextt] = -1;
+                        nDone.getAndIncrement();
+                    }
+                });
+            }
+        }
+    }
+
+
 }
