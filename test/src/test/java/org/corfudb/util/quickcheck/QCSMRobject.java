@@ -159,7 +159,8 @@ public class QCSMRobject {
         }
 
         Object ret;
-        for (int i = 0; i < 10; i++) {
+        final int c10 = 10, c50 = 50;
+        for (int i = 0; i < c10; i++) {
             try {
                 ret = m.invoke(o, split);
             } catch (InvocationTargetException e) {
@@ -168,7 +169,7 @@ public class QCSMRobject {
                         c.toString().matches(".*Disconnected endpoint.*")) {
                     // Very occasionally, QuickCheck tests will encounter an exception
                     // caused by a disconnection with the remote endpoint.
-                    try { Thread.sleep(50); } catch (InterruptedException ie){};
+                    try { Thread.sleep(c50); } catch (InterruptedException ie){};
                     continue;
                 } else {
                     return replyErr("exception", e.getClass().getSimpleName(),
