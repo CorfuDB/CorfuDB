@@ -669,7 +669,6 @@ public class AbstractCorfuTest {
         return new AssertableObject<T>(() -> runThread(threadNum, () -> {toRun.run(); return null;}));
     }
 
-
     /**
      * This utility method is an engine for interleaving thread executions, state by state.
      *
@@ -679,13 +678,12 @@ public class AbstractCorfuTest {
      * The engine will interleave the execution of numThreads concurrent instances of the state machine.
      * It starts numThreads threads. Each thread goes through the states of the state machine, randomly interleaving.
      * The last state of a state-machine is special, it finishes the task and makes the thread ready for a new task.
-
      * @param numThreads the desired concurrency level, and the number of instances of state-machines
      * @param numTasks total number of tasks to execute
      * @param stateMachine an array of functions to execute at each step.
      *                     each function call returns boolean to indicate if it reaches a final state.
      */
-    public void scheduleInterleaved(int numThreads, int numTasks, ArrayList<BiConsumer<Integer, Integer>> stateMachine) {
+    public void scheduleInterleaved(int numThreads, int numTasks, ArrayList<IntConsumer> stateMachine) {
         final int NOTASK = -1;
 
         int numStates = stateMachine.size();
@@ -711,7 +709,7 @@ public class AbstractCorfuTest {
 
             if (onTask[nextt] != NOTASK) {
                 t(nextt, () -> {
-                    stateMachine.get(onState[nextt]).accept(nextt, onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
+                    stateMachine.get(onState[nextt]).accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
                     if (++onState[nextt] >= numStates) {
                         onTask[nextt] = NOTASK;
                         nDone.getAndIncrement();
@@ -721,5 +719,21 @@ public class AbstractCorfuTest {
         }
     }
 
+    /**
+     * This engine takes the same state machine as scheduleInterleaved above,
+     * and executes the state machines in separate threads running concurrenty, without explicit interleaving.
+     *
+     * @param numThreads specifies desired concurrency level
+     * @param numTasks specifies the desired number of state machine instances
+     * @param stateMachine specifies the state machine as an array of steps, each one is a lambda
+     */
+    public void scheduleThreaded(int numThreads, int numTasks, ArrayList<IntConsumer> stateMachine)
+            throws Exception
+    {
+        scheduleConcurrently(numTasks, (numTask) -> {
+            for (IntConsumer step : stateMachine) step.accept(numTask);
+        });
+        executeScheduled(numThreads, PARAMETERS.TIMEOUT_NORMAL);
+    }
 
 }

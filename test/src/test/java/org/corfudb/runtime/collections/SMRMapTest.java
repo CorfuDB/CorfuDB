@@ -581,90 +581,58 @@ public class SMRMapTest extends AbstractViewTest {
         testMap.put("a", "z");
     }
 
-    @Test
-    public void concurrentAbortTest()
-            throws Exception {
+    AtomicInteger aborts;
 
+    ArrayList<IntConsumer> getAbortTestSM() {
         Map<String, String> testMap = getRuntime().getObjectsView().build()
                 .setStreamID(UUID.randomUUID())
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .addOption(ObjectOpenOptions.NO_CACHE)
                 .open();
-
-        final int num_threads = 5;
-        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();
 
-        scheduleConcurrently(num_threads, threadNumber -> {
-            int base = threadNumber * num_records;
-            for (int i = base; i < base + num_records; i++) {
-                try {
+        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>(){
+
+            {
+                // state 0: start a transaction
+                add ((ignored_task_num) -> {
                     getRuntime().getObjectsView().TXBegin();
-                    assertThat(testMap.put(Integer.toString(i),
-                            Integer.toString(i)))
+                });
+
+                // state 1: do a put
+                add( (task_num) -> {
+                    assertThat(testMap.put(Integer.toString(task_num),
+                            Integer.toString(task_num)))
                             .isEqualTo(null);
-                    getRuntime().getObjectsView().TXEnd();
-                } catch (TransactionAbortedException tae) {
-                    aborts.incrementAndGet();
-                }
+                });
+
+                // state 2 (final): ask to commit the transaction
+                add ( (ignored_task_num) -> {
+                    try {
+                        getRuntime().getObjectsView().TXEnd();
+                    } catch (TransactionAbortedException tae) {
+                        aborts.incrementAndGet();
+                    }
+                });
+
             }
-        });
-
-        long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
-        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
-
-        calculateAbortRate(aborts.get(), num_records * num_threads);
+        } ;
+        return stateMachine;
     }
 
-
     @Test
-    public void concurrentAbortTestInterleaved()
-        throws Exception
+    public void concurrentAbortTestThreaded()
+            throws Exception
     {
         final int numThreads =  PARAMETERS.CONCURRENCY_SOME;
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
 
-        Map<String, String> testMap = getRuntime().getObjectsView().build()
-                .setStreamID(UUID.randomUUID())
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                .addOption(ObjectOpenOptions.NO_CACHE)
-                .open();
-        AtomicInteger aborts = new AtomicInteger();
-        testMap.clear();
-
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>(){
-
-            {
-                // state 0: start a transaction
-                add ((Integer ignored_thread_num, Integer ignored_task_num) -> {
-                    getRuntime().getObjectsView().TXBegin();
-                         });
-
-                // state 1: do a put
-                add( (Integer ignored_thread_num, Integer task_num) -> {
-                            assertThat(testMap.put(Integer.toString(task_num),
-                                    Integer.toString(task_num)))
-                                    .isEqualTo(null);
-                        });
-
-                // state 2 (final): ask to commit the transaction
-                add ( (Integer ignored_thread_num, Integer ignored_task_num) -> {
-                            try {
-                                getRuntime().getObjectsView().TXEnd();
-                            } catch (TransactionAbortedException tae) {
-                                aborts.incrementAndGet();
-                            }
-                        });
-
-            }
-        } ;
-
         long startTime = System.currentTimeMillis();
 
-        // invoke the interleaving engine
-        scheduleInterleaved(numThreads, numThreads*numRecords, stateMachine);
+        aborts = new AtomicInteger();
+        // invoke the threaded engine
+        scheduleThreaded(numThreads, numThreads*numRecords, getAbortTestSM());
 
         // print stats..
         calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
@@ -673,17 +641,27 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    public void concurrentAbortMultiViewInterleaved()
-            throws Exception {
-        final int numThreads = PARAMETERS.CONCURRENCY_SOME;
-        final int numKeys = PARAMETERS.CONCURRENCY_SOME * 5; // When fine-grained map conflicts will be implemented, this number of keys SHOULD allow some concurrency, but create conflicts
+    public void concurrentAbortTestInterleaved()
+            throws Exception
+    {
+        final int numThreads =  PARAMETERS.CONCURRENCY_SOME;
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
-        AtomicInteger aborts = new AtomicInteger();
+
+        long startTime = System.currentTimeMillis();
+
+        aborts = new AtomicInteger();
+        // invoke the interleaving engine
+        scheduleInterleaved(numThreads, numThreads*numRecords, getAbortTestSM());
+
+        // print stats..
+        calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
+        calculateAbortRate(aborts.get(), numRecords * numThreads);
+
+    }
+
+    ArrayList<IntConsumer> getMultiViewSM(int numThreads) {
 
         UUID mapStream = UUID.randomUUID();
-
-
         Map<String, String>[] testMap =
                 IntStream.range(0, numThreads)
                         .mapToObj(i -> {
@@ -696,27 +674,31 @@ public class SMRMapTest extends AbstractViewTest {
                                     .open();
                         })
                         .toArray(Map[]::new);
+        AtomicInteger aborts = new AtomicInteger();
+
+        // # keys indicate how much contention there will be
+        final int numKeys = numThreads * 5;
 
         Random r = new Random();
 
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>(){
+        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>(){
 
             {
                 // state 0: start a transaction
-                add ((Integer ignored_thread_num, Integer ignored_task_num) -> {
+                add ((ignored_task_num) -> {
                     getRuntime().getObjectsView().TXBegin();
                 });
 
                 // state 1: do a put and a get
-                add( (Integer thread_num, Integer task_num) -> {
+                add( (task_num) -> {
                     final int putKey = r.nextInt(numKeys);
                     final int getKey = r.nextInt(numKeys);
-                    testMap[thread_num].put(Integer.toString(putKey),
-                            testMap[thread_num].get(Integer.toString(getKey)));
+                    testMap[task_num%numThreads].put(Integer.toString(putKey),
+                            testMap[task_num%numThreads].get(Integer.toString(getKey)));
                 });
 
                 // state 2 (final): ask to commit the transaction
-                add ( (Integer ignored_thread_num, Integer ignored_task_num) -> {
+                add ( (ignored_task_num) -> {
                     try {
                         getRuntime().getObjectsView().TXEnd();
                     } catch (TransactionAbortedException tae) {
@@ -727,107 +709,49 @@ public class SMRMapTest extends AbstractViewTest {
             }
         } ;
 
+        return stateMachine;
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void concurrentAbortMultiViewInterleaved()
+            throws Exception {
+        final int numThreads = PARAMETERS.CONCURRENCY_SOME;
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
+        AtomicInteger aborts = new AtomicInteger();
+
+
         long startTime = System.currentTimeMillis();
 
         // invoke the interleaving engine
-        scheduleInterleaved(numThreads, numThreads*numRecords, stateMachine);
+        scheduleInterleaved(numThreads, numThreads*numRecords,
+                getMultiViewSM(numThreads)
+        );
 
         // print stats..
         calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
         calculateAbortRate(aborts.get(), numRecords * numThreads);
-
-
-
-    }
-
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void concurrentAbortMultiViewTest()
-            throws Exception {
-        final int num_threads = 5;
-        final int num_keys = 100;
-        final int num_records = 1_000;
-        AtomicInteger aborts = new AtomicInteger();
-
-        UUID mapStream = UUID.randomUUID();
-
-        Map<String, String>[] testMap =
-            IntStream.range(0, num_threads)
-                    .mapToObj(i -> {
-                        return getRuntime().getObjectsView()
-                                .build()
-                                .setStreamID(mapStream)
-                                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
-                                })
-                                .addOption(ObjectOpenOptions.NO_CACHE)
-                                .open();
-                    })
-                    .toArray(Map[]::new);
-
-        Random r = new Random();
-        scheduleConcurrently(num_threads, threadNumber -> {
-            int base = threadNumber * num_records;
-            for (int i = base; i < base + num_records; i++) {
-                try {
-                    getRuntime().getObjectsView().TXBegin();
-                    testMap[threadNumber].put(Integer.toString(r.nextInt(num_keys)),
-                            testMap[threadNumber].get(Integer.toString(r.nextInt(num_keys))));
-                    getRuntime().getObjectsView().TXEnd();
-                } catch (TransactionAbortedException tae) {
-                    aborts.incrementAndGet();
-                }
-            }
-        });
-
-        long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
-        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
-
-        calculateAbortRate(aborts.get(), num_records * num_threads);
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void concurrentAbortTestMulti()
+    public void concurrentAbortMultiViewThreaded()
             throws Exception {
-
-        final int num_maps = 100;
-        List<Map<Integer,Integer>> mapList = IntStream.range(0, num_maps)
-                                                    .mapToObj(x ->
-                                                        getRuntime()
-                                                                .getObjectsView().build()
-                                                                .setStreamName("map-" + x)
-                                                                .setTypeToken(new TypeToken<SMRMap<Integer, Integer>>() {})
-                                                                .open()
-                                                    )
-                                                    .collect(Collectors.toList());
-        final int num_threads = PARAMETERS.CONCURRENCY_SOME;
-        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
+        final int numThreads = PARAMETERS.CONCURRENCY_SOME;
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
         AtomicInteger aborts = new AtomicInteger();
 
-        scheduleConcurrently(num_threads, threadNumber -> {
-            int base = threadNumber * num_records;
-            Random r = new Random(threadNumber);
-            for (int i = base; i < base + num_records; i++) {
-                try {
-                    getRuntime().getObjectsView().TXBegin();
-                    //pick a map at "random" to insert to
-                    mapList.get(r.nextInt(num_maps)).put(0, 1);
-                    getRuntime().getObjectsView().TXEnd();
-                } catch (TransactionAbortedException tae) {
-                    aborts.incrementAndGet();
-                }
-            }
-        });
-
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
-        calculateRequestsPerSecond("TPS", num_records * num_threads, startTime);
 
-        calculateAbortRate(aborts.get(), num_records * num_threads);
+        // invoke the interleaving engine
+        scheduleThreaded(numThreads, numThreads*numRecords,
+                getMultiViewSM(numThreads)
+        );
+
+        // print stats..
+        calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
+        calculateAbortRate(aborts.get(), numRecords * numThreads);
     }
-
     @Test
     @SuppressWarnings("unchecked")
     public void bulkReads()

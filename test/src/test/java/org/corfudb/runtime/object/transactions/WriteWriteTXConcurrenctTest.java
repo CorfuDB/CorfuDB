@@ -9,6 +9,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.function.BiConsumer;
+import java.util.function.IntConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -134,50 +135,50 @@ public class WriteWriteTXConcurrenctTest extends AbstractViewTest {
         AtomicIntegerArray snapStatus = new AtomicIntegerArray(numTasks);
 
         // a state-machine:
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>();
+        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>();
 
         // SM step 1: start a write-write transaction
-        stateMachine.add((Integer ignored_thread_num, Integer ignored_task_num) -> {
+        stateMachine.add((ignored_task_num) -> {
             TXBegin();
         });
 
         // SM step 2: modify shared counter per task
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             sharedCounters.get(task_num).setValue(OVERWRITE_ONCE);
         });
 
         // SM step 3: each task reads a shared counter modified by another task and records it
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             snapStatus.set(task_num, sharedCounters.get((task_num + 1) % numTasks).getValue());
         });
 
         // SM step 4: each task verifies opacity, checking that it can read its own modified value
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             assertThat(sharedCounters.get(task_num).getValue())
                     .isEqualTo(OVERWRITE_ONCE);
         });
 
         // SM step 5: next, each task overwrites its own value again
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             sharedCounters.get(task_num).setValue(OVERWRITE_TWICE);
         } );
 
         // SM step 6: each task again reads a counter modified by another task.
         // it should read the same snapshot value as the beginning of the transaction
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
                     .isEqualTo(snapStatus.get(task_num));
         });
 
         // SM step 7: each task  again verifies opacity, checking that it can read its own modified value
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             assertThat(sharedCounters.get(task_num).getValue())
                     .isEqualTo(OVERWRITE_TWICE);
         });
 
         // SM step 8: all tasks try to commit their transacstion.
         // Task k aborts if, and only if, counter k+1 was modified after it read it and transaction k+1 already committed.
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             try {
                 TXEnd();
             } catch (TransactionAbortedException tae) {
@@ -229,50 +230,50 @@ public class WriteWriteTXConcurrenctTest extends AbstractViewTest {
             sharedCounters.get(i).setValue(INITIAL);
 
         // a state-machine:
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>();
+        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>();
 
         // SM step 1: start an optimistic transaction
-        stateMachine.add((Integer ignored_thread_num, Integer ignored_task_num) -> {
+        stateMachine.add((ignored_task_num) -> {
             TXBegin();
         });
 
         // SM step 2: task k modify counter k
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             sharedCounters.get(task_num).setValue(OVERWRITE_ONCE);
         });
 
         // SM step 3: task k reads counter k+1
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
                     .isBetween(INITIAL, OVERWRITE_ONCE);
         });
 
         // SM step 4: task k verifies opacity, checking that it can read its own modified value of counter k
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             assertThat(sharedCounters.get(task_num).getValue())
                     .isEqualTo(OVERWRITE_ONCE);
         });
 
         // SM step 5: task k overwrites counter k+1
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             sharedCounters.get((task_num+1)%numTasks).setValue(OVERWRITE_TWICE);
         } );
 
         // SM step 6: task k again check opacity, reading its own modified value, this time of counter k+1
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
                     .isEqualTo(OVERWRITE_TWICE);
         });
 
         // SM step 7: each thread again verifies opacity, checking that it can re-read counter k
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             assertThat(sharedCounters.get(task_num).getValue())
                     .isEqualTo(OVERWRITE_ONCE);
         });
 
         // SM step 8: try to commit all transactions;
         // task k aborts only if one or both of (k-1), (k+1) committed before it
-        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+        stateMachine.add((task_num) -> {
             try {
                 TXEnd();
                 commitStatus.set(task_num, COMMITVALUE);
