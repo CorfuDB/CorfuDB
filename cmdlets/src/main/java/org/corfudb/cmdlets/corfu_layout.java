@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -19,7 +21,9 @@ import org.docopt.Docopt;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -34,6 +38,7 @@ import static org.fusesource.jansi.Ansi.ansi;
 public class corfu_layout implements ICmdlet {
 
     private static Map<String, NettyClientRouter> routers = new ConcurrentHashMap<>();
+    private static Map<String, CorfuRuntime> setEpochRTs = new ConcurrentHashMap<>();
 
     private static final String USAGE =
             "corfu_layout, directly interact with a layout server.\n"
@@ -41,9 +46,11 @@ public class corfu_layout implements ICmdlet {
                     + "Usage:\n"
                     + "\tcorfu_layout query <address>:<port> [-d <level>] [-e epoch] [-p <qapp>]\n"
                     + "\tcorfu_layout bootstrap <address>:<port> [-l <layout>|-s] [-d <level>] [-e epoch] [-p <qapp>]\n"
+                    + "\tcorfu_layout set_epoch <address>:<port> -e epoch [-d <level>] [-p <qapp>]\n"
                     + "\tcorfu_layout prepare <address>:<port> -r <rank> [-d <level>] [-e epoch] [-p <qapp>]\n"
                     + "\tcorfu_layout propose <address>:<port> -r <rank> [-l <layout>|-s] [-d <level>] [-e epoch] [-p <qapp>]\n"
                     + "\tcorfu_layout committed <address>:<port> -r <rank> [-l <layout>] [-d <level>] [-e epoch] [-p <qapp>]\n"
+                    + "\tcorfu_layout getClientID <address>:<port> [-d <level>] [-e epoch] [-p <qapp>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <layout>, --layout-file=<layout>  Path to a JSON file describing the \n"
@@ -109,8 +116,9 @@ public class corfu_layout implements ICmdlet {
         }
         router = routers.get(addressportPrefix + addressport);
 
+        Long epoch = 0L;
         if (opts.get("--epoch") != null) {
-            Long epoch = Long.parseLong((String) opts.get("--epoch"));
+            epoch = Long.parseLong((String) opts.get("--epoch"));
             log.trace("Specify router's epoch as " + epoch);
             router.setEpoch(epoch);
         } else {
@@ -127,11 +135,14 @@ public class corfu_layout implements ICmdlet {
             }
         }
 
-        if ((Boolean) opts.get("query")) {
+        if ((Boolean) opts.get("getClientID")) {
+            String clientID = router.getClientID().toString();
+            return cmdlet.ok(clientID);
+        } else if ((Boolean) opts.get("query")) {
             try {
                 Layout l = router.getClient(LayoutClient.class).getLayout().get();
                 Gson gs = new GsonBuilder().setPrettyPrinting().create();
-                return cmdlet.ok(gs.toJson(l));
+                return cmdlet.ok("layout: " + gs.toJson(l));
             } catch (ExecutionException ex) {
                 if (ex.getCause().getClass() == WrongEpochException.class) {
                     WrongEpochException we = (WrongEpochException) ex.getCause();
@@ -162,17 +173,45 @@ public class corfu_layout implements ICmdlet {
             } catch (Exception e) {
                 return cmdlet.err("Exception bootstrapping layout", e.toString());
             }
+        } else if ((Boolean) opts.get("set_epoch")) {
+            log.debug("Set epoch with new epoch={}", epoch);
+            try {
+                CorfuRuntime rt;
+                if ((rt = setEpochRTs.get(addressport)) == null) {
+                    log.trace("Creating CorfuRuntime for set_epoch for {} ", addressport);
+                    rt = new CorfuRuntime().addLayoutServer(addressport);
+                    setEpochRTs.putIfAbsent(addressport, rt);
+                }
+                rt = setEpochRTs.get(addressport);
+
+                // Construct a layout that contains just enough to allow .moveServersToEpoch()
+                // to send SET_EPOCH to our desired endpoint.
+                List<String> ls = new ArrayList(1);
+                ls.add(addressport);
+                List<String> none1 = new ArrayList(0);
+                List<Layout.LayoutSegment> none2 = new ArrayList(0);
+                Layout tmpLayout = new Layout(ls, none1, none2, epoch);
+                tmpLayout.setRuntime(rt);
+                tmpLayout.moveServersToEpoch();
+                return cmdlet.ok();
+            } catch (WrongEpochException we) {
+                return cmdlet.err("Exception during set_epoch",
+                        we.getCause() == null ? "WrongEpochException" : we.getCause().toString(),
+                        "correctEpoch: " + we.getCorrectEpoch(),
+                        "stack: " + ExceptionUtils.getStackTrace(we));
+            } catch (Exception e) {
+                return cmdlet.err("Exception during set_epoch", e.toString(), ExceptionUtils.getStackTrace(e));
+            }
         } else if ((Boolean) opts.get("prepare")) {
             long rank = Long.parseLong((String) opts.get("--rank"));
-            Layout l = getLayout(opts);
             log.debug("Prepare with new rank={}", rank);
             try {
-                if (router.getClient(LayoutClient.class).prepare(l.getEpoch(), rank).get() != null) {
-                    System.out.println(ansi().a("RESPONSE from ").fg(WHITE).a(host + ":" + port)
-                            .reset().fg(GREEN).a(": ACK"));
-                    return cmdlet.ok();
+                LayoutPrepareResponse r = router.getClient(LayoutClient.class).prepare(epoch, rank).get();
+                Layout r_layout = r.getLayout();
+                if (r_layout == null) {
+                    return cmdlet.ok("ignored: ignored");
                 } else {
-                    return cmdlet.err("ACK");
+                    return cmdlet.ok("layout: " + r_layout.asJSONString());
                 }
             } catch (ExecutionException ex) {
                 if (ex.getCause().getClass() == OutrankedException.class) {

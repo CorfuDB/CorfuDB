@@ -97,6 +97,10 @@ public class LayoutServer extends AbstractServer {
 
     @Override
     public synchronized void reset() {
+        // File system state surrounding server epoch will be deleted later in this function.
+        // However, we must also re-set live object state in the server router.
+        setServerEpoch(0);
+
         String d = serverContext.getDataStore().getLogDir();
         if (d != null) {
             Path dir = FileSystems.getDefault().getPath(d);
@@ -114,16 +118,6 @@ public class LayoutServer extends AbstractServer {
                     log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
                 }
             }
-            /*
-            try (DirectoryStream<Path> stream =
-                         Files.newDirectoryStream(dir, "*")) {
-                for (Path entry : stream) {
-                    System.out.println("Remaining file " + entry);
-                }
-            } catch (IOException e) {
-                log.error("reset: error deleting prefix: " + e.toString());
-            }
-            */
         }
         reset_part_2();
         reboot();
@@ -292,7 +286,9 @@ public class LayoutServer extends AbstractServer {
 
         long serverEpoch = getServerEpoch();
 
-        if (msg.getPayload().getEpoch() != serverEpoch) {
+        // If both epoch numbers in the msg aren't equal, then the request is malformed.
+        if (msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch() ||
+                msg.getPayload().getEpoch() != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", proposeLayout.getEpoch(), serverEpoch, msg);
             return;
@@ -338,7 +334,9 @@ public class LayoutServer extends AbstractServer {
         Layout commitLayout = msg.getPayload().getLayout();
         if (!checkBootstrap(msg, ctx, r)) { return; }
         long serverEpoch = getServerEpoch();
-        if(msg.getPayload().getEpoch() < serverEpoch) {
+        // If both epoch numbers in the msg aren't equal, then the request is malformed.
+        if(msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch() ||
+                msg.getPayload().getEpoch() < serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }

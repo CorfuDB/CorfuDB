@@ -14,6 +14,7 @@ ebin: $(objects)
 
 clean:
 	rm -f $(objects)
+	rm -rf deps
 
 ######
 
