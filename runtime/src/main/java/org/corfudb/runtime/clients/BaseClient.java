@@ -6,6 +6,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.ServerRejectedException;
 
 import java.lang.invoke.MethodHandles;
 import java.util.concurrent.CompletableFuture;
@@ -155,6 +156,18 @@ public class BaseClient implements IClient {
     private static Object handleVersionResponse(JSONPayloadMsg<VersionInfo> msg,
                                                 ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
+    }
+
+    /** Handle a REJECTED response from the server.
+     *
+     * @param msg   The version message
+     * @param ctx   The context the message was sent under
+     * @param r     A reference to the router
+     * @return      The versioninfo object.
+     */
+    @ClientHandler(type=CorfuMsgType.REJECTED)
+    private static Object handleRejected(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        throw new ServerRejectedException();
     }
 
 }

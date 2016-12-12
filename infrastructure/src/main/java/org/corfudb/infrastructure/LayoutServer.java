@@ -286,9 +286,13 @@ public class LayoutServer extends AbstractServer {
 
         long serverEpoch = getServerEpoch();
 
-        // If both epoch numbers in the msg aren't equal, then the request is malformed.
-        if (msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch() ||
-                msg.getPayload().getEpoch() != serverEpoch) {
+        if (msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch()) {
+            log.trace("Incoming propose message malformed, got epoch {} vs. payload epoch {}, message was: {}",
+                    msg.getPayload().getEpoch(), msg.getPayload().getLayout().getEpoch(), msg);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.REJECTED));
+            return;
+        }
+        if (msg.getPayload().getEpoch() != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", proposeLayout.getEpoch(), serverEpoch, msg);
             return;
@@ -334,9 +338,14 @@ public class LayoutServer extends AbstractServer {
         Layout commitLayout = msg.getPayload().getLayout();
         if (!checkBootstrap(msg, ctx, r)) { return; }
         long serverEpoch = getServerEpoch();
-        // If both epoch numbers in the msg aren't equal, then the request is malformed.
-        if(msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch() ||
-                msg.getPayload().getEpoch() < serverEpoch) {
+
+        if (msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch()) {
+            log.trace("Incoming commit message malformed, got epoch {} vs. payload epoch {}, message was: {}",
+                    msg.getPayload().getEpoch(), msg.getPayload().getLayout().getEpoch(), msg);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.REJECTED));
+            return;
+        }
+        if (msg.getPayload().getEpoch() < serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }
