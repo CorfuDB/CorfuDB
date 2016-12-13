@@ -1,12 +1,14 @@
 package org.corfudb;
 
+import org.corfudb.test.DisabledOnTravis;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
-import org.junit.rules.TestWatcher;
+import org.junit.runners.model.Statement;
 import org.junit.runner.Description;
+import org.junit.runners.model.MultipleFailureException;
 
 import java.io.File;
 import java.time.Duration;
@@ -22,7 +24,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static java.time.temporal.ChronoUnit.MILLIS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.fusesource.jansi.Ansi.ansi;
 
@@ -40,9 +41,52 @@ public class AbstractCorfuTest {
     public static final CorfuTestServers SERVERS =
             new CorfuTestServers();
 
+    /** A watcher which prints whether tests have failed or not, for a useful
+     * report which can be read on Travis.
+     */
     @Rule
-    public TestRule watcher = new TestWatcher() {
+    public TestRule watcher = new TestRule() {
+
+
+        /** Run the statement, which performs the actual test as well as
+         * print the report. */
         @Override
+        public Statement apply(final Statement statement,
+                               final Description description) {
+            return new Statement() {
+                @Override
+                public void evaluate() throws Throwable {
+                    starting(description);
+                    try {
+                        // Skip the test if we're on travis and the test is
+                        // annotated to be disabled.
+                        if( PARAMETERS.TRAVIS_BUILD &&
+                                description.getAnnotation
+                                        (DisabledOnTravis.class) != null ||
+                            PARAMETERS.TRAVIS_BUILD &&
+                                description.getTestClass()
+                                        .getAnnotation(DisabledOnTravis.class) != null) {
+                            travisSkipped(description);
+                        } else {
+                            statement.evaluate();
+                            succeeded(description);
+                        }
+
+                    } catch (org.junit.internal.AssumptionViolatedException  e)
+                    {
+                        skipped(e, description);
+                    } catch (Throwable e) {
+                        failed(e, description);
+                    } finally {
+                        finished(description);
+                    }
+                }
+            };
+        }
+
+        /** Run when the test successfully completes.
+         * @param description   A description of the method run.
+         */
         protected void succeeded(Description description) {
             if (!testStatus.equals("")) {
                 testStatus = " [" + testStatus + "]";
@@ -51,12 +95,50 @@ public class AbstractCorfuTest {
                     .reset().a("]" + testStatus).newline());
         }
 
-        @Override
+        /** Run when the test fails.
+         * @param e             The exception which caused the error.
+         * @param description   A description of the method run.
+         */
         protected void failed(Throwable e, Description description) {
-            System.out.print(ansi().a("[").fg(Ansi.Color.RED)
-                    .a("FAIL").reset().a("]").newline());
+            System.out.print(ansi().a("[")
+                    .fg(Ansi.Color.RED)
+                        .a("FAIL - ").reset()
+                    .a(e.getClass().toString())
+                    .a("]").newline());
         }
 
+        /** Run when the test is finished.
+         * @param description   A description of the method run.
+         */
+        protected void finished(Description description) {
+        }
+
+        /** Run when a test is skipped due to being disabled on Travis-CI.
+         * This method doesn't provide an exception, unlike skipped().
+         * @param description   A description of the method run.
+         */
+        protected void travisSkipped(Description description) {
+            System.out.print(ansi().a("[")
+                    .fg(Ansi.Color.YELLOW)
+                    .a("SKIPPED").reset()
+                    .a("]").newline());
+        }
+
+        /** Run when a test is skipped due to not meeting prereqs.
+         * @param e             The exception that was thrown.
+         * @param description   A description of the method run.
+         */
+        protected void skipped(Throwable e, Description description) {
+            System.out.print(ansi().a("[")
+                    .fg(Ansi.Color.YELLOW)
+                    .a("SKIPPED -").reset()
+                    .a(e.getClass().toString())
+                    .a("]").newline());
+        }
+
+        /** Run before a test starts.
+         * @param description   A description of the method run.
+         */
         protected void starting(Description description) {
             System.out.print(String.format("%-60s", description
                     .getMethodName()));
