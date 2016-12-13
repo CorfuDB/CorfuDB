@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
+import java.util.function.IntConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -187,7 +188,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 .open();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
-        Random r = new Random(PARAMETERS.SEED);
+        Random r = new Random(PARAMETERS.isRandomSeed() ? System.currentTimeMillis() : 0);
 
         sharedCounter.setValue(-1);
         AtomicInteger lastUpdate = new AtomicInteger(-1);
@@ -196,11 +197,11 @@ public class CompileProxyTest extends AbstractViewTest {
                 .isEqualTo(lastUpdate.get());
 
         // build a state-machine:
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>(){
+        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>(){
 
             {
                 // only one step: randomly choose between read/write of the shared counter
-                add ((Integer ignored_thread_num, Integer task_num) -> {
+                add ((task_num) -> {
                     if (r.nextBoolean()) {
                         sharedCounter.setValue(task_num);
                         lastUpdate.set(task_num); // remember the last written value
@@ -241,7 +242,7 @@ public class CompileProxyTest extends AbstractViewTest {
         StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
-        Random r = new Random(PARAMETERS.SEED);
+        Random r = new Random(PARAMETERS.isRandomSeed() ? System.currentTimeMillis() : 0);
 
         final int INITIAL = -1;
 
@@ -255,11 +256,11 @@ public class CompileProxyTest extends AbstractViewTest {
         AtomicInteger lastRead = new AtomicInteger(INITIAL);
 
         // build a state-machine:
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>(){
+        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>(){
 
             {
                 // only one step: randomly choose between read/write of the shared counter
-                add ((Integer ignored_thread_num, Integer task_num) -> {
+                add ((task_num) -> {
 
                     // check that stream has the expected number of entries: number of updates - 1
                     assertThat(objStream.check())
@@ -316,7 +317,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // each one put()'s a key with its thread index
 
         scheduleConcurrently(concurrency, t -> {
-            map.put(t.toString(), "world");
+            map.put(Integer.toString(t), "world");
         });
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
 
@@ -433,11 +434,11 @@ public class CompileProxyTest extends AbstractViewTest {
         sharedCorfuCompound.getID();
 
         // build a state-machine:
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>() {
+        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>() {
 
             {
                 // step 1: update the shared compound to task-specific value
-                add((Integer ignored_thread_num, Integer task_num) -> {
+                add((task_num) -> {
                     sharedCorfuCompound.set(sharedCorfuCompound.new Inner("C" + task_num, "D" + task_num), task_num);
 
                     // check that the raw-stream offset reflects that 'task_num' updates have been made
@@ -446,7 +447,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 });
 
                 // step 2: check the unsync'ed in-memory object state
-                add((Integer thread_num, Integer task_num) -> {
+                add((ignored_task_num) -> {
                     // before sync'ing the in-memory object, the in-memory copy does not get updated
                     assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getFirstName())
                             .startsWith("E");
