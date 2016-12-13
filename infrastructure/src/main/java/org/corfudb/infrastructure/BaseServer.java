@@ -1,10 +1,12 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
@@ -26,6 +28,13 @@ public class BaseServer extends AbstractServer {
     @Getter
     private final CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
+
+    @Getter
+    @Setter
+    private static Timer timerPing = new Timer();
+    @Getter
+    @Setter
+    private static Timer timerVersionRequest = new Timer();
 
     /** Respond to a ping message.
      *

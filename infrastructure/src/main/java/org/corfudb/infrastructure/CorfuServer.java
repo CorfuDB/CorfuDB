@@ -210,6 +210,11 @@ public class CorfuServer {
 
         // Create a common Server Context for all servers to access.
         serverContext = new ServerContext(opts, router);
+        String mpBase = "corfu.server.base.";
+        router.baseServer.setTimerPing(
+                serverContext.getMetrics().timer(mpBase + "ping"));
+        router.baseServer.setTimerVersionRequest(
+                serverContext.getMetrics().timer(mpBase + "version-request"));
 
         // Add each role to the router.
         addSequencer();

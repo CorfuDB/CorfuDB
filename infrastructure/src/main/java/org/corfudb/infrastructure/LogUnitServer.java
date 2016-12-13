@@ -8,11 +8,14 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Exchanger;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -44,6 +47,7 @@ import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
@@ -112,6 +116,22 @@ public class LogUnitServer extends AbstractServer {
 
     private final BatchWriter<LogAddress, LogData> batchWriter;
 
+    @Getter
+    static private Timer timerLogWrite;
+    @Getter
+    static private Timer timerLogCommit;
+    @Getter
+    static private Timer timerLogRead;
+    @Getter
+    static private Timer timerLogGcInterval;
+    @Getter
+    static private Timer timerLogForceGc;
+    @Getter
+    static private Timer timerLogFillHole;
+    @Getter
+    static private Timer timerLogTrim;
+
+
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
@@ -139,11 +159,23 @@ public class LogUnitServer extends AbstractServer {
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
+                .recordStats()
                 .build(this::handleRetrieval);
 
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
         trimMap = new ConcurrentHashMap<>();
+
+        MetricRegistry metrics = serverContext.getMetrics();
+        String mpLU = "corfu.server.logunit.";
+        timerLogWrite = metrics.timer(mpLU + "write");
+        timerLogCommit = metrics.timer(mpLU + "commit");
+        timerLogRead = metrics.timer(mpLU + "read");
+        timerLogGcInterval = metrics.timer(mpLU + "gc-interval");
+        timerLogForceGc = metrics.timer(mpLU + "force-gc");
+        timerLogFillHole = metrics.timer(mpLU + "fill-hole");
+        timerLogTrim = metrics.timer(mpLU + "trim");
+        MetricsUtils.addCacheGauges(metrics, mpLU + "cache.", dataCache);
     }
 
     /**
@@ -152,7 +184,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
-                        .getPayload().getGlobalAddress(),
+                .getPayload().getGlobalAddress(),
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
         // clear any commit record (or set initially to false).
         msg.getPayload().clearCommit();

@@ -1,8 +1,11 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Data;
@@ -10,6 +13,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
@@ -20,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
+import static org.corfudb.util.MetricsUtils.addCacheGauges;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -102,6 +107,7 @@ public class SequencerServer extends AbstractServer {
 
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
+    @Getter
     private final Cache<Integer, Long>
             conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
@@ -112,12 +118,18 @@ public class SequencerServer extends AbstractServer {
                     maxConflictWildcard = Math.max(V, maxConflictWildcard);
                 }
             })
+            .recordStats()
             .build();
 
     /** Handler for this server */
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
+
+    @Getter
+    static private Timer timerSeqReq;
+    static private Counter counterTokenSum;
+    static private Counter counterToken0;
 
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
@@ -129,6 +141,13 @@ public class SequencerServer extends AbstractServer {
         } else {
             globalLogTail.set(initialToken);
         }
+
+        MetricRegistry metrics = serverContext.getMetrics();
+        String mpSeq = "corfu.server.sequencer.";
+        timerSeqReq = metrics.timer(mpSeq + "token-req");
+        counterTokenSum = metrics.counter(mpSeq + "token-sum");
+        counterToken0 = metrics.counter(mpSeq + "token-query");
+        addCacheGauges(metrics, mpSeq + "conflict.cache.", conflictToGlobalTailCache);
     }
 
     /** Get the conflict hash code for a stream ID and conflict param.
@@ -239,9 +258,13 @@ public class SequencerServer extends AbstractServer {
                                           ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
 
+        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         if (req.getReqType() == TokenRequest.TK_QUERY) {
+            MetricsUtils.incConditionalCounter(isEnabled, counterToken0, 1);
             handleTokenQuery(msg, ctx, r);
             return;
+        } else {
+            MetricsUtils.incConditionalCounter(isEnabled, counterTokenSum, req.getNumTokens());
         }
 
         // for raw log implementation, simply extend the global log tail and return the global-log token

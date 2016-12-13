@@ -36,6 +36,7 @@ public class DataStore implements IDataStore {
 
     private final Map<String, Object> opts;
     private final boolean isPersistent;
+    @Getter
     private final LoadingCache<String, String> cache;
     private final String logDir;
 
@@ -67,6 +68,7 @@ public class DataStore implements IDataStore {
     private LoadingCache<String, String> buildMemoryDS() {
         LoadingCache<String, String> cache = Caffeine
                 .newBuilder()
+                .recordStats()
                 .build(k -> null);
         return cache;
     }
@@ -80,6 +82,7 @@ public class DataStore implements IDataStore {
      */
     private LoadingCache<String, String> buildPersistentDS() {
         LoadingCache<String, String> cache = Caffeine.newBuilder()
+                .recordStats()
                 .writer(new CacheWriter<String, String>() {
                     @Override
                     public synchronized void write(@Nonnull String key, @Nonnull String value) {

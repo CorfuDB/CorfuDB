@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -74,12 +76,34 @@ public class LayoutServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
+    @Getter
+    static private Timer timerLayoutReq;
+    @Getter
+    static private Timer timerLayoutBootstrap;
+    @Getter
+    static private Timer timerLayoutSetEpoch;
+    @Getter
+    static private Timer timerLayoutPrepare;
+    @Getter
+    static private Timer timerLayoutPropose;
+    @Getter
+    static private Timer timerLayoutCommitted;
+
     public LayoutServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
 
         if ((Boolean) opts.get("--single"))
             getSingleNodeLayout();
+
+        MetricRegistry metrics = serverContext.getMetrics();
+        String mpLayout = "corfu.server.layout.";
+        timerLayoutReq = metrics.timer(mpLayout + "request");
+        timerLayoutBootstrap = metrics.timer(mpLayout + "bootstrap");
+        timerLayoutSetEpoch = metrics.timer(mpLayout + "set-epoch");
+        timerLayoutPrepare = metrics.timer(mpLayout + "prepare");
+        timerLayoutPropose = metrics.timer(mpLayout + "propose");
+        timerLayoutCommitted = metrics.timer(mpLayout + "committed");
     }
 
     private void getSingleNodeLayout() {
@@ -121,12 +145,10 @@ public class LayoutServer extends AbstractServer {
         } else {
             // else the client is somehow ahead of the server.
             //TODO figure out a strategy to deal with this situation
-            // Very odd ... if we don't send any response here, we hang the OTP mailbox thread.
             long serverEpoch = serverContext.getServerEpoch();
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.warn("Message Epoch {} ahead of Server epoch {}", epoch, serverContext.getServerConfig());
         }
-
     }
 
     /**
