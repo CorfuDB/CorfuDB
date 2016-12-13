@@ -1,7 +1,10 @@
 package org.corfudb.runtime.clients;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
+import com.google.common.primitives.Booleans;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
@@ -28,6 +31,11 @@ import java.util.concurrent.CompletableFuture;
  * Created by mwei on 12/10/15.
  */
 public class LogUnitClient implements IClient {
+
+    /**
+     * Metrics: meter (counter), histogram
+     */
+    public static final MetricRegistry metrics = new MetricRegistry();
 
     @Setter
     @Getter
@@ -172,6 +180,7 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
                                             Object writeObject, Map<UUID, Long> backpointerMap) {
+        Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
@@ -179,7 +188,8 @@ public class LogUnitClient implements IClient {
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
-        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
     /**
@@ -195,32 +205,40 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
                                             ByteBuf buffer, Map<UUID, Long> backpointerMap) {
+        Timer.Context context = getTimerContext("writeByteBuf");
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, buffer);
         wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
-        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
     public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
                                                   Object object) {
+        Timer.Context context = getTimerContext("writeStreamObject");
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize(object, payload);
-        return writeStream(address, streamAddresses, payload);
+        CompletableFuture<Boolean> cf = writeStream(address, streamAddresses, payload);
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
     public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
                                                   ByteBuf buffer) {
+        Timer.Context context = getTimerContext("writeStreamByteBuf");
         WriteRequest wr = new WriteRequest(WriteMode.REPLEX_STREAM, streamAddresses, buffer);
         wr.setLogicalAddresses(streamAddresses);
         wr.setGlobalAddress(address);
-        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
     public CompletableFuture<Boolean> writeCommit(Map<UUID, Long> streams, long address, boolean commit) {
+        Timer.Context context = getTimerContext("writeCommit");
         CommitRequest wr = new CommitRequest(streams, address, commit);
-        return router.sendMessageAndGetCompletable(CorfuMsgType.COMMIT.payloadMsg(wr));
+        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.COMMIT.payloadMsg(wr));
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
     /**
@@ -231,13 +249,17 @@ public class LogUnitClient implements IClient {
      * completes.
      */
     public CompletableFuture<ReadResponse> read(long address) {
-        return router.sendMessageAndGetCompletable(
+        Timer.Context context = getTimerContext("read");
+        CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
     public CompletableFuture<ReadResponse> read(UUID stream, Range<Long> offsetRange) {
-        return router.sendMessageAndGetCompletable(
+        Timer.Context context = getTimerContext("readRange");
+        CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(offsetRange, stream)));
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
     /**
@@ -256,13 +278,17 @@ public class LogUnitClient implements IClient {
      * @param address The address to fill a hole at.
      */
     public CompletableFuture<Boolean> fillHole(long address) {
-        return router.sendMessageAndGetCompletable(
+        Timer.Context context = getTimerContext("fileHole");
+        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(null, address)));
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
     public CompletableFuture<Boolean> fillHole(UUID streamID, long address) {
-        return router.sendMessageAndGetCompletable(
+        Timer.Context context = getTimerContext("fileHole");
+        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));
+        return context == null ? cf : cf.thenApply(x -> { context.stop(); return x; });
     }
 
 
@@ -289,5 +315,12 @@ public class LogUnitClient implements IClient {
         router.sendMessage(CorfuMsgType.GC_INTERVAL.payloadMsg(millis));
     }
 
-
+    private Timer.Context getTimerContext(String opName) {
+        if (!(this.router.getClass() == NettyClientRouter.class)) {
+            return null;
+        }
+        NettyClientRouter r = (NettyClientRouter) this.router;
+        Timer t = metrics.timer(r.getHost() + ":" + r.getPort().toString() + "-" + opName);
+        return t.time();
+    }
 }

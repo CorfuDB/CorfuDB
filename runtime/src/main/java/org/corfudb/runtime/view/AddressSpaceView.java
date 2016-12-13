@@ -1,5 +1,8 @@
 package org.corfudb.runtime.view;
 
+import com.codahale.metrics.CsvReporter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
@@ -19,17 +22,23 @@ import org.corfudb.protocols.wireprotocol.InMemoryLogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.collections.FGMap;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 
@@ -45,6 +54,8 @@ public class AddressSpaceView extends AbstractView {
      * A cache for read results.
      */
     static LoadingCache<Long, ILogData> readCache;
+
+    public final MetricRegistry metrics = new MetricRegistry();
 
     /**
      * Duration before retrying an empty read.
@@ -62,6 +73,53 @@ public class AddressSpaceView extends AbstractView {
         } else {
             log.debug("Read cache already built, re-using existing read cache.");
         }
+
+        metrics.register("cache-size", new Gauge<Long>() {
+            @Override
+            public Long getValue() {
+                return readCache.estimatedSize();
+            }
+        });
+        metrics.register("evictions", new Gauge<Long>() {
+            @Override
+            public Long getValue() {
+                return readCache.stats().evictionCount();
+            }
+        });
+        metrics.register("hit-rate", new Gauge<Double>() {
+            @Override
+            public Double getValue() {
+                return readCache.stats().hitRate();
+            }
+        });
+        metrics.register("hits", new Gauge<Long>() {
+            @Override
+            public Long getValue() {
+                return readCache.stats().hitCount();
+            }
+        });
+        metrics.register("misses", new Gauge<Long>() {
+            @Override
+            public Long getValue() {
+                return readCache.stats().missCount();
+            }
+        });
+
+        // TODO: Move this stats dumping to a more appropriate place as stats dialog progresses.
+        // At the moment, AddressSpaceView stats are on a per-runtime basis.
+        // This isn't intended to be good but instead to start dialog & iteration.
+        String outPath = System.getenv("CORFU_RUNTIME_STATS");
+        if (outPath != null && ! outPath.isEmpty()) {
+            String statPath1 = outPath + "/AddressSpaceView-" + this.hashCode() + "/";
+            File statDir1 = new File(statPath1);
+            statDir1.mkdirs();
+            final CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
+                    .formatFor(Locale.US)
+                    .convertRatesTo(TimeUnit.SECONDS)
+                    .convertDurationsTo(TimeUnit.MILLISECONDS)
+                    .build(statDir1);
+            reporter1.start(1, TimeUnit.SECONDS);
+        }
     }
 
     /**
@@ -71,6 +129,7 @@ public class AddressSpaceView extends AbstractView {
         readCache = Caffeine.<Long, ILogData>newBuilder()
                 .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
                 .maximumWeight(runtime.getMaxCacheSize())
+                .recordStats()
                 .build(new CacheLoader<Long, ILogData>() {
                     @Override
                     public ILogData load(Long aLong) throws Exception {

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.codahale.metrics.*;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.annotations.*;
@@ -16,10 +17,20 @@ import java.util.zip.CRC32;
  * Created by mwei on 3/29/16.
  */
 @CorfuObject(constructorType = ConstructorType.PERSISTED,
-        objectType = ObjectType.STATELESS)
+             objectType = ObjectType.STATELESS,
+             metricsEnabled = true)
 public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>>
         implements Map<K, V>
 {
+    /**
+     * Metrics: meter (counter), histogram
+     */
+    public static final MetricRegistry metrics = new MetricRegistry();
+    public static final com.codahale.metrics.Timer timerLogWrite = metrics.timer("log-write");
+    public static final com.codahale.metrics.Timer timerUpcall = metrics.timer("upcall");
+    public static final com.codahale.metrics.Timer timerTxn = metrics.timer("txn");
+    public static final Counter counterTxnRetry1 = metrics.counter("txn-retry1");
+    public static final Counter counterTxnRetryN = metrics.counter("txn-retryN");
 
     @Getter
     public final int numBuckets;

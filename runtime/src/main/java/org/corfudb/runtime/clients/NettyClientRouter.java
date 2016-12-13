@@ -1,5 +1,7 @@
 package org.corfudb.runtime.clients;
 
+import com.codahale.metrics.*;
+import com.codahale.metrics.Timer;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -19,25 +21,23 @@ import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.codehaus.groovy.tools.shell.IO;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.collections.FGMap;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
+import java.io.File;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -50,6 +50,18 @@ import java.util.concurrent.atomic.AtomicLong;
 @ChannelHandler.Sharable
 public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         implements IClientRouter {
+
+    /**
+     * Metrics: meter (counter), histogram
+     */
+    public static final MetricRegistry metrics = new MetricRegistry();
+    public static Gauge<Integer> gaugeConnected;
+    public static Timer timerConnect;
+    public static Timer timerSyncOp;
+    public static Counter counterConnectFailed;
+    public static Counter counterSendDisconnected;
+    public static Counter counterSendTimeout;
+    public static Counter counterAsyncOpSent;
 
     /**
      * A random instance
@@ -160,6 +172,65 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
 
+        String endpoint = new String(host + ":" + port);
+        synchronized (metrics) {
+            if (!metrics.getNames().contains(endpoint + "-connected")) {
+                gaugeConnected = metrics.register(endpoint + "-connected", new Gauge<Integer>() {
+                    @Override
+                    public Integer getValue() {
+                        return connected_p ? 1 : 0;
+                    }
+                });
+                timerConnect = metrics.timer(endpoint + "-connect");
+                timerSyncOp = metrics.timer(endpoint + "-sync-op");
+                counterConnectFailed = metrics.counter(endpoint + "-connect-failed");
+                counterSendDisconnected = metrics.counter(endpoint + "-send-disconnected");
+                counterSendTimeout = metrics.counter(endpoint + "-send-timeout");
+                counterAsyncOpSent = metrics.counter(endpoint + "-async-op-sent");
+                // TODO: Move this stats dumping to a more appropriate place as stats dialog progresses.
+                // SMRMap and FGMap stats are static/spanning multiple client runtimes.
+                String outPath = System.getenv("CORFU_RUNTIME_STATS");
+                if (outPath != null && !outPath.isEmpty()) {
+                    String statPath1 = outPath + "/client-" + endpoint + "-" + this.hashCode() + "/";
+                    File statDir1 = new File(statPath1);
+                    statDir1.mkdirs();
+                    final CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
+                            .formatFor(Locale.US)
+                            .convertRatesTo(TimeUnit.SECONDS)
+                            .convertDurationsTo(TimeUnit.MILLISECONDS)
+                            .build(statDir1);
+                    reporter1.start(1, TimeUnit.SECONDS);
+                    String statPath2 = outPath + "/SMRMap-" + this.hashCode() + "/";
+                    File statDir2 = new File(statPath2);
+                    statDir2.mkdirs();
+                    final CsvReporter reporter2 = CsvReporter.forRegistry(SMRMap.metrics)
+                            .formatFor(Locale.US)
+                            .convertRatesTo(TimeUnit.SECONDS)
+                            .convertDurationsTo(TimeUnit.MILLISECONDS)
+                            .build(statDir2);
+                    reporter2.start(1, TimeUnit.SECONDS);
+                    String statPath3 = outPath + "/FGMap-" + this.hashCode() + "/";
+                    File statDir3 = new File(statPath3);
+                    statDir3.mkdirs();
+                    final CsvReporter reporter3 = CsvReporter.forRegistry(FGMap.metrics)
+                            .formatFor(Locale.US)
+                            .convertRatesTo(TimeUnit.SECONDS)
+                            .convertDurationsTo(TimeUnit.MILLISECONDS)
+                            .build(statDir3);
+                    reporter3.start(1, TimeUnit.SECONDS);
+                    String statPath4 = outPath + "/LogUnitClient-" + this.hashCode() + "/";
+                    File statDir4 = new File(statPath4);
+                    statDir4.mkdirs();
+                    final CsvReporter reporter4 = CsvReporter.forRegistry(LogUnitClient.metrics)
+                            .formatFor(Locale.US)
+                            .convertRatesTo(TimeUnit.SECONDS)
+                            .convertDurationsTo(TimeUnit.MILLISECONDS)
+                            .build(statDir4);
+                    reporter4.start(1, TimeUnit.SECONDS);
+                }
+            }
+        }
+
         addClient(new BaseClient());
         start();
     }
@@ -264,15 +335,22 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     synchronized void connectChannel(Bootstrap b, long c) {
-        ChannelFuture cf = b.connect(host, port);
-        cf.syncUninterruptibly();
-        if (!cf.awaitUninterruptibly(timeoutConnect)) {
-            throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
+        Timer.Context context = timerConnect.time();
+        try {
+            ChannelFuture cf = b.connect(host, port);
+            cf.syncUninterruptibly();
+            if (!cf.awaitUninterruptibly(timeoutConnect)) {
+                counterConnectFailed.inc();
+                throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
+            }
+            channel = cf.channel();
+        } finally {
+            context.stop();
         }
-        channel = cf.channel();
         channel.closeFuture().addListener((r) -> {
             connected_p = false;
             outstandingRequests.forEach((ReqID, reqCF) -> {
+                counterSendDisconnected.inc();
                 reqCF.completeExceptionally(new NetworkException("Disconnected", host + ":" + port));
                 outstandingRequests.remove(ReqID);
             });
@@ -283,6 +361,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                         connectChannel(b, c);
                         return;
                     } catch (Exception ex) {
+                        counterConnectFailed.inc();
                         log.trace("Exception while reconnecting, retry in {} ms", timeoutRetry);
                         Thread.sleep(timeoutRetry);
                     }
@@ -324,8 +403,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
         if (!connected_p) {
             log.trace("Disconnected endpoint " + host + ":" + port);
+            counterSendDisconnected.inc();
             throw new NetworkException("Disconnected endpoint", host + ":" + port);
         } else {
+            Timer.Context context = timerSyncOp.time();
             // Get the next request ID.
             final long thisRequest = requestID.getAndIncrement();
             // Set the message fields.
@@ -343,9 +424,15 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 ctx.writeAndFlush(message);
             }
             log.trace("Sent message: {}", message);
+            final CompletableFuture<T> cfElapsed = cf.thenApply(x -> {
+                context.stop();
+                // DEBUGGING ONLY: try {Thread.sleep(1234); } catch (Exception e) {}
+                return x;
+            });
             // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-            final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
+            final CompletableFuture<T> cfTimeout = CFUtils.within(cfElapsed, Duration.ofMillis(timeoutResponse));
             cfTimeout.exceptionally(e -> {
+                counterSendTimeout.inc();
                 outstandingRequests.remove(thisRequest);
                 log.debug("Remove request {} due to timeout!", thisRequest);
                 return null;
@@ -378,6 +465,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         message.setEpoch(epoch);
         // Write this message out on the channel.
         outContext.writeAndFlush(message);
+        counterAsyncOpSent.inc();
         log.trace("Sent one-way message: {}", message);
     }
 

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import com.codahale.metrics.Counter;
 import io.netty.util.internal.ConcurrentSet;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import org.corfudb.util.serializer.ISerializer;
 import java.lang.reflect.Constructor;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 import static java.lang.Long.min;
@@ -342,8 +344,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @return The value supplied by the function.
      */
     @Override
-    public <R> R TXExecute(Supplier<R> txFunction) {
+    public <R> R TXExecute(Supplier<R> txFunction, IntConsumer txRetryFunction) {
         long sleepTime = 1L;
+        int retries = 1;
         while (true) {
             try {
                 rt.getObjectsView().TXBegin();
@@ -351,6 +354,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getObjectsView().TXEnd();
                 return ret;
             } catch (Exception e) {
+                if (txRetryFunction != null) {
+                    txRetryFunction.accept(retries);
+                }
                 log.debug("Transactional function aborted due to {}, retrying after {} msec", e, sleepTime);
                 try {Thread.sleep(sleepTime); }
                 catch (Exception ex) {}

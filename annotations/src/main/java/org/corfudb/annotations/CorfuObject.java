@@ -19,6 +19,10 @@ public @interface CorfuObject {
     /** @return Whether the constructor is persisted in the log or not. */
     ConstructorType constructorType() default ConstructorType.RUNTIME;
 
+    /** @return Whether the object should have client-side metrics
+     *  support embedded. */
+    boolean metricsEnabled() default false;
+
     /** @return Whether or not the object holds state or not. Deprecated. */
     @Deprecated
     ObjectType objectType() default ObjectType.STATELESS;

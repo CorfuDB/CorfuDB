@@ -7,12 +7,21 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
+import com.codahale.metrics.*;
+import com.codahale.metrics.Timer;
+import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -151,6 +160,8 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        final Timer.Context context = BaseServer.timerLogWrite.time();
+      try {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg.getPayload().getGlobalAddress(),
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
         // clear any commit record (or set initially to false).
@@ -173,6 +184,9 @@ public class LogUnitServer extends AbstractServer {
             else
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_REPLEX_OVERWRITE.msg());
         }
+      } finally {
+        context.stop();
+      }
     }
 
     /**
@@ -180,6 +194,8 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.COMMIT)
     public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        final Timer.Context context = BaseServer.timerLogCommit.time();
+      try {
         Map<UUID, Long> streamAddresses = msg.getPayload().getStreams();
         if (streamAddresses == null) {
             // Then this is a commit bit for the global log.
@@ -203,10 +219,15 @@ public class LogUnitServer extends AbstractServer {
             }
         }
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+      } finally {
+          context.stop();
+      }
     }
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        final Timer.Context context = BaseServer.timerLogRead.time();
+      try {
         log.debug("log read: {} {}", msg.getPayload().getStreamID(), msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         try {
@@ -226,22 +247,37 @@ public class LogUnitServer extends AbstractServer {
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
         }
+      } finally {
+          context.stop();
+      }
     }
 
     @ServerHandler(type = CorfuMsgType.GC_INTERVAL)
     private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        final Timer.Context context = BaseServer.timerLogGcInterval.time();
+      try {
         gcRetry.setRetryInterval(msg.getPayload());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+      } finally {
+          context.stop();
+      }
     }
 
     @ServerHandler(type = CorfuMsgType.FORCE_GC)
     private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        final Timer.Context context = BaseServer.timerLogForceGc.time();
+      try {
         gcThread.interrupt();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+      } finally {
+          context.stop();
+      }
     }
 
     @ServerHandler(type = CorfuMsgType.FILL_HOLE)
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        final Timer.Context context = BaseServer.timerLogFillHole.time();
+      try {
         try {
             dataCache.put(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), LogData.HOLE);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
@@ -249,13 +285,21 @@ public class LogUnitServer extends AbstractServer {
         } catch (OverwriteException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
         }
+      } finally {
+          context.stop();
+      }
     }
 
     @ServerHandler(type = CorfuMsgType.TRIM)
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        final Timer.Context context = BaseServer.timerLogTrim.time();
+      try {
         trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
                 prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+      } finally {
+          context.stop();
+      }
     }
 
     /**

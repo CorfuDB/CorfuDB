@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.codahale.metrics.*;
+import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Data;
@@ -245,9 +247,12 @@ public class SequencerServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.TOKEN_REQ)
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
+        Timer.Context context = BaseServer.timerSeqReq.time();
+      try {
         TokenRequest req = msg.getPayload();
 
         if (req.getReqType() == TokenRequest.TK_QUERY) {
+            BaseServer.counterTokenSum.inc(req.getNumTokens());
             handleTokenQuery(msg, ctx, r);
             return;
         }
@@ -335,5 +340,8 @@ public class SequencerServer extends AbstractServer {
                 new TokenResponse(currentTail,
                         backPointerMap.build(),
                         requestStreamTokens.build())));
+      } finally {
+          context.stop();
+      }
     }
 }
