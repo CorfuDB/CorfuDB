@@ -71,6 +71,13 @@ public class CompileProxyTest extends AbstractViewTest {
                 .isEqualTo(VALUE);
     }
 
+    /**
+     * test concurrent writes to a shared counter.
+     * set up 'concurrency' threads that concurrently try to set the counter to their thread-index.
+     * the test tracks raw stream updates, one by one, guaranteeing that all the updates appended to the stream differ from each other.
+     *
+     * @throws Exception
+     */
     @Test
     public void testCorfuSharedCounterConcurrentWrites() throws Exception {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
@@ -80,21 +87,26 @@ public class CompileProxyTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<CorfuSharedCounter>() {
                 })
                 .open();
-        int concurrency = PARAMETERS.CONCURRENCY_SOME;
+        final int concurrency = PARAMETERS.CONCURRENCY_LOTS;
+        final int INITIAL = -1;
 
-        sharedCounter.setValue(-1);
+        sharedCounter.setValue(INITIAL);
         assertThat(sharedCounter.getValue())
-                .isEqualTo(-1);
+                .isEqualTo(INITIAL);
 
+        // schedule 'concurrency' number of threads,
+        // each one sets the shared counter value to its thread index
         scheduleConcurrently(concurrency, t ->
-            sharedCounter.setValue(t)
+                sharedCounter.setValue(t)
         );
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
 
-        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>)  sharedCounter;
+        // track the raw stream updates caused by the execution so far
+        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>) sharedCounter;
         ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
         StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
+        // check that stream received 'concurrency' number of updates
         assertThat(objStream.check())
                 .isEqualTo(concurrency);
 
@@ -102,9 +114,9 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // before sync'ing the in-memory object, the in-memory copy does not get updated
         assertThat(beforeSync = proxy_CORFUSMR.getUnderlyingObject().object.getValue())
-                .isEqualTo(-1);
+                .isEqualTo(INITIAL);
 
-        // after sync'ing the in-memory map object, the in-memory map has all the keys
+        // sync with the stream entry by entry
         for (int timestamp = 1; timestamp <= concurrency; timestamp++) {
             proxy_CORFUSMR.syncObjectUnsafe(proxy_CORFUSMR.getUnderlyingObject(), timestamp);
             assertThat((afterSync = proxy_CORFUSMR.getUnderlyingObject().object.getValue()))
@@ -114,20 +126,40 @@ public class CompileProxyTest extends AbstractViewTest {
             beforeSync = afterSync;
         }
 
-
         // now we get the LATEST value through the Corfu object API
         assertThat((afterSync = sharedCounter.getValue()))
                 .isBetween(0, concurrency);
         assertThat(beforeSync)
                 .isEqualTo(afterSync);
+    }
 
-        int curValue = sharedCounter.getValue();
+    /**
+     * test serializability guarantee of mutatorAccessor methods.
+     * The test invokes CorfuSharedCounter::CAS by 'concurrency' number of concurrent threads.
+     * @throws Exception
+     */
+    @Test
+    public void testCorfuSharedCounterConcurrentCAS() throws Exception {
+    CorfuSharedCounter sharedCounter = getDefaultRuntime()
+            .getObjectsView().build()
+            .setStreamName("my stream")
+            .setUseCompiledClass(true)
+            .setTypeToken(new TypeToken<CorfuSharedCounter>() {
+            })
+            .open();
+        int concurrency = PARAMETERS.CONCURRENCY_LOTS;
+        final int INITIAL = -1;
+
+        sharedCounter.setValue(INITIAL);
+
         AtomicInteger casSucceeded = new AtomicInteger(0);
         scheduleConcurrently(concurrency, t -> {
-                    if (sharedCounter.CAS(curValue, t+1) == curValue)
+                    if (sharedCounter.CAS(INITIAL, t+1) == INITIAL)
                         casSucceeded.incrementAndGet();
         });
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
+
+        // check that exactly one CAS succeeded
         assertThat(sharedCounter.getValue())
                 .isBetween(0, concurrency);
         assertThat(casSucceeded.get())
