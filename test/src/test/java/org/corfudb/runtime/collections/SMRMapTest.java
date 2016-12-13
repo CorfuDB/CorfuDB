@@ -741,7 +741,7 @@ public class SMRMapTest extends AbstractViewTest {
     }
 
 
-        @Test
+    @Test
     @SuppressWarnings("unchecked")
     public void concurrentAbortMultiViewTest()
             throws Exception {

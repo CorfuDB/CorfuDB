@@ -17,12 +17,15 @@ import org.junit.Test;
 import org.omg.CORBA.INITIALIZE;
 import org.omg.CORBA.TIMEOUT;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -131,6 +134,15 @@ public class CompileProxyTest extends AbstractViewTest {
                 .isEqualTo(1);
     }
 
+    /**
+     * the test interleaves reads and writes to a shared counter.
+     *
+     * The test uses the interleaving engine to interleave numTasks*threads state machines.
+     * A simple state-machine is built. It randomly chooses to either read or write the counter.
+     * On a read, the last written value is expected.
+     *
+     * @throws Exception
+     */
     @Test
     public void testCorfuSharedCounterConcurrentReads() throws Exception {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
@@ -141,37 +153,45 @@ public class CompileProxyTest extends AbstractViewTest {
                 })
                 .open();
 
-        int writeconcurrency = PARAMETERS.CONCURRENCY_TWO;
-        int concurrency = writeconcurrency + PARAMETERS.CONCURRENCY_ONE;
-        int writerwork = PARAMETERS.NUM_ITERATIONS_LOW;
+        int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
+        Random r = new Random(PARAMETERS.isRandomSeed() ? System.currentTimeMillis() : 0);
 
         sharedCounter.setValue(-1);
+        AtomicInteger lastUpdate = new AtomicInteger(-1);
+
         assertThat(sharedCounter.getValue())
-                .isEqualTo(-1);
+                .isEqualTo(lastUpdate.get());
 
-        scheduleConcurrently(writeconcurrency, t -> {
-                    for (int i = 0; i < writerwork; i++)
-                        sharedCounter.setValue(t*writerwork + i);
-                }
-        );
-        scheduleConcurrently(concurrency-writeconcurrency, t -> {
-                    int lastread = -1;
-                    for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
-                        int res = sharedCounter.getValue();
-                        boolean assertflag =
-                                (
-                                        ( ((lastread < writerwork && res < writerwork) || (lastread >= writerwork && res >= writerwork) ) && lastread <= res ) ||
-                                            ( (lastread < writerwork && res >= writerwork) || (lastread >= writerwork && res < writerwork) )
-                                );
-                        assertThat(assertflag)
-                                .isTrue();
+        // build a state-machine:
+        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>(){
+
+            {
+                // only one step: randomly choose between read/write of the shared counter
+                add ((Integer ignored_thread_num, Integer task_num) -> {
+                    if (r.nextBoolean()) {
+                        sharedCounter.setValue(task_num);
+                        lastUpdate.set(task_num); // remember the last written value
+                    } else {
+                        assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get()); // expect to read the value in lastUpdate
                     }
-                }
-        );
-        executeScheduled(concurrency, PARAMETERS.TIMEOUT_LONG);
+                } );
+            }
+        };
 
+        // invoke the interleaving engine
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.CONCURRENCY_SOME*numTasks, stateMachine);
     }
 
+    /**
+     * the test is similar to the interleaved read/write above to a shared counter.
+     * in addition to checking read/write values, it tracks the raw stream state between updates and syncs.
+     *
+     * The test uses the interleaving engine to interleave numTasks*threads state machines.
+     * A simple state-machine is built. It randomly chooses to either read or write the counter.
+     * On a read, the last written value is expected.
+     *
+     * @throws Exception
+     */
 
     @Test
     public void testCorfuSharedCounterConcurrentMixedReadsWrites() throws Exception {
@@ -187,30 +207,56 @@ public class CompileProxyTest extends AbstractViewTest {
         ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
         StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
-        for (int repetition = 0; repetition < PARAMETERS.NUM_ITERATIONS_LOW; repetition += 2) {
-            final int r = repetition;
-            t3(() -> sharedCounter.setValue(r+1));
-            t4(() -> {
-                assertThat(objStream.check())
-                        .isEqualTo(r);
+        int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
+        Random r = new Random(PARAMETERS.isRandomSeed() ? System.currentTimeMillis() : 0);
 
-                // before sync'ing the in-memory object, the in-memory copy does not get updated
-                assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
-                        .isEqualTo(r);
-            });
-            t3(() -> sharedCounter.setValue(r+2));
-            t4(() -> {
-                assertThat(objStream.check())
-                        .isEqualTo(r+1);
+        final int INITIAL = -1;
 
-                // before sync'ing the in-memory object, the in-memory copy does not get updated
-                assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
-                        .isEqualTo(r);
+        sharedCounter.setValue(INITIAL);
+        AtomicInteger lastUpdate = new AtomicInteger(INITIAL);
+        AtomicLong lastUpdateStreamPosition = new AtomicLong(0);
 
-                assertThat(sharedCounter.getValue())
-                        .isEqualTo(r+2);
-            });
-        }
+        assertThat(sharedCounter.getValue())
+                .isEqualTo(lastUpdate.get());
+
+        AtomicInteger lastRead = new AtomicInteger(INITIAL);
+
+        // build a state-machine:
+        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>(){
+
+            {
+                // only one step: randomly choose between read/write of the shared counter
+                add ((Integer ignored_thread_num, Integer task_num) -> {
+
+                    // check that stream has the expected number of entries: number of updates - 1
+                    assertThat(objStream.check())
+                            .isEqualTo(lastUpdateStreamPosition.get());
+
+                    if (r.nextBoolean()) {
+                        sharedCounter.setValue(task_num);
+                        lastUpdate.set(task_num); // remember the last written value
+                        lastUpdateStreamPosition.incrementAndGet(); // advance the expected stream position
+
+                    } else {
+                        // before sync'ing the in-memory object, the in-memory copy does not get updated
+                        // check that the in-memory copy is only as up-to-date as the latest 'get()'
+                        assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
+                                .isEqualTo(lastRead.get());
+
+                        // now read, expect to get the latest written
+                        assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get());
+
+                        // remember the last read
+                        lastRead.set(lastUpdate.get());
+                    }
+
+
+                } );
+            }
+        };
+
+        // invoke the interleaving engine
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.CONCURRENCY_SOME*numTasks, stateMachine);
     }
 
 
