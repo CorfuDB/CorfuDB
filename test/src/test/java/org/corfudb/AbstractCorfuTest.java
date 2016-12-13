@@ -684,13 +684,12 @@ public class AbstractCorfuTest {
      * @param numTasks total number of tasks to execute
      * @param stateMachine an array of functions to execute at each step.
      *                     each function call returns boolean to indicate if it reaches a final state.
-     * @param seed for the interleaving engine
      */
-    public void scheduleInterleaved(int numThreads, int numTasks, ArrayList<BiConsumer<Integer, Integer>> stateMachine, long seed) {
+    public void scheduleInterleaved(int numThreads, int numTasks, ArrayList<BiConsumer<Integer, Integer>> stateMachine) {
         final int NOTASK = -1;
 
         int numStates = stateMachine.size();
-        Random r = new Random(seed);
+        Random r = new Random(PARAMETERS.isRandomSeed() ? System.currentTimeMillis() : 0);
         AtomicInteger nDone = new AtomicInteger(0);
 
         int[] onTask = new int[numThreads];
