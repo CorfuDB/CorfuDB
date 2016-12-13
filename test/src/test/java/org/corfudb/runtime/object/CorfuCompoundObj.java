@@ -17,6 +17,7 @@ public class CorfuCompoundObj {
         @Setter @Getter
         String firstName, lastName;
 
+        public Inner(String f, String l) { firstName = f; lastName = l; }
     }
 
     Inner user;

@@ -51,6 +51,11 @@ public class CorfuTestParameters {
      */
     public final int NUM_ITERATIONS_LOW;
 
+    /** The number of iterations to run for a moderate test.
+     * This will be about 1000 by default, and should be used to exercise interesting contention and interleaving between threads.
+     */
+    public final int NUM_ITERATIONS_MODERATE;
+
     /** The number of iterations to run for a large test.
      * This will be about 10,000 by default, and should be used for fast
      * compute-only operations.
@@ -107,6 +112,7 @@ public class CorfuTestParameters {
         // Iterations
         NUM_ITERATIONS_VERY_LOW = TRAVIS_BUILD ? 1 : 10;
         NUM_ITERATIONS_LOW = TRAVIS_BUILD ?  10 : 100;
+        NUM_ITERATIONS_MODERATE = TRAVIS_BUILD ? 100: 1000;
         NUM_ITERATIONS_LARGE = TRAVIS_BUILD ? 1_000 : 10_000;
 
         // Concurrency
