@@ -12,6 +12,8 @@ import org.junit.runners.model.MultipleFailureException;
 
 import java.io.File;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -65,7 +67,8 @@ public class AbstractCorfuTest {
                                         (DisabledOnTravis.class) != null ||
                             PARAMETERS.TRAVIS_BUILD &&
                                 description.getTestClass()
-                                        .getAnnotation(DisabledOnTravis.class) != null) {
+                                        .getAnnotation(DisabledOnTravis.class)
+                                        != null) {
                             travisSkipped(description);
                         } else {
                             statement.evaluate();
@@ -75,8 +78,12 @@ public class AbstractCorfuTest {
                     } catch (org.junit.internal.AssumptionViolatedException  e)
                     {
                         skipped(e, description);
+                        MultipleFailureException.assertEmpty(Collections
+                                .singletonList(e));
                     } catch (Throwable e) {
                         failed(e, description);
+                        MultipleFailureException.assertEmpty(Collections
+                                                    .singletonList(e));
                     } finally {
                         finished(description);
                     }
@@ -95,16 +102,41 @@ public class AbstractCorfuTest {
                     .reset().a("]" + testStatus).newline());
         }
 
-        /** Run when the test fails.
+        /** Run when the test fails, prints the name of the exception
+         * with the line number the exception was caused on.
          * @param e             The exception which caused the error.
          * @param description   A description of the method run.
          */
         protected void failed(Throwable e, Description description) {
             System.out.print(ansi().a("[")
                     .fg(Ansi.Color.RED)
-                        .a("FAIL - ").reset()
-                    .a(e.getClass().toString())
+                        .a("FAIL").reset()
+                    .a(" - ").a(shortClassName(e.getClass()))
+                    .a(":L").a(getLineNumber(e, description))
                     .a("]").newline());
+        }
+
+        /** Get the short class name from the fully qualified class.
+         * @param cls   The class to get the name of.
+         * @return      The short class name.
+         */
+        private String shortClassName(Class<?> cls) {
+            int lastIndex = cls.toString().lastIndexOf('.');
+            return cls.toString().substring(lastIndex + 1);
+        }
+
+        /** Get the line number of the test which caused the exception.
+         * @param e             The exception which caused the error.
+         * @param description   A description of the method run.
+         * @return
+         */
+        private int getLineNumber(Throwable e, Description description) {
+            StackTraceElement testElement = Arrays.stream(e.getStackTrace())
+                    .filter(element -> element.getClassName()
+                        .equals(description.getClassName()))
+                    .reduce((first, second) -> second)
+                    .get();
+            return testElement.getLineNumber();
         }
 
         /** Run when the test is finished.
