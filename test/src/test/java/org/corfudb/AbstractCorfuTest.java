@@ -111,18 +111,9 @@ public class AbstractCorfuTest {
             System.out.print(ansi().a("[")
                     .fg(Ansi.Color.RED)
                         .a("FAIL").reset()
-                    .a(" - ").a(shortClassName(e.getClass()))
+                    .a(" - ").a(e.getClass().getSimpleName())
                     .a(":L").a(getLineNumber(e, description))
                     .a("]").newline());
-        }
-
-        /** Get the short class name from the fully qualified class.
-         * @param cls   The class to get the name of.
-         * @return      The short class name.
-         */
-        private String shortClassName(Class<?> cls) {
-            int lastIndex = cls.toString().lastIndexOf('.');
-            return cls.toString().substring(lastIndex + 1);
         }
 
         /** Get the line number of the test which caused the exception.
