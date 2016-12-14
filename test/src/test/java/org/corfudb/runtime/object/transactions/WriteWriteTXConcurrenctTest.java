@@ -11,11 +11,12 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
- * Created by dalia on 12/8/16.
+ * Created by dmalkhi on 12/13/16.
  */
-public class OptimisticTXConcurrencyTest extends AbstractViewTest {
+public class WriteWriteTXConcurrenctTest extends AbstractViewTest {
 
     @Before
     public void setupTest() { getDefaultRuntime(); }
@@ -44,27 +45,24 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
      *  - task j reads counter j (own), expecting to read OVERWRITE_TWICE,
      *  - task j reads counter (j+1) mod n, expecting to read the same value as before,
      *
-     *  Then all tasks try to commit their transacstion.
-     *  Task aborts if, and only if, counter k+1 was modified after it read it and transaction k+1 already committed.
+     *  Then all tasks try to commit their transacstion, and they all should succeed, since every counter is modified exclusively by one task.
      *
      * @throws Exception
      */
     @Test
-    public void testOpacity() throws Exception {
+    public void testNoWriteConflict() throws Exception {
 
         final int numTasks = PARAMETERS.NUM_ITERATIONS_MODERATE;
         CorfuSharedCounter[] sharedCounters = new CorfuSharedCounter[numTasks];
 
         AtomicIntegerArray snapStatus = new AtomicIntegerArray(numTasks);
-        AtomicIntegerArray commitStatus = new AtomicIntegerArray(numTasks);
-        final int COMMITVALUE = 1;
 
         for (int i = 0; i < numTasks; i++)
-          sharedCounters[i] = getRuntime().getObjectsView()
-                  .build()
-                  .setStreamName("test"+i)
-                  .setType(CorfuSharedCounter.class)
-                  .open();
+            sharedCounters[i] = getRuntime().getObjectsView()
+                    .build()
+                    .setStreamName("test"+i)
+                    .setType(CorfuSharedCounter.class)
+                    .open();
 
         // initialize all shared counters
         for (int i = 0; i < numTasks; i++)
@@ -119,12 +117,8 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
         stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
             try {
                 TXEnd();
-                commitStatus.set(task_num, COMMITVALUE);
             } catch (TransactionAbortedException tae) {
-                assertThat(sharedCounters[(task_num + 1) % numTasks].getValue())
-                    .isNotEqualTo(snapStatus.get(task_num));
-                assertThat(commitStatus.get((task_num + 1) % numTasks))
-                        .isEqualTo(COMMITVALUE);
+                fail("Transasction abort without write-write conflict " + task_num);
             }
         } );
 
@@ -231,7 +225,7 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
                 commitStatus.set(task_num, COMMITVALUE);
             } catch (TransactionAbortedException tae) {
                 assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||
-                                commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
+                        commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
                         .isTrue();
             }
         } );
@@ -246,7 +240,6 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
 
     void TXBegin() {
         getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.OPTIMISTIC)
+                .setType(TransactionType.WRITE_AFTER_WRITE)
                 .begin();
-    }
-}
+    }}
