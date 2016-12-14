@@ -119,13 +119,12 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
         stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
             try {
                 TXEnd();
+                commitStatus.set(task_num, COMMITVALUE);
             } catch (TransactionAbortedException tae) {
                 assertThat(sharedCounters[(task_num + 1) % numTasks].getValue())
                     .isNotEqualTo(snapStatus.get(task_num));
                 assertThat(commitStatus.get((task_num + 1) % numTasks))
                         .isEqualTo(COMMITVALUE);
-            } finally {
-                commitStatus.set(task_num, COMMITVALUE);
             }
         } );
 
@@ -229,12 +228,11 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
         stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
             try {
                 TXEnd();
+                commitStatus.set(task_num, COMMITVALUE);
             } catch (TransactionAbortedException tae) {
                 assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||
                                 commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
                         .isTrue();
-            } finally {
-                commitStatus.set(task_num, COMMITVALUE);
             }
         } );
 
