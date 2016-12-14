@@ -27,8 +27,8 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
     /**
      * test concurrent transactions for opacity. This works as follows:
      *
-     * (denote n = concurrencySome for brevity.)
-     * there are 'n' shared counters numbered 0..n-1, and 'n' tasks executing by an interleaving engine by 'n' threads.
+     * there are 'numTasks' shared counters numbered 0..numTasks-1,
+     * and 'numTasks' tasks executing by an interleaving engine by CONCURRENCY_SOME number of  threads.
      *
      * all counters are initialized to INITIAL.
      *
@@ -135,8 +135,8 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
     /**
      * test multiple threads optimistically manipulating objects concurrently. This works as follows:
      *
-     * (denote n = concurrencySome for brevity.)
-     * there are 'n' shared counters numbered 0..n-1, and 'n' tasks executing by an interleaving engine by 'n' threads.
+     * there are 'numTasks' shared counters numbered 0..numTasks-1,
+     * and 'numTasks' tasks executing by an interleaving engine by CONCURRENCY_SOME number of  threads.
      *
      * all counters are initialized to INITIAL.
      *
