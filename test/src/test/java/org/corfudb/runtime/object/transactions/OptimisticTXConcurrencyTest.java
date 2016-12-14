@@ -6,6 +6,10 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.function.BiConsumer;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -14,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class OptimisticTXConcurrencyTest extends AbstractViewTest {
 
     @Before
-    public void before() { getDefaultRuntime(); }
+    public void setupTest() { getDefaultRuntime(); }
 
     static final int INITIAL = 32;
     static final int OVERWRITE_ONCE = 33;
@@ -23,34 +27,39 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
     /**
      * test concurrent transactions for opacity. This works as follows:
      *
-     * there are 'n' shared counters numbered 0..n-1, and 'n' threads.
-     * Thread j initializes counter j to INITIAL. Then all threads start transactions simultaneously.
+     * (denote n = concurrencySome for brevity.)
+     * there are 'n' shared counters numbered 0..n-1, and 'n' tasks executing by an interleaving engine by 'n' threads.
      *
-     * Within each transaction, each thread repeat twice modify-read own-read other.
+     * all counters are initialized to INITIAL.
+     *
+     * Each task is specified as a state machine.
+     * The state machine starts a transaction.
+     * Then it repeats twice modify, read own counter, read other counter.
      * Specifically,
-     *  - thread j modifies counter j to OVERWRITE_ONCE,
-     *  - reads counter j (own), expecting to read OVERWRITE_ONCE,
-     *  - reads counter (j+1) mod n, expecting to read either OVERWRITE_ONCE or INITIAL,
+     *  - task j modifies counter j to OVERWRITE_ONCE,
+     *  - task j reads counter j (own), expecting to read OVERWRITE_ONCE,
+     *  - task j reads counter (j+1) mod n, and records the value it reads,
      *
-     *  - then thread j modifies counter j to OVERWRITE_TWICE,
-     *  - reads counter j (own), expecting to read OVERWRITE_TWICE,
-     *  - reads counter (j+1) mod n, expecting to read either OVERWRITE_ONCE or INITIAL,
+     *  - then task j modifies counter j to OVERWRITE_TWICE,
+     *  - task j reads counter j (own), expecting to read OVERWRITE_TWICE,
+     *  - task j reads counter (j+1) mod n, expecting to read the same value as before,
      *
-     *  Then all transactions try to commit.
-     *  - The first n-1 should succeed
-     *  - The last must fail, since it is wrapping-around and reading counter 0, which has been modified.
+     *  Then all tasks try to commit their transacstion.
+     *  Task aborts if, and only if, counter k+1 was modified after it read it and transaction k+1 already committed.
      *
      * @throws Exception
      */
     @Test
     public void testOpacity() throws Exception {
 
-        final int n = 5;
-        assertThat(n).isGreaterThan(1); // don't change concurrency to less than 2, test will break
+        final int numTasks = PARAMETERS.NUM_ITERATIONS_MODERATE;
+        CorfuSharedCounter[] sharedCounters = new CorfuSharedCounter[numTasks];
 
-        CorfuSharedCounter[] sharedCounters = new CorfuSharedCounter[n];
+        AtomicIntegerArray snapStatus = new AtomicIntegerArray(numTasks);
+        AtomicIntegerArray commitStatus = new AtomicIntegerArray(numTasks);
+        final int COMMITVALUE = 1;
 
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < numTasks; i++)
           sharedCounters[i] = getRuntime().getObjectsView()
                   .build()
                   .setStreamName("test"+i)
@@ -58,91 +67,109 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
                   .open();
 
         // initialize all shared counters
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < numTasks; i++)
             sharedCounters[i].setValue(INITIAL);
 
-        // start concurrent transacstions on all threads
-        for (int i = 0; i < n; i++)
-            t(i, this::TXBegin);
+        // a state-machine:
+        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>();
 
-        // modify shared counter per thread
-        for (int i = 0; i < n; i++) {
-            final int threadind = i;
-            t(threadind, () -> sharedCounters[threadind].setValue(OVERWRITE_ONCE));
-        }
+        // SM step 1: start an optimistic transaction
+        stateMachine.add((Integer ignored_thread_num, Integer ignored_task_num) -> {
+            getRuntime().getObjectsView().TXBuild()
+                    .setType(TransactionType.OPTIMISTIC)
+                    .begin();
+        });
 
-        // each thread reads a shared counter modified by another thread
-        for (int i = 0; i < n; i++) {
-            final int threadind = i;
-            t(threadind, () ->
-                    assertThat(sharedCounters[(threadind+1)%n].getValue())
-            .isBetween(INITIAL, OVERWRITE_ONCE)
-            );
-            t(threadind, () ->
-                    assertThat(sharedCounters[threadind].getValue())
-                            .isEqualTo(OVERWRITE_ONCE)
-            );
-        }
+        // SM step 2: modify shared counter per task
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            sharedCounters[task_num].setValue(OVERWRITE_ONCE);
+        });
 
-        // each thread modifies its own shared counter
-        for (int i = 0; i < n; i++) {
-            final int threadind = i;
-            t(threadind, () -> sharedCounters[threadind].setValue(OVERWRITE_TWICE) );
-        }
+        // SM step 3: each task reads a shared counter modified by another task and records it
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            snapStatus.set(task_num, sharedCounters[(task_num + 1) % numTasks].getValue());
+        });
 
+        // SM step 4: each task verifies opacity, checking that it can read its own modified value
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            assertThat(sharedCounters[task_num].getValue())
+                    .isEqualTo(OVERWRITE_ONCE);
+        });
 
-        // verify opacity: Each thread reads its own writes,
-        // and reads a version of other objects that it started a transaction with
-        for (int i = 0; i < n; i++) {
-            final int threadind = i;
-            t(threadind, () ->
-                    assertThat(sharedCounters[(threadind+1)%n].getValue())
-                            .isBetween(INITIAL, OVERWRITE_ONCE)
-            );
-            t(threadind, () ->
-                    assertThat(sharedCounters[threadind].getValue())
-                            .isEqualTo(OVERWRITE_TWICE)
-            );
-        }
+        // SM step 5: next, each task overwrites its own value again
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            sharedCounters[task_num].setValue(OVERWRITE_TWICE);
+        } );
 
-        // try to commit all transactions; all but the last should succeed
-        for (int i = 0; i < n-1; i++)
-            t(0, this::TXEnd);
+        // SM step 6: each task again reads a counter modified by another task.
+        // it should read the same snapshot value as the beginning of the transaction
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            assertThat(sharedCounters[(task_num + 1) % numTasks].getValue())
+                    .isEqualTo(snapStatus.get(task_num));
+        });
 
-        t(n-1, this::TXEnd)
-                    .assertThrows()
-                    .isInstanceOf(TransactionAbortedException.class);
+        // SM step 7: each task  again verifies opacity, checking that it can read its own modified value
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            assertThat(sharedCounters[task_num].getValue())
+                    .isEqualTo(OVERWRITE_TWICE);
+        });
+
+        // SM step 8: all tasks try to commit their transacstion.
+        // Task k aborts if, and only if, counter k+1 was modified after it read it and transaction k+1 already committed.
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            try {
+                TXEnd();
+            } catch (TransactionAbortedException tae) {
+                assertThat(sharedCounters[(task_num + 1) % numTasks].getValue())
+                    .isNotEqualTo(snapStatus.get(task_num));
+                assertThat(commitStatus.get((task_num + 1) % numTasks))
+                        .isEqualTo(COMMITVALUE);
+            } finally {
+                commitStatus.set(task_num, COMMITVALUE);
+            }
+        } );
+
+        // invoke the interleaving engine
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks, stateMachine);
     }
 
     /**
      * test multiple threads optimistically manipulating objects concurrently. This works as follows:
      *
-     * there are 'n' shared counters numbered 0..n-1, and 'n' threads.
-     * Thread j initializes counter j to INITIAL. Then all threads start transactions simultaneously.
+     * (denote n = concurrencySome for brevity.)
+     * there are 'n' shared counters numbered 0..n-1, and 'n' tasks executing by an interleaving engine by 'n' threads.
      *
-     * Within each transaction, each thread repeat twice modify-read own-read other.
+     * all counters are initialized to INITIAL.
+     *
+     * Each task is specified as a state machine.
+     * The state machine starts a transaction.
+     * Within each transaction, each task repeats twice modify, read own, read other.
+     *
      * Specifically,
-     *  - thread j modifies counter j to OVERWRITE_ONCE,
-     *  - reads counter j (own), expecting to read OVERWRITE_ONCE,
-     *  - reads counter (j+1) mod n, expecting to read either OVERWRITE_ONCE or INITIAL,
+     *  - task j modifies counter j to OVERWRITE_ONCE,
+     *  - task j reads counter j (own), expecting to read OVERWRITE_ONCE,
+     *  - task j reads counter (j+1) mod n, expecting to read either OVERWRITE_ONCE or INITIAL,
      *
-     *  - then thread j modifies counter (j+1) mod n to OVERWRITE_TWICE,
-     *  - reads counter j+1 mod n (own), expecting to read OVERWRITE_TWICE,
-     *  - reads counter j (the one it changed before), expecting to read OVERWRITE_ONCE ,
+     *  - then task j modifies counter (j+1) mod n to OVERWRITE_TWICE,
+     *  - task j reads counter j+1 mod n (own), expecting to read OVERWRITE_TWICE,
+     *  - task j reads counter j (the one it changed before), expecting to read OVERWRITE_ONCE ,
      *
-     *  Then all transactions try to commit.
-     *  They should succeed in alteration -- one succeeds, next one fails (because it reads a counter modified by previous), next one succeeds, etc.
-     *  The last one will always fail, because it reads the counter of the first.
+     *  Then all tasks try to commit their transasctions.
+     *  If task k aborts, then either task (k-1), or (k+1), or both, must have committed
+     *  (wrapping around for tasks n-1 and 0, respectively).
      */
     @Test
     public void testOptimism() throws Exception {
 
-        final int n = 5;
-        assertThat(n).isGreaterThan(1); // don't change concurrency to less than 2, test will break
+        assertThat(PARAMETERS.CONCURRENCY_SOME).isGreaterThan(1); // don't change concurrency to less than 2, test will break
 
-        CorfuSharedCounter[] sharedCounters = new CorfuSharedCounter[n];
+        final int numTasks = PARAMETERS.NUM_ITERATIONS_MODERATE;
+        CorfuSharedCounter[] sharedCounters = new CorfuSharedCounter[numTasks];
 
-        for (int i = 0; i < n; i++)
+        AtomicIntegerArray commitStatus = new AtomicIntegerArray(numTasks);
+        final int COMMITVALUE = 1;
+
+        for (int i = 0; i < numTasks; i++)
             sharedCounters[i] = getRuntime().getObjectsView()
                     .build()
                     .setStreamName("test"+i)
@@ -150,68 +177,69 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
                     .open();
 
         // initialize all shared counters
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < numTasks; i++)
             sharedCounters[i].setValue(INITIAL);
 
-        // start concurrent transacstions on all threads
-        for (int i = 0; i < n; i++)
-            t(i, this::TXBegin);
+        // a state-machine:
+        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>();
 
-        // modify shared counter per thread
-        for (int i = 0; i < n; i++) {
-            final int threadind = i;
-            t(threadind, () -> sharedCounters[threadind].setValue(OVERWRITE_ONCE));
-        }
+        // SM step 1: start an optimistic transaction
+        stateMachine.add((Integer ignored_thread_num, Integer ignored_task_num) -> {
+            getRuntime().getObjectsView().TXBuild()
+                    .setType(TransactionType.OPTIMISTIC)
+                    .begin();
+        });
 
-        // each thread reads a shared counter modified by another thread
-        for (int i = 0; i < n; i++) {
-            final int threadind = i;
-            t(threadind, () ->
-                    assertThat(sharedCounters[(threadind+1)%n].getValue())
-                            .isBetween(INITIAL, OVERWRITE_ONCE)
-            );
-        }
+        // SM step 2: task k modify counter k
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            sharedCounters[task_num].setValue(OVERWRITE_ONCE);
+        });
 
-        // each thread modifies a counter written by another thread
-        for (int i = 0; i < n; i++) {
-            final int threadind = i;
-            t(threadind, () -> sharedCounters[(threadind+1)%n].setValue(OVERWRITE_TWICE) );
-        }
+        // SM step 3: task k reads counter k+1
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            assertThat(sharedCounters[(task_num + 1) % numTasks].getValue())
+                    .isBetween(INITIAL, OVERWRITE_ONCE);
+        });
 
+        // SM step 4: task k verifies opacity, checking that it can read its own modified value of counter k
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            assertThat(sharedCounters[task_num].getValue())
+                    .isEqualTo(OVERWRITE_ONCE);
+        });
 
-        // verify opacity: Each thread reads its own writes,
-        // and reads a version of other objects that it started a transaction with
-        for (int i = 0; i < n; i++) {
-            final int threadind = i;
-            t(threadind, () ->
-                    assertThat(sharedCounters[(threadind+1)%n].getValue())
-                            .isEqualTo(OVERWRITE_TWICE)
-            );
-            t(threadind, () ->
-                    assertThat(sharedCounters[threadind].getValue())
-                            .isEqualTo(OVERWRITE_ONCE)
-            );
-        }
+        // SM step 5: task k overwrites counter k+1
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            sharedCounters[(task_num+1)%numTasks].setValue(OVERWRITE_TWICE);
+        } );
 
-        // try to commit all transactions but the last.
-        // they will succeed in alteration -- one succeeds, next one fails (because it reads a counter modified by previous), next one succeeds, etc.
-        int i = 0;
-        while (i < n-1) {
-            final int threadind = i;
-            if (i % 2 == 0) // should succeed
-                t(threadind, this::TXEnd);
-            else {
-                t(threadind, this::TXEnd)
-                        .assertThrows()
-                        .isInstanceOf(TransactionAbortedException.class);
+        // SM step 6: task k again check opacity, reading its own modified value, this time of counter k+1
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            assertThat(sharedCounters[(task_num + 1) % numTasks].getValue())
+                    .isEqualTo(OVERWRITE_TWICE);
+        });
+
+        // SM step 7: each thread again verifies opacity, checking that it can re-read counter k
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            assertThat(sharedCounters[task_num].getValue())
+                    .isEqualTo(OVERWRITE_ONCE);
+        });
+
+        // SM step 8: try to commit all transactions;
+        // task k aborts only if one or both of (k-1), (k+1) committed before it
+        stateMachine.add((Integer ignored_thread_num, Integer task_num) -> {
+            try {
+                TXEnd();
+            } catch (TransactionAbortedException tae) {
+                assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||
+                                commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
+                        .isTrue();
+            } finally {
+                commitStatus.set(task_num, COMMITVALUE);
             }
-            i++;
-        }
+        } );
 
-        // the last one will always fail, because it reads the counter of the first.
-        t(n-1, this::TXEnd)
-                .assertThrows()
-                .isInstanceOf(TransactionAbortedException.class);
+        // invoke the interleaving engine
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks, stateMachine);
     }
 
 
