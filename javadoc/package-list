@@ -1,3 +1,4 @@
+org.corfudb.annotations
 org.corfudb.infrastructure
 org.corfudb.infrastructure.log
 org.corfudb.protocols.logprotocol
