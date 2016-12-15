@@ -88,15 +88,17 @@ public class LogUnitServer extends AbstractServer {
      */
     Map<String, Object> opts;
 
-    /** Handler for the base server */
+    /**
+     * Handler for the base server
+     */
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
-                                            .generateHandlers(MethodHandles.lookup(), this);
+            .generateHandlers(MethodHandles.lookup(), this);
 
     /**
      * Service an incoming write request.
      */
-    @ServerHandler(type=CorfuMsgType.WRITE)
+    @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg.getPayload().getGlobalAddress(),
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
@@ -125,7 +127,7 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming commit request.
      */
-    @ServerHandler(type=CorfuMsgType.COMMIT)
+    @ServerHandler(type = CorfuMsgType.COMMIT)
     public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         Map<UUID, Long> streamAddresses = msg.getPayload().getStreams();
         if (streamAddresses == null) {
@@ -134,8 +136,7 @@ public class LogUnitServer extends AbstractServer {
             if (entry == null) {
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_NOENTRY.msg());
                 return;
-            }
-            else {
+            } else {
                 entry.getMetadataMap().put(IMetadata.LogUnitMetadataType.COMMIT, msg.getPayload().getCommit());
             }
         } else {
@@ -145,8 +146,7 @@ public class LogUnitServer extends AbstractServer {
                     r.sendResponse(ctx, msg, CorfuMsgType.ERROR_NOENTRY.msg());
                     // TODO: Crap, we have to go back and undo all the commit bits??
                     return;
-                }
-                else {
+                } else {
                     entry.getMetadataMap().put(IMetadata.LogUnitMetadataType.COMMIT, msg.getPayload().getCommit());
                 }
             }
@@ -154,13 +154,13 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type=CorfuMsgType.READ_REQUEST)
+    @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log read: {} {}", msg.getPayload().getStreamID(), msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
-                 l < msg.getPayload().getRange().upperEndpoint()+1L; l++) {
+                 l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
                 LogAddress logAddress = new LogAddress(l, msg.getPayload().getStreamID());
                 LogData e = dataCache.get(logAddress);
                 if (e == null) {
@@ -177,19 +177,19 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type=CorfuMsgType.GC_INTERVAL)
+    @ServerHandler(type = CorfuMsgType.GC_INTERVAL)
     private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         gcRetry.setRetryInterval(msg.getPayload());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type=CorfuMsgType.FORCE_GC)
+    @ServerHandler(type = CorfuMsgType.FORCE_GC)
     private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         gcThread.interrupt();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type=CorfuMsgType.FILL_HOLE)
+    @ServerHandler(type = CorfuMsgType.FILL_HOLE)
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         try {
             dataCache.put(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), LogData.HOLE);
@@ -200,7 +200,7 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type=CorfuMsgType.TRIM)
+    @ServerHandler(type = CorfuMsgType.TRIM)
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
                 prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
@@ -224,6 +224,8 @@ public class LogUnitServer extends AbstractServer {
     long maxCacheSize;
 
     private StreamLog streamLog;
+
+    private BatchWriter<LogAddress, LogData> batchWriter;
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
@@ -275,7 +277,7 @@ public class LogUnitServer extends AbstractServer {
         } else {
             String logdir = opts.get("--log-path") + File.separator + "log";
             File dir = new File(logdir);
-            if(!dir.exists()){
+            if (!dir.exists()) {
                 dir.mkdir();
             }
             streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
@@ -287,21 +289,18 @@ public class LogUnitServer extends AbstractServer {
                     .map(m -> m.getData().release());
         }
 
-        dataCache = Caffeine.<LogAddress,LogData>newBuilder()
-                .<LogAddress,LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().readableBytes())
+        if (batchWriter != null) {
+            batchWriter.close();
+        }
+
+        batchWriter = new BatchWriter(streamLog);
+
+        dataCache = Caffeine.<LogAddress, LogData>newBuilder()
+                .<LogAddress, LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().readableBytes())
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
-                .writer(new CacheWriter<LogAddress, LogData>() {
-                    @Override
-                    public void write(@Nonnull LogAddress address, @Nonnull LogData entry) {
-                            streamLog.append(address, entry);
-                    }
-
-                    @Override
-                    public void delete(LogAddress aLong, LogData logUnitEntry, RemovalCause removalCause) {
-                        // never need to delete
-                    }
-                }).<LogAddress,LogData>build(this::handleRetrieval);
+                .writer(batchWriter)
+                .build(this::handleRetrieval);
 
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
@@ -399,6 +398,7 @@ public class LogUnitServer extends AbstractServer {
     public void shutdown() {
         scheduler.shutdownNow();
         dataCache.invalidateAll(); //should evict all entries
+        batchWriter.close();
     }
 
     @VisibleForTesting

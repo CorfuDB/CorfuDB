@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.test.DisabledOnTravis;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -17,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by mwei on 1/8/16.
  */
+@DisabledOnTravis
 public class ReplexSMRMapTest extends SMRMapTest {
 
     @Before

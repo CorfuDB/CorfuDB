@@ -94,9 +94,24 @@ into a shell to execute it:
 
 # 3. Running CorfuDB in QuickCheck testing mode
 
-Run a single CorfuDB server process using:
+We usually start a single CorfuDB server process using the
+`bin/corfu_server` script.
+However, to run QuickCheck, we need to start the server via the
+Clojure CLI shell.  Please add the following text to the file
+`/tmp/start-corfu-server-with-quickcheck`:
 
-    ./bin/corfu_server -Q -l /tmp/some/path -s 8000 --cm-poll-interval=99999
+    (def q-opts (new java.util.HashMap))
+    (.put q-opts "<port>" "8000")
+    (new org.corfudb.util.quickcheck.QuickCheckMode q-opts)
+    (def server-args  "-l /tmp/some/path -s -d ERROR 8000")
+    (org.corfudb.infrastructure.CorfuServer/main (into-array String (.split server-args " ")))
+
+To start the corfu server, use:
+
+    cat /tmp/start-corfu-server-with-quickcheck | java -Dlogback.configurationFile=./runtime/src/main/resources/logback.xml -cp `echo */target/*shaded.jar | sed 's/ /:/g'`:test/target/test-0.1-SNAPSHOT-tests.jar org.corfudb.shell.ShellMain
+
+If you wish to change the server's command line arguments, adjust the
+`server-args` string accordingly.
 
 Flags are explained below:
 

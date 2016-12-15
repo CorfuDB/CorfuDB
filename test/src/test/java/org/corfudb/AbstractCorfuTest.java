@@ -2,18 +2,22 @@ package org.corfudb;
 
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
+import org.corfudb.test.DisabledOnTravis;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
-import org.junit.rules.TestWatcher;
+import org.junit.runners.model.Statement;
 import org.junit.runner.Description;
+import org.junit.runners.model.MultipleFailureException;
 
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.*;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -37,7 +41,6 @@ import static org.fusesource.jansi.Ansi.ansi;
 public class AbstractCorfuTest {
 
     public Set<Callable<Object>> scheduledThreads;
-    public Set<String> temporaryDirectories;
     public String testStatus = "";
 
     public static final CorfuTestParameters PARAMETERS =
@@ -46,9 +49,57 @@ public class AbstractCorfuTest {
     public static final CorfuTestServers SERVERS =
             new CorfuTestServers();
 
+    /** A watcher which prints whether tests have failed or not, for a useful
+     * report which can be read on Travis.
+     */
     @Rule
-    public TestRule watcher = new TestWatcher() {
+    public TestRule watcher = new TestRule() {
+
+
+        /** Run the statement, which performs the actual test as well as
+         * print the report. */
         @Override
+        public Statement apply(final Statement statement,
+                               final Description description) {
+            return new Statement() {
+                @Override
+                public void evaluate() throws Throwable {
+                    starting(description);
+                    try {
+                        // Skip the test if we're on travis and the test is
+                        // annotated to be disabled.
+                        if( PARAMETERS.TRAVIS_BUILD &&
+                                description.getAnnotation
+                                        (DisabledOnTravis.class) != null ||
+                            PARAMETERS.TRAVIS_BUILD &&
+                                description.getTestClass()
+                                        .getAnnotation(DisabledOnTravis.class)
+                                        != null) {
+                            travisSkipped(description);
+                        } else {
+                            statement.evaluate();
+                            succeeded(description);
+                        }
+
+                    } catch (org.junit.internal.AssumptionViolatedException  e)
+                    {
+                        skipped(e, description);
+                        MultipleFailureException.assertEmpty(Collections
+                                .singletonList(e));
+                    } catch (Throwable e) {
+                        failed(e, description);
+                        MultipleFailureException.assertEmpty(Collections
+                                                    .singletonList(e));
+                    } finally {
+                        finished(description);
+                    }
+                }
+            };
+        }
+
+        /** Run when the test successfully completes.
+         * @param description   A description of the method run.
+         */
         protected void succeeded(Description description) {
             if (!testStatus.equals("")) {
                 testStatus = " [" + testStatus + "]";
@@ -57,12 +108,66 @@ public class AbstractCorfuTest {
                     .reset().a("]" + testStatus).newline());
         }
 
-        @Override
+        /** Run when the test fails, prints the name of the exception
+         * with the line number the exception was caused on.
+         * @param e             The exception which caused the error.
+         * @param description   A description of the method run.
+         */
         protected void failed(Throwable e, Description description) {
-            System.out.print(ansi().a("[").fg(Ansi.Color.RED)
-                    .a("FAIL").reset().a("]").newline());
+            System.out.print(ansi().a("[")
+                    .fg(Ansi.Color.RED)
+                        .a("FAIL").reset()
+                    .a(" - ").a(e.getClass().getSimpleName())
+                    .a(":L").a(getLineNumber(e, description))
+                    .a("]").newline());
         }
 
+        /** Get the line number of the test which caused the exception.
+         * @param e             The exception which caused the error.
+         * @param description   A description of the method run.
+         * @return
+         */
+        private int getLineNumber(Throwable e, Description description) {
+            StackTraceElement testElement = Arrays.stream(e.getStackTrace())
+                    .filter(element -> element.getClassName()
+                        .equals(description.getClassName()))
+                    .reduce((first, second) -> second)
+                    .get();
+            return testElement.getLineNumber();
+        }
+
+        /** Run when the test is finished.
+         * @param description   A description of the method run.
+         */
+        protected void finished(Description description) {
+        }
+
+        /** Run when a test is skipped due to being disabled on Travis-CI.
+         * This method doesn't provide an exception, unlike skipped().
+         * @param description   A description of the method run.
+         */
+        protected void travisSkipped(Description description) {
+            System.out.print(ansi().a("[")
+                    .fg(Ansi.Color.YELLOW)
+                    .a("SKIPPED").reset()
+                    .a("]").newline());
+        }
+
+        /** Run when a test is skipped due to not meeting prereqs.
+         * @param e             The exception that was thrown.
+         * @param description   A description of the method run.
+         */
+        protected void skipped(Throwable e, Description description) {
+            System.out.print(ansi().a("[")
+                    .fg(Ansi.Color.YELLOW)
+                    .a("SKIPPED -").reset()
+                    .a(e.getClass().toString())
+                    .a("]").newline());
+        }
+
+        /** Run before a test starts.
+         * @param description   A description of the method run.
+         */
         protected void starting(Description description) {
             System.out.print(String.format("%-60s", description
                     .getMethodName()));
@@ -70,18 +175,26 @@ public class AbstractCorfuTest {
         }
     };
 
-    public static void deleteFolder(File folder) {
+    /** Delete a folder.
+     *
+     * @param folder        The folder, as a File.
+     * @param deleteSelf    True to delete the folder itself,
+     *                      False to delete just the folder contents.
+     */
+    public static void deleteFolder(File folder, boolean deleteSelf) {
         File[] files = folder.listFiles();
         if (files != null) { //some JVMs return null for empty dirs
             for (File f : files) {
                 if (f.isDirectory()) {
-                    deleteFolder(f);
+                    deleteFolder(f, true);
                 } else {
                     f.delete();
                 }
             }
         }
-        folder.delete();
+        if (deleteSelf) {
+            folder.delete();
+        }
     }
 
     @Before
@@ -94,10 +207,6 @@ public class AbstractCorfuTest {
         scheduledThreads = new HashSet<>();
     }
 
-    @Before
-    public void setupTempDirs() {
-        temporaryDirectories = new HashSet<>();
-    }
 
     @After
     public void cleanupScheduledThreads() {
@@ -107,19 +216,14 @@ public class AbstractCorfuTest {
         scheduledThreads.clear();
     }
 
-    public String getTempDir() {
-        String tempdir = com.google.common.io.Files.createTempDir().getAbsolutePath();
-        temporaryDirectories.add(tempdir);
-        return tempdir;
+    /** Clean the per test temporary directory (PARAMETERS.TEST_TEMP_DIR)
+     */
+    @After
+    public void cleanPerTestTempDir() {
+        deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR),
+                false);
     }
 
-    @After
-    public void deleteTempDirs() {
-        for (String s : temporaryDirectories) {
-            File folder = new File(s);
-            deleteFolder(folder);
-        }
-    }
 
     public void calculateAbortRate(int aborts, int transactions) {
         final float FRACTION_TO_PERCENT = 100.0F;

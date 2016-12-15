@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.clients.TestRule;
@@ -49,6 +50,13 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
         bootstrapAllServers(l);
+
+        // Reduce test execution time from 15+ seconds to about 8 seconds:
+        // Set aggressive timeouts for surviving MS that polls the dead MS.
+        ManagementServer ms = getManagementServer(SERVERS.PORT_1);
+        ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
 
         failureDetected.acquire();
 

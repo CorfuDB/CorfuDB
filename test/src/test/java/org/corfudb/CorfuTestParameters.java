@@ -2,7 +2,11 @@ package org.corfudb;
 
 import lombok.Getter;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Comparator;
 
 import static java.time.temporal.ChronoUnit.MILLIS;
 import static java.time.temporal.ChronoUnit.MINUTES;
@@ -67,38 +71,62 @@ public class CorfuTestParameters {
      * cause the (un)expected behavior. */
     public final int CONCURRENCY_LOTS;
 
+    /** Temporary directory for all tests. Cleared after each test. */
+    public final String TEST_TEMP_DIR;
+
+    /** Whether or not the build was started on Travis-CI. */
+    public final boolean TRAVIS_BUILD;
+    
     // Magic number check disabled to make this constants more readable.
     @SuppressWarnings("checkstyle:magicnumber")
     public CorfuTestParameters(){
 
-        if (isTravisBuild()) {
+        TRAVIS_BUILD = System.getProperty("test.travisBuild")
+                != null && System.getProperty("test.travisBuild").toLowerCase()
+                .equals("true");
+        
+        if (TRAVIS_BUILD) {
             System.out.println("Building on travis, increased timeouts, "
                    + "shorter tests and reduced concurrency will be used.");
         }
+        
         // Timeouts
-        TIMEOUT_VERY_SHORT = isTravisBuild() ? Duration.of(1, SECONDS) :
+        TIMEOUT_VERY_SHORT = TRAVIS_BUILD ? Duration.of(1, SECONDS) :
                                             Duration.of(100, MILLIS);
-        TIMEOUT_SHORT = isTravisBuild() ? Duration.of(5, SECONDS) :
+        TIMEOUT_SHORT = TRAVIS_BUILD ? Duration.of(5, SECONDS) :
                                         Duration.of(1, SECONDS);
-        TIMEOUT_NORMAL = isTravisBuild() ? Duration.of(20, SECONDS) :
+        TIMEOUT_NORMAL = TRAVIS_BUILD ? Duration.of(20, SECONDS) :
                                         Duration.of(10, SECONDS);
-        TIMEOUT_LONG = isTravisBuild() ? Duration.of(2, MINUTES):
+        TIMEOUT_LONG = TRAVIS_BUILD ? Duration.of(2, MINUTES):
                                         Duration.of(1, MINUTES);
 
         // Iterations
-        NUM_ITERATIONS_VERY_LOW = isTravisBuild() ? 1 : 10;
-        NUM_ITERATIONS_LOW = isTravisBuild() ?  10 : 100;
-        NUM_ITERATIONS_LARGE = isTravisBuild() ? 1_000 : 10_000;
+        NUM_ITERATIONS_VERY_LOW = TRAVIS_BUILD ? 1 : 10;
+        NUM_ITERATIONS_LOW = TRAVIS_BUILD ?  10 : 100;
+        NUM_ITERATIONS_LARGE = TRAVIS_BUILD ? 1_000 : 10_000;
 
         // Concurrency
         CONCURRENCY_ONE = 1;
         CONCURRENCY_TWO = 2;
-        CONCURRENCY_SOME = isTravisBuild() ? 3 : 5;
-        CONCURRENCY_LOTS = isTravisBuild() ? 25 : 100;
+        CONCURRENCY_SOME = TRAVIS_BUILD ? 3 : 5;
+        CONCURRENCY_LOTS = TRAVIS_BUILD ? 25 : 100;
+
+        // Filesystem
+        TEST_TEMP_DIR = com.google.common.io.Files.createTempDir()
+                                            .getAbsolutePath();
+
+        printParameters();
     }
 
-    @Getter(lazy=true)
-    private final boolean travisBuild = System.getProperty("test.travisBuild")
-            != null && System.getProperty("test.travisBuild").toLowerCase()
-                                        .equals("true");
+    /** Print the parameters, using reflection magic
+     * (prints all public fields)*/
+    private void printParameters() {
+        System.out.println("Test Configuration:");
+        Arrays.stream(this.getClass().getDeclaredFields())
+            .sorted(Comparator.comparing(Field::getName))
+            .filter(f -> (f.getModifiers() & Modifier.PUBLIC) > 0)
+            .forEachOrdered(f -> { try {System.out.println(f.getName() + ":"
+                                      + f.get(this).toString());}
+            catch (Exception e) {}});
+    }
 }
