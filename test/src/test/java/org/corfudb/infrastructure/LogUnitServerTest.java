@@ -33,7 +33,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Test
     public void checkOverwritesFail() throws Exception {
-        String serviceDir = getTempDir();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
         LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
