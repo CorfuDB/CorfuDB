@@ -125,6 +125,9 @@ public class CorfuTestParameters {
         TEST_TEMP_DIR = com.google.common.io.Files.createTempDir()
                                             .getAbsolutePath();
 
+        // Random Seed
+        SEED = System.getProperty("test.seed") == null ? 0L :
+                Long.parseLong(System.getProperty("test.seed"));
         printParameters();
     }
 

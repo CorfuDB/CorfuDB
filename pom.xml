@@ -308,6 +308,7 @@
                     <trimStackTrace>false</trimStackTrace>
                     <systemPropertyVariables>
                         <propertyName>test.travisBuild</propertyName>
+                        <propertyName>test.seed</propertyName>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
