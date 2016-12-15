@@ -187,7 +187,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 .open();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
-        Random r = new Random(PARAMETERS.isRandomSeed() ? System.currentTimeMillis() : 0);
+        Random r = new Random(PARAMETERS.SEED);
 
         sharedCounter.setValue(-1);
         AtomicInteger lastUpdate = new AtomicInteger(-1);
@@ -241,7 +241,7 @@ public class CompileProxyTest extends AbstractViewTest {
         StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
-        Random r = new Random(PARAMETERS.isRandomSeed() ? System.currentTimeMillis() : 0);
+        Random r = new Random(PARAMETERS.SEED);
 
         final int INITIAL = -1;
 

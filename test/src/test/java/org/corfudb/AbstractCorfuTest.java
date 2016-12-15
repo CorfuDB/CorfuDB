@@ -689,7 +689,7 @@ public class AbstractCorfuTest {
         final int NOTASK = -1;
 
         int numStates = stateMachine.size();
-        Random r = new Random(PARAMETERS.isRandomSeed() ? System.currentTimeMillis() : 0);
+        Random r = new Random(PARAMETERS.SEED);
         AtomicInteger nDone = new AtomicInteger(0);
 
         int[] onTask = new int[numThreads];
