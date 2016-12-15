@@ -8,6 +8,7 @@ import net.bytebuddy.dynamic.DynamicType;
 import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
 import net.bytebuddy.implementation.MethodDelegation;
 import net.bytebuddy.matcher.ElementMatchers;
+import org.corfudb.annotations.*;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -25,6 +26,7 @@ import java.util.Set;
  * Created by mwei on 3/30/16.
  */
 @Slf4j
+@Deprecated
 public class CorfuProxyBuilder {
 
     final static AnnotationDescription instrumentedDescription =
@@ -76,8 +78,8 @@ public class CorfuProxyBuilder {
         return bb.implement(ICorfuObject.class)
                 .method(ElementMatchers.named("getStreamID"))
                 .intercept(MethodDelegation.to(proxy, "getStreamID").filter(ElementMatchers.named("getStreamID")))
-                .method(ElementMatchers.named("getProxy"))
-                .intercept(MethodDelegation.to(proxy, "getProxy").filter(ElementMatchers.named("getProxy")))
+                .method(ElementMatchers.named("getWrapper"))
+                .intercept(MethodDelegation.to(proxy, "getWrapper").filter(ElementMatchers.named("getWrapper")))
                 .method(ElementMatchers.named("getRuntime"))
                 .intercept(MethodDelegation.to(proxy, "getRuntime").filter(ElementMatchers.named("getRuntime")))
                 .method(ElementMatchers.isAnnotatedWith(TransactionalMethod.class))

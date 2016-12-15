@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -10,6 +11,11 @@ import org.junit.Test;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -76,30 +82,55 @@ public class ObjectsViewTest extends AbstractViewTest {
         CorfuRuntime r = getDefaultRuntime()
                 .setTransactionLogging(true);
 
-        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
-        smrMap.put("a", "b");
+        SMRMap<String, String> map = getDefaultRuntime().getObjectsView()
+                .build()
+                .setStreamName("map a")
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
 
-        //generate an aborted TX
-        r.getObjectsView().TXBegin();
-        String b = smrMap.get("a");
-        smrMap.put("b", b);
-        StreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("map a"));
-        LogData rr = sv.read();
-        sv.write(rr.getPayload(getRuntime()));
-        assertThatThrownBy(() -> {
-            r.getObjectsView().TXEnd();
-        }).isInstanceOf(TransactionAbortedException.class);
+        // TODO: fix so this does not require mapCopy.
+        SMRMap<String, String> mapCopy = getDefaultRuntime().getObjectsView()
+                .build()
+                .setStreamName("map a")
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .addOption(ObjectOpenOptions.NO_CACHE)
+                .open();
 
-        //this TX should not conflict
-        assertThat(smrMap)
-                .doesNotContainKey("b");
-        r.getObjectsView().TXBegin();
-        b = smrMap.get("a");
-        smrMap.put("b", b);
-        r.getObjectsView().TXEnd();
 
-        assertThat(smrMap)
-                .containsEntry("b", "b");
+        map.put("initial", "value");
+
+        Semaphore s1 = new Semaphore(0);
+        Semaphore s2 = new Semaphore(0);
+
+        // Schedule two threads, the first starts a transaction and reads,
+        // then waits for the second thread to finish.
+        // the second starts a transaction, waits for the first tx to read
+        // and commits.
+        // The first thread then resumes and attempts to commit. It should abort.
+        scheduleConcurrently(1, t -> {
+            assertThatThrownBy(() -> {
+                getRuntime().getObjectsView().TXBegin();
+                map.get("k");
+                s1.release();   // Let thread 2 start.
+                s2.acquire();   // Wait for thread 2 to commit.
+                map.put("k", "v1");
+                getRuntime().getObjectsView().TXEnd();
+            }).isInstanceOf(TransactionAbortedException.class);
+        });
+
+        scheduleConcurrently(1, t -> {
+            s1.acquire();   // Wait for thread 1 to read
+            getRuntime().getObjectsView().TXBegin();
+            mapCopy.put("k", "v2");
+            getRuntime().getObjectsView().TXEnd();
+            s2.release();
+        });
+
+        executeScheduled(2, PARAMETERS.TIMEOUT_LONG);
+
+        // The result should contain T2s modification.
+        assertThat(map)
+                .containsEntry("k", "v2");
 
         //TODO: currently the txn stream is broken should figure out what to do about it.
         // The transaction stream should have two transaction entries, one for the first
@@ -167,37 +198,4 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .containsEntry("b", "b");
     }
 
-    @Test
-    @SuppressWarnings("unchecked")
-    public void canRunLambdaTransaction()
-            throws Exception {
-        //begin tests
-        CorfuRuntime r = getDefaultRuntime();
-        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
-
-        assertThat(r.getObjectsView().executeTX(() -> {
-            smrMap.put("a", "b");
-            assertThat(smrMap)
-                    .containsEntry("a", "b");
-            return true;
-        })).isTrue();
-
-        assertThat(smrMap)
-                .containsEntry("a", "b");
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void canRunLambdaReferenceTransaction()
-            throws Exception {
-        //begin tests
-        CorfuRuntime r = getDefaultRuntime();
-        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
-
-        assertThat(r.getObjectsView().executeTX(ObjectsViewTest::referenceTX, smrMap))
-                .isEqualTo(true);
-
-        assertThat(smrMap)
-                .containsEntry("a", "b");
-    }
 }

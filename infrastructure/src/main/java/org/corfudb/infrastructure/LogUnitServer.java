@@ -240,8 +240,8 @@ public class LogUnitServer extends AbstractServer {
                 Utils.getOption(opts, "--compact", Long.class, 60L),
                 TimeUnit.SECONDS);*/
 
-        gcThread = new Thread(this::runGC);
-        gcThread.start();
+        //gcThread = new Thread(this::runGC);
+        //gcThread.start();
     }
 
     @Override
@@ -322,9 +322,9 @@ public class LogUnitServer extends AbstractServer {
         return entry;
     }
 
+
     public synchronized void handleEviction(LogAddress address, LogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
-
         streamLog.release(address, entry);
     }
 

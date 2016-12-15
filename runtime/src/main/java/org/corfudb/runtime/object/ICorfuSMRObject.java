@@ -5,6 +5,7 @@ import org.corfudb.runtime.exceptions.UnprocessedException;
 /**
  * Created by mwei on 1/7/16.
  */
+@Deprecated
 public interface ICorfuSMRObject<T> extends ICorfuObject {
 
     // These calls are dynamically overridden by the proxy, and should not be
@@ -26,10 +27,6 @@ public interface ICorfuSMRObject<T> extends ICorfuObject {
      * @return The current state of the SMR object.
      */
     default T getSMRObject() {
-        throw new UnprocessedException();
-    }
-
-    default void registerPostHandler(SMRHandlerMethod postHandler) {
         throw new UnprocessedException();
     }
 

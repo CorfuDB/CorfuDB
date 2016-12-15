@@ -8,6 +8,8 @@ import net.bytebuddy.implementation.bind.annotation.Origin;
 import net.bytebuddy.implementation.bind.annotation.RuntimeType;
 import net.bytebuddy.implementation.bind.annotation.SuperCall;
 import net.bytebuddy.implementation.bind.annotation.This;
+import org.corfudb.annotations.Mutator;
+import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.protocols.logprotocol.*;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -36,6 +38,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * Created by mwei on 1/7/16.
  */
 @Slf4j
+@Deprecated
 public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
     P smrObject;
@@ -152,29 +155,12 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         }
     }
 
-    public Object findTransactionalSMRObject() {
-        for (StackTraceElement ste : new Exception().getStackTrace()) {
-            if (ste.getMethodName().equals("interceptAccessor")) {
-                return TransactionalContext.getCurrentContext().getObjectRead(this);
-            } else if (ste.getMethodName().equals("interceptMutator")) {
-                return TransactionalContext.getCurrentContext().getObjectWrite(this);
-            } else if (ste.getMethodName().equals("interceptMutatorAccessor")) {
-                return TransactionalContext.getCurrentContext().getObjectReadWrite(this);
-            }
-        }
-        return TransactionalContext.getCurrentContext().getObjectReadWrite(this);
-    }
 
     @SuppressWarnings("unchecked")
     @RuntimeType
     public Object interceptGetSMRObject(@This ICorfuSMRObject<P> obj) throws Exception {
         if (smrObject == null && !selfState) {
             smrObject = constructSMRObject(obj);
-        }
-
-        if (TransactionalContext.isInTransaction()
-                && !TransactionalContext.getCurrentContext().isInSyncMode()) {
-            return findTransactionalSMRObject();
         }
 
         if (selfState) {
@@ -217,12 +203,8 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                 // be a new instance
                 Mutator m = Mmethod.getAnnotation(Mutator.class);
                 if (m.reset()) {
-                    TransactionalContext.getCurrentContext()
-                            .resetObject(this);
                 }
             }
-            TransactionalContext.getCurrentContext().bufferObjectUpdate(this,
-                    method, allArguments, serializer, true);
             doUnderlyingCall(superMethod, Mmethod, allArguments);
         }
         return null;
@@ -255,8 +237,6 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             doTransactionalSync(obj);
             // in a transaction, we add the update to the TX buffer and apply the update
             // immediately.
-            TransactionalContext.getCurrentContext().bufferObjectUpdate(CorfuSMRObjectProxy.this,
-                    method, allArguments, serializer, false);
             return doUnderlyingCall(superMethod, Mmethod, allArguments);
         }
     }
@@ -275,12 +255,6 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         } else {
             doTransactionalSync(obj);
             Object ret = doUnderlyingCall(superMethod, method, arguments);
-            // If the object was written to (due to transactional clone), the read set is not resolvable.
-            if (!TransactionalContext.getCurrentContext().isObjectCloned(this)) {
-                // Store the read set with the context.
-                TransactionalContext.getCurrentContext().addReadSet(this,
-                        getSMRMethodName(method), ret);
-            }
             return ret;
         }
     }
@@ -295,12 +269,6 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     }
 
     public synchronized void doTransactionalSync(P obj) {
-        if (TransactionalContext.needsReadLock()) {
-            TransactionalContext.getCurrentContext().setInSyncMode(true);
-            // Otherwise we should make sure we're sync'd up to the TX
-            sync(obj, TransactionalContext.getCurrentContext().getFirstReadTimestamp());
-            TransactionalContext.getCurrentContext().setInSyncMode(false);
-        }
     }
 
     public String getSMRMethodName(Method method) {

@@ -8,6 +8,8 @@ import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -27,6 +29,57 @@ public class LogUnitServerTest extends AbstractServerTest {
     @Override
     public AbstractServer getDefaultServer() {
         return new LogUnitServer(new ServerContextBuilder().build());
+    }
+
+    @Test
+    public void checkOverwritesFail() throws Exception {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(s1);
+
+        final long ADDRESS_0 = 0L;
+        final long ADDRESS_1 = 100L;
+        //write at 0
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        Serializers.CORFU.serialize("0".getBytes(), b);
+        WriteRequest m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        m.setGlobalAddress(ADDRESS_0);
+        // m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setStreams(Collections.EMPTY_SET);
+        m.setRank(ADDRESS_0);
+        m.setBackpointerMap(Collections.emptyMap());
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+
+        assertThat(s1)
+                .containsDataAtAddress(ADDRESS_0);
+        assertThat(s1)
+                .isEmptyAtAddress(ADDRESS_1);
+
+
+        // repeat: this should throw an exception
+        WriteRequest m2 = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        m2.setGlobalAddress(ADDRESS_0);
+        // m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m2.setStreams(Collections.EMPTY_SET);
+        m2.setRank(ADDRESS_0);
+        m2.setBackpointerMap(Collections.emptyMap());
+
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m2));
+        Assertions.assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsgType.ERROR_OVERWRITE);
+
     }
 
     @Test

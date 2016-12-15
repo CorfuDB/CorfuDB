@@ -7,6 +7,7 @@ import java.util.Set;
 /**
  * Created by mwei on 1/11/16.
  */
+@Deprecated
 public interface ISMRInterface {
 
     Set<SMRMethod> getSMRAccessors();

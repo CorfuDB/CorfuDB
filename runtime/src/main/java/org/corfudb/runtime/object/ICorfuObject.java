@@ -9,6 +9,7 @@ import java.util.UUID;
 /**
  * Created by mwei on 3/30/16.
  */
+@Deprecated
 public interface ICorfuObject {
 
     /**
