@@ -467,4 +467,42 @@ public class CompileProxyTest extends AbstractViewTest {
 
     }
 
+    /** Checks that the fine-grained conflict set is correctly produced
+     * by the annotation framework.
+     *
+     * Each method in ConflictParameterClass is executed, and the result
+     * of invoking the method from the conflict function map should be
+     * the objects annotated by conflict parameter.
+     */
+    @Test
+    public void checkConflictParameters() {
+        ConflictParameterClass testObject = getDefaultRuntime()
+                .getObjectsView().build()
+                .setStreamName("my stream")
+                .setUseCompiledClass(true)
+                .setType(ConflictParameterClass.class)
+                .open();
+
+        ICorfuSMR<ConflictParameterClass> testObjectSMR =
+                (ICorfuSMR<ConflictParameterClass>) testObject;
+        CorfuCompileProxy<ConflictParameterClass> proxy =
+                (CorfuCompileProxy<ConflictParameterClass>) testObjectSMR
+                        .getCorfuSMRProxy();
+
+        // mutator test -> second option should be conflict
+        assertThat(proxy.getConflictFunctionMap().get("mutatorTest")
+                .calculate(0, 1))
+                .contains(1);
+
+        // accessor test -> first option should be conflict.
+        assertThat(proxy.getConflictFunctionMap().get("accessorTest")
+                .calculate("a", "b"))
+                .contains("a");
+
+        // mutatorAccessor test -> first option should be conflict.
+        assertThat(proxy.getConflictFunctionMap().get("mutatorAccessorTest")
+                .calculate("a", "b"))
+                .contains("a");
+    }
+
 }

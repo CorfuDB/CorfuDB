@@ -105,7 +105,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      */
     @Accessor
     @Override
-    V get(Object key);
+    V get(@ConflictParameter Object key);
 
     /**
      * Associates the specified value with the specified key in this map
@@ -133,10 +133,30 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      */
     @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
     @Override
-    V put(K key, V value);
+    V put(@ConflictParameter K key, V value);
 
+
+    /**
+     * Associates the specified value with the specified key in this map
+     * without return the previous value.  If the map previously contained a
+     * mapping for the key, the old value is replaced by the specified value.
+     * (A map <tt>m</tt> is said to contain a mapping for a key <tt>k</tt> if
+     * and only if {@link #containsKey(Object) m.containsKey(k)} would return
+     * <tt>true</tt>.)
+     *
+     * @param key   key with which the specified value is to be associated
+     * @param value value to be associated with the specified key
+     * @throws UnsupportedOperationException if the <tt>put</tt> operation
+     *                                       is not supported by this map
+     * @throws ClassCastException            if the class of the specified key or value
+     *                                       prevents it from being stored in this map
+     * @throws NullPointerException          if the specified key or value is null
+     *                                       and this map does not permit null keys or values
+     * @throws IllegalArgumentException      if some property of the specified key
+     *                                       or value prevents it from being stored in this map
+     */
     @Mutator(name = "put", noUpcall = true)
-    default void blindPut(K key, V value) {
+    default void blindPut(@ConflictParameter K key, V value) {
         put(key, value);
     }
 
@@ -204,7 +224,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      */
     @MutatorAccessor(name="remove", undoFunction = "undoRemove", undoRecordFunction = "undoRemoveRecord")
     @Override
-    V remove(Object key);
+    V remove(@ConflictParameter Object key);
 
     /** Generate an undo record for a remove, given the previous state of the map
      * and the parameters to the remove call.
