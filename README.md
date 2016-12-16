@@ -53,7 +53,7 @@ $ sudo apt-get install python-software-properties
 # Add the Corfu signing key to your keychain
 $ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 482CD4B4
 # Add the Corfu repository
-$ sudo apt-add-repository "deb https://raw.github.com/CorfuDB/CorfuDB/debian/ trusty main"
+$ sudo apt-add-repository "deb https://raw.github.com/CorfuDB/Corfu-Repos/debian/ trusty main"
 # Update packages and install the Corfu server infrastructure
 $ sudo apt-get update
 $ sudo apt-get install corfu-server
@@ -114,8 +114,12 @@ You should get output similar to this:
       "replicationMode": "CHAIN_REPLICATION",
       "start": 0,
       "end": -1,
-      "logServers": [
-        "localhost:9000"
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9000"
+          ]
+        }
       ]
     }
   ],
@@ -123,7 +127,7 @@ You should get output similar to this:
 }
 ```
 
-This means that the infrastrucutre is currently configured with a single layout server, a single sequencer, and a single replica which is replicated using chain replication.
+This means that the infrastructure is currently configured with a single layout server, a single sequencer, and a single replica which is replicated using chain replication.
 
 Now we can try writing to the instance. The stream utility can be used to write to the instance:
 ```
@@ -149,32 +153,65 @@ $ corfu_server -m 9001
 
 Now lets add that layout server to the previous deployment:
 ```
-$ corfu_layouts add_layout -c localhost:9000 -e localhost:9001
+$ corfu_layouts -c localhost:9000 edit
 ```
+
+This should bring up your editor. If you modify the layoutServers line to read:
+```json
+  "layoutServers": [
+    "localhost:9000", "localhost:9001"
+  ],
+```
+This will install that server as a new layout server.
 
 If you check the current layout using the query command:
 ```
 $ corfu_layouts query -c localhost:9000,localhost:9001
 ```
 You will see that you now have two servers in the layout.
+
+How about adding an additional replica so we can tolerate a 
+single log server failure? We can use the same ```corfu_server``` 
+on port 9001. Recall that ```corfu_server``` is a monolithic binary 
+containing all servers. Since we have not yet pointed to the log server 
+on 9001, that server has started but is not in use.
+
+To add a replica, we edit the layout again:
+```
+$ corfu_layouts edit -c localhost:9000,localhost:9001
+```
+
+You'll want to add localhost:9001 as a new logunit to the existing segment:
 ```json
-  "layoutServers": [
-    "localhost:9000",
-    "localhost:9001"
-  ]
+      "logServers": [
+        "localhost:9000",
+        "localhost:9001"
+      ]
 ```
+This adds the log unit at localhost:9001 to the only segment in the system.
+to learn more about segments, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
 
-How about adding an additional replica so we can tolerate a single log server failure? We can use the same ```corfu_server``` on port 9001. Recall that ```corfu_server``` is a monolithic binary containing all servers. Since we have not yet pointed to the log server on 9001, that server has started but is not in use.
+To scale Corfu, we add additional ``stripes''. To add an additional stripe, 
+start a new ```corfu_server``` on port 9002 and edit the layout again:
+```
+$ corfu_layouts edit -c localhost:9000,localhost:9001
+```
+This time we add localhost:9002 as a new stripe.
 
-To add a replica, we use the command:
-```
-$ corfu_layouts edit_segment 0 0 -c localhost:9000,localhost:9001  -a -e localhost:9001
-```
-This adds the log unit at localhost:9001 to the only segment in the system. To learn more about segments, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
-
-To scale Corfu, we add additional ``stripes''. To add an additional stripe, start a new ```corfu_server``` on port 9002 and run:
-```
-$ corfu_layouts add_stripe 0 -c localhost:9000,localhost:9001  -a localhost:9002
+```json
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9000",
+            "localhost:9001"
+          ]
+        },
+        {
+          "logServers": [
+            "localhost:9002"
+          ]
+        }
+      ]
 ```
 
 This adds the logunit at localhost:9002 as an additional stripe in the system. That is, writes to even addresses will now go to
@@ -187,7 +224,7 @@ To write your first program that uses Corfu, you will want to add Corfu as a dep
 ```xml
  <dependency>
     <groupId>org.corfudb</groupId>
-    <artifactId>corfu</artifactId>
+    <artifactId>runtime</artifactId>
     <version>0.1-SNAPSHOT</version>
     <scope>compile</scope>
 </dependency>
@@ -199,7 +236,7 @@ You will also want to add the Corfu Maven repository, unless you ran ```mvn inst
 <repositories>
     <repository>
         <id>corfu-mvn-repo</id>
-        <url>https://raw.github.com/CorfuDB/CorfuDB/mvn-repo/</url>
+        <url>https://raw.github.com/CorfuDB/Corfu-Repos/mvn-repo/</url>
         <snapshots>
             <enabled>true</enabled>
             <updatePolicy>always</updatePolicy>

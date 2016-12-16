@@ -17,8 +17,8 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
-if ls ${DIR}/../target/*.jar > /dev/null 2>&1; then
-  CLASSPATH=(${DIR}/../target/corfu-*-shaded.jar)
+if ls "${DIR}"/../cmdlets/target/*.jar > /dev/null 2>&1; then
+  CLASSPATH=("${DIR}"/../cmdlets/target/cmdlets-*-shaded.jar)
 else
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfu/lib/*.jar)
 fi
@@ -40,4 +40,5 @@ CORFUDB_HEAP="${CORFUDB_HEAP:-1000}"
 export CORFUDB_JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
 RUN_AS=`basename $0`
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS org.corfudb.cmdlets.CmdletRouter $0 $*
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+"$JAVA" -cp "$CLASSPATH" $JVMFLAGS org.corfudb.shell.ShellMain run-script "$DIR/../corfu_scripts/$RUN_AS.clj" $*

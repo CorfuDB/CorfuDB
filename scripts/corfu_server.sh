@@ -17,9 +17,9 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
-if ls ${DIR}/../target/*.jar > /dev/null 2>&1; then
- # echo "Running from development source"
-  CLASSPATH=(${DIR}/../target/corfu-*-shaded.jar)
+if ls "${DIR}"/../target/*.jar > /dev/null 2>&1; then
+  # echo "Running from development source"
+  CLASSPATH=("${DIR}"/../infrastructure/target/infrastructure-*-shaded.jar)
 else
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfu/lib/*.jar)
 fi
@@ -40,4 +40,9 @@ fi
 CORFUDB_HEAP="${CORFUDB_HEAP:-1000}"
 export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
+while true; do
 "$JAVA" -cp "$CLASSPATH" $JVMFLAGS org.corfudb.infrastructure.CorfuServer $*
+if [ $? -ne 100 ]; then
+break
+fi
+done
