@@ -44,7 +44,7 @@ public class BatchWriter <K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             submitWrite((LogAddress) key, (LogData) value).get();
         } catch (Exception e) {
-            log.error("Write Exception {}", e);
+            log.trace("Write Exception {}", e);
 
             if(e.getCause() instanceof OverwriteException) {
                 throw new OverwriteException();
