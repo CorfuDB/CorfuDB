@@ -30,7 +30,7 @@ public interface ICorfuSMR<T> {
      * @return The undo record map. */
     Map<String, IUndoRecordFunction<T>> getCorfuUndoRecordMap();
     /** Get a map from strings (function names) to conflict methods.
-     * @return The undo record map. */
+     * @return The conflict map. */
     Map<String, IConflictFunction> getCorfuConflictMap();
 
     /** Return the stream ID that this object belongs to.
