@@ -357,7 +357,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getObjectsView().TXEnd();
                 return ret;
             } catch (Exception e) {
-                log.trace("Transactional function aborted due to {}, retrying", e);
+                log.debug("Transactional function aborted due to {}, retrying after {} msec", e, sleepTime);
                 try {Thread.sleep(sleepTime); }
                 catch (Exception ex) {}
                 sleepTime = min(sleepTime * 2L, 1000L);
