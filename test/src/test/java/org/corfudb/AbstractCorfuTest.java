@@ -266,9 +266,12 @@ public class AbstractCorfuTest {
      */
     public void scheduleConcurrently(int repetitions, CallableConsumer function) {
         for (int i = 0; i < repetitions; i++) {
-            final int threadNumber = i;
+            final int taskNumber = i;
+
             scheduledThreads.add(() -> {
-                function.accept(threadNumber);
+                // executorService uses Callable functions
+                // here, wrap a Corfu test CallableConsumer task (input task #, no output) as a Callable.
+                function.accept(taskNumber);
                 return null;
             });
         }
@@ -334,21 +337,6 @@ public class AbstractCorfuTest {
             throw new RuntimeException(ie);
         }
 
-    }
-
-    /**
-     * An interface that defines threads run through the unit testing interface.
-     */
-    @FunctionalInterface
-    public interface CallableConsumer {
-        /**
-         * The function contains the code to be run when the thread is scheduled.
-         * The thread number is passed as the first argument.
-         *
-         * @param threadNumber The thread number of this thread.
-         * @throws Exception The exception to be called.
-         */
-        void accept(Integer threadNumber) throws Exception;
     }
 
     @FunctionalInterface
@@ -736,4 +724,18 @@ public class AbstractCorfuTest {
         executeScheduled(numThreads, PARAMETERS.TIMEOUT_NORMAL);
     }
 
+    /**
+     * An interface that defines threads run through the unit testing interface.
+     */
+    @FunctionalInterface
+    public interface CallableConsumer {
+        /**
+         * The function contains the code to be run when the thread is scheduled.
+         * The thread number is passed as the first argument.
+         *
+         * @param threadNumber The thread number of this thread.
+         * @throws Exception The exception to be called.
+         */
+        void accept(Integer threadNumber) throws Exception;
+    }
 }

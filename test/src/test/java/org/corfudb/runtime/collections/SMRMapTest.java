@@ -580,7 +580,6 @@ public class SMRMapTest extends AbstractViewTest {
 
         testMap.put("a", "z");
     }
-
     AtomicInteger aborts;
 
     ArrayList<IntConsumer> getAbortTestSM() {
@@ -720,6 +719,26 @@ public class SMRMapTest extends AbstractViewTest {
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
         AtomicInteger aborts = new AtomicInteger();
 
+
+        long startTime = System.currentTimeMillis();
+
+        // invoke the interleaving engine
+        scheduleInterleaved(numThreads, numThreads*numRecords,
+                getMultiViewSM(numThreads)
+        );
+
+        // print stats..
+        calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
+        calculateAbortRate(aborts.get(), numRecords * numThreads);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void concurrentAbortMultiViewThreaded()
+            throws Exception {
+        final int numThreads = PARAMETERS.CONCURRENCY_SOME;
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
+        AtomicInteger aborts = new AtomicInteger();
 
         long startTime = System.currentTimeMillis();
 
