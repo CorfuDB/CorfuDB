@@ -156,7 +156,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      *                                       or value prevents it from being stored in this map
      */
     @Mutator(name = "put", noUpcall = true)
-    default void blindPut(@ConflictParameter K key, V value) {
+    default void blindPut(K key, V value) {
         put(key, value);
     }
 
