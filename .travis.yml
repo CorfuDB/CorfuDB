@@ -14,7 +14,7 @@ after_success:
 - .travis_scripts/mvnrepo.sh
 - .travis_scripts/push_deb.sh
 before_cache:
-- rm -rf $HOME/.m2/repository/org/corfudb/corfu
+- rm -rf $HOME/.m2/repository/org/corfudb
 cache:
   directories:
   - $HOME/.m2
