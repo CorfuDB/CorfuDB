@@ -82,7 +82,7 @@ public class BatchWriter <K, V> implements CacheWriter<K, V>, AutoCloseable {
 
                     if (currOp == null || processed == BATCH_SIZE || currOp == WriteOperation.SHUTDOWN) {
                         streamLog.sync();
-                        log.info("Sync'd {} writes", processed);
+                        log.trace("Sync'd {} writes", processed);
 
                         for(CompletableFuture cf : ack) {
                             cf.complete(null);
@@ -99,7 +99,7 @@ public class BatchWriter <K, V> implements CacheWriter<K, V>, AutoCloseable {
                 }
 
                 if (currOp == WriteOperation.SHUTDOWN) {
-                    log.info("Shutting down the write processor");
+                    log.trace("Shutting down the write processor");
                     break;
                 }
                 if (currOp == null) {
