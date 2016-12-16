@@ -580,6 +580,7 @@ public class SMRMapTest extends AbstractViewTest {
 
         testMap.put("a", "z");
     }
+
     AtomicInteger aborts;
 
     ArrayList<IntConsumer> getAbortTestSM() {
@@ -673,7 +674,6 @@ public class SMRMapTest extends AbstractViewTest {
                                     .open();
                         })
                         .toArray(Map[]::new);
-        AtomicInteger aborts = new AtomicInteger();
 
         // # keys indicate how much contention there will be
         final int numKeys = numThreads * 5;
@@ -717,10 +717,10 @@ public class SMRMapTest extends AbstractViewTest {
             throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_SOME;
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
-        AtomicInteger aborts = new AtomicInteger();
 
 
         long startTime = System.currentTimeMillis();
+        aborts = new AtomicInteger();
 
         // invoke the interleaving engine
         scheduleInterleaved(numThreads, numThreads*numRecords,
@@ -738,9 +738,9 @@ public class SMRMapTest extends AbstractViewTest {
             throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_SOME;
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
-        AtomicInteger aborts = new AtomicInteger();
 
         long startTime = System.currentTimeMillis();
+        aborts = new AtomicInteger();
 
         // invoke the interleaving engine
         scheduleInterleaved(numThreads, numThreads*numRecords,
@@ -752,25 +752,6 @@ public class SMRMapTest extends AbstractViewTest {
         calculateAbortRate(aborts.get(), numRecords * numThreads);
     }
 
-    @Test
-    @SuppressWarnings("unchecked")
-    public void concurrentAbortMultiViewThreaded()
-            throws Exception {
-        final int numThreads = PARAMETERS.CONCURRENCY_SOME;
-        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
-        AtomicInteger aborts = new AtomicInteger();
-
-        long startTime = System.currentTimeMillis();
-
-        // invoke the interleaving engine
-        scheduleThreaded(numThreads, numThreads*numRecords,
-                getMultiViewSM(numThreads)
-        );
-
-        // print stats..
-        calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
-        calculateAbortRate(aborts.get(), numRecords * numThreads);
-    }
     @Test
     @SuppressWarnings("unchecked")
     public void bulkReads()
