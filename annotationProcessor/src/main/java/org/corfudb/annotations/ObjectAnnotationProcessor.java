@@ -121,16 +121,33 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         TypeElement interfaceOverride;
         /** If the element should be excluded from instrumentation. */
         boolean doNotAdd = false;
+        /** If the element has conflictParameter annotations. */
+        final boolean hasConflictAnnotations;
 
-        public SMRMethodInfo(ExecutableElement method, TypeElement interfaceOverride) {
+        public SMRMethodInfo(ExecutableElement method,
+                             TypeElement interfaceOverride) {
             this.method = method;
             this.interfaceOverride = interfaceOverride;
+            this.hasConflictAnnotations = checkForConflictAnnotations(method);
         }
 
-        public SMRMethodInfo(ExecutableElement method, TypeElement interfaceOverride, boolean doNotAdd) {
+        public SMRMethodInfo(ExecutableElement method,
+                             TypeElement interfaceOverride,
+                             boolean doNotAdd) {
             this.method = method;
             this.interfaceOverride = interfaceOverride;
             this.doNotAdd = doNotAdd;
+            this.hasConflictAnnotations = checkForConflictAnnotations(method);
+        }
+
+        /** Return whether the given method has conflict annotations.
+         * @param method    The method to check for.
+         * @return          True, if conflict annotations are present.
+         */
+        private boolean checkForConflictAnnotations(ExecutableElement method) {
+            return method.getParameters().stream()
+                    .anyMatch(x -> x.getAnnotation(ConflictParameter.class)
+                                            != null);
         }
     }
 
@@ -430,6 +447,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         addUpcallMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addUndoRecordMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addUndoMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addConflictMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
 
         typeSpecBuilder
                 .addSuperinterfaces(interfacesToAdd);
@@ -657,6 +675,68 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         ParameterizedTypeName.get(ClassName.get(IUndoFunction.class),
                                 originalName)))
                 .addStatement("return $L", "undoMap" + CORFUSMR_FIELD)
+                .build());
+
+    }
+
+
+    /** Generate the conflict map for the type. */
+    private void addConflictMap(TypeSpec.Builder typeSpecBuilder,
+                                TypeName originalName,
+                                Set<TypeName> interfacesToAdd,
+                                Set<SMRMethodInfo> methodSet) {
+
+        String conflictString = methodSet.stream()
+                .filter(x -> x.hasConflictAnnotations)
+                .map(x -> {
+                    // Generate statements which convert the object array
+                    // back into the original field names.
+                    String parameterNames =
+                            IntStream.range(0, x.method.getParameters().size())
+                                .mapToObj(y -> {
+                                    VariableElement v =
+                                            x.method.getParameters().get(y);
+                                    return "Object " + v.getSimpleName() + " = "
+                                            + " args[" + y + "];";
+                                })
+                            .collect(Collectors.joining("\n"));
+                    // For conflict annotations, we simply pass the
+                    // parameters which are annotated.
+                    String annotatedParameters = x.method.getParameters()
+                        .stream()
+                        .filter(y -> y.getAnnotation(ConflictParameter.class)
+                                                != null)
+                        .map(y -> y.getSimpleName())
+                        .collect(Collectors.joining(", "));
+                    return "\n.put(\"" + getSMRFunctionName(x.method) + "\", "
+                        + "(args) -> { " + parameterNames +
+                             "return new Object[] {"
+                            + annotatedParameters  + "};})";
+                })
+                .collect(Collectors.joining());
+
+
+        FieldSpec conflictMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
+                ClassName.get(String.class),
+                ClassName.get(IConflictFunction.class)),
+                "conflictMap" + CORFUSMR_FIELD,
+                Modifier.PUBLIC, Modifier.FINAL)
+                .initializer("new $T()$L.build()",
+                        ParameterizedTypeName.get(ClassName
+                                        .get(ImmutableMap.Builder.class),
+                                ClassName.get(String.class),
+                                ClassName.get(IConflictFunction.class)
+                                        ), conflictString)
+                .build();
+
+        typeSpecBuilder.addField(conflictMap);
+
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuConflictMap")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
+                        ClassName.get(String.class),
+                        ClassName.get(IConflictFunction.class)))
+                .addStatement("return $L", "conflictMap" + CORFUSMR_FIELD)
                 .build());
 
     }
