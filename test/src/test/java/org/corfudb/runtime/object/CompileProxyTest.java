@@ -1,28 +1,14 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
-import lombok.Getter;
-import lombok.Setter;
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.Mutator;
-import org.corfudb.annotations.MutatorAccessor;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.StreamView;
-import org.corfudb.runtime.view.StreamsView;
 import org.junit.Test;
-import org.omg.CORBA.INITIALIZE;
-import org.omg.CORBA.TIMEOUT;
 
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
@@ -465,6 +451,44 @@ public class CompileProxyTest extends AbstractViewTest {
         assertThat(sharedCorfuCompound.getUser().getLastName())
                 .startsWith("D");
 
+    }
+
+    /** Checks that the fine-grained conflict set is correctly produced
+     * by the annotation framework.
+     *
+     * Each method in ConflictParameterClass is executed, and the result
+     * of invoking the method from the conflict function map should be
+     * the objects annotated by conflict parameter.
+     */
+    @Test
+    public void checkConflictParameters() {
+        ConflictParameterClass testObject = getDefaultRuntime()
+                .getObjectsView().build()
+                .setStreamName("my stream")
+                .setUseCompiledClass(true)
+                .setType(ConflictParameterClass.class)
+                .open();
+
+        ICorfuSMR<ConflictParameterClass> testObjectSMR =
+                (ICorfuSMR<ConflictParameterClass>) testObject;
+        CorfuCompileProxy<ConflictParameterClass> proxy =
+                (CorfuCompileProxy<ConflictParameterClass>) testObjectSMR
+                        .getCorfuSMRProxy();
+
+        // mutator test -> second option should be conflict
+        assertThat(proxy.getConflictFunctionMap().get("mutatorTest")
+                .getConflictSet(0, 1))
+                .contains(1);
+
+        // accessor test -> first option should be conflict.
+        assertThat(proxy.getConflictFunctionMap().get("accessorTest")
+                .getConflictSet("a", "b"))
+                .contains("a");
+
+        // mutatorAccessor test -> first option should be conflict.
+        assertThat(proxy.getConflictFunctionMap().get("mutatorAccessorTest")
+                .getConflictSet("a", "b"))
+                .contains("a");
     }
 
 }

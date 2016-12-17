@@ -71,6 +71,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Getter
     final Map<String, IUndoRecordFunction<T>> undoRecordTargetMap;
 
+    /** A conflict function map. This map contains functions which given
+     * the name of the function and its parameters, calculates the
+     * fine-grained conflict set.
+     */
+    @Getter
+    final Map<String, IConflictFunction> conflictFunctionMap;
+
     /** The arguments this proxy was created with.
      *
      */
@@ -96,7 +103,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
-                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap
+                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
+                             Map<String, IConflictFunction> conflictFunctionMap
                              ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -107,6 +115,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.upcallTargetMap = upcallTargetMap;
         this.undoTargetMap = undoTargetMap;
         this.undoRecordTargetMap = undoRecordTargetMap;
+        this.conflictFunctionMap = conflictFunctionMap;
 
         this.pendingUpcalls = new ConcurrentSet<>();
         this.upcallResults = new ConcurrentHashMap<>();
