@@ -41,6 +41,8 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
 
     int numTasks;
     ArrayList<CorfuSharedCounter> sharedCounters;
+    AtomicIntegerArray commitStatus;
+    final int COMMITVALUE = 1; // by default, ABORTVALUE = 0
 
     /**
      * build an array of shared counters for the test
@@ -61,70 +63,8 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
         for (int i = 0; i < numTasks; i++)
             sharedCounters.get(i).setValue(INITIAL);
 
+        commitStatus = new AtomicIntegerArray(numTasks);
     }
-
-    void getOpacityTestSM() {
-        // populate numTasks and sharedCounters array
-        setupCounters();
-
-        AtomicIntegerArray snapStatus = new AtomicIntegerArray(numTasks);
-        AtomicIntegerArray commitStatus = new AtomicIntegerArray(numTasks);
-        final int COMMITVALUE = 1;
-
-        // SM step 1: start an optimistic transaction
-        addTestStep((ignored_task_num) -> {
-            TXBegin();
-        });
-
-        // SM step 2: modify shared counter per task
-        addTestStep((task_num) -> {
-            sharedCounters.get(task_num).setValue(OVERWRITE_ONCE);
-        });
-
-        // SM step 3: each task reads a shared counter modified by another task and records it
-        addTestStep((task_num) -> {
-            snapStatus.set(task_num, sharedCounters.get((task_num + 1) % numTasks).getValue());
-        });
-
-        // SM step 4: each task verifies opacity, checking that it can read its own modified value
-        addTestStep((task_num) -> {
-            assertThat(sharedCounters.get(task_num).getValue())
-                    .isEqualTo(OVERWRITE_ONCE);
-        });
-
-        // SM step 5: next, each task overwrites its own value again
-        addTestStep((task_num) -> {
-            sharedCounters.get(task_num).setValue(OVERWRITE_TWICE);
-        } );
-
-        // SM step 6: each task again reads a counter modified by another task.
-        // it should read the same snapshot value as the beginning of the transaction
-        addTestStep((task_num) -> {
-            assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
-                    .isEqualTo(snapStatus.get(task_num));
-        });
-
-        // SM step 7: each task  again verifies opacity, checking that it can read its own modified value
-        addTestStep((task_num) -> {
-            assertThat(sharedCounters.get(task_num).getValue())
-                    .isEqualTo(OVERWRITE_TWICE);
-        });
-
-        // SM step 8: all tasks try to commit their transacstion.
-        // Task k aborts if, and only if, counter k+1 was modified after it read it and transaction k+1 already committed.
-        addTestStep((task_num) -> {
-            try {
-                TXEnd();
-                commitStatus.set(task_num, COMMITVALUE);
-            } catch (TransactionAbortedException tae) {
-                assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
-                        .isNotEqualTo(snapStatus.get(task_num));
-                assertThat(commitStatus.get((task_num + 1) % numTasks))
-                        .isEqualTo(COMMITVALUE);
-            }
-        } );
-    }
-
 
     /**
      * test concurrent transactions for opacity. This works as follows:
@@ -151,16 +91,90 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
      *
      * @throws Exception
      */
+    void testOpacity(boolean testInterleaved)
+        throws Exception {
+        // populate numTasks and sharedCounters array
+        setupCounters();
+
+        AtomicIntegerArray snapStatus = new AtomicIntegerArray(numTasks);
+
+        // SM step 1: start an optimistic transaction
+        addTestStep((ignored_task_num) -> {
+            TXBegin();
+        });
+
+        // SM step 2: modify shared counter per task
+        addTestStep((task_num) -> {
+            sharedCounters.get(task_num).setValue(OVERWRITE_ONCE);
+        });
+
+        // SM step 3: each task reads a shared counter modified by another task and records it
+        addTestStep((task_num) -> {
+            snapStatus.set(task_num, sharedCounters.get((task_num + 1) % numTasks).getValue());
+        });
+
+        // SM step 4: each task verifies opacity, checking that it can read its own modified value
+        addTestStep((task_num) -> {
+            assertThat(sharedCounters.get(task_num).getValue())
+                    .isEqualTo(OVERWRITE_ONCE);
+        });
+
+        // SM step 5: next, each task overwrites its own value again
+        addTestStep((task_num) -> {
+            sharedCounters.get(task_num).setValue(OVERWRITE_TWICE);
+        });
+
+        // SM step 6: each task again reads a counter modified by another task.
+        // it should read the same snapshot value as the beginning of the transaction
+        addTestStep((task_num) -> {
+            assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
+                    .isEqualTo(snapStatus.get(task_num));
+        });
+
+        // SM step 7: each task  again verifies opacity, checking that it can read its own modified value
+        addTestStep((task_num) -> {
+            assertThat(sharedCounters.get(task_num).getValue())
+                    .isEqualTo(OVERWRITE_TWICE);
+        });
+
+        // SM step 8: all tasks try to commit their transacstion.
+        // Task k aborts if, and only if, counter k+1 was modified after it read it and transaction k+1 already committed.
+        addTestStep((task_num) -> {
+            try {
+                TXEnd();
+                commitStatus.set(task_num, COMMITVALUE);
+            } catch (TransactionAbortedException tae) {
+                // do nothing
+            }
+        });
+
+        if (testInterleaved)
+            scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks);
+        else
+            scheduleThreaded(PARAMETERS.CONCURRENCY_SOME, numTasks);
+
+        // verfiy that all aborts are justified
+        for (int task_num = 0; task_num < numTasks; task_num++) {
+            if (commitStatus.get(task_num) != COMMITVALUE) {
+                assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
+                        .isNotEqualTo(snapStatus.get(task_num));
+                assertThat(commitStatus.get((task_num + 1) % numTasks))
+                        .isEqualTo(COMMITVALUE);
+            }
+
+        }
+    }
+
     @Test
     public void testOpacityInterleaved() throws Exception {
         // invoke the interleaving engine
-        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks);
+            testOpacity(true);
     }
 
     @Test
     public void testOpacityThreaded() throws Exception {
         // invoke the threaded engine
-        scheduleThreaded(PARAMETERS.CONCURRENCY_SOME, numTasks);
+        testOpacity(false);
     }
 
     /**
@@ -188,12 +202,10 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
      *  If task k aborts, then either task (k-1), or (k+1), or both, must have committed
      *  (wrapping around for tasks n-1 and 0, respectively).
      */
-    void getOptimismSM() {
+    void testOptimism(boolean testInterleaved)
+        throws Exception {
         // populate numTasks and sharedCounters array
         setupCounters();
-
-        AtomicIntegerArray commitStatus = new AtomicIntegerArray(numTasks);
-        final int COMMITVALUE = 1;
 
         assertThat(numTasks).isGreaterThan(1); // don't change concurrency to less than 2, test will break
 
@@ -243,25 +255,34 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
                 TXEnd();
                 commitStatus.set(task_num, COMMITVALUE);
             } catch (TransactionAbortedException tae) {
+                // do nothing
+            }
+        });
+
+        // invoke the execution engine
+        if (testInterleaved)
+            scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks);
+        else
+            scheduleThreaded(PARAMETERS.CONCURRENCY_SOME, numTasks);
+
+        // verfiy that all aborts are justified
+        for (int task_num = 0; task_num < numTasks; task_num++) {
+            if (commitStatus.get(task_num) != COMMITVALUE)
                 assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||
                         commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
                         .isTrue();
-            }
-        });
+        }
+
     }
 
     @Test
     public void testOptimismInterleaved() throws Exception {
-        getOptimismSM();
-        // invoke the interleaving engine
-        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks);
+        testOptimism(true);
     }
 
     @Test
     public void testOptimismThreaded() throws Exception {
-        getOptimismSM();
-        // invoke the interleaving engine
-        scheduleThreaded(PARAMETERS.CONCURRENCY_SOME, numTasks);
+        testOptimism(false);
     }
 
     void TXEnd() {
