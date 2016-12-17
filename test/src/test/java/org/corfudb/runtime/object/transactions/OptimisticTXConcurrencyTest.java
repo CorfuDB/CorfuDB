@@ -1,17 +1,13 @@
 package org.corfudb.runtime.object.transactions;
 
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSharedCounter;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.StreamView;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicIntegerArray;
-import java.util.function.BiConsumer;
-import java.util.function.IntConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,7 +63,7 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
 
     }
 
-    ArrayList<IntConsumer> getOpacityTestSM() {
+    void getOpacityTestSM() {
         // populate numTasks and sharedCounters array
         setupCounters();
 
@@ -75,51 +71,48 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
         AtomicIntegerArray commitStatus = new AtomicIntegerArray(numTasks);
         final int COMMITVALUE = 1;
 
-        // a state-machine:
-        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>();
-
         // SM step 1: start an optimistic transaction
-        stateMachine.add((ignored_task_num) -> {
+        addTestStep((ignored_task_num) -> {
             TXBegin();
         });
 
         // SM step 2: modify shared counter per task
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             sharedCounters.get(task_num).setValue(OVERWRITE_ONCE);
         });
 
         // SM step 3: each task reads a shared counter modified by another task and records it
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             snapStatus.set(task_num, sharedCounters.get((task_num + 1) % numTasks).getValue());
         });
 
         // SM step 4: each task verifies opacity, checking that it can read its own modified value
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             assertThat(sharedCounters.get(task_num).getValue())
                     .isEqualTo(OVERWRITE_ONCE);
         });
 
         // SM step 5: next, each task overwrites its own value again
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             sharedCounters.get(task_num).setValue(OVERWRITE_TWICE);
         } );
 
         // SM step 6: each task again reads a counter modified by another task.
         // it should read the same snapshot value as the beginning of the transaction
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
                     .isEqualTo(snapStatus.get(task_num));
         });
 
         // SM step 7: each task  again verifies opacity, checking that it can read its own modified value
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             assertThat(sharedCounters.get(task_num).getValue())
                     .isEqualTo(OVERWRITE_TWICE);
         });
 
         // SM step 8: all tasks try to commit their transacstion.
         // Task k aborts if, and only if, counter k+1 was modified after it read it and transaction k+1 already committed.
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             try {
                 TXEnd();
                 commitStatus.set(task_num, COMMITVALUE);
@@ -130,8 +123,6 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
                         .isEqualTo(COMMITVALUE);
             }
         } );
-
-        return stateMachine;
     }
 
 
@@ -163,13 +154,13 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
     @Test
     public void testOpacityInterleaved() throws Exception {
         // invoke the interleaving engine
-        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks, getOpacityTestSM());
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks);
     }
 
     @Test
     public void testOpacityThreaded() throws Exception {
         // invoke the threaded engine
-        scheduleThreaded(PARAMETERS.CONCURRENCY_SOME, numTasks, getOpacityTestSM());
+        scheduleThreaded(PARAMETERS.CONCURRENCY_SOME, numTasks);
     }
 
     /**
@@ -197,8 +188,7 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
      *  If task k aborts, then either task (k-1), or (k+1), or both, must have committed
      *  (wrapping around for tasks n-1 and 0, respectively).
      */
-    @Test
-    public void testOptimism() throws Exception {
+    void getOptimismSM() {
         // populate numTasks and sharedCounters array
         setupCounters();
 
@@ -207,63 +197,71 @@ public class OptimisticTXConcurrencyTest extends AbstractViewTest {
 
         assertThat(numTasks).isGreaterThan(1); // don't change concurrency to less than 2, test will break
 
-        // a state-machine:
-        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>();
-
         // SM step 1: start an optimistic transaction
-        stateMachine.add((ignored_task_num) -> {
+        addTestStep((ignored_task_num) -> {
             TXBegin();
         });
 
         // SM step 2: task k modify counter k
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             sharedCounters.get(task_num).setValue(OVERWRITE_ONCE);
         });
 
         // SM step 3: task k reads counter k+1
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
                     .isBetween(INITIAL, OVERWRITE_ONCE);
         });
 
         // SM step 4: task k verifies opacity, checking that it can read its own modified value of counter k
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             assertThat(sharedCounters.get(task_num).getValue())
                     .isEqualTo(OVERWRITE_ONCE);
         });
 
         // SM step 5: task k overwrites counter k+1
-        stateMachine.add((task_num) -> {
-            sharedCounters.get((task_num+1)%numTasks).setValue(OVERWRITE_TWICE);
-        } );
+        addTestStep((task_num) -> {
+            sharedCounters.get((task_num + 1) % numTasks).setValue(OVERWRITE_TWICE);
+        });
 
         // SM step 6: task k again check opacity, reading its own modified value, this time of counter k+1
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
                     .isEqualTo(OVERWRITE_TWICE);
         });
 
         // SM step 7: each thread again verifies opacity, checking that it can re-read counter k
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             assertThat(sharedCounters.get(task_num).getValue())
                     .isEqualTo(OVERWRITE_ONCE);
         });
 
         // SM step 8: try to commit all transactions;
         // task k aborts only if one or both of (k-1), (k+1) committed before it
-        stateMachine.add((task_num) -> {
+        addTestStep((task_num) -> {
             try {
                 TXEnd();
                 commitStatus.set(task_num, COMMITVALUE);
             } catch (TransactionAbortedException tae) {
                 assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||
-                                commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
+                        commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
                         .isTrue();
             }
-        } );
+        });
+    }
 
+    @Test
+    public void testOptimismInterleaved() throws Exception {
+        getOptimismSM();
         // invoke the interleaving engine
-        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks, stateMachine);
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks);
+    }
+
+    @Test
+    public void testOptimismThreaded() throws Exception {
+        getOptimismSM();
+        // invoke the interleaving engine
+        scheduleThreaded(PARAMETERS.CONCURRENCY_SOME, numTasks);
     }
 
     void TXEnd() {

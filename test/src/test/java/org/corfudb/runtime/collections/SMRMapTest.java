@@ -7,11 +7,8 @@ import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuObject;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
@@ -22,10 +19,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
-import java.util.function.IntConsumer;
-import java.util.function.IntPredicate;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -583,7 +576,7 @@ public class SMRMapTest extends AbstractViewTest {
 
     AtomicInteger aborts;
 
-    ArrayList<IntConsumer> getAbortTestSM() {
+    void getAbortTestSM() {
         Map<String, String> testMap = getRuntime().getObjectsView().build()
                 .setStreamID(UUID.randomUUID())
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
@@ -592,33 +585,26 @@ public class SMRMapTest extends AbstractViewTest {
         AtomicInteger aborts = new AtomicInteger();
         testMap.clear();
 
-        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>(){
+        // state 0: start a transaction
+        addTestStep((ignored_task_num) -> {
+            getRuntime().getObjectsView().TXBegin();
+        });
 
-            {
-                // state 0: start a transaction
-                add ((ignored_task_num) -> {
-                    getRuntime().getObjectsView().TXBegin();
-                });
+        // state 1: do a put
+        addTestStep( (task_num) -> {
+            assertThat(testMap.put(Integer.toString(task_num),
+                    Integer.toString(task_num)))
+                    .isEqualTo(null);
+        });
 
-                // state 1: do a put
-                add( (task_num) -> {
-                    assertThat(testMap.put(Integer.toString(task_num),
-                            Integer.toString(task_num)))
-                            .isEqualTo(null);
-                });
-
-                // state 2 (final): ask to commit the transaction
-                add ( (ignored_task_num) -> {
-                    try {
-                        getRuntime().getObjectsView().TXEnd();
-                    } catch (TransactionAbortedException tae) {
-                        aborts.incrementAndGet();
-                    }
-                });
-
+        // state 2 (final): ask to commit the transaction
+        addTestStep( (ignored_task_num) -> {
+            try {
+                getRuntime().getObjectsView().TXEnd();
+            } catch (TransactionAbortedException tae) {
+                aborts.incrementAndGet();
             }
-        } ;
-        return stateMachine;
+        });
     }
 
     @Test
@@ -632,7 +618,7 @@ public class SMRMapTest extends AbstractViewTest {
 
         aborts = new AtomicInteger();
         // invoke the threaded engine
-        scheduleThreaded(numThreads, numThreads*numRecords, getAbortTestSM());
+        scheduleThreaded(numThreads, numThreads*numRecords);
 
         // print stats..
         calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
@@ -651,7 +637,7 @@ public class SMRMapTest extends AbstractViewTest {
 
         aborts = new AtomicInteger();
         // invoke the interleaving engine
-        scheduleInterleaved(numThreads, numThreads*numRecords, getAbortTestSM());
+        scheduleInterleaved(numThreads, numThreads*numRecords);
 
         // print stats..
         calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
@@ -659,7 +645,7 @@ public class SMRMapTest extends AbstractViewTest {
 
     }
 
-    ArrayList<IntConsumer> getMultiViewSM(int numThreads) {
+    void getMultiViewSM(int numThreads) {
 
         UUID mapStream = UUID.randomUUID();
         Map<String, String>[] testMap =
@@ -680,35 +666,28 @@ public class SMRMapTest extends AbstractViewTest {
 
         Random r = new Random();
 
-        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>(){
+        // state 0: start a transaction
+        addTestStep((ignored_task_num) -> {
+            getRuntime().getObjectsView().TXBegin();
+        });
 
-            {
-                // state 0: start a transaction
-                add ((ignored_task_num) -> {
-                    getRuntime().getObjectsView().TXBegin();
-                });
+        // state 1: do a put and a get
+        addTestStep( (task_num) -> {
+            final int putKey = r.nextInt(numKeys);
+            final int getKey = r.nextInt(numKeys);
+            testMap[task_num%numThreads].put(Integer.toString(putKey),
+                    testMap[task_num%numThreads].get(Integer.toString(getKey)));
+        });
 
-                // state 1: do a put and a get
-                add( (task_num) -> {
-                    final int putKey = r.nextInt(numKeys);
-                    final int getKey = r.nextInt(numKeys);
-                    testMap[task_num%numThreads].put(Integer.toString(putKey),
-                            testMap[task_num%numThreads].get(Integer.toString(getKey)));
-                });
-
-                // state 2 (final): ask to commit the transaction
-                add ( (ignored_task_num) -> {
-                    try {
-                        getRuntime().getObjectsView().TXEnd();
-                    } catch (TransactionAbortedException tae) {
-                        aborts.incrementAndGet();
-                    }
-                });
-
+        // state 2 (final): ask to commit the transaction
+        addTestStep( (ignored_task_num) -> {
+            try {
+                getRuntime().getObjectsView().TXEnd();
+            } catch (TransactionAbortedException tae) {
+                aborts.incrementAndGet();
             }
-        } ;
+        });
 
-        return stateMachine;
     }
 
     @Test
@@ -723,9 +702,7 @@ public class SMRMapTest extends AbstractViewTest {
         aborts = new AtomicInteger();
 
         // invoke the interleaving engine
-        scheduleInterleaved(numThreads, numThreads*numRecords,
-                getMultiViewSM(numThreads)
-        );
+        scheduleInterleaved(numThreads, numThreads*numRecords);
 
         // print stats..
         calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
@@ -743,9 +720,7 @@ public class SMRMapTest extends AbstractViewTest {
         aborts = new AtomicInteger();
 
         // invoke the interleaving engine
-        scheduleInterleaved(numThreads, numThreads*numRecords,
-                getMultiViewSM(numThreads)
-        );
+        scheduleInterleaved(numThreads, numThreads*numRecords);
 
         // print stats..
         calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);

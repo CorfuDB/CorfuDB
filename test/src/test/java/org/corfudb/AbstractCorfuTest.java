@@ -46,6 +46,10 @@ public class AbstractCorfuTest {
     public Set<Callable<Object>> scheduledThreads;
     public String testStatus = "";
 
+    public Map<Integer, TestThread> threadsMap;
+
+    public ArrayList<IntConsumer> testSM = null;
+
     public static final CorfuTestParameters PARAMETERS =
             new CorfuTestParameters();
 
@@ -404,8 +408,6 @@ public class AbstractCorfuTest {
 
     }
 
-    Map<Integer, TestThread> threadsMap = new ConcurrentHashMap<>();
-
     @Before
     public void resetThreadingTest() {
         threadsMap.clear();
@@ -658,9 +660,9 @@ public class AbstractCorfuTest {
     }
 
     /**
-     * This utility method is an engine for interleaving thread executions, state by state.
+     * This is an engine for interleaving test state-machines, step by step.
      *
-     * A state-machine is provided as an array of lambdas to invoke at each state.
+     * A state-machine {@link AbstractCorfuTest#testSM} is provided as an array of lambdas to invoke at each state.
      * The state-machine will be instantiated numTasks times, once per task.
      *
      * The engine will interleave the execution of numThreads concurrent instances of the state machine.
@@ -668,13 +670,11 @@ public class AbstractCorfuTest {
      * The last state of a state-machine is special, it finishes the task and makes the thread ready for a new task.
      * @param numThreads the desired concurrency level, and the number of instances of state-machines
      * @param numTasks total number of tasks to execute
-     * @param stateMachine an array of functions to execute at each step.
-     *                     each function call returns boolean to indicate if it reaches a final state.
      */
-    public void scheduleInterleaved(int numThreads, int numTasks, ArrayList<IntConsumer> stateMachine) {
+    public void scheduleInterleaved(int numThreads, int numTasks) {
         final int NOTASK = -1;
 
-        int numStates = stateMachine.size();
+        int numStates = testSM.size();
         Random r = new Random(PARAMETERS.SEED);
         AtomicInteger nDone = new AtomicInteger(0);
 
@@ -697,7 +697,7 @@ public class AbstractCorfuTest {
 
             if (onTask[nextt] != NOTASK) {
                 t(nextt, () -> {
-                    stateMachine.get(onState[nextt]).accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
+                    testSM.get(onState[nextt]).accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
                     if (++onState[nextt] >= numStates) {
                         onTask[nextt] = NOTASK;
                         nDone.getAndIncrement();
@@ -706,22 +706,42 @@ public class AbstractCorfuTest {
             }
         }
     }
-
     /**
-     * This engine takes the same state machine as scheduleInterleaved above,
-     * and executes the state machines in separate threads running concurrenty, without explicit interleaving.
+     * This engine takes the testSM state machine (same as scheduleInterleaved above),
+     * and executes state machines in separate threads running concurrenty.
+     * There is no explicit interleaving control here.
      *
      * @param numThreads specifies desired concurrency level
      * @param numTasks specifies the desired number of state machine instances
-     * @param stateMachine specifies the state machine as an array of steps, each one is a lambda
      */
-    public void scheduleThreaded(int numThreads, int numTasks, ArrayList<IntConsumer> stateMachine)
+    public void scheduleThreaded(int numThreads, int numTasks)
             throws Exception
     {
         scheduleConcurrently(numTasks, (numTask) -> {
-            for (IntConsumer step : stateMachine) step.accept(numTask);
+            for (IntConsumer step : testSM) step.accept(numTask);
         });
         executeScheduled(numThreads, PARAMETERS.TIMEOUT_NORMAL);
+    }
+
+
+    /** utilities for building a test state-machine
+     *
+     */
+    // @Before
+    public void InitSM() {
+        System.out.println("initSM");
+        if (testSM != null)
+            testSM.clear();
+        else
+            testSM = new ArrayList<>();
+    }
+
+    public void addTestStep(IntConsumer stepFunction) {
+        if (testSM == null) {
+            System.out.println("SM was null");
+            InitSM();
+        }
+        testSM.add(stepFunction);
     }
 
     /**
