@@ -46,7 +46,7 @@ public class AbstractCorfuTest {
     public Set<Callable<Object>> scheduledThreads;
     public String testStatus = "";
 
-    public Map<Integer, TestThread> threadsMap;
+    public Map<Integer, TestThread> threadsMap = new ConcurrentHashMap<>();
 
     public ArrayList<IntConsumer> testSM = null;
 
@@ -727,9 +727,8 @@ public class AbstractCorfuTest {
     /** utilities for building a test state-machine
      *
      */
-    // @Before
+    @Before
     public void InitSM() {
-        System.out.println("initSM");
         if (testSM != null)
             testSM.clear();
         else
@@ -738,7 +737,6 @@ public class AbstractCorfuTest {
 
     public void addTestStep(IntConsumer stepFunction) {
         if (testSM == null) {
-            System.out.println("SM was null");
             InitSM();
         }
         testSM.add(stepFunction);

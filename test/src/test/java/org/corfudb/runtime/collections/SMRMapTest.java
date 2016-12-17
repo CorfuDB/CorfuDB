@@ -636,6 +636,8 @@ public class SMRMapTest extends AbstractViewTest {
         long startTime = System.currentTimeMillis();
 
         aborts = new AtomicInteger();
+
+        getAbortTestSM();
         // invoke the interleaving engine
         scheduleInterleaved(numThreads, numThreads*numRecords);
 
@@ -701,6 +703,7 @@ public class SMRMapTest extends AbstractViewTest {
         long startTime = System.currentTimeMillis();
         aborts = new AtomicInteger();
 
+        getMultiViewSM(numThreads);
         // invoke the interleaving engine
         scheduleInterleaved(numThreads, numThreads*numRecords);
 
@@ -719,8 +722,9 @@ public class SMRMapTest extends AbstractViewTest {
         long startTime = System.currentTimeMillis();
         aborts = new AtomicInteger();
 
+        getMultiViewSM(numThreads);
         // invoke the interleaving engine
-        scheduleInterleaved(numThreads, numThreads*numRecords);
+        scheduleThreaded(numThreads, numThreads*numRecords);
 
         // print stats..
         calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);

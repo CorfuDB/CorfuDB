@@ -6,12 +6,10 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.StreamView;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.IntConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -181,21 +179,15 @@ public class CompileProxyTest extends AbstractViewTest {
         assertThat(sharedCounter.getValue())
                 .isEqualTo(lastUpdate.get());
 
-        // build a state-machine:
-        ArrayList<IntConsumer> stateMachine = new ArrayList<IntConsumer>(){
-
-            {
-                // only one step: randomly choose between read/write of the shared counter
-                add ((task_num) -> {
-                    if (r.nextBoolean()) {
-                        sharedCounter.setValue(task_num);
-                        lastUpdate.set(task_num); // remember the last written value
-                    } else {
-                        assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get()); // expect to read the value in lastUpdate
-                    }
-                } );
+        // only one step: randomly choose between read/write of the shared counter
+        addTestStep ((task_num) -> {
+            if (r.nextBoolean()) {
+                sharedCounter.setValue(task_num);
+                lastUpdate.set(task_num); // remember the last written value
+            } else {
+                assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get()); // expect to read the value in lastUpdate
             }
-        };
+        } );
 
         // invoke the interleaving engine
         scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.CONCURRENCY_SOME*numTasks);
