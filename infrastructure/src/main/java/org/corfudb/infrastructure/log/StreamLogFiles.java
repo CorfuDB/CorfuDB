@@ -266,7 +266,7 @@ public class StreamLogFiles implements StreamLog {
                 }
 
                 writeHeader(fc, VERSION, verify);
-                log.info("Opened new log file at {}", a);
+                log.trace("Opened new log file at {}", a);
                 FileHandle fh = new FileHandle(fc, a);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
@@ -349,7 +349,7 @@ public class StreamLogFiles implements StreamLog {
             } else {
                 throw new OverwriteException();
             }
-            log.info("Disk_write[{}]: Written to disk.", logAddress);
+            log.trace("Disk_write[{}]: Written to disk.", logAddress);
         } catch (IOException e) {
             log.error("Disk_write[{}]: Exception", logAddress, e);
             throw new RuntimeException(e);

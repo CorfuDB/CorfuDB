@@ -16,6 +16,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
+import static java.lang.Long.min;
+
 /**
  * Created by mwei on 11/11/16.
  */
@@ -356,6 +358,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
+        long sleepTime = 1L;
         while (true) {
             try {
                 rt.getObjectsView().TXBegin();
@@ -363,9 +366,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getObjectsView().TXEnd();
                 return ret;
             } catch (Exception e) {
-                log.warn("Transactional function aborted due to {}, retrying", e);
-                try {Thread.sleep(1000); }
+                log.debug("Transactional function aborted due to {}, retrying after {} msec", e, sleepTime);
+                try {Thread.sleep(sleepTime); }
                 catch (Exception ex) {}
+                sleepTime = min(sleepTime * 2L, 1000L);
             }
         }
     }
