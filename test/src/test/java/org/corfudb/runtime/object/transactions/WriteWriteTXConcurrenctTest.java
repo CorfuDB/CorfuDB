@@ -210,8 +210,7 @@ public class WriteWriteTXConcurrenctTest extends AbstractViewTest {
      *  If task k aborts, then either task (k-1), or (k+1), or both, must have committed
      *  (wrapping around for tasks n-1 and 0, respectively).
      */
-    @Test
-    public void testOptimism() throws Exception {
+    public void testOptimism(boolean testInterleaved) throws Exception {
         // populate numTasks and sharedCounters array
         setupCounters();
 
@@ -248,8 +247,8 @@ public class WriteWriteTXConcurrenctTest extends AbstractViewTest {
 
         // SM step 5: task k overwrites counter k+1
         addTestStep((task_num) -> {
-            sharedCounters.get((task_num+1)%numTasks).setValue(OVERWRITE_TWICE);
-        } );
+            sharedCounters.get((task_num + 1) % numTasks).setValue(OVERWRITE_TWICE);
+        });
 
         // SM step 6: task k again check opacity, reading its own modified value, this time of counter k+1
         addTestStep((task_num) -> {
@@ -270,14 +269,35 @@ public class WriteWriteTXConcurrenctTest extends AbstractViewTest {
                 TXEnd();
                 commitStatus.set(task_num, COMMITVALUE);
             } catch (TransactionAbortedException tae) {
-                assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||
-                        commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
-                        .isTrue();
+                // do nothing
             }
-        } );
+        });
 
-        // invoke the interleaving engine
-        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks);
+        // invoke the execution engine
+        if (testInterleaved)
+            scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, numTasks);
+        else
+            scheduleThreaded(PARAMETERS.CONCURRENCY_SOME, numTasks);
+
+        // verfiy that all aborts are justified
+        for (int task_num = 0; task_num < numTasks; task_num++) {
+            if (commitStatus.get(task_num) != COMMITVALUE)
+                assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||
+                    commitStatus.get((task_num - 1) % numTasks) == COMMITVALUE)
+                    .isTrue();
+        }
+    }
+
+    @Test
+    public void testOptimismInterleaved()
+            throws Exception {
+        testOptimism(true);
+    }
+
+    @Test
+    public void testOptimismThreaded()
+            throws Exception {
+        testOptimism(false);
     }
 
     void TXEnd() {
