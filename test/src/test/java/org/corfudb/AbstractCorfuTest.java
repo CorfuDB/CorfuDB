@@ -121,12 +121,34 @@ public class AbstractCorfuTest {
          * @param description   A description of the method run.
          */
         protected void failed(Throwable e, Description description) {
+            final int lineNumber = getLineNumber(e, description);
+            String lineOut = lineNumber == -1 ? "" : ":L" + lineNumber;
             System.out.print(ansi().a("[")
                     .fg(Ansi.Color.RED)
-                        .a("FAIL").reset()
+                    .a("FAIL").reset()
                     .a(" - ").a(e.getClass().getSimpleName())
-                    .a(":L").a(getLineNumber(e, description))
+                    .a(lineOut)
                     .a("]").newline());
+        }
+
+        /** Gets whether or not the given class inherits from the class
+         * given by the string.
+         * @param className     The string to check.
+         * @param cls           The class to traverse the inheritance tree
+         *                      for.
+         * @return              True, if cls inherits from (or is) the class
+         *                      given by the className string.
+         */
+        private boolean classInheritsFromNamedClass(String className,
+                                                    Class<?> cls) {
+            Class<?> nextParent = cls;
+            while (nextParent != Object.class) {
+                if (className.equals(nextParent.getName())) {
+                    return true;
+                }
+                nextParent = nextParent.getSuperclass();
+            }
+            return false;
         }
 
         /** Get the line number of the test which caused the exception.
@@ -135,12 +157,17 @@ public class AbstractCorfuTest {
          * @return
          */
         private int getLineNumber(Throwable e, Description description) {
-            StackTraceElement testElement = Arrays.stream(e.getStackTrace())
-                    .filter(element -> element.getClassName()
-                        .equals(description.getClassName()))
-                    .reduce((first, second) -> second)
-                    .get();
-            return testElement.getLineNumber();
+            try {
+                StackTraceElement testElement = Arrays.stream(e.getStackTrace())
+                        .filter(element -> classInheritsFromNamedClass(
+                                element.getClassName(), description.getTestClass()))
+                        .reduce((first, second) -> second)
+                        .get();
+                return testElement.getLineNumber();
+            } catch (NoSuchElementException nse)
+            {
+                return -1;
+            }
         }
 
         /** Run when the test is finished.
