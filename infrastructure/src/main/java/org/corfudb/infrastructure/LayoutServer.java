@@ -289,7 +289,7 @@ public class LayoutServer extends AbstractServer {
         if (msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch()) {
             log.trace("Incoming propose message malformed, got epoch {} vs. payload epoch {}, message was: {}",
                     msg.getPayload().getEpoch(), msg.getPayload().getLayout().getEpoch(), msg);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.REJECTED));
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.GENERIC_ERROR));
             return;
         }
         if (msg.getPayload().getEpoch() != serverEpoch) {
@@ -342,7 +342,7 @@ public class LayoutServer extends AbstractServer {
         if (msg.getPayload().getEpoch() != msg.getPayload().getLayout().getEpoch()) {
             log.trace("Incoming commit message malformed, got epoch {} vs. payload epoch {}, message was: {}",
                     msg.getPayload().getEpoch(), msg.getPayload().getLayout().getEpoch(), msg);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.REJECTED));
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.GENERIC_ERROR));
             return;
         }
         if (msg.getPayload().getEpoch() < serverEpoch) {
