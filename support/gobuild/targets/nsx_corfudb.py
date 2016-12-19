@@ -186,8 +186,7 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
         publish_dist_dir = "%s/%s" % (publish_dir, DIST)
         cmds = ["mkdir -p %s" % publish_dist_dir,
                 "mkdir -p %s/mvn" % publish_dir,
-                "cp -r %s/tmp/mvn %s" % (chroot_dir, publish_dir),
-                "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dist_dir)]
+                "cp -r %s/tmp/mvn %s" % (chroot_dir, publish_dir)]
         cmd = " && ".join(cmds)
         commands.append({
             "desc": "Copy build collateral to publish directory",
