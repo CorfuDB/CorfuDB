@@ -16,6 +16,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
+import static java.lang.Long.min;
+
 /**
  * Created by mwei on 11/11/16.
  */
@@ -69,6 +71,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Getter
     final Map<String, IUndoRecordFunction<T>> undoRecordTargetMap;
 
+    /** A conflict function map. This map contains functions which given
+     * the name of the function and its parameters, calculates the
+     * fine-grained conflict set.
+     */
+    @Getter
+    final Map<String, IConflictFunction> conflictFunctionMap;
+
     /** The arguments this proxy was created with.
      *
      */
@@ -94,7 +103,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
-                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap
+                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
+                             Map<String, IConflictFunction> conflictFunctionMap
                              ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -105,6 +115,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.upcallTargetMap = upcallTargetMap;
         this.undoTargetMap = undoTargetMap;
         this.undoRecordTargetMap = undoRecordTargetMap;
+        this.conflictFunctionMap = conflictFunctionMap;
 
         this.pendingUpcalls = new ConcurrentSet<>();
         this.upcallResults = new ConcurrentHashMap<>();
@@ -347,6 +358,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
+        long sleepTime = 1L;
         while (true) {
             try {
                 rt.getObjectsView().TXBegin();
@@ -354,9 +366,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getObjectsView().TXEnd();
                 return ret;
             } catch (Exception e) {
-                log.warn("Transactional function aborted due to {}, retrying", e);
-                try {Thread.sleep(1000); }
+                log.debug("Transactional function aborted due to {}, retrying after {} msec", e, sleepTime);
+                try {Thread.sleep(sleepTime); }
                 catch (Exception ex) {}
+                sleepTime = min(sleepTime * 2L, 1000L);
             }
         }
     }

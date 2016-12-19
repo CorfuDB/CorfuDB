@@ -41,7 +41,8 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
         smrMap.put("a", "a");
-        Map<String, String> smrMapCopy = r.getObjectsView().copy(smrMap, "map a copy");
+        Map<String, String> smrMapCopy = r.getObjectsView()
+                .copy(smrMap, "map a copy");
         smrMapCopy.put("b", "b");
 
         assertThat(smrMapCopy)

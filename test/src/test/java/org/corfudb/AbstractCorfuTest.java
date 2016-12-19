@@ -46,6 +46,10 @@ public class AbstractCorfuTest {
     public Set<Callable<Object>> scheduledThreads;
     public String testStatus = "";
 
+    public Map<Integer, TestThread> threadsMap = new ConcurrentHashMap<>();
+
+    public ArrayList<IntConsumer> testSM = null;
+
     public static final CorfuTestParameters PARAMETERS =
             new CorfuTestParameters();
 
@@ -266,9 +270,12 @@ public class AbstractCorfuTest {
      */
     public void scheduleConcurrently(int repetitions, CallableConsumer function) {
         for (int i = 0; i < repetitions; i++) {
-            final int threadNumber = i;
+            final int taskNumber = i;
+
             scheduledThreads.add(() -> {
-                function.accept(threadNumber);
+                // executorService uses Callable functions
+                // here, wrap a Corfu test CallableConsumer task (input task #, no output) as a Callable.
+                function.accept(taskNumber);
                 return null;
             });
         }
@@ -336,21 +343,6 @@ public class AbstractCorfuTest {
 
     }
 
-    /**
-     * An interface that defines threads run through the unit testing interface.
-     */
-    @FunctionalInterface
-    public interface CallableConsumer {
-        /**
-         * The function contains the code to be run when the thread is scheduled.
-         * The thread number is passed as the first argument.
-         *
-         * @param threadNumber The thread number of this thread.
-         * @throws Exception The exception to be called.
-         */
-        void accept(Integer threadNumber) throws Exception;
-    }
-
     @FunctionalInterface
     public interface ExceptionFunction<T> {
         T run() throws Exception;
@@ -415,8 +407,6 @@ public class AbstractCorfuTest {
         }
 
     }
-
-    Map<Integer, TestThread> threadsMap = new ConcurrentHashMap<>();
 
     @Before
     public void resetThreadingTest() {
@@ -669,26 +659,22 @@ public class AbstractCorfuTest {
         return new AssertableObject<T>(() -> runThread(threadNum, () -> {toRun.run(); return null;}));
     }
 
-
     /**
-     * This utility method is an engine for interleaving thread executions, state by state.
+     * This is an engine for interleaving test state-machines, step by step.
      *
-     * A state-machine is provided as an array of lambdas to invoke at each state.
+     * A state-machine {@link AbstractCorfuTest#testSM} is provided as an array of lambdas to invoke at each state.
      * The state-machine will be instantiated numTasks times, once per task.
      *
      * The engine will interleave the execution of numThreads concurrent instances of the state machine.
      * It starts numThreads threads. Each thread goes through the states of the state machine, randomly interleaving.
      * The last state of a state-machine is special, it finishes the task and makes the thread ready for a new task.
-
      * @param numThreads the desired concurrency level, and the number of instances of state-machines
      * @param numTasks total number of tasks to execute
-     * @param stateMachine an array of functions to execute at each step.
-     *                     each function call returns boolean to indicate if it reaches a final state.
      */
-    public void scheduleInterleaved(int numThreads, int numTasks, ArrayList<BiConsumer<Integer, Integer>> stateMachine) {
+    public void scheduleInterleaved(int numThreads, int numTasks) {
         final int NOTASK = -1;
 
-        int numStates = stateMachine.size();
+        int numStates = testSM.size();
         Random r = new Random(PARAMETERS.SEED);
         AtomicInteger nDone = new AtomicInteger(0);
 
@@ -711,7 +697,7 @@ public class AbstractCorfuTest {
 
             if (onTask[nextt] != NOTASK) {
                 t(nextt, () -> {
-                    stateMachine.get(onState[nextt]).accept(nextt, onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
+                    testSM.get(onState[nextt]).accept(onTask[nextt]); // invoke the next state-machine step of thread 'nextt'
                     if (++onState[nextt] >= numStates) {
                         onTask[nextt] = NOTASK;
                         nDone.getAndIncrement();
@@ -720,6 +706,54 @@ public class AbstractCorfuTest {
             }
         }
     }
+    /**
+     * This engine takes the testSM state machine (same as scheduleInterleaved above),
+     * and executes state machines in separate threads running concurrenty.
+     * There is no explicit interleaving control here.
+     *
+     * @param numThreads specifies desired concurrency level
+     * @param numTasks specifies the desired number of state machine instances
+     */
+    public void scheduleThreaded(int numThreads, int numTasks)
+            throws Exception
+    {
+        scheduleConcurrently(numTasks, (numTask) -> {
+            for (IntConsumer step : testSM) step.accept(numTask);
+        });
+        executeScheduled(numThreads, PARAMETERS.TIMEOUT_NORMAL);
+    }
 
 
+    /** utilities for building a test state-machine
+     *
+     */
+    @Before
+    public void InitSM() {
+        if (testSM != null)
+            testSM.clear();
+        else
+            testSM = new ArrayList<>();
+    }
+
+    public void addTestStep(IntConsumer stepFunction) {
+        if (testSM == null) {
+            InitSM();
+        }
+        testSM.add(stepFunction);
+    }
+
+    /**
+     * An interface that defines threads run through the unit testing interface.
+     */
+    @FunctionalInterface
+    public interface CallableConsumer {
+        /**
+         * The function contains the code to be run when the thread is scheduled.
+         * The thread number is passed as the first argument.
+         *
+         * @param threadNumber The thread number of this thread.
+         * @throws Exception The exception to be called.
+         */
+        void accept(Integer threadNumber) throws Exception;
+    }
 }

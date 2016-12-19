@@ -1,31 +1,15 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
-import lombok.Getter;
-import lombok.Setter;
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.Mutator;
-import org.corfudb.annotations.MutatorAccessor;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.StreamView;
-import org.corfudb.runtime.view.StreamsView;
 import org.junit.Test;
-import org.omg.CORBA.INITIALIZE;
-import org.omg.CORBA.TIMEOUT;
 
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -195,24 +179,18 @@ public class CompileProxyTest extends AbstractViewTest {
         assertThat(sharedCounter.getValue())
                 .isEqualTo(lastUpdate.get());
 
-        // build a state-machine:
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>(){
-
-            {
-                // only one step: randomly choose between read/write of the shared counter
-                add ((Integer ignored_thread_num, Integer task_num) -> {
-                    if (r.nextBoolean()) {
-                        sharedCounter.setValue(task_num);
-                        lastUpdate.set(task_num); // remember the last written value
-                    } else {
-                        assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get()); // expect to read the value in lastUpdate
-                    }
-                } );
+        // only one step: randomly choose between read/write of the shared counter
+        addTestStep ((task_num) -> {
+            if (r.nextBoolean()) {
+                sharedCounter.setValue(task_num);
+                lastUpdate.set(task_num); // remember the last written value
+            } else {
+                assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get()); // expect to read the value in lastUpdate
             }
-        };
+        } );
 
         // invoke the interleaving engine
-        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.CONCURRENCY_SOME*numTasks, stateMachine);
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.CONCURRENCY_SOME*numTasks);
     }
 
     /**
@@ -255,41 +233,38 @@ public class CompileProxyTest extends AbstractViewTest {
         AtomicInteger lastRead = new AtomicInteger(INITIAL);
 
         // build a state-machine:
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>(){
 
-            {
-                // only one step: randomly choose between read/write of the shared counter
-                add ((Integer ignored_thread_num, Integer task_num) -> {
+        // only one step: randomly choose between read/write of the shared counter
+        addTestStep((task_num) -> {
 
-                    // check that stream has the expected number of entries: number of updates - 1
-                    assertThat(objStream.check())
-                            .isEqualTo(lastUpdateStreamPosition.get());
+            // check that stream has the expected number of entries: number of updates - 1
+            assertThat(objStream.check())
+                    .isEqualTo(lastUpdateStreamPosition.get());
 
-                    if (r.nextBoolean()) {
-                        sharedCounter.setValue(task_num);
-                        lastUpdate.set(task_num); // remember the last written value
-                        lastUpdateStreamPosition.incrementAndGet(); // advance the expected stream position
+            if (r.nextBoolean()) {
+                sharedCounter.setValue(task_num);
+                lastUpdate.set(task_num); // remember the last written value
+                lastUpdateStreamPosition.incrementAndGet(); // advance the expected stream position
 
-                    } else {
-                        // before sync'ing the in-memory object, the in-memory copy does not get updated
-                        // check that the in-memory copy is only as up-to-date as the latest 'get()'
-                        assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
-                                .isEqualTo(lastRead.get());
+            } else {
+                // before sync'ing the in-memory object, the in-memory copy does not get updated
+                // check that the in-memory copy is only as up-to-date as the latest 'get()'
+                assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
+                        .isEqualTo(lastRead.get());
 
-                        // now read, expect to get the latest written
-                        assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get());
+                // now read, expect to get the latest written
+                assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get());
 
-                        // remember the last read
-                        lastRead.set(lastUpdate.get());
-                    }
-
-
-                } );
+                // remember the last read
+                lastRead.set(lastUpdate.get());
             }
-        };
+
+
+        } );
+
 
         // invoke the interleaving engine
-        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.CONCURRENCY_SOME*numTasks, stateMachine);
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.CONCURRENCY_SOME*numTasks);
     }
 
 
@@ -316,7 +291,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // each one put()'s a key with its thread index
 
         scheduleConcurrently(concurrency, t -> {
-            map.put(t.toString(), "world");
+            map.put(Integer.toString(t), "world");
         });
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
 
@@ -433,38 +408,71 @@ public class CompileProxyTest extends AbstractViewTest {
         sharedCorfuCompound.getID();
 
         // build a state-machine:
-        ArrayList<BiConsumer<Integer, Integer>> stateMachine = new ArrayList<BiConsumer<Integer, Integer>>() {
 
-            {
-                // step 1: update the shared compound to task-specific value
-                add((Integer ignored_thread_num, Integer task_num) -> {
-                    sharedCorfuCompound.set(sharedCorfuCompound.new Inner("C" + task_num, "D" + task_num), task_num);
+        // step 1: update the shared compound to task-specific value
+        addTestStep((task_num) -> {
+            sharedCorfuCompound.set(sharedCorfuCompound.new Inner("C" + task_num, "D" + task_num), task_num);
 
-                    // check that the raw-stream offset reflects that 'task_num' updates have been made
-                    assertThat(objStream.check())
-                            .isEqualTo(task_num+1);
-                });
+            // check that the raw-stream offset reflects that 'task_num' updates have been made
+            assertThat(objStream.check())
+                    .isEqualTo(task_num+1);
+        });
 
-                // step 2: check the unsync'ed in-memory object state
-                add((Integer thread_num, Integer task_num) -> {
-                    // before sync'ing the in-memory object, the in-memory copy does not get updated
-                    assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getFirstName())
-                            .startsWith("E");
-                    assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getLastName())
-                            .startsWith("F");
-                });
-
-            }
-        };
+        // step 2: check the unsync'ed in-memory object state
+        addTestStep((ignored_task_num) -> {
+            // before sync'ing the in-memory object, the in-memory copy does not get updated
+            assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getFirstName())
+                    .startsWith("E");
+            assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getLastName())
+                    .startsWith("F");
+        });
 
         // invoke the interleaving engine
-        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.NUM_ITERATIONS_MODERATE, stateMachine);
+        scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.NUM_ITERATIONS_MODERATE);
 
         assertThat(sharedCorfuCompound.getUser().getFirstName())
                 .startsWith("C");
         assertThat(sharedCorfuCompound.getUser().getLastName())
                 .startsWith("D");
 
+    }
+
+    /** Checks that the fine-grained conflict set is correctly produced
+     * by the annotation framework.
+     *
+     * Each method in ConflictParameterClass is executed, and the result
+     * of invoking the method from the conflict function map should be
+     * the objects annotated by conflict parameter.
+     */
+    @Test
+    public void checkConflictParameters() {
+        ConflictParameterClass testObject = getDefaultRuntime()
+                .getObjectsView().build()
+                .setStreamName("my stream")
+                .setUseCompiledClass(true)
+                .setType(ConflictParameterClass.class)
+                .open();
+
+        ICorfuSMR<ConflictParameterClass> testObjectSMR =
+                (ICorfuSMR<ConflictParameterClass>) testObject;
+        CorfuCompileProxy<ConflictParameterClass> proxy =
+                (CorfuCompileProxy<ConflictParameterClass>) testObjectSMR
+                        .getCorfuSMRProxy();
+
+        // mutator test -> second option should be conflict
+        assertThat(proxy.getConflictFunctionMap().get("mutatorTest")
+                .getConflictSet(0, 1))
+                .contains(1);
+
+        // accessor test -> first option should be conflict.
+        assertThat(proxy.getConflictFunctionMap().get("accessorTest")
+                .getConflictSet("a", "b"))
+                .contains("a");
+
+        // mutatorAccessor test -> first option should be conflict.
+        assertThat(proxy.getConflictFunctionMap().get("mutatorAccessorTest")
+                .getConflictSet("a", "b"))
+                .contains("a");
     }
 
 }
