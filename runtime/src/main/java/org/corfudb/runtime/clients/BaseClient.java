@@ -158,14 +158,14 @@ public class BaseClient implements IClient {
         return msg.getPayload();
     }
 
-    /** Handle a REJECTED response from the server.
+    /** Handle a GENERIC_ERROR response from the server.
      *
      * @param msg   The version message
      * @param ctx   The context the message was sent under
      * @param r     A reference to the router
      * @return      The versioninfo object.
      */
-    @ClientHandler(type=CorfuMsgType.REJECTED)
+    @ClientHandler(type=CorfuMsgType.GENERIC_ERROR)
     private static Object handleRejected(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         throw new ServerRejectedException();
     }
