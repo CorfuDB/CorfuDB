@@ -119,6 +119,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             x.getLogUnitServer().shutdown();
             x.getManagementServer().shutdown();
         });
+        // Abort any active transactions...
+        while (runtime.getObjectsView().TXActive()) {
+            runtime.getObjectsView().TXAbort();
+        }
     }
 
     /** Add a server at a specific port, using the given configuration options.

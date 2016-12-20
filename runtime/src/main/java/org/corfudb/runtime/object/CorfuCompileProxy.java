@@ -71,13 +71,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Getter
     final Map<String, IUndoRecordFunction<T>> undoRecordTargetMap;
 
-    /** A conflict function map. This map contains functions which given
-     * the name of the function and its parameters, calculates the
-     * fine-grained conflict set.
-     */
-    @Getter
-    final Map<String, IConflictFunction> conflictFunctionMap;
-
     /** The arguments this proxy was created with.
      *
      */
@@ -103,8 +96,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
-                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
-                             Map<String, IConflictFunction> conflictFunctionMap
+                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap
                              ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -115,7 +107,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.upcallTargetMap = upcallTargetMap;
         this.undoTargetMap = undoTargetMap;
         this.undoRecordTargetMap = undoRecordTargetMap;
-        this.conflictFunctionMap = conflictFunctionMap;
 
         this.pendingUpcalls = new ConcurrentSet<>();
         this.upcallResults = new ConcurrentHashMap<>();
@@ -124,16 +115,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     /**
-     * Access the state of the object.
-     *
-     * @param accessMethod The method to execute when accessing an object.
-     * @return
+     * {@inheritDoc}
      */
     @Override
-    public <R> R access(ICorfuSMRAccess<R, T> accessMethod) {
+    public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
+                        Object[] conflictObject) {
         if (TransactionalContext.isInTransaction()) {
             return TransactionalContext.getCurrentContext()
-                    .access(this, accessMethod);
+                    .access(this, accessMethod, conflictObject);
         }
 
         // Linearize this read against a timestamp
@@ -251,21 +240,18 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     /**
-     * Record an SMR function to the log before returning.
-     *
-     * @param smrUpdateFunction The name of the function to record.
-     * @param args              The arguments to the function.
-     * @return The address in the log the SMR function was recorded at.
+     * {@inheritDoc}
      */
     @Override
-    public long logUpdate(String smrUpdateFunction, Object... args) {
+    public long logUpdate(String smrUpdateFunction, Object[] conflictObject,
+                          Object... args) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
             // We generate an entry to avoid exposing the serializer to the tx context.
             SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
             return TransactionalContext.getCurrentContext()
-                    .logUpdate(this, entry);
+                    .logUpdate(this, entry, conflictObject);
         }
 
         // If we aren't in a transaction, we can just write the modification.
@@ -283,20 +269,17 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     /**
-     * Return the result of an upcall at the given timestamp.
-     *
-     * @param timestamp  The timestamp to request the upcall for.
-     * @return           The result of the upcall.
+     * {@inheritDoc}
      */
     @Override
     @SuppressWarnings("unchecked")
-    public <R> R getUpcallResult(long timestamp) {
+    public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
 
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
             return (R) TransactionalContext.getCurrentContext()
-                    .getUpcallResult(this, timestamp);
+                    .getUpcallResult(this, timestamp, conflictObject);
         }
 
         // Check first if we have the upcall, if we do

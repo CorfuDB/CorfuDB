@@ -62,17 +62,6 @@ public abstract class AbstractTransactionalContext {
     @Getter
     AbstractTransactionalContext parentContext;
 
-    /** A wrapper which combines SMREntries with
-     * their upcall result.
-     */
-    @Data
-    @RequiredArgsConstructor
-    public static class UpcallWrapper {
-        final SMREntry entry;
-        Object upcallResult;
-        boolean haveUpcallResult;
-    }
-
     abstract public Set<ICorfuSMRProxyInternal> getModifiedProxies();
 
     /** Return the write set for this transaction
@@ -80,14 +69,14 @@ public abstract class AbstractTransactionalContext {
      * @return  The write set, which contains all modifications this
      *          transaction will make.
      */
-    abstract public Map<UUID, List<UpcallWrapper>> getWriteSet();
+    abstract public Map<UUID, List<WriteSetEntry>> getWriteSet();
 
     /** Return the read set for this transaction
      *
      * @return  The read set, which contains all objects read by this
      *          transaction.
      */
-    abstract public Set<UUID> getReadSet();
+    abstract public Map<UUID, List<ReadSetEntry>> getReadSet();
 
     /**
      * A future which gets completed when this transaction commits.
@@ -108,30 +97,38 @@ public abstract class AbstractTransactionalContext {
      * @param proxy             The proxy to access the state for.
      * @param accessFunction    The function to execute, which will be provided with the state
      *                          of the object.
+     * @param conflictObject    Fine-grained conflict information, if available.
      * @param <R>               The return type of the access function.
      * @param <T>               The type of the proxy's underlying object.
      * @return                  The return value of the access function.
      */
-    abstract public <R,T> R access(ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R,T> accessFunction);
+    abstract public <R,T> R access(ICorfuSMRProxyInternal<T> proxy,
+                                   ICorfuSMRAccess<R,T> accessFunction,
+                                   Object[] conflictObject);
 
     /** Get the result of an upcall.
      *
      * @param proxy             The proxy to retrieve the upcall for.
      * @param timestamp         The timestamp to return the upcall for.
+     * @param conflictObject    Fine-grained conflict information, if available.
      * @param <T>               The type of the proxy's underlying object.
      * @return                  The result of the upcall.
      */
-    abstract public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy, long timestamp);
+    abstract public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
+                                               long timestamp,
+                                               Object[] conflictObject);
 
     /** Log an SMR update to the Corfu log.
      *
      * @param proxy             The proxy which generated the update.
      * @param updateEntry       The entry which we are writing to the log.
+     * @param conflictObject    Fine-grained conflict information, if available.
      * @param <T>               The type of the proxy's underlying object.
      * @return                  The address the update was written at.
      */
     abstract public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                              SMREntry updateEntry);
+                              SMREntry updateEntry,
+                              Object[] conflictObject);
 
     /** Add a given transaction to this transactional context, merging
      * the read and write sets.

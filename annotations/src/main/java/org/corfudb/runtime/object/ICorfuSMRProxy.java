@@ -12,27 +12,33 @@ public interface ICorfuSMRProxy<T> {
 
     /** Access the state of the object.
      * @param accessMethod      The method to execute when accessing an object.
+     * @param conflictObject    Fine-grained conflict information, if available.
      * @param <R>               The type to return.
      * @return                  The result of the accessMethod
      */
-    <R> R access(ICorfuSMRAccess<R, T> accessMethod);
+    <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject);
 
     /**
      * Record an SMR function to the log before returning.
      * @param smrUpdateFunction     The name of the function to record.
+     * @param conflictObject        Fine-grained conflict information, if
+     *                              available.
      * @param args                  The arguments to the function.
      *
      * @return  The address in the log the SMR function was recorded at.
      */
-    long logUpdate(String smrUpdateFunction, Object... args);
+    long logUpdate(String smrUpdateFunction, Object[] conflictObject,
+                   Object... args);
 
     /**
      * Return the result of an upcall at the given timestamp.
      * @param timestamp             The timestamp to request the upcall for.
+     * @param conflictObject        Fine-grained conflict information, if
+     *                              available.
      * @param <R>                   The type of the upcall to return.
      * @return                      The result of the upcall.
      */
-    <R> R getUpcallResult(long timestamp);
+    <R> R getUpcallResult(long timestamp, Object[] conflictObject);
 
     /** Get the ID of the stream this proxy is subscribed to.
      *

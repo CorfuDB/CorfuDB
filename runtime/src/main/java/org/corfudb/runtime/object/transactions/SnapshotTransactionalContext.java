@@ -9,6 +9,7 @@ import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A snapshot transactional context.
@@ -31,28 +32,26 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      *
      */
     @Getter
-    private Map<UUID, List<UpcallWrapper>> writeSet = ImmutableMap.of();
+    private Map<UUID, List<WriteSetEntry>> writeSet = ImmutableMap.of();
 
     /** The read set for this transaction.
      */
     @Getter
-    private Set<UUID> readSet = new HashSet<>();
+    private Map<UUID, List<ReadSetEntry>> readSet = new ConcurrentHashMap<>();
 
     public SnapshotTransactionalContext(TransactionBuilder builder) {
         super(builder);
     }
 
     /**
-     * Access the state of the object.
-     *
-     * @param proxy          The proxy to access the state for.
-     * @param accessFunction The function to execute, which will be provided with the state
-     *                       of the object.
-     * @return The return value of the access function.
+     * {@inheritDoc}
      */
     @Override
-    public <R, T> R access(ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R, T> accessFunction) {
-        readSet.add(proxy.getStreamID());
+    public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
+                           ICorfuSMRAccess<R, T> accessFunction,
+                           Object[] conflictObject) {
+        readSet.computeIfAbsent(proxy.getStreamID(), k -> new ArrayList<>());
+        readSet.get(proxy.getStreamID()).add(new ReadSetEntry(conflictObject));
         return proxy.getUnderlyingObject().optimisticallyReadThenReadLockThenWriteOnFail(
                 (v, o) -> {
                     // We're lucky and the object has not been modified AND
@@ -107,7 +106,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The result of the upcall.
      */
     @Override
-    public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy, long timestamp) {
+    public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
+                                      long timestamp,
+                                      Object[] conflictObject) {
         throw new UnsupportedOperationException("Can't get upcall during a read-only transaction!");
     }
 
@@ -119,7 +120,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The address the update was written at.
      */
     @Override
-    public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry) {
+    public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
+                              SMREntry updateEntry,
+                              Object[] conflictObject) {
         throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
     }
 
