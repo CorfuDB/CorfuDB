@@ -163,13 +163,6 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "env": self._GetEnvironment(hosttype)
         })
 
-        artifact_paths = []
-        for root, dirs, files in os.walk("/root/corfudb"):
-            for directory in dirs:
-                if directory == "mvn-repo":
-                    artifact_paths.append(os.path.join(root, directory, "*"))
-        artifact_cp_cmds = ["cp -r {0} /tmp/mvn".format(path)
-                            for path in artifact_paths]
         cmds = [
             "cd /root/corfudb",
             # Hack: inserting build number into pom.xml
@@ -178,8 +171,24 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "mkdir -p /tmp/mvn",
             "mkdir -p /tmp/%s" % (DIST)
         ]
-        cmd = " && ".join(cmds + artifact_cp_cmds)
-
+        # For now, hard-code the sub-module names.
+        sub_modules = [
+            ".",
+            "annotationProcessor",
+            "annotations",
+            "cmdlets",
+            "format",
+            "infrastructure",
+            "runtime",
+            "test"]
+        artifact_paths = [os.path.join("/root/corfudb",
+                                       module,
+                                       "target",
+                                       "mvn-repo",
+                                       "*")
+                          for module in sub_modules]
+        cp_cmds = ["cp -r {0} /tmp/mvn".format(path) for path in artifact_paths]
+        cmd = " && ".join(cmds + cp_cmds)
         commands.append({
             "desc": "Running mvn clean deploy",
             "root": "%(buildroot)",
@@ -203,7 +212,7 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
         })
         return commands
 
-    #Hack: reading the version and build number from pom.xml
+    # Hack: reading the version and build number from pom.xml
     def GetBuildProductVersion(self, hosttype):
         vfile_path = "%s/corfudb/pom.xml" % self.options.get('buildroot')
         pom = open(vfile_path)
