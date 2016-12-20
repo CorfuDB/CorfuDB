@@ -319,20 +319,15 @@ postcondition(#state{d=D}, {call,_,keySet,[_Mbox, _EP, _Str, _MT]}, Ret) ->
         _Else ->
             ?ELSE({got, _Else})
     end;
-postcondition(#state{d=D}, {call,_,values,[_Mbox, _EP, _Str, MT]}, Ret) ->
+postcondition(#state{d=D}, {call,_,values,[_Mbox, _EP, _Str, _MT]}, Ret) ->
     case Ret of
         ["OK", Java_toString] ->
-            %% Alright, here's a work-around for bug #213.  FGMap's
-            %% values() only gives us unique values.
-            Sort = if MT == smrmap -> fun lists:sort/1;
-                      MT == fgmap  -> fun lists:usort/1
-                   end,
             Vs = split_on_comma(Java_toString),
             %% Our ASCII protocol can't tell us the difference between
             %% an empty list and a list of length one that contains an
             %% empty string.
-            lists:sort(Vs) == Sort([V || {_K,V} <- orddict:to_list(D),
-                                         V /= ""])
+            lists:sort(Vs) == lists:sort([V || {_K,V} <- orddict:to_list(D),
+                                               V /= ""])
     end;
 postcondition(#state{d=D}, {call,_,entrySet,[_Mbox, _EP, _Str, _MT]}, Ret) ->
     case Ret of
