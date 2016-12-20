@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 public class SequencerServer extends AbstractServer {
+    public static final long NO_INITIAL_TOKEN = -1L;
 
     private static final String PREFIX_SEQUENCER = "SEQUENCER";
     private static final String KEY_SEQUENCER = "CURRENT";
@@ -80,7 +81,7 @@ public class SequencerServer extends AbstractServer {
      */
     @Getter
     private final long leaseLength = 10000;
-    private final long leaseRenew = 1000;
+    private final long leaseRenewalNotice = 1000; // renew when token crosses leaseLength - leaseRenewalNotice threshold
 
     /** Handler for this server */
     @Getter
@@ -92,12 +93,13 @@ public class SequencerServer extends AbstractServer {
         this.opts = serverContext.getServerConfig();
 
         long initialToken = Utils.parseLong(opts.get("--initial-token"));
-        if (initialToken != -1) {
+        System.out.println("initial token: " + initialToken);
+        if (initialToken == NO_INITIAL_TOKEN) {
+            getInitalLease();
+        } else {
             renewLease(initialToken);
             globalLogTail.set(initialToken);
         }
-        else
-            getInitalLease();
     }
 
     /**
@@ -178,8 +180,9 @@ public class SequencerServer extends AbstractServer {
         }
 
         // check if need to renew sequencer lease
-        if (globalLogTail.get() - getCurrentLease() < leaseRenew)
-            renewLease(getCurrentLease() + leaseLength);
+        long leaseRenew = getCurrentLease() + leaseLength;
+        if (globalLogTail.get() >= (leaseRenew - leaseRenewalNotice))
+            renewLease(leaseRenew);
 
         // if no streams, simply allocate a position at the tail of the global log
         if (req.getStreams() == null) {
@@ -291,8 +294,14 @@ public class SequencerServer extends AbstractServer {
      * @param leaseStart the new lease starting point
      */
     private void renewLease(long leaseStart) {
+        System.out.println("renewLease " + leaseStart);
         serverContext.getDataStore()
                 .put(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER, leaseStart);
+
+        Long currentLease = serverContext.getDataStore()
+                .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
+        if (currentLease == null)
+            System.out.println("getCurrentLease: datastore returns null Long");
     }
 
     /**
@@ -300,8 +309,20 @@ public class SequencerServer extends AbstractServer {
      * @return the lease's starting point
      */
     private long getCurrentLease() {
+        /*
         return serverContext.getDataStore()
+                .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER, 0L);
+        */
+        Long currentLease = serverContext.getDataStore()
                 .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
+        if (currentLease == null) {
+            System.out.println("getCurrentLease: datastore returns null Long");
+            return 0L;
+        } else {
+            System.out.println("getCurrentLease: datastore returns " + currentLease);
+            return currentLease;
+        }
+
     }
 
     /**

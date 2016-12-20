@@ -17,6 +17,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.Callable;
 
 /**
  * Stores data as JSON.
@@ -35,7 +37,7 @@ public class DataStore implements IDataStore {
 
     private LoadingCache<String, String> cache;
 
-    private final long maxDataStoreSize = 10_00;
+    private final long maxDataStoreSize = 1_000;
 
 
     public DataStore(Map<String, Object> opts) {
@@ -44,6 +46,7 @@ public class DataStore implements IDataStore {
         ) {
             @Override
             public synchronized void write(@Nonnull String key, @Nonnull String value) {
+                System.out.println("  *caffeine write " + key);
                 if (logDir == null) {
                     return;
                 }
@@ -57,6 +60,7 @@ public class DataStore implements IDataStore {
 
             @Override
             public synchronized void delete(@Nonnull String key, @Nullable String value, @Nonnull RemovalCause cause) {
+                System.out.println("  *caffeine evict " + key);
                 if (logDir == null) {
                     return;
                 }
@@ -67,8 +71,11 @@ public class DataStore implements IDataStore {
                     throw new RuntimeException(e);
                 }
             }
-        }).maximumSize(maxDataStoreSize)
+          })
+                .maximumSize(maxDataStoreSize)
+                .removalListener(this::handleEviction)
                 .build(key -> {
+                    System.out.println("  *caffeine build " + key);
                     if (logDir != null) {
                         try {
                             Path path = Paths.get(logDir + File.separator + key);
@@ -81,17 +88,32 @@ public class DataStore implements IDataStore {
                         }
                     }
                     return null;
-                });
+                })
+               ;
     }
 
-    @Override
+    public synchronized void handleEviction(String key, String  entry, RemovalCause cause) {
+        System.out.println("  *caffeine eviction " + key + ", " + entry);
+    }
+
+
+        @Override
     public synchronized  <T> void put(Class<T> tClass, String prefix, String key, T value) {
+        System.out.println("dataStore put " + getKey(prefix, key) + ", " + value);
         cache.put(getKey(prefix, key), JSONUtils.parser.toJson(value, tClass));
     }
 
     @Override
     public synchronized  <T> T get(Class<T> tClass, String prefix, String key) {
+        System.out.println("dataStore get of " + getKey(prefix, key));
         String json = cache.get(getKey(prefix, key));
+        System.out.println("dataStore get retrieves value " + getKey(prefix, key) + ", " + json);
+        return getObject(json, tClass);
+    }
+
+    public <T> T get(Class<T> tClass, String prefix, String key, T value) {
+        String keyString = getKey(prefix, key);
+        String json = cache.get(keyString, k -> JSONUtils.parser.toJson(value, tClass));
         return getObject(json, tClass);
     }
 

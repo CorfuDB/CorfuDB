@@ -13,8 +13,7 @@ import lombok.experimental.Accessors;
 @SuppressWarnings("checkstyle:magicnumber")
 public class ServerContextBuilder {
 
-    static final long NO_INITIAL_TOKEN = -1;
-    long initialToken = NO_INITIAL_TOKEN;
+    long initialToken = 0L; // for testing, we want to reset the sequencer on each test
 
     boolean single = true;
     boolean memory = true;

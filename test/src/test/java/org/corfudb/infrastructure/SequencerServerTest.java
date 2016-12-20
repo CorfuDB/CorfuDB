@@ -201,7 +201,7 @@ public class SequencerServerTest extends AbstractServerTest {
         SequencerServer s1 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setInitialToken(0)
+                // .setInitialToken(0)
                 // .setCheckpoint(1)
                 .build());
 
@@ -219,7 +219,7 @@ public class SequencerServerTest extends AbstractServerTest {
         SequencerServer s2 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                //.setInitialToken(ServerContextBuilder.NO_INITIAL_TOKEN)
+                .setInitialToken(SequencerServer.NO_INITIAL_TOKEN)
                 //.setCheckpoint(1)
                 .build());
         this.router.reset();
