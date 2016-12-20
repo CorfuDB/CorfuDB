@@ -165,11 +165,10 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
 
         cmds = [
             "cd /root/corfudb",
-            # Hack: inserting build number into pom.xml
-            "sed -i s/-SNAPSHOT/.%s/g pom.xml" % (BUILDNUMBER),
             "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean deploy",
             "mkdir -p /tmp/mvn",
-            "mkdir -p /tmp/%s" % (DIST)
+            "mkdir -p /tmp/%s" % (DIST),
+            "cp /root/corfudb/infrastructure/target/*.deb /tmp/%s" % (DIST)
         ]
         # For now, hard-code the sub-module names.
         sub_modules = [
@@ -201,7 +200,8 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
         publish_dist_dir = "%s/%s" % (publish_dir, DIST)
         cmds = ["mkdir -p %s" % publish_dist_dir,
                 "mkdir -p %s/mvn" % publish_dir,
-                "cp -r %s/tmp/mvn %s" % (chroot_dir, publish_dir)]
+                "cp -r %s/tmp/mvn %s" % (chroot_dir, publish_dir),
+                "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dist_dir)]
         cmd = " && ".join(cmds)
         commands.append({
             "desc": "Copy build collateral to publish directory",
