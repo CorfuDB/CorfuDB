@@ -168,15 +168,17 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             for directory in dirs:
                 if directory == "mvn-repo":
                     artifact_paths.append(os.path.join(root, directory, "*"))
+        artifact_cp_cmds = ["cp -r {0} /tmp/mvn".format(path)
+                            for path in artifact_paths]
         cmds = [
             "cd /root/corfudb",
             # Hack: inserting build number into pom.xml
             "sed -i s/-SNAPSHOT/.%s/g pom.xml" % (BUILDNUMBER),
             "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean deploy",
             "mkdir -p /tmp/mvn",
-            "mkdir -p /tmp/%s" % (DIST),
-            "cp -r {0} /tmp/mvn".format(' '.join(artifact_paths))
+            "mkdir -p /tmp/%s" % (DIST)
         ]
+        cmds + artifact_cp_cmds
         cmd = " && ".join(cmds)
 
         commands.append({
