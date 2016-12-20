@@ -194,7 +194,7 @@ public class SequencerServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void checkSequencerCheckpointingWorks()
+    public void checkSequencerLeaseWorks()
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
@@ -202,7 +202,7 @@ public class SequencerServerTest extends AbstractServerTest {
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .setInitialToken(0)
-                .setCheckpoint(1)
+                // .setCheckpoint(1)
                 .build());
 
         this.router.reset();
@@ -219,13 +219,13 @@ public class SequencerServerTest extends AbstractServerTest {
         SequencerServer s2 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setInitialToken(-1)
-                .setCheckpoint(1)
+                //.setInitialToken(ServerContextBuilder.NO_INITIAL_TOKEN)
+                //.setCheckpoint(1)
                 .build());
         this.router.reset();
         this.router.addServer(s2);
         assertThat(s2)
-                .tokenIsAt(2);
+                .tokenIsAt(s2.getLeaseLength());
     }
 
 }

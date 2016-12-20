@@ -35,6 +35,8 @@ public class DataStore implements IDataStore {
 
     private LoadingCache<String, String> cache;
 
+    private final long maxDataStoreSize = 10_00;
+
 
     public DataStore(Map<String, Object> opts) {
         this.logDir = (String) opts.get("--log-path");
@@ -65,7 +67,7 @@ public class DataStore implements IDataStore {
                     throw new RuntimeException(e);
                 }
             }
-        }).maximumSize(10_00)
+        }).maximumSize(maxDataStoreSize)
                 .build(key -> {
                     if (logDir != null) {
                         try {
@@ -107,6 +109,11 @@ public class DataStore implements IDataStore {
     @Override
     public synchronized <T> void delete(Class<T> tClass, String prefix, String key) {
         cache.invalidate(getKey(prefix, key));
+    }
+
+    @Override
+    public synchronized void deleteAll() {
+        cache.invalidateAll();
     }
 
     // Helper methods

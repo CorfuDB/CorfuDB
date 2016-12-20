@@ -97,34 +97,8 @@ public class LayoutServer extends AbstractServer {
 
     @Override
     public synchronized void reset() {
-        String d = serverContext.getDataStore().getLogDir();
-        if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d);
-            String prefixes[] = new String[] {PREFIX_LAYOUT, KEY_LAYOUT, PREFIX_PHASE_1, PREFIX_PHASE_2,
-                    PREFIX_LAYOUTS, "SERVER_EPOCH"};
+        serverContext.getDataStore().deleteAll();
 
-            for (String pfx : prefixes) {
-                try (DirectoryStream<Path> stream =
-                             Files.newDirectoryStream(dir, pfx + "_*")) {
-                    for (Path entry : stream) {
-                        // System.out.println("Deleting " + entry);
-                        Files.delete(entry);
-                    }
-                } catch (IOException e) {
-                    log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
-                }
-            }
-            /*
-            try (DirectoryStream<Path> stream =
-                         Files.newDirectoryStream(dir, "*")) {
-                for (Path entry : stream) {
-                    System.out.println("Remaining file " + entry);
-                }
-            } catch (IOException e) {
-                log.error("reset: error deleting prefix: " + e.toString());
-            }
-            */
-        }
         reset_part_2();
         reboot();
     }
