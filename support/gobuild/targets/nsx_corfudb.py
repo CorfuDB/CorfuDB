@@ -178,8 +178,7 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "mkdir -p /tmp/mvn",
             "mkdir -p /tmp/%s" % (DIST)
         ]
-        cmds + artifact_cp_cmds
-        cmd = " && ".join(cmds)
+        cmd = " && ".join(cmds + artifact_cp_cmds)
 
         commands.append({
             "desc": "Running mvn clean deploy",
