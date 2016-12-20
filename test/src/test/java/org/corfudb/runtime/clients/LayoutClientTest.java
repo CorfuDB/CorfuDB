@@ -146,17 +146,17 @@ public class LayoutClientTest extends AbstractClientTest {
     @Test
     public void proposeMalformedRejected()
             throws Exception {
-        Layout layout = TestLayoutBuilder.single(9000);
+        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         long epoch = layout.getEpoch();
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
 
-        assertThat(client.prepare(epoch, 10L).get() != null)
+        assertThat(client.prepare(epoch, RANK_HIGH).get() != null)
                 .isEqualTo(true);
 
         long wrongAmount = 1L;    // Any non-zero amount is wrong.
         assertThatThrownBy(() -> {
-            router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_PROPOSE.payloadMsg(new LayoutProposeRequest(epoch+wrongAmount, 10L, layout))).get();
+            router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_PROPOSE.payloadMsg(new LayoutProposeRequest(epoch+wrongAmount, RANK_HIGH, layout))).get();
         }).hasCauseInstanceOf(ServerRejectedException.class);
         assertThatThrownBy(() -> {
             router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_COMMITTED.payloadMsg(new LayoutCommittedRequest(epoch+wrongAmount, layout))).get();
