@@ -175,7 +175,7 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean deploy",
             "mkdir -p /tmp/mvn",
             "mkdir -p /tmp/%s" % (DIST),
-            "cp -r {} /tmp/mvn".format(' '.join(artifact_paths))
+            "cp -r {0} /tmp/mvn".format(' '.join(artifact_paths))
         ]
         cmd = " && ".join(cmds)
 
