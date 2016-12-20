@@ -62,7 +62,7 @@ public class WriteAfterWriteTransactionalContext
         getWriteSet().entrySet()
                 .forEach(x -> builder.put(x.getKey(),
                         new MultiSMREntry(x.getValue().stream()
-                                .map(UpcallWrapper::getEntry)
+                                .map(WriteSetEntry::getEntry)
                                 .collect(Collectors.toList()))));
         Map<UUID, MultiSMREntry> entryMap = builder.build();
         MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
