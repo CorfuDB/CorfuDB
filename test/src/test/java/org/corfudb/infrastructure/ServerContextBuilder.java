@@ -20,7 +20,6 @@ public class ServerContextBuilder {
     String logPath = null;
     boolean noVerify = false;
     int maxCache = 1000000;
-    int checkpoint = 100;
     String address = "test";
     int port = 9000;
     IServerRouter serverRouter;
@@ -41,7 +40,6 @@ public class ServerContextBuilder {
          builder
                 .put("--no-verify", noVerify)
                 .put("--max-cache", maxCache)
-//                .put("--checkpoint", checkpoint)
                 .put("--address", address)
                 .put("<port>", port);
         return new ServerContext(builder.build(), serverRouter);

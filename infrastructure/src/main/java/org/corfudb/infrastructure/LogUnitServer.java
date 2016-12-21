@@ -86,6 +86,7 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * GC parameters
+     * TODO: entire GC handling needs updating, currently not being activated
      */
     private final Thread gcThread = null;
     private IntervalAndSentinelRetry gcRetry;

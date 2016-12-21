@@ -90,8 +90,6 @@ public class CorfuServer {
                     + "                                         evicted entries will be auto-trimmed. [default: 1000000000].\n"
                     + " -t <token>, --initial-token=<token>     The first token the sequencer will issue, or -1 to recover\n"
                     + "                                         from the log. [default: -1].\n"
-                    + " -k <seconds>, --checkpoint=<seconds>    The rate the sequencer should checkpoint its state to disk,\n"
-                    + "                                         in seconds [default: 60].\n"
                     + " -p <seconds>, --compact=<seconds>       The rate the log unit should compact entries (find the,\n"
                     + "                                         contiguous tail) in seconds [default: 60].\n"
                     + " -d <level>, --log-level=<level>         Set the logging level, valid levels are: \n"

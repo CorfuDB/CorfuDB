@@ -28,6 +28,9 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public class SequencerServer extends AbstractServer {
 
+    /**
+     * key-name for storing {@link SequencerServer} state in {@link ServerContext::getDataStore()}.
+     */
     private static final String PREFIX_SEQUENCER = "SEQUENCER";
     private static final String KEY_SEQUENCER = "CURRENT";
 
@@ -42,15 +45,14 @@ public class SequencerServer extends AbstractServer {
     private final Map<String, Object> opts;
 
     /**
-     * The sequencer maintains information about log and streams.
+     * The sequencer maintains information about log and streams:
+     *
+     *  - {@link SequencerServer::globalLogTail}: global log tail
+     *  - {@link SequencerServer::streamTailMap}: a map of per-stream tail
+     *  - {@link SequencerServer::streamTailToGlobalTailMap}: map from stream-tails to global-log tails. used for backpointers.
+     *  - {@link SequencerServer::conflictToGlobalTailCache}: the {@link SequencerServer::maxConflictCacheSize} latest conflict keys and their latest commit (global-log) position
+     *
      * Every append to the log updates the information in these maps.
-     *
-     * The following informaion and maps reflect the state of the logs and streams:
-     *
-     *  - globalLogTail: global log tail
-     *  - streamTailMap: a map of per-stream tail
-     *  - map from stream-tails to global-log tails. used for backpointers.
-     *  - cache of maxConflictCacheSize conflict keys and their latest commit (global-log) index
      */
     @Getter
     private final AtomicLong globalLogTail = new AtomicLong(0L);
@@ -67,10 +69,12 @@ public class SequencerServer extends AbstractServer {
      * A lease is good for (@Link #SequencerServer::leaseLength) number of tokens.
      *
      * A lease is renewed when we reach leaseRenew tokens away from the limit.
+     *
+     * TODO: these parameters should probably be configurable from somewhere
      */
     @Getter
-    private final long leaseLength = 10_000;
-    private final long leaseRenewalNotice = 1_000; // renew when token crosses leaseLength - leaseRenewalNotice threshold
+    private final long leaseLength = 100_000;
+    private final long leaseRenewalNotice = 10_000; // renew when token crosses leaseLength - leaseRenewalNotice threshold
 
     /** Handler for this server */
     @Getter
@@ -82,8 +86,7 @@ public class SequencerServer extends AbstractServer {
         this.opts = serverContext.getServerConfig();
 
         long initialToken = Utils.parseLong(opts.get("--initial-token"));
-        System.out.println("initial token: " + initialToken);
-        if (initialToken == NO_LOG_ADDR_MAGIC) {
+        if (initialToken == NON_LOG_ADDR_MAGIC) {
             getInitalLease();
         } else {
             renewLease(initialToken);
@@ -247,15 +250,22 @@ public class SequencerServer extends AbstractServer {
      * TODO in the future, a sequencer needs to obtain the lease from the layout service
      */
     private void getInitalLease() {
+
+        // check for existing previous lease
         Long leaseTail = serverContext.getDataStore()
                 .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
+
         if (leaseTail != null) {
+            // if a previous lease exists, go past it to teh next lease segment
             renewLease(leaseTail + leaseLength);
             globalLogTail.set(leaseTail + leaseLength);
+            // todo: we need to update the conflictCache to reflect the lack of information up to the current tail
         } else {
+            // otherwise, grab a lease from the start of the log
             renewLease(0L);
             globalLogTail.set(0L);
         }
+
     }
 
     /**
@@ -263,14 +273,8 @@ public class SequencerServer extends AbstractServer {
      * @param leaseStart the new lease starting point
      */
     private void renewLease(long leaseStart) {
-        System.out.println("renewLease " + leaseStart);
         serverContext.getDataStore()
                 .put(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER, leaseStart);
-
-        Long currentLease = serverContext.getDataStore()
-                .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
-        if (currentLease == null)
-            System.out.println("getCurrentLease: datastore returns null Long");
     }
 
     /**
@@ -278,27 +282,7 @@ public class SequencerServer extends AbstractServer {
      * @return the lease's starting point
      */
     private long getCurrentLease() {
-        /*
         return serverContext.getDataStore()
-                .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER, 0L);
-        */
-        Long currentLease = serverContext.getDataStore()
                 .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
-        if (currentLease == null) {
-            System.out.println("getCurrentLease: datastore returns null Long");
-            return 0L;
-        } else {
-            System.out.println("getCurrentLease: datastore returns " + currentLease);
-            return currentLease;
-        }
-
     }
-
-    /**
-     * Shutdown the server.
-    @Override
-    public void shutdown() {
-        // nothing to do
-    }
-     */
 }

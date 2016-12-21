@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.github.benmanes.caffeine.cache.*;
-import com.google.common.cache.CacheBuilder;
 import lombok.Getter;
 import org.corfudb.util.JSONUtils;
 
@@ -15,30 +14,33 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Stores data as JSON.
- * Employs a {@link LoadingCache} to front a file per value storage scheme.
+ *
+ * Handle in-memory and persistent case differently:
+ *
+ * In in-memory mode, the "cache" is actually the store, so we never evict anything from it.
+ *
+ * In persistent mode, we use a {@link LoadingCache}, where an in-memory map is backed by disk.
  * In this scheme, the key for each value is also the name of the file where the value is stored.
  * The key is determined as (prefix + "_" + key).
+ * The cache here serves mostly for easily managed synchronization of in-memory/file.
  * <p>
- * If a log-path for storing files is not provided, the store is just an in memory cache.
+ * If 'opts' either has '--memory=true' or a log-path for storing files is not provided,
+ * the store is just an in memory cache.
  * <p>
  * Created by mdhawan on 7/27/16.
  */
-
 public class DataStore implements IDataStore {
 
     private final Map<String, Object> opts;
     private final boolean isPersistent;
-    private final Cache<String, String> cache;
+    private final LoadingCache<String, String> cache;
     private final String logDir;
 
     @Getter
-    private final long maxDataStoreSize = 1_000;
+    private final long maxDataStoreCacheSize = 1_000; // size bound for in-memory cache for dataStore
 
 
     public DataStore(Map<String, Object> opts) {
@@ -46,29 +48,41 @@ public class DataStore implements IDataStore {
 
         if ((opts.get("--memory") != null && (Boolean) opts.get("--memory"))
                 || opts.get("--log-path") == null) {
+            // in-memory dataSture case
             isPersistent = false;
             this.logDir = null;
             cache = buildMemoryDS();
         } else {
+            // persistent dataSture case
             isPersistent = true;
             this.logDir = (String) opts.get("--log-path");
             cache = buildPersistentDS();
         }
     }
 
-    private Cache<String, String> buildMemoryDS() {
-        Cache<String, String> cache = Caffeine
+    /**
+     * obtain an in-memory cache, no content loader, no writer, no size limit.
+     * @return
+     */
+    private LoadingCache<String, String> buildMemoryDS() {
+        LoadingCache<String, String> cache = Caffeine
                 .newBuilder()
-                .build();
+                .build(k -> null);
         return cache;
     }
 
-    private Cache<String, String> buildPersistentDS() {
+    /**
+     * obtain a {@link LoadingCache}.
+     * The cache is backed up by file-per-key uner {@link DataStore::logDir}.
+     * The cache size is bounded by {@link DataStore::maxDataStoreCacheSize}.
+     *
+     * @return the cache object
+     */
+    private LoadingCache<String, String> buildPersistentDS() {
         LoadingCache<String, String> cache = Caffeine.newBuilder()
                 .writer(new CacheWriter<String, String>() {
                     @Override
                     public synchronized void write(@Nonnull String key, @Nonnull String value) {
-                        System.out.println("  *caffeine write " + key);
                         try {
                             Path path = Paths.get(logDir + File.separator + key);
                             Files.write(path, value.getBytes());
@@ -79,7 +93,6 @@ public class DataStore implements IDataStore {
 
                     @Override
                     public synchronized void delete(@Nonnull String key, @Nullable String value, @Nonnull RemovalCause cause) {
-                        System.out.println("  *caffeine evict " + key);
                         try {
                             Path path = Paths.get(logDir + File.separator + key);
                             Files.deleteIfExists(path);
@@ -88,10 +101,8 @@ public class DataStore implements IDataStore {
                         }
                     }
                 })
-            .maximumSize(maxDataStoreSize)
-            .removalListener(this::handleEviction)
+            .maximumSize(maxDataStoreCacheSize)
             .build(key -> {
-                    System.out.println("  *caffeine build " + key);
                     try {
                         Path path = Paths.get(logDir + File.separator + key);
                         if (Files.notExists(path)) {
@@ -106,28 +117,27 @@ public class DataStore implements IDataStore {
         return cache;
     }
 
-    public synchronized void handleEviction(String key, String  entry, RemovalCause cause) {
-        System.out.println("  *caffeine eviction " + key + ", " + entry);
-        if (! isPersistent)
-            throw new RuntimeException(); // panic, we'll lose state!
-    }
-
-
     @Override
     public synchronized  <T> void put(Class<T> tClass, String prefix, String key, T value) {
-        System.out.println("dataStore put " + getKey(prefix, key) + ", " + value);
         cache.put(getKey(prefix, key), JSONUtils.parser.toJson(value, tClass));
     }
 
     @Override
     public synchronized  <T> T get(Class<T> tClass, String prefix, String key) {
-        System.out.println("dataStore get of " + getKey(prefix, key));
-        String json = cache.get(getKey(prefix, key), k -> null);
-        if (json == null)
-            System.out.println("dataStore get retrieves null value " + getKey(prefix, key));
+        String json = cache.get(getKey(prefix, key));
         return getObject(json, tClass);
     }
 
+    /**
+     * This is an atomic conditional get/put: If the key is not found, then the specified value is inserted.
+     * It returns the latest value, either the original one found, or the newly inserted value
+     * @param tClass type of value
+     * @param prefix prefix part of key
+     * @param key suffice part of key
+     * @param value value to be conditionally accepted
+     * @param <T> value class
+     * @return the latest value in the cache
+     */
     public <T> T get(Class<T> tClass, String prefix, String key, T value) {
         String keyString = getKey(prefix, key);
         String json = cache.get(keyString, k -> JSONUtils.parser.toJson(value, tClass));

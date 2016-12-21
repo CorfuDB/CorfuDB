@@ -201,8 +201,6 @@ public class SequencerServerTest extends AbstractServerTest {
         SequencerServer s1 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                // .setInitialToken(0)
-                // .setCheckpoint(1)
                 .build());
 
         this.router.reset();
@@ -219,8 +217,7 @@ public class SequencerServerTest extends AbstractServerTest {
         SequencerServer s2 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setInitialToken(SequencerServer.NO_LOG_ADDR_MAGIC)
-                //.setCheckpoint(1)
+                .setInitialToken(SequencerServer.NON_LOG_ADDR_MAGIC)
                 .build());
         this.router.reset();
         this.router.addServer(s2);
