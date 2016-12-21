@@ -65,10 +65,4 @@ public class BaseServer extends AbstractServer {
         Utils.sleepUninterruptibly(500); // Sleep, to make sure that all channels are flushed...
         System.exit(100);
     }
-
-    @Override
-    public void reset() { }
-
-    @Override
-    public void reboot() { }
 }

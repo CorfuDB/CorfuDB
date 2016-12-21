@@ -41,7 +41,7 @@ public class ServerContextBuilder {
          builder
                 .put("--no-verify", noVerify)
                 .put("--max-cache", maxCache)
-                .put("--checkpoint", checkpoint)
+//                .put("--checkpoint", checkpoint)
                 .put("--address", address)
                 .put("<port>", port);
         return new ServerContext(builder.build(), serverRouter);

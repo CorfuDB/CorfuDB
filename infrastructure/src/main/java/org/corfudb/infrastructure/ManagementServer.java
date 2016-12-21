@@ -44,11 +44,12 @@ public class ManagementServer extends AbstractServer {
     /**
      * The options map.
      */
-    private Map<String, Object> opts;
-    private ServerContext serverContext;
+    private final Map<String, Object> opts;
+    private final ServerContext serverContext;
 
     private static final String PREFIX_LAYOUT = "M_LAYOUT";
     private static final String KEY_LAYOUT = "M_CURRENT";
+    private static final long SHUTDOWN_TIMER = 5; // seconds
 
     private CorfuRuntime corfuRuntime;
     /**
@@ -64,7 +65,7 @@ public class ManagementServer extends AbstractServer {
      * In milliseconds.
      */
     @Getter
-    private long policyExecuteInterval = 1000;
+    private final long policyExecuteInterval = 1000;
     /**
      * To schedule failure detection.
      */
@@ -122,32 +123,6 @@ public class ManagementServer extends AbstractServer {
         } catch (RejectedExecutionException err) {
             log.error("Error scheduling failure detection task, {}", err);
         }
-    }
-
-    /**
-     * Resetting the datastore entries.
-     */
-    @Override
-    public void reset() {
-        String d = serverContext.getDataStore().getLogDir();
-        if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d);
-            String prefixes[] = new String[]{PREFIX_LAYOUT, KEY_LAYOUT};
-
-            for (String pfx : prefixes) {
-                try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, pfx + "_*")) {
-                    for (Path entry : stream) {
-                        Files.delete(entry);
-                    }
-                } catch (IOException e) {
-                    log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
-                }
-            }
-        }
-    }
-
-    @Override
-    public void reboot() {
     }
 
     /**
@@ -344,7 +319,7 @@ public class ManagementServer extends AbstractServer {
         }
 
         try {
-            failureDetectorService.awaitTermination(5, TimeUnit.SECONDS);
+            failureDetectorService.awaitTermination(SHUTDOWN_TIMER, TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             log.debug("failureDetectorService awaitTermination interrupted : {}", ie);
         }

@@ -169,9 +169,8 @@ public class LogUnitClientTest extends AbstractClientTest {
         // Verify that the data has been written correctly
         assertThat(r.getPayload(null)).isEqualTo(testString);
 
-        // In order to clear the logunit's cache, the server is restarted so that
-        // the next read is forced to be retrieved from file and not the cache
-        server.reboot();
+        LogUnitServer server2 = new LogUnitServer(serverContext);
+        serverRouter.addServer(server2);
 
         // Corrupt the written log entry
         String logDir = (String) serverContext.getServerConfig().get("--log-path");

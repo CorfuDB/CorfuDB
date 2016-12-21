@@ -2,9 +2,7 @@ package org.corfudb.infrastructure;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -12,15 +10,7 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.util.Utils;
 
-import java.io.File;
-import java.io.IOException;
 import java.lang.invoke.MethodHandles;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -37,7 +27,6 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 public class SequencerServer extends AbstractServer {
-    public static final long NO_INITIAL_TOKEN = -1L;
 
     private static final String PREFIX_SEQUENCER = "SEQUENCER";
     private static final String KEY_SEQUENCER = "CURRENT";
@@ -67,7 +56,7 @@ public class SequencerServer extends AbstractServer {
     private final AtomicLong globalLogTail = new AtomicLong(0L);
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
-    private final long maxConflictCacheSize = 10000;
+    private final long maxConflictCacheSize = 10_000;
     private final Cache<Object, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
                 .build();
@@ -80,8 +69,8 @@ public class SequencerServer extends AbstractServer {
      * A lease is renewed when we reach leaseRenew tokens away from the limit.
      */
     @Getter
-    private final long leaseLength = 10000;
-    private final long leaseRenewalNotice = 1000; // renew when token crosses leaseLength - leaseRenewalNotice threshold
+    private final long leaseLength = 10_000;
+    private final long leaseRenewalNotice = 1_000; // renew when token crosses leaseLength - leaseRenewalNotice threshold
 
     /** Handler for this server */
     @Getter
@@ -94,7 +83,7 @@ public class SequencerServer extends AbstractServer {
 
         long initialToken = Utils.parseLong(opts.get("--initial-token"));
         System.out.println("initial token: " + initialToken);
-        if (initialToken == NO_INITIAL_TOKEN) {
+        if (initialToken == NO_LOG_ADDR_MAGIC) {
             getInitalLease();
         } else {
             renewLease(initialToken);
@@ -250,26 +239,6 @@ public class SequencerServer extends AbstractServer {
                 new TokenResponse(currentTail,
                         backPointerMap.build(),
                         requestStreamTokens.build())));
-    }
-
-    @Override
-    public void reset() {
-        serverContext.getDataStore().deleteAll();
-        reboot();
-    }
-
-    @Override
-    public synchronized void reboot() {
-
-        streamTailToGlobalTailMap.clear();
-        streamTailMap.clear();
-        conflictToGlobalTailCache.invalidateAll();
-        serverContext.resetDataStore();
-
-        // get a new lease.
-        // note: do not conflict with the previous sequencer incarnation!
-        getInitalLease();
-        log.info("Sequencer initial token set to {}", globalLogTail.get());
     }
 
     /**

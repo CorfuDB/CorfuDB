@@ -25,10 +25,10 @@ public class ServerContext {
     private static final String KEY_EPOCH = "CURRENT";
 
     @Getter
-    private Map<String, Object> serverConfig;
+    private final Map<String, Object> serverConfig;
 
     @Getter
-    private DataStore dataStore;
+    private final DataStore dataStore;
 
     @Getter
     private IServerRouter serverRouter;
@@ -39,13 +39,9 @@ public class ServerContext {
 
     public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
         this.serverConfig = serverConfig;
-        resetDataStore();
+        this.dataStore = new DataStore(serverConfig);
         this.serverRouter = serverRouter;
         this.failureDetectorPolicy = new PeriodicPollPolicy();
-    }
-
-    public void resetDataStore() {
-        this.dataStore = new DataStore(serverConfig);
     }
 
     /**

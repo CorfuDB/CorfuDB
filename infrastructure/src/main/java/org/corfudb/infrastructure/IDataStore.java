@@ -46,11 +46,6 @@ public interface IDataStore {
     public <T> void delete(Class<T> tClass, String prefix, String key);
 
     /**
-     * Delete all entries
-     */
-    public void deleteAll();
-
-    /**
      * Retrieves all the values under a prefix.
      * <p>
      * NOTE there is no ordered retrieval provided.

@@ -55,6 +55,10 @@ public class CorfuServer {
     @Getter
     private static ManagementServer managementServer;
 
+    private static NettyServerRouter router;
+
+    private static ServerContext serverContext;
+
     public static boolean serverRunning = false;
 
     /**
@@ -169,20 +173,16 @@ public class CorfuServer {
         }
 
         // Now, we start the Netty router, and have it route to the correct port.
-        NettyServerRouter router = new NettyServerRouter(opts);
+        router = new NettyServerRouter(opts);
 
         // Create a common Server Context for all servers to access.
-        ServerContext serverContext = new ServerContext(opts, router);
+        serverContext = new ServerContext(opts, router);
 
         // Add each role to the router.
-        sequencerServer = new SequencerServer(serverContext);
-        router.addServer(sequencerServer);
-        layoutServer = new LayoutServer(serverContext);
-        router.addServer(layoutServer);
-        logUnitServer = new LogUnitServer(serverContext);
-        router.addServer(logUnitServer);
-        managementServer = new ManagementServer(serverContext);
-        router.addServer(managementServer);
+        addSequencer();
+        addLayoutServer();
+        addLogUnit();
+        addManagmentServer();
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.
@@ -261,5 +261,25 @@ public class CorfuServer {
             workerGroup.shutdownGracefully();
         }
 
+    }
+
+    public static void addSequencer() {
+        sequencerServer = new SequencerServer(serverContext);
+        router.addServer(sequencerServer);
+    }
+
+    public static void addLayoutServer() {
+        layoutServer = new LayoutServer(serverContext);
+        router.addServer(layoutServer);
+    }
+
+    public static void addLogUnit() {
+        logUnitServer = new LogUnitServer(serverContext);
+        router.addServer(logUnitServer);
+    }
+
+    public static void addManagmentServer() {
+        managementServer = new ManagementServer(serverContext);
+        router.addServer(managementServer);
     }
 }
