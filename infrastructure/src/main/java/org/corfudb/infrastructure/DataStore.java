@@ -40,7 +40,7 @@ public class DataStore implements IDataStore {
     private final String logDir;
 
     @Getter
-    private final long maxDataStoreCacheSize = 1_000; // size bound for in-memory cache for dataStore
+    private final long DS_CACHE_SZ = 1_000; // size bound for in-memory cache for dataStore
 
 
     public DataStore(Map<String, Object> opts) {
@@ -74,7 +74,7 @@ public class DataStore implements IDataStore {
     /**
      * obtain a {@link LoadingCache}.
      * The cache is backed up by file-per-key uner {@link DataStore::logDir}.
-     * The cache size is bounded by {@link DataStore::maxDataStoreCacheSize}.
+     * The cache size is bounded by {@link DataStore::DS_CACHE_SZ}.
      *
      * @return the cache object
      */
@@ -101,7 +101,7 @@ public class DataStore implements IDataStore {
                         }
                     }
                 })
-            .maximumSize(maxDataStoreCacheSize)
+            .maximumSize(DS_CACHE_SZ)
             .build(key -> {
                     try {
                         Path path = Paths.get(logDir + File.separator + key);

@@ -4,7 +4,6 @@ import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ManagementServer;
-import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -12,7 +11,6 @@ import org.docopt.Docopt;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,7 +43,7 @@ public class QCSMRobject {
         if (args != null && args.length > 0 && args[0].contentEquals("reboot")) {
             ManagementServer ms = CorfuServer.getManagementServer();
             ms.shutdown();
-            CorfuServer.addManagmentServer();
+            CorfuServer.addManagementServer();
 
             LogUnitServer ls = CorfuServer.getLogUnitServer();
             if (ls != null) {

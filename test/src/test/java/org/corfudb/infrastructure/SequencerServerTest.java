@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.SequencerServerAssertions.assertThat;
+import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 
 /**
  * Created by mwei on 12/13/15.
@@ -217,7 +218,7 @@ public class SequencerServerTest extends AbstractServerTest {
         SequencerServer s2 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setInitialToken(SequencerServer.NON_LOG_ADDR_MAGIC)
+                .setInitialToken(NON_LOG_ADDR_MAGIC)
                 .build());
         this.router.reset();
         this.router.addServer(s2);

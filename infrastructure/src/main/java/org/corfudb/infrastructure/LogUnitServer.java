@@ -55,6 +55,8 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
+import static org.corfudb.infrastructure.ServerContext.SMALL_INTERVAL;
+
 /**
  * Created by mwei on 12/10/15.
  * <p>

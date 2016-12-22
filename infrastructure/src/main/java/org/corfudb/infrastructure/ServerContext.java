@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.runtime.view.Layout;
 
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -23,6 +24,18 @@ import java.util.Map;
 public class ServerContext {
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
+
+    /**
+     * magic non-address value, used in parameters to indicate no valid log address is provided
+     */
+    public static final long NON_LOG_ADDR_MAGIC = -1L;
+
+    /**
+     * various duration constants
+     */
+    public static final Duration SMALL_INTERVAL = Duration.ofMillis(60_000);
+    public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
+
 
     @Getter
     private final Map<String, Object> serverConfig;

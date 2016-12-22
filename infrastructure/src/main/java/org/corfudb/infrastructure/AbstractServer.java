@@ -14,9 +14,6 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public abstract class AbstractServer {
-    public static final long NON_LOG_ADDR_MAGIC = -1L;
-    public static final Duration SMALL_INTERVAL = Duration.ofMillis(60_000);
-
 
     @Getter
     @Setter

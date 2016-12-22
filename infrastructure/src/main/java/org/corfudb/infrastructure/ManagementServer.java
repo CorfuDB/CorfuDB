@@ -49,7 +49,6 @@ public class ManagementServer extends AbstractServer {
 
     private static final String PREFIX_LAYOUT = "M_LAYOUT";
     private static final String KEY_LAYOUT = "M_CURRENT";
-    private static final long SHUTDOWN_TIMER = 5; // seconds
 
     private CorfuRuntime corfuRuntime;
     /**
@@ -319,7 +318,7 @@ public class ManagementServer extends AbstractServer {
         }
 
         try {
-            failureDetectorService.awaitTermination(SHUTDOWN_TIMER, TimeUnit.SECONDS);
+            failureDetectorService.awaitTermination(serverContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             log.debug("failureDetectorService awaitTermination interrupted : {}", ie);
         }

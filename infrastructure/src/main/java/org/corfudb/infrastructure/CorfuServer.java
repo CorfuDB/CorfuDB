@@ -180,7 +180,7 @@ public class CorfuServer {
         addSequencer();
         addLayoutServer();
         addLogUnit();
-        addManagmentServer();
+        addManagementServer();
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.
@@ -276,7 +276,7 @@ public class CorfuServer {
         router.addServer(logUnitServer);
     }
 
-    public static void addManagmentServer() {
+    public static void addManagementServer() {
         managementServer = new ManagementServer(serverContext);
         router.addServer(managementServer);
     }

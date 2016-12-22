@@ -53,7 +53,7 @@ public class DataStoreTest extends AbstractCorfuTest {
                 .put("--log-path", serviceDir)
                 .build());
 
-        for (int i = 0; i < dataStore.getMaxDataStoreCacheSize() * 2; i++) {
+        for (int i = 0; i < dataStore.getDS_CACHE_SZ() * 2; i++) {
             String value = UUID.randomUUID().toString();
             dataStore.put(String.class, "test", "key", value);
 
@@ -89,7 +89,7 @@ public class DataStoreTest extends AbstractCorfuTest {
                 .put("--memory", true)
                 .build());
 
-        for (int i = 0; i < dataStore.getMaxDataStoreCacheSize() * 2; i++) {
+        for (int i = 0; i < dataStore.getDS_CACHE_SZ() * 2; i++) {
             String value = UUID.randomUUID().toString();
             dataStore.put(String.class, "test", "key", value);
             assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);

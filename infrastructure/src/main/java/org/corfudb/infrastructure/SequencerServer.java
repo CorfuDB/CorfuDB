@@ -16,6 +16,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
+
 /**
  * This server implements the sequencer functionality of Corfu.
  * <p>
