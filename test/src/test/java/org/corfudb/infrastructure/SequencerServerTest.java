@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.SequencerServerAssertions.assertThat;
+import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 
 /**
  * Created by mwei on 12/13/15.
@@ -194,15 +195,13 @@ public class SequencerServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void checkSequencerCheckpointingWorks()
+    public void checkSequencerLeaseWorks()
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
         SequencerServer s1 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setInitialToken(0)
-                .setCheckpoint(1)
                 .build());
 
         this.router.reset();
@@ -219,13 +218,12 @@ public class SequencerServerTest extends AbstractServerTest {
         SequencerServer s2 = new SequencerServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setInitialToken(-1)
-                .setCheckpoint(1)
+                .setInitialToken(NON_LOG_ADDR_MAGIC)
                 .build());
         this.router.reset();
         this.router.addServer(s2);
         assertThat(s2)
-                .tokenIsAt(2);
+                .tokenIsAt(s2.getLeaseLength());
     }
 
 }

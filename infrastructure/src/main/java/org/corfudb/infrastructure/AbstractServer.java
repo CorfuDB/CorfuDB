@@ -6,6 +6,9 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
 /**
  * Created by mwei on 12/4/15.
  */
@@ -38,16 +41,6 @@ public abstract class AbstractServer {
             log.warn("Received unhandled message type {}" , msg.getMsgType());
         }
     }
-
-    /**
-     * Reboot the server, using persistent state on disk to restart.
-     */
-    public abstract void reboot();
-
-    /**
-     * Reset the server, deleting persistent state on disk prior to rebooting.
-     */
-    public abstract void reset();
 
     /**
      * Shutdown the server.

@@ -64,110 +64,41 @@ public class LayoutServer extends AbstractServer {
     /**
      * The options map.
      */
-    private Map<String, Object> opts;
+    private final Map<String, Object> opts;
 
     @Getter
-    private ServerContext serverContext;
+    private final ServerContext serverContext;
 
     /** Handler for this server */
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    private int reboots = 0;
-
     public LayoutServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
 
-        reboot();
-        reset_part_2();
-
-        // QuickCheck: Create the distributed Erlang message handling threads
-        Object test_mode = opts.get("--quickcheck-test-mode");
-        if (test_mode != null && (Boolean) test_mode) {
-            // Disabled due to cyclic dependency...
-         //   QuickCheckMode qm = new QuickCheckMode(opts);
-        }
+        if ((Boolean) opts.get("--single"))
+            getSingleNodeLayout();
     }
 
-    /**
-     * Reset the server, deleting persistent state on disk prior to rebooting.
-     */
-
-    @Override
-    public synchronized void reset() {
-        String d = serverContext.getDataStore().getLogDir();
-        if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d);
-            String prefixes[] = new String[] {PREFIX_LAYOUT, KEY_LAYOUT, PREFIX_PHASE_1, PREFIX_PHASE_2,
-                    PREFIX_LAYOUTS, "SERVER_EPOCH"};
-
-            for (String pfx : prefixes) {
-                try (DirectoryStream<Path> stream =
-                             Files.newDirectoryStream(dir, pfx + "_*")) {
-                    for (Path entry : stream) {
-                        // System.out.println("Deleting " + entry);
-                        Files.delete(entry);
-                    }
-                } catch (IOException e) {
-                    log.error("reset: error deleting prefix " + pfx + ": " + e.toString());
-                }
-            }
-            /*
-            try (DirectoryStream<Path> stream =
-                         Files.newDirectoryStream(dir, "*")) {
-                for (Path entry : stream) {
-                    System.out.println("Remaining file " + entry);
-                }
-            } catch (IOException e) {
-                log.error("reset: error deleting prefix: " + e.toString());
-            }
-            */
-        }
-        reset_part_2();
-        reboot();
-    }
-
-    private void reset_part_2() {
-        if ((Boolean) opts.get("--single")) {
-            String localAddress = opts.get("--address") + ":" + opts.get("<port>");
-            String boot_msg = "Single-node mode requested, initializing layout with single log unit and sequencer at {}.";
-            if (reboots++ == 0 ) {
-                log.info(boot_msg, localAddress);
-            } else {
-                log.debug(boot_msg, localAddress);
-
-            }
-            setCurrentLayout(new Layout(
-                    Collections.singletonList(localAddress),
-                    Collections.singletonList(localAddress),
-                    Collections.singletonList(new LayoutSegment(
-                            Layout.ReplicationMode.CHAIN_REPLICATION,
-                            0L,
-                            -1L,
-                            Collections.singletonList(
-                                    new Layout.LayoutStripe(
-                                            Collections.singletonList(localAddress)
-                                    )
-                            )
-                    )),
-                    0L
-            ));
-        }
-    }
-
-    /**
-     * Reboot the server, using persistent state on disk to restart.
-     */
-    @Override
-    public synchronized void reboot() {
-        serverContext.resetDataStore();
-
-        if (serverContext.getServerRouter().getClass().toString().equals("class org.corfudb.infrastructure.TestServerRouter") &&
-                (Boolean) opts.get("--single") && (Boolean) opts.get("--memory")) {
-            reset_part_2();
-        }
+    private void getSingleNodeLayout() {
+        String localAddress = opts.get("--address") + ":" + opts.get("<port>");
+        setCurrentLayout(new Layout(
+                Collections.singletonList(localAddress),
+                Collections.singletonList(localAddress),
+                Collections.singletonList(new LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        Collections.singletonList(localAddress)
+                                )
+                        )
+                )),
+                0L
+        ));
     }
 
     boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {

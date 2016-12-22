@@ -1,7 +1,8 @@
 package org.corfudb.infrastructure;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -9,21 +10,13 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.util.Utils;
 
-import java.io.File;
-import java.io.IOException;
 import java.lang.invoke.MethodHandles;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -38,106 +31,68 @@ import java.util.concurrent.atomic.AtomicLong;
 public class SequencerServer extends AbstractServer {
 
     /**
-     * A scheduler, which is used to schedule checkpoints and lease renewal
+     * key-name for storing {@link SequencerServer} state in {@link ServerContext::getDataStore()}.
      */
-    private final ScheduledExecutorService scheduler =
-            Executors.newScheduledThreadPool(
-                    1,
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("Seq-Checkpoint-%d")
-                            .build());
-    @Getter
-    long epoch;
-    AtomicLong globalLogTail;
+    private static final String PREFIX_SEQUENCER = "SEQUENCER";
+    private static final String KEY_SEQUENCER = "CURRENT";
 
     /**
-     * The file channel.
+     * Inherit from CorfuServer a server context
      */
-    private FileChannel fc;
-    private Object fcLock = new Object();
+    private final ServerContext serverContext;
 
     /**
      * Our options
      */
-    private Map<String, Object> opts;
+    private final Map<String, Object> opts;
+
+    /**
+     * The sequencer maintains information about log and streams:
+     *
+     *  - {@link SequencerServer::globalLogTail}: global log tail
+     *  - {@link SequencerServer::streamTailMap}: a map of per-stream tail
+     *  - {@link SequencerServer::streamTailToGlobalTailMap}: map from stream-tails to global-log tails. used for backpointers.
+     *  - {@link SequencerServer::conflictToGlobalTailCache}: the {@link SequencerServer::maxConflictCacheSize} latest conflict keys and their latest commit (global-log) position
+     *
+     * Every append to the log updates the information in these maps.
+     */
+    @Getter
+    private final AtomicLong globalLogTail = new AtomicLong(0L);
+    private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+    private final long maxConflictCacheSize = 10_000;
+    private final Cache<Object, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
+            .maximumSize(maxConflictCacheSize)
+                .build();
+
+    /**
+     * A sequencer needs a lease to serve a certain number of tokens.
+     * The lease starting index is persisted.
+     * A lease is good for (@Link #SequencerServer::leaseLength) number of tokens.
+     *
+     * A lease is renewed when we reach leaseRenew tokens away from the limit.
+     *
+     * TODO: these parameters should probably be configurable from somewhere
+     */
+    @Getter
+    private final long leaseLength = 100_000;
+    private final long leaseRenewalNotice = 10_000; // renew when token crosses leaseLength - leaseRenewalNotice threshold
 
     /** Handler for this server */
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    /**
-     * map from stream-trails to global-log tails. used for backpointers.
-     */
-    ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap;
-
-    /**
-     * map of stream tails.
-     */
-    ConcurrentHashMap<UUID, Long> streamTailMap;
-
     public SequencerServer(ServerContext serverContext) {
-        Map<String, Object> opts = serverContext.getServerConfig();
-        streamTailToGlobalTailMap = new ConcurrentHashMap<>();
-        streamTailMap = new ConcurrentHashMap<>();
-        globalLogTail = new AtomicLong();
-        this.opts = opts;
+        this.serverContext = serverContext;
+        this.opts = serverContext.getServerConfig();
 
-        try {
-            if (!(Boolean) opts.get("--memory")) {
-                synchronized (fcLock) {
-                    open_fc();
-                }
-                // schedule checkpointing.
-                scheduler.scheduleAtFixedRate(this::checkpointState,
-                        Utils.parseLong(opts.get("--checkpoint")),
-                        Utils.parseLong(opts.get("--checkpoint")),
-                        TimeUnit.SECONDS);
-            }
-            reboot();
-
-            log.info("Sequencer initial token set to {}", globalLogTail.get());
-        } catch (Exception ex) {
-            log.warn("Exception parsing initial token, default to 0.", ex);
-            ex.printStackTrace();
-        }
-    }
-
-    private void open_fc() {
-        try {
-            fc = FileChannel.open(make_checkpoint_path(),
-                    EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
-                            StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
-        } catch (IOException e) {
-            log.warn("Error opening " + make_checkpoint_path() + ": " + e);
-            fc = null;
-        }
-    }
-
-    private java.nio.file.Path make_checkpoint_path() {
-        return FileSystems.getDefault().getPath(opts.get("--log-path")
-                + File.separator + "sequencer_checkpoint");
-    }
-
-    /**
-     * Checkpoints the state of the sequencer.
-     */
-    public void checkpointState() {
-        ByteBuffer b = ByteBuffer.allocate(8);
-        long checkpointAddress = globalLogTail.get();
-        b.putLong(checkpointAddress);
-        b.flip();
-        synchronized (fcLock) {
-            if (fc != null) {
-                try {
-                    fc.write(b, 0L);
-                    fc.force(true);
-                    log.debug("Sequencer state successfully checkpointed at {}", checkpointAddress);
-                } catch (IOException ie) {
-                    log.warn("Sequencer checkpoint failed due to exception", ie);
-                }
-            }
+        long initialToken = Utils.parseLong(opts.get("--initial-token"));
+        if (initialToken == NON_LOG_ADDR_MAGIC) {
+            getInitalLease();
+        } else {
+            renewLease(initialToken);
+            globalLogTail.set(initialToken);
         }
     }
 
@@ -218,6 +173,11 @@ public class SequencerServer extends AbstractServer {
             return;
         }
 
+        // check if need to renew sequencer lease
+        long leaseRenew = getCurrentLease() + leaseLength;
+        if (globalLogTail.get() >= (leaseRenew - leaseRenewalNotice))
+            renewLease(leaseRenew);
+
         // if no streams, simply allocate a position at the tail of the global log
         if (req.getStreams() == null) {
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
@@ -286,62 +246,45 @@ public class SequencerServer extends AbstractServer {
                         requestStreamTokens.build())));
     }
 
-    @Override
-    public void reset() {
-        if (fc != null) {
-            synchronized (fcLock) {
-                try { fc.close(); } catch (IOException e) { /* Not a fatal problem, right? */ }
-                try {
-                    Files.delete(make_checkpoint_path());
-                } catch (IOException e) {
-                    log.warn("Error deleting " + make_checkpoint_path() + ":" + e);
-                }
-                open_fc();
-            }
-        }
-        reboot();
-    }
+    /**
+     * obtain the initial lease (a log tail).
+     * for now, this works only with a local file.
+     * TODO in the future, a sequencer needs to obtain the lease from the layout service
+     */
+    private void getInitalLease() {
 
-    @Override
-    public synchronized void reboot() {
-            streamTailToGlobalTailMap = new ConcurrentHashMap<>();
-            streamTailMap = new ConcurrentHashMap<>();
-            globalLogTail = new AtomicLong(0L);
-            long newIndex = Utils.parseLong(opts.get("--initial-token"));
-            if (newIndex == -1) {
-                if (!(Boolean) opts.get("--memory")) {
-                    try {
-                        ByteBuffer b = ByteBuffer.allocate((int) fc.size());
-                        fc.read(b);
-                        if (fc.size() >= 8) {
-                            globalLogTail.set(b.getLong(0));
-                        } else {
-                            log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
-                        }
-                    } catch (IOException e) {
-                        log.warn("Reboot to zero.  Sequencer checkpoint read & parse: " + e);
-                    }
-                } else {
-                    log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
-                }
-            } else {
-                globalLogTail.set(newIndex);
-            }
+        // check for existing previous lease
+        Long leaseTail = serverContext.getDataStore()
+                .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
+
+        if (leaseTail != null) {
+            // if a previous lease exists, go past it to teh next lease segment
+            renewLease(leaseTail + leaseLength);
+            globalLogTail.set(leaseTail + leaseLength);
+            // todo: we need to update the conflictCache to reflect the lack of information up to the current tail
+        } else {
+            // otherwise, grab a lease from the start of the log
+            renewLease(0L);
+            globalLogTail.set(0L);
+        }
+
     }
 
     /**
-     * Shutdown the server.
+     * extend the current lease to a new tail
+     * @param leaseStart the new lease starting point
      */
-    @Override
-    public void shutdown() {
-        try {
-            scheduler.shutdownNow();
-            checkpointState();
-            synchronized (fcLock) {
-                if (fc != null) fc.close();
-            }
-        } catch (IOException ie) {
-            log.warn("Error checkpointing server during shutdown!", ie);
-        }
+    private void renewLease(long leaseStart) {
+        serverContext.getDataStore()
+                .put(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER, leaseStart);
+    }
+
+    /**
+     * query the current lease
+     * @return the lease's starting point
+     */
+    private long getCurrentLease() {
+        return serverContext.getDataStore()
+                .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
     }
 }

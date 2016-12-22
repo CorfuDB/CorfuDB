@@ -17,7 +17,7 @@ import org.junit.Test;
 
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+//import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 
 /**
@@ -450,7 +450,7 @@ public class LayoutServerTest extends AbstractServerTest {
         bootstrapServer(layout);
 
         // Reboot, then check that our epoch 100 layout is still there.
-        s1.reboot();
+        //s1.reboot();
 
         requestLayout(NEW_EPOCH);
         Assertions.assertThat(getLastMessage().getMsgType())
@@ -466,16 +466,8 @@ public class LayoutServerTest extends AbstractServerTest {
         }
     }
 
-    // Same as commitReturnsAck() test, but we perhaps make a .reboot() call
-    // between each step.
-
-    // note: unclear what "reboot" does, so disabling this style check.
-    @SuppressWarnings("checkstyle:magicnumber")
     private void commitReturnsAck(LayoutServer s1, Integer reboot, long baseEpoch) {
 
-        if ((reboot & 1) > 0) {
-            s1.reboot();
-        }
         long newEpoch = baseEpoch + reboot;
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch));
 
@@ -485,24 +477,11 @@ public class LayoutServerTest extends AbstractServerTest {
         sendPrepare(newEpoch, HIGH_RANK);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_PREPARE_ACK);
 
-        if ((reboot & 2) > 0) {
-            log.debug("Rebooted server because reboot & 2 {}", reboot & 2);
-            s1.reboot();
-        }
-
         sendPropose(newEpoch, HIGH_RANK, layout);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
 
-        if ((reboot & 4) > 0) {
-            s1.reboot();
-        }
-
         sendCommitted(newEpoch, layout);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-
-        if ((reboot & 8) > 0) {
-            s1.reboot();
-        }
 
         sendCommitted(newEpoch, layout);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);

@@ -66,6 +66,15 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                 });
     }
 
+    public void removeServer(AbstractServer server) {
+        // Iterate through all types of CorfuMsgType, un-registering the handler
+        server.getHandler().getHandledTypes()
+                .forEach(x -> {
+                    handlerMap.remove(x, server);
+                    log.trace("Un-Registered {} to handle messages of type {}", server, x);
+                });
+    }
+
     /**
      * Send a netty message through this router, setting the fields in the outgoing message.
      *
@@ -74,12 +83,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      * @param outMsg Outgoing message.
      */
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
-        long badEpoch = -667788;
-
-        outMsg.setEpoch(badEpoch);
         outMsg.copyBaseFields(inMsg);
-        if (outMsg.getEpoch() == badEpoch) { log.warn("copyBaseFields didn't clobber epoch"); System.exit(66); }
-
         ctx.writeAndFlush(outMsg);
         log.trace("Sent response: {}", outMsg);
     }

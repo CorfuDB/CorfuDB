@@ -224,7 +224,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     {
         testServerMap.entrySet().parallelStream()
                 .forEach(e -> {
-                    e.getValue().layoutServer.reset();
                     e.getValue().layoutServer
                             .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
                                     null, e.getValue().serverRouter);
