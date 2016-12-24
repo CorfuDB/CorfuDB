@@ -1,10 +1,12 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.TestRule;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -183,4 +185,14 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(sv.read().getPayload(getRuntime()))
                 .isEqualTo(testPayload2);
     }
+
+    /* @Test
+    public void backpointersWithHoleFill()
+        throws Exception {
+
+        // drop write requests from this client, so we can force hole filling to take place
+        addClientRule(r, new TestRule().matches(corfuMsg -> { return corfuMsg.getMsgType() == CorfuMsgType.WRITE ; }).drop());
+
+
+    }*/
 }
