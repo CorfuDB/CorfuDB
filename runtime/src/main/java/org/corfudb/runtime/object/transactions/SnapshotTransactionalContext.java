@@ -28,17 +28,6 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Getter
     private Set<ICorfuSMRProxyInternal> modifiedProxies = ImmutableSet.of();
 
-    /** In a snapshot transaction, no write set is ever generated.
-     *
-     */
-    @Getter
-    private Map<UUID, List<WriteSetEntry>> writeSet = ImmutableMap.of();
-
-    /** The read set for this transaction.
-     */
-    @Getter
-    private Map<UUID, List<ReadSetEntry>> readSet = new ConcurrentHashMap<>();
-
     public SnapshotTransactionalContext(TransactionBuilder builder) {
         super(builder);
     }
@@ -50,8 +39,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
                            Object[] conflictObject) {
-        readSet.computeIfAbsent(proxy.getStreamID(), k -> new ArrayList<>());
-        readSet.get(proxy.getStreamID()).add(new ReadSetEntry(conflictObject));
+
+        addToReadSet(proxy, conflictObject);
+
         return proxy.getUnderlyingObject().optimisticallyReadThenReadLockThenWriteOnFail(
                 (v, o) -> {
                     // We're lucky and the object has not been modified AND
@@ -130,4 +120,6 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public void addTransaction(AbstractTransactionalContext tc) {
         throw new UnsupportedOperationException("Can't merge into a readonly txn (yet)");
     }
+
+    public long fetchFirstTimestamp() { return builder.getSnapshot(); }
 }

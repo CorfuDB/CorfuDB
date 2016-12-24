@@ -11,6 +11,7 @@ import org.corfudb.runtime.object.*;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents a transactional context. Transactional contexts
@@ -62,21 +63,39 @@ public abstract class AbstractTransactionalContext {
     @Getter
     AbstractTransactionalContext parentContext;
 
-    abstract public Set<ICorfuSMRProxyInternal> getModifiedProxies();
-
-    /** Return the write set for this transaction
-     *
-     * @return  The write set, which contains all modifications this
-     *          transaction will make.
+    /**
+     * For conflict resolution purposes, maintain three pieces of information:
+     * 1. {@link firstReadTimestamp} : the timestamp of the first read in the system.
+     * 2. {@link writeConflictSet}: streams, and (optional) conflict tags per stream, touched by this TX
+     * 3. {@link readConflictSet}: streams, and (optional) conflict tags per stream, read by this TX
      */
-    abstract public Map<UUID, List<WriteSetEntry>> getWriteSet();
 
-    /** Return the read set for this transaction
-     *
-     * @return  The read set, which contains all objects read by this
-     *          transaction.
+    /**
+     * @return The timestamp of the first read object, which may be null.
      */
-    abstract public Map<UUID, List<ReadSetEntry>> getReadSet();
+    @Getter(lazy = true)
+    private final long firstReadTimestamp = fetchFirstTimestamp();
+    abstract public long fetchFirstTimestamp();
+
+    /** The write set for this transaction.*/
+    @Getter
+    protected final Map<UUID, Set<Object>> writeConflictSet =
+            new ConcurrentHashMap<>();
+
+    /** The read set for this transaction. */
+    @Getter
+    protected final Map<UUID, Set<Object>> readConflictSet =
+            new ConcurrentHashMap<>();
+
+    /**
+     * For the transaction update itself, we collect SMREntry objects representing the updates made by this TX
+     *
+     * @return a map from streams to write entry representing an update made by this TX
+     */
+    @Getter
+    protected final Map<UUID, List<WriteSetEntry>> writeSet =
+            new ConcurrentHashMap<>();
+
 
     /**
      * A future which gets completed when this transaction commits.
@@ -152,4 +171,18 @@ public abstract class AbstractTransactionalContext {
         completionFuture
                 .completeExceptionally(new TransactionAbortedException());
     }
+
+    /** Add the proxy and conflict information to our read set.
+     * @param proxy             The proxy to add
+     * @param conflictObject    The fine-grained conflict information, if
+     *                          available.
+     */
+    protected void addToReadSet(ICorfuSMRProxyInternal proxy,
+                                Object[] conflictObject)
+    {
+        readConflictSet.computeIfAbsent(proxy.getStreamID(), k -> new HashSet<>());
+        if (conflictObject != null)
+            readConflictSet.get(proxy.getStreamID()).addAll(Arrays.asList(conflictObject));
+    }
+
 }

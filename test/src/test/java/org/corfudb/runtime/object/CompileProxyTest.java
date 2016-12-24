@@ -469,17 +469,15 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // Assert that the read set contains TEST_1, TEST_4
         assertThat(TransactionalContext.getCurrentContext()
-                .getReadSet().values().stream()
+                .getReadConflictSet().values().stream()
                 .flatMap(x -> x.stream())
-                .flatMap(x -> Arrays.stream(x.getConflictObjects()))
-                        .collect(Collectors.toList()))
+                .collect(Collectors.toList()))
                 .contains(TEST_0, TEST_4);
 
         // Assert that the write set contains TEST_2, TEST_4
         assertThat(TransactionalContext.getCurrentContext()
-                .getWriteSet().values().stream()
+                .getWriteConflictSet().values().stream()
                 .flatMap(x -> x.stream())
-                .flatMap(x -> Arrays.stream(x.getConflictObjects()))
                 .collect(Collectors.toList()))
                 .contains(TEST_3, TEST_4);
 

@@ -16,54 +16,39 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-/** A standard Corfu optimistic transaction context.
+/** A Corfu optimistic transaction context.
  *
- * Optimistic transactions in Corfu provide the following guarantees:
+ * Optimistic transactions in Corfu provide the following isolation guarantees:
  *
- * (1) Reads in a transaction are guaranteed to observe either
- *  (a) A write in the same transaction, if a write happens before
+ * (1) Read-your-own Writes:
+ *  Reads in a transaction are guaranteed to observe a write in the same transaction, if a write happens before
  *      the read.
- *  (b) The state of the system ("snapshot") as of the time of the
- *      first read which occurs in the transaction ("first read
- *      timestamp").
  *
- * (2) Writes in a transaction are guaranteed to commit atomically,
+ * (2) Opacity:
+ *  Read in a transaction observe the state of the system ("snapshot") as of the time of the
+ *      first read which occurs in the transaction ("first read
+ *      timestamp"), except in case (1) above where they observe the own tranasction's writes.
+ *
+ * (3) Atomicity:
+ *  Writes in a transaction are guaranteed to commit atomically,
  *     and commit if and only if none of the objects which were
  *     read (the "read set") were modified between the first read
  *     ("first read timestamp") and the time of commit.
- *
  *
  * Created by mwei on 4/4/16.
  */
 @Slf4j
 public class OptimisticTransactionalContext extends AbstractTransactionalContext {
 
-    /**
-     * The timestamp of the first read in the system.
-     *
-     * @return The timestamp of the first read object, which may be null.
-     */
-    @Getter(lazy = true)
-    private final long firstReadTimestamp = fetchFirstTimestamp();
+    /** The proxies which were modified by this transaction. */
+    @Getter
+    private final Set<ICorfuSMRProxyInternal> modifiedProxies =
+            new HashSet<>();
 
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
     }
 
-    /** The write set for this transaction.*/
-    @Getter
-    private final Map<UUID, List<WriteSetEntry>> writeSet =
-            new ConcurrentHashMap<>();
-
-    /** The read set for this transaction. */
-    @Getter
-    private final Map<UUID, List<ReadSetEntry>> readSet =
-            new ConcurrentHashMap<>();
-
-    /** The proxies which were modified by this transaction. */
-    @Getter
-    private final Set<ICorfuSMRProxyInternal> modifiedProxies =
-            new HashSet<>();
 
     /**
      * Sync the state of the proxy to the latest updates in the write
@@ -210,11 +195,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
                               SMREntry updateEntry,
                               Object[] conflictObject) {
-        // If this proxy isn't in the write set, add it.
-        writeSet.putIfAbsent(proxy.getStreamID(), new LinkedList<>());
-        // Insert the modification into our write set.
-        writeSet.get(proxy.getStreamID()).add(
-                new WriteSetEntry(updateEntry, conflictObject));
+        // record the streamID and optional conflict objects in writeConflictSet.
+        writeConflictSet.putIfAbsent(proxy.getStreamID(), new HashSet<>());
+        if (conflictObject != null)
+            writeConflictSet.get(proxy.getStreamID()).addAll(Arrays.asList(conflictObject));
+
+        // Insert the modification into writeSet.
+        writeSet.putIfAbsent(proxy.getStreamID(), new ArrayList<>());
+        writeSet.get(proxy.getStreamID()).add(new WriteSetEntry(updateEntry));
+
+        // TODO: what is this?
         // Return the "address" of the upcall.
         return writeSet.get(proxy.getStreamID()).size() - 1;
     }
@@ -226,15 +216,23 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @SuppressWarnings("unchecked")
     public void addTransaction(AbstractTransactionalContext tc) {
-        // merge the read sets and write sets
-        for (UUID proxy : tc.getReadSet().keySet()) {
-            readSet.computeIfAbsent(proxy, k -> new ArrayList<>());
-            readSet.get(proxy).addAll(tc.getReadSet().get(proxy));
+
+        // merge the read sets and write conflict sets
+        for (UUID proxy : tc.getReadConflictSet().keySet()) {
+            readConflictSet.computeIfAbsent(proxy, k -> new HashSet<>());
+            readConflictSet.get(proxy).addAll(tc.getReadConflictSet().get(proxy));
         }
+        for (UUID proxy : tc.getWriteConflictSet().keySet()) {
+            readConflictSet.computeIfAbsent(proxy, k -> new HashSet<>());
+            readConflictSet.get(proxy).addAll(tc.getWriteConflictSet().get(proxy));
+        }
+
+        // merge the write sets
         tc.getWriteSet().entrySet().forEach(e-> {
-            writeSet.putIfAbsent(e.getKey(), new LinkedList<>());
+            writeSet.putIfAbsent(e.getKey(), new ArrayList<>());
             writeSet.get(e.getKey()).addAll(e.getValue());
         });
+
         // "commit" the optimistic writes (for each proxy we touched)
         // by updating the modifying context (as long as the context
         // is still the same).
@@ -281,9 +279,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // address of -1L if it is rejected.
         long address = this.builder.runtime.getStreamsView()
                 .acquireAndWrite(affectedStreams, entry, t->true, t->true,
-                        getFirstReadTimestamp(), readSet.keySet());
-                                        // Note: when fine-grained resolution
-                                        // is enabled, pass the entire readset.
+                        getFirstReadTimestamp(), readConflictSet.keySet());
+                                        // TODO: for fine-grained resolution pass the entire readConflictSet.
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
             abortTransaction();
@@ -376,7 +373,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      *
      * @return The first timestamp to be used for this transaction.
      */
-    private synchronized long fetchFirstTimestamp() {
+    public synchronized long fetchFirstTimestamp() {
         if (getRootContext() != this) {
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
@@ -391,15 +388,4 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
     }
 
-    /** Add the proxy and conflict information to our read set.
-     * @param proxy             The proxy to add
-     * @param conflictObject    The fine-grained conflict information, if
-     *                          available.
-     */
-    protected void addToReadSet(ICorfuSMRProxyInternal proxy,
-                                Object[] conflictObject)
-    {
-        readSet.computeIfAbsent(proxy.getStreamID(), k -> new ArrayList<>());
-        readSet.get(proxy.getStreamID()).add(new ReadSetEntry(conflictObject));
-    }
 }

@@ -64,6 +64,7 @@ public class WriteAfterWriteTransactionalContext
                         new MultiSMREntry(x.getValue().stream()
                                 .map(WriteSetEntry::getEntry)
                                 .collect(Collectors.toList()))));
+                                // todo: provide the write conflict set
         Map<UUID, MultiSMREntry> entryMap = builder.build();
         MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
 
