@@ -49,9 +49,9 @@ public class SequencerServer extends AbstractServer {
     /**
      * The sequencer maintains information about log and streams:
      *
-     *  - {@link SequencerServer::globalLogTail}: global log tail
-     *  - {@link SequencerServer::streamTailMap}: a map of per-stream tail
-     *  - {@link SequencerServer::streamTailToGlobalTailMap}: map from stream-tails to global-log tails. used for backpointers.
+     *  - {@link SequencerServer::globalLogTail}: global log tail. points to the first available position (initially, 0).
+     *  - {@link SequencerServer::streamTailMap}: a map of per-stream tail. points to per-stream first available position.
+     *  - {@link SequencerServer::streamBackpointerMap}: per stream map to last issued global-log position. used for backpointers.
      *  - {@link SequencerServer::conflictToGlobalTailCache}: the {@link SequencerServer::maxConflictCacheSize} latest conflict keys and their latest commit (global-log) position
      *
      * Every append to the log updates the information in these maps.
@@ -59,7 +59,7 @@ public class SequencerServer extends AbstractServer {
     @Getter
     private final AtomicLong globalLogTail = new AtomicLong(0L);
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> streamBackpointerMap = new ConcurrentHashMap<>();
     private final long maxConflictCacheSize = 10_000;
     private final Cache<Object, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
@@ -114,7 +114,7 @@ public class SequencerServer extends AbstractServer {
                 break;
 
 
-            streamTailToGlobalTailMap.compute(id, (k, v) -> {
+            streamBackpointerMap.compute(id, (k, v) -> {
                 if (v == null) {
                     return null;
                 } else {
@@ -129,8 +129,8 @@ public class SequencerServer extends AbstractServer {
         return commit.get();
     }
 
-    public void returnLatestOffsets(CorfuPayloadMsg<TokenRequest> msg,
-                                    ChannelHandlerContext ctx, IServerRouter r) {
+    public void handleTokenQuery(CorfuPayloadMsg<TokenRequest> msg,
+                                 ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
 
         long maxStreamGlobalTails = -1L;
@@ -148,7 +148,7 @@ public class SequencerServer extends AbstractServer {
                 return v;
             });
             // Compute the latest global offset across all streams.
-            Long lastIssued = streamTailToGlobalTailMap.get(id);
+            Long lastIssued = streamBackpointerMap.get(id);
             maxStreamGlobalTails = Math.max(maxStreamGlobalTails, lastIssued == null ? Long.MIN_VALUE : lastIssued);
         }
 
@@ -165,29 +165,30 @@ public class SequencerServer extends AbstractServer {
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
-        log.trace("req txn reso: {}", req.getTxnResolution());
 
-        // if requested number of tokens is zero, it is just a query of current tail(s)
-        if (req.getNumTokens() == 0) {
-            returnLatestOffsets(msg, ctx, r);
+        if (req.getReqType() == TokenRequest.TK_QUERY) {
+            handleTokenQuery(msg, ctx, r);
             return;
         }
 
-        // check if need to renew sequencer lease
+        // check if log tail getting close to lease-limit. If so, we need to renew sequencer lease
         long leaseRenew = getCurrentLease() + leaseLength;
         if (globalLogTail.get() >= (leaseRenew - leaseRenewalNotice))
             renewLease(leaseRenew);
 
-        // if no streams, simply allocate a position at the tail of the global log
-        if (req.getStreams() == null) {
+        // for raw log implementation, simply extend the global log tail and return the global-log token
+        if (req.getReqType() == TokenRequest.TK_RAW) {
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                     new TokenResponse(globalLogTail.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
             return;
         }
 
-        // If the request is a transaction resolution request, then check if it should abort.
-        if (req.getTxnResolution()) {
-            if (!txnResolution(req.getReadTimestamp(), req.getReadSet())) {
+        // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
+        // Token allocation is conditioned on commit.
+        // First, we check if the transaction can commit.
+        if (req.getReqType() == TokenRequest.TK_TX) {
+
+            if (!txnResolution(req.getTxnResolution().getReadTimestamp(), req.getTxnResolution().getReadSet())) {
                 // If the txn aborts, then DO NOT hand out a token.
                 r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                         new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
@@ -195,51 +196,41 @@ public class SequencerServer extends AbstractServer {
             }
         }
 
+        // extend the tail of the global log by the requested # of tokens
+        // currentTail is the first available position in the global log
         long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
 
-        // If the txn can commit, or if the request is for a non-txn entry, then proceed normally to
-        // hand out local stream offsets.
+        // for each stream:
+        //   1. obtain the last back-pointer for this stream, if exists; -1L otherwise.
+        //   2. record the new global tail as back-pointer for this stream.
+        //   3. extend the tail by the requested # tokens.
         ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
         ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
         for (UUID id : req.getStreams()) {
-            streamTailToGlobalTailMap.compute(id, (k, v) -> {
+
+            // step 1. and 2. (comment above)
+            streamBackpointerMap.compute(id, (k, v) -> {
                 if (v == null) {
                     backPointerMap.put(k, -1L);
                     return currentTail + req.getNumTokens() - 1;
+                } else {
+                    backPointerMap.put(k, v);
+                    return Math.max(currentTail + req.getNumTokens() - 1, v);
                 }
-                backPointerMap.put(k, v);
-                return Math.max(currentTail + req.getNumTokens() - 1, v);
             });
-            /*
-             * Action table for (overwrite, replexOverwrite) pairs:
-             * overwrite | replexOverwrite | Action
-             *   F              F            Hand out tokens as requested
-             *   F              T            There was an overwrite in the local stream layer, so allocate
-             *                               a new global token AND increment local stream offsets. The
-             *                               action should be identical to the (F,F) case.
-             *   T              F            There was an overwrite in the global log layer, so ONLY
-             *                               allocate a new global token, and DO NOT increment local
-             *                               stream offsets.
-             *   T              T            This should never happen, because the Replex write protocol
-             *                               terminates immediately if it encounters a global log overwrite.
-             */
-            /* TODO: In the (F,T) case, hole-filling (or some other mechanism, perhaps the same writer),
-             * needs to mark the hanging entry in the global log with a false commit bit.
-             */
-            if (msg.getPayload().getReplexOverwrite() ||
-                    !msg.getPayload().getOverwrite()) {
-                // Collect the stream offsets for this token request.
-                streamTailMap.compute(id, (k, v) -> {
-                    if (v == null) {
-                        requestStreamTokens.put(k, req.getNumTokens() - 1L);
-                        return req.getNumTokens() - 1L;
-                    }
-                    requestStreamTokens.put(k, v + req.getNumTokens());
-                    return v + req.getNumTokens();
-                });
-            }
+
+            // step 3. (comment above)
+            streamTailMap.compute(id, (k, v) -> {
+                if (v == null) {
+                    requestStreamTokens.put(k, req.getNumTokens() - 1L);
+                    return req.getNumTokens() - 1L;
+                }
+                requestStreamTokens.put(k, v + req.getNumTokens());
+                return v + req.getNumTokens();
+            });
         }
 
+        // return the token response with the new global tail, new stream tails, and the stream backpointers
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(currentTail,
                         backPointerMap.build(),

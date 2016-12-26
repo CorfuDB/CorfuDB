@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 @ToString(exclude = "aborted")
 @NoArgsConstructor
 @Slf4j
+@Deprecated
 public class TXEntry extends LogEntry implements ISMRConsumable {
 
     @Getter
