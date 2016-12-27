@@ -132,7 +132,7 @@ public class StreamsView {
                     token = temp.getToken();
                     tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
-                    log.trace("object is instance of TXEntry! readTimestamp: {}", readTimestamp);
+                    log.trace("object is instance of TXEntry! snapshotTimestamp: {}", readTimestamp);
                     tokenResponse =
                             runtime.getSequencerView().nextToken(streamIDs, 1, false, false, true,
                                     readTimestamp, readSet);

@@ -64,6 +64,8 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     {
         // T1 starts non-transactionally.
         t(1, () -> put("k", "v0"));
+        t(1, () -> put("k1", "v1"));
+        t(1, () -> put("k2", "v2"));
         // Now T1 and T2 both start transactions and read v0.
         t(1, this::TXBegin);
         t(2, this::TXBegin);

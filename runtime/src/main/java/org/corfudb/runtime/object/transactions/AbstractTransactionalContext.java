@@ -1,11 +1,9 @@
 package org.corfudb.runtime.object.transactions;
 
-import lombok.Data;
 import lombok.Getter;
 
-import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
 
@@ -52,7 +50,13 @@ public abstract class AbstractTransactionalContext {
      * The start time of the context.
      */
     @Getter
-    public long startTime;
+    public final long startTime;
+
+    /** The global-log position that the transaction snapshots in all reads.
+     */
+    @Getter(lazy = true)
+    private final long snapshotTimestamp = obtainSnapshotTimestamp();
+
 
     /** The address that the transaction was committed at.
      */
@@ -61,31 +65,15 @@ public abstract class AbstractTransactionalContext {
 
     /** The parent context of this transaction, if in a nested transaction.*/
     @Getter
-    AbstractTransactionalContext parentContext;
+    private final AbstractTransactionalContext parentContext;
 
     /**
-     * For conflict resolution purposes, maintain three pieces of information:
-     * 1. {@link firstReadTimestamp} : the timestamp of the first read in the system.
-     * 2. {@link writeConflictSet}: streams, and (optional) conflict tags per stream, touched by this TX
-     * 3. {@link readConflictSet}: streams, and (optional) conflict tags per stream, read by this TX
+     * A conflict set of the txn.
+     * The txn can only commit if none of the conflict objects (or the stream, if no specific conflict keys are provided)
+     * is superseded by a later update.
      */
-
-    /**
-     * @return The timestamp of the first read object, which may be null.
-     */
-    @Getter(lazy = true)
-    private final long firstReadTimestamp = fetchFirstTimestamp();
-    abstract public long fetchFirstTimestamp();
-
-    /** The write set for this transaction.*/
     @Getter
-    protected final Map<UUID, Set<Object>> writeConflictSet =
-            new ConcurrentHashMap<>();
-
-    /** The read set for this transaction. */
-    @Getter
-    protected final Map<UUID, Set<Object>> readConflictSet =
-            new ConcurrentHashMap<>();
+    private final Map<UUID, List<Long>> conflictInfo = new HashMap<>();
 
     /**
      * For the transaction update itself, we collect SMREntry objects representing the updates made by this TX
@@ -95,7 +83,6 @@ public abstract class AbstractTransactionalContext {
     @Getter
     protected final Map<UUID, List<WriteSetEntry>> writeSet =
             new ConcurrentHashMap<>();
-
 
     /**
      * A future which gets completed when this transaction commits.
@@ -172,17 +159,32 @@ public abstract class AbstractTransactionalContext {
                 .completeExceptionally(new TransactionAbortedException());
     }
 
-    /** Add the proxy and conflict information to our read set.
+    abstract public long obtainSnapshotTimestamp();
+
+    /** Add the proxy and conflict information to our conflict set.
      * @param proxy             The proxy to add
      * @param conflictObject    The fine-grained conflict information, if
      *                          available.
      */
-    protected void addToReadSet(ICorfuSMRProxyInternal proxy,
-                                Object[] conflictObject)
+    public void addToConflictSet(ICorfuSMRProxyInternal proxy, Object[] conflictObject)
     {
-        readConflictSet.computeIfAbsent(proxy.getStreamID(), k -> new HashSet<>());
+        conflictInfo.computeIfAbsent(proxy.getStreamID(), k -> new ArrayList<>());
         if (conflictObject != null)
-            readConflictSet.get(proxy.getStreamID()).addAll(Arrays.asList(conflictObject));
+            Arrays.asList(conflictObject).stream()
+                .forEach(V -> conflictInfo.get(proxy.getStreamID()).add(Long.valueOf(V.hashCode())) ) ;
     }
+
+
+    /**
+     * merge another conflictInfo map into this one
+     * @param otherCMap
+     */
+    public void mergeInto(Map<UUID, List<Long>> otherCMap) {
+        otherCMap.forEach((branchID, conflictSet) -> {
+            conflictInfo.putIfAbsent(branchID, new ArrayList<>());
+            conflictInfo.get(branchID).addAll(conflictSet);
+        });
+    }
+
 
 }

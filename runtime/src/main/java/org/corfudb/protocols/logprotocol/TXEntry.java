@@ -47,7 +47,7 @@ public class TXEntry extends LogEntry implements ISMRConsumable {
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
                 .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
             // Starting at the stream local address of this entry, read backwards until you hit a stream entry whose
-            // global address is less than readTimestamp.
+            // global address is less than snapshotTimestamp.
             if (getEntry().getLogicalAddresses().get(stream) == 0)
                 return false;
             LogData curEntry = runtime.getAddressSpaceView().read(stream, getEntry().getLogicalAddresses().get(stream) - 1, 1)

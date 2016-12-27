@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.annotations.*;
 import org.corfudb.runtime.object.AbstractCorfuWrapper;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import sun.misc.CRC16;
 
 import java.util.*;

@@ -142,9 +142,9 @@ public interface ICorfuPayload<T> {
 
     /** A really simple flat list implementation. The first entry is the size of the set as an int,
      * and the next entries are each value..
+     * @param <V>           The type of the values.
      * @param buf        The buffer to deserialize.
      * @param valueClass    The class of the values.
-     * @param <V>           The type of the values.
      * @return
      */
     static <V> List<V> listFromBuffer(ByteBuf buf, Class<V> valueClass) {

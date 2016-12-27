@@ -73,7 +73,7 @@ public class WriteAfterWriteTransactionalContext
         // address of -1L if it is rejected.
         long address = this.builder.runtime.getStreamsView()
                 .acquireAndWrite(affectedStreams, entry, t->true, t->true,
-                        getFirstReadTimestamp(), affectedStreams);
+                        getSnapshotTimestamp(), affectedStreams);
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
             abortTransaction();

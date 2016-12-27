@@ -1,10 +1,13 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
+import lombok.Setter;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Created by dmalkhi on 12/26/16.
@@ -12,29 +15,60 @@ import java.util.UUID;
 public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     /* Latest readstamp of the txn. */
     @Getter
-    final Long readTimestamp;
+    @Setter
+    final Long snapshotTimestamp;
 
-    /*
-     * Streams that are in the read set of the txn. The txn can only commit if none of the current offsets in each of
-     * streams is greater than readTimestamp.
-     */
     @Getter
-    final Set<UUID> conflictSet;
+    final Map<UUID, List<Long>> conflictMap;
 
+    public TxResolutionInfo(long readTS, Map<UUID, List<Long>> conflictMap) {
+        this.snapshotTimestamp = readTS;
+        this.conflictMap = conflictMap;
+    }
+
+
+    // todo: eventually, deprecate this adaptation constructor
+    public TxResolutionInfo(long readTS, Set<UUID> branches) {
+        this.snapshotTimestamp = readTS;
+        ImmutableMap.Builder<UUID, List<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
+        if (branches != null)
+            branches.forEach(branch -> conflictMapBuilder.put(branch, new ArrayList<>()));
+        conflictMap = conflictMapBuilder.build();
+    }
+
+    /**
+     * fast, specialized deserialization constructor, from a ByteBuf to this object
+     *
+     * The first entry is a long, the snapshot timestamp.
+     * The second is an int, the size of the map.
+     * Next, entries are serialized one by one, first the key, then each value, itself a set of objects.
+     *
+     * @param buf        The buffer to deserialize.
+     */
     public TxResolutionInfo(ByteBuf buf) {
-        readTimestamp = ICorfuPayload.fromBuffer(buf, Long.class);
-        conflictSet = ICorfuPayload.setFromBuffer(buf, UUID.class);
+        snapshotTimestamp = buf.readLong();
+        int numEntries = buf.readInt();
+        ImmutableMap.Builder<UUID, List<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
+        for (int i = 0; i < numEntries; i++) {
+            UUID K = ICorfuPayload.fromBuffer(buf, UUID.class);
+            List<Long> V = ICorfuPayload.listFromBuffer(buf, Long.class);
+            conflictMapBuilder.put(K, V);
+        }
+        conflictMap = conflictMapBuilder.build();
     }
 
-    public TxResolutionInfo(long readTS, Set<UUID> streams) {
-        this.readTimestamp = readTS;
-        this.conflictSet = streams;
-    }
-
+    /**
+     * fast , specialized serialization of object into ByteBuf
+     * @param buf
+     */
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, readTimestamp);
-        ICorfuPayload.serialize(buf, conflictSet);
+        buf.writeLong(snapshotTimestamp);
+        buf.writeInt(conflictMap.size());
+        conflictMap.entrySet().stream().forEach(x -> {
+            ICorfuPayload.serialize(buf, x.getKey());
+            ICorfuPayload.serialize(buf, x.getValue());
+        });
     }
-
 }
+
