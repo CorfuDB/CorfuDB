@@ -9,7 +9,7 @@ import java.util.UUID;
 /**
  * Created by dmalkhi on 12/26/16.
  */
-public class TxData implements ICorfuPayload<TxData> {
+public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     /* Latest readstamp of the txn. */
     @Getter
     final Long readTimestamp;
@@ -19,22 +19,22 @@ public class TxData implements ICorfuPayload<TxData> {
      * streams is greater than readTimestamp.
      */
     @Getter
-    final Set<UUID> readSet;
+    final Set<UUID> conflictSet;
 
-    public TxData(ByteBuf buf) {
+    public TxResolutionInfo(ByteBuf buf) {
         readTimestamp = ICorfuPayload.fromBuffer(buf, Long.class);
-        readSet = ICorfuPayload.setFromBuffer(buf, UUID.class);
+        conflictSet = ICorfuPayload.setFromBuffer(buf, UUID.class);
     }
 
-    public TxData(long readTS, Set<UUID> streams) {
+    public TxResolutionInfo(long readTS, Set<UUID> streams) {
         this.readTimestamp = readTS;
-        this.readSet = streams;
+        this.conflictSet = streams;
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, readTimestamp);
-        ICorfuPayload.serialize(buf, readSet);
+        ICorfuPayload.serialize(buf, conflictSet);
     }
 
 }

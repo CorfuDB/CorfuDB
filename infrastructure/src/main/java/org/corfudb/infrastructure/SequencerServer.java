@@ -51,7 +51,7 @@ public class SequencerServer extends AbstractServer {
      *
      *  - {@link SequencerServer::globalLogTail}: global log tail. points to the first available position (initially, 0).
      *  - {@link SequencerServer::streamTailMap}: a map of per-stream tail. points to per-stream first available position.
-     *  - {@link SequencerServer::streamBackpointerMap}: per stream map to last issued global-log position. used for backpointers.
+     *  - {@link SequencerServer::streamTailToGlobalTailMap}: per stream map to last issued global-log position. used for backpointers.
      *  - {@link SequencerServer::conflictToGlobalTailCache}: the {@link SequencerServer::maxConflictCacheSize} latest conflict keys and their latest commit (global-log) position
      *
      * Every append to the log updates the information in these maps.
@@ -59,7 +59,8 @@ public class SequencerServer extends AbstractServer {
     @Getter
     private final AtomicLong globalLogTail = new AtomicLong(0L);
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Long> streamBackpointerMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+
     private final long maxConflictCacheSize = 10_000;
     private final Cache<Object, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
@@ -101,25 +102,25 @@ public class SequencerServer extends AbstractServer {
      * If the request submits a timestamp (a global offset) that is less than one of the
      * global offsets of a stream specified in the request, then abort; otherwise commit.
      *
-     * @param timestamp Read timestamp of the txn; in order to commit, no writes may be made past this
-     *                  (global) timestamp on any streams touched by the txn.
-     * @param streams   Read set of the txn.
+     * @param txData info provided by runtime for conflict resolultion.
+     *              - timestamp : the snapshot (global) offset that this TX reads
+     *              - streams: conflict set of the txn. if any stream in this set has a later timestamp than the snapshot, abort
      */
-    public boolean txnResolution(long timestamp, Set<UUID> streams) {
-        log.trace("txn resolution, timestamp: {}, streams: {}", timestamp, streams);
+    public boolean txnCanCommit(TxResolutionInfo txData) {
+        log.trace("txn resolution, timestamp: {}, streams: {}", txData.getReadTimestamp(), txData.getConflictSet());
 
         AtomicBoolean commit = new AtomicBoolean(true);
-        for (UUID id : streams) {
+        for (UUID id : txData.getConflictSet()) {
             if (!commit.get())
                 break;
 
 
-            streamBackpointerMap.compute(id, (k, v) -> {
+            streamTailToGlobalTailMap.compute(id, (k, v) -> {
                 if (v == null) {
                     return null;
                 } else {
-                    if (v > timestamp) {
-                        log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
+                    if (v > txData.getReadTimestamp()) {
+                        log.debug("Rejecting request due to {} > {} on stream {}", v, txData.getReadTimestamp(), id);
                         commit.set(false);
                     }
                 }
@@ -148,7 +149,7 @@ public class SequencerServer extends AbstractServer {
                 return v;
             });
             // Compute the latest global offset across all streams.
-            Long lastIssued = streamBackpointerMap.get(id);
+            Long lastIssued = streamTailToGlobalTailMap.get(id);
             maxStreamGlobalTails = Math.max(maxStreamGlobalTails, lastIssued == null ? Long.MIN_VALUE : lastIssued);
         }
 
@@ -188,7 +189,7 @@ public class SequencerServer extends AbstractServer {
         // First, we check if the transaction can commit.
         if (req.getReqType() == TokenRequest.TK_TX) {
 
-            if (!txnResolution(req.getTxnResolution().getReadTimestamp(), req.getTxnResolution().getReadSet())) {
+            if (!txnCanCommit(req.getTxnResolution())) {
                 // If the txn aborts, then DO NOT hand out a token.
                 r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                         new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
@@ -209,7 +210,7 @@ public class SequencerServer extends AbstractServer {
         for (UUID id : req.getStreams()) {
 
             // step 1. and 2. (comment above)
-            streamBackpointerMap.compute(id, (k, v) -> {
+            streamTailToGlobalTailMap.compute(id, (k, v) -> {
                 if (v == null) {
                     backPointerMap.put(k, -1L);
                     return currentTail + req.getNumTokens() - 1;

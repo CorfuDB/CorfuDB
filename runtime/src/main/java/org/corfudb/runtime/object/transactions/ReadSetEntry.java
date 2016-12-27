@@ -5,6 +5,7 @@ import lombok.Getter;
 /** An entry in a transaction read set.
  * Created by mwei on 12/19/16.
  */
+@Deprecated
 public class ReadSetEntry {
 
     /** The fine-grained conflict information for this read, if present.*/

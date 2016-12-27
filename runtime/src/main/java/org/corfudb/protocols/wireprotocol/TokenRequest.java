@@ -4,7 +4,6 @@ import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,37 +49,31 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     final Boolean replexOverwrite = false; // todo: deprecate
 
     /* used for transaction resolution. */
-    final TxData txnResolution;
+    final TxResolutionInfo txnResolution;
 
-    public TokenRequest(byte reqType, long numTokens, Set<UUID> streams, boolean overwrite, boolean replexOverwrite, TxData txData) {
-        this.reqType = reqType;
+    // todo: deprecate this constructor!
+    public TokenRequest(Long numTokens, Set<UUID> streams, Boolean overwrite, Boolean replexOverwrite,
+                        boolean isTx, long readTS, Set<UUID> readSet) {
+
+        if (numTokens == 0)
+            this.reqType = TK_QUERY;
+        else if (isTx)
+            this.reqType = TK_TX;
+        else if (streams == null || streams.size() == 0)
+            this.reqType = TK_RAW;
+        else
+            this.reqType = TK_MULTI_STREAM;
+
         this.numTokens = numTokens;
         this.streams = streams;
         //this.overwrite = overwrite;
         //this.replexOverwrite = replexOverwrite;
-        this.txnResolution = txData;
+        this.txnResolution = isTx ? new TxResolutionInfo(readTS, readSet) : new TxResolutionInfo(-1L, null);
     }
 
     public TokenRequest(Long numTokens, Set<UUID> streams, Boolean overwrite, Boolean replexOverwrite) {
         this(numTokens, streams, overwrite, replexOverwrite,
                 false, 0L, null);
-    }
-
-    // todo: deprecate this constructor!
-    public TokenRequest(Long numTokens, Set<UUID> streams, Boolean overwrite, Boolean replexOverwrite,
-                        boolean isTx, long readTS, Set<UUID> readSet) {
-        this(
-                numTokens == 0 ? TK_QUERY : (streams != null && streams.size() > 0) ? TK_MULTI_STREAM : TK_RAW ,
-                numTokens,
-                streams,
-                overwrite,
-                replexOverwrite,
-                isTx ? new TxData(readTS, readSet) : new TxData(-1L, null)
-        );
-    }
-
-    public TokenRequest(byte reqType) {
-        this(reqType, 0, null, false, false, null);
     }
 
     public TokenRequest(ByteBuf buf) {
@@ -110,7 +103,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
             case TK_TX:
                 numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
                 streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
-                txnResolution = ICorfuPayload.fromBuffer(buf, TxData.class);
+                txnResolution = ICorfuPayload.fromBuffer(buf, TxResolutionInfo.class);
                 break;
 
             default:
