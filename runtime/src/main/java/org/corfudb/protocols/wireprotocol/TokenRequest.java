@@ -5,6 +5,7 @@ import jdk.nashorn.internal.objects.annotations.Getter;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -52,33 +53,24 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /* used for transaction resolution. */
     final TxResolutionInfo txnResolution;
 
-    // todo: deprecate this constructor!
     public TokenRequest(Long numTokens, Set<UUID> branches, Boolean overwrite, Boolean replexOverwrite,
-                        boolean isTx, long readTS, Set<UUID> readSet) {
+                        boolean isTx, TxResolutionInfo conflictInfo) {
+        reqType = TK_TX;
+        this.numTokens = numTokens;
+        this.branches = branches;
+        txnResolution = conflictInfo;
+    }
 
+    public TokenRequest(Long numTokens, Set<UUID> branches, Boolean overwrite, Boolean replexOverwrite) {
         if (numTokens == 0)
             this.reqType = TK_QUERY;
-        else if (isTx)
-            this.reqType = TK_TX;
         else if (branches == null || branches.size() == 0)
             this.reqType = TK_RAW;
         else
             this.reqType = TK_MULTI_STREAM;
-
         this.numTokens = numTokens;
         this.branches = branches;
-        //this.overwrite = overwrite;
-        //this.replexOverwrite = replexOverwrite;
-
-        if (isTx)
-            txnResolution = new TxResolutionInfo(readTS, readSet);
-        else
-            txnResolution = null;
-    }
-
-    public TokenRequest(Long numTokens, Set<UUID> branches, Boolean overwrite, Boolean replexOverwrite) {
-        this(numTokens, branches, overwrite, replexOverwrite,
-                false, 0L, null);
+        txnResolution = null;
     }
 
     public TokenRequest(ByteBuf buf) {

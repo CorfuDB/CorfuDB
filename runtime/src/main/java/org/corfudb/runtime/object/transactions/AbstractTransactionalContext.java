@@ -3,7 +3,6 @@ package org.corfudb.runtime.object.transactions;
 import lombok.Getter;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
 
@@ -73,7 +72,7 @@ public abstract class AbstractTransactionalContext {
      * is superseded by a later update.
      */
     @Getter
-    private final Map<UUID, List<Long>> conflictInfo = new HashMap<>();
+    private final Map<UUID, Set<Long>> conflictSet = new HashMap<>();
 
     /**
      * For the transaction update itself, we collect SMREntry objects representing the updates made by this TX
@@ -168,21 +167,21 @@ public abstract class AbstractTransactionalContext {
      */
     public void addToConflictSet(ICorfuSMRProxyInternal proxy, Object[] conflictObject)
     {
-        conflictInfo.computeIfAbsent(proxy.getStreamID(), k -> new ArrayList<>());
+        conflictSet.computeIfAbsent(proxy.getStreamID(), k -> new HashSet<>());
         if (conflictObject != null)
             Arrays.asList(conflictObject).stream()
-                .forEach(V -> conflictInfo.get(proxy.getStreamID()).add(Long.valueOf(V.hashCode())) ) ;
+                .forEach(V -> conflictSet.get(proxy.getStreamID()).add(Long.valueOf(V.hashCode())) ) ;
     }
 
 
     /**
-     * merge another conflictInfo map into this one
-     * @param otherCMap
+     * merge another conflictSet into this one
+     * @param otherCSet
      */
-    public void mergeInto(Map<UUID, List<Long>> otherCMap) {
-        otherCMap.forEach((branchID, conflictSet) -> {
-            conflictInfo.putIfAbsent(branchID, new ArrayList<>());
-            conflictInfo.get(branchID).addAll(conflictSet);
+    public void mergeInto(Map<UUID, Set<Long>> otherCSet) {
+        otherCSet.forEach((branchID, conflictParamSet) -> {
+            this.conflictSet.putIfAbsent(branchID, new HashSet<>());
+            this.conflictSet.get(branchID).addAll(conflictParamSet);
         });
     }
 

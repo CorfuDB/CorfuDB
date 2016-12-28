@@ -17,9 +17,9 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     final Long snapshotTimestamp;
 
     @Getter
-    final Map<UUID, List<Long>> conflictMap;
+    final Map<UUID, Set<Long>> conflictMap;
 
-    public TxResolutionInfo(long readTS, Map<UUID, List<Long>> conflictMap) {
+    public TxResolutionInfo(long readTS, Map<UUID, Set<Long>> conflictMap) {
         this.snapshotTimestamp = readTS;
         this.conflictMap = conflictMap;
     }
@@ -28,9 +28,9 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     // todo: eventually, deprecate this adaptation constructor
     public TxResolutionInfo(long readTS, Set<UUID> branches) {
         this.snapshotTimestamp = readTS;
-        ImmutableMap.Builder<UUID, List<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
+        ImmutableMap.Builder<UUID, Set<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
         if (branches != null)
-            branches.forEach(branch -> conflictMapBuilder.put(branch, new ArrayList<>()));
+            branches.forEach(branch -> conflictMapBuilder.put(branch, new HashSet<>()));
         conflictMap = conflictMapBuilder.build();
     }
 
@@ -46,10 +46,10 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     public TxResolutionInfo(ByteBuf buf) {
         snapshotTimestamp = buf.readLong();
         int numEntries = buf.readInt();
-        ImmutableMap.Builder<UUID, List<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
+        ImmutableMap.Builder<UUID, Set<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
         for (int i = 0; i < numEntries; i++) {
             UUID K = ICorfuPayload.fromBuffer(buf, UUID.class);
-            List<Long> V = ICorfuPayload.listFromBuffer(buf, Long.class);
+            Set<Long> V = ICorfuPayload.setFromBuffer(buf, Long.class);
             conflictMapBuilder.put(K, V);
         }
         conflictMap = conflictMapBuilder.build();

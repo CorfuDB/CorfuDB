@@ -216,7 +216,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         //setSnapshotTimestamp(tc.getSnapshotTimestamp());
 
         // merge the conflict maps
-        mergeInto(tc.getConflictInfo());
+        mergeInto(tc.getConflictSet());
 
         // merge the write sets
         tc.getWriteSet().entrySet().forEach(e-> {
@@ -268,16 +268,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
-
-        //System.out.println("commitTransaction with snapshotTimestamp=" + getSnapshotTimestamp()
-        //        + " conflict-set sz=" + getConflictInfo().getConflictMap().size()
-        //        + " conflict-set: " + getConflictInfo().getConflictMap().keySet()
-        //        + " write-set sz=" + entryMap.size());
-
         long address = this.builder.runtime.getStreamsView()
                 .acquireAndWrite(affectedStreams, entry, t->true, t->true,
-                        getSnapshotTimestamp(), getConflictInfo().keySet());
-                                        // TODO: for fine-grained resolution pass the entire monflict map.
+                        getSnapshotTimestamp(), getConflictSet());
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
             abortTransaction();

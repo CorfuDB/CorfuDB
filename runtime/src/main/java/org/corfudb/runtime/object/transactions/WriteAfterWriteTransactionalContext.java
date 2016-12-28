@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 import java.util.Map;
@@ -68,12 +69,16 @@ public class WriteAfterWriteTransactionalContext
         Map<UUID, MultiSMREntry> entryMap = builder.build();
         MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
 
+        // compute the conflictSet
+        TxResolutionInfo txResolutionInfo = new TxResolutionInfo(
+                getSnapshotTimestamp(), affectedStreams
+        );
+
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
         long address = this.builder.runtime.getStreamsView()
-                .acquireAndWrite(affectedStreams, entry, t->true, t->true,
-                        getSnapshotTimestamp(), affectedStreams);
+                .acquireAndWrite(affectedStreams, entry, t->true, t->true, txResolutionInfo);
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
             abortTransaction();

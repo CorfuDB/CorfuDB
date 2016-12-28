@@ -55,10 +55,9 @@ public class SequencerClient implements IClient {
                                                       boolean overwrite,
                                                       boolean replexOverwrite,
                                                       boolean txnResolution,
-                                                      long readTimestamp,
-                                                      Set<UUID> readSet) {
+                                                      TxResolutionInfo conflictInfo) {
         return router.sendMessageAndGetCompletable(
                 CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, overwrite, replexOverwrite,
-                        txnResolution, readTimestamp, readSet)));
+                        txnResolution, conflictInfo)));
     }
 }
