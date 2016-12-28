@@ -112,22 +112,41 @@ public class SequencerServer extends AbstractServer {
         //        + " branches: " + txData.getConflictMap().keySet());
 
         AtomicBoolean commit = new AtomicBoolean(true);
-        for (UUID id : txData.getConflictMap().keySet()) {
+        for (Map.Entry<UUID, List<Long>> entry : txData.getConflictMap().entrySet()) {
             if (!commit.get())
                 break;
 
-            branchTailToGlobalTailMap.compute(id, (k, v) -> {
-                if (v == null) {
-                    return null;
-                } else {
-                    if (v > txData.getSnapshotTimestamp()) {
-                        log.debug("Rejecting request due to {} > {} on branch {}", v, txData.getSnapshotTimestamp(), id);
+            // if conflict-parameters are present, check for conflict based on conflict-parameter updates
+            List<Long> conflictList = entry.getValue();
+            if (conflictList != null && conflictList.size() > 0) {
+                conflictList.forEach(conflictParam -> {
+                    Long v = conflictToGlobalTailCache.getIfPresent(conflictParam);
+                    if (v != null && v > txData.getSnapshotTimestamp()) {
+                        log.debug("Rejecting request due to {} > {} on conflictParam {}",
+                                v, txData.getSnapshotTimestamp(), conflictParam);
                         commit.set(false);
                     }
-                }
-                return v;
-            });
+                });
+            }
+
+            // otherwise, check for conflict based on branch updates
+            else {
+                UUID branchID = entry.getKey();
+                branchTailToGlobalTailMap.compute(branchID, (k, v) -> {
+                    if (v == null) {
+                        return null;
+                    } else {
+                        if (v > txData.getSnapshotTimestamp()) {
+                            log.debug("Rejecting request due to {} > {} on branch {}",
+                                    v, txData.getSnapshotTimestamp(), branchID);
+                            commit.set(false);
+                        }
+                    }
+                    return v;
+                });
+            }
         }
+
         return commit.get();
     }
 
