@@ -1,19 +1,13 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.clients.TestRule;
 import org.junit.Before;
 import org.junit.Test;
-import sun.rmi.runtime.Log;
 
 import java.util.Collections;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
