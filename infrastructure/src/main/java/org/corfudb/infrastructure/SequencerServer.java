@@ -48,19 +48,19 @@ public class SequencerServer extends AbstractServer {
     private final Map<String, Object> opts;
 
     /**
-     * The sequencer maintains information about log and branches:
+     * The sequencer maintains information about log and streams:
      *
      *  - {@link SequencerServer::globalLogTail}: global log tail. points to the first available position (initially, 0).
-     *  - {@link SequencerServer::branchTailMap}: a map of per-branch tail. points to per-branch first available position.
-     *  - {@link SequencerServer::branchTailToGlobalTailMap}: per branch map to last issued global-log position. used for backpointers.
+     *  - {@link SequencerServer::streamTailMap}: a map of per-streams tail. points to per-streams first available position.
+     *  - {@link SequencerServer::streamTailToGlobalTailMap}: per streams map to last issued global-log position. used for backpointers.
      *  - {@link SequencerServer::conflictToGlobalTailCache}: the {@link SequencerServer::maxConflictCacheSize} latest conflict keys and their latest commit (global-log) position
      *
      * Every append to the log updates the information in these maps.
      */
     @Getter
     private final AtomicLong globalLogTail = new AtomicLong(0L);
-    private final ConcurrentHashMap<UUID, Long> branchTailMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, Long> branchTailToGlobalTailMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
@@ -105,14 +105,15 @@ public class SequencerServer extends AbstractServer {
     /**
      * Returns true if the txn commits.
      * If the request submits a timestamp (a global offset) that is less than one of the
-     * global offsets of a branch specified in the request, then abort; otherwise commit.
+     * global offsets of a streams specified in the request, then abort; otherwise commit.
      *
-     * @param txData info provided by runtime for conflict resolultion.
+     * @param txData info provided by runtime for conflict resolultion:
      *              - timestamp : the snapshot (global) offset that this TX reads
-     *              - branches: conflict set of the txn. if any branch in this set has a later timestamp than the snapshot, abort
+     *              - conflictSet: conflict set of the txn.
+     *                if any conflict-param (or stream, if empty) in this set has a later timestamp than the snapshot, abort
      */
     public boolean txnCanCommit(TxResolutionInfo txData) {
-        log.trace("txn resolution, timestamp: {}, branches: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
+        log.trace("txn resolution, timestamp: {}, streams: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
 
         AtomicBoolean commit = new AtomicBoolean(true);
         for (Map.Entry<UUID, Set<Integer>> entry : txData.getConflictSet().entrySet()) {
@@ -133,16 +134,16 @@ public class SequencerServer extends AbstractServer {
                 });
             }
 
-            // otherwise, check for conflict based on branch updates
+            // otherwise, check for conflict based on streams updates
             else {
-                UUID branchID = entry.getKey();
-                branchTailToGlobalTailMap.compute(branchID, (k, v) -> {
+                UUID streamID = entry.getKey();
+                streamTailToGlobalTailMap.compute(streamID, (k, v) -> {
                     if (v == null) {
                         return null;
                     } else {
                         if (v > txData.getSnapshotTimestamp()) {
-                            log.debug("Rejecting request due to {} > {} on branch {}",
-                                    v, txData.getSnapshotTimestamp(), branchID);
+                            log.debug("Rejecting request due to {} > {} on streams {}",
+                                    v, txData.getSnapshotTimestamp(), streamID);
                             commit.set(false);
                         }
                     }
@@ -158,29 +159,29 @@ public class SequencerServer extends AbstractServer {
                                  ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
 
-        long maxBranchGlobalTails = -1L;
+        long maxStreamGlobalTails = -1L;
 
-        // Collect the latest local offset for every branch in the request.
-        ImmutableMap.Builder<UUID, Long> responseBranchTails = ImmutableMap.builder();
+        // Collect the latest local offset for every streams in the request.
+        ImmutableMap.Builder<UUID, Long> responseStreamTails = ImmutableMap.builder();
 
-        for (UUID id : req.getBranches()) {
-            branchTailMap.compute(id, (k, v) -> {
+        for (UUID id : req.getStreams()) {
+            streamTailMap.compute(id, (k, v) -> {
                 if (v == null) {
-                    responseBranchTails.put(k, -1L);
+                    responseStreamTails.put(k, -1L);
                     return null;
                 }
-                responseBranchTails.put(k, v);
+                responseStreamTails.put(k, v);
                 return v;
             });
-            // Compute the latest global offset across all branches.
-            Long lastIssued = branchTailToGlobalTailMap.get(id);
-            maxBranchGlobalTails = Math.max(maxBranchGlobalTails, lastIssued == null ? Long.MIN_VALUE : lastIssued);
+            // Compute the latest global offset across all streams.
+            Long lastIssued = streamTailToGlobalTailMap.get(id);
+            maxStreamGlobalTails = Math.max(maxStreamGlobalTails, lastIssued == null ? Long.MIN_VALUE : lastIssued);
         }
 
-        // If no branches are specified in the request, this value returns the last global token issued.
-        long responseGlobalTail = (req.getBranches().size() == 0) ? globalLogTail.get() - 1 : maxBranchGlobalTails;
+        // If no streams are specified in the request, this value returns the last global token issued.
+        long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 : maxStreamGlobalTails;
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                new TokenResponse(responseGlobalTail, Collections.emptyMap(), responseBranchTails.build())));
+                new TokenResponse(responseGlobalTail, Collections.emptyMap(), responseStreamTails.build())));
     }
 
     /**
@@ -226,16 +227,16 @@ public class SequencerServer extends AbstractServer {
         long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
         long newTail = currentTail + req.getNumTokens();
 
-        // for each branch:
-        //   1. obtain the last back-pointer for this branch, if exists; -1L otherwise.
-        //   2. record the new global tail as back-pointer for this branch.
+        // for each streams:
+        //   1. obtain the last back-pointer for this streams, if exists; -1L otherwise.
+        //   2. record the new global tail as back-pointer for this streams.
         //   3. extend the tail by the requested # tokens.
         ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
-        ImmutableMap.Builder<UUID, Long> requestBranchTokens = ImmutableMap.builder();
-        for (UUID id : req.getBranches()) {
+        ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
+        for (UUID id : req.getStreams()) {
 
             // step 1. and 2. (comment above)
-            branchTailToGlobalTailMap.compute(id, (k, v) -> {
+            streamTailToGlobalTailMap.compute(id, (k, v) -> {
                 if (v == null) {
                     backPointerMap.put(k, -1L);
                     return newTail-1;
@@ -246,12 +247,12 @@ public class SequencerServer extends AbstractServer {
             });
 
             // step 3. (comment above)
-            branchTailMap.compute(id, (k, v) -> {
+            streamTailMap.compute(id, (k, v) -> {
                 if (v == null) {
-                    requestBranchTokens.put(k, req.getNumTokens() - 1L);
+                    requestStreamTokens.put(k, req.getNumTokens() - 1L);
                     return req.getNumTokens() - 1L;
                 }
-                requestBranchTokens.put(k, v + req.getNumTokens());
+                requestStreamTokens.put(k, v + req.getNumTokens());
                 return v + req.getNumTokens();
             });
         }
@@ -261,11 +262,11 @@ public class SequencerServer extends AbstractServer {
             for (Integer cParam : req.getTxnResolution().getWriteConflictParams())
                 conflictToGlobalTailCache.put(cParam, newTail-1);
 
-        // return the token response with the new global tail, new branch tails, and the branch backpointers
+        // return the token response with the new global tail, new streams tails, and the streams backpointers
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(currentTail,
                         backPointerMap.build(),
-                        requestBranchTokens.build())));
+                        requestStreamTokens.build())));
     }
 
     /**

@@ -194,8 +194,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Insert the modification into writeSet.
         addToWriteSet(proxy, updateEntry, conflictObjects);
 
-        // TODO: what is this?
-        // Return the "address" of the upcall.
+        // Return the "address" of the update; used for retrieving results from operations via getUpcallRestult.
         return writeSet.get(proxy.getStreamID()).getValue().size() - 1;
     }
 
@@ -339,7 +338,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public synchronized long obtainSnapshotTimestamp() {
-        AbstractTransactionalContext atc = getRootContext();
+        final AbstractTransactionalContext atc = getRootContext();
         if (atc != null && atc != this) {
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.

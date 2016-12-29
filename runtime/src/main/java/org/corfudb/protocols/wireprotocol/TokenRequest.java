@@ -1,11 +1,9 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import jdk.nashorn.internal.objects.annotations.Getter;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,7 +16,7 @@ import java.util.UUID;
  *              This extends the global log tail by the requested # of tokens.
  * 2. {@link TokenRequest::TK_STREAM} : Ask for token(s) on a specific stream.
  *          This extends both the global log tail, and the specific stream tail, by the requested # of tokens.
- * 3. {@link TokenRequest::TK_MULTI_STREAM} : Ask for token(s) on multiple branches.
+ * 3. {@link TokenRequest::TK_MULTI_STREAM} : Ask for token(s) on multiple streams.
  *          This extends both the global log tail, and each of the specified stream tails, by the requested # of tokens.
  * 4. {@link TokenRequest::TK_TX} :
  *          First, check transaction resolution. If transaction can commit, then behave like {@link TokenRequest::TK_MULTI_STREAM}.
@@ -39,8 +37,8 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /** The number of tokens to request. */
     final Long numTokens;
 
-    /** The branches which are written to by this token request. */
-    final Set<UUID> branches;
+    /** The streams which are written to by this token request. */
+    final Set<UUID> streams;
 
     /* True if the Replex protocol encountered an overwrite at the global log layer. */
     @Deprecated
@@ -53,24 +51,24 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /* used for transaction resolution. */
     final TxResolutionInfo txnResolution;
 
-    public TokenRequest(Long numTokens, Set<UUID> branches,
+    public TokenRequest(Long numTokens, Set<UUID> streams,
                         Boolean overwrite, Boolean replexOverwrite,
                         TxResolutionInfo conflictInfo) {
         reqType = TK_TX;
         this.numTokens = numTokens;
-        this.branches = branches;
+        this.streams = streams;
         txnResolution = conflictInfo;
     }
 
-    public TokenRequest(Long numTokens, Set<UUID> branches, Boolean overwrite, Boolean replexOverwrite) {
+    public TokenRequest(Long numTokens, Set<UUID> streams, Boolean overwrite, Boolean replexOverwrite) {
         if (numTokens == 0)
             this.reqType = TK_QUERY;
-        else if (branches == null || branches.size() == 0)
+        else if (streams == null || streams.size() == 0)
             this.reqType = TK_RAW;
         else
             this.reqType = TK_MULTI_STREAM;
         this.numTokens = numTokens;
-        this.branches = branches;
+        this.streams = streams;
         txnResolution = null;
     }
 
@@ -81,31 +79,31 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
 
             case TK_QUERY:
                 numTokens = 0L;
-                branches = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
                 txnResolution = null;
                 break;
 
             case TK_RAW:
                 numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
-                branches = null;
+                streams = null;
                 txnResolution = null;
                 break;
 
             case TK_MULTI_STREAM:
                 numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
-                branches = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
                 txnResolution = null;
                 break;
 
             case TK_TX:
                 numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
-                branches = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
                 txnResolution = new TxResolutionInfo(buf);
                 break;
 
             default:
                 numTokens = -1L;
-                branches = null;
+                streams = null;
                 txnResolution = null;
                 break;
         }
@@ -118,7 +116,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
             ICorfuPayload.serialize(buf, numTokens);
 
         if (reqType != TK_RAW)
-            ICorfuPayload.serialize(buf, branches);
+            ICorfuPayload.serialize(buf, streams);
 
         if (reqType == TK_TX)
             ICorfuPayload.serialize(buf, txnResolution);
