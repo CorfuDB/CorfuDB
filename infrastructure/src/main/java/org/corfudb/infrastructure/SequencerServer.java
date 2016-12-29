@@ -67,7 +67,6 @@ public class SequencerServer extends AbstractServer {
     private final Cache<Integer, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
             .removalListener((Integer  K, Long V, RemovalCause cause) -> {
-                System.out.println("conflict cache eviction");
                 maxConflictWildcard = Math.max(V, maxConflictWildcard);
             })
             .build();
@@ -114,8 +113,6 @@ public class SequencerServer extends AbstractServer {
      */
     public boolean txnCanCommit(TxResolutionInfo txData) {
         log.trace("txn resolution, timestamp: {}, branches: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
-        //System.out.println("txn resolution, timestamp: " + txData.getSnapshotTimestamp()
-        //        + " branches: " + txData.getConflictSet().keySet());
 
         AtomicBoolean commit = new AtomicBoolean(true);
         for (Map.Entry<UUID, Set<Integer>> entry : txData.getConflictSet().entrySet()) {
