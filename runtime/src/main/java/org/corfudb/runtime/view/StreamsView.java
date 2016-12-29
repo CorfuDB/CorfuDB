@@ -120,15 +120,6 @@ public class StreamsView {
     public long acquireAndWrite(Set<UUID> streamIDs, Object object,
                                 Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback,
-                                Long snapshotTimestamp, Map<UUID, Set<Long>> conflictSet) {
-        return acquireAndWrite(streamIDs, object,
-                acquisitionCallback, deacquisitionCallback,
-                new TxResolutionInfo(snapshotTimestamp, conflictSet));
-    }
-
-    public long acquireAndWrite(Set<UUID> streamIDs, Object object,
-                                Function<TokenResponse, Boolean> acquisitionCallback,
-                                Function<TokenResponse, Boolean> deacquisitionCallback,
                                 TxResolutionInfo conflictInfo) {
         boolean replexOverwrite = false;
         boolean overwrite = false;
@@ -138,12 +129,12 @@ public class StreamsView {
                 long token;
                 if (overwrite) {
                     TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false, true, conflictInfo);
+                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false, conflictInfo);
                     token = temp.getToken();
                     tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
                     tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false, true, conflictInfo);
+                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false, conflictInfo);
                     token = tokenResponse.getToken();
                 }
                 log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);

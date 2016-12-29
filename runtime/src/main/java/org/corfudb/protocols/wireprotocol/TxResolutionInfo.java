@@ -11,27 +11,31 @@ import java.util.*;
  * Created by dmalkhi on 12/26/16.
  */
 public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
-    /* Latest readstamp of the txn. */
+    /* snapshot timestamp of the txn. */
     @Getter
     @Setter
     final Long snapshotTimestamp;
 
     @Getter
-    final Map<UUID, Set<Long>> conflictMap;
+    final Map<UUID, Set<Integer>> conflictSet;
 
-    public TxResolutionInfo(long readTS, Map<UUID, Set<Long>> conflictMap) {
-        this.snapshotTimestamp = readTS;
-        this.conflictMap = conflictMap;
+    @Getter
+    final Set<Integer> writeConflictParams; // todo: should we group them by streams??
+
+    public TxResolutionInfo(long snapshotTS, Map<UUID, Set<Integer>> conflictMap, Set<Integer> writeConflictParams) {
+        this.snapshotTimestamp = snapshotTS;
+        this.conflictSet = conflictMap;
+        this.writeConflictParams = writeConflictParams;
     }
 
 
-    // todo: eventually, deprecate this adaptation constructor
-    public TxResolutionInfo(long readTS, Set<UUID> branches) {
+    public TxResolutionInfo(long readTS, Set<UUID> streams,  Set<Integer> writeConflictParams) {
         this.snapshotTimestamp = readTS;
-        ImmutableMap.Builder<UUID, Set<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
-        if (branches != null)
-            branches.forEach(branch -> conflictMapBuilder.put(branch, new HashSet<>()));
-        conflictMap = conflictMapBuilder.build();
+        ImmutableMap.Builder<UUID, Set<Integer>> conflictMapBuilder = new ImmutableMap.Builder<>();
+        if (streams != null)
+            streams.forEach(streamID -> conflictMapBuilder.put(streamID, new HashSet<>()));
+        conflictSet = conflictMapBuilder.build();
+        this.writeConflictParams = writeConflictParams;
     }
 
     /**
@@ -46,13 +50,14 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     public TxResolutionInfo(ByteBuf buf) {
         snapshotTimestamp = buf.readLong();
         int numEntries = buf.readInt();
-        ImmutableMap.Builder<UUID, Set<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
+        ImmutableMap.Builder<UUID, Set<Integer>> conflictMapBuilder = new ImmutableMap.Builder<>();
         for (int i = 0; i < numEntries; i++) {
             UUID K = ICorfuPayload.fromBuffer(buf, UUID.class);
-            Set<Long> V = ICorfuPayload.setFromBuffer(buf, Long.class);
+            Set<Integer> V = ICorfuPayload.setFromBuffer(buf, Integer.class);
             conflictMapBuilder.put(K, V);
         }
-        conflictMap = conflictMapBuilder.build();
+        conflictSet = conflictMapBuilder.build();
+        writeConflictParams = ICorfuPayload.setFromBuffer(buf, Integer.class);
     }
 
     /**
@@ -62,11 +67,12 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     @Override
     public void doSerialize(ByteBuf buf) {
         buf.writeLong(snapshotTimestamp);
-        buf.writeInt(conflictMap.size());
-        conflictMap.entrySet().stream().forEach(x -> {
+        buf.writeInt(conflictSet.size());
+        conflictSet.entrySet().stream().forEach(x -> {
             ICorfuPayload.serialize(buf, x.getKey());
             ICorfuPayload.serialize(buf, x.getValue());
         });
+        ICorfuPayload.serialize(buf, writeConflictParams);
     }
 }
 

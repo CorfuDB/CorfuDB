@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
@@ -62,9 +63,14 @@ public class SequencerServer extends AbstractServer {
     private final ConcurrentHashMap<UUID, Long> branchTailToGlobalTailMap = new ConcurrentHashMap<>();
 
     private final long maxConflictCacheSize = 10_000;
-    private final Cache<Object, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
+    private long maxConflictWildcard = -1L;
+    private final Cache<Integer, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
-                .build();
+            .removalListener((Integer  K, Long V, RemovalCause cause) -> {
+                System.out.println("conflict cache eviction");
+                maxConflictWildcard = Math.max(V, maxConflictWildcard);
+            })
+            .build();
 
     /**
      * A sequencer needs a lease to serve a certain number of tokens.
@@ -107,23 +113,24 @@ public class SequencerServer extends AbstractServer {
      *              - branches: conflict set of the txn. if any branch in this set has a later timestamp than the snapshot, abort
      */
     public boolean txnCanCommit(TxResolutionInfo txData) {
-        log.trace("txn resolution, timestamp: {}, branches: {}", txData.getSnapshotTimestamp(), txData.getConflictMap());
+        log.trace("txn resolution, timestamp: {}, branches: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
         //System.out.println("txn resolution, timestamp: " + txData.getSnapshotTimestamp()
-        //        + " branches: " + txData.getConflictMap().keySet());
+        //        + " branches: " + txData.getConflictSet().keySet());
 
         AtomicBoolean commit = new AtomicBoolean(true);
-        for (Map.Entry<UUID, List<Long>> entry : txData.getConflictMap().entrySet()) {
+        for (Map.Entry<UUID, Set<Integer>> entry : txData.getConflictSet().entrySet()) {
             if (!commit.get())
                 break;
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter updates
-            List<Long> conflictList = entry.getValue();
-            if (conflictList != null && conflictList.size() > 0) {
-                conflictList.forEach(conflictParam -> {
+            Set<Integer> conflictParamSet = entry.getValue();
+            if (conflictParamSet != null && conflictParamSet.size() > 0) {
+                conflictParamSet.forEach(conflictParam -> {
                     Long v = conflictToGlobalTailCache.getIfPresent(conflictParam);
-                    if (v != null && v > txData.getSnapshotTimestamp()) {
-                        log.debug("Rejecting request due to {} > {} on conflictParam {}",
-                                v, txData.getSnapshotTimestamp(), conflictParam);
+                    if ((v != null && v > txData.getSnapshotTimestamp()) ||
+                            (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
+                        log.debug("Rejecting request due to update-timestamp > {} on conflictParam {}",
+                                txData.getSnapshotTimestamp(), conflictParam);
                         commit.set(false);
                     }
                 });
@@ -220,6 +227,7 @@ public class SequencerServer extends AbstractServer {
         // extend the tail of the global log by the requested # of tokens
         // currentTail is the first available position in the global log
         long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
+        long newTail = currentTail + req.getNumTokens();
 
         // for each branch:
         //   1. obtain the last back-pointer for this branch, if exists; -1L otherwise.
@@ -233,10 +241,10 @@ public class SequencerServer extends AbstractServer {
             branchTailToGlobalTailMap.compute(id, (k, v) -> {
                 if (v == null) {
                     backPointerMap.put(k, -1L);
-                    return currentTail + req.getNumTokens() - 1;
+                    return newTail-1;
                 } else {
                     backPointerMap.put(k, v);
-                    return Math.max(currentTail + req.getNumTokens() - 1, v);
+                    return Math.max(newTail - 1, v);
                 }
             });
 
@@ -250,6 +258,11 @@ public class SequencerServer extends AbstractServer {
                 return v + req.getNumTokens();
             });
         }
+
+        // update the cache of conflict parameters
+        if (req.getTxnResolution() != null)
+            for (Integer cParam : req.getTxnResolution().getWriteConflictParams())
+                conflictToGlobalTailCache.put(cParam, newTail-1);
 
         // return the token response with the new global tail, new branch tails, and the branch backpointers
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(

@@ -52,26 +52,23 @@ public class WriteAfterWriteTransactionalContext
             return commitAddress;
         }
 
-        // Otherwise, commit by generating the set of affected streams
-        // and having the sequencer conditionally issue a token.
-        Set<UUID> affectedStreams = getWriteSet().keySet();
+        // we are going to compile the write-set in three parts:
+        // 1. a MultiObjectSMREntry: This contains the update(s) to objects
+        // 2. a set of stream-IDs : This is the set of affected streams
+        // 3. a set of conflict-params : This is the set of affected conflict params
 
-        // For now, we have to convert our write set into a map
-        // that we can construct a new MultiObjectSMREntry from.
-        ImmutableMap.Builder<UUID, MultiSMREntry> builder =
-                ImmutableMap.builder();
-        getWriteSet().entrySet()
-                .forEach(x -> builder.put(x.getKey(),
-                        new MultiSMREntry(x.getValue().stream()
-                                .map(WriteSetEntry::getEntry)
-                                .collect(Collectors.toList()))));
-                                // todo: provide the write conflict set
-        Map<UUID, MultiSMREntry> entryMap = builder.build();
-        MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
+        // (item 1. in the comment above.)
+        MultiObjectSMREntry entry = collectWriteSetEntries();
+
+        // (item 2. in the comment above.)
+        Set<UUID> affectedStreams = writeSet.keySet();
+
+        // (item 3. in the comment above.)
+        Set<Integer> writeConflictParams = collectWriteConflictParams();
 
         // compute the conflictSet
         TxResolutionInfo txResolutionInfo = new TxResolutionInfo(
-                getSnapshotTimestamp(), affectedStreams
+                getSnapshotTimestamp(), affectedStreams, writeConflictParams
         );
 
         // Now we obtain a conditional address from the sequencer.

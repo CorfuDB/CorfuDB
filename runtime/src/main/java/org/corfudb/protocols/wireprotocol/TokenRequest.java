@@ -53,8 +53,9 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /* used for transaction resolution. */
     final TxResolutionInfo txnResolution;
 
-    public TokenRequest(Long numTokens, Set<UUID> branches, Boolean overwrite, Boolean replexOverwrite,
-                        boolean isTx, TxResolutionInfo conflictInfo) {
+    public TokenRequest(Long numTokens, Set<UUID> branches,
+                        Boolean overwrite, Boolean replexOverwrite,
+                        TxResolutionInfo conflictInfo) {
         reqType = TK_TX;
         this.numTokens = numTokens;
         this.branches = branches;

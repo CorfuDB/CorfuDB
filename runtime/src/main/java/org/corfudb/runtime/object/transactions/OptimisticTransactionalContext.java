@@ -1,18 +1,16 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
 
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /** A Corfu optimistic transaction context.
@@ -98,10 +96,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         Iterator<AbstractTransactionalContext> contextIterator =
             TransactionalContext.getTransactionStack().descendingIterator();
 
-        contextIterator.forEachRemaining(x -> {
-            allUpdates.addAll(x.getWriteSet()
-                    .getOrDefault(streamID, Collections.emptyList()));
-        });
+        contextIterator.forEachRemaining(x -> { allUpdates.addAll(x.getWriteSetEntryList(streamID)); });
 
         // Record that we have modified this proxy.
         if (allUpdates.size() > 0) {
@@ -166,21 +161,21 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         addToConflictSet(proxy, conflictObject);
 
         // if we have a result, return it.
-        WriteSetEntry wrapper = getWriteSet(proxy.getStreamID()).get((int)timestamp);
+        WriteSetEntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
         if (wrapper != null && wrapper.isHaveUpcallResult()){
             return wrapper.getUpcallResult();
         }
         // Otherwise, we need to sync the object
         return proxy.getUnderlyingObject().write((v,o) -> {
             syncUnsafe(proxy);
-            WriteSetEntry wrapper2 = getWriteSet(proxy.getStreamID()).get((int)timestamp);
+            WriteSetEntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()){
                 return wrapper2.getUpcallResult();
             }
             // If we still don't have the upcall, this must be a bug.
             throw new RuntimeException("Tried to get upcall during a transaction but" +
             " we don't have it even after an optimistic sync (asked for " + timestamp +
-            " we have 0-" + (writeSet.get(proxy.getStreamID()).size() - 1) + ")");
+            " we have 0-" + (writeSet.get(proxy.getStreamID()).getValue().size() - 1) + ")");
         });
     }
 
@@ -194,15 +189,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
                               SMREntry updateEntry,
-                              Object[] conflictObject) {
+                              Object[] conflictObjects) {
 
         // Insert the modification into writeSet.
-        writeSet.putIfAbsent(proxy.getStreamID(), new ArrayList<>());
-        writeSet.get(proxy.getStreamID()).add(new WriteSetEntry(updateEntry));
+        addToWriteSet(proxy, updateEntry, conflictObjects);
 
         // TODO: what is this?
         // Return the "address" of the upcall.
-        return writeSet.get(proxy.getStreamID()).size() - 1;
+        return writeSet.get(proxy.getStreamID()).getValue().size() - 1;
     }
 
     /**
@@ -212,17 +206,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @SuppressWarnings("unchecked")
     public void addTransaction(AbstractTransactionalContext tc) {
-        // merge snapshot time
-        //setSnapshotTimestamp(tc.getSnapshotTimestamp());
-
         // merge the conflict maps
-        mergeInto(tc.getConflictSet());
+        mergeConflictSetInto(tc.getConflictSet());
 
-        // merge the write sets
-        tc.getWriteSet().entrySet().forEach(e-> {
-            writeSet.putIfAbsent(e.getKey(), new ArrayList<>());
-            writeSet.get(e.getKey()).addAll(e.getValue());
-        });
+        // merge the write-sets
+        mergeWriteSetInto(tc.writeSet);
 
         // "commit" the optimistic writes (for each proxy we touched)
         // by updating the modifying context (as long as the context
@@ -249,28 +237,26 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             return commitAddress;
         }
 
-        // Otherwise, commit by generating the set of affected streams
-        // and having the sequencer conditionally issue a token.
+        // we are going to compile the write-set in three parts:
+        // 1. a MultiObjectSMREntry: This contains the update(s) to objects
+        // 2. a set of stream-IDs : This is the set of affected streams
+        // 3. a set of conflict-params : This is the set of affected conflict params
+
+        // (item 1. in the comment above.)
+        MultiObjectSMREntry entry = collectWriteSetEntries();
+
+        // (item 2. in the comment above.)
         Set<UUID> affectedStreams = writeSet.keySet();
 
-        // For now, we have to convert our write set into a map
-        // that we can construct a new MultiObjectSMREntry from.
-        ImmutableMap.Builder<UUID, MultiSMREntry> builder =
-                ImmutableMap.builder();
-        writeSet.entrySet()
-                .forEach(x -> builder.put(x.getKey(),
-                                          new MultiSMREntry(x.getValue().stream()
-                                            .map(WriteSetEntry::getEntry)
-                                            .collect(Collectors.toList()))));
-        Map<UUID, MultiSMREntry> entryMap = builder.build();
-        MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
+        // (item 3. in the comment above.)
+        Set<Integer> writeConflictParams = collectWriteConflictParams();
 
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
         long address = this.builder.runtime.getStreamsView()
                 .acquireAndWrite(affectedStreams, entry, t->true, t->true,
-                        getSnapshotTimestamp(), getConflictSet());
+                        new TxResolutionInfo(getSnapshotTimestamp(), getConflictSet(), writeConflictParams));
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
             abortTransaction();
@@ -306,17 +292,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         });
     }
 
-    /** Helper function to get a write set for a particular stream.
-     *
-     * @param id    The stream to get a write set for.
-     * @return      The write set for that stream, as an ordered list.
-     */
-    private List<WriteSetEntry> getWriteSet(UUID id) {
-        return writeSet.getOrDefault(id, new LinkedList<>());
-    }
-
-
-
     /** Determine whether a proxy's object is optimistically "up to date".
      *
      * An object is optimistically up to date if
@@ -335,8 +310,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     private <T> boolean objectIsOptimisticallyUpToDateUnsafe(ICorfuSMRProxyInternal<T> proxy) {
         long numOptimisticModifications = TransactionalContext.getTransactionStack()
-                .stream().flatMap(x -> x.getWriteSet().getOrDefault(proxy.getStreamID(),
-                        Collections.emptyList()).stream()).count();
+                .stream().flatMap(x -> x.getWriteSetEntryList(proxy.getStreamID()).stream()).count();
 
         return (numOptimisticModifications == 0 &&
                 !proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) ||
