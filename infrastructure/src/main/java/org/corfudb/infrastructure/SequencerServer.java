@@ -62,11 +62,18 @@ public class SequencerServer extends AbstractServer {
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
+    /**
+     * A cache of conflict parameter modification timestamps.
+     *
+     * A "wildcard" {@link SequencerServer::maxConflictWildcard} representing all the entries which were evicted from the cache holds
+     * theier maximal modification time.
+     */
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
     private final Cache<Integer, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
             .removalListener((Integer  K, Long V, RemovalCause cause) -> {
+                // System.out.println("conflict param eviction");
                 maxConflictWildcard = Math.max(V, maxConflictWildcard);
             })
             .build();
@@ -114,6 +121,10 @@ public class SequencerServer extends AbstractServer {
      */
     public boolean txnCanCommit(TxResolutionInfo txData) {
         log.trace("txn resolution, timestamp: {}, streams: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
+        //System.out.println("txn resolution");
+        //System.out.println("   txData.conflictSet entries: " + txData.getConflictSet().entrySet() );
+        //if (txData.getReadSet().entrySet().size() > 0)
+        //    System.out.println("   txData.conflictSet params: " + txData.getReadSet().values());
 
         AtomicBoolean commit = new AtomicBoolean(true);
         for (Map.Entry<UUID, Set<Integer>> entry : txData.getConflictSet().entrySet()) {
@@ -129,6 +140,8 @@ public class SequencerServer extends AbstractServer {
                             (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
                         log.debug("Rejecting request due to update-timestamp > {} on conflictParam {}",
                                 txData.getSnapshotTimestamp(), conflictParam);
+                        //System.out.println("Rejecting request due to update-timestamp on conflictParam" +
+                        //        conflictParam);
                         commit.set(false);
                     }
                 });
@@ -144,6 +157,9 @@ public class SequencerServer extends AbstractServer {
                         if (v > txData.getSnapshotTimestamp()) {
                             log.debug("Rejecting request due to {} > {} on streams {}",
                                     v, txData.getSnapshotTimestamp(), streamID);
+                            System.out.println("Rejecting request due to update-timestamp on stream");
+                            System.out.println("  streamID=" + streamID);
+                            System.out.println("   txData.conflictSet entries: " + txData.getConflictSet().entrySet() );
                             commit.set(false);
                         }
                     }
@@ -259,8 +275,9 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null)
-            for (Integer cParam : req.getTxnResolution().getWriteConflictParams())
-                conflictToGlobalTailCache.put(cParam, newTail-1);
+            for (Set<Integer> conflictParams : req.getTxnResolution().getWriteConflictParams().values())
+                for (Integer cParam : conflictParams)
+                    conflictToGlobalTailCache.put(cParam, newTail-1);
 
         // return the token response with the new global tail, new streams tails, and the streams backpointers
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
