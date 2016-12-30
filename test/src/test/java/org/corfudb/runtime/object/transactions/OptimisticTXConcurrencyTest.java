@@ -78,4 +78,22 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenarios {
         assertThat(commitStatus.get(0) == COMMITVALUE || commitStatus.get(1) == COMMITVALUE)
                 .isTrue();
     }
+
+    @Test
+    public void testAbortWWInterleaved()
+            throws Exception
+    {
+        concurrentAbortTest(true);
+
+        // no assertion, just print abort rate
+    }
+
+    @Test
+    public void testAbortWWThreaded()
+            throws Exception
+    {
+        concurrentAbortTest(false);
+
+        // no assertion, just print abort rate
+    }
 }

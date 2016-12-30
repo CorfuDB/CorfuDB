@@ -70,7 +70,7 @@ public abstract class AbstractTransactionContextTest extends AbstractViewTest {
     ArrayList<CorfuSharedCounter> sharedCounters;
     AtomicIntegerArray commitStatus;
     final int COMMITVALUE = 1; // by default, ABORTVALUE = 0
-    AtomicIntegerArray snapStatus = new AtomicIntegerArray(numTasks);
+    AtomicIntegerArray snapStatus;
 
     /**
      * build an array of shared counters for the test

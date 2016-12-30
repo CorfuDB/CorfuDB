@@ -8,9 +8,10 @@ import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -290,4 +291,60 @@ public abstract class TXConflictScenarios extends AbstractTransactionContextTest
                 .isTrue();
     }
 
+    void getAbortTestSM() {
+        Random rand = new Random(PARAMETERS.SEED);
+
+        Map<String, String> testMap = getMap();
+        testMap.clear();
+
+        // state 0: start a transaction
+        addTestStep((ignored_task_num) -> TXBegin() );
+
+        // state 1: do some puts
+        addTestStep( (task_num) -> {
+            assertThat(testMap.put(Integer.toString(task_num),
+                    Integer.toString(task_num)))
+                    .isEqualTo(null);
+            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++)
+                testMap.get(Integer.toString(rand.nextInt(PARAMETERS.NUM_ITERATIONS_MODERATE)));
+        });
+
+        // state 2 (final): ask to commit the transaction
+        addTestStep( (task_num) -> {
+            try {
+                TXEnd();
+                commitStatus.set(task_num, COMMITVALUE);
+            } catch (TransactionAbortedException tae) {
+            }
+        });
+    }
+
+    public void concurrentAbortTest(boolean testInterleaved)
+            throws Exception
+    {
+        final int numThreads =  PARAMETERS.CONCURRENCY_SOME;
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
+        numTasks = numThreads*numRecords;
+
+        long startTime = System.currentTimeMillis();
+
+        commitStatus = new AtomicIntegerArray(numTasks);
+
+        getAbortTestSM();
+
+        // invoke the execution engine
+        if (testInterleaved)
+            scheduleInterleaved(numThreads, numTasks);
+        else
+            scheduleThreaded(numThreads, numTasks);
+
+        int aborts = 0;
+        for (int i = 0; i < numTasks; i++)
+            if (commitStatus.get(i) != COMMITVALUE)
+                aborts++;
+
+        // print stats..
+        calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
+        calculateAbortRate(aborts, numRecords * numThreads);
+    }
 }
