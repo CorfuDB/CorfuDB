@@ -7,7 +7,6 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.StreamView;
 import org.junit.Test;
 
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -467,21 +466,19 @@ public class CompileProxyTest extends AbstractViewTest {
         // WS,RS=TEST_4
         testObject.mutatorAccessorTest(TEST_4, TEST_5);
 
-        // Assert that the read set contains TEST_1, TEST_4
+        // Assert that the conflict set contains TEST_1, TEST_4
         assertThat(TransactionalContext.getCurrentContext()
-                .getReadSet().values().stream()
+                .getConflictSet().values().stream()
                 .flatMap(x -> x.stream())
-                .flatMap(x -> Arrays.stream(x.getConflictObjects()))
-                        .collect(Collectors.toList()))
-                .contains(TEST_0, TEST_4);
-
-        // Assert that the write set contains TEST_2, TEST_4
-        assertThat(TransactionalContext.getCurrentContext()
-                .getWriteSet().values().stream()
-                .flatMap(x -> x.stream())
-                .flatMap(x -> Arrays.stream(x.getConflictObjects()))
                 .collect(Collectors.toList()))
-                .contains(TEST_3, TEST_4);
+                .contains(Integer.valueOf(TEST_0.hashCode()), Integer.valueOf(TEST_4.hashCode()));
+
+        // in optimistic mode, assert that the conflict set does NOT contain TEST_2, TEST_4
+        assertThat(TransactionalContext.getCurrentContext()
+                .getConflictSet().values().stream()
+                .flatMap(x -> x.stream())
+                .collect(Collectors.toList()))
+                .doesNotContain(Integer.valueOf(TEST_3), Integer.valueOf(TEST_4));
 
         getRuntime().getObjectsView().TXAbort();
     }

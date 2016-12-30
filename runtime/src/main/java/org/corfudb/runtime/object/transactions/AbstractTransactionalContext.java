@@ -1,16 +1,19 @@
 package org.corfudb.runtime.object.transactions;
 
-import lombok.Data;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 
-import lombok.RequiredArgsConstructor;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Represents a transactional context. Transactional contexts
@@ -51,7 +54,13 @@ public abstract class AbstractTransactionalContext {
      * The start time of the context.
      */
     @Getter
-    public long startTime;
+    public final long startTime;
+
+    /** The global-log position that the transaction snapshots in all reads.
+     */
+    @Getter(lazy = true)
+    private final long snapshotTimestamp = obtainSnapshotTimestamp();
+
 
     /** The address that the transaction was committed at.
      */
@@ -60,23 +69,34 @@ public abstract class AbstractTransactionalContext {
 
     /** The parent context of this transaction, if in a nested transaction.*/
     @Getter
-    AbstractTransactionalContext parentContext;
+    private final AbstractTransactionalContext parentContext;
 
-    abstract public Set<ICorfuSMRProxyInternal> getModifiedProxies();
-
-    /** Return the write set for this transaction
-     *
-     * @return  The write set, which contains all modifications this
-     *          transaction will make.
+    /**
+     * A conflict set of the txn.
+     * The txn can only commit if none of the conflict objects (or the stream, if no specific conflict keys are provided)
+     * is superseded by a later update.
      */
-    abstract public Map<UUID, List<WriteSetEntry>> getWriteSet();
+    @Getter
+    private final Map<UUID, Set<Integer>> conflictSet = new ConcurrentHashMap<>();
 
-    /** Return the read set for this transaction
+    /**
+     * A write-set is a key component of a transaction.
+     * We collect the write-set as a map, organized by streams.
+     * For each stream, we record a pair:
+     *  - a set of conflict-parameters modified by this transaction on the stream,
+     *  - a list of SMR updates by this transcation on the stream.
      *
-     * @return  The read set, which contains all objects read by this
-     *          transaction.
+     * @return a map from streams to write entry representing an update made by this TX
      */
-    abstract public Map<UUID, List<ReadSetEntry>> getReadSet();
+    @Getter
+    protected final Map
+            <  UUID,                                                // stream ID
+                    AbstractMap.SimpleEntry<                        // per-stream pair
+                            Set<Integer>,                              // set of conflict-parameters
+                            List<WriteSetEntry>                     // list of updates
+                    >
+            >
+            writeSet = new ConcurrentHashMap<>();
 
     /**
      * A future which gets completed when this transaction commits.
@@ -152,4 +172,128 @@ public abstract class AbstractTransactionalContext {
         completionFuture
                 .completeExceptionally(new TransactionAbortedException());
     }
+
+    abstract public long obtainSnapshotTimestamp();
+
+    /** Add the proxy and conflict information to our conflict set.
+     * @param proxy             The proxy to add
+     * @param conflictObjects    The fine-grained conflict information, if
+     *                          available.
+     */
+    public void addToConflictSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects)
+    {
+        conflictSet.computeIfAbsent(proxy.getStreamID(), k -> new HashSet<>());
+        if (conflictObjects != null) {
+            Set<Integer> conflictParamSet = conflictSet.get(proxy.getStreamID());
+            Arrays.asList(conflictObjects).stream()
+                .forEach(V -> conflictParamSet.add(Integer.valueOf(V.hashCode())) ) ;
+        }
+    }
+
+    /**
+     * merge another conflictSet into this one
+     * @param otherCSet
+     */
+    void mergeConflictSetInto(Map<UUID, Set<Integer>> otherCSet) {
+        otherCSet.forEach((branchID, conflictParamSet) -> {
+            this.conflictSet.computeIfAbsent(branchID, u -> new HashSet<Integer>());
+            this.conflictSet.get(branchID).addAll(conflictParamSet);
+        });
+    }
+
+    void addToWriteSet(ICorfuSMRProxy proxy, SMREntry updateEntry, Object[] conflictObjects) {
+
+        // create an entry for this streamID
+        writeSet.computeIfAbsent(proxy.getStreamID(),
+                u -> new AbstractMap.SimpleEntry<>(new HashSet<>(), new ArrayList<>() )
+        );
+
+        // add the SMRentry to the list of updates for this stream
+        writeSet.get(proxy.getStreamID()).getValue().add(new WriteSetEntry(updateEntry));
+
+        // add all the conflict params to the conflict-params set for this stream
+        if (conflictObjects != null) {
+            Set<Integer> writeConflictParamSet = writeSet.get(proxy.getStreamID()).getKey();
+            Arrays.asList(conflictObjects).stream()
+                    .forEach(V -> writeConflictParamSet.add(Integer.valueOf(V.hashCode())));
+        }
+    }
+
+    /**
+     * collect all the conflict-params from the write-set for this transaction into a set.
+     * @return A set of longs representing all the conflict params
+     */
+    Set<Integer> collectWriteConflictParams() {
+        ImmutableSet.Builder<Integer> builder = new ImmutableSet.Builder<>();
+
+        writeSet.entrySet()         // mappings from streamIDs to
+                                    // pairs (set of conflict-params, list of WriteSetEntry)
+                .forEach(e -> {
+                    e.getValue()    // a pair
+                    .getKey()       // left component: a conflict-params set
+                    .forEach(conflictParam -> {
+                        builder.add(conflictParam);
+                    } );
+        });
+        return builder.build();
+    }
+
+    void mergeWriteSetInto(Map<UUID, AbstractMap.SimpleEntry<Set<Integer>, List<WriteSetEntry>>> otherWSet) {
+        otherWSet.entrySet().forEach(e-> {
+            // create an entry for this streamID
+            writeSet.computeIfAbsent(e.getKey(),                    // the streamID
+                    u -> new AbstractMap.SimpleEntry<>(new HashSet<>(), new ArrayList<>() ));
+
+            // copy all the conflict-params set for this streamID
+            writeSet.get(e.getKey())                 // the entry pair for this streamID
+                    .getKey()                        // the left componentof the pair is a conflict-param set
+                    .addAll(e.getValue()             // the pair from the otherWSet
+                            .getKey());              // the left component of the pair
+
+            // copy all the WriteSetEntry list for this streamID
+            writeSet.get(e.getKey())                 // the entry pair for this streamID
+                    .getValue()                      // the right componentof the pair is a WriteSetEntry list
+                    .addAll(e.getValue()             // the pair from the otherWSet
+                            .getValue());            // the right component of the pair
+
+
+        });
+    }
+
+    /**
+     * convert our write set into a new MultiObjectSMREntry.
+     * @return
+     */
+    MultiObjectSMREntry collectWriteSetEntries() {
+        ImmutableMap.Builder<UUID, MultiSMREntry> builder =
+                ImmutableMap.builder();
+
+        writeSet.entrySet()                 // mappings from streamIDs to
+                // pairs (set of conflict-params, list of WriteSetEntry)
+
+                .forEach(x -> builder.put(x.getKey(),   // a streamID
+                        new MultiSMREntry(x.getValue()  // a pair
+                                .getValue()             // right component: a list of WriteSetEntry
+                                .stream()
+                                .map(WriteSetEntry::getEntry)
+                                .collect(Collectors.toList())))
+                );
+        Map<UUID, MultiSMREntry> entryMap = builder.build();
+        MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
+        return entry;
+    }
+
+    /** Helper function to get a write set for a particular stream.
+     *
+     * @param id    The stream to get a write set for.
+     * @return      The write set for that stream, as an ordered list.
+     */
+    List<WriteSetEntry> getWriteSetEntryList(UUID id) {
+
+        return writeSet
+                .getOrDefault(id, new AbstractMap.SimpleEntry<>(Collections.emptySet(), Collections.emptyList()))
+                .getValue();
+    }
+
+
 }

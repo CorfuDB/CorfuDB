@@ -291,7 +291,9 @@ public class SMRMapTest extends AbstractViewTest {
         scheduleConcurrently(1, threadNumber -> {
             s1.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(),
                     TimeUnit.MILLISECONDS);
-            testMap2.put("c", "d");
+            getRuntime().getObjectsView().TXBegin();
+            testMap2.put("a", "d");
+            getRuntime().getObjectsView().TXEnd();
             s2.release();
         });
 
@@ -503,12 +505,60 @@ public class SMRMapTest extends AbstractViewTest {
                     .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                     .open();
 
+            getRuntime().getObjectsView().TXBegin();
             testMap2.put("a", "f");
+            getRuntime().getObjectsView().TXEnd();
         });
         cf.join();
         assertThatThrownBy(() -> getRuntime().getObjectsView().TXEnd())
                 .isInstanceOf(TransactionAbortedException.class);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void finegrainedUpdatesDoNotConflict()
+            throws Exception {
+        Map<String, String> testMap = getRuntime().getObjectsView()
+                .build()
+                .setStreamName("A")
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
+
+        getRuntime().getObjectsView().TXBegin();
+        testMap.put("a", "a");
+        assertThat(testMap.put("a", "b"))
+                .isEqualTo("a");
+        CompletableFuture cf = CompletableFuture.runAsync(() -> {
+            Map<String, String> testMap2 = getRuntime().getObjectsView()
+                    .build()
+                    .setStreamName("A")
+                    .setSerializer(Serializers.JSON)
+                    .addOption(ObjectOpenOptions.NO_CACHE)
+                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                    .open();
+
+            getRuntime().getObjectsView().TXBegin();
+            testMap2.put("b", "f");
+            assertThat(testMap.put("b", "g"))
+                    .isEqualTo("f");
+            getRuntime().getObjectsView().TXEnd();
+        });
+        cf.join();
+        try {
+            getRuntime().getObjectsView().TXEnd();
+        } catch (TransactionAbortedException te) {
+            throw new RuntimeException();
+        }
+
+        // verify that both transactions committed successfully
+        assertThat(testMap.get("a"))
+                .isEqualTo("b");
+        assertThat(testMap.get("b"))
+                .isEqualTo("g");
+    }
+
+
+
 
     @Test
     @SuppressWarnings("unchecked")

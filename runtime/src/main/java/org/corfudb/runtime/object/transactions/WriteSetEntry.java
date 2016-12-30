@@ -25,8 +25,6 @@ public class WriteSetEntry {
     /** The fine-grained conflict information for this object,
      * or NULL, if there is no fine-grained conflict information.
      */
-    @Getter
-    final Object[] conflictObjects;
 
     /** Set the upcall result for this entry. */
     public void setUpcallResult(Object result) {
@@ -36,10 +34,8 @@ public class WriteSetEntry {
 
     /** Create a new write set entry.
      * @param entry             An entry, representing the modifcation made
-     * @param conflictObjects   Fine grained conflict information, if present.
      */
-    public WriteSetEntry(@NonNull SMREntry entry, Object[] conflictObjects) {
+    public WriteSetEntry(@NonNull SMREntry entry) {
         this.entry = entry;
-        this.conflictObjects = conflictObjects;
     }
 }

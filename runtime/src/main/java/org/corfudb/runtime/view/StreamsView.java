@@ -5,12 +5,14 @@ import org.corfudb.protocols.logprotocol.IDivisibleEntry;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.logprotocol.TXEntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -112,30 +114,27 @@ public class StreamsView {
                                 Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback) {
         return acquireAndWrite(streamIDs, object,
-                acquisitionCallback, deacquisitionCallback, null, null);
+                acquisitionCallback, deacquisitionCallback,null);
     }
 
     public long acquireAndWrite(Set<UUID> streamIDs, Object object,
                                 Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback,
-                                Long readTimestamp, Set<UUID> readSet) {
+                                TxResolutionInfo conflictInfo) {
         boolean replexOverwrite = false;
         boolean overwrite = false;
         TokenResponse tokenResponse = null;
         while (true) {
-            if (readTimestamp != null) {
+            if (conflictInfo != null) {
                 long token;
                 if (overwrite) {
                     TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false, true,
-                                    readTimestamp, readSet);
+                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false, conflictInfo);
                     token = temp.getToken();
                     tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
-                    log.trace("object is instance of TXEntry! readTimestamp: {}", readTimestamp);
                     tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false, true,
-                                    readTimestamp, readSet);
+                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false, conflictInfo);
                     token = tokenResponse.getToken();
                 }
                 log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);

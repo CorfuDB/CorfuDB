@@ -1,6 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -9,7 +8,6 @@ import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A snapshot transactional context.
@@ -28,17 +26,6 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Getter
     private Set<ICorfuSMRProxyInternal> modifiedProxies = ImmutableSet.of();
 
-    /** In a snapshot transaction, no write set is ever generated.
-     *
-     */
-    @Getter
-    private Map<UUID, List<WriteSetEntry>> writeSet = ImmutableMap.of();
-
-    /** The read set for this transaction.
-     */
-    @Getter
-    private Map<UUID, List<ReadSetEntry>> readSet = new ConcurrentHashMap<>();
-
     public SnapshotTransactionalContext(TransactionBuilder builder) {
         super(builder);
     }
@@ -50,13 +37,16 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
                            Object[] conflictObject) {
-        readSet.computeIfAbsent(proxy.getStreamID(), k -> new ArrayList<>());
-        readSet.get(proxy.getStreamID()).add(new ReadSetEntry(conflictObject));
+
+        // In snapshot transactions, there are no conflicts.
+        // Hence, we do not need to add this access to a conflict set
+        // do not add: addToConflictSet(proxy, conflictObject);
+
         return proxy.getUnderlyingObject().optimisticallyReadThenReadLockThenWriteOnFail(
                 (v, o) -> {
                     // We're lucky and the object has not been modified AND
                     // it's the right version.
-                    if (v == builder.getSnapshot() &&
+                    if (v == getSnapshotTimestamp() &&
                             !proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
                         return accessFunction.access(o);
                     }
@@ -65,7 +55,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                 (v, o) -> {
                     // We're lucky and the object has not been modified AND
                     // it's the right version. (Another writer modified it to this state).
-                    if (v == builder.getSnapshot() &&
+                    if (v == getSnapshotTimestamp() &&
                             !proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
                         return accessFunction.access(o);
                     }
@@ -81,14 +71,14 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                     }
                     // Next check the version, if it is ahead, try undo
                     // We don't support this yet, so we just reset
-                    if (proxy.getVersion() > builder.getSnapshot()) {
+                    if (proxy.getVersion() > getSnapshotTimestamp()) {
                         proxy.resetObjectUnsafe(proxy.getUnderlyingObject());
                     }
 
                     // Now we sync forward if we are behind
-                    if (proxy.getVersion() < builder.getSnapshot()) {
+                    if (proxy.getVersion() < getSnapshotTimestamp()) {
                         proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
-                                builder.getSnapshot());
+                                getSnapshotTimestamp());
                     }
 
                     // Now we do the access
@@ -130,4 +120,11 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public void addTransaction(AbstractTransactionalContext tc) {
         throw new UnsupportedOperationException("Can't merge into a readonly txn (yet)");
     }
+
+    @Override
+    public long obtainSnapshotTimestamp() {
+        return getBuilder().getSnapshot();
+    }
+
+
 }
