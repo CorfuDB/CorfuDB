@@ -157,9 +157,9 @@ public class SequencerServer extends AbstractServer {
                         if (v > txData.getSnapshotTimestamp()) {
                             log.debug("Rejecting request due to {} > {} on streams {}",
                                     v, txData.getSnapshotTimestamp(), streamID);
-                            System.out.println("Rejecting request due to update-timestamp on stream");
-                            System.out.println("  streamID=" + streamID);
-                            System.out.println("   txData.conflictSet entries: " + txData.getConflictSet().entrySet() );
+                            //System.out.println("Rejecting request due to update-timestamp on stream");
+                            //System.out.println("  streamID=" + streamID);
+                            //System.out.println("   txData.conflictSet entries: " + txData.getConflictSet().entrySet() );
                             commit.set(false);
                         }
                     }

@@ -92,4 +92,13 @@ public class WriteAfterWriteTransactionalContext
         return address;
     }
 
+    @Override
+    /** Add the proxy and conflict-params information to our read set.
+     * @param proxy             The proxy to add
+     * @param conflictObjects    The fine-grained conflict information, if
+     *                          available.
+     */
+    public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
+        // do nothing! write-write conflict TXs do not need to keep track of read sets.
+    }
 }
