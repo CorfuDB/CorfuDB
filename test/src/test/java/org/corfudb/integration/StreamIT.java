@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.StreamView;
@@ -58,7 +59,7 @@ public class StreamIT {
 
         // Read back the data and verify it is correct
         for(int x = 0; x < numEntries; x++) {
-            LogData entry = s1.read(x);
+            ILogData entry = s1.read(x);
             byte[] tmp = (byte[]) entry.getPayload(rt);
 
             assertThat(tmp).isEqualTo(data[x]);

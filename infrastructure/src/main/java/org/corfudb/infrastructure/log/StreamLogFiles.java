@@ -442,8 +442,6 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void release(LogAddress logAddress, LogData entry) {
-        if (entry != null && entry.getData() != null && entry.getData().refCnt() > 0)
-            entry.getData().release();
     }
 
     @VisibleForTesting

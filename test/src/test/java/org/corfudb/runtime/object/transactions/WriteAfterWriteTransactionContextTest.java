@@ -5,6 +5,7 @@ import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
@@ -50,7 +51,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
 
         // Verify that the transaction that succeeded is written to the transaction stream
         StreamView txStream = getRuntime().getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
-        LogData[] txns = txStream.readTo(Long.MAX_VALUE);
+        ILogData[] txns = txStream.readTo(Long.MAX_VALUE);
         assertThat(txns.length).isEqualTo(1);
         assertThat(txns[0].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
 

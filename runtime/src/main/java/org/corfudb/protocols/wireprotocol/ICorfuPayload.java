@@ -46,6 +46,12 @@ public interface ICorfuPayload<T> {
                     return layout;
                 })
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
+                .put(byte[].class, x -> {
+                    int length = x.readInt();
+                    byte[] bytes = new byte[length];
+                    x.readBytes(bytes);
+                    return bytes;
+                })
                 .put(ByteBuf.class, x -> {
                     int bytes = x.readInt();
                     //ByteBuf b =
@@ -238,6 +244,9 @@ public interface ICorfuPayload<T> {
             buffer.writeDouble((Double) payload);
         } else if (payload instanceof Float) {
             buffer.writeFloat((Float) payload);
+        } else if (payload instanceof byte[]) {
+            buffer.writeInt(((byte[]) payload).length);
+            buffer.writeBytes((byte[]) payload);
         }
         // and some standard non prims as well
         else if (payload instanceof String) {
