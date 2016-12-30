@@ -14,6 +14,7 @@
         <module>test</module>
         <module>annotationProcessor</module>
         <module>annotations</module>
+        <module>samples</module>
     </modules>
 
     <packaging>pom</packaging>
