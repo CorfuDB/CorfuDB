@@ -18,6 +18,11 @@
         <artifactId>runtime</artifactId>
         <version>${project.version}</version>
     </dependency>
+        <dependency>
+            <groupId>com.offbytwo</groupId>
+            <artifactId>docopt</artifactId>
+            <version>0.6.0.20150202</version>
+        </dependency>
     </dependencies>
 
 

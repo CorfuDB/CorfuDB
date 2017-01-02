@@ -2,6 +2,9 @@ package org.corfudb.samples;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.util.GitRepositoryState;
+
+import org.docopt.Docopt;
 
 import java.util.Map;
 
@@ -11,27 +14,36 @@ import java.util.Map;
  * Created by dalia on 12/30/16.
  */
 public class HeloCorfu {
-
-    static String defaultCorfuService = "localhost:9999";
+    private static final String USAGE = "Usage: HeloCorfu [-c <conf>]\n"
+            + "Options:\n"
+            + " -c <conf>     Set the configuration host and port  [default: localhost:9999]\n";
 
     /**
-     * Internally, the runtime interacts with the CorfuDB service over TCP/IP sockets.
+     * Internally, the corfuRuntime interacts with the CorfuDB service over TCP/IP sockets.
      *
      * @param configurationString specifies the IP:port of the CorfuService
      *                            The configuration string has format "hostname:port", for example, "localhost:9090".
      * @return a CorfuRuntime object, with which Corfu applications perform all Corfu operations
      */
     private static CorfuRuntime getRuntimeAndConnect(String configurationString) {
+
         CorfuRuntime corfuRuntime = new CorfuRuntime(configurationString).connect();
         return corfuRuntime;
     }
 
     public static void main(String[] args) {
+        // Parse the options given, using docopt.
+        Map<String, Object> opts =
+                new Docopt(USAGE)
+                        .withVersion(GitRepositoryState.getRepositoryState().describe)
+                        .parse(args);
+        String corfuConfigurationString = (String) opts.get("-c");
+
         /**
          * First, the application needs to instantiate a CorfuRuntime,
          * which is a Java object that contains all of the Corfu utilities exposed to applications.
          */
-         CorfuRuntime runtime = getRuntimeAndConnect(defaultCorfuService);
+        CorfuRuntime runtime = getRuntimeAndConnect(corfuConfigurationString);
 
         /**
          * Obviously, this application is not doing much yet,

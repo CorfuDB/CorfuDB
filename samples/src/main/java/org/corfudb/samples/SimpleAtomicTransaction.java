@@ -56,7 +56,7 @@ import java.util.Map;
  * A transaction is a body of code wrapped with `TXBegin()` and `TXEnd()`.
  * For example, in the code below, we will wrap the code above with a transaction block:
 
-     runtime.getObjectsView().TXBegin();
+     corfuRuntime.getObjectsView().TXBegin();
      Integer previous = map.get("a");
      if (previous == null) {
          System.out.println("This is the first time we were run!");
@@ -66,7 +66,7 @@ import java.util.Map;
          map.put("a", ++previous);
          System.out.println("This is the " + previous + " time we were run!");
      }
-     runtime.getObjectsView.TXEnd();
+     corfuRuntime.getObjectsView.TXEnd();
 
  * If we were to run three instances of this program concurrently, we would guarantee
  * a **serializable** execution order. The only valid output would be
@@ -77,35 +77,25 @@ import java.util.Map;
 
  * Created by dalia on 12/30/16.
  */
-public class SimpleAtomicTransaction {
-
-    static String defaultCorfuService = "localhost:9999";
+public class SimpleAtomicTransaction extends BasicCorfuProgram {
+    /**
+     * main() and standard setup methods are deferred to BasicCorfuProgram
+     * @return
+     */
+    static BasicCorfuProgram selfFactory() { return new WriteWriteWordload1(); }
+    public static void main(String[] args) { selfFactory().start(args); }
 
     /**
-     * Internally, the runtime interacts with the CorfuDB service over TCP/IP sockets.
-     *
-     * @param configurationString specifies the IP:port of the CorfuService
-     *                            The configuration string has format "hostname:port", for example, "localhost:9090".
-     * @return a CorfuRuntime object, with which Corfu applications perform all Corfu operations
+     * this method initiates activity
      */
-    private static CorfuRuntime getRuntimeAndConnect(String configurationString) {
-        CorfuRuntime corfuRuntime = new CorfuRuntime(configurationString).connect();
-        return corfuRuntime;
-    }
-
-    public static void main(String[] args) {
-        /**
-         * First, the application needs to instantiate a CorfuRuntime,
-         * which is a Java object that contains all of the Corfu utilities exposed to applications.
-         */
-        CorfuRuntime runtime = getRuntimeAndConnect(defaultCorfuService);
-
+    @Override
+    void action() {
         /**
          * A Corfu Stream is a log dedicated specifically to the history of updates of one object.
          * We will instantiate a stream by giving it a name "A",
          * and then instantiate an object by specifying its class
          */
-        Map<String, Integer> map = runtime.getObjectsView()
+        Map<String, Integer> map = getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
                 .setType(SMRMap.class)  // object class backed by this stream
@@ -116,7 +106,7 @@ public class SimpleAtomicTransaction {
          * Inside the transaction, an application first obtains the current value of an entry "a",
          * then it increments the value and replaces the map entry with the incremented value.
          */
-        runtime.getObjectsView().TXBegin();
+        getCorfuRuntime().getObjectsView().TXBegin();
         Integer previous = map.get("a");
         if (previous == null) {
             System.out.println("This is the first time we were run!");
@@ -126,7 +116,7 @@ public class SimpleAtomicTransaction {
             map.put("a", ++previous);
             System.out.println("This is the " + previous + " time we were run!");
         }
-        runtime.getObjectsView().TXEnd();
+        getCorfuRuntime().getObjectsView().TXEnd();
 
         /**
          * If we were to run three instances of this program concurrently, we would guarantee
