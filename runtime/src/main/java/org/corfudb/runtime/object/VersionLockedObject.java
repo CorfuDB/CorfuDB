@@ -338,6 +338,6 @@ public class VersionLockedObject<T> {
     }
 
     public void resetStreamViewUnsafe() {
-        sv.setLogPointer(0L);
+        sv.reset();
     }
 }

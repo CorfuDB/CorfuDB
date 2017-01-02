@@ -47,6 +47,14 @@ public class StreamView implements AutoCloseable {
         return streamContexts.first();
     }
 
+    /** Reset the state of this streamview, causing the next read to return
+     * from the beginning of the stream.
+     */
+    public synchronized void reset() {
+        this.streamContexts.clear();
+        this.streamContexts.add(new StreamContext(streamID, Long.MAX_VALUE));
+    }
+
     /**
      * Write an object to this stream, returning the physical address it
      * was written at.
