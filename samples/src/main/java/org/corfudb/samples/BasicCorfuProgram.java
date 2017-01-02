@@ -12,7 +12,7 @@ import java.util.Map;
  * Created by dalia on 12/31/16.
  */
 public abstract class BasicCorfuProgram {
-    private static final String USAGE = "Usage: HeloCorfu [-c <conf>]\n"
+    private static final String USAGE = "Usage: HelloCorfu [-c <conf>]\n"
             + "Options:\n"
             + " -c <conf>     Set the configuration host and port  [default: localhost:9999]\n";
 

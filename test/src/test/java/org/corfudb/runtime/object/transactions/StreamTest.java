@@ -142,7 +142,7 @@ public class StreamTest extends AbstractViewTest {
      *
      * @param readPrecent ratio of reads (to 100)
      */
-    public void mixedReadWriteLoad(int ignoredThreadNum, int readPrecent) {
+    public void concurrentStreamRWLoad(int ignoredThreadNum, int readPrecent) {
         System.out.println("running mixedRWload..");
         final AtomicInteger aborts = new AtomicInteger(0);
         // java.util.concurrent.ThreadLocalRandom rand = java.util.concurrent.ThreadLocalRandom.current();
@@ -204,15 +204,15 @@ public class StreamTest extends AbstractViewTest {
     /**
      * This is where activity is started
      */
-    //@Test
-    public void action() {
+    @Test
+    public void testConcurrentStreamRW() {
 
         final int NUM_THREADS = 3;
         ArrayList<Thread> tList = new ArrayList<>();
 
         // generate the maps and populate with elements
         generateMaps();
-        mixedReadWriteLoad(-1, READ_PERCENT);
+        concurrentStreamRWLoad(-1, READ_PERCENT);
         scheduleInterleaved(NUM_THREADS, NUM_THREADS);
     }
 

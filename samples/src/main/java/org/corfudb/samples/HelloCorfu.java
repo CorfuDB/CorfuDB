@@ -13,8 +13,8 @@ import java.util.Map;
  *
  * Created by dalia on 12/30/16.
  */
-public class HeloCorfu {
-    private static final String USAGE = "Usage: HeloCorfu [-c <conf>]\n"
+public class HelloCorfu {
+    private static final String USAGE = "Usage: HelloCorfu [-c <conf>]\n"
             + "Options:\n"
             + " -c <conf>     Set the configuration host and port  [default: localhost:9999]\n";
 

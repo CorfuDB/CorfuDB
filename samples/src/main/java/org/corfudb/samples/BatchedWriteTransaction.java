@@ -1,6 +1,5 @@
 package org.corfudb.samples;
 
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 
 import java.util.ArrayList;
@@ -47,7 +46,7 @@ public class BatchedWriteTransaction extends BasicCorfuProgram {
      * main() and standard setup methods are deferred to BasicCorfuProgram
      * @return
      */
-    static BasicCorfuProgram selfFactory() { return new WriteWriteWordload1(); }
+    static BasicCorfuProgram selfFactory() { return new WriteWriteWorkload1(); }
     public static void main(String[] args) { selfFactory().start(args); }
 
     private final int numBatches = 100;
