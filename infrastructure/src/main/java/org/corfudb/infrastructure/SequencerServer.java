@@ -114,17 +114,13 @@ public class SequencerServer extends AbstractServer {
      * If the request submits a timestamp (a global offset) that is less than one of the
      * global offsets of a streams specified in the request, then abort; otherwise commit.
      *
-     * @param txData info provided by runtime for conflict resolultion:
+     * @param txData info provided by corfuRuntime for conflict resolultion:
      *              - timestamp : the snapshot (global) offset that this TX reads
      *              - conflictSet: conflict set of the txn.
      *                if any conflict-param (or stream, if empty) in this set has a later timestamp than the snapshot, abort
      */
     public boolean txnCanCommit(TxResolutionInfo txData) {
         log.trace("txn resolution, timestamp: {}, streams: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
-        //System.out.println("txn resolution");
-        //System.out.println("   txData.conflictSet entries: " + txData.getConflictSet().entrySet() );
-        //if (txData.getReadSet().entrySet().size() > 0)
-        //    System.out.println("   txData.conflictSet params: " + txData.getReadSet().values());
 
         AtomicBoolean commit = new AtomicBoolean(true);
         for (Map.Entry<UUID, Set<Integer>> entry : txData.getConflictSet().entrySet()) {
@@ -140,8 +136,6 @@ public class SequencerServer extends AbstractServer {
                             (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
                         log.debug("Rejecting request due to update-timestamp > {} on conflictParam {}",
                                 txData.getSnapshotTimestamp(), conflictParam);
-                        //System.out.println("Rejecting request due to update-timestamp on conflictParam" +
-                        //        conflictParam);
                         commit.set(false);
                     }
                 });
@@ -258,7 +252,13 @@ public class SequencerServer extends AbstractServer {
                     return newTail-1;
                 } else {
                     backPointerMap.put(k, v);
-                    return Math.max(newTail - 1, v);
+
+                    // legacy code, addition sanity check instead:
+                    //return Math.max(newTail - 1, v);
+                    if (newTail-1 < v)
+                        log.error("backpointer {} is already greater than newTail-1 {}", v, newTail-1);
+
+                    return newTail-1;
                 }
             });
 
@@ -279,6 +279,7 @@ public class SequencerServer extends AbstractServer {
                 for (Integer cParam : conflictParams)
                     conflictToGlobalTailCache.put(cParam, newTail-1);
 
+        log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
         // return the token response with the new global tail, new streams tails, and the streams backpointers
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(currentTail,
