@@ -19,11 +19,11 @@ import java.util.Map;
  *
  * Running on my macbook, the first loop takes (roughly) 57 seconds, the second one 5 seconds.
  *
- * The reason is  that internally, the Corfu runtime sends updates to the Corfu log to persist.
+ * The reason is  that internally, the Corfu corfuRuntime sends updates to the Corfu log to persist.
  * When an application performs a bunch of individual updates, they are persisted one at a time,
  * each in a separate log entry.
  *
- * In a transaction, the runtime waits until the transaction end and persists one (large) log entry
+ * In a transaction, the corfuRuntime waits until the transaction end and persists one (large) log entry
  * for the entire transaction. Writing one large entry takes much less time than many small ones.
  *
  * Workload 2:
@@ -42,33 +42,23 @@ import java.util.Map;
  *
  * Created by dalia on 12/30/16.
  */
-public class BatchedWriteTrasnaction {
-    static String defaultCorfuService = "localhost:9999";
+public class BatchedWriteTransaction extends BasicCorfuProgram {
     /**
-     * @param configurationString specifies the IP:port of the CorfuService
-     * @return a CorfuRuntime object, with which Corfu applications perform all Corfu operations
+     * main() and standard setup methods are deferred to BasicCorfuProgram
+     * @return
      */
-    private static CorfuRuntime getRuntimeAndConnect(String configurationString) {
-        CorfuRuntime corfuRuntime = new CorfuRuntime(configurationString).connect();
-        return corfuRuntime;
-    }
+    static BasicCorfuProgram selfFactory() { return new WriteWriteWordload1(); }
+    public static void main(String[] args) { selfFactory().start(args); }
 
-    public static void main(String[] args) {
-        /**
-         * First, the application needs to instantiate a CorfuRuntime
-         */
-        CorfuRuntime runtime = getRuntimeAndConnect(defaultCorfuService);
-        new BatchedWriteTrasnaction(runtime).start();
-    }
-
-    private final CorfuRuntime runtime;
     private final int numBatches = 100;
     private final int batchSize = 1_000;
     private final int numTasks = numBatches * batchSize;
 
-    public BatchedWriteTrasnaction(CorfuRuntime runtime) { this.runtime = runtime; }
-
-    void start() {
+    /**
+     * this method initiates activity
+     */
+    @Override
+    void action() {
         workload1();
         workload2();
     }
@@ -77,7 +67,7 @@ public class BatchedWriteTrasnaction {
         /**
          * Instantiate a Corfu Stream named "A" dedicated to an SMRmap object
          */
-        Map<String, Integer> map = runtime.getObjectsView()
+        Map<String, Integer> map = getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
                 .setType(SMRMap.class)  // object class backed by this stream
@@ -94,10 +84,10 @@ public class BatchedWriteTrasnaction {
         // populate map: in batched transactions
         startt = System.currentTimeMillis();
         for (int i = 0; i < numBatches; i++) {
-            runtime.getObjectsView().TXBegin();
+            getCorfuRuntime().getObjectsView().TXBegin();
             for (int j = 0; j < batchSize; j++)
                 map.put("k2" + (i * batchSize + j), i);
-            runtime.getObjectsView().TXEnd();
+            getCorfuRuntime().getObjectsView().TXEnd();
         }
         endt = System.currentTimeMillis();
         System.out.println("time to populate map in batches (msecs): " + (endt - startt));
@@ -110,7 +100,7 @@ public class BatchedWriteTrasnaction {
         List<Map<String, Integer>> maparray = new ArrayList<Map<String, Integer>>(numBatches);
         for (int m = 0; m < numBatches; m++) {
             maparray.add(m,
-                    runtime.getObjectsView()
+                    getCorfuRuntime().getObjectsView()
                             .build()
                             .setStreamName("C" + m)
                             .setType(SMRMap.class)
@@ -120,10 +110,10 @@ public class BatchedWriteTrasnaction {
 
         long startt = System.currentTimeMillis();
         for (int i = 0; i < batchSize; i++) {
-            runtime.getObjectsView().TXBegin();
+            getCorfuRuntime().getObjectsView().TXBegin();
             for (int j = 0; j < numBatches; j++)
                 maparray.get(j).put("k2"+(i*numBatches + j), i);
-            runtime.getObjectsView().TXEnd();
+            getCorfuRuntime().getObjectsView().TXEnd();
         }
         long endt = System.currentTimeMillis();
         System.out.println("time to populate map-array in batches (msecs): " + (endt-startt));
