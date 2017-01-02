@@ -468,14 +468,14 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // Assert that the conflict set contains TEST_1, TEST_4
         assertThat(TransactionalContext.getCurrentContext()
-                .getConflictSet().values().stream()
+                .getReadSet().values().stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
                 .contains(Integer.valueOf(TEST_0.hashCode()), Integer.valueOf(TEST_4.hashCode()));
 
         // in optimistic mode, assert that the conflict set does NOT contain TEST_2, TEST_4
         assertThat(TransactionalContext.getCurrentContext()
-                .getConflictSet().values().stream()
+                .getReadSet().values().stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
                 .doesNotContain(Integer.valueOf(TEST_3), Integer.valueOf(TEST_4));

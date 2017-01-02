@@ -62,6 +62,12 @@ public class SequencerServer extends AbstractServer {
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
+    /**
+     * A cache of conflict parameter modification timestamps.
+     *
+     * A "wildcard" {@link SequencerServer::maxConflictWildcard} representing all the entries which were evicted from the cache holds
+     * theier maximal modification time.
+     */
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
     private final Cache<Integer, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
@@ -107,7 +113,7 @@ public class SequencerServer extends AbstractServer {
      * If the request submits a timestamp (a global offset) that is less than one of the
      * global offsets of a streams specified in the request, then abort; otherwise commit.
      *
-     * @param txData info provided by runtime for conflict resolultion:
+     * @param txData info provided by corfuRuntime for conflict resolultion:
      *              - timestamp : the snapshot (global) offset that this TX reads
      *              - conflictSet: conflict set of the txn.
      *                if any conflict-param (or stream, if empty) in this set has a later timestamp than the snapshot, abort
@@ -242,7 +248,13 @@ public class SequencerServer extends AbstractServer {
                     return newTail-1;
                 } else {
                     backPointerMap.put(k, v);
-                    return Math.max(newTail - 1, v);
+
+                    // legacy code, addition sanity check instead:
+                    //return Math.max(newTail - 1, v);
+                    if (newTail-1 < v)
+                        log.error("backpointer {} is already greater than newTail-1 {}", v, newTail-1);
+
+                    return newTail-1;
                 }
             });
 
@@ -259,9 +271,11 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null)
-            for (Integer cParam : req.getTxnResolution().getWriteConflictParams())
-                conflictToGlobalTailCache.put(cParam, newTail-1);
+            for (Set<Integer> conflictParams : req.getTxnResolution().getWriteConflictParams().values())
+                for (Integer cParam : conflictParams)
+                    conflictToGlobalTailCache.put(cParam, newTail-1);
 
+        log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
         // return the token response with the new global tail, new streams tails, and the streams backpointers
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(currentTail,

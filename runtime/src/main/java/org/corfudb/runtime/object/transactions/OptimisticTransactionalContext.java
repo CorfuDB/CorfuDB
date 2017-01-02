@@ -122,8 +122,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                            ICorfuSMRAccess<R, T> accessFunction,
                            Object[] conflictObject) {
 
-        // First, we add this access to the conflict set, and set the tx snapshot time
-        addToConflictSet(proxy, conflictObject);
+        // First, we add this access to the read set
+        addToReadSet(proxy, conflictObject);
 
         // Next, we check if the write set has any
         // outstanding modifications.
@@ -158,7 +158,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
                                       long timestamp, Object[] conflictObject) {
         // Getting an upcall result adds the object to the conflict set.
-        addToConflictSet(proxy, conflictObject);
+        addToReadSet(proxy, conflictObject);
 
         // if we have a result, return it.
         WriteSetEntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
@@ -206,7 +206,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     public void addTransaction(AbstractTransactionalContext tc) {
         // merge the conflict maps
-        mergeConflictSetInto(tc.getConflictSet());
+        mergeReadSetInto(tc.getReadSet());
 
         // merge the write-sets
         mergeWriteSetInto(tc.writeSet);
@@ -236,26 +236,28 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             return commitAddress;
         }
 
-        // we are going to compile the write-set in three parts:
-        // 1. a MultiObjectSMREntry: This contains the update(s) to objects
-        // 2. a set of stream-IDs : This is the set of affected streams
-        // 3. a set of conflict-params : This is the set of affected conflict params
-
-        // (item 1. in the comment above.)
-        MultiObjectSMREntry entry = collectWriteSetEntries();
-
-        // (item 2. in the comment above.)
-        Set<UUID> affectedStreams = writeSet.keySet();
-
-        // (item 3. in the comment above.)
-        Set<Integer> writeConflictParams = collectWriteConflictParams();
-
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
         long address = this.builder.runtime.getStreamsView()
-                .acquireAndWrite(affectedStreams, entry, t->true, t->true,
-                        new TxResolutionInfo(getSnapshotTimestamp(), getConflictSet(), writeConflictParams));
+                .acquireAndWrite(
+
+                        // a set of stream-IDs that contains the affected streams
+                        writeSet.keySet(),
+
+                        // a MultiObjectSMREntry that contains the update(s) to objects
+                        collectWriteSetEntries(),
+
+                        // nothing to do after successful acquisition and after deacquisition
+                        t->true, t->true,
+
+                        // TxResolution info:
+                        // 1. snapshot timestamp
+                        // 2. a map of conflict params, arranged by streamID's
+                        // 3. a map of write conflict-params, arranged by streamID's
+                        new TxResolutionInfo(getSnapshotTimestamp(), getReadSet(), collectWriteConflictParams())
+                );
+
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
             abortTransaction();

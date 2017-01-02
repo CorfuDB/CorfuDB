@@ -12,7 +12,6 @@ import org.corfudb.runtime.object.*;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -72,12 +71,13 @@ public abstract class AbstractTransactionalContext {
     private final AbstractTransactionalContext parentContext;
 
     /**
-     * A conflict set of the txn.
-     * The txn can only commit if none of the conflict objects (or the stream, if no specific conflict keys are provided)
-     * is superseded by a later update.
+     * A read-set of the txn.
+     * We collect the read-set as a map, organized by streams.
+     * For each stream, we record:
+     *  - a set of conflict-parameters read by this transaction on the stream,
      */
     @Getter
-    private final Map<UUID, Set<Integer>> conflictSet = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<Integer>> readSet = new HashMap<>();
 
     /**
      * A write-set is a key component of a transaction.
@@ -96,7 +96,7 @@ public abstract class AbstractTransactionalContext {
                             List<WriteSetEntry>                     // list of updates
                     >
             >
-            writeSet = new ConcurrentHashMap<>();
+            writeSet = new HashMap<>();
 
     /**
      * A future which gets completed when this transaction commits.
@@ -175,29 +175,29 @@ public abstract class AbstractTransactionalContext {
 
     abstract public long obtainSnapshotTimestamp();
 
-    /** Add the proxy and conflict information to our conflict set.
+    /** Add the proxy and conflict-params information to our read set.
      * @param proxy             The proxy to add
      * @param conflictObjects    The fine-grained conflict information, if
      *                          available.
      */
-    public void addToConflictSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects)
+    public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects)
     {
-        conflictSet.computeIfAbsent(proxy.getStreamID(), k -> new HashSet<>());
+        readSet.computeIfAbsent(proxy.getStreamID(), k -> new HashSet<Integer>());
         if (conflictObjects != null) {
-            Set<Integer> conflictParamSet = conflictSet.get(proxy.getStreamID());
+            Set<Integer> conflictParamSet = readSet.get(proxy.getStreamID());
             Arrays.asList(conflictObjects).stream()
                 .forEach(V -> conflictParamSet.add(Integer.valueOf(V.hashCode())) ) ;
         }
     }
 
     /**
-     * merge another conflictSet into this one
+     * merge another readSet into this one
      * @param otherCSet
      */
-    void mergeConflictSetInto(Map<UUID, Set<Integer>> otherCSet) {
+    void mergeReadSetInto(Map<UUID, Set<Integer>> otherCSet) {
         otherCSet.forEach((branchID, conflictParamSet) -> {
-            this.conflictSet.computeIfAbsent(branchID, u -> new HashSet<Integer>());
-            this.conflictSet.get(branchID).addAll(conflictParamSet);
+            this.readSet.computeIfAbsent(branchID, u -> new HashSet<Integer>());
+            this.readSet.get(branchID).addAll(conflictParamSet);
         });
     }
 
@@ -223,18 +223,16 @@ public abstract class AbstractTransactionalContext {
      * collect all the conflict-params from the write-set for this transaction into a set.
      * @return A set of longs representing all the conflict params
      */
-    Set<Integer> collectWriteConflictParams() {
-        ImmutableSet.Builder<Integer> builder = new ImmutableSet.Builder<>();
+    Map<UUID, Set<Integer>> collectWriteConflictParams() {
+        ImmutableMap.Builder<UUID, Set<Integer>> builder = new ImmutableMap.Builder<>();
 
         writeSet.entrySet()         // mappings from streamIDs to
                                     // pairs (set of conflict-params, list of WriteSetEntry)
                 .forEach(e -> {
-                    e.getValue()    // a pair
-                    .getKey()       // left component: a conflict-params set
-                    .forEach(conflictParam -> {
-                        builder.add(conflictParam);
-                    } );
-        });
+                    builder.put(e.getKey(),     // UUID
+                                e.getValue()   // a pair
+                                   .getKey() );// left component: a conflict-params set
+                    });
         return builder.build();
     }
 
