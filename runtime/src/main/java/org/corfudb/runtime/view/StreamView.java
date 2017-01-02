@@ -39,10 +39,6 @@ public class StreamView implements AutoCloseable {
         return getCurrentContext().logPointer.get();
     }
 
-    public void setLogPointer(long pos) {
-        getCurrentContext().logPointer.set(pos);
-    }
-
     public StreamContext getCurrentContext() {
         return streamContexts.first();
     }
