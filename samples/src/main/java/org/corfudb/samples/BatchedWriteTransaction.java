@@ -89,7 +89,7 @@ public class BatchedWriteTrasnaction {
             map.put("k1" + i, i);
         }
         long endt = System.currentTimeMillis();
-        System.out.println("time to populate map sequentially (secs): " + (endt - startt) / 1000);
+        System.out.println("time to populate map sequentially (msecs): " + (endt - startt) );
 
         // populate map: in batched transactions
         startt = System.currentTimeMillis();
@@ -100,7 +100,7 @@ public class BatchedWriteTrasnaction {
             runtime.getObjectsView().TXEnd();
         }
         endt = System.currentTimeMillis();
-        System.out.println("time to populate map in batches (secs): " + (endt - startt) / 1000);
+        System.out.println("time to populate map in batches (msecs): " + (endt - startt));
     }
 
     void workload2() {
@@ -126,7 +126,7 @@ public class BatchedWriteTrasnaction {
             runtime.getObjectsView().TXEnd();
         }
         long endt = System.currentTimeMillis();
-        System.out.println("time to populate map-array in batches (secs): " + (endt-startt)/1000);
+        System.out.println("time to populate map-array in batches (msecs): " + (endt-startt));
 
     }
 }
