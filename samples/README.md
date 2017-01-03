@@ -2,10 +2,12 @@
 
 ## Code samples
 
-  * First Corfu application: [HeloCorfu.java](https://github.com/CorfuDB/CorfuDB/blob/fgperformance/samples/src/main/java/org/corfudb/samples/HeloCorfu.java)
-  * An explanation and simple demonstration of transaction atomicity: [SimpleAtomicTransaction.java](https://github.com/CorfuDB/CorfuDB/blob/fgperformance/samples/src/main/java/org/corfudb/samples/SimpleAtomicTransaction.java)
-  * Simple write-only atomic TX: [WriteOnlySimpleTransaction.java](https://github.com/CorfuDB/CorfuDB/blob/fgperformance/samples/src/main/java/org/corfudb/samples/WriteOnlySimpleTransaction.java)
-  * Batched-writes in TXs: [BatchedWriteTransaction.java](https://github.com/CorfuDB/CorfuDB/blob/fgperformance/samples/src/main/java/org/corfudb/samples/BatchedWriteTrasnaction.java)
+  * First Corfu application: [HelloCorfu.java](https://github.com/CorfuDB/CorfuDB/blob/master/samples/src/main/java/org/corfudb/samples/HelloCorfu.java)
+  * An explanation and simple demonstration of transaction atomicity: [SimpleAtomicTransaction.java](https://github.com/CorfuDB/CorfuDB/blob/master/samples/src/main/java/org/corfudb/samples/SimpleAtomicTransaction.java)
+  * Simple write-only atomic TX: [WriteOnlySimpleTransaction.java](https://github.com/CorfuDB/CorfuDB/blob/master/samples/src/main/java/org/corfudb/samples/WriteOnlySimpleTransaction.java)
+  * Batched-writes in TXs: [BatchedWriteTransaction.java](https://github.com/CorfuDB/CorfuDB/blob/master/samples/src/main/java/org/corfudb/samples/BatchedWriteTrasnaction.java)
+  * Simple TX with write-write conflict isolation: [WriteOnlySimpleTransaction.java](https://github.com/CorfuDB/CorfuDB/blob/master/samples/src/main/java/org/corfudb/samples/WriteOnlySimpleTransaction.java)
+  * Mixed TX workload with write-write conflict isolation: [WriteWriteWorkload1.java](https://github.com/CorfuDB/CorfuDB/blob/master/samples/src/main/java/org/corfudb/samples/WriteWriteWorkload1.java)
 
 
 ## Writing Corfu unit tests:

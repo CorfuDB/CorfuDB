@@ -46,7 +46,7 @@ public class BatchedWriteTransaction extends BasicCorfuProgram {
      * main() and standard setup methods are deferred to BasicCorfuProgram
      * @return
      */
-    static BasicCorfuProgram selfFactory() { return new WriteWriteWorkload1(); }
+    static BasicCorfuProgram selfFactory() { return new WriteWriteTXs(); }
     public static void main(String[] args) { selfFactory().start(args); }
 
     private final int numBatches = 100;
