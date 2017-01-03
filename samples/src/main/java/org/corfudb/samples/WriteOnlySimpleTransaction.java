@@ -19,39 +19,32 @@ import java.util.Map;
  *
  * Created by dalia on 12/30/16.
  */
-public class WriteOnlySimpleTransaction {
-    static String defaultCorfuService = "localhost:9999";
+public class WriteOnlySimpleTransaction extends BasicCorfuProgram {
+    /**
+     * main() and standard setup methods are deferred to BasicCorfuProgram
+     * @return
+     */
+    static BasicCorfuProgram selfFactory() { return new WriteWriteWorkload1(); }
+    public static void main(String[] args) { selfFactory().start(args); }
+
 
     /**
-     * @param configurationString specifies the IP:port of the CorfuService
-     * @return a CorfuRuntime object, with which Corfu applications perform all Corfu operations
+     * This is where activity is started
      */
-    private static CorfuRuntime getRuntimeAndConnect(String configurationString) {
-        CorfuRuntime corfuRuntime = new CorfuRuntime(configurationString).connect();
-        return corfuRuntime;
-    }
-
-    public static void main(String[] args) {
-        /**
-         * First, the application needs to instantiate a CorfuRuntime
-         */
-        CorfuRuntime runtime = getRuntimeAndConnect(defaultCorfuService);
-
+    @Override
+    void action() {
         /**
          * Instantiate a Corfu Stream named "A" dedicated to an SMRmap object.
          */
-        Map<String, Integer> map = runtime.getObjectsView()
-                .build()
-                .setStreamName("A")     // stream name
-                .setType(SMRMap.class)  // object class backed by this stream
-                .open();                // instantiate the object!
+        Map<String, Integer> map = instantiateCorfuObject(SMRMap.class, "A");
+
 
         // thread 1: update "a" and "b" atomically
         new Thread(() -> {
-            runtime.getObjectsView().TXBegin();
+            TXBegin();
             map.put("a", 1);
             map.put("b", 1);
-            runtime.getObjectsView().TXEnd();
+            TXEnd();
         }
         ).start();
 
@@ -59,10 +52,13 @@ public class WriteOnlySimpleTransaction {
         // this thread will print either both 1's, or both nil's
         new Thread(() -> {
             Integer valA = 0, valB = 0;
+
+            TXBegin();
             valA = map.get("a");
             System.out.println("a: " + valA);
             valB = map.get("b");
             System.out.println("b: " + valB);
+            TXEnd();
         }
         ).start();
     }
