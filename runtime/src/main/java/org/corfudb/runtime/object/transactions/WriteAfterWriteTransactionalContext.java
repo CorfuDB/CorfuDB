@@ -50,6 +50,14 @@ public class WriteAfterWriteTransactionalContext
             return commitAddress;
         }
 
+
+        // If the write set is empty, we're done and just return
+        // NOWRITE_ADDRESS.
+        if (writeSet.keySet().isEmpty())
+        {
+            return NOWRITE_ADDRESS;
+        }
+
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
@@ -73,7 +81,6 @@ public class WriteAfterWriteTransactionalContext
                                 collectWriteConflictParams(),
                                 collectWriteConflictParams())
                 );
-
 
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");

@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -36,6 +35,11 @@ public abstract class AbstractTransactionalContext {
      *
      */
     public static final long ABORTED_ADDRESS = -3L;
+
+    /** Constant for committing a transaction which did not
+     * modify the log at all.
+     */
+    public static final long NOWRITE_ADDRESS = -4L;
 
     /** The ID of the transaction. This is used for tracking only, it is
      * NOT recorded in the log.
@@ -103,7 +107,8 @@ public abstract class AbstractTransactionalContext {
      * It is completed exceptionally when the transaction aborts.
      */
     @Getter
-    public CompletableFuture<Boolean> completionFuture = new CompletableFuture<>();
+    public CompletableFuture<Boolean> completionFuture =
+            new CompletableFuture<>();
 
     AbstractTransactionalContext(TransactionBuilder builder) {
         transactionID = UUID.randomUUID();
@@ -162,7 +167,7 @@ public abstract class AbstractTransactionalContext {
      */
     public long commitTransaction() throws TransactionAbortedException {
         completionFuture.complete(true);
-        return 0L;
+        return NOWRITE_ADDRESS;
     }
 
     /** Forcefully abort the transaction.
@@ -186,7 +191,7 @@ public abstract class AbstractTransactionalContext {
         if (conflictObjects != null) {
             Set<Integer> conflictParamSet = readSet.get(proxy.getStreamID());
             Arrays.asList(conflictObjects).stream()
-                .forEach(V -> conflictParamSet.add(Integer.valueOf(V.hashCode())) ) ;
+                .forEach(V -> conflictParamSet.add(Integer.valueOf(V.hashCode()))) ;
         }
     }
 

@@ -1,6 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -14,6 +16,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
 import static org.assertj.core.api.Assertions.fail;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 11/21/16.
@@ -94,4 +98,23 @@ public abstract class AbstractTransactionContextTest extends AbstractViewTest {
         commitStatus = new AtomicIntegerArray(numTasks);
         snapStatus = new AtomicIntegerArray(numTasks);
     }
+
+    /** Ensure that empty write sets are not written to the log.
+     * This test applies to all contexts which is why it is in
+     * the abstract test.
+     */
+    @Test
+    public void ensureEmptyWriteSetIsNotWritten() {
+        TXBegin();
+        long result = TXEnd();
+        LogData ld =
+                getRuntime()
+                        .getAddressSpaceView()
+                        .read(0);
+        assertThat(ld.getType())
+                .isEqualTo(DataType.EMPTY);
+        assertThat(result)
+                .isEqualTo(AbstractTransactionalContext.NOWRITE_ADDRESS);
+    }
+
 }
