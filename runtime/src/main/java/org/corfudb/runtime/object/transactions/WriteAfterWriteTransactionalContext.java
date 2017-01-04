@@ -6,9 +6,12 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 /** A write-after-write transactional context.
  *
@@ -50,12 +53,15 @@ public class WriteAfterWriteTransactionalContext
             return commitAddress;
         }
 
-
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
-        if (writeSet.keySet().isEmpty())
-        {
+        if (writeSet.keySet().isEmpty()) {
             return NOWRITE_ADDRESS;
+        }
+
+        Set<UUID> affectedStreams = new HashSet<>(writeSet.keySet());
+        if (this.builder.getRuntime().getObjectsView().isTransactionLogging()) {
+            affectedStreams.add(TRANSACTION_STREAM_ID);
         }
 
         // Now we obtain a conditional address from the sequencer.
@@ -65,7 +71,7 @@ public class WriteAfterWriteTransactionalContext
                 .acquireAndWrite(
 
                         // a set of stream-IDs that contains the affected streams
-                        writeSet.keySet(),
+                        affectedStreams,
 
                         // a MultiObjectSMREntry that contains the update(s) to objects
                         collectWriteSetEntries(),

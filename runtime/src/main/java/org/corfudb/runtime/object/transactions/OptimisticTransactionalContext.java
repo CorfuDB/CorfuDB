@@ -2,16 +2,26 @@ package org.corfudb.runtime.object.transactions;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.*;
+import org.corfudb.runtime.object.ICorfuSMRAccess;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.VersionLockedObject;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.ConcurrentModificationException;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
+
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 /** A Corfu optimistic transaction context.
  *
@@ -238,9 +248,18 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
-        if (writeSet.isEmpty())
-        {
+        if (writeSet.isEmpty()) {
             return NOWRITE_ADDRESS;
+        }
+
+        //TODO(Maithem): Since the actualy stream write doesn't happen in the parent class,
+        // we end up duplicating the same code for transaction logging for each type of transaction.
+        // This is superfluous, find a better way to factor this piece of code.
+
+        // Write to the transaction stream if transaction logging is enabled
+        Set<UUID> affectedStreams = new HashSet<>(writeSet.keySet());
+        if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
+            affectedStreams.add(TRANSACTION_STREAM_ID);
         }
 
         // Now we obtain a conditional address from the sequencer.
@@ -250,7 +269,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 .acquireAndWrite(
 
                         // a set of stream-IDs that contains the affected streams
-                        writeSet.keySet(),
+                        affectedStreams,
 
                         // a MultiObjectSMREntry that contains the update(s) to objects
                         collectWriteSetEntries(),

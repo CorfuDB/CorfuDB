@@ -27,6 +27,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
+    /**
+     * The Transaction stream is used to log/write successful transactions from different clients.
+     * Transaction data and meta data can be obtained by reading this stream.
+     */
     static public UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
 
     @Getter
