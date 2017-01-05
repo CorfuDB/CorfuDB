@@ -74,6 +74,8 @@ public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
                 instantiateCorfuObject(
                         new TypeToken<SMRMap<String, Integer> >() { },
                         "A" + System.currentTimeMillis() );
+        //map.put("foo", 0);
+
         AtomicInteger
                 valA = new AtomicInteger(0),
                 valB = new AtomicInteger(0);
