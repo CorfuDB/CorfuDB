@@ -34,7 +34,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
     }
 
     @Override
-    void TXBegin() {
+    protected void TXBegin() {
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.WRITE_AFTER_WRITE)
                 .begin();

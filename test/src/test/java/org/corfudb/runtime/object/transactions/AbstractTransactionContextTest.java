@@ -18,15 +18,9 @@ import static org.assertj.core.api.Assertions.fail;
 /**
  * Created by mwei on 11/21/16.
  */
-public abstract class AbstractTransactionContextTest extends AbstractViewTest {
+public abstract class AbstractTransactionContextTest extends AbstractObjectTest {
 
     protected ISMRMap<String, String> testMap;
-
-    abstract void TXBegin();
-
-    long TXEnd() {
-        return getRuntime().getObjectsView().TXEnd();
-    }
 
     @Before
     public void resetMap() {
@@ -36,13 +30,17 @@ public abstract class AbstractTransactionContextTest extends AbstractViewTest {
 
     public ISMRMap<String, String> getMap() {
         if (testMap == null) {
-            testMap = getRuntime()
-                    .getObjectsView()
-                    .build()
-                    .setStreamName("test stream")
-                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
-                    })
-                    .open();
+            testMap = (ISMRMap<String, String>) instantiateCorfuObject(
+                    new TypeToken<ISMRMap<String, String>>() {
+                    }, "test stream"
+            ) ;
+//                    getRuntime()
+//                    .getObjectsView()
+//                    .build()
+//                    .setStreamName("test stream")
+//                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+//                    })
+//                    .open();
         }
         return testMap;
     }
@@ -81,11 +79,9 @@ public abstract class AbstractTransactionContextTest extends AbstractViewTest {
         sharedCounters = new ArrayList<>();
 
         for (int i = 0; i < numTasks; i++)
-            sharedCounters.add(i, getRuntime().getObjectsView()
-                    .build()
-                    .setStreamName("test"+i)
-                    .setType(CorfuSharedCounter.class)
-                    .open() );
+            sharedCounters.add(i,
+                    instantiateCorfuObject(CorfuSharedCounter.class, "test"+i)
+            );
 
         // initialize all shared counters
         for (int i = 0; i < numTasks; i++)

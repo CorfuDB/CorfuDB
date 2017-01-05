@@ -198,16 +198,11 @@ public abstract class TXConflictScenarios extends AbstractTransactionContextTest
     }
 
     void testNoWriteConflictSimple() throws Exception {
-        final CorfuSharedCounter sharedCounter1 = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test"+1)
-                .setType(CorfuSharedCounter.class)
-                .open();
-        final CorfuSharedCounter sharedCounter2 = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test"+2)
-                .setType(CorfuSharedCounter.class)
-                .open();
+
+        final CorfuSharedCounter sharedCounter1 =
+                instantiateCorfuObject(CorfuSharedCounter.class, "test"+1);
+        final CorfuSharedCounter sharedCounter2 =
+                instantiateCorfuObject(CorfuSharedCounter.class, "test"+2);
 
         commitStatus = new AtomicIntegerArray(2);
 
@@ -259,13 +254,16 @@ public abstract class TXConflictScenarios extends AbstractTransactionContextTest
 
         Map<String, String> testMap = getMap();
 
-        Map<String, String> testMap2 = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test stream")
-                .setSerializer(Serializers.JSON)
-                .addOption(ObjectOpenOptions.NO_CACHE)
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                .open();
+        Map<String, String> testMap2 = (Map<String, String>)
+                instantiateCorfuObject(
+                        new TypeToken<SMRMap<String, String>>() {}, "test stream");
+//        getRuntime().getObjectsView()
+//                .build()
+//                .setStreamName("test stream")
+//                .setSerializer(Serializers.JSON)
+//                .addOption(ObjectOpenOptions.NO_CACHE)
+//                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+//                .open();
 
         t(1, () -> TXBegin() );
         t(1, () -> testMap.put("a", "a") );

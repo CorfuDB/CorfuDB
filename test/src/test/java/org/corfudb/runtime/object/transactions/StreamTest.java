@@ -17,17 +17,9 @@ import static org.assertj.core.api.Assertions.fail;
 /**
  * Created by dmalkhi on 12/13/16.
  */
-public class StreamTest extends AbstractViewTest {
-
-    @Before
-    public void setupTest() { getDefaultRuntime(); }
-
-
-    void TXEnd() {
-        getRuntime().getObjectsView().TXEnd();
-    }
-
-    void TXBegin() {
+public class StreamTest extends AbstractObjectTest {
+    @Override
+    protected void TXBegin() {
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.WRITE_AFTER_WRITE)
                 .begin();
@@ -50,17 +42,6 @@ public class StreamTest extends AbstractViewTest {
 
     private final int READ_PERCENT = 80;
     private final int MAX_PERCENT = 100;
-
-    /**
-     * Utility method to instantiate a Corfu object
-     */
-    protected <T> T instantiateCorfuObject(Class<T> tClass, String name) {
-        return getRuntime().getObjectsView()
-                .build()
-                .setStreamName(name)     // stream name
-                .setType(tClass)        // object class backed by this stream
-                .open();                // instantiate the object!
-    }
 
     @Test
     public void mixBackpointers() {

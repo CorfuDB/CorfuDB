@@ -86,6 +86,8 @@ public class VersionLockedObject<T> {
     /** The undo target map for this object. */
     private final Map<String, IUndoFunction<T>> undoFunctionMap;
 
+    public static ThreadLocal<Long> sleepHack = new ThreadLocal<>();
+
     public VersionLockedObject(T obj, long version, StreamView sv,
                   Map<String, ICorfuSMRUpcallTarget<T>> upcallTargets,
                   Map<String, IUndoRecordFunction<T>> undoRecordTargets,
@@ -106,7 +108,33 @@ public class VersionLockedObject<T> {
         this.upcallTargetMap = upcallTargets;
         this.undoRecordFunctionMap = undoRecordTargets;
         this.undoFunctionMap = undoTargets;
-        lock = new StampedLock();
+        lock = new StampedLock() {
+            public long writeLock() {
+                System.out.println("Write lock "+Thread.currentThread().getName());
+                return super.writeLock();
+            }
+
+            public void unlock(long stamp) {
+                System.out.println("Unlocking "+Thread.currentThread().getName());
+                Long sleep = sleepHack.get();
+                if (sleep != null) {
+                    try {
+                            Thread.sleep(sleep);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        } finally {
+                            sleepHack.set(null);
+                        }
+                }
+                try {
+                    super.unlock(stamp);
+                } catch (RuntimeException | Error t) {
+                    t.printStackTrace();
+                    throw t;
+                }
+            }
+        };
+
     }
 
     public int getOptimisticVersionUnsafe() {
