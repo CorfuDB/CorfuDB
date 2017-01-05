@@ -138,7 +138,7 @@ This utility takes input from stdin and writes it into the log. This command inv
 
 Next, we can try reading back that stream. This can be done by running:
 ```
-$ corfu_stream read -c localhost:9000 -s test
+$ corfu_stream read -c localhost:9000 -i test
 ```
 The utility should print back "hello world".
 
