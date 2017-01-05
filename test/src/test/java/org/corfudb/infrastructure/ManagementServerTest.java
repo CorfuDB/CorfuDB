@@ -50,10 +50,10 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void bootstrapManagementServer() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(layout));
+        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP);
+        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR);
     }
 
     /**
@@ -65,8 +65,8 @@ public class ManagementServerTest extends AbstractServerTest {
         Map<String, Boolean> map = new HashMap<>();
         map.put("key", true);
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(new FailureDetectorMsg(map)));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(layout));
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR);
+        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(new FailureDetectorMsg(map)));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);

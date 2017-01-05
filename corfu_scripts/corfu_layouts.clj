@@ -60,26 +60,29 @@ Options:
                              (if (.equals layout new-layout) (println "Layout not modified, exiting")
                                  ; If changes were made, check if the layout servers were modified
                                  ; if it was, we'll have to add them to the service
-                                 (if (.equals (.getLayoutServers layout) (.getLayoutServers new-layout))
-                                     ; Equal, just install the new layout
-                                     (do
-                                      (install-layout new-layout)
-                                      (println "New layout installed!"))
-                                     ; Not equal, need to:
-                                     ; (1) make sure all layout servers are bootstrapped
-                                     ; (2) install layout on all servers
-                                     (do
-                                       (doseq [server (.getLayoutServers new-layout)]
-                                       (do (get-router server)
-                                           (try
-                                             (.get (.bootstrapLayout (get-layout-client) new-layout))
-                                             (catch Exception e
-                                             (println server":" (.getMessage e))))
-                                           ))
-                                       (install-layout new-layout)
-                                       (println "New layout installed!")
-                                     )
-                                 )
+                                 ; Do not allow the user to modify the epoch directly.
+                                 (if-not (.equals (.getEpoch layout) (.getEpoch new-layout)) (println "Epoch modification not allowed, exiting")
+                                   (if (.equals (.getLayoutServers layout) (.getLayoutServers new-layout))
+                                       ; Equal, just install the new layout
+                                       (do
+                                        (install-layout new-layout)
+                                        (println "New layout installed!"))
+                                       ; Not equal, need to:
+                                       ; (1) make sure all layout servers are bootstrapped
+                                       ; (2) install layout on all servers
+                                       (do
+                                         (doseq [server (.getLayoutServers new-layout)]
+                                         (do (get-router server)
+                                             (try
+                                               (.get (.bootstrapLayout (get-layout-client) new-layout))
+                                               (catch Exception e
+                                               (println server":" (.getMessage e))))
+                                             ))
+                                         (install-layout new-layout)
+                                         (println "New layout installed!")
+                                       )
+                                   )
+                                )
                             )
                        ))))
 

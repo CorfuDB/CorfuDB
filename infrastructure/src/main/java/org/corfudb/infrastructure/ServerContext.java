@@ -50,11 +50,16 @@ public class ServerContext {
     @Setter
     private IFailureDetectorPolicy failureDetectorPolicy;
 
+    @Getter
+    @Setter
+    private IFailureHandlerPolicy failureHandlerPolicy;
+
     public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
         this.serverRouter = serverRouter;
         this.failureDetectorPolicy = new PeriodicPollPolicy();
+        this.failureHandlerPolicy = new PurgeFailurePolicy();
     }
 
     /**

@@ -3,6 +3,8 @@ package org.corfudb.runtime.view;
 import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.junit.Test;
 
@@ -50,6 +52,12 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
         bootstrapAllServers(l);
+
+        CorfuRuntime corfuRuntime = new CorfuRuntime();
+        l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
+        corfuRuntime.connect();
+        corfuRuntime.getRouter(SERVERS.ENDPOINT_1).getClient(ManagementClient.class).initiateFailureHandler();
+
 
         // Reduce test execution time from 15+ seconds to about 8 seconds:
         // Set aggressive timeouts for surviving MS that polls the dead MS.
