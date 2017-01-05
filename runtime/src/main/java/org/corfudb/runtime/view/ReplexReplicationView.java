@@ -37,7 +37,8 @@ public class ReplexReplicationView extends AbstractReplicationView {
      * @param address An address to write to.
      * @param stream  The streams which will belong on this entry.
      * @param data    The data to write.
-     * @param backpointerMap If stream is null, then this is a write to the global log
+     * @param backpointerMap If stream is null, then this is a write to the
+     *                       global log
      */
     @Override
     public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
@@ -45,7 +46,8 @@ public class ReplexReplicationView extends AbstractReplicationView {
             throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         int payloadBytes = 0;
-        // To reduce the overhead of serialization, we serialize only the first time we write, saving
+        // To reduce the overhead of serialization, we serialize only the
+        // first time we write, saving
         // when we go down the chain.
         try (AutoCloseableByteBuf b =
                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
@@ -88,7 +90,8 @@ public class ReplexReplicationView extends AbstractReplicationView {
             }
 /*
             if (data instanceof TXEntry) {
-                // If the Object is of type TxEntry, only write partial write sets.
+                // If the Object is of type TxEntry, only write partial write
+                // sets.
                 for (UUID streamID : stream) {
                     if (((TXEntry) data).getTxMap().get(streamID) == null ||
                             ((TXEntry) data).getTxMap().get(streamID).getUpdates().size() == 0)
@@ -181,7 +184,8 @@ public class ReplexReplicationView extends AbstractReplicationView {
         if (potentialResult.getType() == DataType.DATA &&
                 potentialResult.getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT)) {
             if (!(Boolean)(potentialResult.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT))) {
-                // If the commit is FALSE, then it is an aborted write and doesn't need to be hole-filled.
+                // If the commit is FALSE, then it is an aborted write and
+                // doesn't need to be hole-filled.
                 return LogData.HOLE;
             }
             else return LogData.EMPTY;
@@ -208,7 +212,8 @@ public class ReplexReplicationView extends AbstractReplicationView {
             if (potentialResult.get(address).getType() == DataType.DATA) {
                 if (potentialResult.get(address).getMetadataMap().containsKey(IMetadata.LogUnitMetadataType.COMMIT)) {
                     if (!(Boolean)(potentialResult.get(address).getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT))) {
-                        // If the commit is FALSE, then it is an aborted write and doesn't need to be hole-filled.
+                        // If the commit is FALSE, then it is an aborted write
+                        // and doesn't need to be hole-filled.
                         //potentialResult.put(address, LogData.HOLE);
                         builder.put(address, LogData.EMPTY);
                     } else {

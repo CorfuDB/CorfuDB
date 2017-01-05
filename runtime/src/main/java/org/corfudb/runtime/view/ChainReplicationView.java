@@ -51,7 +51,8 @@ public class ChainReplicationView extends AbstractReplicationView {
             throws OverwriteException {
         int numUnits = getLayout().getSegmentLength(address);
         int payloadBytes = 0;
-        // To reduce the overhead of serialization, we serialize only the first time we write, saving
+        // To reduce the overhead of serialization, we serialize only the
+        // first time we write, saving
         // when we go down the chain.
         try (AutoCloseableByteBuf b =
                      new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
@@ -71,7 +72,8 @@ public class ChainReplicationView extends AbstractReplicationView {
             payloadBytes = b.readableBytes();
             for (int i = 0; i < numUnits; i++) {
                 log.trace("Write[{}]: chain {}/{}", address, i + 1, numUnits);
-                // In chain replication, we write synchronously to every unit in the chain.
+                // In chain replication, we write synchronously to every unit
+                // in the chain.
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
                                 .write(address, stream, 0L, data, backpointerMap), OverwriteException.class);
@@ -119,7 +121,8 @@ public class ChainReplicationView extends AbstractReplicationView {
         int numUnits = getLayout().getSegmentLength(address);
         for (int i = 0; i < numUnits; i++) {
             log.trace("fillHole[{}]: chain {}/{}", address, i + 1, numUnits);
-            // In chain replication, we write synchronously to every unit in the chain.
+            // In chain replication, we write synchronously to every unit in
+            // the chain.
             CFUtils.getUninterruptibly(getLayout().getLogUnitClient(address, i)
                     .fillHole(address), OverwriteException.class);
         }

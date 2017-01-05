@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -33,13 +34,13 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        StreamView sv = r.getStreamsView().get(streamA);
-        sv.write(testPayload);
+        IStreamView sv = r.getStreamsView().get(streamA);
+        sv.append(testPayload);
 
-        assertThat(sv.read().getPayload(getRuntime()))
+        assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
-        assertThat(sv.read())
+        assertThat(sv.next())
                 .isEqualTo(null);
     }
 
@@ -50,18 +51,18 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        StreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getStreamsView().get(streamA);
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW,
-                i -> sv.write(testPayload));
+                i -> sv.append(testPayload));
         executeScheduled(PARAMETERS.CONCURRENCY_SOME,
                 PARAMETERS.TIMEOUT_NORMAL);
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW,
-                i -> assertThat(sv.read().getPayload(getRuntime()))
+                i -> assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes()));
         executeScheduled(PARAMETERS.CONCURRENCY_SOME,
                 PARAMETERS.TIMEOUT_NORMAL);
-        assertThat(sv.read())
+        assertThat(sv.next())
                 .isEqualTo(null);
     }
 
@@ -74,16 +75,16 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        StreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getStreamsView().get(streamA);
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, i ->
-                sv.write(testPayload));
+                sv.append(testPayload));
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_NORMAL);
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, i ->
-                assertThat(sv.read().getPayload(getRuntime()))
+                assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes()));
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_NORMAL);
-        assertThat(sv.read())
+        assertThat(sv.next())
                 .isEqualTo(null);
     }
 
@@ -97,13 +98,13 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        StreamView sv = r.getStreamsView().get(streamA);
-        sv.write(testPayload);
+        IStreamView sv = r.getStreamsView().get(streamA);
+        sv.append(testPayload);
 
-        assertThat(sv.read().getPayload(getRuntime()))
+        assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
-        assertThat(sv.read())
+        assertThat(sv.next())
                 .isEqualTo(null);
     }
 
@@ -114,17 +115,17 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         byte[] testPayload = "hello world".getBytes();
 
-        // write without reserving a token
+        // append without reserving a token
         r.getAddressSpaceView().fillHole(0);
 
         // Write to the stream, and read back. The hole should be filled.
-        StreamView sv = r.getStreamsView().get(streamA);
-        sv.write(testPayload);
+        IStreamView sv = r.getStreamsView().get(streamA);
+        sv.append(testPayload);
 
-        assertThat(sv.read().getPayload(getRuntime()))
+        assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
-        assertThat(sv.read())
+        assertThat(sv.next())
                 .isEqualTo(null);
     }
 
@@ -140,13 +141,13 @@ public class StreamViewTest extends AbstractViewTest {
         r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
 
         // Write to the stream, and read back. The hole should be filled.
-        StreamView sv = r.getStreamsView().get(streamA);
-        sv.write(testPayload);
+        IStreamView sv = r.getStreamsView().get(streamA);
+        sv.append(testPayload);
 
-        assertThat(sv.read().getPayload(getRuntime()))
+        assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
-        assertThat(sv.read())
+        assertThat(sv.next())
                 .isEqualTo(null);
     }
 
@@ -160,8 +161,8 @@ public class StreamViewTest extends AbstractViewTest {
         byte[] testPayload = "hello world".getBytes();
         byte[] testPayload2 = "hello world2".getBytes();
 
-        StreamView sv = r.getStreamsView().get(streamA);
-        sv.write(testPayload);
+        IStreamView sv = r.getStreamsView().get(streamA);
+        sv.append(testPayload);
 
         //generate a stream hole
         TokenResponse tr =
@@ -171,13 +172,13 @@ public class StreamViewTest extends AbstractViewTest {
         tr = r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
         r.getAddressSpaceView().fillHole(tr.getToken());
 
-        sv.write(testPayload2);
+        sv.append(testPayload2);
 
         //make sure we can still read the stream.
-        assertThat(sv.read().getPayload(getRuntime()))
+        assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo(testPayload);
 
-        assertThat(sv.read().getPayload(getRuntime()))
+        assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo(testPayload2);
     }
 

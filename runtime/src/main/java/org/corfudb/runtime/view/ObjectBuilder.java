@@ -11,6 +11,7 @@ import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.CorfuProxyBuilder;
 import org.corfudb.runtime.object.IObjectBuilder;
 import org.corfudb.runtime.object.ISMRInterface;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -88,7 +89,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
             streamID = CorfuRuntime.getStreamID(streamName);
         }
 
-        final StreamView sv = runtime.getStreamsView().get(streamID);
+        final IStreamView sv = runtime.getStreamsView().get(streamID);
 
         if (useCompiledClass)
         {

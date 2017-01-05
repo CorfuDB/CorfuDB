@@ -150,7 +150,7 @@ public class StreamLogFiles implements StreamLog {
      * Write the header for a Corfu log file.
      *
      * @param fc      The file channel to use.
-     * @param version The version number to write to the header.
+     * @param version The version number to append to the header.
      * @param verify  Checksum verify flag
      * @throws IOException
      */
@@ -431,13 +431,12 @@ public class StreamLogFiles implements StreamLog {
      *
      * @param fh      The file handle to use.
      * @param address The address of the entry.
-     * @param entry   The LogUnitEntry to write.
+     * @param entry   The LogUnitEntry to append.
      */
     private void writeRecord(FileHandle fh, long address, LogData entry) throws IOException {
         LogEntry logEntry = getLogEntry(address, entry);
 
         ByteBuffer record = getByteBufferWithMetaData(logEntry);
-
 
         ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
                 + record.capacity());
