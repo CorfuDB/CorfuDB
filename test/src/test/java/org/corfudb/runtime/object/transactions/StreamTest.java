@@ -70,7 +70,6 @@ public class StreamTest extends AbstractObjectTest {
         for (int j = 0; j < concurrency; j++)
             t(j, () -> {
                 TXBegin();
-                System.out.println("map2.get: " + map3.get("foo"));
             });
 
         t(concurrency, () -> { TXBegin(); map2.put("foo", 0); TXEnd(); });
@@ -80,11 +79,10 @@ public class StreamTest extends AbstractObjectTest {
             final int threadNum = j;
             t(threadNum, () -> {
                 try {
-                    System.out.println("2nd map2.get: " + map3.get("foo"));
                     map3.put("bar" + threadNum, 0);
                     TXEnd();
                 } catch (NullPointerException ne) {
-                    System.out.println("null pointer exception");
+                    throw new RuntimeException();
                 }
             });
         }

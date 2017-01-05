@@ -41,13 +41,13 @@ public class AbstractObjectTest extends AbstractViewTest {
      * @return an object instance of type T backed by a stream named 'name'
      */
     protected <T> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
-        return getRuntime().getObjectsView()
+        return (T)
+                getRuntime().getObjectsView()
                         .build()
                         .setStreamName(name)     // stream name
                         .setTypeToken(tType)    // a TypeToken of the specified class
                         .open();                // instantiate the object!
     }
-
 
     /**
      * Utility method to start a (default type) TX

@@ -1,5 +1,6 @@
 package org.corfudb.samples;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.runtime.CorfuRuntime;
@@ -9,15 +10,23 @@ import org.docopt.Docopt;
 import java.util.Map;
 
 /**
- * This basic class demonstrates the basics of a Corfu application.
+ * This class provides several recurring utility methods for Corfu applications.
  *
  * Created by dalia on 12/31/16.
  */
-public abstract class BasicCorfuProgram {
+public abstract class CorfuAppUtils {
+
     @Setter @Getter
     CorfuRuntime corfuRuntime;
 
     /**
+     * A Corfu application needs to instantiate a CorfuRuntime in order to connect to the Corfu service.
+     * CorfuRuntime is a Java object that contains all of the Corfu utilities exposed to applications,
+     * including library classes for streams, objects and transactions.
+     *
+     * the application needs to point the runtime to a host and port which is running the Corfu service.
+     * See http://github.com/CorfuDB/CorfuDB for instructions on how to deploy Corfu.
+     *
      * Internally, the corfuRuntime interacts with the CorfuDB service over TCP/IP sockets.
      *
      * @param configurationString specifies the IP:port of the CorfuService
@@ -52,18 +61,13 @@ public abstract class BasicCorfuProgram {
         String corfuConfigurationString = (String) opts.get("-c");
 
         /**
-         * First, the application needs to instantiate a CorfuRuntime,
-         * which is a Java object that contains all of the Corfu utilities exposed to applications.
-
-         * Above, you will need to point it to a host and port which is running the service.
-         * See {@link https://github.com/CorfuDB/CorfuDB} for instructions on how to deploy Corfu.
+         * Must set up a Corfu runtime before everything.
          */
         setCorfuRuntime( getRuntimeAndConnect(corfuConfigurationString) );
 
         /**
          * Obviously, this application is not doing much yet,
          * but you can already invoke getRuntimeAndConnect to test if you can connect to a deployed Corfu service.
-         *
          *
          * Next, invoke a class-specific activity wrapper named 'action()'.
          */
@@ -89,6 +93,27 @@ public abstract class BasicCorfuProgram {
                 .setType(tClass)        // object class backed by this stream
                 .open();                // instantiate the object!
     }
+
+    /**
+     * Utility method to instantiate a Corfu object
+     *
+     * A Corfu Stream is a log dedicated specifically to the history of updates of one object.
+     * This method will instantiate a stream by giving it a name,
+     * and then instantiate an object by specifying its class
+     *
+     * @param tType is a TypeToken wrapping the (possibly generic) object class
+     * @param name is the name of the stream backing up the object
+     * @param <T> the return class
+     * @return an object instance of type T backed by a stream named 'name'
+     */
+    protected <T> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
+        return getCorfuRuntime().getObjectsView()
+                .build()
+                .setStreamName(name)     // stream name
+                .setTypeToken(tType)    // a TypeToken of the specified class
+                .open();                // instantiate the object!
+    }
+
 
     /**
      * Utility method to start a (default type) TX

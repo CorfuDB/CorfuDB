@@ -74,13 +74,11 @@ public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
                 instantiateCorfuObject(
                         new TypeToken<SMRMap<String, Integer> >() { },
                         "A" + System.currentTimeMillis() );
-        //map.put("foo", 0);
 
         AtomicInteger
                 valA = new AtomicInteger(0),
                 valB = new AtomicInteger(0);
         final Thread t1, t2;
-        final long SLEEP_TIME = 1000l;
 
         t2 = new Thread(() -> {
             Integer ga  = map.get("a");
@@ -98,7 +96,6 @@ public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
             map.put("a", 1);
             map.put("b", 1);
             t2.start();
-            //VersionLockedObject.sleepHack.set(SLEEP_TIME);
             TXEnd();
         });
 
