@@ -25,22 +25,14 @@ public abstract class AbstractTransactionContextTest extends AbstractObjectTest 
     @Before
     public void resetMap() {
         testMap = null;
-        getDefaultRuntime();
     }
 
     public ISMRMap<String, String> getMap() {
         if (testMap == null) {
             testMap = (ISMRMap<String, String>) instantiateCorfuObject(
-                    new TypeToken<ISMRMap<String, String>>() {
+                    new TypeToken<SMRMap<String, String>>() {
                     }, "test stream"
             ) ;
-//                    getRuntime()
-//                    .getObjectsView()
-//                    .build()
-//                    .setStreamName("test stream")
-//                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {
-//                    })
-//                    .open();
         }
         return testMap;
     }

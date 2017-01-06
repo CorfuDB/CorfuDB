@@ -47,22 +47,21 @@ public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
         t(0, () -> map.put("a", 1));
         t(0, () -> map.put("b", 1));
 
-//        t(1, () -> TXBegin());
+        t(1, () -> TXBegin());
         t(1, () -> {
             Integer ga  = map.get("a");
             if (ga != null) valA.set(ga);
         } );
-        System.out.println("a: " + valA);
         t(1, () -> {
             Integer gb  = map.get("b");
             if (gb != null) valB.set(gb);
         } );
-        System.out.println("b: " + valB);
 
- //       t(1, () -> TXEnd());
+        t(1, () -> TXEnd());
 
         t(0, () -> TXEnd());
 
+        assertThat(valA.get()).isEqualTo(valB.get());
     }
 
     @Test
@@ -83,11 +82,9 @@ public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
         t2 = new Thread(() -> {
             Integer ga  = map.get("a");
             if (ga != null) valA.set(ga);
-            System.out.println("a: " + valA);
 
             Integer gb  = map.get("b");
             if (gb != null) valB.set(gb);
-            System.out.println("b: " + valB);
         });
 
         t1 = new Thread(() -> {
@@ -107,6 +104,7 @@ public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
         } catch (InterruptedException ie) {
 
         }
+        assertThat(valA.get()).isEqualTo(valB.get());
     }
 
 

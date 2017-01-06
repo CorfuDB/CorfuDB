@@ -100,9 +100,7 @@ public class StreamTest extends AbstractObjectTest {
         map3 = instantiateCorfuObject(SMRMap.class, "foo");
 
         // populate maps
-        System.out.print("generating maps..");
         for (int i = 0; i < NUM_BATCHES; i++) {
-            System.out.print(".");
             TXBegin();
             for (int j = 0; j < BATCH_SZ; j++) {
                 map1.put("m1" + (i * BATCH_SZ + j), i);
@@ -111,7 +109,6 @@ public class StreamTest extends AbstractObjectTest {
             }
             TXEnd();
         }
-        System.out.println("END");
     }
 
     /**
@@ -122,9 +119,7 @@ public class StreamTest extends AbstractObjectTest {
      * @param readPrecent ratio of reads (to 100)
      */
     public void concurrentStreamRWLoad(int ignoredThreadNum, int readPrecent) {
-        System.out.println("running mixedRWload..");
         final AtomicInteger aborts = new AtomicInteger(0);
-        // java.util.concurrent.ThreadLocalRandom rand = java.util.concurrent.ThreadLocalRandom.current();
 
         for (int i = 0; i < NUM_BATCHES; i++) {
             final int fi = i;

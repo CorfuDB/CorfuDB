@@ -2,11 +2,15 @@ package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.junit.Before;
 
 /**
  * Created by dmalkhi on 1/4/17.
  */
 public class AbstractObjectTest extends AbstractViewTest {
+    @Before
+    public void becomeCorfuApp() {         getDefaultRuntime(); }
+
     /**
      * Utility method to instantiate a Corfu object
      *
