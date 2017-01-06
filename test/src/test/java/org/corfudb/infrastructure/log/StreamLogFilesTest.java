@@ -118,7 +118,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.close();
 
         final int OVERWRITE_DELIMITER = 0xFFFF;
-        final int OVERWRITE_BYTES = 4;
+        final int OVERWRITE_BYTES = 12;
 
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
         String logFilePath = logDir + 0 + ".log";

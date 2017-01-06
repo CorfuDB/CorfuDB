@@ -5,7 +5,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
@@ -16,6 +16,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -24,7 +26,12 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
+import org.corfudb.format.Types.ChecksummedRecord;
+import org.corfudb.format.Types.DataType;
+import org.corfudb.format.Types.LogEntry;
+import org.corfudb.format.Types.LogRecord;
 import org.corfudb.format.Types.LogHeader;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -152,6 +159,37 @@ public class StreamLogFiles implements StreamLog {
         fc.force(true);
     }
 
+    private LogData getLogData(LogRecord record) {
+        LogEntry entry = record.getEntry();
+        ByteBuf data = Unpooled.wrappedBuffer(entry.getData().toByteArray());
+        LogData logData = new LogData(org.corfudb.protocols.wireprotocol.
+                DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
+
+        logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
+        logData.setGlobalAddress(entry.getGlobalAddress());
+        logData.setBackpointerMap(getUUIDLongMap(entry.getLogicalAddressesMap()));
+        logData.setStreams(getStreamsSet(entry.getStreamsList().asByteStringList()));
+        logData.setRank(entry.getRank());
+
+        logData.clearCommit();
+
+        if(entry.getCommit()) {
+            logData.setCommit();
+        }
+
+        return logData;
+    }
+
+    Set<UUID> getStreamsSet(List<ByteString> list) {
+        Set<UUID> set = new HashSet();
+
+        for(ByteString string : list) {
+            set.add(UUID.fromString(string.toString(StandardCharsets.UTF_8)));
+        }
+
+        return set;
+    }
+
     /**
      * Find a log entry in a file.
      *
@@ -165,7 +203,7 @@ public class StreamLogFiles implements StreamLog {
         // A channel lock is required to read the file size because the channel size can change
         // when it is written to, so when we read the size we need to guarantee that the size only
         // includes fully written records.
-        long logFileSize = 0;
+        long logFileSize;
 
         synchronized (fh.lock) {
             logFileSize = fh.channel.size();
@@ -196,42 +234,33 @@ public class StreamLogFiles implements StreamLog {
                 return null;
             }
 
-            int checksum = o.getInt();
-            ByteBuffer checksumBuf = o.slice();
-            long entryAddress = o.getLong();
-            int entryLen = o.getInt();
+            int recordSize = o.getInt();
+            byte[] recordBuf = new byte[recordSize];
+            o.get(recordBuf);
 
-            if (!noVerify) {
-                Hasher computedChecksum = Hashing.crc32c().newHasher();
+            try {
+                ChecksummedRecord checksummedRecord = ChecksummedRecord.parseFrom(recordBuf);
+                LogRecord record = checksummedRecord.getLogRecord();
 
-                int recordLen = Long.BYTES     // Size of address
-                        + Integer.BYTES  // Size of entry length
-                        + entryLen;      // entry size
-
-                for (int x = 0; x < recordLen; x++) {
-                    computedChecksum.putByte(checksumBuf.get());
+                if (!noVerify) {
+                    if (checksummedRecord.getChecksum() != getChecksum(record.toByteArray())) {
+                        log.error("Checksum mismatch detected while trying to read address {}", address);
+                        throw new DataCorruptionException();
+                    }
                 }
 
-                if (checksum != computedChecksum.hash().asInt()) {
-                    log.error("Checksum mismatch detected while trying to read address {}", address);
-                    throw new DataCorruptionException();
+                if (address == -1) {
+                    //Todo(Maithem) : maybe we can move this to getChannelForAddress
+                    fh.knownAddresses.add(record.getAddress());
+                } else if (record.getAddress() != address) {
+                    log.trace("Read address {}, not match {}, skipping. (remain={})", record.getAddress(), address);
+                } else {
+                    log.debug("Entry at {} hit, reading (size={}).", address, recordSize);
+
+                    return getLogData(record);
                 }
-            }
-
-
-            if (address == -1) {
-                //Todo(Maithem) : maybe we can move this to getChannelForAddress
-                fh.knownAddresses.add(entryAddress);
-            }
-
-            if (entryAddress != address) {
-                o.position(o.position() + entryLen); //skip over (size-20 is what we haven't read).
-                log.trace("Read address {}, not match {}, skipping. (remain={})", entryAddress, address, o.remaining());
-            } else {
-                log.debug("Entry at {} hit, reading (size={}).", address, entryLen);
-
-                ByteBuf buf = Unpooled.wrappedBuffer(o.slice());
-                return new LogData(buf);
+            } catch (InvalidProtocolBufferException e) {
+                throw new DataCorruptionException();
             }
         }
         return null;
@@ -303,6 +332,94 @@ public class StreamLogFiles implements StreamLog {
         });
     }
 
+    Map<String, Long> getStrLongMap(Map<UUID, Long> uuidLongMap) {
+        Map<String, Long> stringLongMap = new HashMap();
+
+        for(Map.Entry<UUID, Long> entry : uuidLongMap.entrySet()) {
+            stringLongMap.put(entry.getKey().toString(), entry.getValue());
+        }
+
+        return stringLongMap;
+    }
+
+    Map<UUID, Long> getUUIDLongMap(Map<String, Long> stringLongMap) {
+        Map<UUID, Long> uuidLongMap = new HashMap();
+
+        for(Map.Entry<String, Long> entry : stringLongMap.entrySet()) {
+            uuidLongMap.put(UUID.fromString(entry.getKey()), entry.getValue());
+        }
+
+        return uuidLongMap;
+    }
+
+
+    Set<String> getStrUUID(Set<UUID> uuids) {
+        Set<String> strUUIds = new HashSet();
+
+        for(UUID uuid : uuids) {
+            strUUIds.add(uuid.toString());
+        }
+
+        return strUUIds;
+    }
+
+    LogRecord getLogRecord(long address, LogData entry) {
+        byte[] data = new byte[0];
+
+        if (entry.getData() != null) {
+            data = entry.getData();
+        }
+
+        boolean setCommit = false;
+        Object val = entry.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT);
+        if(val != null) {
+            setCommit = (boolean) val;
+        }
+
+        LogEntry logEntry = LogEntry.newBuilder()
+                .setDataType(DataType.forNumber(entry.getType().ordinal()))
+                .setData(ByteString.copyFrom(data))
+                .setGlobalAddress(entry.getGlobalAddress())
+                .setRank(entry.getRank())
+                .setCommit(setCommit)
+                .addAllStreams(getStrUUID(entry.getStreams()))
+                .putAllLogicalAddresses(getStrLongMap(entry.getLogicalAddresses()))
+                .putAllBackpointers(getStrLongMap(entry.getBackpointerMap()))
+                .build();
+
+        LogRecord record = LogRecord.newBuilder()
+                .setAddress(address)
+                .setLength(logEntry.getSerializedSize())
+                .setEntry(logEntry)
+                .build();
+
+        return record;
+    }
+
+    int getChecksum(byte[] bytes) {
+        Hasher hasher = Hashing.crc32c().newHasher();
+
+        for(byte a : bytes) {
+            hasher.putByte(a);
+        }
+
+        return hasher.hash().asInt();
+    }
+
+    ChecksummedRecord getCheckummedRecord(LogRecord record) {
+        int checksum = 0;
+
+        if(!noVerify) {
+            checksum = getChecksum(record.toByteArray());
+        }
+
+        ChecksummedRecord checksummedRecord = ChecksummedRecord.newBuilder()
+                .setChecksum(checksum)
+                .setLogRecord(record)
+                .build();
+
+        return checksummedRecord;
+    }
 
     /**
      * Write a log entry record to a file.
@@ -312,52 +429,22 @@ public class StreamLogFiles implements StreamLog {
      * @param entry   The LogUnitEntry to write.
      */
     private void writeRecord(FileHandle fh, long address, LogData entry) throws IOException {
-        ByteBuf recordBuf = Unpooled.buffer();
+        LogRecord logRecord = getLogRecord(address, entry);
+        ChecksummedRecord record = getCheckummedRecord(logRecord);
 
-        recordBuf.writeShort(RECORD_DELIMITER);
-        int checkSumInd = recordBuf.writerIndex();
-        recordBuf.writeInt(0);
-        recordBuf.writeLong(address);
-        int dataSizeInd = recordBuf.writerIndex();
-        recordBuf.writeInt(0);
-        int entryInd = recordBuf.writerIndex();
-        entry.doSerialize(recordBuf);
-        int recordBufLastInd = recordBuf.writerIndex();
+        ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
+                + Integer.BYTES // Size of int (Record size)
+                + record.getSerializedSize()); // Record
 
-        // Rewind writer index to write entry length
-        recordBuf.writerIndex(dataSizeInd);
-        recordBuf.writeInt(recordBufLastInd - entryInd);
-
-        // Restore writer index
-        recordBuf.writerIndex(recordBufLastInd);
-
-        if (!noVerify) {
-            // Checksum is only computed over the address and the entry, so the reader
-            // index needs to skip the delimiter and checksum
-            recordBuf.readShort();
-            recordBuf.readInt();
-
-            Hasher hasher = Hashing.crc32c().newHasher();
-
-            while (recordBuf.isReadable()) {
-                hasher.putByte(recordBuf.readByte());
-            }
-
-            recordBuf.readerIndex(checkSumInd);
-            recordBuf.writerIndex(checkSumInd);
-            recordBuf.writeInt(hasher.hash().asInt());
-        }
-
-        // Restore record buffer pointers
-        recordBuf.readerIndex(0);
-        recordBuf.writerIndex(recordBufLastInd);
+        recordBuf.putShort(RECORD_DELIMITER);
+        recordBuf.putInt(record.getSerializedSize());
+        recordBuf.put(record.toByteArray());
+        recordBuf.flip();
 
         synchronized (fh.lock) {
-            fh.channel.write(recordBuf.nioBuffer());
+            fh.channel.write(recordBuf);
             channelsToSync.add(fh.channel);
         }
-
-        recordBuf.release();
     }
 
     @Override

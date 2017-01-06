@@ -25,9 +25,12 @@ message LogHeader {
 
 message LogRecord {
     // The checksum is computed over fields 2-4
-    optional int32 checksum = 1;
-    optional int64 address = 2;
-    optional int32 length = 3;
-    optional LogEntry entry = 4;
+    optional int64 address = 1;
+    optional int32 length = 2;
+    optional LogEntry entry = 3;
 }
 
+message ChecksummedRecord {
+    optional int64 checksum = 1;
+    optional LogRecord log_record = 2;
+}

@@ -17,6 +17,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
@@ -176,9 +177,12 @@ public class LogUnitClientTest extends AbstractClientTest {
         String logDir = (String) serverContext.getServerConfig().get("--log-path");
         String logFilePath = logDir + File.separator + "log/0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
-        final long FILE_HEADER = 64;
+        ByteBuffer headerBuf = ByteBuffer.allocate(Integer.BYTES);
+        file.getChannel().read(headerBuf);
+        headerBuf.flip();
         final int CORRUPT_BYTES = 0xFFFF;
-        file.seek(FILE_HEADER + 2); // File header + delimiter
+        final int OFFSET = 20;
+        file.seek(headerBuf.getInt() + OFFSET); // File header + delimiter
         file.writeInt(CORRUPT_BYTES);
         file.close();
 
