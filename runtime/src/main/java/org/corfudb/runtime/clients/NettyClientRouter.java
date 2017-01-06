@@ -14,6 +14,9 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
@@ -28,6 +31,10 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
+import java.io.FileInputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.KeyStore;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.net.ssl.*;
 
 /**
  * A client router which multiplexes operations over the Netty transport.
@@ -140,11 +148,22 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
     private Bootstrap b;
 
+    private static Boolean tlsEnabled = false;
+
+    private static SslContext sslContext;
+
     public NettyClientRouter(String endpoint) {
-        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]));
+        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]),
+            false, null, null, null, null);
     }
 
     public NettyClientRouter(String host, Integer port) {
+        this(host, port, false, null, null, null, null);
+    }
+
+    public NettyClientRouter(String host, Integer port, Boolean tls,
+        String keyStore, String ksPasswordFile, String trustStore,
+        String tsPasswordFile) {
         this.host = host;
         this.port = port;
 
@@ -160,9 +179,79 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
 
+        if (tls) {
+            enableTls(keyStore, ksPasswordFile, trustStore, tsPasswordFile);
+        }
+
         addClient(new BaseClient());
         start();
     }
+
+    private void enableTls(String keyStore, String ksPasswordFile,
+        String trustStore, String tsPasswordFile) {
+
+        // Get the key store password
+        String ksp = "";
+        if (ksPasswordFile != null) {
+            try {
+                ksp = (new String(Files.readAllBytes(Paths.get(ksPasswordFile))))
+                        .trim();
+            } catch (Exception e) {
+                throw new RuntimeException("Could not read the key store " +
+                        "password file: " + e.getClass().getSimpleName(), e);
+            }
+        }
+        // Get the key store
+        KeyStore ks = null;
+        if (keyStore != null) {
+            try (FileInputStream fis = new FileInputStream(keyStore)) {
+                ks = KeyStore.getInstance(KeyStore.getDefaultType());
+                ks.load(fis, ksp.toCharArray());
+            } catch (Exception e) {
+                throw new RuntimeException("Could not load keys from the key " +
+                        "store: " + e.getClass().getSimpleName(), e);
+            }
+        }
+
+        // Get the trust store password
+        String tsp = "";
+        if (tsPasswordFile != null) {
+            try {
+                tsp = (new String(Files.readAllBytes(Paths.get(tsPasswordFile))))
+                        .trim();
+            } catch (Exception e) {
+                throw new RuntimeException("Could not read the trust store " +
+                        "password file: " + e.getClass().getSimpleName(), e);
+            }
+        }
+        // Get the trust store
+        KeyStore ts = null;
+        if (trustStore != null) {
+            try (FileInputStream fis = new FileInputStream(trustStore)) {
+                ts = KeyStore.getInstance(KeyStore.getDefaultType());
+                ts.load(fis, tsp.toCharArray());
+            } catch (Exception e) {
+                throw new RuntimeException("Could not load keys from the trust " +
+                        "store: " + e.getClass().getSimpleName(), e);
+            }
+        }
+
+        try {
+            KeyManagerFactory kmf =
+                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, ksp.toCharArray());
+            TrustManagerFactory tmf =
+                TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(ts);
+            sslContext = SslContextBuilder.forClient().keyManager(kmf).trustManager(tmf).build();
+        } catch (Exception e) {
+            throw new RuntimeException("Could not build SslContext: " +
+                    e.getClass().getSimpleName(), e);
+        }
+
+        this.tlsEnabled = true;
+    }
+
 
     /**
      * Add a new client to the router.
@@ -246,6 +335,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             b.handler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
+                    if (tlsEnabled) {
+                        ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
+                    }
                     ch.pipeline().addLast(new LengthFieldPrepender(4));
                     ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
                     ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());

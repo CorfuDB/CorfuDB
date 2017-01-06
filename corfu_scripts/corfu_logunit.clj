@@ -5,10 +5,15 @@
 
 (def usage "corfu_logunit, directly interact with Corfu logunits.
 Usage:
-  corfu_logunit [-i <stream-id>] <endpoint> read <address>
-  corfu_logunit [-i <stream-id>] <endpoint> write <address>
+  corfu_logunit [-i <stream-id>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] <endpoint> read <address>
+  corfu_logunit [-i <stream-id>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] <endpoint> write <address>
 Options:
-  -i <stream-id>, --stream-id <stream-id>     ID or name of the stream to work with.
+  -i <stream-id>, --stream-id <stream-id>                                                ID or name of the stream to work with.
+  -e, --enable-tls                                                                       Enable TLS.
+  -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
+  -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
+  -r <truststore>, --truststore=<truststore>                                             Path to the trust store.
+  -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.
   -h, --help     Show this screen.
 ")
 
@@ -31,7 +36,7 @@ Options:
 
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
-(get-router (.. localcmd (get "<endpoint>")))
+(get-router (.. localcmd (get "<endpoint>")) localcmd)
 
 (def stream
   (if (nil? (.. localcmd (get "--stream-id")))
