@@ -24,6 +24,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
+import org.corfudb.format.Types.LogHeader;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -83,11 +84,19 @@ public class StreamLogFiles implements StreamLog {
                 try {
                     FileInputStream fIn = new FileInputStream(file);
                     FileChannel fc = fIn.getChannel();
-                    ByteBuffer buf = ByteBuffer.allocate(LogFileHeader.size);
-                    fc.read(buf);
-                    buf.rewind();
 
-                    LogFileHeader header = LogFileHeader.fromBuffer(buf);
+
+                    ByteBuffer sizeBuf = ByteBuffer.allocate(Integer.BYTES);
+                    fc.read(sizeBuf);
+                    sizeBuf.flip();
+
+                    ByteBuffer headerBuf = ByteBuffer.allocate(sizeBuf.getInt());
+                    fc.read(headerBuf);
+
+                    fc.close();
+                    fIn.close();
+
+                    LogHeader header = LogHeader.parseFrom(headerBuf.array());
 
                     if (header.getVersion() != VERSION) {
                         String msg = String.format("Log version {} for {} should match the logunit log version {}",
@@ -95,7 +104,7 @@ public class StreamLogFiles implements StreamLog {
                         throw new RuntimeException(msg);
                     }
 
-                    if (noVerify == false && header.verify == false) {
+                    if (noVerify == false && header.getVerifyChecksum() == false) {
                         String msg = String.format("Log file {} not generated with checksums, can't verify!",
                                 file.getAbsoluteFile());
                         throw new RuntimeException(msg);
@@ -127,9 +136,19 @@ public class StreamLogFiles implements StreamLog {
      */
     static public void writeHeader(FileChannel fc, int version, boolean verify)
             throws IOException {
-        LogFileHeader lfg = new LogFileHeader(version, verify);
-        ByteBuffer b = lfg.getBuffer();
-        fc.write(b);
+
+        LogHeader header = LogHeader.newBuilder()
+                .setVersion(version)
+                .setVerifyChecksum(verify)
+                .build();
+
+        int size = header.getSerializedSize();
+        ByteBuffer buf = ByteBuffer.allocate(size + Integer.BYTES);
+        buf.putInt(size);
+        buf.put(header.toByteArray());
+        buf.flip();
+
+        fc.write(buf);
         fc.force(true);
     }
 
@@ -158,8 +177,13 @@ public class StreamLogFiles implements StreamLog {
             return null;
         }
 
-        fc.position(LogFileHeader.size);
-        ByteBuffer o = ByteBuffer.allocate((int) logFileSize - LogFileHeader.size);
+        // Skip the header
+        ByteBuffer sizeBuf = ByteBuffer.allocate(Integer.BYTES);
+        fc.read(sizeBuf);
+        sizeBuf.flip();
+
+        fc.position(fc.position() + sizeBuf.getInt());
+        ByteBuffer o = ByteBuffer.allocate((int) logFileSize - (int) fc.position());
         fc.read(o);
         fc.close();
         o.flip();
@@ -374,54 +398,6 @@ public class StreamLogFiles implements StreamLog {
         private String fileName;
         private Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         private final Lock lock = new ReentrantLock();
-    }
-
-    @Data
-    static class LogFileHeader {
-        static final String magic = "CORFULOG";
-        static final int size = 64;
-        final int version;
-        final boolean verify;
-
-        static LogFileHeader fromBuffer(ByteBuffer buffer) {
-            byte[] bMagic = new byte[8];
-            buffer.get(bMagic, 0, 8);
-            if (!new String(bMagic).equals(magic)) {
-                log.warn("Encountered invalid magic, expected {}, got {}", magic, new String(bMagic));
-                throw new RuntimeException("Invalid header magic!");
-            }
-
-            int version = buffer.getInt();
-            byte verifyByte = buffer.get();
-            boolean verify = true;
-
-            if (verifyByte == 0x0) {
-                verify = false;
-            }
-
-            return new LogFileHeader(version, verify);
-        }
-
-        ByteBuffer getBuffer() {
-            ByteBuffer b = ByteBuffer.allocate(size);
-            // 0: "CORFULOG" header(8)
-            b.put(magic.getBytes(Charset.forName("UTF-8")), 0, 8);
-            // 8: Version number(4)
-            b.putInt(version);
-            // 12: Flags (8)
-            if (verify) {
-                b.put((byte) 0xf);
-            } else {
-                b.put((byte) 0x0);
-            }
-            b.put((byte) 0);
-            b.putShort((short) 0);
-            b.putInt(0);
-            // 20: Reserved (54)
-            b.position(size);
-            b.flip();
-            return b;
-        }
     }
 
     @Override

@@ -123,7 +123,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
         String logFilePath = logDir + 0 + ".log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
-        file.seek(StreamLogFiles.LogFileHeader.size + OVERWRITE_BYTES);
+        int headerLen = file.readInt();
+        file.seek(Integer.BYTES + headerLen + OVERWRITE_BYTES);
         file.writeInt(OVERWRITE_DELIMITER);
         file.close();
 
@@ -135,7 +136,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Overwrite the delimiter
         file = new RandomAccessFile(logFilePath, "rw");
-        file.seek(StreamLogFiles.LogFileHeader.size );
+        file.seek(Integer.BYTES + headerLen);
         file.writeInt(OVERWRITE_DELIMITER);
         file.close();
 
