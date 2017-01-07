@@ -72,8 +72,9 @@ Options:
                                        (doseq [server (.getLayoutServers new-layout)]
                                        (do (get-router server)
                                            (try
-                                             (.bootstrapLayout (get-layout-client) new-layout)
-                                             (catch org.corfudb.runtime.exceptions.AlreadyBootstrappedException e))
+                                             (.get (.bootstrapLayout (get-layout-client) new-layout))
+                                             (catch Exception e
+                                             (println server":" (.getMessage e))))
                                            ))
                                        (install-layout new-layout)
                                        (println "New layout installed!")
