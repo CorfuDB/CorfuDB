@@ -257,13 +257,6 @@ public abstract class TXConflictScenarios extends AbstractTransactionContextTest
         Map<String, String> testMap2 = (Map<String, String>)
                 instantiateCorfuObject(
                         new TypeToken<SMRMap<String, String>>() {}, "test stream");
-//        getRuntime().getObjectsView()
-//                .build()
-//                .setStreamName("test stream")
-//                .setSerializer(Serializers.JSON)
-//                .addOption(ObjectOpenOptions.NO_CACHE)
-//                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-//                .open();
 
         t(1, () -> TXBegin() );
         t(1, () -> testMap.put("a", "a") );

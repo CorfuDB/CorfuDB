@@ -28,7 +28,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
     {
         getMap();
         t(1, () -> write("k" , "v1"));
-        t(1, () -> TXBegin());
+        t(1, this::TXBegin);
         t(2, this::TXBegin);
         t(1, () -> get("k"));
         t(2, () -> get("k"));
