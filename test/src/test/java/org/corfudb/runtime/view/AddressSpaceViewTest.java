@@ -5,6 +5,7 @@ import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
 import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -155,7 +156,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         RangeSet<Long> rs = TreeRangeSet.create();
         rs.add(Range.closed(0L, ADDRESS_2));
-        Map<Long, LogData> m = r.getAddressSpaceView().read(rs);
+        Map<Long, ILogData> m = r.getAddressSpaceView().read(rs);
 
         assertThat(m.get(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());

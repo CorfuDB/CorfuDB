@@ -2,6 +2,7 @@ package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
@@ -107,7 +108,7 @@ public abstract class AbstractTransactionContextTest extends AbstractViewTest {
     public void ensureEmptyWriteSetIsNotWritten() {
         TXBegin();
         long result = TXEnd();
-        LogData ld =
+        ILogData ld =
                 getRuntime()
                         .getAddressSpaceView()
                         .read(0);

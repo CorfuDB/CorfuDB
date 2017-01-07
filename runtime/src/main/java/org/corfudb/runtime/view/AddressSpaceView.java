@@ -13,7 +13,9 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
+import org.corfudb.protocols.wireprotocol.InMemoryLogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -42,7 +44,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    static LoadingCache<Long, LogData> readCache;
+    static LoadingCache<Long, ILogData> readCache;
 
     /**
      * Duration before retrying an empty read.
@@ -66,17 +68,18 @@ public class AddressSpaceView extends AbstractView {
      * Reset all in-memory caches.
      */
     public void resetCaches() {
-        readCache = Caffeine.<Long, LogData>newBuilder()
-                .<Long, LogData>weigher((k, v) -> v.getType() != DataType.DATA ? 1 : v.getData().readableBytes())
+        readCache = Caffeine.<Long, ILogData>newBuilder()
+                .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
                 .maximumWeight(runtime.getMaxCacheSize())
-                .build(new CacheLoader<Long, LogData>() {
+                .build(new CacheLoader<Long, ILogData>() {
                     @Override
-                    public LogData load(Long aLong) throws Exception {
+                    public ILogData load(Long aLong) throws Exception {
                         return cacheFetch(aLong);
                     }
 
                     @Override
-                    public Map<Long, LogData> loadAll(Iterable<? extends Long> keys) throws Exception {
+                    public Map<Long, ILogData>
+                    loadAll(Iterable<? extends Long> keys) throws Exception {
                         return cacheFetch((Iterable<Long>) keys);
                     }
                 });
@@ -129,11 +132,7 @@ public class AddressSpaceView extends AbstractView {
 
         // Insert this write to our local cache.
         if (!runtime.isCacheDisabled()) {
-            //TODO: fix me
-            ByteBuf b = PooledByteBufAllocator.DEFAULT.buffer();
-            Serializers.CORFU.serialize(data, b);
-
-            LogData ld = new LogData(DataType.DATA, b);
+            InMemoryLogData ld = new InMemoryLogData(DataType.DATA, data);
             ld.setGlobalAddress(address);
             ld.setBackpointerMap(backpointerMap);
             ld.setStreams(stream);
@@ -154,7 +153,7 @@ public class AddressSpaceView extends AbstractView {
      * @param address An address to read from.
      * @return A result, which be cached.
      */
-    public LogData read(long address) {
+    public ILogData read(long address) {
         if (!runtime.isCacheDisabled()) {
             return readCache.get(address);
         }
@@ -176,7 +175,7 @@ public class AddressSpaceView extends AbstractView {
      * @param addresses An address range to read from.
      * @return A result, which be cached.
      */
-    public Map<Long, LogData> read(RangeSet<Long> addresses) {
+    public Map<Long, ILogData> read(RangeSet<Long> addresses) {
 
         if (!runtime.isCacheDisabled()) {
             return readCache.getAll(Utils.discretizeRangeSet(addresses));
@@ -228,7 +227,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached. If the readresult is empty,
      * This entry will be scheduled to self invalidate.
      */
-    private Map<Long, LogData> cacheFetch(Iterable<Long> addresses) {
+    private Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
         // for each address, figure out which replication group it goes to.
         Map<AbstractReplicationView, RangeSet<Long>> groupMap = new ConcurrentHashMap<>();
         return layoutHelper(l -> {
@@ -238,7 +237,7 @@ public class AddressSpaceView extends AbstractView {
                         groupMap.computeIfAbsent(v, x -> TreeRangeSet.<Long>create())
                                 .add(Range.singleton(a));
                     }
-                    Map<Long, LogData> result =
+                    Map<Long, ILogData> result =
                             new ConcurrentHashMap<>();
                     for (AbstractReplicationView vk : groupMap.keySet()) {
                         result.putAll(vk.read(groupMap.get(vk)));
