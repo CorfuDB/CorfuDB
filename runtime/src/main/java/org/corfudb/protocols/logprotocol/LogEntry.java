@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ICorfuSerializable;
@@ -44,7 +45,7 @@ public class LogEntry implements ICorfuSerializable {
      */
     @Getter
     @Setter
-    LogData entry;
+    ILogData entry;
 
     /**
      * Constructor for generating LogEntries.

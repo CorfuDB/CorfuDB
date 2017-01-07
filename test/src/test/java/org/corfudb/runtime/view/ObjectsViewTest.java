@@ -1,7 +1,8 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.logprotocol.*;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
@@ -79,20 +80,21 @@ public class ObjectsViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void abortedTransactionDoesNotConflict()
             throws Exception {
+        final String mapA = "map a";
         //Enbale transaction logging
         CorfuRuntime r = getDefaultRuntime()
                 .setTransactionLogging(true);
 
         SMRMap<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setStreamName("map a")
+                .setStreamName(mapA)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
         // TODO: fix so this does not require mapCopy.
         SMRMap<String, String> mapCopy = getDefaultRuntime().getObjectsView()
                 .build()
-                .setStreamName("map a")
+                .setStreamName(mapA)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .addOption(ObjectOpenOptions.NO_CACHE)
                 .open();
@@ -133,17 +135,22 @@ public class ObjectsViewTest extends AbstractViewTest {
         assertThat(map)
                 .containsEntry("k", "v2");
 
-        //TODO: currently the txn stream is broken should figure out what to do about it.
-        // The transaction stream should have two transaction entries, one for the first
-        // failed transaction and the other for successful transaction
-        /*
         StreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
-        LogData[] txns = txStream.readTo(Long.MAX_VALUE);
+        ILogData[] txns = txStream.readTo(Long.MAX_VALUE);
         assertThat(txns.length).isEqualTo(1);
-        assertThat(txns[0].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.TX);
-        TXEntry tx1 = (TXEntry)txns[0].getLogEntry(getRuntime());
-        assertThat(tx1.isAborted()).isEqualTo(false);
-        */
+        assertThat(txns[0].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
+
+        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns[0].getLogEntry(getRuntime());
+        MultiSMREntry entryMap = tx1.getEntryMap().get(CorfuRuntime.getStreamID(mapA));
+        assertThat(entryMap).isNotNull();
+
+        assertThat(entryMap.getUpdates().size()).isEqualTo(1);
+
+        SMREntry smrEntry = entryMap.getUpdates().get(0);
+        Object[] args = smrEntry.getSMRArguments();
+        assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
+        assertThat((String) args[0]).isEqualTo("k");
+        assertThat((String) args[1]).isEqualTo("v2");
     }
 
     @Test

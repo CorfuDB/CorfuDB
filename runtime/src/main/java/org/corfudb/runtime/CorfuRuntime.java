@@ -225,6 +225,11 @@ public class CorfuRuntime {
         return this;
     }
 
+    /**
+     * If enabled, successful transactions will be written to a special transaction stream (i.e. TRANSACTION_STREAM_ID)
+     * @param enable
+     * @return
+     */
     public CorfuRuntime setTransactionLogging(boolean enable) {
         this.getObjectsView().setTransactionLogging(enable);
         return this;

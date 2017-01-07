@@ -135,7 +135,7 @@ public class LogUnitServer extends AbstractServer {
         batchWriter = new BatchWriter(streamLog);
 
         dataCache = Caffeine.<LogAddress, LogData>newBuilder()
-                .<LogAddress, LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().readableBytes())
+                .<LogAddress, LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().length)
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
@@ -336,10 +336,6 @@ public class LogUnitServer extends AbstractServer {
         // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
         // assuming the entry is back by disk
         dataCache.invalidate(address);
-        //and free any references the buffer might have
-        if (entry.getData() != null) {
-            entry.getData().release();
-        }
     }
 
     /**

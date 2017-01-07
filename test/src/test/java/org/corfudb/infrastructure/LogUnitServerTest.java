@@ -83,34 +83,6 @@ public class LogUnitServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void checkHeapLeak() throws Exception {
-
-        LogUnitServer s1 = new LogUnitServer(ServerContextBuilder.emptyContext());
-
-        this.router.reset();
-        this.router.addServer(s1);
-        long address = 0L;
-        final byte TEST_BYTE = 42;
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer(1);
-        b.writeByte(TEST_BYTE);
-        WriteRequest wr = WriteRequest.builder()
-                            .writeMode(WriteMode.NORMAL)
-                            .data(new LogData(DataType.DATA, b))
-                            .build();
-        //write at 0
-        wr.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
-        wr.setRank(0L);
-        wr.setBackpointerMap(Collections.emptyMap());
-        wr.setGlobalAddress(0L);
-
-        sendMessage(CorfuMsgType.WRITE.payloadMsg(wr));
-
-        LoadingCache<LogAddress, LogData> dataCache = s1.getDataCache();
-        // Make sure that extra bytes are truncated from the payload byte buf
-        Assertions.assertThat(dataCache.get(new LogAddress(address, null)).getData().capacity()).isEqualTo(1);
-    }
-
-    @Test
     public void checkThatWritesArePersisted()
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
