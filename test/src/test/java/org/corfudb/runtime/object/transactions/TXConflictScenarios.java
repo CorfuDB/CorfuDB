@@ -291,11 +291,14 @@ public abstract class TXConflictScenarios extends AbstractTransactionContextTest
         // state 0: start a transaction
         addTestStep((ignored_task_num) -> TXBegin() );
 
-        // state 1: do some puts
+        // state 1: do some puts/gets
         addTestStep( (task_num) -> {
-            assertThat(testMap.put(Integer.toString(task_num),
-                    Integer.toString(task_num)))
-                    .isEqualTo(null);
+
+            // put to a task-exclusive entry
+            testMap.put(Integer.toString(task_num),
+                    Integer.toString(task_num));
+
+            // do some gets arbitrarily at random
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++)
                 testMap.get(Integer.toString(rand.nextInt(PARAMETERS.NUM_ITERATIONS_MODERATE)));
         });

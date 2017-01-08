@@ -174,6 +174,17 @@ public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
                 .isEqualTo(COMMITVALUE);
     }
 
+    /**
+     * This test uses the concurrentAbortTest scenario.
+     * The test invokes numTasks tasks, each one writes exclusively to a map entry,
+     * and reads a few entries arbitrarily at random.
+     *
+     * Unlike optimistic TXs, in write-write conflict mode, there should be --no-- conflicts,
+     * unless the conflict-parameters of different tasks happen to collide in hashCode().
+     *
+     * @param testInterleaved
+     * @throws Exception
+     */
     public void testAbortWW(boolean testInterleaved)
             throws Exception
     {
