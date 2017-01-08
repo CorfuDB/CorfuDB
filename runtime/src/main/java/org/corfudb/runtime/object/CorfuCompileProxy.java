@@ -129,6 +129,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         final long timestamp =
                 rt.getSequencerView()
                 .nextToken(Collections.singleton(streamID), 0).getToken();
+        log.debug("access [{}] at ts {}", getStreamID(), timestamp);
 
         // Acquire locks and perform read.
         return underlyingObject.optimisticallyReadThenReadLockThenWriteOnFail(
@@ -141,6 +142,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             }
             // We don't have the right version, so we need to write
             // throwing this exception causes us to take a write lock.
+                 log.debug("access needs to sync forward up to timestamp {}", timestamp);
             throw new ConcurrentModificationException();
         },
             //  The read did not acquire the right version, so we

@@ -32,5 +32,4 @@ public class CorfuSharedCounter {
             value = newValue;
         return curValue;
     }
-
 }

@@ -46,7 +46,7 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
 
 
     @Override
-    void TXBegin() {
+    protected void TXBegin() {
         // By default, begin a snapshot at address 2L
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)

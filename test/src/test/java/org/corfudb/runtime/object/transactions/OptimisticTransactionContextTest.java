@@ -177,7 +177,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     }
 
     @Override
-    void TXBegin() {
+    protected void TXBegin() {
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.OPTIMISTIC)
                 .begin();

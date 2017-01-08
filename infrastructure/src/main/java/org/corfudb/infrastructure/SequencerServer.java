@@ -131,6 +131,8 @@ public class SequencerServer extends AbstractServer {
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
                 conflictParamSet.forEach(conflictParam -> {
                     Long v = conflictToGlobalTailCache.getIfPresent(conflictParam);
+                    log.trace("txn resolution for conflictparam {}, last update {}",
+                            conflictParam, v);
                     if ((v != null && v > txData.getSnapshotTimestamp()) ||
                             (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
                         log.debug("Rejecting request due to update-timestamp > {} on conflictParam {}",
