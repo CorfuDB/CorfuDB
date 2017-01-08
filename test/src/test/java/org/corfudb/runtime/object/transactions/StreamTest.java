@@ -15,6 +15,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 /**
+ * These tests generate workloads with mixed reads/writes on multiple maps.
+ *
+ * The tests previously surfaced a concurrency bug in navigating streams
+ * by concurrent threads. It's good to leave it in.
+ *
  * Created by dmalkhi on 12/13/16.
  */
 public class StreamTest extends AbstractObjectTest {
@@ -73,8 +78,9 @@ public class StreamTest extends AbstractObjectTest {
             });
 
         t(concurrency, () -> { TXBegin(); map2.put("foo", 0); TXEnd(); });
-        // now, thread 0 has to go back in the stream of map3 to its snapshot-position
 
+        // now, thread 0..concurrency-1 have to go back in
+        // the stream of map3 to its snapshot-position
         for (int j = 0; j < concurrency; j++) {
             final int threadNum = j;
             t(threadNum, () -> {
@@ -125,7 +131,6 @@ public class StreamTest extends AbstractObjectTest {
             final int fi = i;
 
             addTestStep(task_num -> {
-                System.out.println(task_num + ".");
                 TXBegin();
             });
 
@@ -143,9 +148,6 @@ public class StreamTest extends AbstractObjectTest {
                         accumulator += map2.get("m2" + r2);
                         accumulator += map3.get("m3" + r3);
                     } catch (Exception e) {
-                        System.out.println(task_num +
-                                ": exception on task_num " + fi + "," + fj
-                                + ", r=" + r1 + "," + r2 + "," + r3);
                         e.printStackTrace();
                     }
 
@@ -169,8 +171,7 @@ public class StreamTest extends AbstractObjectTest {
         }
 
         addTestStep(task_num ->
-            System.out.println(task_num
-                    + ":   #aborts/#TXs: " + aborts.get() + "/" + numTasks)
+                calculateAbortRate(aborts.get(), numTasks)
         );
 
     }
