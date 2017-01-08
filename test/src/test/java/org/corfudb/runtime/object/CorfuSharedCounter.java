@@ -32,9 +32,4 @@ public class CorfuSharedCounter {
             value = newValue;
         return curValue;
     }
-
-    /** a non-idempotent mutator
-     */
-    @Mutator
-    public void increment() { value++; }
 }

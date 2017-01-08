@@ -3,20 +3,14 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSharedCounter;
-import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicIntegerArray;
-
-import static org.assertj.core.api.Assertions.fail;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -95,7 +89,7 @@ public abstract class AbstractTransactionContextTest extends AbstractObjectTest 
     @Test
     public void ensureEmptyWriteSetIsNotWritten() {
         TXBegin();
-        long result = TXEnd();
+        long result = getRuntime().getObjectsView().TXEnd();
         ILogData ld =
                 getRuntime()
                         .getAddressSpaceView()
