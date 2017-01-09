@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.*;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
@@ -135,7 +136,7 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .containsEntry("k", "v2");
 
         StreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
-        LogData[] txns = txStream.readTo(Long.MAX_VALUE);
+        ILogData[] txns = txStream.readTo(Long.MAX_VALUE);
         assertThat(txns.length).isEqualTo(1);
         assertThat(txns[0].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
 

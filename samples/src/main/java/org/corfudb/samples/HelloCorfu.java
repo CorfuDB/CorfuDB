@@ -83,14 +83,5 @@ public class HelloCorfu {
              map.put("a", ++previous);
              System.out.println("This is the " + previous + " time we were run!");
          }
-
-        /**
-         * ---- more: ------
-         * See
-         *      {@link https://github.com/CorfuDB/CorfuDB/wiki/Atomic-Transactions}
-         *      or {@link SimpleAtomicTransaction}
-         * for a tutorial on using transactions to guarantee atomicity of
-         * concurrent executions of the map.get/map.put block above.
-         */
     }
 }

@@ -125,6 +125,9 @@ public class VersionLockedObject<T> {
      *
      */
     public void optimisticCommitUnsafe(long version) {
+        log.trace("optimisticCommit --version={} stream logPopinter={}",
+                version, sv.getLogPointer()
+        );
         // TODO: validate the caller actually has a write lock.
         // TODO: merge the optimistic undo log into the undo log
         optimisticUndoLog.clear();

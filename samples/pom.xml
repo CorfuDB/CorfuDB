@@ -23,6 +23,11 @@
             <artifactId>docopt</artifactId>
             <version>0.6.0.20150202</version>
         </dependency>
+        <dependency>
+            <groupId>org.corfudb</groupId>
+            <artifactId>test</artifactId>
+            <version>0.1-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
 

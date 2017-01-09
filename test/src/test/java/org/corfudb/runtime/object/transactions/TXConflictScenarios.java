@@ -198,16 +198,11 @@ public abstract class TXConflictScenarios extends AbstractTransactionContextTest
     }
 
     void testNoWriteConflictSimple() throws Exception {
-        final CorfuSharedCounter sharedCounter1 = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test"+1)
-                .setType(CorfuSharedCounter.class)
-                .open();
-        final CorfuSharedCounter sharedCounter2 = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test"+2)
-                .setType(CorfuSharedCounter.class)
-                .open();
+
+        final CorfuSharedCounter sharedCounter1 =
+                instantiateCorfuObject(CorfuSharedCounter.class, "test"+1);
+        final CorfuSharedCounter sharedCounter2 =
+                instantiateCorfuObject(CorfuSharedCounter.class, "test"+2);
 
         commitStatus = new AtomicIntegerArray(2);
 
@@ -259,13 +254,9 @@ public abstract class TXConflictScenarios extends AbstractTransactionContextTest
 
         Map<String, String> testMap = getMap();
 
-        Map<String, String> testMap2 = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test stream")
-                .setSerializer(Serializers.JSON)
-                .addOption(ObjectOpenOptions.NO_CACHE)
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                .open();
+        Map<String, String> testMap2 = (Map<String, String>)
+                instantiateCorfuObject(
+                        new TypeToken<SMRMap<String, String>>() {}, "test stream");
 
         t(1, () -> TXBegin() );
         t(1, () -> testMap.put("a", "a") );
@@ -300,11 +291,14 @@ public abstract class TXConflictScenarios extends AbstractTransactionContextTest
         // state 0: start a transaction
         addTestStep((ignored_task_num) -> TXBegin() );
 
-        // state 1: do some puts
+        // state 1: do some puts/gets
         addTestStep( (task_num) -> {
-            assertThat(testMap.put(Integer.toString(task_num),
-                    Integer.toString(task_num)))
-                    .isEqualTo(null);
+
+            // put to a task-exclusive entry
+            testMap.put(Integer.toString(task_num),
+                    Integer.toString(task_num));
+
+            // do some gets arbitrarily at random
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++)
                 testMap.get(Integer.toString(rand.nextInt(PARAMETERS.NUM_ITERATIONS_MODERATE)));
         });
