@@ -63,16 +63,17 @@ public class SequencerServer extends AbstractServer {
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
     /**
-     * A cache of conflict parameter modification timestamps.
+     * A cache that records revent (stream, conflict parameter) modification timestamps (global addresses).
      *
-     * A "wildcard" {@link SequencerServer::maxConflictWildcard} representing all the entries which were evicted from the cache holds
-     * theier maximal modification time.
+     * And a "wildcard" representing all the entries which were evicted from the cache
+     * holds their maximal modification time.
      */
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
-    private final Cache<Integer, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
+    private final Cache<AbstractMap.SimpleEntry<Integer,Integer>, Long>
+            conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
-            .removalListener((Integer  K, Long V, RemovalCause cause) -> {
+            .removalListener((AbstractMap.SimpleEntry<Integer, Integer> K, Long V, RemovalCause cause) -> {
                 maxConflictWildcard = Math.max(V, maxConflictWildcard);
             })
             .build();
@@ -129,14 +130,23 @@ public class SequencerServer extends AbstractServer {
             // if conflict-parameters are present, check for conflict based on conflict-parameter updates
             Set<Integer> conflictParamSet = entry.getValue();
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
+
+                // instantiate a key-pair, and set its streamID (1st component)
+                AbstractMap.SimpleEntry<Integer, Integer> conflictKeyPair =
+                        new AbstractMap.SimpleEntry<>(entry.getKey().hashCode(), 0);
+
+                // for each key pair, check for conflict;
+                // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    Long v = conflictToGlobalTailCache.getIfPresent(conflictParam);
+                    conflictKeyPair.setValue(conflictParam);
+                    Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyPair);
                     log.trace("txn resolution for conflictparam {}, last update {}",
-                            conflictParam, v);
+                            conflictKeyPair, v);
                     if ((v != null && v > txData.getSnapshotTimestamp()) ||
                             (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
-                        log.debug("Rejecting request due to update-timestamp > {} on conflictParam {}",
-                                txData.getSnapshotTimestamp(), conflictParam);
+                        log.debug("Rejecting request due to update-timestamp " +
+                                        "> {} on conflictKeyPair {}",
+                                txData.getSnapshotTimestamp(), conflictKeyPair);
                         commit.set(false);
                     }
                 });
@@ -273,9 +283,20 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null)
-            for (Set<Integer> conflictParams : req.getTxnResolution().getWriteConflictParams().values())
-                for (Integer cParam : conflictParams)
-                    conflictToGlobalTailCache.put(cParam, newTail-1);
+            for (Map.Entry<UUID, Set<Integer>> writeConflictEntry :
+                    req.getTxnResolution().getWriteConflictParams().entrySet()) {
+
+                // instantiate a key-pair, and set its streamID (1st component)
+                AbstractMap.SimpleEntry<Integer, Integer> conflictKeyPair =
+                        new AbstractMap.SimpleEntry<>(writeConflictEntry.getKey().hashCode(),
+                                0);
+
+                // now update each key-pair with this token's timestamp
+                for (Integer cParam : writeConflictEntry.getValue()) {
+                    conflictKeyPair.setValue(cParam);
+                    conflictToGlobalTailCache.put(conflictKeyPair, newTail - 1);
+                }
+            }
 
         log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
         // return the token response with the new global tail, new streams tails, and the streams backpointers
