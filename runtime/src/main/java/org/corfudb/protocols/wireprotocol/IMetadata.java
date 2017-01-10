@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -104,7 +105,8 @@ public interface IMetadata {
 
     @SuppressWarnings("unchecked")
     default Long getGlobalAddress() {
-        return (Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS);
+
+        return Optional.ofNullable((Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
     }
 
     @SuppressWarnings("unchecked")
