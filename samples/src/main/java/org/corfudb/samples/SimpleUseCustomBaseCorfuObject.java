@@ -4,12 +4,12 @@ package org.corfudb.samples;
  * A simple program
  * that makes use of {@link CorfuSharedCounter} and {@link CorfuCompoundObject}.
  */
-public class SimpleUseCustomCorfuObject extends CorfuAppUtils {
+public class SimpleUseCustomBaseCorfuObject extends BaseCorfuAppUtils {
     /**
-     * main() and standard setup methods are deferred to CorfuAppUtils
+     * main() and standard setup methods are deferred to BaseCorfuAppUtils
      * @return
      */
-    static CorfuAppUtils selfFactory() { return new SimpleUseCustomCorfuObject(); }
+    static BaseCorfuAppUtils selfFactory() { return new SimpleUseCustomBaseCorfuObject(); }
     public static void main(String[] args) { selfFactory().start(args); }
 
     public void action() {
