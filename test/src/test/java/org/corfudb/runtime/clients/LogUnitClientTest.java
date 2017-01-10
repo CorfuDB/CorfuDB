@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Range;
+import org.corfudb.format.Types;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
@@ -25,6 +26,7 @@ import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 
 /**
  * Created by mwei on 12/14/15.
@@ -177,12 +179,15 @@ public class LogUnitClientTest extends AbstractClientTest {
         String logDir = (String) serverContext.getServerConfig().get("--log-path");
         String logFilePath = logDir + File.separator + "log/0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
-        ByteBuffer headerBuf = ByteBuffer.allocate(Integer.BYTES);
-        file.getChannel().read(headerBuf);
-        headerBuf.flip();
+
+        ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
+        file.getChannel().read(metaDataBuf);
+        metaDataBuf.flip();
+
+        Types.Metadata metadata = Types.Metadata.parseFrom(metaDataBuf.array());
+        final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + 20;
         final int CORRUPT_BYTES = 0xFFFF;
-        final int OFFSET = 20;
-        file.seek(headerBuf.getInt() + OFFSET); // File header + delimiter
+        file.seek(fileOffset); // File header + delimiter
         file.writeInt(CORRUPT_BYTES);
         file.close();
 

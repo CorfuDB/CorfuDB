@@ -16,6 +16,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
+import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
@@ -26,11 +27,10 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
-import org.corfudb.format.Types.ChecksummedRecord;
 import org.corfudb.format.Types.DataType;
 import org.corfudb.format.Types.LogEntry;
-import org.corfudb.format.Types.LogRecord;
 import org.corfudb.format.Types.LogHeader;
+import org.corfudb.format.Types.Metadata;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -66,6 +66,11 @@ public class StreamLogFiles implements StreamLog {
     static public int VERSION = 1;
     static public int RECORDS_PER_LOG_FILE = 10000;
 
+    static public final int METADATA_SIZE = Metadata.newBuilder()
+            .setChecksum(-1)
+            .setLength(-1)
+            .build()
+            .getSerializedSize();
     private final boolean noVerify;
     public final String logDir;
     private Map<String, FileHandle> writeChannels;
@@ -93,17 +98,25 @@ public class StreamLogFiles implements StreamLog {
                     FileChannel fc = fIn.getChannel();
 
 
-                    ByteBuffer sizeBuf = ByteBuffer.allocate(Integer.BYTES);
-                    fc.read(sizeBuf);
-                    sizeBuf.flip();
+                    ByteBuffer metadataBuf = ByteBuffer.allocate(METADATA_SIZE);
+                    fc.read(metadataBuf);
+                    metadataBuf.flip();
 
-                    ByteBuffer headerBuf = ByteBuffer.allocate(sizeBuf.getInt());
+                    Metadata metadata = Metadata.parseFrom(metadataBuf.array());
+
+                    ByteBuffer headerBuf = ByteBuffer.allocate(metadata.getLength());
                     fc.read(headerBuf);
+                    headerBuf.flip();
+
+                    LogHeader header = LogHeader.parseFrom(headerBuf.array());
 
                     fc.close();
                     fIn.close();
 
-                    LogHeader header = LogHeader.parseFrom(headerBuf.array());
+                    if(metadata.getChecksum() != getChecksum(header.toByteArray())) {
+                        log.error("Checksum mismatch detected while trying to read header for logfile {}", file);
+                        throw new DataCorruptionException();
+                    }
 
                     if (header.getVersion() != VERSION) {
                         String msg = String.format("Log version {} for {} should match the logunit log version {}",
@@ -149,18 +162,25 @@ public class StreamLogFiles implements StreamLog {
                 .setVerifyChecksum(verify)
                 .build();
 
-        int size = header.getSerializedSize();
-        ByteBuffer buf = ByteBuffer.allocate(size + Integer.BYTES);
-        buf.putInt(size);
-        buf.put(header.toByteArray());
-        buf.flip();
-
+        ByteBuffer buf = getByteBufferWithMetaData(header);
         fc.write(buf);
         fc.force(true);
     }
 
-    private LogData getLogData(LogRecord record) {
-        LogEntry entry = record.getEntry();
+    static private ByteBuffer getByteBufferWithMetaData(AbstractMessage message) {
+        Metadata metadata = Metadata.newBuilder()
+                .setChecksum(getChecksum(message.toByteArray()))
+                .setLength(message.getSerializedSize())
+                .build();
+
+        ByteBuffer buf = ByteBuffer.allocate(metadata.getSerializedSize() + message.getSerializedSize());
+        buf.put(metadata.toByteArray());
+        buf.put(message.toByteArray());
+        buf.flip();
+        return buf;
+    }
+
+    private LogData getLogData(LogEntry entry) {
         ByteBuf data = Unpooled.wrappedBuffer(entry.getData().toByteArray());
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol.
                 DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
@@ -216,11 +236,13 @@ public class StreamLogFiles implements StreamLog {
         }
 
         // Skip the header
-        ByteBuffer sizeBuf = ByteBuffer.allocate(Integer.BYTES);
-        fc.read(sizeBuf);
-        sizeBuf.flip();
+        ByteBuffer headerMetadataBuf = ByteBuffer.allocate(METADATA_SIZE);
+        fc.read(headerMetadataBuf);
+        headerMetadataBuf.flip();
 
-        fc.position(fc.position() + sizeBuf.getInt());
+        Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
+
+        fc.position(fc.position() + headerMetadata.getLength());
         ByteBuffer o = ByteBuffer.allocate((int) logFileSize - (int) fc.position());
         fc.read(o);
         fc.close();
@@ -234,16 +256,20 @@ public class StreamLogFiles implements StreamLog {
                 return null;
             }
 
-            int recordSize = o.getInt();
-            byte[] recordBuf = new byte[recordSize];
-            o.get(recordBuf);
+            byte[] metadataBuf = new byte[METADATA_SIZE];
+            o.get(metadataBuf);
 
             try {
-                ChecksummedRecord checksummedRecord = ChecksummedRecord.parseFrom(recordBuf);
-                LogRecord record = checksummedRecord.getLogRecord();
+                Metadata metadata = Metadata.parseFrom(metadataBuf);
+
+                byte[] logEntryBuf = new byte[metadata.getLength()];
+
+                o.get(logEntryBuf);
+
+                LogEntry entry = LogEntry.parseFrom(logEntryBuf);
 
                 if (!noVerify) {
-                    if (checksummedRecord.getChecksum() != getChecksum(record.toByteArray())) {
+                    if (metadata.getChecksum() != getChecksum(entry.toByteArray())) {
                         log.error("Checksum mismatch detected while trying to read address {}", address);
                         throw new DataCorruptionException();
                     }
@@ -251,13 +277,13 @@ public class StreamLogFiles implements StreamLog {
 
                 if (address == -1) {
                     //Todo(Maithem) : maybe we can move this to getChannelForAddress
-                    fh.knownAddresses.add(record.getAddress());
-                } else if (record.getAddress() != address) {
-                    log.trace("Read address {}, not match {}, skipping. (remain={})", record.getAddress(), address);
+                    fh.knownAddresses.add(entry.getGlobalAddress());
+                } else if (entry.getGlobalAddress() != address) {
+                    log.trace("Read address {}, not match {}, skipping. (remain={})", entry.getGlobalAddress(), address);
                 } else {
-                    log.debug("Entry at {} hit, reading (size={}).", address, recordSize);
+                    log.debug("Entry at {} hit, reading (size={}).", address, metadata.getLength());
 
-                    return getLogData(record);
+                    return getLogData(entry);
                 }
             } catch (InvalidProtocolBufferException e) {
                 throw new DataCorruptionException();
@@ -363,7 +389,7 @@ public class StreamLogFiles implements StreamLog {
         return strUUIds;
     }
 
-    LogRecord getLogRecord(long address, LogData entry) {
+    LogEntry getLogEntry(long address, LogData entry) {
         byte[] data = new byte[0];
 
         if (entry.getData() != null) {
@@ -379,7 +405,7 @@ public class StreamLogFiles implements StreamLog {
         LogEntry logEntry = LogEntry.newBuilder()
                 .setDataType(DataType.forNumber(entry.getType().ordinal()))
                 .setData(ByteString.copyFrom(data))
-                .setGlobalAddress(entry.getGlobalAddress())
+                .setGlobalAddress(address)
                 .setRank(entry.getRank())
                 .setCommit(setCommit)
                 .addAllStreams(getStrUUID(entry.getStreams()))
@@ -387,16 +413,10 @@ public class StreamLogFiles implements StreamLog {
                 .putAllBackpointers(getStrLongMap(entry.getBackpointerMap()))
                 .build();
 
-        LogRecord record = LogRecord.newBuilder()
-                .setAddress(address)
-                .setLength(logEntry.getSerializedSize())
-                .setEntry(logEntry)
-                .build();
-
-        return record;
+        return logEntry;
     }
 
-    int getChecksum(byte[] bytes) {
+    static int getChecksum(byte[] bytes) {
         Hasher hasher = Hashing.crc32c().newHasher();
 
         for(byte a : bytes) {
@@ -404,21 +424,6 @@ public class StreamLogFiles implements StreamLog {
         }
 
         return hasher.hash().asInt();
-    }
-
-    ChecksummedRecord getCheckummedRecord(LogRecord record) {
-        int checksum = 0;
-
-        if(!noVerify) {
-            checksum = getChecksum(record.toByteArray());
-        }
-
-        ChecksummedRecord checksummedRecord = ChecksummedRecord.newBuilder()
-                .setChecksum(checksum)
-                .setLogRecord(record)
-                .build();
-
-        return checksummedRecord;
     }
 
     /**
@@ -429,16 +434,16 @@ public class StreamLogFiles implements StreamLog {
      * @param entry   The LogUnitEntry to write.
      */
     private void writeRecord(FileHandle fh, long address, LogData entry) throws IOException {
-        LogRecord logRecord = getLogRecord(address, entry);
-        ChecksummedRecord record = getCheckummedRecord(logRecord);
+        LogEntry logEntry = getLogEntry(address, entry);
+
+        ByteBuffer record = getByteBufferWithMetaData(logEntry);
+
 
         ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
-                + Integer.BYTES // Size of int (Record size)
-                + record.getSerializedSize()); // Record
+                + record.capacity());
 
         recordBuf.putShort(RECORD_DELIMITER);
-        recordBuf.putInt(record.getSerializedSize());
-        recordBuf.put(record.toByteArray());
+        recordBuf.put(record.array());
         recordBuf.flip();
 
         synchronized (fh.lock) {
