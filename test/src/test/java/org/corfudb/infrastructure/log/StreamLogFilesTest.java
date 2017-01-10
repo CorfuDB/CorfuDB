@@ -2,19 +2,20 @@ package org.corfudb.infrastructure.log;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.io.File;
 import java.io.RandomAccessFile;
-import java.util.concurrent.TimeUnit;
+import java.nio.ByteBuffer;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.format.Types.Metadata;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -118,12 +119,20 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.close();
 
         final int OVERWRITE_DELIMITER = 0xFFFF;
-        final int OVERWRITE_BYTES = 4;
+        final int OVERWRITE_BYTES = 12;
 
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
         String logFilePath = logDir + 0 + ".log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
-        file.seek(StreamLogFiles.LogFileHeader.size + OVERWRITE_BYTES);
+        ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
+        file.getChannel().read(metaDataBuf);
+        metaDataBuf.flip();
+
+        Metadata metadata = Metadata.parseFrom(metaDataBuf.array());
+
+        final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + OVERWRITE_BYTES;
+
+        file.seek(fileOffset);
         file.writeInt(OVERWRITE_DELIMITER);
         file.close();
 
@@ -132,15 +141,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasCauseInstanceOf(DataCorruptionException.class);
         log2.close();
-
-        // Overwrite the delimiter
-        file = new RandomAccessFile(logFilePath, "rw");
-        file.seek(StreamLogFiles.LogFileHeader.size );
-        file.writeInt(OVERWRITE_DELIMITER);
-        file.close();
-
-        StreamLog log3 = new StreamLogFiles(logDir, false);
-        assertThat(log3.read(address0)).isNull();
     }
 
     @Test
