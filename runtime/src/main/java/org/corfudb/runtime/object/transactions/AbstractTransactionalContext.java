@@ -19,7 +19,8 @@ import java.util.stream.Collectors;
  *
  * Created by mwei on 4/4/16.
  */
-public abstract class AbstractTransactionalContext {
+public abstract class AbstractTransactionalContext implements
+        Comparable<AbstractTransactionalContext> {
 
     /** Constant for the address of an uncommitted log entry.
      *
@@ -301,4 +302,10 @@ public abstract class AbstractTransactionalContext {
     }
 
 
+    /** Transactions are ordered by their snapshot timestamp. */
+    @Override
+    public int compareTo(AbstractTransactionalContext o) {
+        return Long.compare(this.getSnapshotTimestamp(), o
+                .getSnapshotTimestamp());
+    }
 }
