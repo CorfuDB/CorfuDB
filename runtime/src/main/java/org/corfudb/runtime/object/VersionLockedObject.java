@@ -143,7 +143,7 @@ public class VersionLockedObject<T> {
      */
     public void optimisticRollbackUnsafe() {
         // TODO: validate the caller actually has a write lock.
-        if (optimisticUndoLog.size() > 0 || !optimisticallyUndoable) {
+        if (!optimisticallyUndoable) {
             throw new NoRollbackException();
         }
         // The undo log is a stack, where the last entry applied
