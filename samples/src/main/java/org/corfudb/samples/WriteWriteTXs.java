@@ -29,12 +29,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * Created by dalia on 12/30/16.
  */
-public class WriteWriteTXs extends CorfuAppUtils {
+public class WriteWriteTXs extends BaseCorfuAppUtils {
     /**
-     * main() and standard setup methods are deferred to CorfuAppUtils
+     * main() and standard setup methods are deferred to BaseCorfuAppUtils
      * @return
      */
-    static CorfuAppUtils selfFactory() { return new WriteWriteTXs(); }
+    static BaseCorfuAppUtils selfFactory() { return new WriteWriteTXs(); }
     public static void main(String[] args) { selfFactory().start(args); }
 
     /**

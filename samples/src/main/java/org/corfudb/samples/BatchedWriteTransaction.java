@@ -41,12 +41,12 @@ import java.util.Map;
  *
  * Created by dalia on 12/30/16.
  */
-public class BatchedWriteTransaction extends CorfuAppUtils {
+public class BatchedWriteTransaction extends BaseCorfuAppUtils {
     /**
-     * main() and standard setup methods are deferred to CorfuAppUtils
+     * main() and standard setup methods are deferred to BaseCorfuAppUtils
      * @return
      */
-    static CorfuAppUtils selfFactory() { return new WriteWriteTXs(); }
+    static BaseCorfuAppUtils selfFactory() { return new BatchedWriteTransaction(); }
     public static void main(String[] args) { selfFactory().start(args); }
 
     private final int numBatches = 100;

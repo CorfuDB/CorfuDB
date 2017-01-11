@@ -15,12 +15,12 @@ import org.corfudb.runtime.collections.SMRMap;
  *
  * Created by dmalkhi on 1/5/17.
  */
-public class SimpleUseCorfuCollections extends CorfuAppUtils {
+public class SimpleUseBaseCorfuCollections extends BaseCorfuAppUtils {
     /**
-     * main() and standard setup methods are deferred to CorfuAppUtils
+     * main() and standard setup methods are deferred to BaseCorfuAppUtils
      * @return
      */
-    static CorfuAppUtils selfFactory() { return new SimpleUseCorfuCollections(); }
+    static BaseCorfuAppUtils selfFactory() { return new SimpleUseBaseCorfuCollections(); }
     public static void main(String[] args) { selfFactory().start(args); }
 
     public void action() {
