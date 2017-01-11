@@ -76,7 +76,7 @@ public class CorfuServer {
             "Corfu Server, the server for the Corfu Infrastructure.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tcorfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-P <seconds>] <port>\n"
+                    + "\tcorfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-M <address>:<port>] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>            Set the path to the storage file for the log unit.\n"
@@ -95,7 +95,7 @@ public class CorfuServer {
                     + " -d <level>, --log-level=<level>         Set the logging level, valid levels are: \n"
                     + "                                         ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
                     + " -Q, --quickcheck-test-mode              Run in QuickCheck test mode\n"
-                    + " -P <seconds>, --cm-poll-interval        Configuration manager poll interval [default: 1]\n"
+                    + " -M <address>:<port>, --management-server=<address>:<port>     Layout endpoint to seed Management Server\n"
                     + " -n, --no-verify                         Disable checksum computation and verification.\n"
                     + " -h, --help  Show this screen\n"
                     + " --version  Show version\n";

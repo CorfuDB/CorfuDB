@@ -22,6 +22,7 @@ public class ServerContextBuilder {
     int maxCache = 1000000;
     String address = "test";
     int port = 9000;
+    String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
 
     public ServerContextBuilder() {
@@ -36,6 +37,9 @@ public class ServerContextBuilder {
                 .put("--memory", memory);
         if (logPath != null) {
          builder.put("--log-path", logPath);
+        }
+        if (managementBootstrapEndpoint != null) {
+            builder.put("--management-server", managementBootstrapEndpoint);
         }
          builder
                 .put("--no-verify", noVerify)

@@ -232,7 +232,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                             .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
                                     null, e.getValue().serverRouter);
                     e.getValue().managementServer
-                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(l),
+                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l),
                                     null, e.getValue().serverRouter);
                 });
     }
