@@ -18,12 +18,12 @@ import java.util.Map;
  *
  * Created by dalia on 12/30/16.
  */
-public class WriteOnlySimpleTransaction extends CorfuAppUtils {
+public class WriteOnlySimpleTransaction extends BaseCorfuAppUtils {
     /**
-     * main() and standard setup methods are deferred to CorfuAppUtils
+     * main() and standard setup methods are deferred to BaseCorfuAppUtils
      * @return
      */
-    static CorfuAppUtils selfFactory() { return new WriteWriteTXs(); }
+    static BaseCorfuAppUtils selfFactory() { return new WriteOnlySimpleTransaction(); }
     public static void main(String[] args) { selfFactory().start(args); }
 
 
