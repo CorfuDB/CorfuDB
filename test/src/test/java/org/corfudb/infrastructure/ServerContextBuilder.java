@@ -39,7 +39,7 @@ public class ServerContextBuilder {
          builder.put("--log-path", logPath);
         }
         if (managementBootstrapEndpoint != null) {
-            builder.put("--mgmt", managementBootstrapEndpoint);
+            builder.put("--management-server", managementBootstrapEndpoint);
         }
          builder
                 .put("--no-verify", noVerify)

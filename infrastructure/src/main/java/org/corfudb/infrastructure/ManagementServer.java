@@ -88,7 +88,7 @@ public class ManagementServer extends AbstractServer {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
 
-        bootstrapEndpoint = (opts.get("--mgmt")!=null) ? opts.get("--mgmt").toString() : null;
+        bootstrapEndpoint = (opts.get("--management-server")!=null) ? opts.get("--management-server").toString() : null;
 
         if((Boolean) opts.get("--single")) {
             String localAddress = opts.get("--address") + ":" + opts.get("<port>");
