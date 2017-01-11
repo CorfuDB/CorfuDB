@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
@@ -79,10 +80,17 @@ public class SequencerServer extends AbstractServer {
     /**
      * The sequencer maintains information about log and streams:
      *
-     *  - {@link SequencerServer::globalLogTail}: global log tail. points to the first available position (initially, 0).
-     *  - {@link SequencerServer::streamTailMap}: a map of per-streams tail. points to per-streams first available position.
-     *  - {@link SequencerServer::streamTailToGlobalTailMap}: per streams map to last issued global-log position. used for backpointers.
-     *  - {@link SequencerServer::conflictToGlobalTailCache}: the {@link SequencerServer::maxConflictCacheSize} latest conflict keys and their latest commit (global-log) position
+     *  - {@link SequencerServer::globalLogTail}:
+     *      global log tail. points to the first available position (initially, 0).
+     *  - {@link SequencerServer::streamTailMap}:
+     *      a map of per-streams tail. points to per-streams first available position.
+     *  - {@link SequencerServer::streamTailToGlobalTailMap}:
+     *      per streams map to last issued global-log position. used for backpointers.
+     *  - {@link SequencerServer::conflictToGlobalTailCache}:
+     *      a cache of recent conflict keys and their latest global-log position
+     *  - {@link SequencerServer::maxConflictWildcard} :
+     *      a "wildcard" representing the maximal update timestamp of
+     *      all the confict keys which were evicted from the cache
      *
      * Every append to the log updates the information in these maps.
      */
@@ -92,18 +100,31 @@ public class SequencerServer extends AbstractServer {
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
     /**
-     * A cache that records recent (stream, conflict parameter) modification
-     * timestamps (global addresses).
-     *
-     * And a "wildcard" representing all the entries which were evicted from the cache
-     * holds their maximal modification time.
+     * an object representing a conflict-key on a specific stream
      */
+    @Data
+    class ConflictKey {
+        final int NO_CONFLICT_KEY = -1;
+        int streamIDhash;
+        int conflictKeyhash;
+
+        /**
+         * construct a generic conflict-key for the stream.
+         * the specific key will be set later
+         * @param streamID
+         */
+        public ConflictKey(UUID streamID) {
+            streamIDhash = streamID.hashCode();
+            this.conflictKeyhash = NO_CONFLICT_KEY;
+        }
+    };
+
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
-    private final Cache<AbstractMap.SimpleEntry<Integer,Integer>, Long>
+    private final Cache<ConflictKey, Long>
             conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
-            .removalListener((AbstractMap.SimpleEntry<Integer, Integer> K, Long V, RemovalCause cause) -> {
+            .removalListener((ConflictKey K, Long V, RemovalCause cause) -> {
                 maxConflictWildcard = Math.max(V, maxConflictWildcard);
             })
             .build();
@@ -148,13 +169,13 @@ public class SequencerServer extends AbstractServer {
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
 
                 // instantiate a key-pair, and set its streamID (1st component)
-                AbstractMap.SimpleEntry<Integer, Integer> conflictKeyPair =
-                        new AbstractMap.SimpleEntry<>(entry.getKey().hashCode(), 0);
+                ConflictKey conflictKeyPair =
+                        new ConflictKey(entry.getKey());
 
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    conflictKeyPair.setValue(conflictParam);
+                    conflictKeyPair.setConflictKeyhash(conflictParam);
                     Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyPair);
                     log.trace("txn resolution for conflictparam {}, last update {}",
                             conflictKeyPair, v);
@@ -298,13 +319,12 @@ public class SequencerServer extends AbstractServer {
                     req.getTxnResolution().getWriteConflictParams().entrySet()) {
 
                 // instantiate a key-pair, and set its streamID (1st component)
-                AbstractMap.SimpleEntry<Integer, Integer> conflictKeyPair =
-                        new AbstractMap.SimpleEntry<>(writeConflictEntry.getKey().hashCode(),
-                                0);
+                ConflictKey conflictKeyPair =
+                        new ConflictKey(writeConflictEntry.getKey());
 
                 // now update each key-pair with this token's timestamp
                 for (Integer cParam : writeConflictEntry.getValue()) {
-                    conflictKeyPair.setValue(cParam);
+                    conflictKeyPair.setConflictKeyhash(cParam);
                     conflictToGlobalTailCache.put(conflictKeyPair, newTail - 1);
                 }
             }
