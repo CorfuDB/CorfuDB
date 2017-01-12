@@ -14,7 +14,7 @@ import java.util.Map;
  *
  * Created by dalia on 12/31/16.
  */
-public abstract class CorfuAppUtils {
+public abstract class BaseCorfuAppUtils {
 
     @Setter @Getter
     CorfuRuntime corfuRuntime;
