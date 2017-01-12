@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.stream;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -89,7 +90,7 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return          The next entries in the stream, or an empty list,
      *                  if no entries are available.
      */
-    default List<ILogData> remaining() { return remainingUpTo(Long.MAX_VALUE); }
+    default List<ILogData> remaining() { return remainingUpTo(Address.MAX); }
 
     /** Retrieve all of the entries from this stream, up to the address given or
      *  the tail of the stream. If there are no entries present, this function

@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.Address;
 
 import java.util.*;
 import java.util.function.Function;
@@ -148,10 +149,15 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return false;
         }
 
-        // First, we fetch the current token from the sequencer.
+        // First, we fetch the current token (backpointer) from the sequencer.
         final long latestToken = runtime.getSequencerView()
                 .nextToken(Collections.singleton(context.id), 0)
                 .getToken();
+
+        // If the backpointer was unwritten, return, there is nothing to do
+        if (latestToken == Address.NEVER_READ) {
+            return false;
+        }
 
         // Now we start traversing backpointers, if they are available. We
         // start at the latest token and go backward, until we reach the
@@ -159,7 +165,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // maxGlobalAddress, we insert it into the read queue.
         long currentRead = latestToken;
 
-        while (currentRead > context.globalPointer) {
+        while (currentRead > context.globalPointer &&
+                currentRead != Address.NEVER_READ) {
             // Read the entry in question.
             ILogData currentEntry =
                     runtime.getAddressSpaceView().read(currentRead);
@@ -171,11 +178,18 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 // We'll retry the read a few times, we should only need
                 // to fill if a client has actually failed, which should
                 // be a relatively rare event.
+
                 for (int i = 0; i < NUM_RETRIES; i++) {
                     currentEntry =
                             runtime.getAddressSpaceView().read(currentRead);
                     if (currentEntry.getType() != DataType.EMPTY) {
                         break;
+                    }
+                    // Wait 1 << i ms (exp. backoff) before retrying again.
+                    try {
+                        Thread.sleep(1 << i);
+                    } catch (InterruptedException ie) {
+                        throw new RuntimeException(ie);
                     }
                 }
 

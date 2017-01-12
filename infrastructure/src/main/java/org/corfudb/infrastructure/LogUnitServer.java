@@ -208,7 +208,9 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("log read: {} {}", msg.getPayload().getStreamID(), msg.getPayload().getRange());
+        log.trace("log read: {} {}", msg.getPayload().getStreamID()  == null
+                        ? "global" : msg.getPayload().getStreamID(),
+                msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();

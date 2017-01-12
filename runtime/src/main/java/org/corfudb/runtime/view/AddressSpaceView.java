@@ -51,7 +51,7 @@ public class AddressSpaceView extends AbstractView {
      */
     @Getter
     @Setter
-    Duration emptyDuration = Duration.ofMillis(1L);
+    Duration emptyDuration = Duration.ofMillis(100L);
 
     public AddressSpaceView(CorfuRuntime runtime) {
         super(runtime);
