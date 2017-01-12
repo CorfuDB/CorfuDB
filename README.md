@@ -153,8 +153,8 @@ $ corfu_server -m 9001
 
 Bootstraping the newly added server using previous layout
 ```
-$corfu_layouts -c localhost:9000 query 2>&1 | grep -v parsley.fold/cat | sed 1d  > /tmp/master_layout
-$corfu_management_bootstrap -c localhost:9001 -l /tmp/master_layout
+$ corfu_layouts -c localhost:9000 query 2>&1 | grep -v parsley.fold/cat | sed 1d  > /tmp/master_layout
+$ corfu_management_bootstrap -c localhost:9001 -l /tmp/master_layout
 ```
 
 Now lets add that layout server to the previous deployment:
