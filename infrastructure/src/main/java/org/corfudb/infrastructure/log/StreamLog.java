@@ -27,6 +27,17 @@ public interface StreamLog {
     LogData read(LogAddress address);
 
     /**
+     * Mark a StreamLog address as trimmed.
+     * @param address
+     */
+    void trim(LogAddress address);
+
+    /**
+     * Deleted all trimmed addresses from the StreamLog.
+     */
+    void compact();
+
+    /**
      * Sync the stream log file to secondary storage.
      */
     void sync() throws IOException;

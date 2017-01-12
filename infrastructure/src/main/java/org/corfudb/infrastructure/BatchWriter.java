@@ -103,11 +103,16 @@ public class BatchWriter <K, V> implements CacheWriter<K, V>, AutoCloseable {
                     continue;
                 }
 
-                try {
-                    streamLog.append(currOp.getLogAddress(), currOp.getLogData());
+                if(currOp.getLogData() == null) {
+                    streamLog.trim(currOp.getLogAddress());
                     ack.add(currOp.getFuture());
-                } catch (OverwriteException e) {
-                    err.add(currOp.getFuture());
+                } else {
+                    try {
+                        streamLog.append(currOp.getLogAddress(), currOp.getLogData());
+                        ack.add(currOp.getFuture());
+                    } catch (OverwriteException e) {
+                        err.add(currOp.getFuture());
+                    }
                 }
 
                 processed++;

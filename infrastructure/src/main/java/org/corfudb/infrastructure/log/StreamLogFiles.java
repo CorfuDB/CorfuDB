@@ -146,6 +146,16 @@ public class StreamLogFiles implements StreamLog {
         channelsToSync.clear();
     }
 
+    @Override
+    public void trim(LogAddress address) {
+
+    }
+
+    @Override
+    public void compact() {
+
+    }
+
     /**
      * Write the header for a Corfu log file.
      *
