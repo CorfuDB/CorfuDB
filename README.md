@@ -148,13 +148,7 @@ Now that you have a working Corfu deployment, you'll probably want to make it di
 
 Let's start by adding a layout server. To do that, start a non-provisioned Corfu server instance in addition to the previous one. We'll start it on port 9001.
 ```
-$ corfu_server -m 9001
-```
-
-Bootstraping the newly added server using previous layout
-```
-$ corfu_layouts -c localhost:9000 query 2>&1 | grep -v parsley.fold/cat | sed 1d  > /tmp/master_layout
-$ corfu_management_bootstrap -c localhost:9001 -l /tmp/master_layout
+$ corfu_server -m -M localhost:9000 9001
 ```
 
 Now lets add that layout server to the previous deployment:
