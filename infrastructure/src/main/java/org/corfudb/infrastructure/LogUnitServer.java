@@ -101,8 +101,6 @@ public class LogUnitServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    private final ConcurrentHashMap<UUID, Long> trimMap;
-
     /**
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
@@ -145,10 +143,6 @@ public class LogUnitServer extends AbstractServer {
                 .writer(batchWriter)
                 .recordStats()
                 .build(this::handleRetrieval);
-
-        // Trim map is set to empty on start
-        // TODO: persist trim map - this is optional since trim is just a hint.
-        trimMap = new ConcurrentHashMap<>();
 
         MetricRegistry metrics = serverContext.getMetrics();
         MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
@@ -268,11 +262,10 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.TRIM, opTimer = metricsPrefix + "trim")
-    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
-                      boolean isMetricsEnabled) {
-        trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
-                prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
+    @ServerHandler(type = CorfuMsgType.TRIM)
+    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        batchWriter.write(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), null);
+        //TODO(Maithem): should we return an error if the write fails
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -295,65 +288,6 @@ public class LogUnitServer extends AbstractServer {
     public synchronized void handleEviction(LogAddress address, LogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
         streamLog.release(address, entry);
-    }
-
-
-    public void runGC() {
-        Thread.currentThread().setName("LogUnit-GC");
-        val retry = IRetry.build(IntervalAndSentinelRetry.class, this::handleGC)
-                .setOptions(x -> x.setSentinelReference(running))
-                .setOptions(x -> x.setRetryInterval(SMALL_INTERVAL.toMillis()));
-
-        gcRetry = (IntervalAndSentinelRetry) retry;
-
-        retry.runForever();
-    }
-
-    @SuppressWarnings("unchecked")
-    public boolean handleGC() {
-        log.info("Garbage collector starting...");
-        long freedEntries = 0;
-
-        /* Pick a non-compacted region or just scan the cache */
-        Map<LogAddress, LogData> map = dataCache.asMap();
-        SortedSet<LogAddress> addresses = new TreeSet<>(map.keySet());
-        for (LogAddress address : addresses) {
-            LogData buffer = dataCache.getIfPresent(address);
-            if (buffer != null) {
-                Set<UUID> streams = buffer.getStreams();
-                // this is a normal entry
-                if (streams.size() > 0) {
-                    boolean trimmable = true;
-                    for (java.util.UUID stream : streams) {
-                        Long trimMark = trimMap.getOrDefault(stream, null);
-                        // if the stream has not been trimmed, or has not been trimmed to this point
-                        if (trimMark == null || address.getAddress() > trimMark) {
-                            trimmable = false;
-                            break;
-                        }
-                        // it is not trimmable.
-                    }
-                    if (trimmable) {
-                        log.trace("Trimming entry at {}", address);
-                        trimEntry(address.getAddress(), streams, buffer);
-                        freedEntries++;
-                    }
-                } else {
-                    //this is an entry which belongs in all streams
-                }
-            }
-        }
-
-        log.info("Garbage collection pass complete. Freed {} entries", freedEntries);
-        return true;
-    }
-
-    public void trimEntry(long address, Set<java.util.UUID> streams, LogData entry) {
-        // Add this entry to the trimmed range map.
-        //trimRange.add(Range.closed(address, address));
-        // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
-        // assuming the entry is back by disk
-        dataCache.invalidate(address);
     }
 
     /**

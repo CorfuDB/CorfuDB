@@ -1,12 +1,15 @@
 package org.corfudb.infrastructure.log;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 
 /**
  * This class implements the StreamLog interface using a Java hash map. The stream log is only stored in-memory and not
@@ -18,10 +21,12 @@ public class InMemoryStreamLog implements StreamLog {
 
     private Map<Long, LogData> logCache;
     private Map<UUID, Map<Long, LogData>> streamCache;
+    private Set<LogAddress> trimmed;
 
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap();
         streamCache = new HashMap();
+        trimmed = new HashSet();
     }
 
     @Override
@@ -48,7 +53,23 @@ public class InMemoryStreamLog implements StreamLog {
     }
 
     @Override
+    public synchronized void trim(LogAddress address) {
+        if(address.getStream() == null) {
+            logCache.put(address.address, null);
+        } else {
+            Map<Long, LogData> stream = streamCache.get(address.getStream());
+            if(stream != null){
+                stream.put(address.address, null);
+            }
+        }
+    }
+
+    @Override
     public LogData read(LogAddress logAddress) {
+        if(trimmed.contains(logAddress)) {
+            throw new TrimmedException();
+        }
+
         if (logAddress.getStream() == null) {
             return logCache.get(logAddress.address);
         } else {
@@ -76,5 +97,10 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public void release(LogAddress logAddress, LogData entry) {
         // in memory, do nothing
+    }
+
+    @Override
+    public void compact() {
+        // No-op
     }
 }
