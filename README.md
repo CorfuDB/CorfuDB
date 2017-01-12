@@ -148,7 +148,7 @@ Now that you have a working Corfu deployment, you'll probably want to make it di
 
 Let's start by adding a layout server. To do that, start a non-provisioned Corfu server instance in addition to the previous one. We'll start it on port 9001.
 ```
-$ corfu_server -m 9001
+$ corfu_server -m -M localhost:9000 9001
 ```
 
 Now lets add that layout server to the previous deployment:
