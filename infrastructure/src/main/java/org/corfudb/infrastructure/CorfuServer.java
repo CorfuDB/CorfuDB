@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.TlsUtils;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
@@ -215,54 +216,6 @@ public class CorfuServer {
         // Setup SSL if needed
         Boolean tlsEnabled = (Boolean) opts.get("--enable-tls");
         if (tlsEnabled) {
-            // Get the key store password
-            String ksp = "";
-            String kspf = (String) opts.get("--keystore-password-file");
-            if (kspf != null) {
-                try {
-                    ksp = (new String(Files.readAllBytes(Paths.get(kspf)))).trim();
-                } catch (Exception ex) {
-                    log.error("Could not read the key store password file.");
-                    System.exit(1);
-                }
-            }
-            // Get the key store
-            KeyStore ks = null;
-            String ksf = (String) opts.get("--keystore");
-            if (ksf != null) {
-                try (FileInputStream fis = new FileInputStream(ksf)) {
-                    ks = KeyStore.getInstance(KeyStore.getDefaultType());
-                    ks.load(fis, ksp.toCharArray());
-                } catch (Exception ex) {
-                    log.error("Could not load keys from the key store.");
-                    System.exit(1);
-                }
-            }
-
-            // Get the trust store password
-            String tsp = "";
-            String tspf = (String) opts.get("--truststore-password-file");
-            if (tspf != null) {
-                try {
-                    tsp = (new String(Files.readAllBytes(Paths.get(tspf)))).trim();
-                } catch (Exception ex) {
-                    log.error("Could not read the trust store password file.");
-                    System.exit(1);
-                }
-            }
-            // Get the trust store
-            KeyStore ts = null;
-            String tsf = (String) opts.get("--truststore");
-            if (tsf != null) {
-                try (FileInputStream fis = new FileInputStream(tsf)) {
-                    ts = KeyStore.getInstance(KeyStore.getDefaultType());
-                    ts.load(fis, tsp.toCharArray());
-                } catch (Exception ex) {
-                    log.error("Could not load keys from the trust store.");
-                    System.exit(1);
-                }
-            }
-
             // Get the TLS cipher suites to enable
             String ciphs = (String) opts.get("--tls-ciphers");
             if (ciphs != null) {
@@ -284,23 +237,25 @@ public class CorfuServer {
             }
 
             try {
-                KeyManagerFactory kmf =
-                    KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-                kmf.init(ks, ksp.toCharArray());
-                TrustManagerFactory tmf =
-                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-                tmf.init(ts);
-                sslContext = SslContextBuilder.forServer(kmf).trustManager(tmf).build();
-            } catch (KeyStoreException ex) {
-                log.error("Could not initialize the Key/Trust Manager Factory");
-                System.exit(1);
-            } catch (NoSuchAlgorithmException ex) {
-                log.error("Unknown Key/Trust Manager Factory Algorithm");
-                System.exit(1);
-            } catch (UnrecoverableKeyException ex) {
-                log.error("Could not recover the key from the key store");
-                System.exit(1);
-            } catch (SSLException ex) {
+                sslContext =
+                        TlsUtils.enableTls(TlsUtils.SslContextType.SERVER_CONTEXT,
+                                (String) opts.get("--keystore-password-file"), e -> {
+                                    log.error("Could not read the key store password file.");
+                                    System.exit(1);
+                                },
+                                (String) opts.get("--keystore"), e -> {
+                                    log.error("Could not load keys from the key store.");
+                                    System.exit(1);
+                                },
+                                (String) opts.get("--truststore-password-file"), e -> {
+                                    log.error("Could not read the trust store password file.");
+                                    System.exit(1);
+                                },
+                                (String) opts.get("--truststore"), e -> {
+                                    log.error("Could not load keys from the trust store.");
+                                    System.exit(1);
+                                });
+            } catch (Exception ex) {
                 log.error("Could not build the SSL context");
                 System.exit(1);
             }

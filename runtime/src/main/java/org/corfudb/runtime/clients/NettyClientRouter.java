@@ -30,6 +30,7 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.TlsUtils;
 
 import java.io.FileInputStream;
 import java.nio.file.Files;
@@ -180,78 +181,30 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         shutdown = true;
 
         if (tls) {
-            enableTls(keyStore, ksPasswordFile, trustStore, tsPasswordFile);
+            sslContext =
+                    TlsUtils.enableTls(TlsUtils.SslContextType.CLIENT_CONTEXT,
+                            keyStore, e -> {
+                                throw new RuntimeException("Could not read the key store " +
+                                        "password file: " + e.getClass().getSimpleName(), e);
+                            },
+                            ksPasswordFile, e -> {
+                                throw new RuntimeException("Could not load keys from the key " +
+                                        "store: " + e.getClass().getSimpleName(), e);
+                            },
+                            trustStore, e -> {
+                                throw new RuntimeException("Could not read the trust store " +
+                                        "password file: " + e.getClass().getSimpleName(), e);
+                            },
+                            tsPasswordFile, e -> {
+                                throw new RuntimeException("Could not load keys from the trust " +
+                                        "store: " + e.getClass().getSimpleName(), e);
+                            });
+            this.tlsEnabled = true;
         }
 
         addClient(new BaseClient());
         start();
     }
-
-    private void enableTls(String keyStore, String ksPasswordFile,
-        String trustStore, String tsPasswordFile) {
-
-        // Get the key store password
-        String ksp = "";
-        if (ksPasswordFile != null) {
-            try {
-                ksp = (new String(Files.readAllBytes(Paths.get(ksPasswordFile))))
-                        .trim();
-            } catch (Exception e) {
-                throw new RuntimeException("Could not read the key store " +
-                        "password file: " + e.getClass().getSimpleName(), e);
-            }
-        }
-        // Get the key store
-        KeyStore ks = null;
-        if (keyStore != null) {
-            try (FileInputStream fis = new FileInputStream(keyStore)) {
-                ks = KeyStore.getInstance(KeyStore.getDefaultType());
-                ks.load(fis, ksp.toCharArray());
-            } catch (Exception e) {
-                throw new RuntimeException("Could not load keys from the key " +
-                        "store: " + e.getClass().getSimpleName(), e);
-            }
-        }
-
-        // Get the trust store password
-        String tsp = "";
-        if (tsPasswordFile != null) {
-            try {
-                tsp = (new String(Files.readAllBytes(Paths.get(tsPasswordFile))))
-                        .trim();
-            } catch (Exception e) {
-                throw new RuntimeException("Could not read the trust store " +
-                        "password file: " + e.getClass().getSimpleName(), e);
-            }
-        }
-        // Get the trust store
-        KeyStore ts = null;
-        if (trustStore != null) {
-            try (FileInputStream fis = new FileInputStream(trustStore)) {
-                ts = KeyStore.getInstance(KeyStore.getDefaultType());
-                ts.load(fis, tsp.toCharArray());
-            } catch (Exception e) {
-                throw new RuntimeException("Could not load keys from the trust " +
-                        "store: " + e.getClass().getSimpleName(), e);
-            }
-        }
-
-        try {
-            KeyManagerFactory kmf =
-                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, ksp.toCharArray());
-            TrustManagerFactory tmf =
-                TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init(ts);
-            sslContext = SslContextBuilder.forClient().keyManager(kmf).trustManager(tmf).build();
-        } catch (Exception e) {
-            throw new RuntimeException("Could not build SslContext: " +
-                    e.getClass().getSimpleName(), e);
-        }
-
-        this.tlsEnabled = true;
-    }
-
 
     /**
      * Add a new client to the router.
