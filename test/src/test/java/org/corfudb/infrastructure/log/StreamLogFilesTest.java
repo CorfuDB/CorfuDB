@@ -7,10 +7,14 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.io.File;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.util.UUID;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -194,5 +198,19 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.sync();
 
         assertThat(log.getChannelsToSync().size()).isEqualTo(0);
+    }
+
+    @Test
+    public void testTrim() throws Exception {
+        String logDir = getDirPath();
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        final long address = 1000;
+        LogAddress logAddress = new LogAddress(address, null);
+        log.trim(logAddress);
+        String logFilePath = logDir + 0 + ".log";
+        RandomAccessFile file = new RandomAccessFile(logFilePath+".pending", "rw");
+        InputStream inputStream = Channels.newInputStream(file.getChannel());
+        Types.TrimEntry entry = Types.TrimEntry.parseDelimitedFrom(inputStream);
+        assertThat(entry.getAddress()).isEqualTo(address);
     }
 }

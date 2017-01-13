@@ -3,12 +3,23 @@ package org.corfudb.infrastructure.log;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.StandardOpenOption;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -19,6 +30,7 @@ import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
+import groovy.json.internal.Byt;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -27,6 +39,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
+import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.format.Types.DataType;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
@@ -73,7 +86,7 @@ public class StreamLogFiles implements StreamLog {
             .getSerializedSize();
     private final boolean noVerify;
     public final String logDir;
-    private Map<String, FileHandle> writeChannels;
+    private Map<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
 
     public StreamLogFiles(String logDir, boolean noVerify) {
@@ -113,7 +126,7 @@ public class StreamLogFiles implements StreamLog {
                     fc.close();
                     fIn.close();
 
-                    if(metadata.getChecksum() != getChecksum(header.toByteArray())) {
+                    if (metadata.getChecksum() != getChecksum(header.toByteArray())) {
                         log.error("Checksum mismatch detected while trying to read header for logfile {}", file);
                         throw new DataCorruptionException();
                     }
@@ -148,7 +161,27 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void trim(LogAddress address) {
+        SegmentHandle handle = getSegmentHandleForAddress(address);
+        if (handle.getPendingTrims().contains(address.getAddress()) ||
+                handle.getTrimmedAddresses().contains(address.getAddress())) {
+            return;
+        }
 
+        TrimEntry entry = TrimEntry.newBuilder()
+                .setChecksum(getChecksum(address.getAddress()))
+                .setAddress(address.getAddress())
+                .build();
+
+        // TODO(Maithem) possibly move this to SegmentHandle. Do we need to close and flush?
+        OutputStream outputStream = Channels.newOutputStream(handle.getPendingTrimChannel());
+
+        try {
+            entry.writeDelimitedTo(outputStream);
+            outputStream.flush();
+            handle.pendingTrims.add(address.getAddress());
+        } catch (IOException e) {
+            log.warn("Exception while writing a trim entry {} : {}", address.toString(), e.toString());
+        }
     }
 
     @Override
@@ -203,7 +236,7 @@ public class StreamLogFiles implements StreamLog {
 
         logData.clearCommit();
 
-        if(entry.getCommit()) {
+        if (entry.getCommit()) {
             logData.setCommit();
         }
 
@@ -213,7 +246,7 @@ public class StreamLogFiles implements StreamLog {
     Set<UUID> getStreamsSet(List<ByteString> list) {
         Set<UUID> set = new HashSet();
 
-        for(ByteString string : list) {
+        for (ByteString string : list) {
             set.add(UUID.fromString(string.toString(StandardCharsets.UTF_8)));
         }
 
@@ -227,7 +260,7 @@ public class StreamLogFiles implements StreamLog {
      * @param address The address of the entry.
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
-    private LogData readRecord(FileHandle fh, long address)
+    private LogData readRecord(SegmentHandle fh, long address)
             throws IOException {
 
         // A channel lock is required to read the file size because the channel size can change
@@ -236,7 +269,7 @@ public class StreamLogFiles implements StreamLog {
         long logFileSize;
 
         synchronized (fh.lock) {
-            logFileSize = fh.channel.size();
+            logFileSize = fh.logChannel.size();
         }
 
         FileChannel fc = getChannel(fh.fileName, true);
@@ -331,7 +364,7 @@ public class StreamLogFiles implements StreamLog {
      * @param logAddress The address to open.
      * @return The FileChannel for that address.
      */
-    private synchronized FileHandle getFileHandleForAddress(LogAddress logAddress) {
+    private synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
         String filePath = logDir + File.separator;
         long segment = logAddress.address / RECORDS_PER_LOG_FILE;
 
@@ -346,7 +379,9 @@ public class StreamLogFiles implements StreamLog {
         return writeChannels.computeIfAbsent(filePath, a -> {
 
             try {
-                FileChannel fc = getChannel(a, false);
+                FileChannel fc1 = getChannel(a, false);
+                FileChannel fc2 = getChannel(a + ".trimmed", false);
+                FileChannel fc3 = getChannel(a + ".pending", false);
 
                 boolean verify = true;
 
@@ -354,9 +389,9 @@ public class StreamLogFiles implements StreamLog {
                     verify = false;
                 }
 
-                writeHeader(fc, VERSION, verify);
+                writeHeader(fc1, VERSION, verify);
                 log.trace("Opened new log file at {}", a);
-                FileHandle fh = new FileHandle(fc, a);
+                SegmentHandle fh = new SegmentHandle(fc1, fc2, fc3, a);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 readRecord(fh, -1);
@@ -371,7 +406,7 @@ public class StreamLogFiles implements StreamLog {
     Map<String, Long> getStrLongMap(Map<UUID, Long> uuidLongMap) {
         Map<String, Long> stringLongMap = new HashMap();
 
-        for(Map.Entry<UUID, Long> entry : uuidLongMap.entrySet()) {
+        for (Map.Entry<UUID, Long> entry : uuidLongMap.entrySet()) {
             stringLongMap.put(entry.getKey().toString(), entry.getValue());
         }
 
@@ -381,7 +416,7 @@ public class StreamLogFiles implements StreamLog {
     Map<UUID, Long> getUUIDLongMap(Map<String, Long> stringLongMap) {
         Map<UUID, Long> uuidLongMap = new HashMap();
 
-        for(Map.Entry<String, Long> entry : stringLongMap.entrySet()) {
+        for (Map.Entry<String, Long> entry : stringLongMap.entrySet()) {
             uuidLongMap.put(UUID.fromString(entry.getKey()), entry.getValue());
         }
 
@@ -392,7 +427,7 @@ public class StreamLogFiles implements StreamLog {
     Set<String> getStrUUID(Set<UUID> uuids) {
         Set<String> strUUIds = new HashSet();
 
-        for(UUID uuid : uuids) {
+        for (UUID uuid : uuids) {
             strUUIds.add(uuid.toString());
         }
 
@@ -408,7 +443,7 @@ public class StreamLogFiles implements StreamLog {
 
         boolean setCommit = false;
         Object val = entry.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT);
-        if(val != null) {
+        if (val != null) {
             setCommit = (boolean) val;
         }
 
@@ -428,12 +463,16 @@ public class StreamLogFiles implements StreamLog {
 
     static int getChecksum(byte[] bytes) {
         Hasher hasher = Hashing.crc32c().newHasher();
-
-        for(byte a : bytes) {
+        for (byte a : bytes) {
             hasher.putByte(a);
         }
 
         return hasher.hash().asInt();
+    }
+
+    static int getChecksum(long num) {
+        Hasher hasher = Hashing.crc32c().newHasher();
+        return hasher.putLong(num).hash().asInt();
     }
 
     /**
@@ -443,7 +482,7 @@ public class StreamLogFiles implements StreamLog {
      * @param address The address of the entry.
      * @param entry   The LogUnitEntry to append.
      */
-    private void writeRecord(FileHandle fh, long address, LogData entry) throws IOException {
+    private void writeRecord(SegmentHandle fh, long address, LogData entry) throws IOException {
         LogEntry logEntry = getLogEntry(address, entry);
 
         ByteBuffer record = getByteBufferWithMetaData(logEntry);
@@ -456,8 +495,8 @@ public class StreamLogFiles implements StreamLog {
         recordBuf.flip();
 
         synchronized (fh.lock) {
-            fh.channel.write(recordBuf);
-            channelsToSync.add(fh.channel);
+            fh.logChannel.write(recordBuf);
+            channelsToSync.add(fh.logChannel);
         }
     }
 
@@ -467,7 +506,7 @@ public class StreamLogFiles implements StreamLog {
         try {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
-            FileHandle fh = getFileHandleForAddress(logAddress);
+            SegmentHandle fh = getSegmentHandleForAddress(logAddress);
             if (!fh.getKnownAddresses().contains(logAddress.address)) {
                 writeRecord(fh, logAddress.address, entry);
                 fh.getKnownAddresses().add(logAddress.address);
@@ -484,7 +523,7 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public LogData read(LogAddress logAddress) {
         try {
-            return readRecord(getFileHandleForAddress(logAddress), logAddress.address);
+            return readRecord(getSegmentHandleForAddress(logAddress), logAddress.address);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -492,26 +531,42 @@ public class StreamLogFiles implements StreamLog {
 
 
     @Data
-    class FileHandle {
+    class SegmentHandle {
         @NonNull
-        private FileChannel channel;
+        private FileChannel logChannel;
+        @NonNull
+        private FileChannel trimmedChannel;
+        @NonNull
+        private FileChannel pendingTrimChannel;
         @NonNull
         private String fileName;
         private Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        private Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        private Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
         private final Lock lock = new ReentrantLock();
+
+        public void close() {
+            Set<FileChannel> channels = new HashSet(Arrays.asList(logChannel, trimmedChannel, pendingTrimChannel));
+            for (FileChannel channel : channels) {
+                try {
+                    channel.force(true);
+                    channel.close();
+                    channel = null;
+                } catch (Exception e) {
+                    log.warn("Error closing channel {}: {}", channel.toString(), e.toString());
+                }
+            }
+
+            knownAddresses = null;
+            trimmedAddresses = null;
+            pendingTrims = null;
+        }
     }
 
     @Override
     public void close() {
-        for (FileHandle fh : writeChannels.values()) {
-            try {
-                fh.getChannel().force(true);
-                fh.getChannel().close();
-                fh.channel = null;
-                fh.knownAddresses = null;
-            } catch (IOException e) {
-                log.warn("Error closing fh {}: {}", fh.toString(), e.toString());
-            }
+        for (SegmentHandle fh : writeChannels.values()) {
+            fh.close();
         }
 
         writeChannels = new HashMap<>();
