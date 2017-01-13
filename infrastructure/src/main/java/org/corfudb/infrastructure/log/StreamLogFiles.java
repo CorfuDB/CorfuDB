@@ -3,12 +3,16 @@ package org.corfudb.infrastructure.log;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.Collection;
@@ -16,6 +20,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,7 +35,6 @@ import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
-import groovy.json.internal.Byt;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -48,6 +52,7 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+
 
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
@@ -88,6 +93,7 @@ public class StreamLogFiles implements StreamLog {
     public final String logDir;
     private Map<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
+    private int threshold = 20;
 
     public StreamLogFiles(String logDir, boolean noVerify) {
         this.logDir = logDir;
@@ -186,7 +192,111 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void compact() {
+        for(SegmentHandle sh : writeChannels.values()) {
+            Set<Long> pending = sh.getPendingTrims();
+            Set<Long> trimmed = sh.getTrimmedAddresses();
 
+            if(sh.getKnownAddresses().size() + trimmed.size() != RECORDS_PER_LOG_FILE) {
+                log.trace("Log segment still not complete, skipping");
+                continue;
+            }
+
+            int compactedSize = sh.getKnownAddresses().size() - trimmed.size();
+            pending.removeAll(trimmed);
+
+            if(compactedSize / pending.size() < threshold) {
+                log.trace("Thresh hold not exceeded. Ratio {} threshold {}", compactedSize / pending.size(), threshold);
+                return;
+            }
+
+            try {
+                trimLogFile(sh.getFileName(), pending);
+            } catch (IOException e) {
+                log.error("Compact operation failed for file {}", sh.getFileName());
+            }
+        }
+    }
+
+    private void trimLogFile(String filePath, Set<Long> pendingTrim) throws IOException {
+        FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath + ".copy"),
+                EnumSet.of(StandardOpenOption.TRUNCATE_EXISTING));
+
+        List<LogEntry> compacted = getCompactedEntries(filePath, pendingTrim);
+
+        //TODO(Maithem) preserve header from the old header
+        writeHeader(fc, VERSION, noVerify);
+
+        for(LogEntry entry : compacted) {
+            ByteBuffer record = getByteBufferWithMetaData(entry);
+            ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
+                    + record.capacity());
+
+            recordBuf.putShort(RECORD_DELIMITER);
+            recordBuf.put(record.array());
+            recordBuf.flip();
+
+            fc.write(recordBuf);
+        }
+
+        fc.force(true);
+
+        Files.move(Paths.get(filePath + ".copy"), Paths.get(filePath), StandardCopyOption.ATOMIC_MOVE);
+        writeChannels.remove(filePath);
+        // write pending trims to trimmed
+    }
+
+    List<LogEntry> getCompactedEntries(String filePath, Set<Long> pendingTrim) throws IOException {
+        FileChannel fc = getChannel(filePath, true);
+
+        // Skip the header
+        ByteBuffer headerMetadataBuf = ByteBuffer.allocate(METADATA_SIZE);
+        fc.read(headerMetadataBuf);
+        headerMetadataBuf.flip();
+
+        Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
+
+        fc.position(fc.position() + headerMetadata.getLength());
+        ByteBuffer o = ByteBuffer.allocate((int) fc.size() - (int) fc.position());
+        fc.read(o);
+        fc.close();
+        o.flip();
+
+        List<LogEntry> compacted = new LinkedList();
+
+        while (o.hasRemaining()) {
+
+            //Skip delimiter
+            o.getShort();
+
+            byte[] metadataBuf = new byte[METADATA_SIZE];
+            o.get(metadataBuf);
+
+            try {
+                Metadata metadata = Metadata.parseFrom(metadataBuf);
+
+                byte[] logEntryBuf = new byte[metadata.getLength()];
+
+                o.get(logEntryBuf);
+
+                LogEntry entry = LogEntry.parseFrom(logEntryBuf);
+
+                if (!noVerify) {
+                    if (metadata.getChecksum() != getChecksum(entry.toByteArray())) {
+                        log.error("Checksum mismatch detected while trying to read address {}", entry.getGlobalAddress());
+                        throw new DataCorruptionException();
+                    }
+                }
+
+                if(!pendingTrim.contains(entry.getGlobalAddress())) {
+                    compacted.add(entry);
+                }
+
+            } catch (InvalidProtocolBufferException e) {
+                throw new DataCorruptionException();
+            }
+        }
+
+        return compacted;
     }
 
     /**
@@ -391,16 +501,59 @@ public class StreamLogFiles implements StreamLog {
 
                 writeHeader(fc1, VERSION, verify);
                 log.trace("Opened new log file at {}", a);
-                SegmentHandle fh = new SegmentHandle(fc1, fc2, fc3, a);
+                SegmentHandle sh = new SegmentHandle(fc1, fc2, fc3, a);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
-                readRecord(fh, -1);
-                return fh;
+                readRecord(sh, -1);
+                loadTrimAddresses(sh);
+                return sh;
             } catch (IOException e) {
                 log.error("Error opening file {}", a, e);
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    private void loadTrimAddresses(SegmentHandle sh) throws IOException {
+        long trimmedSize;
+        long pendingTrimSize;
+
+        //TODO(Maithem) compute checksums and refactor
+        synchronized (sh.lock) {
+            trimmedSize = sh.getTrimmedChannel().size();
+            pendingTrimSize = sh.getPendingTrimChannel().size();
+        }
+
+        FileChannel fcTrimmed = getChannel(sh.getFileName() + ".trimmed", true);
+        FileChannel fcPending = getChannel(sh.getFileName() + ".pending", true);
+
+        if (fcTrimmed == null) {
+            return;
+        }
+
+        InputStream inputStream = Channels.newInputStream(fcTrimmed);
+
+        while (fcTrimmed.position() < trimmedSize) {
+            TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(inputStream);
+            sh.getTrimmedAddresses().add(trimEntry.getAddress());
+        }
+
+        inputStream.close();
+        fcTrimmed.close();
+
+        if (fcPending == null) {
+            return;
+        }
+
+        inputStream = Channels.newInputStream(fcPending);
+
+        while (fcPending.position() < pendingTrimSize) {
+            TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(inputStream);
+            sh.getPendingTrims().add(trimEntry.getAddress());
+        }
+
+        inputStream.close();
+        fcPending.close();
     }
 
     Map<String, Long> getStrLongMap(Map<UUID, Long> uuidLongMap) {
@@ -507,11 +660,13 @@ public class StreamLogFiles implements StreamLog {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
             SegmentHandle fh = getSegmentHandleForAddress(logAddress);
-            if (!fh.getKnownAddresses().contains(logAddress.address)) {
+            // TODO(MAITHEM) What happens when the old segment is removed?!
+            if (fh.getKnownAddresses().contains(logAddress.address) ||
+                    fh.getTrimmedAddresses().contains(logAddress.address)) {
+                throw new OverwriteException();
+            } else {
                 writeRecord(fh, logAddress.address, entry);
                 fh.getKnownAddresses().add(logAddress.address);
-            } else {
-                throw new OverwriteException();
             }
             log.trace("Disk_write[{}]: Written to disk.", logAddress);
         } catch (IOException e) {
