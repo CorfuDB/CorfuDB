@@ -64,7 +64,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // Reduce test execution time from 15+ seconds to about 8 seconds:
         // Set aggressive timeouts for surviving MS that polls the dead MS.
         ManagementServer ms = getManagementServer(SERVERS.PORT_1);
-        getManagementServer(SERVERS.PORT_1).setPolicyExecuteInterval(200);
+        getManagementServer(SERVERS.PORT_1).setPolicyExecuteInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         ms.getCorfuRuntime().getRouter(SERVERS.ENDPOINT_0).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -137,7 +137,7 @@ public class ManagementViewTest extends AbstractViewTest {
         routerEndpoints.add(SERVERS.ENDPOINT_2);
         serverPorts.forEach(serverPort -> {
             routerEndpoints.forEach(routerEndpoint -> {
-                getManagementServer(serverPort).setPolicyExecuteInterval(200);
+                getManagementServer(serverPort).setPolicyExecuteInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
                 getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
                 getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
                 getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -148,7 +148,7 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         getManagementServer(SERVERS.PORT_1).shutdown();
 
-        for (int i=0; i<PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++){
+        for (int i=0; i<PARAMETERS.NUM_ITERATIONS_LOW; i++){
             corfuRuntime.invalidateLayout();
             if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {break;}
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
