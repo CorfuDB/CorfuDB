@@ -159,9 +159,6 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     public void generateProxy(TypeElement classElement)
             throws IOException
     {
-        // Extract metrics status
-        CorfuObject annotation = classElement.getAnnotation(CorfuObject.class);
-        boolean metricsEnabled = annotation.metricsEnabled();
         // Extract the package name for the class. We'll need this to generate the proxy file.
         String packageName = elementUtils.getPackageOf(classElement).toString();
         // Calculate the name of the proxy, which appends $CORFUSMR to the class name.
@@ -370,15 +367,9 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     }
 
                     // If a mutator, then log the update.
-                    if (mutatorAccessor != null) {
-                        ms.addStatement("long address" + CORFUSMR_FIELD);
-                    }
-                    boolean metricsCtx = false;
                     if (mutator != null || mutatorAccessor != null) {
-                        metricsCtx = addMetricsWrapperStart(metricsEnabled, metricsCtx, ms,
-                                                            classElement, "timerLogWrite");
                         ms.addStatement(
-                                (mutatorAccessor != null ? "     address" + CORFUSMR_FIELD + " = " : "    ") +
+                                (mutatorAccessor != null ? "long address" + CORFUSMR_FIELD + " = " : "") +
                                 "proxy" + CORFUSMR_FIELD + ".logUpdate($S,$L$L$L)",
                                 getSMRFunctionName(smrMethod),
                                 m.hasConflictAnnotations ? conflictField : "null",
@@ -386,7 +377,6 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 smrMethod.getParameters().stream()
                                     .map(VariableElement::getSimpleName)
                                     .collect(Collectors.joining(", ")));
-                        addMetricsWrapperStop(metricsEnabled, ms);
                     }
 
 
@@ -395,31 +385,19 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         // If the return to the mutatorAcessor is void, we don't need
                         // to do anything...
                         if (!smrMethod.getReturnType().getKind().equals(TypeKind.VOID)) {
-                            ms.addStatement(ParameterizedTypeName.get(smrMethod.getReturnType())
-                                    + " res");
-                            metricsCtx = addMetricsWrapperStart(metricsEnabled, metricsCtx,
-                                                                ms, classElement, "timerUpcall");
-                            ms.addStatement("    res = " + "proxy" + CORFUSMR_FIELD
+                            ms.addStatement("return (" +
+                                    ParameterizedTypeName.get(smrMethod.getReturnType())
+                                    + ") proxy" + CORFUSMR_FIELD
                                     + ".getUpcallResult(address"
                                     + CORFUSMR_FIELD
                                     +  ", "
                                     + (m.hasConflictAnnotations ?
                                             conflictField: "null")
                                     + ")");
-                            addMetricsWrapperStop(metricsEnabled, ms);
-                            ms.addStatement("return res");
                         }
                     }
                     // If transactional, begin the transaction
                     else if (transactional != null) {
-                        String txRetryFunction = metricsEnabled ?
-                                "(count) -> {\n" +
-                                "    if (count == 1) { " + classElement.getSimpleName().toString() + ".counterTxnRetry1.inc(); }\n" +
-                                "    " + classElement.getSimpleName().toString() + ".counterTxnRetryN.inc();\n" +
-                                "}" :
-                                "(unused) -> {}";
-                        metricsCtx = addMetricsWrapperStart(metricsEnabled, metricsCtx,
-                                                            ms, classElement, "timerTxn");
                         ms.addCode(smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
                                 "proxy" + CORFUSMR_FIELD + ".TXExecute(() -> {":
                                 "return proxy" + CORFUSMR_FIELD + ".TXExecute(() -> {"
@@ -433,11 +411,9 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                         .map(VariableElement::getSimpleName)
                                         .collect(Collectors.joining(", ")));
                         ms.addCode(smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
-                                "return null; }, " + txRetryFunction + ");\n":
-                                "}, " + txRetryFunction + ");\n"
-
+                                "return null; });":
+                                "});"
                         );
-                        addMetricsWrapperStop(metricsEnabled, ms);
                     }
                     else if (smrMethod.getAnnotation(PassThrough.class) != null) {
                         ms.addStatement("$L super.$L($L)",
@@ -487,7 +463,6 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
         typeSpecBuilder
                 .addSuperinterfaces(interfacesToAdd);
-        System.err.printf("YO YO interfacesToAdd = %s\n", interfacesToAdd.toString());
         // Mark the object as instrumented, so we don't instrument it again.
         typeSpecBuilder
                 .addAnnotation(AnnotationSpec.builder(InstrumentedCorfuObject.class).build());
@@ -731,26 +706,5 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 != null)
                         .map(y -> y.getSimpleName())
                         .collect(Collectors.joining(", ")));
-    }
-
-    private boolean addMetricsWrapperStart(boolean metricsEnabled, boolean metricsCtx,
-                                           MethodSpec.Builder ms, TypeElement classElement,
-                                           String timerName) {
-        if (metricsEnabled) {
-            if (!metricsCtx) {
-                ms.addStatement("com.codahale.metrics.Timer.Context context");
-            }
-            ms.addStatement("context = " + classElement.getSimpleName().toString() + "." + timerName + ".time()");
-            ms.addCode("try {\n");
-        }
-        return true;
-    }
-
-    private void addMetricsWrapperStop(boolean metricsEnabled, MethodSpec.Builder ms) {
-        if (metricsEnabled) {
-            ms.addCode("} finally {\n");
-            ms.addStatement("    context.stop()");
-            ms.addCode("}\n");
-        }
     }
 }

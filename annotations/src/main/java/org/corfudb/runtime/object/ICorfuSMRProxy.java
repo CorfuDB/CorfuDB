@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object;
 
 import java.util.UUID;
-import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /** An interface for accessing a proxy, which
@@ -50,11 +49,10 @@ public interface ICorfuSMRProxy<T> {
     /** Run in a transactional context.
      *
      * @param txFunction    The function to run in a transactional context.
-     * @param txRetryFunction The function to run when a transaction is retried.
      * @param <R>           The return type.
      * @return              The value supplied by the function.
      */
-    <R> R TXExecute(Supplier<R> txFunction, IntConsumer txRetryFunction);
+    <R> R TXExecute(Supplier<R> txFunction);
 
     /** Get an object builder to build new objects.
      *

@@ -203,21 +203,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     String statPath2 = outPath + "/SMRMap-" + this.hashCode() + "/";
                     File statDir2 = new File(statPath2);
                     statDir2.mkdirs();
-                    final CsvReporter reporter2 = CsvReporter.forRegistry(SMRMap.metrics)
-                            .formatFor(Locale.US)
-                            .convertRatesTo(TimeUnit.SECONDS)
-                            .convertDurationsTo(TimeUnit.MILLISECONDS)
-                            .build(statDir2);
-                    reporter2.start(1, TimeUnit.SECONDS);
-                    String statPath3 = outPath + "/FGMap-" + this.hashCode() + "/";
-                    File statDir3 = new File(statPath3);
-                    statDir3.mkdirs();
-                    final CsvReporter reporter3 = CsvReporter.forRegistry(FGMap.metrics)
-                            .formatFor(Locale.US)
-                            .convertRatesTo(TimeUnit.SECONDS)
-                            .convertDurationsTo(TimeUnit.MILLISECONDS)
-                            .build(statDir3);
-                    reporter3.start(1, TimeUnit.SECONDS);
                     String statPath4 = outPath + "/LogUnitClient-" + this.hashCode() + "/";
                     File statDir4 = new File(statPath4);
                     statDir4.mkdirs();

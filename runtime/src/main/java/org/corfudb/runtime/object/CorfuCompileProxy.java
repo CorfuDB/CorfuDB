@@ -344,7 +344,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @return The value supplied by the function.
      */
     @Override
-    public <R> R TXExecute(Supplier<R> txFunction, IntConsumer txRetryFunction) {
+    public <R> R TXExecute(Supplier<R> txFunction) {
         long sleepTime = 1L;
         int retries = 1;
         while (true) {
@@ -354,9 +354,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getObjectsView().TXEnd();
                 return ret;
             } catch (Exception e) {
-                if (txRetryFunction != null) {
-                    txRetryFunction.accept(retries);
-                }
+                // SLF TODO: metrics counter doodad here.
                 log.debug("Transactional function aborted due to {}, retrying after {} msec", e, sleepTime);
                 try {Thread.sleep(sleepTime); }
                 catch (Exception ex) {}
