@@ -151,6 +151,9 @@ public class ManagementViewTest extends AbstractViewTest {
             if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {break;}
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(2L);
+        Layout l2 = corfuRuntime.getLayoutView().getLayout();
+        assertThat(l2.getEpoch()).isEqualTo(2L);
+        assertThat(l2.getLayoutServers().size()).isEqualTo(2);
+        assertThat(l2.getLayoutServers().contains(SERVERS.ENDPOINT_1)).isFalse();
     }
 }
