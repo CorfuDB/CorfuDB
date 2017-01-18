@@ -27,3 +27,10 @@ message Metadata {
     optional sfixed32 checksum = 1;
     optional sfixed32 length = 2;
 }
+
+message NodeMetrics {
+    optional string endpoint = 1;
+    optional bool layoutServerStatus = 2;
+    optional bool sequencerServerStatus = 3;
+    optional bool logunitServerStatus = 4;
+}
