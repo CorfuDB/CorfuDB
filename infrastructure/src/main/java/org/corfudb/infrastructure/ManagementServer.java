@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -14,7 +15,6 @@ import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutView;
 
 import java.lang.invoke.MethodHandles;
 
@@ -319,15 +319,11 @@ public class ManagementServer extends AbstractServer {
      */
     private void failureDetectorTask() {
 
-        LayoutView layoutView;
-
-        CorfuRuntime corfuRuntime;
-        corfuRuntime = getCorfuRuntime();
+        CorfuRuntime corfuRuntime = getCorfuRuntime();
         corfuRuntime.invalidateLayout();
 
         // Fetch the latest layout view through the runtime.
-        layoutView = corfuRuntime.getLayoutView();
-        safeUpdateLayout(layoutView.getLayout());
+        safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
 
         // Execute the failure detection policy once.
         failureDetectorPolicy.executePolicy(latestLayout, corfuRuntime);

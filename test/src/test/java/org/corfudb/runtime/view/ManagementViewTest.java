@@ -8,6 +8,8 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -86,5 +88,72 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL
                         .toNanos(),
                 TimeUnit.NANOSECONDS)).isEqualTo(true);
+    }
+
+    /**
+     * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
+     * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
+     * handle this failure, propose a new layout and we assert on the epoch change.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void handleSingleNodeFailure()
+            throws Exception{
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l);
+
+        CorfuRuntime corfuRuntime = new CorfuRuntime();
+        l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
+        corfuRuntime.connect();
+        // Initiating all failure handlers.
+        l.getAllServers().forEach(server -> corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler());
+
+        // Setting aggressive timeouts
+        List<Integer> serverPorts = new ArrayList<> ();
+        serverPorts.add(SERVERS.PORT_0);
+        serverPorts.add(SERVERS.PORT_1);
+        serverPorts.add(SERVERS.PORT_2);
+        List<String> routerEndpoints = new ArrayList<> ();
+        routerEndpoints.add(SERVERS.ENDPOINT_0);
+        routerEndpoints.add(SERVERS.ENDPOINT_1);
+        routerEndpoints.add(SERVERS.ENDPOINT_2);
+        serverPorts.forEach(serverPort -> {
+            routerEndpoints.forEach(routerEndpoint -> {
+                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            });
+        });
+
+        // Adding a rule on SERVERS.PORT_1 to drop all packets
+        addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
+        getManagementServer(SERVERS.PORT_1).shutdown();
+
+        for (int i=0; i<PARAMETERS.NUM_ITERATIONS_LOW; i++){
+            corfuRuntime.invalidateLayout();
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {break;}
+            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        }
+        Layout l2 = corfuRuntime.getLayoutView().getLayout();
+        assertThat(l2.getEpoch()).isEqualTo(2L);
+        assertThat(l2.getLayoutServers().size()).isEqualTo(2);
+        assertThat(l2.getLayoutServers().contains(SERVERS.ENDPOINT_1)).isFalse();
     }
 }
