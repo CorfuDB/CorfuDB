@@ -1,6 +1,8 @@
 package org.corfudb.runtime.object;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import io.netty.util.internal.ConcurrentSet;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -94,6 +96,19 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     Map<Long, Object> upcallResults;
 
+    /**
+     * Metrics: meter (counter), histogram
+     */
+    public static final MetricRegistry metrics = new MetricRegistry();
+    private static final Timer timerAccess = metrics.timer("access");
+    private static final Timer timerLogWrite = metrics.timer("log-write");
+    private static final Timer timerTxn = metrics.timer("txn");
+    private static final Timer timerUpcall = metrics.timer("upcall");
+    private static final Counter counterAccessOptimistic = metrics.counter("access-optimistic");
+    private static final Counter counterAccessLocked = metrics.counter("access-locked");
+    private static final Counter counterTxnRetry1 = metrics.counter("txn-retry1");
+    private static final Counter counterTxnRetryN = metrics.counter("txn-retryN");
+
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
@@ -122,71 +137,78 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        if (TransactionalContext.isInTransaction()) {
-            return TransactionalContext.getCurrentContext()
-                    .access(this, accessMethod, conflictObject);
+        Timer.Context context = timerAccess.time();
+        try {
+            if (TransactionalContext.isInTransaction()) {
+                return TransactionalContext.getCurrentContext()
+                        .access(this, accessMethod, conflictObject);
+            }
+
+            // Linearize this read against a timestamp
+            final long timestamp =
+                    rt.getSequencerView()
+                            .nextToken(Collections.singleton(streamID), 0).getToken();
+            log.debug("access [{}] at ts {}", getStreamID(), timestamp);
+
+            // Acquire locks and perform read.
+            return underlyingObject.optimisticallyReadThenReadLockThenWriteOnFail(
+                    (ver, o) -> {
+                        // If not in a transaction, check if the version is
+                        // at least that of the linearized read requested.
+                        if (ver >= timestamp
+                                && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                            counterAccessOptimistic.inc();
+                            return accessMethod.access(underlyingObject.getObjectUnsafe());
+                        }
+                        // We don't have the right version, so we need to write
+                        // throwing this exception causes us to take a write lock.
+                        counterAccessLocked.inc();
+                        log.debug("access needs to sync forward up to timestamp {}", timestamp);
+                        throw new ConcurrentModificationException();
+                    },
+                    //  The read did not acquire the right version, so we
+                    //  have now acquired a write lock.
+                    (ver, o) -> {
+                        // In the off chance that someone updated the version
+                        // for us.
+                        if (ver >= timestamp
+                                && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                            return accessMethod.access(underlyingObject.getObjectUnsafe());
+                        }
+
+                        // Now we sync forward while we have the lock, if the object
+                        // was not optimistically modified
+                        if (!underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                            syncObjectUnsafe(underlyingObject, timestamp);
+                            return accessMethod.access(underlyingObject.getObjectUnsafe());
+
+                        }
+                        // Otherwise, we rollback any optimistic changes, if they
+                        // are undoable, and then sync the object before accessing
+                        // the object.
+                        else if (underlyingObject.isOptimisticallyUndoableUnsafe()) {
+                            try {
+                                underlyingObject.optimisticRollbackUnsafe();
+                                syncObjectUnsafe(underlyingObject, timestamp);
+                                // do the access
+                                R ret = accessMethod
+                                        .access(underlyingObject.getObjectUnsafe());
+                                return ret;
+                            } catch (NoRollbackException nre) {
+                                // We couldn't roll back, so we'll have to
+                                // resort to generating a new object.
+                            }
+                        }
+
+                        // As a last resort, we'll have to generate a new object
+                        // and replay. The object will be disposed.
+                        VersionLockedObject<T> temp = getNewVersionLockedObject();
+                        syncObjectUnsafe(temp, timestamp);
+                        return accessMethod.access(temp.getObjectUnsafe());
+                    });
+        } finally {
+            context.stop();
         }
-
-        // Linearize this read against a timestamp
-        final long timestamp =
-                rt.getSequencerView()
-                .nextToken(Collections.singleton(streamID), 0).getToken();
-        log.debug("access [{}] at ts {}", getStreamID(), timestamp);
-
-        // Acquire locks and perform read.
-        return underlyingObject.optimisticallyReadThenReadLockThenWriteOnFail(
-             (ver,o) -> {
-            // If not in a transaction, check if the version is
-            // at least that of the linearized read requested.
-            if (ver >= timestamp
-                    && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
-                return accessMethod.access(underlyingObject.getObjectUnsafe());
-            }
-            // We don't have the right version, so we need to write
-            // throwing this exception causes us to take a write lock.
-                 log.debug("access needs to sync forward up to timestamp {}", timestamp);
-            throw new ConcurrentModificationException();
-        },
-            //  The read did not acquire the right version, so we
-            //  have now acquired a write lock.
-        (ver, o) -> {
-            // In the off chance that someone updated the version
-            // for us.
-            if (ver >= timestamp
-                    && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
-                return accessMethod.access(underlyingObject.getObjectUnsafe());
-            }
-
-            // Now we sync forward while we have the lock, if the object
-            // was not optimistically modified
-            if (!underlyingObject.isOptimisticallyModifiedUnsafe()) {
-                syncObjectUnsafe(underlyingObject, timestamp);
-                return accessMethod.access(underlyingObject.getObjectUnsafe());
-
-            }
-            // Otherwise, we rollback any optimistic changes, if they
-            // are undoable, and then sync the object before accessing
-            // the object.
-            else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
-                try {
-                    underlyingObject.optimisticRollbackUnsafe();
-                    syncObjectUnsafe(underlyingObject, timestamp);
-                    // do the access
-                    R ret = accessMethod
-                            .access(underlyingObject.getObjectUnsafe());
-                    return ret;
-                } catch (NoRollbackException nre) {
-                    // We couldn't roll back, so we'll have to
-                    // resort to generating a new object.
-                }
-            }
-
-            // As a last resort, we'll have to generate a new object
-            // and replay. The object will be disposed.
-            VersionLockedObject<T> temp = getNewVersionLockedObject();
-            syncObjectUnsafe(temp, timestamp);
-            return accessMethod.access(temp.getObjectUnsafe());
-        });
     }
 
 
@@ -249,27 +271,32 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public long logUpdate(String smrUpdateFunction, Object[] conflictObject,
                           Object... args) {
-        // If we aren't coming from a transactional context,
-        // redirect us to a transactional context first.
-        if (TransactionalContext.isInTransaction()) {
-            // We generate an entry to avoid exposing the serializer to the tx context.
-            SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
-            return TransactionalContext.getCurrentContext()
-                    .logUpdate(this, entry, conflictObject);
-        }
+        Timer.Context context = timerLogWrite.time();
+        try {
+            // If we aren't coming from a transactional context,
+            // redirect us to a transactional context first.
+            if (TransactionalContext.isInTransaction()) {
+                // We generate an entry to avoid exposing the serializer to the tx context.
+                SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
+                return TransactionalContext.getCurrentContext()
+                        .logUpdate(this, entry, conflictObject);
+            }
 
-        // If we aren't in a transaction, we can just write the modification.
-        // We need to add the acquired token into the pending upcall list.
-        SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
-        long address = underlyingObject.getStreamViewUnsafe().acquireAndWrite(smrEntry, t -> {
+            // If we aren't in a transaction, we can just write the modification.
+            // We need to add the acquired token into the pending upcall list.
+            SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
+            long address = underlyingObject.getStreamViewUnsafe().acquireAndWrite(smrEntry, t -> {
                 pendingUpcalls.add(t.getToken());
                 return true;
             }, t -> {
                 pendingUpcalls.remove(t.getToken());
                 return true;
             });
-        log.trace("Update {} written to {}", smrUpdateFunction, address);
-        return address;
+            log.trace("Update {} written to {}", smrUpdateFunction, address);
+            return address;
+        } finally {
+            context.stop();
+        }
     }
 
     /**
@@ -278,43 +305,47 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     @SuppressWarnings("unchecked")
     public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
+        Timer.Context context = timerUpcall.time();
+        try {
+            // If we aren't coming from a transactional context,
+            // redirect us to a transactional context first.
+            if (TransactionalContext.isInTransaction()) {
+                return (R) TransactionalContext.getCurrentContext()
+                        .getUpcallResult(this, timestamp, conflictObject);
+            }
 
-        // If we aren't coming from a transactional context,
-        // redirect us to a transactional context first.
-        if (TransactionalContext.isInTransaction()) {
-            return (R) TransactionalContext.getCurrentContext()
-                    .getUpcallResult(this, timestamp, conflictObject);
-        }
-
-        // Check first if we have the upcall, if we do
-        // we can service the request right away.
-        if (upcallResults.containsKey(timestamp)) {
-            R ret = (R) upcallResults.get(timestamp);
-            upcallResults.remove(timestamp);
-            return ret == NullValue.NULL_VALUE ? null : ret;
-        }
-
-        // if someone took a writelock on the object, we
-        // should just wait for it, since the object will
-        // have are upcall after...
-        if (underlyingObject.isWriteLocked()) {
-            underlyingObject.waitOnLock();
+            // Check first if we have the upcall, if we do
+            // we can service the request right away.
             if (upcallResults.containsKey(timestamp)) {
                 R ret = (R) upcallResults.get(timestamp);
                 upcallResults.remove(timestamp);
                 return ret == NullValue.NULL_VALUE ? null : ret;
             }
-        }
 
-        // Otherwise we need to sync the object by taking
-        // the correct locks.
-        underlyingObject.writeReturnVoid(
-                (v, obj) -> syncObjectUnsafe(underlyingObject, timestamp));
+            // if someone took a writelock on the object, we
+            // should just wait for it, since the object will
+            // have are upcall after...
+            if (underlyingObject.isWriteLocked()) {
+                underlyingObject.waitOnLock();
+                if (upcallResults.containsKey(timestamp)) {
+                    R ret = (R) upcallResults.get(timestamp);
+                    upcallResults.remove(timestamp);
+                    return ret == NullValue.NULL_VALUE ? null : ret;
+                }
+            }
 
-        if (upcallResults.containsKey(timestamp)) {
-            R ret = (R) upcallResults.get(timestamp);
-            upcallResults.remove(timestamp);
-            return ret == NullValue.NULL_VALUE ? null : ret;
+            // Otherwise we need to sync the object by taking
+            // the correct locks.
+            underlyingObject.writeReturnVoid(
+                    (v, obj) -> syncObjectUnsafe(underlyingObject, timestamp));
+
+            if (upcallResults.containsKey(timestamp)) {
+                R ret = (R) upcallResults.get(timestamp);
+                upcallResults.remove(timestamp);
+                return ret == NullValue.NULL_VALUE ? null : ret;
+            }
+        } finally {
+            context.stop();
         }
 
         // The version is already ahead, but we don't have the result.
@@ -347,19 +378,30 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     public <R> R TXExecute(Supplier<R> txFunction) {
         long sleepTime = 1L;
         int retries = 1;
-        while (true) {
-            try {
-                rt.getObjectsView().TXBegin();
-                R ret = txFunction.get();
-                rt.getObjectsView().TXEnd();
-                return ret;
-            } catch (Exception e) {
-                // SLF TODO: metrics counter doodad here.
-                log.debug("Transactional function aborted due to {}, retrying after {} msec", e, sleepTime);
-                try {Thread.sleep(sleepTime); }
-                catch (Exception ex) {}
-                sleepTime = min(sleepTime * 2L, 1000L);
+        Timer.Context context = timerTxn.time();
+        try {
+            while (true) {
+                try {
+                    rt.getObjectsView().TXBegin();
+                    R ret = txFunction.get();
+                    rt.getObjectsView().TXEnd();
+                    return ret;
+                } catch (Exception e) {
+                    if (retries == 1) {
+                        counterTxnRetry1.inc();
+                    }
+                    counterTxnRetryN.inc();
+                    log.debug("Transactional function aborted due to {}, retrying after {} msec", e, sleepTime);
+                    try {
+                        Thread.sleep(sleepTime);
+                    } catch (Exception ex) {
+                    }
+                    sleepTime = min(sleepTime * 2L, 1000L);
+                    retries++;
+                }
             }
+        } finally {
+            context.stop();
         }
     }
 
