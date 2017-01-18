@@ -115,7 +115,7 @@ public class LayoutServer extends AbstractServer {
     // Helper Methods
     @ServerHandler(type=CorfuMsgType.LAYOUT_REQUEST)
     public synchronized void handleMessageLayoutRequest(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        Timer.Context context = BaseServer.timerLayoutReq.time();
+        Timer.Context context = CorfuServer.timerLayoutReq.time();
       try {
         if (!checkBootstrap(msg, ctx, r)) { return; }
         long epoch = msg.getPayload();
@@ -144,7 +144,7 @@ public class LayoutServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.LAYOUT_BOOTSTRAP)
     public synchronized void handleMessageLayoutBootstrap(CorfuPayloadMsg<LayoutBootstrapRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        Timer.Context context = BaseServer.timerLayoutBootstrap.time();
+        Timer.Context context = CorfuServer.timerLayoutBootstrap.time();
       try {
         if (getCurrentLayout() == null) {
             log.info("Bootstrap with new layout={}, {}",  msg.getPayload().getLayout(), msg);
@@ -170,7 +170,7 @@ public class LayoutServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.SET_EPOCH)
     public synchronized void handleMessageSetEpoch(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        Timer.Context context = BaseServer.timerLayoutSetEpoch.time();
+        Timer.Context context = CorfuServer.timerLayoutSetEpoch.time();
       try {
         if (!checkBootstrap(msg, ctx, r)) { return; }
         long serverEpoch = getServerEpoch();
@@ -196,7 +196,7 @@ public class LayoutServer extends AbstractServer {
     // TODO this can work under a separate lock for this step as it does not change the global components
     @ServerHandler(type=CorfuMsgType.LAYOUT_PREPARE)
     public synchronized void handleMessageLayoutPrepare(CorfuPayloadMsg<LayoutPrepareRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        Timer.Context context = BaseServer.timerLayoutPrepare.time();
+        Timer.Context context = CorfuServer.timerLayoutPrepare.time();
       try {
         // Check if the prepare is for the correct epoch
         if (!checkBootstrap(msg, ctx, r)) { return; }
@@ -235,7 +235,7 @@ public class LayoutServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.LAYOUT_PROPOSE)
     public synchronized void handleMessageLayoutPropose(CorfuPayloadMsg<LayoutProposeRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        Timer.Context context = BaseServer.timerLayoutPropose.time();
+        Timer.Context context = CorfuServer.timerLayoutPropose.time();
       try {
             // Check if the propose is for the correct epoch
         if (!checkBootstrap(msg, ctx, r)) { return; }
@@ -292,7 +292,7 @@ public class LayoutServer extends AbstractServer {
     // TODO how do reject the older epoch commits, should it be an explicit NACK.
     @ServerHandler(type=CorfuMsgType.LAYOUT_COMMITTED)
     public synchronized void handleMessageLayoutCommit(CorfuPayloadMsg<LayoutCommittedRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        Timer.Context context = BaseServer.timerLayoutCommitted.time();
+        Timer.Context context = CorfuServer.timerLayoutCommitted.time();
       try {
           Layout commitLayout = msg.getPayload().getLayout();
         if (!checkBootstrap(msg, ctx, r)) { return; }

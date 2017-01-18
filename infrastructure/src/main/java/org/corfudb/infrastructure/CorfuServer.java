@@ -2,6 +2,13 @@ package org.corfudb.infrastructure;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.Timer;
+import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
+import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
+import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -60,6 +67,37 @@ public class CorfuServer {
     private static ServerContext serverContext;
 
     public static boolean serverRunning = false;
+
+    /**
+     * Metrics: meter (counter), histogram
+     */
+    public static final MetricRegistry metricsBase = new MetricRegistry();
+    static final Timer timerPing = metricsBase.timer("base-ping");
+    static final Timer timerVersionRequest = metricsBase.timer("base-version-request");
+    public static final MetricRegistry metricsLogUnit = new MetricRegistry();
+    static final Timer timerLogWrite = metricsLogUnit.timer("write");
+    static final Timer timerLogCommit = metricsLogUnit.timer("commit");
+    static final Timer timerLogRead = metricsLogUnit.timer("read");
+    static final Timer timerLogGcInterval = metricsLogUnit.timer("gc-interval");
+    static final Timer timerLogForceGc = metricsLogUnit.timer("force-gc");
+    static final Timer timerLogFillHole = metricsLogUnit.timer("fill-hole");
+    static final Timer timerLogTrim = metricsLogUnit.timer("trim");
+    public static final MetricRegistry metricsSeq = new MetricRegistry();
+    static final Timer timerSeqReq = metricsSeq.timer("token-req");
+    static final Counter counterTokenSum = metricsSeq.counter("token-sum");
+    static final Counter counterToken0 = metricsSeq.counter("token-0");
+    public static final MetricRegistry metricsLayout = new MetricRegistry();
+    static final Timer timerLayoutReq = metricsLayout.timer("request");
+    static final Timer timerLayoutBootstrap = metricsLayout.timer("bootstrap");
+    static final Timer timerLayoutSetEpoch = metricsLayout.timer("set-epoch");
+    static final Timer timerLayoutPrepare = metricsLayout.timer("prepare");
+    static final Timer timerLayoutPropose = metricsLayout.timer("propose");
+    static final Timer timerLayoutCommitted = metricsLayout.timer("committed");
+    public static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
+    public static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
+    public static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
+
+
 
     /**
      * This string defines the command line arguments,

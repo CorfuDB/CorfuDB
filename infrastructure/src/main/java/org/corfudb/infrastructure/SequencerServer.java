@@ -247,12 +247,12 @@ public class SequencerServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.TOKEN_REQ)
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
-        Timer.Context context = BaseServer.timerSeqReq.time();
+        Timer.Context context = CorfuServer.timerSeqReq.time();
       try {
         TokenRequest req = msg.getPayload();
 
         if (req.getReqType() == TokenRequest.TK_QUERY) {
-            BaseServer.counterTokenSum.inc(req.getNumTokens());
+            CorfuServer.counterTokenSum.inc(req.getNumTokens());
             handleTokenQuery(msg, ctx, r);
             return;
         }

@@ -32,32 +32,6 @@ public class BaseServer extends AbstractServer {
     private final CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    /**
-     * Metrics: meter (counter), histogram
-     */
-    public static final MetricRegistry metrics = new MetricRegistry();
-    public static final Timer timerLogWrite = metrics.timer("write");
-    public static final Timer timerLogCommit = metrics.timer("commit");
-    public static final Timer timerLogRead = metrics.timer("read");
-    public static final Timer timerLogGcInterval = metrics.timer("gc-interval");
-    public static final Timer timerLogForceGc = metrics.timer("force-gc");
-    public static final Timer timerLogFillHole = metrics.timer("fill-hole");
-    public static final Timer timerLogTrim = metrics.timer("trim");
-    public static final MetricRegistry metricsSeq = new MetricRegistry();
-    public static final Timer timerSeqReq = metricsSeq.timer("token-req");
-    public static final Counter counterTokenSum = metricsSeq.counter("token-sum");
-    public static final Counter counterToken0 = metricsSeq.counter("token-0");
-    public static final MetricRegistry metricsLayout = new MetricRegistry();
-    public static final Timer timerLayoutReq = metricsLayout.timer("request");
-    public static final Timer timerLayoutBootstrap = metricsLayout.timer("bootstrap");
-    public static final Timer timerLayoutSetEpoch = metricsLayout.timer("set-epoch");
-    public static final Timer timerLayoutPrepare = metricsLayout.timer("prepare");
-    public static final Timer timerLayoutPropose = metricsLayout.timer("propose");
-    public static final Timer timerLayoutCommitted = metricsLayout.timer("committed");
-    public static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
-    public static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
-    public static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
-
     /** Respond to a ping message.
      *
      * @param msg   The incoming message
@@ -66,7 +40,9 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.PING)
     private static void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        final Timer.Context context = CorfuServer.timerPing.time();
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
+        context.stop();
     }
 
     /** Respond to a version request message.
@@ -77,33 +53,10 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.VERSION_REQUEST)
     private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        Map<String,Object> logStats = new HashMap<>();
-        dumpTimers(metrics, logStats);
-        Map<String,Object> seqStats = new HashMap<>();
-        dumpTimers(metricsSeq, seqStats);
-        seqStats.put("tokens-sum", counterTokenSum);
-        seqStats.put("tokens-0", counterToken0);
-        Map<String,Object> layoutStats = new HashMap<>();
-        dumpTimers(metricsLayout, layoutStats);
-
-        Map<String,Object> logCacheStats = new TreeMap<>();
-        try {
-            CacheStats logCS = CorfuServer.getLogUnitServer().getDataCache().stats();
-            dumpCaffieneStats(logCS, logCacheStats);
-            logCacheStats.put("estimated-size", CorfuServer.getLogUnitServer().getDataCache().estimatedSize());
-        } catch (NullPointerException e) {
-            // Don't add LogUnit cache stats: there's no such component configured (e.g. during unit test)
-        }
-
-        Map<String,Object> jvmGCStats = new HashMap<>();
-        dumpMetricsSet(metricsJVMGC, jvmGCStats);
-        Map<String,Object> jvmMemStats = new HashMap<>();
-        dumpMetricsSet(metricsJVMMem, jvmMemStats);
-        Map<String,Object> jvmThreadStats = new HashMap<>();
-        dumpMetricsSet(metricsJVMThread, jvmThreadStats);
-        VersionInfo vi = new VersionInfo(optionsMap, logStats, seqStats, layoutStats, logCacheStats,
-                jvmGCStats, jvmMemStats, jvmThreadStats);
+        final Timer.Context context = CorfuServer.timerVersionRequest.time();
+        VersionInfo vi = new VersionInfo(optionsMap);
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
+        context.stop();
     }
 
     /** Reset the JVM. This mechanism leverages that corfu_server runs in a bash script
