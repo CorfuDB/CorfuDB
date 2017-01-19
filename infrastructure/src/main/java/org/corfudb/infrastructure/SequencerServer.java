@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.codahale.metrics.*;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
@@ -250,100 +249,100 @@ public class SequencerServer extends AbstractServer {
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
         Timer.Context context = CorfuServer.timerSeqReq.time();
-      try {
-        TokenRequest req = msg.getPayload();
+        try {
+            TokenRequest req = msg.getPayload();
 
-        if (req.getReqType() == TokenRequest.TK_QUERY) {
-            CorfuServer.counterTokenSum.inc(req.getNumTokens());
-            handleTokenQuery(msg, ctx, r);
-            return;
-        }
-
-        // for raw log implementation, simply extend the global log tail and return the global-log token
-        if (req.getReqType() == TokenRequest.TK_RAW) {
-            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                    new TokenResponse(globalLogTail.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
-            return;
-        }
-
-        // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
-        // Token allocation is conditioned on commit.
-        // First, we check if the transaction can commit.
-        if (req.getReqType() == TokenRequest.TK_TX) {
-
-            if (!txnCanCommit(req.getTxnResolution())) {
-                // If the txn aborts, then DO NOT hand out a token.
-                r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                        new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
+            if (req.getReqType() == TokenRequest.TK_QUERY) {
+                CorfuServer.counterTokenSum.inc(req.getNumTokens());
+                handleTokenQuery(msg, ctx, r);
                 return;
             }
-        }
 
-        // extend the tail of the global log by the requested # of tokens
-        // currentTail is the first available position in the global log
-        long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
-        long newTail = currentTail + req.getNumTokens();
+            // for raw log implementation, simply extend the global log tail and return the global-log token
+            if (req.getReqType() == TokenRequest.TK_RAW) {
+                r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                        new TokenResponse(globalLogTail.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
+                return;
+            }
 
-        // for each streams:
-        //   1. obtain the last back-pointer for this streams, if exists; -1L otherwise.
-        //   2. record the new global tail as back-pointer for this streams.
-        //   3. extend the tail by the requested # tokens.
-        ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
-        ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
-        for (UUID id : req.getStreams()) {
+            // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
+            // Token allocation is conditioned on commit.
+            // First, we check if the transaction can commit.
+            if (req.getReqType() == TokenRequest.TK_TX) {
 
-            // step 1. and 2. (comment above)
-            streamTailToGlobalTailMap.compute(id, (k, v) -> {
-                if (v == null) {
-                    backPointerMap.put(k, -1L);
-                    return newTail-1;
-                } else {
-                    backPointerMap.put(k, v);
-
-                    // legacy code, addition sanity check instead:
-                    //return Math.max(newTail - 1, v);
-                    if (newTail-1 < v)
-                        log.error("backpointer {} is already greater than newTail-1 {}", v, newTail-1);
-
-                    return newTail-1;
-                }
-            });
-
-            // step 3. (comment above)
-            streamTailMap.compute(id, (k, v) -> {
-                if (v == null) {
-                    requestStreamTokens.put(k, req.getNumTokens() - 1L);
-                    return req.getNumTokens() - 1L;
-                }
-                requestStreamTokens.put(k, v + req.getNumTokens());
-                return v + req.getNumTokens();
-            });
-        }
-
-        // update the cache of conflict parameters
-        if (req.getTxnResolution() != null)
-            for (Map.Entry<UUID, Set<Integer>> writeConflictEntry :
-                    req.getTxnResolution().getWriteConflictParams().entrySet()) {
-
-                // instantiate a key-pair, and set its streamID (1st component)
-                ConflictKey conflictKeyPair =
-                        new ConflictKey(writeConflictEntry.getKey());
-
-                // now update each key-pair with this token's timestamp
-                for (Integer cParam : writeConflictEntry.getValue()) {
-                    conflictKeyPair.setConflictKeyhash(cParam);
-                    conflictToGlobalTailCache.put(conflictKeyPair, newTail - 1);
+                if (!txnCanCommit(req.getTxnResolution())) {
+                    // If the txn aborts, then DO NOT hand out a token.
+                    r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                            new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
+                    return;
                 }
             }
 
-        log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
-        // return the token response with the new global tail, new streams tails, and the streams backpointers
-        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                new TokenResponse(currentTail,
-                        backPointerMap.build(),
-                        requestStreamTokens.build())));
-      } finally {
-          context.stop();
-      }
+            // extend the tail of the global log by the requested # of tokens
+            // currentTail is the first available position in the global log
+            long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
+            long newTail = currentTail + req.getNumTokens();
+
+            // for each streams:
+            //   1. obtain the last back-pointer for this streams, if exists; -1L otherwise.
+            //   2. record the new global tail as back-pointer for this streams.
+            //   3. extend the tail by the requested # tokens.
+            ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
+            ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
+            for (UUID id : req.getStreams()) {
+
+                // step 1. and 2. (comment above)
+                streamTailToGlobalTailMap.compute(id, (k, v) -> {
+                    if (v == null) {
+                        backPointerMap.put(k, -1L);
+                        return newTail-1;
+                    } else {
+                        backPointerMap.put(k, v);
+
+                        // legacy code, addition sanity check instead:
+                        //return Math.max(newTail - 1, v);
+                        if (newTail-1 < v)
+                            log.error("backpointer {} is already greater than newTail-1 {}", v, newTail-1);
+
+                        return newTail-1;
+                    }
+                });
+
+                // step 3. (comment above)
+                streamTailMap.compute(id, (k, v) -> {
+                    if (v == null) {
+                        requestStreamTokens.put(k, req.getNumTokens() - 1L);
+                        return req.getNumTokens() - 1L;
+                    }
+                    requestStreamTokens.put(k, v + req.getNumTokens());
+                    return v + req.getNumTokens();
+                });
+            }
+
+            // update the cache of conflict parameters
+            if (req.getTxnResolution() != null)
+                for (Map.Entry<UUID, Set<Integer>> writeConflictEntry :
+                        req.getTxnResolution().getWriteConflictParams().entrySet()) {
+
+                    // instantiate a key-pair, and set its streamID (1st component)
+                    ConflictKey conflictKeyPair =
+                            new ConflictKey(writeConflictEntry.getKey());
+
+                    // now update each key-pair with this token's timestamp
+                    for (Integer cParam : writeConflictEntry.getValue()) {
+                        conflictKeyPair.setConflictKeyhash(cParam);
+                        conflictToGlobalTailCache.put(conflictKeyPair, newTail - 1);
+                    }
+                }
+
+            log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
+            // return the token response with the new global tail, new streams tails, and the streams backpointers
+            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
+                    new TokenResponse(currentTail,
+                            backPointerMap.build(),
+                            requestStreamTokens.build())));
+        } finally {
+            context.stop();
+        }
     }
 }
