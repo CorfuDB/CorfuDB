@@ -2,10 +2,7 @@ package org.corfudb.infrastructure;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.MetricSet;
-import com.codahale.metrics.Timer;
+import com.codahale.metrics.*;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
@@ -20,6 +17,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.util.BooleanSupplier;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
@@ -32,9 +30,12 @@ import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.io.*;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.fusesource.jansi.Ansi.Color.*;
@@ -71,28 +72,33 @@ public class CorfuServer {
     /**
      * Metrics: meter (counter), histogram
      */
-    public static final MetricRegistry metricsBase = new MetricRegistry();
-    static final Timer timerPing = metricsBase.timer("base-ping");
-    static final Timer timerVersionRequest = metricsBase.timer("base-version-request");
-    public static final MetricRegistry metricsLogUnit = new MetricRegistry();
-    static final Timer timerLogWrite = metricsLogUnit.timer("write");
-    static final Timer timerLogCommit = metricsLogUnit.timer("commit");
-    static final Timer timerLogRead = metricsLogUnit.timer("read");
-    static final Timer timerLogGcInterval = metricsLogUnit.timer("gc-interval");
-    static final Timer timerLogForceGc = metricsLogUnit.timer("force-gc");
-    static final Timer timerLogFillHole = metricsLogUnit.timer("fill-hole");
-    static final Timer timerLogTrim = metricsLogUnit.timer("trim");
-    public static final MetricRegistry metricsSeq = new MetricRegistry();
-    static final Timer timerSeqReq = metricsSeq.timer("token-req");
-    static final Counter counterTokenSum = metricsSeq.counter("token-sum");
-    static final Counter counterToken0 = metricsSeq.counter("token-0");
-    public static final MetricRegistry metricsLayout = new MetricRegistry();
-    static final Timer timerLayoutReq = metricsLayout.timer("request");
-    static final Timer timerLayoutBootstrap = metricsLayout.timer("bootstrap");
-    static final Timer timerLayoutSetEpoch = metricsLayout.timer("set-epoch");
-    static final Timer timerLayoutPrepare = metricsLayout.timer("prepare");
-    static final Timer timerLayoutPropose = metricsLayout.timer("propose");
-    static final Timer timerLayoutCommitted = metricsLayout.timer("committed");
+    static private final String mp = "corfu.server.";
+    static private final String mpBase = mp + "base.";
+    static private final String mpLU = mp + "logunit.";
+    static private final String mpSeq = mp + "sequencer.";
+    static private final String mpLayout = mp + "layout.";
+    static private final String mpTrigger = "filter-trigger"; // internal use only
+
+    public static final MetricRegistry metrics = new MetricRegistry();
+    static final Counter counterFilterTrigger = metrics.counter(mpTrigger); // Internal use, never reported
+    static final Timer timerPing = metrics.timer(mpBase + "ping");
+    static final Timer timerVersionRequest = metrics.timer(mpBase + "version-request");
+    static final Timer timerLogWrite = metrics.timer(mpLU + "write");
+    static final Timer timerLogCommit = metrics.timer(mpLU + "commit");
+    static final Timer timerLogRead = metrics.timer(mpLU + "read");
+    static final Timer timerLogGcInterval = metrics.timer(mpLU + "gc-interval");
+    static final Timer timerLogForceGc = metrics.timer(mpLU + "force-gc");
+    static final Timer timerLogFillHole = metrics.timer(mpLU + "fill-hole");
+    static final Timer timerLogTrim = metrics.timer(mpLU + "trim");
+    static final Timer timerSeqReq = metrics.timer(mpSeq + "token-req");
+    static final Counter counterTokenSum = metrics.counter(mpSeq + "token-sum");
+    static final Counter counterToken0 = metrics.counter(mpSeq + "token-0");
+    static final Timer timerLayoutReq = metrics.timer(mpLayout + "request");
+    static final Timer timerLayoutBootstrap = metrics.timer(mpLayout + "bootstrap");
+    static final Timer timerLayoutSetEpoch = metrics.timer(mpLayout + "set-epoch");
+    static final Timer timerLayoutPrepare = metrics.timer(mpLayout + "prepare");
+    static final Timer timerLayoutPropose = metrics.timer(mpLayout + "propose");
+    static final Timer timerLayoutCommitted = metrics.timer(mpLayout + "committed");
     public static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
     public static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
     public static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
@@ -226,6 +232,9 @@ public class CorfuServer {
         EventLoopGroup workerGroup;
         EventExecutorGroup ee;
 
+        // Metrics reporting setup
+        metricsReportingSetup();
+
         bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
             final AtomicInteger threadNum = new AtomicInteger(0);
 
@@ -317,5 +326,62 @@ public class CorfuServer {
     public static void addManagementServer() {
         managementServer = new ManagementServer(serverContext);
         router.addServer(managementServer);
+    }
+
+    static Properties metricsProperties = new Properties();
+    static boolean metricsReportingEnabled = false;
+
+    /**
+     * Load a metrics properties file.
+     * The expected properties in this properties file are:
+     *
+     * enabled: Boolean for whether CSV output will be generated.
+     *          For each reporting interval, this function will be
+     *          called to re-parse the properties file and to
+     *          re-evaluate the value of 'enabled'.  Changes to
+     *          any other property in this file will be ignored.
+     *
+     * directory: String for the path to the CSV output subdirectory
+     *
+     * interval: Long for the reporting interval for CSV output
+     */
+    private static void loadPropertiesFile() {
+        String propPath;
+
+        if ((propPath = System.getenv("METRICS_PROPERTIES")) != null) {
+            try {
+                metricsProperties.load(new FileInputStream(propPath));
+                metricsReportingEnabled = Boolean.valueOf((String) metricsProperties.get("enabled"));
+            } catch (Exception e) {
+                log.error("Error processing METRICS_PROPERTIES {}: {}", propPath, e.toString());
+            }
+        }
+    }
+
+    private static void metricsReportingSetup() {
+        loadPropertiesFile();
+        String outPath = (String) metricsProperties.get("directory");
+        if (outPath != null && !outPath.isEmpty()) {
+            Long interval = Long.valueOf((String) metricsProperties.get("interval"));
+            File statDir = new File(outPath);
+            statDir.mkdirs();
+            MetricFilter f = new MetricFilter() {
+                @Override
+                public boolean matches(String name, Metric metric) {
+                    if (name.equals(mpTrigger)) {
+                        loadPropertiesFile();
+                        return false;
+                    }
+                    return metricsReportingEnabled;
+                }
+            };
+            final CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
+                    .formatFor(Locale.US)
+                    .convertRatesTo(TimeUnit.SECONDS)
+                    .convertDurationsTo(TimeUnit.MILLISECONDS)
+                    .filter(f)
+                    .build(statDir);
+            reporter1.start(interval, TimeUnit.SECONDS);
+        }
     }
 }
