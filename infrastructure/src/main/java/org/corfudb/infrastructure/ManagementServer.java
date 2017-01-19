@@ -6,7 +6,6 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.format.Types;
 import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -16,7 +15,6 @@ import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
-import org.w3c.dom.Node;
 
 import java.lang.invoke.MethodHandles;
 
@@ -218,7 +216,6 @@ public class ManagementServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER)
     public synchronized void initiateFailureHandler(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.error("HERE -----------------");
         if (isShutdown()) {
             log.warn("Management Server received {} but is shutdown.", msg.getMsgType().toString());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
@@ -263,7 +260,7 @@ public class ManagementServer extends AbstractServer {
     /**
      * Handles the heartbeat request.
      * It accumulates the metrics required to build
-     * and send the response(NodeHealthModel).
+     * and send the response(NodeMetrics).
      *
      * @param msg
      * @param ctx
@@ -273,7 +270,7 @@ public class ManagementServer extends AbstractServer {
     public synchronized void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         // Currently builds a default instance of the model.
         // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
-        Types.NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();
+        NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();
         r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.HEARTBEAT_RESPONSE, nodeMetrics.toByteArray()));
     }
 
