@@ -4,9 +4,10 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.format.Types;
+import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -15,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
+import org.w3c.dom.Node;
 
 import java.lang.invoke.MethodHandles;
 
@@ -216,6 +218,7 @@ public class ManagementServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER)
     public synchronized void initiateFailureHandler(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.error("HERE -----------------");
         if (isShutdown()) {
             log.warn("Management Server received {} but is shutdown.", msg.getMsgType().toString());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
@@ -255,6 +258,23 @@ public class ManagementServer extends AbstractServer {
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
         failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, latestLayout, getCorfuRuntime(), msg.getPayload().getNodes().keySet());
+    }
+
+    /**
+     * Handles the heartbeat request.
+     * It accumulates the metrics required to build
+     * and send the response(NodeHealthModel).
+     *
+     * @param msg
+     * @param ctx
+     * @param r
+     */
+    @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
+    public synchronized void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // Currently builds a default instance of the model.
+        // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
+        Types.NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();
+        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.HEARTBEAT_RESPONSE, nodeMetrics.toByteArray()));
     }
 
     /**
@@ -353,6 +373,7 @@ public class ManagementServer extends AbstractServer {
      * Shuts down the fault detector service.
      */
     public void shutdown() {
+        super.shutdown();
         // Shutting the fault detector.
         failureDetectorService.shutdownNow();
 
@@ -366,5 +387,6 @@ public class ManagementServer extends AbstractServer {
         } catch (InterruptedException ie) {
             log.debug("failureDetectorService awaitTermination interrupted : {}", ie);
         }
+        log.info("Management Server shutting down.");
     }
 }
