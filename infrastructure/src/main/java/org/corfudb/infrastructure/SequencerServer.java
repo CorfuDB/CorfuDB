@@ -123,12 +123,14 @@ public class SequencerServer extends AbstractServer {
 
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
+    @Getter
     private final Cache<ConflictKey, Long>
             conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
             .removalListener((ConflictKey K, Long V, RemovalCause cause) -> {
                 maxConflictWildcard = Math.max(V, maxConflictWildcard);
             })
+            .recordStats()
             .build();
 
     /** Handler for this server */

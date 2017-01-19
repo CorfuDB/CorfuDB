@@ -148,6 +148,7 @@ public class LogUnitServer extends AbstractServer {
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
+                .recordStats()
                 .build(this::handleRetrieval);
 
         // Trim map is set to empty on start

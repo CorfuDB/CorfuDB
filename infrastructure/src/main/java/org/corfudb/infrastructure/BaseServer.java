@@ -1,11 +1,6 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.*;
 import com.codahale.metrics.Timer;
-import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
-import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
-import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
-import com.github.benmanes.caffeine.cache.stats.CacheStats;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +9,8 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by mwei on 12/8/15.
@@ -75,11 +71,4 @@ public class BaseServer extends AbstractServer {
         System.exit(100);
     }
 
-    private void dumpCaffieneStats(CacheStats src, Map<String,Object> dst) {
-        if (src == null) { return; }
-        dst.put("evictions", src.evictionCount());
-        dst.put("hit-rate", src.hitRate());
-        dst.put("hits", src.hitCount());
-        dst.put("misses", src.missCount());
-    }
 }

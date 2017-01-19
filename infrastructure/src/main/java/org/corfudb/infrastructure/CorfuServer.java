@@ -2,10 +2,18 @@ package org.corfudb.infrastructure;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
-import com.codahale.metrics.*;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.CsvReporter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Metric;
+import com.codahale.metrics.MetricFilter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.Timer;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
+import com.github.benmanes.caffeine.cache.Cache;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -30,7 +38,8 @@ import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
@@ -234,6 +243,7 @@ public class CorfuServer {
         metrics.register("jvm.gc", metricsJVMGC);
         metrics.register("jvm.memory", metricsJVMMem);
         metrics.register("jvm.thread", metricsJVMThread);
+        metricsCachesSetup();
         metricsReportingSetup();
 
         bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
@@ -327,6 +337,20 @@ public class CorfuServer {
     public static void addManagementServer() {
         managementServer = new ManagementServer(serverContext);
         router.addServer(managementServer);
+    }
+
+    private static void metricsCachesSetup() {
+        addCacheGauges(mpLU + "cache.", getLogUnitServer().getDataCache());
+        addCacheGauges(mp + "datastore.cache.", serverContext.getDataStore().getCache());
+        addCacheGauges(mpSeq + "conflict.cache.", sequencerServer.getConflictToGlobalTailCache());
+    }
+
+    private static void addCacheGauges(String name, Cache cache) {
+        metrics.register(name + "cache-size", (Gauge<Long>) () -> cache.estimatedSize());
+        metrics.register(name + "evictions", (Gauge<Long>) () -> cache.stats().evictionCount());
+        metrics.register(name + "hit-rate", (Gauge<Double>) () -> cache.stats().hitRate());
+        metrics.register(name + "hits", (Gauge<Long>) () -> cache.stats().hitCount());
+        metrics.register(name + "misses", (Gauge<Long>) () -> cache.stats().missCount());
     }
 
     static Properties metricsProperties = new Properties();
