@@ -47,8 +47,8 @@ Options:
 
 ```java
     CorfuRuntime rt = new CorfuRuntime("localhost:9000");
-    r.enableTls("keystore.jks", "keystore_password.txt", "truststore.jks", "truststore_password.txt");
-    r.connect();
+    rt.enableTls("keystore.jks", "keystore_password.txt", "truststore.jks", "truststore_password.txt");
+    rt.connect();
 ```
 
 ### Corfu TLS Basics
@@ -159,8 +159,8 @@ Runtime:
 
 ```java
     CorfuRuntime rt = new CorfuRuntime("localhost:9000");
-    r.enableTls("r1.jks", "r1pass.txt", "trust.jks", "tpass.txt");
-    r.connect();
+    rt.enableTls("r1.jks", "r1pass.txt", "trust.jks", "tpass.txt");
+    rt.connect();
 ```
 
 
@@ -218,6 +218,6 @@ Runtime:
 
 ```java
     CorfuRuntime rt = new CorfuRuntime("localhost:9000");
-    r.enableTls("r1.jks", "r1pass.txt", "trust.jks", "tpass.txt");
-    r.connect();
+    rt.enableTls("r1.jks", "r1pass.txt", "trust.jks", "tpass.txt");
+    rt.connect();
 ```
