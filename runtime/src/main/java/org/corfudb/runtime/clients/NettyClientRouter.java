@@ -1,7 +1,6 @@
 package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.Counter;
-import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -29,17 +28,13 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.FGMap;
-import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
-import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Random;
@@ -47,7 +42,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -390,7 +384,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             log.trace("Sent message: {}", message);
             final CompletableFuture<T> cfElapsed = cf.thenApply(x -> {
                 context.stop();
-                // DEBUGGING ONLY: try {Thread.sleep(1234); } catch (Exception e) {}
                 return x;
             });
             // Generate a timeout future, which will complete exceptionally if the main future is not completed.

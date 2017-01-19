@@ -1,8 +1,6 @@
 package org.corfudb.runtime.view;
 
-import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
-import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
@@ -22,23 +20,17 @@ import org.corfudb.protocols.wireprotocol.InMemoryLogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.collections.FGMap;
-import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 
-import java.io.File;
-import java.io.IOException;
 import java.time.Duration;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 

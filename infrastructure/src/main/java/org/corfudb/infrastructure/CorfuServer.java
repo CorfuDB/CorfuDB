@@ -3,10 +3,7 @@ package org.corfudb.infrastructure;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import com.codahale.metrics.Counter;
-import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Metric;
-import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.Timer;
@@ -25,7 +22,6 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.util.BooleanSupplier;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
@@ -40,10 +36,7 @@ import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -89,7 +82,6 @@ public class CorfuServer {
     static private final String mpLayout = mp + "layout.";
 
     public static final MetricRegistry metrics = new MetricRegistry();
-    static final Counter ignoredFilterTrigger = metrics.counter(MetricsUtils.getMpTrigger());
     static final Timer timerPing = metrics.timer(mpBase + "ping");
     static final Timer timerVersionRequest = metrics.timer(mpBase + "version-request");
     static final Timer timerLogWrite = metrics.timer(mpLU + "write");

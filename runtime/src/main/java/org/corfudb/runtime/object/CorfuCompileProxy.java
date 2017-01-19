@@ -16,7 +16,6 @@ import org.corfudb.util.serializer.ISerializer;
 import java.lang.reflect.Constructor;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 import static java.lang.Long.min;

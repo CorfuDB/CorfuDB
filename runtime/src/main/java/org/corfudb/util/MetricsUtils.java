@@ -15,10 +15,9 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class MetricsUtils {
-    static Properties metricsProperties = new Properties();
-    static boolean metricsReportingEnabled = false;
-    @Getter
-    static private final String mpTrigger = "filter-trigger"; // internal use only
+    private static Properties metricsProperties = new Properties();
+    private static boolean metricsReportingEnabled = false;
+    private static String mpTrigger = "filter-trigger"; // internal use only
 
     /**
      * Load a metrics properties file.
@@ -47,22 +46,28 @@ public class MetricsUtils {
         }
     }
 
+    /**
+     * Start metrics reporting via the Dropwizard 'CsvReporter' file writer.
+     * Reporting can be turned on and off via the properties file described
+     * in loadPropertiesFile()'s docs.  The report interval and report
+     * directory cannot be altered at runtime.
+     *
+     * @param metrics
+     */
     public static void metricsReportingSetup(MetricRegistry metrics) {
+        metrics.counter(mpTrigger);
         loadPropertiesFile();
         String outPath = (String) metricsProperties.get("directory");
         if (outPath != null && !outPath.isEmpty()) {
             Long interval = Long.valueOf((String) metricsProperties.get("interval"));
             File statDir = new File(outPath);
             statDir.mkdirs();
-            MetricFilter f = new MetricFilter() {
-                @Override
-                public boolean matches(String name, Metric metric) {
-                    if (name.equals(mpTrigger)) {
-                        loadPropertiesFile();
-                        return false;
-                    }
-                    return metricsReportingEnabled;
+            MetricFilter f = (name, metric) -> {
+                if (name.equals(mpTrigger)) {
+                    loadPropertiesFile();
+                    return false;
                 }
+                return metricsReportingEnabled;
             };
             CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
                     .formatFor(Locale.US)

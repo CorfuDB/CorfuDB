@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;

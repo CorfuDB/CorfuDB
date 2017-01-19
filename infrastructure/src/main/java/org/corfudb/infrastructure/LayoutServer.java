@@ -124,7 +124,6 @@ public class LayoutServer extends AbstractServer {
             } else {
                 // else the client is somehow ahead of the server.
                 //TODO figure out a strategy to deal with this situation
-                // Very odd ... if we don't send any response here, we hang the OTP mailbox thread.
                 long serverEpoch = serverContext.getServerEpoch();
                 r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
                 log.warn("Message Epoch {} ahead of Server epoch {}", epoch, serverContext.getServerConfig());
