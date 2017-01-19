@@ -99,11 +99,9 @@ public class CorfuServer {
     static final Timer timerLayoutPrepare = metrics.timer(mpLayout + "prepare");
     static final Timer timerLayoutPropose = metrics.timer(mpLayout + "propose");
     static final Timer timerLayoutCommitted = metrics.timer(mpLayout + "committed");
-    public static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
-    public static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
-    public static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
-
-
+    static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
+    static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
+    static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
 
     /**
      * This string defines the command line arguments,
@@ -233,6 +231,9 @@ public class CorfuServer {
         EventExecutorGroup ee;
 
         // Metrics reporting setup
+        metrics.register("jvm.gc", metricsJVMGC);
+        metrics.register("jvm.memory", metricsJVMMem);
+        metrics.register("jvm.thread", metricsJVMThread);
         metricsReportingSetup();
 
         bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {

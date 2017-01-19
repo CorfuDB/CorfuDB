@@ -75,45 +75,11 @@ public class BaseServer extends AbstractServer {
         System.exit(100);
     }
 
-    private static double convertMsec(double ns) {
-        return ns / 1_000_000;
-    }
-
-    private void dumpTimers(MetricRegistry srcReg, Map<String, Object> dstStats) {
-        srcReg.getTimers().forEach((k, t) -> {
-            TreeMap<String, Object> m = new TreeMap<>();
-            m.put("count", t.getCount());
-            m.put("mean rate", t.getMeanRate());
-            m.put("1-minute rate", t.getOneMinuteRate());
-            m.put("5-minute rate", t.getFiveMinuteRate());
-            m.put("15-minute rate", t.getFifteenMinuteRate());
-            final Snapshot snapshot = t.getSnapshot();
-            m.put("min", convertMsec(snapshot.getMin()));
-            m.put("max", convertMsec(snapshot.getMax()));
-            m.put("mean", convertMsec(snapshot.getMean()));
-            m.put("50%", convertMsec(snapshot.getMedian()));
-            m.put("75%", convertMsec(snapshot.get75thPercentile()));
-            m.put("95%", convertMsec(snapshot.get95thPercentile()));
-            m.put("99%", convertMsec(snapshot.get99thPercentile()));
-            m.put("99.9%", convertMsec(snapshot.get999thPercentile()));
-            dstStats.put(k, m);
-        });
-    }
-
     private void dumpCaffieneStats(CacheStats src, Map<String,Object> dst) {
         if (src == null) { return; }
         dst.put("evictions", src.evictionCount());
         dst.put("hit-rate", src.hitRate());
         dst.put("hits", src.hitCount());
         dst.put("misses", src.missCount());
-    }
-
-    private void dumpMetricsSet(MetricSet ms, Map<String,Object> dst) {
-        Map<String,Metric> metrics = ms.getMetrics();
-
-        metrics.forEach((k, m) -> {
-            final Gauge gauge = (Gauge) m;
-            dst.put(k, gauge.getValue());
-        });
     }
 }
