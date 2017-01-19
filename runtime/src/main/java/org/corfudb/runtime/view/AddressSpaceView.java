@@ -55,8 +55,6 @@ public class AddressSpaceView extends AbstractView {
      */
     static LoadingCache<Long, ILogData> readCache;
 
-    public final MetricRegistry metrics = new MetricRegistry();
-
     /**
      * Duration before retrying an empty read.
      */
@@ -74,52 +72,12 @@ public class AddressSpaceView extends AbstractView {
             log.debug("Read cache already built, re-using existing read cache.");
         }
 
-        metrics.register("cache-size", new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                return readCache.estimatedSize();
-            }
-        });
-        metrics.register("evictions", new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                return readCache.stats().evictionCount();
-            }
-        });
-        metrics.register("hit-rate", new Gauge<Double>() {
-            @Override
-            public Double getValue() {
-                return readCache.stats().hitRate();
-            }
-        });
-        metrics.register("hits", new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                return readCache.stats().hitCount();
-            }
-        });
-        metrics.register("misses", new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                return readCache.stats().missCount();
-            }
-        });
-
-        // TODO: Move this stats dumping to a more appropriate place as stats dialog progresses.
-        // At the moment, AddressSpaceView stats are on a per-runtime basis.
-        // This isn't intended to be good but instead to start dialog & iteration.
-        String outPath = System.getenv("CORFU_RUNTIME_STATS");
-        if (outPath != null && ! outPath.isEmpty()) {
-            String statPath1 = outPath + "/AddressSpaceView-" + this.hashCode() + "/";
-            File statDir1 = new File(statPath1);
-            statDir1.mkdirs();
-            final CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
-                    .formatFor(Locale.US)
-                    .convertRatesTo(TimeUnit.SECONDS)
-                    .convertDurationsTo(TimeUnit.MILLISECONDS)
-                    .build(statDir1);
-            reporter1.start(1, TimeUnit.SECONDS);
-        }
+        final String pfx = String.format("%s0x%x.", CorfuRuntime.getMpASV(), this.hashCode());
+        CorfuRuntime.getMetrics().register(pfx + "cache-size", (Gauge<Long>) () -> readCache.estimatedSize());
+        CorfuRuntime.getMetrics().register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
+        CorfuRuntime.getMetrics().register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
+        CorfuRuntime.getMetrics().register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
+        CorfuRuntime.getMetrics().register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
     /**

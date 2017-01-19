@@ -33,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
@@ -86,10 +87,9 @@ public class CorfuServer {
     static private final String mpLU = mp + "logunit.";
     static private final String mpSeq = mp + "sequencer.";
     static private final String mpLayout = mp + "layout.";
-    static private final String mpTrigger = "filter-trigger"; // internal use only
 
     public static final MetricRegistry metrics = new MetricRegistry();
-    static final Counter counterFilterTrigger = metrics.counter(mpTrigger); // Internal use, never reported
+    static final Counter ignoredFilterTrigger = metrics.counter(MetricsUtils.getMpTrigger());
     static final Timer timerPing = metrics.timer(mpBase + "ping");
     static final Timer timerVersionRequest = metrics.timer(mpBase + "version-request");
     static final Timer timerLogWrite = metrics.timer(mpLU + "write");
@@ -240,11 +240,11 @@ public class CorfuServer {
         EventExecutorGroup ee;
 
         // Metrics reporting setup
-        metrics.register("jvm.gc", metricsJVMGC);
-        metrics.register("jvm.memory", metricsJVMMem);
-        metrics.register("jvm.thread", metricsJVMThread);
+        metrics.register(mp + "jvm.gc", metricsJVMGC);
+        metrics.register(mp + "jvm.memory", metricsJVMMem);
+        metrics.register(mp + "jvm.thread", metricsJVMThread);
         metricsCachesSetup();
-        metricsReportingSetup();
+        MetricsUtils.metricsReportingSetup(metrics);
 
         bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
             final AtomicInteger threadNum = new AtomicInteger(0);
@@ -353,60 +353,4 @@ public class CorfuServer {
         metrics.register(name + "misses", (Gauge<Long>) () -> cache.stats().missCount());
     }
 
-    static Properties metricsProperties = new Properties();
-    static boolean metricsReportingEnabled = false;
-
-    /**
-     * Load a metrics properties file.
-     * The expected properties in this properties file are:
-     *
-     * enabled: Boolean for whether CSV output will be generated.
-     *          For each reporting interval, this function will be
-     *          called to re-parse the properties file and to
-     *          re-evaluate the value of 'enabled'.  Changes to
-     *          any other property in this file will be ignored.
-     *
-     * directory: String for the path to the CSV output subdirectory
-     *
-     * interval: Long for the reporting interval for CSV output
-     */
-    private static void loadPropertiesFile() {
-        String propPath;
-
-        if ((propPath = System.getenv("METRICS_PROPERTIES")) != null) {
-            try {
-                metricsProperties.load(new FileInputStream(propPath));
-                metricsReportingEnabled = Boolean.valueOf((String) metricsProperties.get("enabled"));
-            } catch (Exception e) {
-                log.error("Error processing METRICS_PROPERTIES {}: {}", propPath, e.toString());
-            }
-        }
-    }
-
-    private static void metricsReportingSetup() {
-        loadPropertiesFile();
-        String outPath = (String) metricsProperties.get("directory");
-        if (outPath != null && !outPath.isEmpty()) {
-            Long interval = Long.valueOf((String) metricsProperties.get("interval"));
-            File statDir = new File(outPath);
-            statDir.mkdirs();
-            MetricFilter f = new MetricFilter() {
-                @Override
-                public boolean matches(String name, Metric metric) {
-                    if (name.equals(mpTrigger)) {
-                        loadPropertiesFile();
-                        return false;
-                    }
-                    return metricsReportingEnabled;
-                }
-            };
-            final CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
-                    .formatFor(Locale.US)
-                    .convertRatesTo(TimeUnit.SECONDS)
-                    .convertDurationsTo(TimeUnit.MILLISECONDS)
-                    .filter(f)
-                    .build(statDir);
-            reporter1.start(interval, TimeUnit.SECONDS);
-        }
-    }
 }

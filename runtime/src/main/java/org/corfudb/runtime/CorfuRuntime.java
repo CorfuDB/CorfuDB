@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import com.codahale.metrics.MetricRegistry;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +12,7 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
 
 import java.util.*;
@@ -95,6 +97,15 @@ public class CorfuRuntime {
     private volatile boolean isShutdown = false;
 
     /**
+     * Metrics: meter (counter), histogram
+     */
+    static private final String mp = "corfu.runtime.";
+    @Getter
+    static private final String mpASV = mp + "address-space-view.";
+    @Getter
+    static public final MetricRegistry metrics = new MetricRegistry();
+
+    /**
      * When set, overrides the default getRouterFunction. Used by the testing
      * framework to ensure the default routers used are for testing.
      */
@@ -137,6 +148,7 @@ public class CorfuRuntime {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
+        MetricsUtils.metricsReportingSetup(metrics);
         log.debug("Corfu runtime version {} initialized.", getVersionString());
     }
 
