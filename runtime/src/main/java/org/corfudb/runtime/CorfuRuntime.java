@@ -103,6 +103,10 @@ public class CorfuRuntime {
     @Getter
     static private final String mpASV = mp + "address-space-view.";
     @Getter
+    static private final String mpLUC = mp + "log-unit-client.";
+    @Getter
+    static private final String mpCR = mp + "client-router.";
+    @Getter
     static public final MetricRegistry metrics = new MetricRegistry();
 
     /**

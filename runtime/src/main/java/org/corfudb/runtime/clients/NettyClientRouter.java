@@ -28,6 +28,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.FGMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -63,14 +64,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * Metrics: meter (counter), histogram
      */
-    public static final MetricRegistry metrics = new MetricRegistry();
-    public static Gauge<Integer> gaugeConnected;
-    public static Timer timerConnect;
-    public static Timer timerSyncOp;
-    public static Counter counterConnectFailed;
-    public static Counter counterSendDisconnected;
-    public static Counter counterSendTimeout;
-    public static Counter counterAsyncOpSent;
+    private static Gauge<Integer> gaugeConnected;
+    private static Timer timerConnect;
+    private static Timer timerSyncOp;
+    private static Counter counterConnectFailed;
+    private static Counter counterSendDisconnected;
+    private static Counter counterSendTimeout;
+    private static Counter counterAsyncOpSent;
 
     /**
      * A random instance
@@ -181,47 +181,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
 
-        String endpoint = new String(host + ":" + port);
+        MetricRegistry metrics = CorfuRuntime.getMetrics();
+        String pfx = CorfuRuntime.getMpCR() + host + ":" + port.toString() + ".";
         synchronized (metrics) {
-            if (!metrics.getNames().contains(endpoint + "-connected")) {
-                gaugeConnected = metrics.register(endpoint + "-connected", new Gauge<Integer>() {
-                    @Override
-                    public Integer getValue() {
-                        return connected_p ? 1 : 0;
-                    }
-                });
-                timerConnect = metrics.timer(endpoint + "-connect");
-                timerSyncOp = metrics.timer(endpoint + "-sync-op");
-                counterConnectFailed = metrics.counter(endpoint + "-connect-failed");
-                counterSendDisconnected = metrics.counter(endpoint + "-send-disconnected");
-                counterSendTimeout = metrics.counter(endpoint + "-send-timeout");
-                counterAsyncOpSent = metrics.counter(endpoint + "-async-op-sent");
-                // TODO: Move this stats dumping to a more appropriate place as stats dialog progresses.
-                // SMRMap and FGMap stats are static/spanning multiple client runtimes.
-                String outPath = System.getenv("CORFU_RUNTIME_STATS");
-                if (outPath != null && !outPath.isEmpty()) {
-                    String statPath1 = outPath + "/client-" + endpoint + "-" + this.hashCode() + "/";
-                    File statDir1 = new File(statPath1);
-                    statDir1.mkdirs();
-                    final CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
-                            .formatFor(Locale.US)
-                            .convertRatesTo(TimeUnit.SECONDS)
-                            .convertDurationsTo(TimeUnit.MILLISECONDS)
-                            .build(statDir1);
-                    reporter1.start(1, TimeUnit.SECONDS);
-                    String statPath2 = outPath + "/SMRMap-" + this.hashCode() + "/";
-                    File statDir2 = new File(statPath2);
-                    statDir2.mkdirs();
-                    String statPath4 = outPath + "/LogUnitClient-" + this.hashCode() + "/";
-                    File statDir4 = new File(statPath4);
-                    statDir4.mkdirs();
-                    final CsvReporter reporter4 = CsvReporter.forRegistry(LogUnitClient.metrics)
-                            .formatFor(Locale.US)
-                            .convertRatesTo(TimeUnit.SECONDS)
-                            .convertDurationsTo(TimeUnit.MILLISECONDS)
-                            .build(statDir4);
-                    reporter4.start(1, TimeUnit.SECONDS);
-                }
+            if (!metrics.getNames().contains(pfx + "connected")) {
+                gaugeConnected = metrics.register(pfx + "connected", () -> connected_p ? 1 : 0);
+                timerConnect = metrics.register(pfx + "connect", new Timer());
+                timerSyncOp = metrics.register(pfx + "sync-op", new Timer());
+                counterConnectFailed = metrics.register(pfx + "connect-failed", new Counter());
+                counterSendDisconnected = metrics.register(pfx + "send-disconnected", new Counter());
+                counterSendTimeout = metrics.register(pfx + "send-timeout", new Counter());
+                counterAsyncOpSent = metrics.register(pfx + "async-op-sent", new Counter());
             }
         }
 

@@ -10,6 +10,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -30,11 +31,6 @@ import java.util.concurrent.CompletableFuture;
  * Created by mwei on 12/10/15.
  */
 public class LogUnitClient implements IClient {
-
-    /**
-     * Metrics: meter (counter), histogram
-     */
-    public static final MetricRegistry metrics = new MetricRegistry();
 
     @Setter
     @Getter
@@ -319,7 +315,9 @@ public class LogUnitClient implements IClient {
             return null;
         }
         NettyClientRouter r = (NettyClientRouter) this.router;
-        Timer t = metrics.timer(r.getHost() + ":" + r.getPort().toString() + "-" + opName);
+        Timer t = CorfuRuntime.getMetrics().timer(
+                CorfuRuntime.getMpLUC() +
+                r.getHost() + ":" + r.getPort().toString() + "-" + opName);
         return t.time();
     }
 }
