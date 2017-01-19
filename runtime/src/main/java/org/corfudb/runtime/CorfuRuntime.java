@@ -101,11 +101,13 @@ public class CorfuRuntime {
      */
     static private final String mp = "corfu.runtime.";
     @Getter
-    static private final String mpASV = mp + "address-space-view.";
+    static private final String mpASV = mp + "as-view.";
     @Getter
     static private final String mpLUC = mp + "log-unit-client.";
     @Getter
     static private final String mpCR = mp + "client-router.";
+    @Getter
+    static private final String mpObj = mp + "object.";
     @Getter
     static public final MetricRegistry metrics = new MetricRegistry();
 

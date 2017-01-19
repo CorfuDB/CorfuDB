@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object;
 
 import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import io.netty.util.internal.ConcurrentSet;
 import lombok.Getter;
@@ -99,15 +98,22 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /**
      * Metrics: meter (counter), histogram
      */
-    public static final MetricRegistry metrics = new MetricRegistry();
-    private static final Timer timerAccess = metrics.timer("access");
-    private static final Timer timerLogWrite = metrics.timer("log-write");
-    private static final Timer timerTxn = metrics.timer("txn");
-    private static final Timer timerUpcall = metrics.timer("upcall");
-    private static final Counter counterAccessOptimistic = metrics.counter("access-optimistic");
-    private static final Counter counterAccessLocked = metrics.counter("access-locked");
-    private static final Counter counterTxnRetry1 = metrics.counter("txn-retry1");
-    private static final Counter counterTxnRetryN = metrics.counter("txn-retryN");
+    private static final Timer timerAccess = CorfuRuntime.getMetrics().timer(
+            CorfuRuntime.getMpObj() + "access");
+    private static final Timer timerLogWrite = CorfuRuntime.getMetrics().timer(
+            CorfuRuntime.getMpObj() + "log-write");
+    private static final Timer timerTxn = CorfuRuntime.getMetrics().timer(
+            CorfuRuntime.getMpObj() + "txn");
+    private static final Timer timerUpcall = CorfuRuntime.getMetrics().timer(
+            CorfuRuntime.getMpObj() + "upcall");
+    private static final Counter counterAccessOptimistic = CorfuRuntime.getMetrics().counter(
+            CorfuRuntime.getMpObj() + "access-optimistic");
+    private static final Counter counterAccessLocked = CorfuRuntime.getMetrics().counter(
+            CorfuRuntime.getMpObj() + "access-locked");
+    private static final Counter counterTxnRetry1 = CorfuRuntime.getMetrics().counter(
+            CorfuRuntime.getMpObj() + "txn-retry1");
+    private static final Counter counterTxnRetryN = CorfuRuntime.getMetrics().counter(
+            CorfuRuntime.getMpObj() + "txn-retryN");
 
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                              ISerializer serializer,

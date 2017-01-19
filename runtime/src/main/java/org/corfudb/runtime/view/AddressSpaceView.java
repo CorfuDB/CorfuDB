@@ -72,7 +72,7 @@ public class AddressSpaceView extends AbstractView {
             log.debug("Read cache already built, re-using existing read cache.");
         }
 
-        final String pfx = String.format("%s0x%x.", CorfuRuntime.getMpASV(), this.hashCode());
+        final String pfx = String.format("%s0x%x.cache.", CorfuRuntime.getMpASV(), this.hashCode());
         CorfuRuntime.getMetrics().register(pfx + "cache-size", (Gauge<Long>) () -> readCache.estimatedSize());
         CorfuRuntime.getMetrics().register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
         CorfuRuntime.getMetrics().register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
