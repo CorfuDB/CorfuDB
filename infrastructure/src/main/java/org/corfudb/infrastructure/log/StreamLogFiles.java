@@ -38,6 +38,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import javafx.util.Pair;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -83,6 +84,7 @@ public class StreamLogFiles implements StreamLog {
     static public final short RECORD_DELIMITER = 0x4C45;
     static public int VERSION = 1;
     static public int RECORDS_PER_LOG_FILE = 10000;
+    static public int TRIM_THRESHOLD = (int) (.25 * RECORDS_PER_LOG_FILE);
 
     static public final int METADATA_SIZE = Metadata.newBuilder()
             .setChecksum(-1)
@@ -93,11 +95,10 @@ public class StreamLogFiles implements StreamLog {
     public final String logDir;
     private Map<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
-    private int threshold = 20;
 
     public StreamLogFiles(String logDir, boolean noVerify) {
         this.logDir = logDir;
-        writeChannels = new HashMap<>();
+        writeChannels = new ConcurrentHashMap();
         channelsToSync = new HashSet<>();
         this.noVerify = noVerify;
 
@@ -156,6 +157,14 @@ public class StreamLogFiles implements StreamLog {
         }
     }
 
+    static public String getPendingTrimsFilePath(String segmentPath) {
+        return segmentPath + ".pending";
+    }
+
+    static public String getTrimmedFilePath(String segmentPath) {
+        return segmentPath + ".trimmed";
+    }
+
     @Override
     public void sync() throws IOException {
         for (FileChannel ch : channelsToSync) {
@@ -168,8 +177,8 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public void trim(LogAddress address) {
         SegmentHandle handle = getSegmentHandleForAddress(address);
-        if (handle.getPendingTrims().contains(address.getAddress()) ||
-                handle.getTrimmedAddresses().contains(address.getAddress())) {
+        if (!handle.getKnownAddresses().contains(address.getAddress()) ||
+                handle.getPendingTrims().contains(address.getAddress())) {
             return;
         }
 
@@ -185,6 +194,7 @@ public class StreamLogFiles implements StreamLog {
             entry.writeDelimitedTo(outputStream);
             outputStream.flush();
             handle.pendingTrims.add(address.getAddress());
+            channelsToSync.add(handle.getPendingTrimChannel());
         } catch (IOException e) {
             log.warn("Exception while writing a trim entry {} : {}", address.toString(), e.toString());
         }
@@ -192,24 +202,26 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void compact() {
-        for(SegmentHandle sh : writeChannels.values()) {
-            Set<Long> pending = sh.getPendingTrims();
+        //TODO(Maithem) Open all segment handlers?
+        for (SegmentHandle sh : writeChannels.values()) {
+            Set<Long> pending = new HashSet(sh.getPendingTrims());
             Set<Long> trimmed = sh.getTrimmedAddresses();
 
-            if(sh.getKnownAddresses().size() + trimmed.size() != RECORDS_PER_LOG_FILE) {
-                log.trace("Log segment still not complete, skipping");
+            if (sh.getKnownAddresses().size() + trimmed.size() != RECORDS_PER_LOG_FILE) {
+                log.info("Log segment still not complete, skipping");
                 continue;
             }
 
-            int compactedSize = sh.getKnownAddresses().size() - trimmed.size();
             pending.removeAll(trimmed);
 
-            if(compactedSize / pending.size() < threshold) {
-                log.trace("Thresh hold not exceeded. Ratio {} threshold {}", compactedSize / pending.size(), threshold);
+            //what if pending size  == knownaddresses size ?
+            if (pending.size() < TRIM_THRESHOLD) {
+                log.trace("Thresh hold not exceeded. Ratio {} threshold {}", pending.size(), TRIM_THRESHOLD);
                 return;
             }
 
             try {
+                log.info("Starting compaction, pending entries size {}", pending.size());
                 trimLogFile(sh.getFileName(), pending);
             } catch (IOException e) {
                 log.error("Compact operation failed for file {}", sh.getFileName());
@@ -219,14 +231,20 @@ public class StreamLogFiles implements StreamLog {
 
     private void trimLogFile(String filePath, Set<Long> pendingTrim) throws IOException {
         FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath + ".copy"),
-                EnumSet.of(StandardOpenOption.TRUNCATE_EXISTING));
+                EnumSet.of(StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
+                        StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
 
-        List<LogEntry> compacted = getCompactedEntries(filePath, pendingTrim);
+        FileChannel fc2 = FileChannel.open(FileSystems.getDefault().getPath(getTrimmedFilePath(filePath)),
+                EnumSet.of(StandardOpenOption.APPEND));
 
-        //TODO(Maithem) preserve header from the old header
-        writeHeader(fc, VERSION, noVerify);
+        Pair<LogHeader, List<LogEntry>> log = getCompactedEntries(filePath, pendingTrim);
+        LogHeader header = log.getKey();
+        List<LogEntry> compacted = log.getValue();
 
-        for(LogEntry entry : compacted) {
+        writeHeader(fc, header.getVersion(), header.getVerifyChecksum());
+
+        for (LogEntry entry : compacted) {
+
             ByteBuffer record = getByteBufferWithMetaData(entry);
             ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
                     + record.capacity());
@@ -239,13 +257,30 @@ public class StreamLogFiles implements StreamLog {
         }
 
         fc.force(true);
+        fc.close();
+
+        OutputStream outputStream = Channels.newOutputStream(fc2);
+
+        // Todo(Maithem) How do we verify that the compacted file is correct?
+        for (Long address : pendingTrim) {
+            TrimEntry entry = TrimEntry.newBuilder()
+                    .setChecksum(getChecksum(address))
+                    .setAddress(address)
+                    .build();
+            entry.writeDelimitedTo(outputStream);
+        }
+
+        outputStream.flush();
+        fc2.force(true);
+        fc2.close();
 
         Files.move(Paths.get(filePath + ".copy"), Paths.get(filePath), StandardCopyOption.ATOMIC_MOVE);
+
+        // Force the reload of the new segment
         writeChannels.remove(filePath);
-        // write pending trims to trimmed
     }
 
-    List<LogEntry> getCompactedEntries(String filePath, Set<Long> pendingTrim) throws IOException {
+    Pair<LogHeader, List<LogEntry>> getCompactedEntries(String filePath, Set<Long> pendingTrim) throws IOException {
         FileChannel fc = getChannel(filePath, true);
 
         // Skip the header
@@ -254,8 +289,12 @@ public class StreamLogFiles implements StreamLog {
         headerMetadataBuf.flip();
 
         Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
+        ByteBuffer headerBuf = ByteBuffer.allocate(headerMetadata.getLength());
+        fc.read(headerBuf);
+        headerBuf.flip();
 
-        fc.position(fc.position() + headerMetadata.getLength());
+        LogHeader header = LogHeader.parseFrom(headerBuf.array());
+
         ByteBuffer o = ByteBuffer.allocate((int) fc.size() - (int) fc.position());
         fc.read(o);
         fc.close();
@@ -287,7 +326,7 @@ public class StreamLogFiles implements StreamLog {
                     }
                 }
 
-                if(!pendingTrim.contains(entry.getGlobalAddress())) {
+                if (!pendingTrim.contains(entry.getGlobalAddress())) {
                     compacted.add(entry);
                 }
 
@@ -296,7 +335,7 @@ public class StreamLogFiles implements StreamLog {
             }
         }
 
-        return compacted;
+        return new Pair(header, compacted);
     }
 
     /**
@@ -474,7 +513,8 @@ public class StreamLogFiles implements StreamLog {
      * @param logAddress The address to open.
      * @return The FileChannel for that address.
      */
-    private synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
+    @VisibleForTesting
+     synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
         String filePath = logDir + File.separator;
         long segment = logAddress.address / RECORDS_PER_LOG_FILE;
 
@@ -490,8 +530,8 @@ public class StreamLogFiles implements StreamLog {
 
             try {
                 FileChannel fc1 = getChannel(a, false);
-                FileChannel fc2 = getChannel(a + ".trimmed", false);
-                FileChannel fc3 = getChannel(a + ".pending", false);
+                FileChannel fc2 = getChannel(getTrimmedFilePath(a) , false);
+                FileChannel fc3 = getChannel(getPendingTrimsFilePath(a), false);
 
                 boolean verify = true;
 
@@ -524,8 +564,8 @@ public class StreamLogFiles implements StreamLog {
             pendingTrimSize = sh.getPendingTrimChannel().size();
         }
 
-        FileChannel fcTrimmed = getChannel(sh.getFileName() + ".trimmed", true);
-        FileChannel fcPending = getChannel(sh.getFileName() + ".pending", true);
+        FileChannel fcTrimmed = getChannel(getTrimmedFilePath(sh.getFileName() ), true);
+        FileChannel fcPending = getChannel(getPendingTrimsFilePath(sh.getFileName()), true);
 
         if (fcTrimmed == null) {
             return;
@@ -660,7 +700,6 @@ public class StreamLogFiles implements StreamLog {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
             SegmentHandle fh = getSegmentHandleForAddress(logAddress);
-            // TODO(MAITHEM) What happens when the old segment is removed?!
             if (fh.getKnownAddresses().contains(logAddress.address) ||
                     fh.getTrimmedAddresses().contains(logAddress.address)) {
                 throw new OverwriteException();

@@ -3,11 +3,7 @@ package org.corfudb.infrastructure;
 import java.io.File;
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,7 +21,6 @@ import io.netty.channel.ChannelHandlerContext;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.LogAddress;

@@ -3,18 +3,21 @@ package org.corfudb.infrastructure.log;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogFiles.getPendingTrimsFilePath;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+
 import java.io.File;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.util.UUID;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.format.Types;
+import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -48,8 +51,10 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // An overwrite exception should occur, since we are writing the
         // same entry.
         final StreamLog newLog = new StreamLogFiles(getDirPath(), true);
-        assertThatThrownBy(() -> { newLog
-                .append(address0, new LogData(DataType.DATA, b)); })
+        assertThatThrownBy(() -> {
+            newLog
+                    .append(address0, new LogData(DataType.DATA, b));
+        })
                 .isInstanceOf(OverwriteException.class);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
     }
@@ -192,7 +197,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(new LogAddress(seg1, null), new LogData(DataType.DATA, b));
         log.append(new LogAddress(seg2, null), new LogData(DataType.DATA, b));
         log.append(new LogAddress(seg3, null), new LogData(DataType.DATA, b));
-        
+
         assertThat(log.getChannelsToSync().size()).isEqualTo(3);
 
         log.sync();
@@ -201,16 +206,70 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testTrim() throws Exception {
+    public void testTrimUnknownAddress() throws Exception {
         String logDir = getDirPath();
         StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
-        final long address = 1000;
-        LogAddress logAddress = new LogAddress(address, null);
+        LogAddress logAddress = new LogAddress(0L, null);
         log.trim(logAddress);
-        String logFilePath = logDir + 0 + ".log";
-        RandomAccessFile file = new RandomAccessFile(logFilePath+".pending", "rw");
-        InputStream inputStream = Channels.newInputStream(file.getChannel());
-        Types.TrimEntry entry = Types.TrimEntry.parseDelimitedFrom(inputStream);
-        assertThat(entry.getAddress()).isEqualTo(address);
+        // Verify that the unknown address trim is not persisted
+        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(new LogAddress(0L, null));
+        assertThat(sh.getPendingTrims().size()).isEqualTo(0);
+    }
+
+    private void writeToLog(StreamLog log, Long addr) {
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        LogAddress address = new LogAddress(addr, null);
+        log.append(address, new LogData(DataType.DATA, b));
+    }
+
+    @Test
+    public void testTrim() throws Exception {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+
+        final int logChunk = StreamLogFiles.RECORDS_PER_LOG_FILE / 2;
+
+        // Write to the addresses then trim the addresses that span two log files
+        for (long x = 0; x < logChunk; x++) {
+            writeToLog(log, x);
+        }
+
+        // Verify that an incomplete log segment isn't compacted
+        for (long x = 0; x < logChunk; x++) {
+            LogAddress logAddress = new LogAddress(x, null);
+            log.trim(logAddress);
+        }
+
+        log.compact();
+
+        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(new LogAddress((long) logChunk, null));
+
+        assertThat(logChunk).isGreaterThan(StreamLogFiles.TRIM_THRESHOLD);
+        assertThat(sh.getPendingTrims().size()).isEqualTo(logChunk);
+        assertThat(sh.getTrimmedAddresses().size()).isEqualTo(0);
+
+        // Fill the rest of the log segment and compact
+        for (long x = logChunk; x < logChunk * 2; x++) {
+            writeToLog(log, x);
+        }
+
+        // Verify the pending trims are compacted after the log segment has filled
+        File file = new File(sh.getFileName());
+        long sizeBeforeCompact = file.length();
+        log.compact();
+        file = new File(sh.getFileName());
+        long sizeAfterCompact = file.length();
+
+        assertThat(sizeAfterCompact).isLessThan(sizeBeforeCompact);
+
+        // Reload the segment handler and check that the first half of the segment has been trimmed
+        sh = log.getSegmentHandleForAddress(new LogAddress((long) logChunk, null));
+        assertThat(sh.getTrimmedAddresses().size()).isEqualTo(logChunk);
+        assertThat(sh.getKnownAddresses().size()).isEqualTo(logChunk);
+
+        for (long x = logChunk; x < logChunk * 2; x++) {
+            assertThat(sh.getKnownAddresses().contains(x)).isTrue();
+        }
     }
 }
