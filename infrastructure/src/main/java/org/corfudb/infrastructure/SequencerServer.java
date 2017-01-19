@@ -305,8 +305,13 @@ public class SequencerServer extends AbstractServer {
         if (req.getTxnResolution() != null)
             req.getTxnResolution().getWriteConflictParams().entrySet()
                 .stream()
+            // for each entry
                 .forEach(txEntry ->
+                        // and for each conflict param
                             txEntry.getValue().stream().forEach(conflictParam ->
+                                    // insert an entry with the new timestamp
+                                    // using the hash code based on the param
+                                    // and the stream id.
                                     conflictToGlobalTailCache.put(
                                             getConflictHashCode(txEntry
                                                     .getKey(), conflictParam),
