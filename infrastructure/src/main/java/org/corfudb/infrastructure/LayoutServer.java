@@ -115,7 +115,14 @@ public class LayoutServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.LAYOUT_REQUEST)
     public synchronized void handleMessageLayoutRequest(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         Timer.Context context = CorfuServer.timerLayoutReq.time();
-      try {
+        try {
+            handleMessageLayoutRequestInner(msg, ctx, r);
+        } finally {
+            context.stop();
+        }
+    }
+
+    private synchronized void handleMessageLayoutRequestInner(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (!checkBootstrap(msg, ctx, r)) { return; }
         long epoch = msg.getPayload();
         if (epoch <= serverContext.getServerEpoch()) {
@@ -128,9 +135,6 @@ public class LayoutServer extends AbstractServer {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.warn("Message Epoch {} ahead of Server epoch {}", epoch, serverContext.getServerConfig());
         }
-      } finally {
-          context.stop();
-      }
     }
 
     /**
@@ -143,7 +147,13 @@ public class LayoutServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.LAYOUT_BOOTSTRAP)
     public synchronized void handleMessageLayoutBootstrap(CorfuPayloadMsg<LayoutBootstrapRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         Timer.Context context = CorfuServer.timerLayoutBootstrap.time();
-      try {
+        try {
+            handleMessageLayoutBootstrapInner(msg, ctx, r);
+        } finally {
+            context.stop();
+        }
+    }
+    private synchronized void handleMessageLayoutBootstrapInner(CorfuPayloadMsg<LayoutBootstrapRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getCurrentLayout() == null) {
             log.info("Bootstrap with new layout={}, {}",  msg.getPayload().getLayout(), msg);
             setCurrentLayout(msg.getPayload().getLayout());
@@ -155,9 +165,6 @@ public class LayoutServer extends AbstractServer {
             log.warn("Got a request to bootstrap a server which is already bootstrapped, rejecting!");
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP));
         }
-      } finally {
-          context.stop();
-      }
     }
 
     /** Respond to a epoch change message.
@@ -169,7 +176,14 @@ public class LayoutServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.SET_EPOCH)
     public synchronized void handleMessageSetEpoch(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         Timer.Context context = CorfuServer.timerLayoutSetEpoch.time();
-      try {
+        try {
+            handleMessageSetEpochInner(msg, ctx, r);
+        } finally {
+            context.stop();
+        }
+    }
+
+    private synchronized void handleMessageSetEpochInner(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (!checkBootstrap(msg, ctx, r)) { return; }
         long serverEpoch = getServerEpoch();
         if (msg.getPayload() >= serverEpoch) {
@@ -180,9 +194,6 @@ public class LayoutServer extends AbstractServer {
             log.debug("Rejected SET_EPOCH currrent={}, requested={}", serverEpoch, msg.getPayload());
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
         }
-      } finally {
-          context.stop();
-      }
     }
 
     /**
@@ -195,7 +206,14 @@ public class LayoutServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.LAYOUT_PREPARE)
     public synchronized void handleMessageLayoutPrepare(CorfuPayloadMsg<LayoutPrepareRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         Timer.Context context = CorfuServer.timerLayoutPrepare.time();
-      try {
+        try {
+            handleMessageLayoutPrepareInner(msg, ctx, r);
+        } finally {
+            context.stop();
+        }
+    }
+
+    private synchronized void handleMessageLayoutPrepareInner(CorfuPayloadMsg<LayoutPrepareRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         // Check if the prepare is for the correct epoch
         if (!checkBootstrap(msg, ctx, r)) { return; }
         Rank prepareRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
@@ -219,9 +237,6 @@ public class LayoutServer extends AbstractServer {
             log.debug("New phase 1 rank={}", getPhase1Rank());
             r.sendResponse(ctx, msg, CorfuMsgType.LAYOUT_PREPARE_ACK.payloadMsg(new LayoutPrepareResponse(prepareRank.getRank(), proposedLayout)));
         }
-      } finally {
-          context.stop();
-      }
     }
 
     /**
@@ -234,8 +249,15 @@ public class LayoutServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.LAYOUT_PROPOSE)
     public synchronized void handleMessageLayoutPropose(CorfuPayloadMsg<LayoutProposeRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         Timer.Context context = CorfuServer.timerLayoutPropose.time();
-      try {
-            // Check if the propose is for the correct epoch
+        try {
+            handleMessageLayoutProposeInner(msg, ctx, r);
+        } finally {
+            context.stop();
+        }
+    }
+
+    private synchronized void handleMessageLayoutProposeInner(CorfuPayloadMsg<LayoutProposeRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // Check if the propose is for the correct epoch
         if (!checkBootstrap(msg, ctx, r)) { return; }
         Rank proposeRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
         Layout proposeLayout = msg.getPayload().getLayout();
@@ -272,9 +294,6 @@ public class LayoutServer extends AbstractServer {
         log.debug("New phase 2 rank={},  layout={}", proposeRank, proposeLayout);
         setPhase2Data(new Phase2Data(proposeRank, proposeLayout));
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
-      } finally {
-          context.stop();
-      }
     }
 
     /**
@@ -291,7 +310,14 @@ public class LayoutServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.LAYOUT_COMMITTED)
     public synchronized void handleMessageLayoutCommit(CorfuPayloadMsg<LayoutCommittedRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         Timer.Context context = CorfuServer.timerLayoutCommitted.time();
-      try {
+        try {
+            handleMessageLayoutCommitInner(msg, ctx, r);
+        } finally {
+            context.stop();
+        }
+    }
+
+    private synchronized void handleMessageLayoutCommitInner(CorfuPayloadMsg<LayoutCommittedRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         Layout commitLayout = msg.getPayload().getLayout();
         if (!checkBootstrap(msg, ctx, r)) { return; }
         long serverEpoch = getServerEpoch();
@@ -303,9 +329,6 @@ public class LayoutServer extends AbstractServer {
         setCurrentLayout(commitLayout);
         setServerEpoch(msg.getPayload().getEpoch());
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
-        } finally {
-        context.stop();
-        }
     }
 
     /**

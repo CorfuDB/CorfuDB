@@ -249,7 +249,15 @@ public class SequencerServer extends AbstractServer {
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
         Timer.Context context = CorfuServer.timerSeqReq.time();
-      try {
+        try {
+            tokenRequestInner(msg, ctx, r);
+        } finally {
+            context.stop();
+        }
+    }
+
+    private synchronized void tokenRequestInner(CorfuPayloadMsg<TokenRequest> msg,
+                                                ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
 
         if (req.getReqType() == TokenRequest.TK_QUERY) {
@@ -341,8 +349,5 @@ public class SequencerServer extends AbstractServer {
                 new TokenResponse(currentTail,
                         backPointerMap.build(),
                         requestStreamTokens.build())));
-      } finally {
-          context.stop();
-      }
     }
 }
