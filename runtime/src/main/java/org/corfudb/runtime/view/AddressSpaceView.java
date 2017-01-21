@@ -64,12 +64,12 @@ public class AddressSpaceView extends AbstractView {
             log.debug("Read cache already built, re-using existing read cache.");
         }
 
-        final String pfx = String.format("%s0x%x.cache.", CorfuRuntime.getMpASV(), this.hashCode());
-        CorfuRuntime.getMetrics().register(pfx + "cache-size", (Gauge<Long>) () -> readCache.estimatedSize());
-        CorfuRuntime.getMetrics().register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
-        CorfuRuntime.getMetrics().register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
-        CorfuRuntime.getMetrics().register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
-        CorfuRuntime.getMetrics().register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
+        final String pfx = String.format("%s0x%x.cache.", runtime.getMpASV(), this.hashCode());
+        runtime.getMetrics().register(pfx + "cache-size", (Gauge<Long>) () -> readCache.estimatedSize());
+        runtime.getMetrics().register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
+        runtime.getMetrics().register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
+        runtime.getMetrics().register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
+        runtime.getMetrics().register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
     /**

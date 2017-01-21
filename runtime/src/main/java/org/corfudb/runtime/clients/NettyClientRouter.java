@@ -58,13 +58,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * Metrics: meter (counter), histogram
      */
-    private static Gauge<Integer> gaugeConnected;
-    private static Timer timerConnect;
-    private static Timer timerSyncOp;
-    private static Counter counterConnectFailed;
-    private static Counter counterSendDisconnected;
-    private static Counter counterSendTimeout;
-    private static Counter counterAsyncOpSent;
+    private Gauge<Integer> gaugeConnected;
+    private Timer timerConnect;
+    private Timer timerSyncOp;
+    private Counter counterConnectFailed;
+    private Counter counterSendDisconnected;
+    private Counter counterSendTimeout;
+    private Counter counterAsyncOpSent;
 
     /**
      * A random instance
@@ -180,14 +180,14 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         synchronized (metrics) {
             if (!metrics.getNames().contains(pfx + "connected")) {
                 gaugeConnected = metrics.register(pfx + "connected", () -> connected_p ? 1 : 0);
-                timerConnect = metrics.register(pfx + "connect", new Timer());
-                timerSyncOp = metrics.register(pfx + "sync-op", new Timer());
-                counterConnectFailed = metrics.register(pfx + "connect-failed", new Counter());
-                counterSendDisconnected = metrics.register(pfx + "send-disconnected", new Counter());
-                counterSendTimeout = metrics.register(pfx + "send-timeout", new Counter());
-                counterAsyncOpSent = metrics.register(pfx + "async-op-sent", new Counter());
             }
         }
+        timerConnect = metrics.timer(pfx + "connect");
+        timerSyncOp = metrics.timer(pfx + "sync-op");
+        counterConnectFailed = metrics.counter(pfx + "connect-failed");
+        counterSendDisconnected = metrics.counter(pfx + "send-disconnected");
+        counterSendTimeout = metrics.counter(pfx + "send-timeout");
+        counterAsyncOpSent = metrics.counter(pfx + "async-op-sent");
 
         addClient(new BaseClient());
         start();
