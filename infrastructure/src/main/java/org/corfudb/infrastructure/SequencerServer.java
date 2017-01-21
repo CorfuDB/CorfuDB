@@ -275,7 +275,7 @@ public class SequencerServer extends AbstractServer {
         TokenRequest req = msg.getPayload();
 
         if (req.getReqType() == TokenRequest.TK_QUERY) {
-            counterToken0.inc(req.getNumTokens());
+            counterToken0.inc();
             handleTokenQuery(msg, ctx, r);
             return;
         } else {
