@@ -1,11 +1,15 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.MetricRegistry;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.MetricsUtils;
 
 import java.time.Duration;
 import java.util.Map;
+
+import static org.corfudb.util.MetricsUtils.addJVMMetrics;
 
 /**
  * Server Context:
@@ -54,12 +58,31 @@ public class ServerContext {
     @Setter
     private IFailureHandlerPolicy failureHandlerPolicy;
 
+    /* Metrics name prefixes */
+    static private final String mp = "corfu.server.";
+    @Getter
+    static private final String mpBase = mp + "base.";
+    @Getter
+    static private final String mpLU = mp + "logunit.";
+    @Getter
+    static private final String mpSeq = mp + "sequencer.";
+    @Getter
+    static private final String mpLayout = mp + "layout.";
+
+    @Getter
+    public static final MetricRegistry metrics = new MetricRegistry();
+
     public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
         this.serverRouter = serverRouter;
         this.failureDetectorPolicy = new PeriodicPollPolicy();
         this.failureHandlerPolicy = new PurgeFailurePolicy();
+
+        // Metrics setup & reporting configuration
+        addJVMMetrics(metrics, mp);
+        MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
+        MetricsUtils.metricsReportingSetup(metrics);
     }
 
     /**

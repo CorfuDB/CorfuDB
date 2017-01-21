@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -20,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
+import static org.corfudb.util.MetricsUtils.addCacheGauges;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -137,6 +140,10 @@ public class SequencerServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
+    private Timer timerSeqReq;
+    private Counter counterTokenSum;
+    private Counter counterToken0;
+
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         this.opts = serverContext.getServerConfig();
@@ -147,6 +154,13 @@ public class SequencerServer extends AbstractServer {
         } else {
             globalLogTail.set(initialToken);
         }
+
+        MetricRegistry metrics = serverContext.getMetrics();
+        String mpSeq = serverContext.getMpSeq();
+        timerSeqReq = metrics.timer(mpSeq + "token-req");
+        counterTokenSum = metrics.counter(mpSeq + "token-sum");
+        counterToken0 = metrics.counter(mpSeq + "token-0");
+        addCacheGauges(metrics, mpSeq + "conflict.cache.", conflictToGlobalTailCache);
     }
 
     /**
@@ -248,7 +262,7 @@ public class SequencerServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.TOKEN_REQ)
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
-        Timer.Context context = CorfuServer.timerSeqReq.time();
+        Timer.Context context = timerSeqReq.time();
         try {
             tokenRequestInner(msg, ctx, r);
         } finally {
@@ -261,9 +275,11 @@ public class SequencerServer extends AbstractServer {
         TokenRequest req = msg.getPayload();
 
         if (req.getReqType() == TokenRequest.TK_QUERY) {
-            CorfuServer.counterTokenSum.inc(req.getNumTokens());
+            counterToken0.inc(req.getNumTokens());
             handleTokenQuery(msg, ctx, r);
             return;
+        } else {
+            counterTokenSum.inc(req.getNumTokens());
         }
 
         // for raw log implementation, simply extend the global log tail and return the global-log token

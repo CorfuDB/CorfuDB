@@ -1,9 +1,10 @@
 package org.corfudb.util;
 
-import com.codahale.metrics.CsvReporter;
-import com.codahale.metrics.Metric;
-import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.*;
+import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
+import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
+import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
+import com.github.benmanes.caffeine.cache.Cache;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,6 +16,10 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class MetricsUtils {
+    private static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
+    private static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
+    private static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
+
     private static Properties metricsProperties = new Properties();
     private static boolean metricsReportingEnabled = false;
     private static String mpTrigger = "filter-trigger"; // internal use only
@@ -76,6 +81,28 @@ public class MetricsUtils {
                     .filter(f)
                     .build(statDir);
             reporter1.start(interval, TimeUnit.SECONDS);
+        }
+    }
+
+    public static void addCacheGauges(MetricRegistry metrics, String name, Cache cache) {
+        try {
+            metrics.register(name + "cache-size", (Gauge<Long>) () -> cache.estimatedSize());
+            metrics.register(name + "evictions", (Gauge<Long>) () -> cache.stats().evictionCount());
+            metrics.register(name + "hit-rate", (Gauge<Double>) () -> cache.stats().hitRate());
+            metrics.register(name + "hits", (Gauge<Long>) () -> cache.stats().hitCount());
+            metrics.register(name + "misses", (Gauge<Long>) () -> cache.stats().missCount());
+        } catch (IllegalArgumentException e) {
+            // Re-registering metrics during test runs, not a problem
+        }
+    }
+
+    public static void addJVMMetrics(MetricRegistry metrics, String pfx) {
+        try {
+            metrics.register(pfx + "jvm.gc", metricsJVMGC);
+            metrics.register(pfx + "jvm.memory", metricsJVMMem);
+            metrics.register(pfx + "jvm.thread", metricsJVMThread);
+        } catch (IllegalArgumentException e) {
+            // Re-registering metrics during test runs, not a problem
         }
     }
 }

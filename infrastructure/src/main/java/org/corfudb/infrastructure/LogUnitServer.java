@@ -7,18 +7,13 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
+import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
@@ -51,6 +46,7 @@ import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
@@ -119,6 +115,14 @@ public class LogUnitServer extends AbstractServer {
 
     private final BatchWriter<LogAddress, LogData> batchWriter;
 
+    private Timer timerLogWrite;
+    private Timer timerLogCommit;
+    private Timer timerLogRead;
+    private Timer timerLogGcInterval;
+    private Timer timerLogForceGc;
+    private Timer timerLogFillHole;
+    private Timer timerLogTrim;
+
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
@@ -152,6 +156,17 @@ public class LogUnitServer extends AbstractServer {
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
         trimMap = new ConcurrentHashMap<>();
+
+        MetricRegistry metrics = serverContext.getMetrics();
+        String mpLU = serverContext.getMpLU();
+        timerLogWrite = metrics.timer(mpLU + "write");
+        timerLogCommit = metrics.timer(mpLU + "commit");
+        timerLogRead = metrics.timer(mpLU + "read");
+        timerLogGcInterval = metrics.timer(mpLU + "gc-interval");
+        timerLogForceGc = metrics.timer(mpLU + "force-gc");
+        timerLogFillHole = metrics.timer(mpLU + "fill-hole");
+        timerLogTrim = metrics.timer(mpLU + "trim");
+        MetricsUtils.addCacheGauges(metrics, mpLU + "cache.", dataCache);
     }
 
     /**
@@ -159,7 +174,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerLogWrite.time();
+        final Timer.Context context = timerLogWrite.time();
         try {
             writeInner(msg, ctx, r);
         } finally {
@@ -197,7 +212,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.COMMIT)
     public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerLogCommit.time();
+        final Timer.Context context = timerLogCommit.time();
         try {
             commitInner(msg, ctx, r);
         } finally {
@@ -233,7 +248,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerLogRead.time();
+        final Timer.Context context = timerLogRead.time();
         try {
             readInner(msg, ctx, r);
         } finally {
@@ -265,7 +280,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.GC_INTERVAL)
     private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerLogGcInterval.time();
+        final Timer.Context context = timerLogGcInterval.time();
         try {
             setGcIntervalInner(msg, ctx, r);
         } finally {
@@ -280,7 +295,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.FORCE_GC)
     private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerLogForceGc.time();
+        final Timer.Context context = timerLogForceGc.time();
         try {
             forceGcInner(msg, ctx, r);
         } finally {
@@ -296,7 +311,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.FILL_HOLE)
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerLogFillHole.time();
+        final Timer.Context context = timerLogFillHole.time();
         try {
             fillHoleInner(msg, ctx, r);
         } finally {
@@ -316,7 +331,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.TRIM)
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerLogTrim.time();
+        final Timer.Context context = timerLogTrim.time();
         try {
             trimInner(msg, ctx, r);
         } finally {

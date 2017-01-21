@@ -28,6 +28,11 @@ public class BaseServer extends AbstractServer {
     private final CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
+    @Setter
+    private static Timer timerPing = new Timer();
+    @Setter
+    private static Timer timerVersionRequest = new Timer();
+
     /** Respond to a ping message.
      *
      * @param msg   The incoming message
@@ -36,7 +41,7 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.PING)
     private static void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerPing.time();
+        Timer.Context context = timerPing.time();
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
         context.stop();
     }
@@ -49,7 +54,7 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type=CorfuMsgType.VERSION_REQUEST)
     private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        final Timer.Context context = CorfuServer.timerVersionRequest.time();
+        Timer.Context context = timerVersionRequest.time();
         VersionInfo vi = new VersionInfo(optionsMap);
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
         context.stop();

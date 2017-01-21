@@ -2,15 +2,6 @@ package org.corfudb.infrastructure;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.MetricSet;
-import com.codahale.metrics.Timer;
-import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
-import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
-import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
-import com.github.benmanes.caffeine.cache.Cache;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -29,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
@@ -38,7 +28,6 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.util.Map;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.fusesource.jansi.Ansi.Color.*;
@@ -71,38 +60,6 @@ public class CorfuServer {
     private static ServerContext serverContext;
 
     public static boolean serverRunning = false;
-
-    /**
-     * Metrics: meter (counter), histogram
-     */
-    static private final String mp = "corfu.server.";
-    static private final String mpBase = mp + "base.";
-    static private final String mpLU = mp + "logunit.";
-    static private final String mpSeq = mp + "sequencer.";
-    static private final String mpLayout = mp + "layout.";
-
-    public static final MetricRegistry metrics = new MetricRegistry();
-    static final Timer timerPing = metrics.timer(mpBase + "ping");
-    static final Timer timerVersionRequest = metrics.timer(mpBase + "version-request");
-    static final Timer timerLogWrite = metrics.timer(mpLU + "write");
-    static final Timer timerLogCommit = metrics.timer(mpLU + "commit");
-    static final Timer timerLogRead = metrics.timer(mpLU + "read");
-    static final Timer timerLogGcInterval = metrics.timer(mpLU + "gc-interval");
-    static final Timer timerLogForceGc = metrics.timer(mpLU + "force-gc");
-    static final Timer timerLogFillHole = metrics.timer(mpLU + "fill-hole");
-    static final Timer timerLogTrim = metrics.timer(mpLU + "trim");
-    static final Timer timerSeqReq = metrics.timer(mpSeq + "token-req");
-    static final Counter counterTokenSum = metrics.counter(mpSeq + "token-sum");
-    static final Counter counterToken0 = metrics.counter(mpSeq + "token-0");
-    static final Timer timerLayoutReq = metrics.timer(mpLayout + "request");
-    static final Timer timerLayoutBootstrap = metrics.timer(mpLayout + "bootstrap");
-    static final Timer timerLayoutSetEpoch = metrics.timer(mpLayout + "set-epoch");
-    static final Timer timerLayoutPrepare = metrics.timer(mpLayout + "prepare");
-    static final Timer timerLayoutPropose = metrics.timer(mpLayout + "propose");
-    static final Timer timerLayoutCommitted = metrics.timer(mpLayout + "committed");
-    static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
-    static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
-    static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
 
     /**
      * This string defines the command line arguments,
@@ -218,6 +175,10 @@ public class CorfuServer {
 
         // Create a common Server Context for all servers to access.
         serverContext = new ServerContext(opts, router);
+        router.baseServer.setTimerPing(
+                serverContext.getMetrics().timer(serverContext.getMpBase() + "ping"));
+        router.baseServer.setTimerVersionRequest(
+                serverContext.getMetrics().timer(serverContext.getMpBase() + "version-request"));
 
         // Add each role to the router.
         addSequencer();
@@ -230,13 +191,6 @@ public class CorfuServer {
         EventLoopGroup bossGroup;
         EventLoopGroup workerGroup;
         EventExecutorGroup ee;
-
-        // Metrics reporting setup
-        metrics.register(mp + "jvm.gc", metricsJVMGC);
-        metrics.register(mp + "jvm.memory", metricsJVMMem);
-        metrics.register(mp + "jvm.thread", metricsJVMThread);
-        metricsCachesSetup();
-        MetricsUtils.metricsReportingSetup(metrics);
 
         bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
             final AtomicInteger threadNum = new AtomicInteger(0);
@@ -330,19 +284,4 @@ public class CorfuServer {
         managementServer = new ManagementServer(serverContext);
         router.addServer(managementServer);
     }
-
-    private static void metricsCachesSetup() {
-        addCacheGauges(mpLU + "cache.", getLogUnitServer().getDataCache());
-        addCacheGauges(mp + "datastore.cache.", serverContext.getDataStore().getCache());
-        addCacheGauges(mpSeq + "conflict.cache.", sequencerServer.getConflictToGlobalTailCache());
-    }
-
-    private static void addCacheGauges(String name, Cache cache) {
-        metrics.register(name + "cache-size", (Gauge<Long>) () -> cache.estimatedSize());
-        metrics.register(name + "evictions", (Gauge<Long>) () -> cache.stats().evictionCount());
-        metrics.register(name + "hit-rate", (Gauge<Double>) () -> cache.stats().hitRate());
-        metrics.register(name + "hits", (Gauge<Long>) () -> cache.stats().hitCount());
-        metrics.register(name + "misses", (Gauge<Long>) () -> cache.stats().missCount());
-    }
-
 }
