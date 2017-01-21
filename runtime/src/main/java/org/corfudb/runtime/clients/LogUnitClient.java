@@ -35,6 +35,10 @@ public class LogUnitClient implements IClient {
     @Getter
     IClientRouter router;
 
+    public String getHost() { return "test-host"; }
+
+    public Integer getPort() { return router.getPort(); }
+
     /** The handler and handlers which implement this client. */
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
@@ -310,13 +314,9 @@ public class LogUnitClient implements IClient {
     }
 
     private Timer.Context getTimerContext(String opName) {
-        if (!(this.router.getClass() == NettyClientRouter.class)) {
-            return null;
-        }
-        NettyClientRouter r = (NettyClientRouter) this.router;
         Timer t = CorfuRuntime.getMetrics().timer(
                 CorfuRuntime.getMpLUC() +
-                r.getHost() + ":" + r.getPort().toString() + "-" + opName);
+                getHost() + ":" + getPort().toString() + "-" + opName);
         return t.time();
     }
 }
