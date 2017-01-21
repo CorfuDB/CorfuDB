@@ -33,6 +33,16 @@ public class SequencerServerTest extends AbstractServerTest {
         server.setBootstrapEpoch(0L);
     }
 
+    /**
+     * Verifies that the SEQUENCER_METRICS_REQUEST is responded by the SEQUENCER_METRICS_RESPONSE
+     */
+    @Test
+    public void sequencerMetricsRequest() {
+        sendMessage(CorfuMsgType.SEQUENCER_METRICS_REQUEST.msg());
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsgType.SEQUENCER_METRICS_RESPONSE);
+    }
+
     @Test
     public void responseForEachRequest() {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {

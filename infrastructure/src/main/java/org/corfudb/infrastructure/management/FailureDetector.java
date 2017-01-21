@@ -16,9 +16,10 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.NodeView;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
@@ -143,16 +144,23 @@ public class FailureDetector implements IDetector {
         Map<String, Long> expectedEpoch = new HashMap<>();
         boolean failuresDetected = false;
 
+        // Node View map for analysis.
+        Map<String, NodeView> nodeViewMap = new HashMap<>();
+
         // In each iteration we poll all the servers in the members list.
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
 
             // Ping all nodes and await their responses.
-            Map<String, CompletableFuture<Boolean>> pollCompletableFutures =
+            Map<String, CompletableFuture<NodeView>> pollCompletableFutures =
                     pollOnceAsync(members, routerMap, epoch);
 
             // Collect responses and increment response counters for successful pings.
-            Set<String> responses =
-                    collectResponsesAndVerifyEpochs(members, pollCompletableFutures, expectedEpoch);
+            // Gather all nodeViews received in the responses in the nodeViewMap.
+            Set<String> responses = collectResponsesAndVerifyEpochs(
+                    members,
+                    pollCompletableFutures,
+                    expectedEpoch,
+                    nodeViewMap);
 
             // Aggregate the responses.
             // Return false if we received responses from all the members - failure NOT present.
@@ -197,6 +205,7 @@ public class FailureDetector implements IDetector {
                 .pollEpoch(epoch)
                 .failingNodes(failed)
                 .outOfPhaseEpochNodes(expectedEpoch)
+                .nodeViewMap(nodeViewMap)
                 .build();
     }
 
@@ -209,17 +218,18 @@ public class FailureDetector implements IDetector {
      * @param epoch     Current epoch for the polling round to stamp the ping messages.
      * @return Map of Completable futures for the pings.
      */
-    private Map<String, CompletableFuture<Boolean>> pollOnceAsync(List<String> members,
-                                                                  Map<String, IClientRouter>
-                                                                          routerMap,
-                                                                  final long epoch) {
+    private Map<String, CompletableFuture<NodeView>> pollOnceAsync(List<String> members,
+                                                                   Map<String, IClientRouter>
+                                                                           routerMap,
+                                                                   final long epoch) {
         // Poll servers for health.  All ping activity will happen in the background.
-        Map<String, CompletableFuture<Boolean>> pollCompletableFutures = new HashMap<>();
+        Map<String, CompletableFuture<NodeView>> pollCompletableFutures = new HashMap<>();
         members.forEach(s -> {
             try {
-                pollCompletableFutures.put(s, new BaseClient(routerMap.get(s), epoch).ping());
+                pollCompletableFutures.put(s, new ManagementClient(routerMap.get(s), epoch)
+                        .sendHeartbeatRequest());
             } catch (Exception e) {
-                CompletableFuture<Boolean> cf = new CompletableFuture<>();
+                CompletableFuture<NodeView> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
                 pollCompletableFutures.put(s, cf);
             }
@@ -234,17 +244,20 @@ public class FailureDetector implements IDetector {
      * expected epoch.
      * 3. Other Exception is thrown. We do nothing. (The response[i] in this case is left behind.)
      */
-    private Set<String> collectResponsesAndVerifyEpochs(List<String> members,
-                                                        Map<String, CompletableFuture<Boolean>>
-                                                                pollCompletableFutures,
-                                                        Map<String, Long> expectedEpoch) {
+    private Set<String> collectResponsesAndVerifyEpochs(
+            List<String> members,
+            Map<String, CompletableFuture<NodeView>> pollCompletableFutures,
+            Map<String, Long> expectedEpoch,
+            Map<String, NodeView> nodeViewMap) {
         // Collect responses and increment response counters for successful pings.
         Set<String> responses = new HashSet<>();
         members.forEach(s -> {
             try {
-                CFUtils.within(pollCompletableFutures.get(s), Duration.ofMillis(period)).get();
+                NodeView nodeView = CFUtils
+                        .within(pollCompletableFutures.get(s), Duration.ofMillis(period)).get();
                 responses.add(s);
                 expectedEpoch.remove(s);
+                nodeViewMap.put(s, nodeView);
             } catch (Exception e) {
                 if (e.getCause() instanceof WrongEpochException) {
                     responses.add(s);

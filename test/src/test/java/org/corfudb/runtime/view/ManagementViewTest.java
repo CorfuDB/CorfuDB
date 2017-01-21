@@ -15,15 +15,21 @@ import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.HealingDetector;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.NodeView;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.protocols.wireprotocol.ServerMetrics;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
 
@@ -40,6 +46,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.fail;
 
 /**
@@ -99,6 +106,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
         bootstrapAllServers(l);
+
+        // Shutting down causes loss of heartbeat requests and responses from this node.
         getManagementServer(SERVERS.PORT_0).shutdown();
 
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
@@ -258,6 +267,61 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     /**
+     * Scenario with 1 node: SERVERS.PORT_0
+     * The node is setup, bootstrapped and then requested for a
+     * heartbeat. This is responded with the nodeMetrics which is
+     * asserted with expected values.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkHeartbeat()
+            throws Exception {
+        addServer(SERVERS.PORT_0);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l);
+
+
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
+
+        // Set aggressive timeouts.
+        setAggressiveTimeouts(l, corfuRuntime,
+                getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
+
+        NodeView nodeView = null;
+
+        ServerMetrics serverMetrics =
+                new ServerMetrics(NodeLocator.parseString(SERVERS.ENDPOINT_0),
+                        new SequencerMetrics(SequencerStatus.UNKNOWN));
+
+        // Send heartbeat requests and wait until we get a valid response.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+
+            nodeView = corfuRuntime.getLayoutView().getRuntimeLayout()
+                    .getManagementClient(SERVERS.ENDPOINT_0).sendHeartbeatRequest().get();
+
+            if (!nodeView.getEndpoint().toString().isEmpty()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+        assertThat(nodeView).isNotNull();
+        assertThat(nodeView.getEndpoint()).isEqualTo(NodeLocator.parseString(SERVERS.ENDPOINT_0));
+        assertThat(nodeView.getServerMetrics().getEndpoint())
+                .isEqualTo(serverMetrics.getEndpoint());
+    }
+
+    /**
      * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
      * Simulate transient failure of a server leading to a partial seal.
      * Allow the management server to detect the partial seal and correct this.
@@ -283,23 +347,71 @@ public class ManagementViewTest extends AbstractViewTest {
         // is sent by the Management client to its server.
         final Semaphore failureDetected = new Semaphore(2, true);
 
-        getManagementTestLayout();
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .setClusterId(UUID.randomUUID())
+                .build();
+        bootstrapAllServers(l);
+        corfuRuntime = getRuntime(l).connect();
+
+        // Waiting for management servers to send the bootstrap sequencer request and be ready
+        // to detect failures to speed up test time.
+        CFUtils.within(
+                CompletableFuture.allOf(
+                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getSequencerBootstrappedFuture(),
+                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getSequencerBootstrappedFuture(),
+                        getManagementServer(SERVERS.PORT_2).getManagementAgent().getSequencerBootstrappedFuture()),
+                PARAMETERS.TIMEOUT_NORMAL
+        ).join();
+
+        // Setting aggressive timeouts
+        setAggressiveTimeouts(l, corfuRuntime,
+                getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
+                getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
+                getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
+
+        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2);
 
         failureDetected.acquire(2);
 
         // Only allow SERVERS.PORT_0 to manage failures.
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
+        // Prevent the other servers from handling failures.
+        TestRule testRule = new TestRule()
+                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SET_EPOCH)
+                        || corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
+                .drop();
+
+        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_1, testRule);
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, testRule);
 
         // PART 1.
         // Prevent ENDPOINT_1 from sealing.
-        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), SERVERS.ENDPOINT_1,
-                new TestRule()
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_1, new TestRule()
                         .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SET_EPOCH))
                         .drop());
         // Simulate ENDPOINT_2 failure from ENDPOINT_0 (only Management Server)
-        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), SERVERS.ENDPOINT_2,
-                new TestRule().matches(corfuMsg -> true).drop());
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, new TestRule().always().drop());
 
         // Adding a rule on SERVERS.PORT_1 to toggle the flag when it sends the
         // MANAGEMENT_FAILURE_DETECTED message.
@@ -324,8 +436,9 @@ public class ManagementViewTest extends AbstractViewTest {
                 TimeUnit.NANOSECONDS)).isEqualTo(true);
 
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
-                new TestRule().matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)
-                ).drop());
+                new TestRule().matches(corfuMsg ->
+                        corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
+                        .drop());
 
         // Assert that only a partial seal was successful.
         // ENDPOINT_0 sealed. ENDPOINT_1 & ENDPOINT_2 not sealed.
@@ -706,8 +819,9 @@ public class ManagementViewTest extends AbstractViewTest {
 
         resetDetected.acquire();
         // Allow only SERVERS.PORT_0 to handle the failure.
-        // Shutting down PORT_2
-        getManagementServer(SERVERS.PORT_2).shutdown();
+        // Preventing PORT_2 from handling failures.
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, new TestRule().always().drop());
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 new TestRule().matches(msg -> {
                     if (msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)) {
@@ -831,9 +945,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
-
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
 
         setAggressiveTimeouts(l, corfuRuntime,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
@@ -984,7 +1095,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
         bootstrapAllServers(l1);
-        getManagementServer(SERVERS.PORT_1).shutdown();
 
         CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
 
@@ -1128,8 +1238,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addUnresponsiveServer(SERVERS.PORT_2)
                 .build();
         bootstrapAllServers(l1);
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
 
         CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
         setAggressiveTimeouts(l1, rt,
@@ -1286,5 +1394,36 @@ public class ManagementViewTest extends AbstractViewTest {
                 .nextToken(Collections.singleton(streamA), 1);
         assertThat(tokenResponse.getBackpointerMap().get(streamA))
                 .isEqualTo(expectedBackpointerStreamA);
+    }
+
+    /**
+     * Starts a cluster with 3 nodes.
+     * The epoch is then incremented and a layout proposed and accepted for the new epoch.
+     * This leaves the sequencer un-bootstrapped causing token requests to hang.
+     * The heartbeats should convey this primary sequencer NOT_READY state to the failure
+     * detector which bootstraps the sequencer.
+     */
+    @Test
+    public void handleUnBootstrappedSequencer() throws Exception {
+        Layout layout = new Layout(getManagementTestLayout());
+
+        // We increment the epoch and propose the same layout for the new epoch.
+        // Due to the router and sequencer epoch mismatch, the sequencer becomes NOT_READY.
+        // Note that this reconfiguration is not followed by the explicit sequencer bootstrap step.
+        layout.setEpoch(layout.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().updateLayout(layout, 1L);
+
+        // Assert that the primary sequencer is not ready.
+        assertThatThrownBy(() -> corfuRuntime.getLayoutView().getRuntimeLayout()
+                .getPrimarySequencerClient()
+                .requestMetrics().get()).hasCauseInstanceOf(ServerNotReadyException.class);
+
+        // Wait for the management service to detect and bootstrap the sequencer.
+        corfuRuntime.getSequencerView().nextToken(Collections.emptySet(), 0);
+
+        // Assert that the primary sequencer is bootstrapped.
+        assertThat(corfuRuntime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient()
+                .requestMetrics().get().getSequencerStatus()).isEqualTo(SequencerStatus.READY);
     }
 }
