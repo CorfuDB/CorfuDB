@@ -45,6 +45,18 @@ public class WriteAfterWriteTransactionalContext
      */
     @Override
     public long commitTransaction() throws TransactionAbortedException {
+        long ret = commitTransactionNoReleaseLock();
+
+        // now unlock this transaction's contention lock
+        try {
+            getMTxLock().unlock();
+        } catch (IllegalMonitorStateException me) {}
+
+        return ret;
+    }
+
+    long commitTransactionNoReleaseLock() throws TransactionAbortedException {
+
 
         // If the transaction is nested, fold the transaction.
         if (TransactionalContext.isInNestedTransaction()) {
