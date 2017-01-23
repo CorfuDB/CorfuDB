@@ -36,25 +36,7 @@ public class WriteAfterWriteTransactionalContext
         super(builder);
     }
 
-    /**
-     * Commit the transaction. If it is the last transaction in the stack,
-     * write it to the log, otherwise merge it into a nested transaction.
-     *
-     * @return The address of the committed transaction.
-     * @throws TransactionAbortedException If the transaction was aborted.
-     */
-    @Override
-    public long commitTransaction() throws TransactionAbortedException {
-        long ret = commitTransactionNoReleaseLock();
-
-        // now unlock this transaction's contention lock
-        try {
-            getMTxLock().unlock();
-        } catch (IllegalMonitorStateException me) {}
-
-        return ret;
-    }
-
+    @Override // from OptimisticTransactionalContext
     long commitTransactionNoReleaseLock() throws TransactionAbortedException {
 
 

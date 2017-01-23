@@ -55,6 +55,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     private final Set<ICorfuSMRProxyInternal> modifiedProxies =
             new HashSet<>();
 
+    /** micro-transaction lock.
+     * used in order to allow tranasctions a certain uniterrupted period of
+     * time to commit
+     */
     @Getter
     private final Lock mTxLock = new ReentrantLock();
 
@@ -261,7 +265,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // now unlock this transaction's contention lock
         try {
             getMTxLock().unlock();
-        } catch (IllegalMonitorStateException me) {}
+        } catch (IllegalMonitorStateException me) {
+            log.error("transaction fails to unlock its own contention lock");
+        }
 
         return ret;
     }
