@@ -36,15 +36,9 @@ public class WriteAfterWriteTransactionalContext
         super(builder);
     }
 
-    /**
-     * Commit the transaction. If it is the last transaction in the stack,
-     * write it to the log, otherwise merge it into a nested transaction.
-     *
-     * @return The address of the committed transaction.
-     * @throws TransactionAbortedException If the transaction was aborted.
-     */
-    @Override
-    public long commitTransaction() throws TransactionAbortedException {
+    @Override // from OptimisticTransactionalContext
+    long commitTransactionNoReleaseLock() throws TransactionAbortedException {
+
 
         // If the transaction is nested, fold the transaction.
         if (TransactionalContext.isInNestedTransaction()) {
