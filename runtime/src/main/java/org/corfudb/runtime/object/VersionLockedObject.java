@@ -132,10 +132,12 @@ public class VersionLockedObject<T> {
         // TODO: merge the optimistic undo log into the undo log
         optimisticUndoLog.clear();
         optimisticVersion = 0;
+        optimisticallyModified = false;
         this.version = version;
         // TODO: fix the stream view pointer seek, for now
         // read will read the tx commit entry.
         sv.read();
+        modifyingContext = null;
     }
 
     /** Rollback any optimistic changes, if possible.
@@ -143,6 +145,11 @@ public class VersionLockedObject<T> {
      */
     public void optimisticRollbackUnsafe() {
         // TODO: validate the caller actually has a write lock.
+
+        if (!optimisticallyModified) {
+            log.debug("nothing to roll");
+            return;
+        }
         if (!optimisticallyUndoable) {
             throw new NoRollbackException();
         }
