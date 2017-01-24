@@ -88,6 +88,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // If we don't own this object, roll it back
             // to avoid interrupting short-lived micro TX, grab the lock
             if (oCtxt != null && oCtxt != this) {
+                /* */
                 try {
                     oCtxt.getMTxLock().tryLock(
                             TransactionalContext.mTxDuration.toMillis(), TimeUnit.MILLISECONDS);
@@ -95,8 +96,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     // it's ok, just means that we move on without the lock
                     log.debug("tx at {} proceeds without lock");
                 }
+                /* */
+                object.optimisticRollbackUnsafe();
             }
-            object.optimisticRollbackUnsafe();
 
             // If the version of this object is ahead of what we expected,
             // we need to rollback...

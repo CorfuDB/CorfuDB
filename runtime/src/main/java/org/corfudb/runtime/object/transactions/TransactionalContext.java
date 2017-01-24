@@ -19,7 +19,7 @@ public class TransactionalContext {
      * allow short-lived transactions to run without contention for this
      * duration
      */
-    public static final Duration mTxDuration = Duration.ofMillis(10);
+    public static final Duration mTxDuration = Duration.ofMillis(1);
 
     /** A thread local stack containing all transaction contexts
      * for a given thread.
