@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadFactory;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import javax.net.ssl.*;
+import javax.net.ssl.SSLEngine;
 
 import static org.fusesource.jansi.Ansi.Color.*;
 import static org.fusesource.jansi.Ansi.ansi;

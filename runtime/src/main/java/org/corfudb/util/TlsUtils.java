@@ -81,6 +81,7 @@ public class TlsUtils {
                 ts.load(fis, tsp.toCharArray());
             } catch (Exception e) {
                 tsPasswordFileException.accept(e);
+                return null;
             }
         }
 
