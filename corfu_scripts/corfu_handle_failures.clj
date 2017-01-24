@@ -4,6 +4,7 @@
 (import org.docopt.Docopt) ; parse some cmdline opts
 (require 'clojure.pprint)
 (require 'clojure.java.shell)
+(import org.corfudb.runtime.view.Layout)
 (def usage "corfu_handle_failures, initiates failure handler on all Management Servers.
 Usage:
   corfu_handle_failures -c <config>
@@ -14,28 +15,40 @@ Options:
 
 ; Parse the incoming docopt options.
 (def localcmd (.. (new Docopt usage) (parse *args)))
-;
-; Get the runtime.
-(get-runtime (.. localcmd (get "--config")))
-(connect-runtime)
-(def layout-view (get-layout-view))
 
-(defn start-fh [] (let [layout (.. (get-layout-view) (getLayout))]
-                       ; For each server send trigger to server initiating failure handling.
-                       (do
-                         (doseq [server (.getAllServers layout)]
-                                (do (get-router server)
-                                    (try
-                                      (.get (.initiateFailureHandler (get-management-client)))
-                                      (println "Failure handler on" server "started.")
-                                      (catch Exception e
-                                        (println "Exception :" server ":" (.getMessage e))))
-                                    ))
-                         (println "Initiation completed !")
-                       )
-                   ))
+(defn send-trigger [server]
+       (try
+         (do (get-router server)
+             (.get (.initiateFailureHandler (get-management-client)))
+             (println "Failure handler on" server "started."))
+         (catch Exception e
+           (println "Exception :" server ":" (.getMessage e))))
+      )
+
+(defn start-fh-runtime []
+      ; Get the runtime.
+      (get-runtime (.. localcmd (get "--config")))
+      (connect-runtime)
+      (def layout-view (get-layout-view))
+
+      ; Send trigger to everyone in the layout
+      (let [layout (.. (get-layout-view) (getLayout))]
+           (doseq [server (.getAllServers layout)]
+                (send-trigger layout))
+
+           (println "Initiation completed !")
+       ))
+
+(defn start-fh [server]
+      ; Send trigger to one of the nodes and let it handle the failures and update the layout.
+      (send-trigger server)
+      ; Once the layout is updated, we connect to the runtime and send the trigger to all
+      ; nodes in the layout.
+      (start-fh-runtime)
+      )
+
 
 ; determine whether options passed correctly
-(cond (.. localcmd (get "--config")) (start-fh)
+(cond (.. localcmd (get "--config")) (start-fh (.. localcmd (get "--config")))
       :else (println "Unknown arguments.")
       )
