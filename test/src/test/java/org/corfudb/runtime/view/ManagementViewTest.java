@@ -58,7 +58,7 @@ public class ManagementViewTest extends AbstractViewTest {
         CorfuRuntime corfuRuntime = new CorfuRuntime();
         l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
         corfuRuntime.connect();
-        corfuRuntime.getRouter(SERVERS.ENDPOINT_1).getClient(ManagementClient.class).initiateFailureHandler();
+        corfuRuntime.getRouter(SERVERS.ENDPOINT_1).getClient(ManagementClient.class).initiateFailureHandler().get();
 
 
         // Reduce test execution time from 15+ seconds to about 8 seconds:
@@ -123,7 +123,9 @@ public class ManagementViewTest extends AbstractViewTest {
         l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
         corfuRuntime.connect();
         // Initiating all failure handlers.
-        l.getAllServers().forEach(server -> corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler());
+        for (String server: l.getAllServers()) {
+            corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler().get();
+        }
 
         // Setting aggressive timeouts
         List<Integer> serverPorts = new ArrayList<> ();

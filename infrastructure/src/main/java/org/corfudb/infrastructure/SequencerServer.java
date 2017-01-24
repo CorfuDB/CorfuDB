@@ -17,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 
@@ -99,32 +100,12 @@ public class SequencerServer extends AbstractServer {
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
-    /**
-     * an object representing a conflict-key on a specific stream
-     */
-    @Data
-    class ConflictKey {
-        final int NO_CONFLICT_KEY = -1;
-        int streamIDhash;
-        int conflictKeyhash;
-
-        /**
-         * construct a generic conflict-key for the stream.
-         * the specific key will be set later
-         * @param streamID
-         */
-        public ConflictKey(UUID streamID) {
-            streamIDhash = streamID.hashCode();
-            this.conflictKeyhash = NO_CONFLICT_KEY;
-        }
-    };
-
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
-    private final Cache<ConflictKey, Long>
+    private final Cache<Integer, Long>
             conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
-            .removalListener((ConflictKey K, Long V, RemovalCause cause) -> {
+            .removalListener((Integer K, Long V, RemovalCause cause) -> {
                 maxConflictWildcard = Math.max(V, maxConflictWildcard);
             })
             .build();
@@ -144,6 +125,16 @@ public class SequencerServer extends AbstractServer {
         } else {
             globalLogTail.set(initialToken);
         }
+    }
+
+    /** Get the conflict hash code for a stream ID and conflict param.
+     *
+     * @param streamID          The stream ID.
+     * @param conflictParam     The conflict parameter.
+     * @return                  A conflict hash code.
+     */
+    public int getConflictHashCode(UUID streamID, int conflictParam) {
+            return Objects.hash(streamID, conflictParam);
     }
 
     /**
@@ -167,23 +158,20 @@ public class SequencerServer extends AbstractServer {
             // if conflict-parameters are present, check for conflict based on conflict-parameter updates
             Set<Integer> conflictParamSet = entry.getValue();
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
-
-                // instantiate a key-pair, and set its streamID (1st component)
-                ConflictKey conflictKeyPair =
-                        new ConflictKey(entry.getKey());
-
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    conflictKeyPair.setConflictKeyhash(conflictParam);
-                    Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyPair);
+                    int conflictKeyHash = getConflictHashCode(entry.getKey(),
+                            conflictParam);
+                    Long v = conflictToGlobalTailCache.getIfPresent
+                            (conflictKeyHash);
                     log.trace("txn resolution for conflictparam {}, last update {}",
-                            conflictKeyPair, v);
+                            conflictKeyHash, v);
                     if ((v != null && v > txData.getSnapshotTimestamp()) ||
                             (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
                         log.debug("Rejecting request due to update-timestamp " +
                                         "> {} on conflictKeyPair {}",
-                                txData.getSnapshotTimestamp(), conflictKeyPair);
+                                txData.getSnapshotTimestamp(), conflictKeyHash);
                         commit.set(false);
                     }
                 });
@@ -315,19 +303,19 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null)
-            for (Map.Entry<UUID, Set<Integer>> writeConflictEntry :
-                    req.getTxnResolution().getWriteConflictParams().entrySet()) {
-
-                // instantiate a key-pair, and set its streamID (1st component)
-                ConflictKey conflictKeyPair =
-                        new ConflictKey(writeConflictEntry.getKey());
-
-                // now update each key-pair with this token's timestamp
-                for (Integer cParam : writeConflictEntry.getValue()) {
-                    conflictKeyPair.setConflictKeyhash(cParam);
-                    conflictToGlobalTailCache.put(conflictKeyPair, newTail - 1);
-                }
-            }
+            req.getTxnResolution().getWriteConflictParams().entrySet()
+                .stream()
+            // for each entry
+                .forEach(txEntry ->
+                        // and for each conflict param
+                            txEntry.getValue().stream().forEach(conflictParam ->
+                                    // insert an entry with the new timestamp
+                                    // using the hash code based on the param
+                                    // and the stream id.
+                                    conflictToGlobalTailCache.put(
+                                            getConflictHashCode(txEntry
+                                                    .getKey(), conflictParam),
+                                            newTail - 1)));
 
         log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
         // return the token response with the new global tail, new streams tails, and the streams backpointers
