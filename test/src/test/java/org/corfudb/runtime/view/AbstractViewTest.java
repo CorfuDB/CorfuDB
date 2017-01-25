@@ -119,6 +119,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             x.getLogUnitServer().shutdown();
             x.getManagementServer().shutdown();
         });
+        // Abort any active transactions...
+        while (runtime.getObjectsView().TXActive()) {
+            runtime.getObjectsView().TXAbort();
+        }
     }
 
     /** Add a server at a specific port, using the given configuration options.
@@ -224,12 +228,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     {
         testServerMap.entrySet().parallelStream()
                 .forEach(e -> {
-                    e.getValue().layoutServer.reset();
                     e.getValue().layoutServer
                             .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
                                     null, e.getValue().serverRouter);
                     e.getValue().managementServer
-                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP.payloadMsg(l),
+                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l),
                                     null, e.getValue().serverRouter);
                 });
     }

@@ -30,7 +30,6 @@ public interface ICorfuSMR<T> {
      * @return The undo record map. */
     Map<String, IUndoRecordFunction<T>> getCorfuUndoRecordMap();
 
-
     /** Return the stream ID that this object belongs to.
      * @return The stream ID this object belongs to. */
     default UUID getCorfuStreamID() {

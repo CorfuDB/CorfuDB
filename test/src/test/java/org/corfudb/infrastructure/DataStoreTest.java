@@ -35,12 +35,67 @@ public class DataStoreTest extends AbstractCorfuTest {
                 .build());
         String value = UUID.randomUUID().toString();
         dataStore.put(String.class, "test", "key", value);
+
         //Simulate a restart of data store
         dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
                 .put("--log-path", serviceDir)
                 .build());
         assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
+
         dataStore.put(String.class, "test", "key", "NEW_VALUE");
         assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+    }
+
+    @Test
+    public void testDatastoreEviction() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
+                .put("--log-path", serviceDir)
+                .build());
+
+        for (int i = 0; i < dataStore.getDS_CACHE_SZ() * 2; i++) {
+            String value = UUID.randomUUID().toString();
+            dataStore.put(String.class, "test", "key", value);
+
+            //Simulate a restart of data store
+            dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
+                    .put("--log-path", serviceDir)
+                    .build());
+            assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
+            dataStore.put(String.class, "test", "key", "NEW_VALUE");
+            assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+        }
+    }
+
+    @Test
+    public void testInmemoryPutGet() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
+                .put("--memory", true)
+                .build());
+        String value = UUID.randomUUID().toString();
+        dataStore.put(String.class, "test", "key", value);
+        assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
+
+        dataStore.put(String.class, "test", "key", "NEW_VALUE");
+        assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+
+    }
+
+    @Test
+    public void testInmemoryEviction() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
+                .put("--memory", true)
+                .build());
+
+        for (int i = 0; i < dataStore.getDS_CACHE_SZ() * 2; i++) {
+            String value = UUID.randomUUID().toString();
+            dataStore.put(String.class, "test", "key", value);
+            assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
+
+            dataStore.put(String.class, "test", "key", "NEW_VALUE");
+            assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
+        }
     }
 }

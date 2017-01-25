@@ -115,22 +115,21 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     /**
-     * Access the state of the object.
-     *
-     * @param accessMethod The method to execute when accessing an object.
-     * @return
+     * {@inheritDoc}
      */
     @Override
-    public <R> R access(ICorfuSMRAccess<R, T> accessMethod) {
+    public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
+                        Object[] conflictObject) {
         if (TransactionalContext.isInTransaction()) {
             return TransactionalContext.getCurrentContext()
-                    .access(this, accessMethod);
+                    .access(this, accessMethod, conflictObject);
         }
 
         // Linearize this read against a timestamp
         final long timestamp =
                 rt.getSequencerView()
                 .nextToken(Collections.singleton(streamID), 0).getToken();
+        log.debug("access [{}] at ts {}", getStreamID(), timestamp);
 
         // Acquire locks and perform read.
         return underlyingObject.optimisticallyReadThenReadLockThenWriteOnFail(
@@ -143,6 +142,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             }
             // We don't have the right version, so we need to write
             // throwing this exception causes us to take a write lock.
+                 log.debug("access needs to sync forward up to timestamp {}", timestamp);
             throw new ConcurrentModificationException();
         },
             //  The read did not acquire the right version, so we
@@ -242,21 +242,18 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     /**
-     * Record an SMR function to the log before returning.
-     *
-     * @param smrUpdateFunction The name of the function to record.
-     * @param args              The arguments to the function.
-     * @return The address in the log the SMR function was recorded at.
+     * {@inheritDoc}
      */
     @Override
-    public long logUpdate(String smrUpdateFunction, Object... args) {
+    public long logUpdate(String smrUpdateFunction, Object[] conflictObject,
+                          Object... args) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
             // We generate an entry to avoid exposing the serializer to the tx context.
             SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
             return TransactionalContext.getCurrentContext()
-                    .logUpdate(this, entry);
+                    .logUpdate(this, entry, conflictObject);
         }
 
         // If we aren't in a transaction, we can just write the modification.
@@ -274,20 +271,17 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     /**
-     * Return the result of an upcall at the given timestamp.
-     *
-     * @param timestamp  The timestamp to request the upcall for.
-     * @return           The result of the upcall.
+     * {@inheritDoc}
      */
     @Override
     @SuppressWarnings("unchecked")
-    public <R> R getUpcallResult(long timestamp) {
+    public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
 
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
             return (R) TransactionalContext.getCurrentContext()
-                    .getUpcallResult(this, timestamp);
+                    .getUpcallResult(this, timestamp, conflictObject);
         }
 
         // Check first if we have the upcall, if we do

@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 @ToString(exclude = "aborted")
 @NoArgsConstructor
 @Slf4j
+@Deprecated
 public class TXEntry extends LogEntry implements ISMRConsumable {
 
     @Getter
@@ -46,7 +48,7 @@ public class TXEntry extends LogEntry implements ISMRConsumable {
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
                 .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
             // Starting at the stream local address of this entry, read backwards until you hit a stream entry whose
-            // global address is less than readTimestamp.
+            // global address is less than snapshotTimestamp.
             if (getEntry().getLogicalAddresses().get(stream) == 0)
                 return false;
             LogData curEntry = runtime.getAddressSpaceView().read(stream, getEntry().getLogicalAddresses().get(stream) - 1, 1)
@@ -65,7 +67,7 @@ public class TXEntry extends LogEntry implements ISMRConsumable {
         }
 
         if (getEntry() != null && getEntry().hasBackpointer(stream)) {
-            LogData backpointedEntry = getEntry();
+            ILogData backpointedEntry = getEntry();
             if (backpointedEntry.isFirstEntry(stream)) {
                 return false;
             }
@@ -96,7 +98,7 @@ public class TXEntry extends LogEntry implements ISMRConsumable {
 
         for (long i = readTimestamp + 1; i < getEntry().getGlobalAddress(); i++) {
             // Backpointers not available, so we do a scan.
-            LogData rr = runtime.getAddressSpaceView().read(i);
+            ILogData rr = runtime.getAddressSpaceView().read(i);
             if (rr.getType() ==
                     DataType.DATA &&
                     ((Set<UUID>) rr.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM))

@@ -1,0 +1,29 @@
+option java_package = "org.corfudb.format";
+
+enum DataType {
+    DATA = 0;
+    EMPTY = 1;
+    HOLE = 2;
+    TRIMMED = 3;
+}
+
+message LogEntry {
+    optional DataType data_type = 1;
+    optional bytes data = 2;
+    optional int64 global_address = 3;
+    optional int64 rank = 4;
+    optional bool commit = 5;
+    repeated string	streams = 6;
+    map<string, int64> logical_addresses = 7;
+    map<string, int64> backpointers = 8;
+}
+
+message LogHeader {
+    optional int32 version = 1;
+    optional bool verify_checksum = 2;
+}
+
+message Metadata {
+    optional sfixed32 checksum = 1;
+    optional sfixed32 length = 2;
+}

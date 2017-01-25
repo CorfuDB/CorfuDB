@@ -63,19 +63,11 @@ public class QCLayout {
                     + " --version  Show version\n";
 
     public static String[] main(String[] args) {
-        if (args != null && args.length > 0 && args[0].contentEquals("reset")) {
-            LayoutServer ls = CorfuServer.getLayoutServer();
-            if (ls != null) {
-                ls.reset();
-                return replyOk();
-            } else {
-                return replyErr("No active layout server");
-            }
-        }
         if (args != null && args.length > 0 && args[0].contentEquals("reboot")) {
             LayoutServer ls = CorfuServer.getLayoutServer();
             if (ls != null) {
-                ls.reboot();
+                ls.shutdown();
+                CorfuServer.addLayoutServer();
                 return replyOk();
             } else {
                 return replyErr("No active layout server");

@@ -1,15 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.junit.Before;
 import org.junit.Test;
-
-import java.util.Map;
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -64,6 +56,8 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     {
         // T1 starts non-transactionally.
         t(1, () -> put("k", "v0"));
+        t(1, () -> put("k1", "v1"));
+        t(1, () -> put("k2", "v2"));
         // Now T1 and T2 both start transactions and read v0.
         t(1, this::TXBegin);
         t(2, this::TXBegin);
@@ -183,7 +177,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     }
 
     @Override
-    void TXBegin() {
+    protected void TXBegin() {
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.OPTIMISTIC)
                 .begin();

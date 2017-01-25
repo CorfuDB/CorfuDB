@@ -125,14 +125,19 @@ public class VersionLockedObject<T> {
      *
      */
     public void optimisticCommitUnsafe(long version) {
+        log.trace("optimisticCommit --version={} stream logPopinter={}",
+                version, sv.getLogPointer()
+        );
         // TODO: validate the caller actually has a write lock.
         // TODO: merge the optimistic undo log into the undo log
         optimisticUndoLog.clear();
         optimisticVersion = 0;
+        optimisticallyModified = false;
         this.version = version;
         // TODO: fix the stream view pointer seek, for now
         // read will read the tx commit entry.
         sv.read();
+        modifyingContext = null;
     }
 
     /** Rollback any optimistic changes, if possible.
@@ -140,7 +145,12 @@ public class VersionLockedObject<T> {
      */
     public void optimisticRollbackUnsafe() {
         // TODO: validate the caller actually has a write lock.
-        if (optimisticUndoLog.size() > 0 || !optimisticallyUndoable) {
+
+        if (!optimisticallyModified) {
+            log.debug("nothing to roll");
+            return;
+        }
+        if (!optimisticallyUndoable) {
             throw new NoRollbackException();
         }
         // The undo log is a stack, where the last entry applied
@@ -338,6 +348,6 @@ public class VersionLockedObject<T> {
     }
 
     public void resetStreamViewUnsafe() {
-        sv.setLogPointer(0L);
+        sv.reset();
     }
 }

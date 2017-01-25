@@ -4,7 +4,6 @@ import org.codehaus.plexus.util.ExceptionUtils;
 import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ManagementServer;
-import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -12,7 +11,6 @@ import org.docopt.Docopt;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,45 +40,15 @@ public class QCSMRobject {
                     + " --version                                      Show version\n";
 
     public static String[] main(String[] args) {
-        if (args != null && args.length > 0 && args[0].contentEquals("reset")) {
-            LogUnitServer ls = CorfuServer.getLogUnitServer();
-            SequencerServer ss = CorfuServer.getSequencerServer();
-            if (ls != null && ss != null) {
-
-                // Reset the local management server.
-                ManagementServer ms = CorfuServer.getManagementServer();
-                ms.reset();
-
-                // Reset the local log server.
-                ls.reset();
-
-                // Reset the local sequencer server
-                ss.reset();
-
-                // Reset all local CorfuRuntime instances
-                Iterator<String> it = rtMap.keySet().iterator();
-                while (it.hasNext()) {
-                    String key = it.next();
-                    CorfuRuntime rt = (CorfuRuntime) rtMap.get(key);
-                    // State needs resetting in rt's ObjectsView
-                    rt.getObjectsView().getObjectCache().clear();
-                    // State needs resetting in rt's AddressSpaceView
-                    rt.getAddressSpaceView().resetCaches();
-                    // Stop the router: false means don't really shutdown,
-                    // but disconnect any existing connection.
-                    rt.stop(false);
-                }
-                return replyOk();
-            } else {
-                return replyErr("No active log server or sequencer server");
-            }
-        }
         if (args != null && args.length > 0 && args[0].contentEquals("reboot")) {
             ManagementServer ms = CorfuServer.getManagementServer();
-            ms.reboot();
+            ms.shutdown();
+            CorfuServer.addManagementServer();
+
             LogUnitServer ls = CorfuServer.getLogUnitServer();
             if (ls != null) {
-                ls.reboot();
+                ls.shutdown();
+                CorfuServer.addLogUnit();
                 return replyOk();
             } else {
                 return replyErr("No active log server");

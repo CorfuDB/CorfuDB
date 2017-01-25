@@ -1,186 +1,210 @@
 package org.corfudb.infrastructure;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.util.Utils;
 
-import java.io.File;
-import java.io.IOException;
 import java.lang.invoke.MethodHandles;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+
+import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 
 /**
  * This server implements the sequencer functionality of Corfu.
  * <p>
  * It currently supports a single operation, which is a incoming request:
  * <p>
- * TOKEN_REQ - Request the next token.
+ * TOKEN_REQ - Request the next address.
+ *
  * <p>
+ * The sequencer server maintains the current tail of the log, the current
+ * tail of every stream, and a cache of timestamps of updates on recent
+ * conflict-parameters.
+ * <p>
+ * A token request can be of several sub-types, which are defined in
+ * {@link TokenRequest}:
+ * <p>
+ * {@link TokenRequest::TK_QUERY} - used for only querying the current tail
+ * of the log and/or the tails of specific streams
+ *
+ * {@link TokenRequest::TK_RAW} - reserved for getting a "raw" token in the
+ * global log
+ *
+ * {@link TokenRequest::TK_MULTI_STREAM} - used for logging across one or
+ * more streams
+ *
+ * {@link TokenRequest::TK_TX} - used for reserving an address for transaction
+ * commit.
+ *
+ * The transaction commit is the most sophisticated functaionality of the
+ * sequencer. The sequencer reserves an address for the transaction
+ * only on if it knows that it can commit.
+ *
+ * The TK_TX request contains a conflict-set and a write-set. The sequencer
+ * checks the conflict-set against the stream-tails and against the
+ * conflict-parameters timestamp cache it maintains. If the transaction
+ * commits, the sequencer updates the tails of all the streams and the cache
+ * of conflict parameters.
+ *
  * Created by mwei on 12/8/15.
  */
 @Slf4j
 public class SequencerServer extends AbstractServer {
 
     /**
-     * A scheduler, which is used to schedule checkpoints and lease renewal
+     * key-name for storing {@link SequencerServer} state in {@link ServerContext::getDataStore()}.
      */
-    private final ScheduledExecutorService scheduler =
-            Executors.newScheduledThreadPool(
-                    1,
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("Seq-Checkpoint-%d")
-                            .build());
-    @Getter
-    long epoch;
-    AtomicLong globalLogTail;
+    private static final String PREFIX_SEQUENCER = "SEQUENCER";
 
     /**
-     * The file channel.
+     * Inherit from CorfuServer a server context
      */
-    private FileChannel fc;
-    private Object fcLock = new Object();
+    private final ServerContext serverContext;
 
     /**
      * Our options
      */
-    private Map<String, Object> opts;
+    private final Map<String, Object> opts;
+
+    /**
+     * The sequencer maintains information about log and streams:
+     *
+     *  - {@link SequencerServer::globalLogTail}:
+     *      global log tail. points to the first available position (initially, 0).
+     *  - {@link SequencerServer::streamTailMap}:
+     *      a map of per-streams tail. points to per-streams first available position.
+     *  - {@link SequencerServer::streamTailToGlobalTailMap}:
+     *      per streams map to last issued global-log position. used for backpointers.
+     *  - {@link SequencerServer::conflictToGlobalTailCache}:
+     *      a cache of recent conflict keys and their latest global-log position
+     *  - {@link SequencerServer::maxConflictWildcard} :
+     *      a "wildcard" representing the maximal update timestamp of
+     *      all the confict keys which were evicted from the cache
+     *
+     * Every append to the log updates the information in these maps.
+     */
+    @Getter
+    private final AtomicLong globalLogTail = new AtomicLong(0L);
+    private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+
+    private final long maxConflictCacheSize = 10_000;
+    private long maxConflictWildcard = -1L;
+    private final Cache<Integer, Long>
+            conflictToGlobalTailCache = Caffeine.newBuilder()
+            .maximumSize(maxConflictCacheSize)
+            .removalListener((Integer K, Long V, RemovalCause cause) -> {
+                maxConflictWildcard = Math.max(V, maxConflictWildcard);
+            })
+            .build();
 
     /** Handler for this server */
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    /**
-     * map from stream-trails to global-log tails. used for backpointers.
-     */
-    ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap;
-
-    /**
-     * map of stream tails.
-     */
-    ConcurrentHashMap<UUID, Long> streamTailMap;
-
     public SequencerServer(ServerContext serverContext) {
-        Map<String, Object> opts = serverContext.getServerConfig();
-        streamTailToGlobalTailMap = new ConcurrentHashMap<>();
-        streamTailMap = new ConcurrentHashMap<>();
-        globalLogTail = new AtomicLong();
-        this.opts = opts;
+        this.serverContext = serverContext;
+        this.opts = serverContext.getServerConfig();
 
-        try {
-            if (!(Boolean) opts.get("--memory")) {
-                synchronized (fcLock) {
-                    open_fc();
-                }
-                // schedule checkpointing.
-                scheduler.scheduleAtFixedRate(this::checkpointState,
-                        Utils.parseLong(opts.get("--checkpoint")),
-                        Utils.parseLong(opts.get("--checkpoint")),
-                        TimeUnit.SECONDS);
-            }
-            reboot();
-
-            log.info("Sequencer initial token set to {}", globalLogTail.get());
-        } catch (Exception ex) {
-            log.warn("Exception parsing initial token, default to 0.", ex);
-            ex.printStackTrace();
+        long initialToken = Utils.parseLong(opts.get("--initial-token"));
+        if (initialToken == NON_LOG_ADDR_MAGIC) {
+            globalLogTail.set(0L);
+        } else {
+            globalLogTail.set(initialToken);
         }
     }
 
-    private void open_fc() {
-        try {
-            fc = FileChannel.open(make_checkpoint_path(),
-                    EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
-                            StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
-        } catch (IOException e) {
-            log.warn("Error opening " + make_checkpoint_path() + ": " + e);
-            fc = null;
-        }
-    }
-
-    private java.nio.file.Path make_checkpoint_path() {
-        return FileSystems.getDefault().getPath(opts.get("--log-path")
-                + File.separator + "sequencer_checkpoint");
-    }
-
-    /**
-     * Checkpoints the state of the sequencer.
+    /** Get the conflict hash code for a stream ID and conflict param.
+     *
+     * @param streamID          The stream ID.
+     * @param conflictParam     The conflict parameter.
+     * @return                  A conflict hash code.
      */
-    public void checkpointState() {
-        ByteBuffer b = ByteBuffer.allocate(8);
-        long checkpointAddress = globalLogTail.get();
-        b.putLong(checkpointAddress);
-        b.flip();
-        synchronized (fcLock) {
-            if (fc != null) {
-                try {
-                    fc.write(b, 0L);
-                    fc.force(true);
-                    log.debug("Sequencer state successfully checkpointed at {}", checkpointAddress);
-                } catch (IOException ie) {
-                    log.warn("Sequencer checkpoint failed due to exception", ie);
-                }
-            }
-        }
+    public int getConflictHashCode(UUID streamID, int conflictParam) {
+            return Objects.hash(streamID, conflictParam);
     }
 
     /**
      * Returns true if the txn commits.
      * If the request submits a timestamp (a global offset) that is less than one of the
-     * global offsets of a stream specified in the request, then abort; otherwise commit.
+     * global offsets of a streams specified in the request, then abort; otherwise commit.
      *
-     * @param timestamp Read timestamp of the txn; in order to commit, no writes may be made past this
-     *                  (global) timestamp on any streams touched by the txn.
-     * @param streams   Read set of the txn.
+     * @param txData info provided by corfuRuntime for conflict resolultion:
+     *              - timestamp : the snapshot (global) offset that this TX reads
+     *              - conflictSet: conflict set of the txn.
+     *                if any conflict-param (or stream, if empty) in this set has a later timestamp than the snapshot, abort
      */
-    public boolean txnResolution(long timestamp, Set<UUID> streams) {
-        log.trace("txn resolution, timestamp: {}, streams: {}", timestamp, streams);
+    public boolean txnCanCommit(TxResolutionInfo txData) {
+        log.trace("txn resolution, timestamp: {}, streams: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
 
         AtomicBoolean commit = new AtomicBoolean(true);
-        for (UUID id : streams) {
+        for (Map.Entry<UUID, Set<Integer>> entry : txData.getConflictSet().entrySet()) {
             if (!commit.get())
                 break;
 
-
-            streamTailToGlobalTailMap.compute(id, (k, v) -> {
-                if (v == null) {
-                    return null;
-                } else {
-                    if (v > timestamp) {
-                        log.debug("Rejecting request due to {} > {} on stream {}", v, timestamp, id);
+            // if conflict-parameters are present, check for conflict based on conflict-parameter updates
+            Set<Integer> conflictParamSet = entry.getValue();
+            if (conflictParamSet != null && conflictParamSet.size() > 0) {
+                // for each key pair, check for conflict;
+                // if not present, check against the wildcard
+                conflictParamSet.forEach(conflictParam -> {
+                    int conflictKeyHash = getConflictHashCode(entry.getKey(),
+                            conflictParam);
+                    Long v = conflictToGlobalTailCache.getIfPresent
+                            (conflictKeyHash);
+                    log.trace("txn resolution for conflictparam {}, last update {}",
+                            conflictKeyHash, v);
+                    if ((v != null && v > txData.getSnapshotTimestamp()) ||
+                            (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
+                        log.debug("Rejecting request due to update-timestamp " +
+                                        "> {} on conflictKeyPair {}",
+                                txData.getSnapshotTimestamp(), conflictKeyHash);
                         commit.set(false);
                     }
-                }
-                return v;
-            });
+                });
+            }
+
+            // otherwise, check for conflict based on streams updates
+            else {
+                UUID streamID = entry.getKey();
+                streamTailToGlobalTailMap.compute(streamID, (k, v) -> {
+                    if (v == null) {
+                        return null;
+                    } else {
+                        if (v > txData.getSnapshotTimestamp()) {
+                            log.debug("Rejecting request due to {} > {} on streams {}",
+                                    v, txData.getSnapshotTimestamp(), streamID);
+                            commit.set(false);
+                        }
+                    }
+                    return v;
+                });
+            }
         }
+
         return commit.get();
     }
 
-    public void returnLatestOffsets(CorfuPayloadMsg<TokenRequest> msg,
-                                    ChannelHandlerContext ctx, IServerRouter r) {
+    public void handleTokenQuery(CorfuPayloadMsg<TokenRequest> msg,
+                                 ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
 
         long maxStreamGlobalTails = -1L;
 
-        // Collect the latest local offset for every stream in the request.
+        // Collect the latest local offset for every streams in the request.
         ImmutableMap.Builder<UUID, Long> responseStreamTails = ImmutableMap.builder();
 
         for (UUID id : req.getStreams()) {
@@ -210,24 +234,25 @@ public class SequencerServer extends AbstractServer {
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
-        log.trace("req txn reso: {}", req.getTxnResolution());
 
-        // if requested number of tokens is zero, it is just a query of current tail(s)
-        if (req.getNumTokens() == 0) {
-            returnLatestOffsets(msg, ctx, r);
+        if (req.getReqType() == TokenRequest.TK_QUERY) {
+            handleTokenQuery(msg, ctx, r);
             return;
         }
 
-        // if no streams, simply allocate a position at the tail of the global log
-        if (req.getStreams() == null) {
+        // for raw log implementation, simply extend the global log tail and return the global-log token
+        if (req.getReqType() == TokenRequest.TK_RAW) {
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                     new TokenResponse(globalLogTail.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
             return;
         }
 
-        // If the request is a transaction resolution request, then check if it should abort.
-        if (req.getTxnResolution()) {
-            if (!txnResolution(req.getReadTimestamp(), req.getReadSet())) {
+        // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
+        // Token allocation is conditioned on commit.
+        // First, we check if the transaction can commit.
+        if (req.getReqType() == TokenRequest.TK_TX) {
+
+            if (!txnCanCommit(req.getTxnResolution())) {
                 // If the txn aborts, then DO NOT hand out a token.
                 r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                         new TokenResponse(-1L, Collections.emptyMap(), Collections.emptyMap())));
@@ -235,113 +260,68 @@ public class SequencerServer extends AbstractServer {
             }
         }
 
+        // extend the tail of the global log by the requested # of tokens
+        // currentTail is the first available position in the global log
         long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
+        long newTail = currentTail + req.getNumTokens();
 
-        // If the txn can commit, or if the request is for a non-txn entry, then proceed normally to
-        // hand out local stream offsets.
+        // for each streams:
+        //   1. obtain the last back-pointer for this streams, if exists; -1L otherwise.
+        //   2. record the new global tail as back-pointer for this streams.
+        //   3. extend the tail by the requested # tokens.
         ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
         ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
         for (UUID id : req.getStreams()) {
+
+            // step 1. and 2. (comment above)
             streamTailToGlobalTailMap.compute(id, (k, v) -> {
                 if (v == null) {
                     backPointerMap.put(k, -1L);
-                    return currentTail + req.getNumTokens() - 1;
+                    return newTail-1;
+                } else {
+                    backPointerMap.put(k, v);
+
+                    // legacy code, addition sanity check instead:
+                    //return Math.max(newTail - 1, v);
+                    if (newTail-1 < v)
+                        log.error("backpointer {} is already greater than newTail-1 {}", v, newTail-1);
+
+                    return newTail-1;
                 }
-                backPointerMap.put(k, v);
-                return Math.max(currentTail + req.getNumTokens() - 1, v);
             });
-            /*
-             * Action table for (overwrite, replexOverwrite) pairs:
-             * overwrite | replexOverwrite | Action
-             *   F              F            Hand out tokens as requested
-             *   F              T            There was an overwrite in the local stream layer, so allocate
-             *                               a new global token AND increment local stream offsets. The
-             *                               action should be identical to the (F,F) case.
-             *   T              F            There was an overwrite in the global log layer, so ONLY
-             *                               allocate a new global token, and DO NOT increment local
-             *                               stream offsets.
-             *   T              T            This should never happen, because the Replex write protocol
-             *                               terminates immediately if it encounters a global log overwrite.
-             */
-            /* TODO: In the (F,T) case, hole-filling (or some other mechanism, perhaps the same writer),
-             * needs to mark the hanging entry in the global log with a false commit bit.
-             */
-            if (msg.getPayload().getReplexOverwrite() ||
-                    !msg.getPayload().getOverwrite()) {
-                // Collect the stream offsets for this token request.
-                streamTailMap.compute(id, (k, v) -> {
-                    if (v == null) {
-                        requestStreamTokens.put(k, req.getNumTokens() - 1L);
-                        return req.getNumTokens() - 1L;
-                    }
-                    requestStreamTokens.put(k, v + req.getNumTokens());
-                    return v + req.getNumTokens();
-                });
-            }
+
+            // step 3. (comment above)
+            streamTailMap.compute(id, (k, v) -> {
+                if (v == null) {
+                    requestStreamTokens.put(k, req.getNumTokens() - 1L);
+                    return req.getNumTokens() - 1L;
+                }
+                requestStreamTokens.put(k, v + req.getNumTokens());
+                return v + req.getNumTokens();
+            });
         }
 
+        // update the cache of conflict parameters
+        if (req.getTxnResolution() != null)
+            req.getTxnResolution().getWriteConflictParams().entrySet()
+                .stream()
+            // for each entry
+                .forEach(txEntry ->
+                        // and for each conflict param
+                            txEntry.getValue().stream().forEach(conflictParam ->
+                                    // insert an entry with the new timestamp
+                                    // using the hash code based on the param
+                                    // and the stream id.
+                                    conflictToGlobalTailCache.put(
+                                            getConflictHashCode(txEntry
+                                                    .getKey(), conflictParam),
+                                            newTail - 1)));
+
+        log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
+        // return the token response with the new global tail, new streams tails, and the streams backpointers
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(currentTail,
                         backPointerMap.build(),
                         requestStreamTokens.build())));
-    }
-
-    @Override
-    public void reset() {
-        if (fc != null) {
-            synchronized (fcLock) {
-                try { fc.close(); } catch (IOException e) { /* Not a fatal problem, right? */ }
-                try {
-                    Files.delete(make_checkpoint_path());
-                } catch (IOException e) {
-                    log.warn("Error deleting " + make_checkpoint_path() + ":" + e);
-                }
-                open_fc();
-            }
-        }
-        reboot();
-    }
-
-    @Override
-    public synchronized void reboot() {
-            streamTailToGlobalTailMap = new ConcurrentHashMap<>();
-            streamTailMap = new ConcurrentHashMap<>();
-            globalLogTail = new AtomicLong(0L);
-            long newIndex = Utils.parseLong(opts.get("--initial-token"));
-            if (newIndex == -1) {
-                if (!(Boolean) opts.get("--memory")) {
-                    try {
-                        ByteBuffer b = ByteBuffer.allocate((int) fc.size());
-                        fc.read(b);
-                        if (fc.size() >= 8) {
-                            globalLogTail.set(b.getLong(0));
-                        } else {
-                            log.warn("Sequencer recovery requested but checkpoint not set, defaulting to 0");
-                        }
-                    } catch (IOException e) {
-                        log.warn("Reboot to zero.  Sequencer checkpoint read & parse: " + e);
-                    }
-                } else {
-                    log.warn("Sequencer recovery requested but has no meaning for a in-memory server, defaulting to 0");
-                }
-            } else {
-                globalLogTail.set(newIndex);
-            }
-    }
-
-    /**
-     * Shutdown the server.
-     */
-    @Override
-    public void shutdown() {
-        try {
-            scheduler.shutdownNow();
-            checkpointState();
-            synchronized (fcLock) {
-                if (fc != null) fc.close();
-            }
-        } catch (IOException ie) {
-            log.warn("Error checkpointing server during shutdown!", ie);
-        }
     }
 }

@@ -1,6 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -27,37 +26,27 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Getter
     private Set<ICorfuSMRProxyInternal> modifiedProxies = ImmutableSet.of();
 
-    /** In a snapshot transaction, no write set is ever generated.
-     *
-     */
-    @Getter
-    private Map<UUID, List<UpcallWrapper>> writeSet = ImmutableMap.of();
-
-    /** The read set for this transaction.
-     */
-    @Getter
-    private Set<UUID> readSet = new HashSet<>();
-
     public SnapshotTransactionalContext(TransactionBuilder builder) {
         super(builder);
     }
 
     /**
-     * Access the state of the object.
-     *
-     * @param proxy          The proxy to access the state for.
-     * @param accessFunction The function to execute, which will be provided with the state
-     *                       of the object.
-     * @return The return value of the access function.
+     * {@inheritDoc}
      */
     @Override
-    public <R, T> R access(ICorfuSMRProxyInternal<T> proxy, ICorfuSMRAccess<R, T> accessFunction) {
-        readSet.add(proxy.getStreamID());
+    public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
+                           ICorfuSMRAccess<R, T> accessFunction,
+                           Object[] conflictObject) {
+
+        // In snapshot transactions, there are no conflicts.
+        // Hence, we do not need to add this access to a conflict set
+        // do not add: addToReadSet(proxy, conflictObject);
+
         return proxy.getUnderlyingObject().optimisticallyReadThenReadLockThenWriteOnFail(
                 (v, o) -> {
                     // We're lucky and the object has not been modified AND
                     // it's the right version.
-                    if (v == builder.getSnapshot() &&
+                    if (v == getSnapshotTimestamp() &&
                             !proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
                         return accessFunction.access(o);
                     }
@@ -66,7 +55,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                 (v, o) -> {
                     // We're lucky and the object has not been modified AND
                     // it's the right version. (Another writer modified it to this state).
-                    if (v == builder.getSnapshot() &&
+                    if (v == getSnapshotTimestamp() &&
                             !proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
                         return accessFunction.access(o);
                     }
@@ -82,14 +71,14 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                     }
                     // Next check the version, if it is ahead, try undo
                     // We don't support this yet, so we just reset
-                    if (proxy.getVersion() > builder.getSnapshot()) {
+                    if (proxy.getVersion() > getSnapshotTimestamp()) {
                         proxy.resetObjectUnsafe(proxy.getUnderlyingObject());
                     }
 
                     // Now we sync forward if we are behind
-                    if (proxy.getVersion() < builder.getSnapshot()) {
+                    if (proxy.getVersion() < getSnapshotTimestamp()) {
                         proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
-                                builder.getSnapshot());
+                                getSnapshotTimestamp());
                     }
 
                     // Now we do the access
@@ -107,7 +96,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The result of the upcall.
      */
     @Override
-    public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy, long timestamp) {
+    public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
+                                      long timestamp,
+                                      Object[] conflictObject) {
         throw new UnsupportedOperationException("Can't get upcall during a read-only transaction!");
     }
 
@@ -119,7 +110,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The address the update was written at.
      */
     @Override
-    public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry) {
+    public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
+                              SMREntry updateEntry,
+                              Object[] conflictObject) {
         throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
     }
 
@@ -127,4 +120,11 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public void addTransaction(AbstractTransactionalContext tc) {
         throw new UnsupportedOperationException("Can't merge into a readonly txn (yet)");
     }
+
+    @Override
+    public long obtainSnapshotTimestamp() {
+        return getBuilder().getSnapshot();
+    }
+
+
 }

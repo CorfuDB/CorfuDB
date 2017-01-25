@@ -2,11 +2,6 @@ package org.corfudb.infrastructure;
 
 import java.io.File;
 import java.lang.invoke.MethodHandles;
-import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
@@ -17,9 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import javax.annotation.Nonnull;
 
-import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -55,6 +48,8 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
+import static org.corfudb.infrastructure.ServerContext.SMALL_INTERVAL;
+
 /**
  * Created by mwei on 12/10/15.
  * <p>
@@ -71,7 +66,7 @@ import org.corfudb.util.retry.IntervalAndSentinelRetry;
 @Slf4j
 public class LogUnitServer extends AbstractServer {
 
-    private ServerContext serverContext;
+    private final ServerContext serverContext;
 
     /**
      * A scheduler, which is used to schedule periodic tasks like garbage collection.
@@ -83,10 +78,19 @@ public class LogUnitServer extends AbstractServer {
                             .setDaemon(true)
                             .setNameFormat("LogUnit-Maintenance-%d")
                             .build());
+
+    /**
+     * GC parameters
+     * TODO: entire GC handling needs updating, currently not being activated
+     */
+    private final Thread gcThread = null;
+    private IntervalAndSentinelRetry gcRetry;
+    private AtomicBoolean running = new AtomicBoolean(true);
+
     /**
      * The options map.
      */
-    Map<String, Object> opts;
+    private final Map<String, Object> opts;
 
     /**
      * Handler for the base server
@@ -94,6 +98,53 @@ public class LogUnitServer extends AbstractServer {
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
+
+    private final ConcurrentHashMap<UUID, Long> trimMap;
+
+    /**
+     * This cache services requests for data at various addresses. In a memory implementation,
+     * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
+     */
+    private final LoadingCache<LogAddress, LogData> dataCache;
+    private final long maxCacheSize;
+
+    private final StreamLog streamLog;
+
+    private final BatchWriter<LogAddress, LogData> batchWriter;
+
+    public LogUnitServer(ServerContext serverContext) {
+        this.opts = serverContext.getServerConfig();
+        this.serverContext = serverContext;
+        maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
+
+        if ((Boolean) opts.get("--memory")) {
+            log.warn("Log unit opened in-memory mode (Maximum size={}). " +
+                    "This should be run for testing purposes only. " +
+                    "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
+                    "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
+            streamLog = new InMemoryStreamLog();
+        } else {
+            String logdir = opts.get("--log-path") + File.separator + "log";
+            File dir = new File(logdir);
+            if (!dir.exists()) {
+                dir.mkdir();
+            }
+            streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
+        }
+
+        batchWriter = new BatchWriter(streamLog);
+
+        dataCache = Caffeine.<LogAddress, LogData>newBuilder()
+                .<LogAddress, LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().length)
+                .maximumWeight(maxCacheSize)
+                .removalListener(this::handleEviction)
+                .writer(batchWriter)
+                .build(this::handleRetrieval);
+
+        // Trim map is set to empty on start
+        // TODO: persist trim map - this is optional since trim is just a hint.
+        trimMap = new ConcurrentHashMap<>();
+    }
 
     /**
      * Service an incoming write request.
@@ -207,106 +258,6 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-
-    /**
-     * The garbage collection thread.
-     */
-    Thread gcThread;
-
-    ConcurrentHashMap<UUID, Long> trimMap;
-    IntervalAndSentinelRetry gcRetry;
-    AtomicBoolean running = new AtomicBoolean(true);
-    /**
-     * This cache services requests for data at various addresses. In a memory implementation,
-     * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
-     */
-    LoadingCache<LogAddress, LogData> dataCache;
-    long maxCacheSize;
-
-    private StreamLog streamLog;
-
-    private BatchWriter<LogAddress, LogData> batchWriter;
-
-    public LogUnitServer(ServerContext serverContext) {
-        this.opts = serverContext.getServerConfig();
-        this.serverContext = serverContext;
-        maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
-
-        reboot();
-
-/*       compactTail seems to be broken, disabling it for now
-         scheduler.scheduleAtFixedRate(this::compactTail,
-                Utils.getOption(opts, "--compact", Long.class, 60L),
-                Utils.getOption(opts, "--compact", Long.class, 60L),
-                TimeUnit.SECONDS);*/
-
-        //gcThread = new Thread(this::runGC);
-        //gcThread.start();
-    }
-
-    @Override
-    public void reset() {
-        String d = serverContext.getDataStore().getLogDir();
-        streamLog.close();
-        if (d != null) {
-            Path dir = FileSystems.getDefault().getPath(d + File.separator + "log");
-            try (DirectoryStream<Path> stream =
-                         Files.newDirectoryStream(dir, "*")) {
-                for (Path entry : stream) {
-                    try {
-                        Files.delete(entry);
-                    } catch (IOException ie) {
-                        log.error("reset: error deleting " + entry.toString() + ": " + entry.toString());
-                    }
-                }
-            } catch (IOException e) {
-                log.error("reset: error for dir " + dir + ": " + e.toString());
-            }
-        }
-        reboot();
-    }
-
-    @Override
-    public void reboot() {
-        if ((Boolean) opts.get("--memory")) {
-            log.warn("Log unit opened in-memory mode (Maximum size={}). " +
-                    "This should be run for testing purposes only. " +
-                    "If you exceed the maximum size of the unit, old entries will be AUTOMATICALLY trimmed. " +
-                    "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
-            streamLog = new InMemoryStreamLog();
-        } else {
-            String logdir = opts.get("--log-path") + File.separator + "log";
-            File dir = new File(logdir);
-            if (!dir.exists()) {
-                dir.mkdir();
-            }
-            streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
-        }
-
-        if (dataCache != null) {
-            /** Free all references */
-            dataCache.asMap().values().parallelStream()
-                    .map(m -> m.getData().release());
-        }
-
-        if (batchWriter != null) {
-            batchWriter.close();
-        }
-
-        batchWriter = new BatchWriter(streamLog);
-
-        dataCache = Caffeine.<LogAddress, LogData>newBuilder()
-                .<LogAddress, LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().readableBytes())
-                .maximumWeight(maxCacheSize)
-                .removalListener(this::handleEviction)
-                .writer(batchWriter)
-                .build(this::handleRetrieval);
-
-        // Trim map is set to empty on start
-        // TODO: persist trim map - this is optional since trim is just a hint.
-        trimMap = new ConcurrentHashMap<>();
-    }
-
     /**
      * Retrieve the LogUnitEntry from disk, given an address.
      *
@@ -333,7 +284,7 @@ public class LogUnitServer extends AbstractServer {
         Thread.currentThread().setName("LogUnit-GC");
         val retry = IRetry.build(IntervalAndSentinelRetry.class, this::handleGC)
                 .setOptions(x -> x.setSentinelReference(running))
-                .setOptions(x -> x.setRetryInterval(60_000));
+                .setOptions(x -> x.setRetryInterval(SMALL_INTERVAL.toMillis()));
 
         gcRetry = (IntervalAndSentinelRetry) retry;
 
@@ -385,10 +336,6 @@ public class LogUnitServer extends AbstractServer {
         // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
         // assuming the entry is back by disk
         dataCache.invalidate(address);
-        //and free any references the buffer might have
-        if (entry.getData() != null) {
-            entry.getData().release();
-        }
     }
 
     /**
@@ -397,7 +344,6 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void shutdown() {
         scheduler.shutdownNow();
-        dataCache.invalidateAll(); //should evict all entries
         batchWriter.close();
     }
 

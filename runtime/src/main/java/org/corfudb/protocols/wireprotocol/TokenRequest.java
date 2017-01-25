@@ -4,81 +4,121 @@ import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Created by mwei on 8/9/16.
+ * A token request is at the heart of the Corfu log protocol.
+ *
+ * There are four token request scenarios, designated by the relevant constants :
+ * 0. {@link TokenRequest::TK_QUERY} : Query of the current log tail and of specific stream-tails.
+ * 1. {@link TokenRequest::TK_RAW} : Ask for raw (global) log token(s).
+ *              This extends the global log tail by the requested # of tokens.
+ * 2. {@link TokenRequest::TK_STREAM} : Ask for token(s) on a specific stream.
+ *          This extends both the global log tail, and the specific stream tail, by the requested # of tokens.
+ * 3. {@link TokenRequest::TK_MULTI_STREAM} : Ask for token(s) on multiple streams.
+ *          This extends both the global log tail, and each of the specified stream tails, by the requested # of tokens.
+ * 4. {@link TokenRequest::TK_TX} :
+ *          First, check transaction resolution. If transaction can commit, then behave like {@link TokenRequest::TK_MULTI_STREAM}.
  */
 @Data
 @AllArgsConstructor
 public class TokenRequest implements ICorfuPayload<TokenRequest> {
 
-    /** The number of tokens to request. 0 means to request the current token. */
+    public static final byte TK_QUERY = 0;
+    public static final byte TK_RAW = 1;
+    // todo: remove ..public static final byte TK_STREAM = 2;
+    public static final byte TK_MULTI_STREAM = 3;
+    public static final byte TK_TX = 4;
+
+    /** The type of request, one of the above */
+    final byte reqType;
+
+    /** The number of tokens to request. */
     final Long numTokens;
 
     /** The streams which are written to by this token request. */
     final Set<UUID> streams;
 
     /* True if the Replex protocol encountered an overwrite at the global log layer. */
-    final Boolean overwrite;
+    @Deprecated
+    final Boolean overwrite = false; // todo : deprecate
 
     /* True if the Replex protocol encountered an overwrite at the local stream layer. */
-    final Boolean replexOverwrite;
+    @Deprecated
+    final Boolean replexOverwrite = false; // todo: deprecate
 
-    /* The following 3 variables are used for transaction resolution. */
-    final Boolean txnResolution;
+    /* used for transaction resolution. */
+    final TxResolutionInfo txnResolution;
 
-    /* Latest readstamp of the txn. */
-    final Long readTimestamp;
-
-    /*
-     * Streams that are in the read set of the txn. The txn can only commit if none of the current offsets in each of
-     * streams is greater than readTimestamp.
-     */
-    final Set<UUID> readSet;
-
-    public TokenRequest(Long numTokens, Set<UUID> streams, Boolean overwrite, Boolean replexOverwrite) {
+    public TokenRequest(Long numTokens, Set<UUID> streams,
+                        Boolean overwrite, Boolean replexOverwrite,
+                        TxResolutionInfo conflictInfo) {
+        reqType = TK_TX;
         this.numTokens = numTokens;
         this.streams = streams;
-        this.overwrite = overwrite;
-        this.replexOverwrite = replexOverwrite;
-        txnResolution = false;
-        readTimestamp = -1L;
-        readSet = null;
+        txnResolution = conflictInfo;
+    }
+
+    public TokenRequest(Long numTokens, Set<UUID> streams, Boolean overwrite, Boolean replexOverwrite) {
+        if (numTokens == 0)
+            this.reqType = TK_QUERY;
+        else if (streams == null || streams.size() == 0)
+            this.reqType = TK_RAW;
+        else
+            this.reqType = TK_MULTI_STREAM;
+        this.numTokens = numTokens;
+        this.streams = streams;
+        txnResolution = null;
     }
 
     public TokenRequest(ByteBuf buf) {
-        numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
-        if (ICorfuPayload.fromBuffer(buf, Boolean.class))
-            streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
-        else streams = null;
-        overwrite = ICorfuPayload.fromBuffer(buf, Boolean.class);
-        replexOverwrite = ICorfuPayload.fromBuffer(buf, Boolean.class);
-        txnResolution = ICorfuPayload.fromBuffer(buf, Boolean.class);
-        if (txnResolution) {
-            readTimestamp = ICorfuPayload.fromBuffer(buf, Long.class);
-            readSet = ICorfuPayload.setFromBuffer(buf, UUID.class);
-        }
-        else {
-            readTimestamp = -1L;
-            readSet = null;
+        reqType = ICorfuPayload.fromBuffer(buf, Byte.class);
+
+        switch (reqType) {
+
+            case TK_QUERY:
+                numTokens = 0L;
+                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                txnResolution = null;
+                break;
+
+            case TK_RAW:
+                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
+                streams = null;
+                txnResolution = null;
+                break;
+
+            case TK_MULTI_STREAM:
+                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
+                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                txnResolution = null;
+                break;
+
+            case TK_TX:
+                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
+                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                txnResolution = new TxResolutionInfo(buf);
+                break;
+
+            default:
+                numTokens = -1L;
+                streams = null;
+                txnResolution = null;
+                break;
         }
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, numTokens);
-        ICorfuPayload.serialize(buf, streams != null);
-        if (streams != null)
+        ICorfuPayload.serialize(buf, reqType);
+        if (reqType != TK_QUERY)
+            ICorfuPayload.serialize(buf, numTokens);
+
+        if (reqType != TK_RAW)
             ICorfuPayload.serialize(buf, streams);
-        ICorfuPayload.serialize(buf, overwrite);
-        ICorfuPayload.serialize(buf, replexOverwrite);
-        ICorfuPayload.serialize(buf, txnResolution);
-        if (txnResolution) {
-            ICorfuPayload.serialize(buf, readTimestamp);
-            ICorfuPayload.serialize(buf, readSet);
-        }
+
+        if (reqType == TK_TX)
+            ICorfuPayload.serialize(buf, txnResolution);
     }
 }

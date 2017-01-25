@@ -39,12 +39,16 @@ public class StreamView implements AutoCloseable {
         return getCurrentContext().logPointer.get();
     }
 
-    public void setLogPointer(long pos) {
-        getCurrentContext().logPointer.set(pos);
-    }
-
     public StreamContext getCurrentContext() {
         return streamContexts.first();
+    }
+
+    /** Reset the state of this streamview, causing the next read to return
+     * from the beginning of the stream.
+     */
+    public synchronized void reset() {
+        this.streamContexts.clear();
+        this.streamContexts.add(new StreamContext(streamID, Long.MAX_VALUE));
     }
 
     /**
@@ -164,7 +168,7 @@ public class StreamView implements AutoCloseable {
         boolean hitBeforeRead = false;
         if (!runtime.backpointersDisabled) {
             resolvedBackpointers.add(latestToken);
-            LogData r = runtime.getAddressSpaceView().read(latestToken);
+            ILogData r = runtime.getAddressSpaceView().read(latestToken);
             long backPointer = latestToken;
             while (r.getType() != DataType.EMPTY
                     && r.getBackpointerMap().containsKey(streamID)) {
@@ -219,11 +223,11 @@ public class StreamView implements AutoCloseable {
      * @return The next item from the stream.
      */
     @SuppressWarnings("unchecked")
-    public synchronized LogData read() {
+    public synchronized ILogData read() {
         return read(Long.MAX_VALUE);
     }
 
-    public synchronized LogData read(long maxGlobal) {
+    public synchronized ILogData read(long maxGlobal) {
         while (true) {
             /*
             long thisRead = logPointer.getAndIncrement();
@@ -268,7 +272,7 @@ public class StreamView implements AutoCloseable {
                 getCurrentContext().logPointer.set(thisRead + 1);
 
                 log.trace("Read[{}]: reading at {}", streamID, thisRead);
-                LogData r = runtime.getAddressSpaceView().read(thisRead);
+                ILogData r = runtime.getAddressSpaceView().read(thisRead);
                 if (r.getType() == DataType.EMPTY) {
                     //determine whether or not this is a hole
                     long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
@@ -352,7 +356,7 @@ public class StreamView implements AutoCloseable {
         }
     }
 
-    public synchronized LogData[] readTo(long pos) {
+    public synchronized ILogData[] readTo(long pos) {
         if (runtime.getLayoutView().getLayout().getSegments().get(
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
                 .getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
@@ -363,17 +367,17 @@ public class StreamView implements AutoCloseable {
                 latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
                 log.trace("Linearization point set to {}", latestToken);
             }
-            ArrayList<LogData> al = new ArrayList<>();
+            ArrayList<ILogData> al = new ArrayList<>();
             log.debug("Stream[{}] pointer[{}], readTo {}", streamID, getCurrentContext().logPointer.get(), latestToken);
             while (getCurrentContext().logPointer.get() <= latestToken) {
-                LogData r = read(pos);
+                ILogData r = read(pos);
                 if (r != null && (max || r.getGlobalAddress() <= pos)) {
                     al.add(r);
                 } else {
                     break;
                 }
             }
-            return al.toArray(new LogData[al.size()]);
+            return al.toArray(new ILogData[al.size()]);
         } else if (runtime.getLayoutView().getLayout().getSegments().get(
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
                 .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
@@ -385,7 +389,7 @@ public class StreamView implements AutoCloseable {
             log.trace("Linearization point set to {}", latestToken);
 
             if (latestToken < getCurrentContext().logPointer.get())
-                return (new ArrayList<LogData>()).toArray(new LogData[0]);
+                return (new ArrayList<LogData>()).toArray(new ILogData[0]);
 
             //if (getCurrentContext().logPointer.get() != 0 && latestToken == getCurrentContext().logPointer.get())
             //    return (new ArrayList<LogData>()).toArray(new LogData[0]);

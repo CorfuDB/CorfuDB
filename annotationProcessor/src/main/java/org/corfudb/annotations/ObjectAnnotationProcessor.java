@@ -121,16 +121,33 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         TypeElement interfaceOverride;
         /** If the element should be excluded from instrumentation. */
         boolean doNotAdd = false;
+        /** If the element has conflictParameter annotations. */
+        final boolean hasConflictAnnotations;
 
-        public SMRMethodInfo(ExecutableElement method, TypeElement interfaceOverride) {
+        public SMRMethodInfo(ExecutableElement method,
+                             TypeElement interfaceOverride) {
             this.method = method;
             this.interfaceOverride = interfaceOverride;
+            this.hasConflictAnnotations = checkForConflictAnnotations(method);
         }
 
-        public SMRMethodInfo(ExecutableElement method, TypeElement interfaceOverride, boolean doNotAdd) {
+        public SMRMethodInfo(ExecutableElement method,
+                             TypeElement interfaceOverride,
+                             boolean doNotAdd) {
             this.method = method;
             this.interfaceOverride = interfaceOverride;
             this.doNotAdd = doNotAdd;
+            this.hasConflictAnnotations = checkForConflictAnnotations(method);
+        }
+
+        /** Return whether the given method has conflict annotations.
+         * @param method    The method to check for.
+         * @return          True, if conflict annotations are present.
+         */
+        private boolean checkForConflictAnnotations(ExecutableElement method) {
+            return method.getParameters().stream()
+                    .anyMatch(x -> x.getAnnotation(ConflictParameter.class)
+                                            != null);
         }
     }
 
@@ -343,13 +360,19 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 + e.getMessage());
                     }
 
+                    // If there is conflict information, calculate the conflict set
+                    final String conflictField = "conflictField" + CORFUSMR_FIELD;
+                    if (m.hasConflictAnnotations) {
+                        addConflictFieldToMethod(ms, conflictField, smrMethod);
+                    }
 
                     // If a mutator, then log the update.
                     if (mutator != null || mutatorAccessor != null) {
                         ms.addStatement(
                                 (mutatorAccessor != null ? "long address" + CORFUSMR_FIELD + " = " : "") +
-                                "proxy" + CORFUSMR_FIELD + ".logUpdate($S$L$L)",
+                                "proxy" + CORFUSMR_FIELD + ".logUpdate($S,$L$L$L)",
                                 getSMRFunctionName(smrMethod),
+                                m.hasConflictAnnotations ? conflictField : "null",
                                 smrMethod.getParameters().size() > 0 ? "," : "",
                                 smrMethod.getParameters().stream()
                                     .map(VariableElement::getSimpleName)
@@ -366,7 +389,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                     ParameterizedTypeName.get(smrMethod.getReturnType())
                                     + ") proxy" + CORFUSMR_FIELD
                                     + ".getUpcallResult(address"
-                                    + CORFUSMR_FIELD + ")");
+                                    + CORFUSMR_FIELD
+                                    +  ", "
+                                    + (m.hasConflictAnnotations ?
+                                            conflictField: "null")
+                                    + ")");
                         }
                     }
                     // If transactional, begin the transaction
@@ -413,7 +440,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         // Otherwise, just force the access to access the underlying call.
                         ms.addStatement((smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ? "" :
                                         "return ") +"proxy" + CORFUSMR_FIELD + ".access(" +
-                                        "o" + CORFUSMR_FIELD + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L})",
+                                        "o" + CORFUSMR_FIELD + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L}," +
+                                        "$L)",
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
                                         "" : "return ",
                                 smrMethod.getSimpleName(),
@@ -421,7 +449,9 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                         .map(VariableElement::getSimpleName)
                                         .collect(Collectors.joining(", ")),
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
-                                        "return null;" : ""
+                                        "return null;" : "",
+                                (m.hasConflictAnnotations ?
+                                        conflictField : "null")
                         );
                     }
                     typeSpecBuilder.addMethod(ms.build());
@@ -659,5 +689,22 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .addStatement("return $L", "undoMap" + CORFUSMR_FIELD)
                 .build());
 
+    }
+
+    /** Add a conflict field to the method.
+     *
+     * @param ms                The builder to add the field to.
+     * @param conflictField     The name of the field to add
+     * @param smrMethod         The method element.
+     */
+    public void addConflictFieldToMethod(MethodSpec.Builder ms, String conflictField,
+                                         ExecutableElement smrMethod) {
+        ms.addStatement("$T $L = new Object[]{$L}", Object[].class, conflictField,
+                smrMethod.getParameters()
+                        .stream()
+                        .filter(y -> y.getAnnotation(ConflictParameter.class)
+                                != null)
+                        .map(y -> y.getSimpleName())
+                        .collect(Collectors.joining(", ")));
     }
 }

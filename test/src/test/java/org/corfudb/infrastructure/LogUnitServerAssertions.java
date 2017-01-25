@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.UnpooledByteBufAllocator;
 import org.assertj.core.api.AbstractAssert;
 import org.corfudb.infrastructure.log.LogAddress;
+import org.corfudb.util.AutoCloseableByteBuf;
 import org.corfudb.util.serializer.Serializers;
 
 
@@ -24,7 +25,7 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
     public LogUnitServerAssertions isEmptyAtAddress(long address) {
         isNotNull();
 
-        if (actual.dataCache.get(new LogAddress(address, null)) != null) {
+        if (actual.getDataCache().get(new LogAddress(address, null)) != null) {
             failWithMessage("Expected address <%d> to be empty but contained data!", address);
         }
 
@@ -34,9 +35,9 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
     public LogUnitServerAssertions containsDataAtAddress(long address) {
         isNotNull();
 
-        if (actual.dataCache.get(new LogAddress(address, null)) == null) {
+        if (actual.getDataCache().get(new LogAddress(address, null)) == null) {
             failWithMessage("Expected address <%d> to contain data but was empty!", address);
-        } else if (actual.dataCache.get(new LogAddress(address, null)).isHole()) {
+        } else if (actual.getDataCache().get(new LogAddress(address, null)).isHole()) {
             failWithMessage("Expected address <%d> to contain data but was filled hole!", address);
         }
 
@@ -46,9 +47,9 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
     public LogUnitServerAssertions containsFilledHoleAtAddress(long address) {
         isNotNull();
 
-        if (actual.dataCache.get(new LogAddress(address, null)) == null) {
+        if (actual.getDataCache().get(new LogAddress(address, null)) == null) {
             failWithMessage("Expected address <%d> to contain filled hole but was empty!", address);
-        } else if (!actual.dataCache.get(new LogAddress(address, null)).isHole()) {
+        } else if (!actual.getDataCache().get(new LogAddress(address, null)).isHole()) {
             failWithMessage("Expected address <%d> to contain filled hole but was data!", address);
         }
 
@@ -58,21 +59,18 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
     public LogUnitServerAssertions matchesDataAtAddress(long address, Object data) {
         isNotNull();
 
-        if (actual.dataCache.get(new LogAddress(address, null)) == null) {
+        if (actual.getDataCache().get(new LogAddress(address, null)) == null) {
             failWithMessage("Expected address <%d> to contain data but was empty!", address);
         } else {
-            actual.dataCache.get(new LogAddress(address, null)).getData().resetReaderIndex();
-            ByteBuf b = UnpooledByteBufAllocator.DEFAULT.buffer();
-            Serializers.CORFU.serialize(data, b);
-            byte[] expected = new byte[b.readableBytes()];
-            b.getBytes(0, expected);
-            int actualbytes = actual.dataCache.get(new LogAddress(address, null)).getData().readableBytes();
-            byte[] actualb = new byte[actualbytes];
-            actual.dataCache.get(new LogAddress(address, null)).getData().getBytes(0, actualb);
-            actual.dataCache.get(new LogAddress(address, null)).getData().resetReaderIndex();
+            try (AutoCloseableByteBuf b = new AutoCloseableByteBuf(UnpooledByteBufAllocator.DEFAULT.buffer())) {
+                Serializers.CORFU.serialize(data, b);
+                byte[] expected = new byte[b.readableBytes()];
+                b.getBytes(0, expected);
 
-            org.assertj.core.api.Assertions.assertThat(actualb)
-                    .isEqualTo(expected);
+                org.assertj.core.api.Assertions.assertThat(actual.getDataCache()
+                                .get(new LogAddress(address, null)).getData())
+                        .isEqualTo(expected);
+            }
         }
 
         return this;

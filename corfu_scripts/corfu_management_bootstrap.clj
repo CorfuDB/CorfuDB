@@ -4,7 +4,7 @@
 (import org.docopt.Docopt)                                  ; parse some cmdline opts
 (import org.corfudb.runtime.view.Layout)
 
-(def usage "corfu_management_bootstrap, work with Corfu streams.
+(def usage "corfu_management_bootstrap, to bootstrap Corfu Management Server.
 Usage:
   corfu_management_bootstrap -c <config> -l <layout>
 Options:
@@ -20,7 +20,7 @@ Options:
                                             )
                                        ))
 
-; a function which reads a stream to stdout
+; a function which builds and bootstraps the layout
 (defn bootstrap-node [endpoint, layout] (do
                                           (build-layout endpoint (str (slurp layout)))
                                           ))

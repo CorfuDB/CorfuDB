@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.SequencerServerAssertions.assertThat;
+import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 
 /**
  * Created by mwei on 12/13/15.
@@ -192,40 +193,4 @@ public class SequencerServerTest extends AbstractServerTest {
                     .isEqualTo(Alocal);
         }
     }
-
-    @Test
-    public void checkSequencerCheckpointingWorks()
-            throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-
-        SequencerServer s1 = new SequencerServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .setMemory(false)
-                .setInitialToken(0)
-                .setCheckpoint(1)
-                .build());
-
-        this.router.reset();
-        this.router.addServer(s1);
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                new TokenRequest(1L, Collections.singleton(CorfuRuntime.getStreamID("a")), false, false)));
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                new TokenRequest(1L, Collections.singleton(CorfuRuntime.getStreamID("a")), false, false)));
-        assertThat(s1)
-                .tokenIsAt(2);
-        Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
-        s1.shutdown();
-
-        SequencerServer s2 = new SequencerServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .setMemory(false)
-                .setInitialToken(-1)
-                .setCheckpoint(1)
-                .build());
-        this.router.reset();
-        this.router.addServer(s2);
-        assertThat(s2)
-                .tokenIsAt(2);
-    }
-
 }

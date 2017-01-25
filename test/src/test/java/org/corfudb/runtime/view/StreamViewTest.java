@@ -1,16 +1,13 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -183,4 +180,5 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(sv.read().getPayload(getRuntime()))
                 .isEqualTo(testPayload2);
     }
+
 }

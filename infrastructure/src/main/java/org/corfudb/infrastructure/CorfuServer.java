@@ -55,6 +55,10 @@ public class CorfuServer {
     @Getter
     private static ManagementServer managementServer;
 
+    private static NettyServerRouter router;
+
+    private static ServerContext serverContext;
+
     public static boolean serverRunning = false;
 
     /**
@@ -72,7 +76,7 @@ public class CorfuServer {
             "Corfu Server, the server for the Corfu Infrastructure.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tcorfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-P <seconds>] <port>\n"
+                    + "\tcorfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-M <address>:<port>] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>            Set the path to the storage file for the log unit.\n"
@@ -86,14 +90,12 @@ public class CorfuServer {
                     + "                                         evicted entries will be auto-trimmed. [default: 1000000000].\n"
                     + " -t <token>, --initial-token=<token>     The first token the sequencer will issue, or -1 to recover\n"
                     + "                                         from the log. [default: -1].\n"
-                    + " -k <seconds>, --checkpoint=<seconds>    The rate the sequencer should checkpoint its state to disk,\n"
-                    + "                                         in seconds [default: 60].\n"
                     + " -p <seconds>, --compact=<seconds>       The rate the log unit should compact entries (find the,\n"
                     + "                                         contiguous tail) in seconds [default: 60].\n"
                     + " -d <level>, --log-level=<level>         Set the logging level, valid levels are: \n"
                     + "                                         ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
                     + " -Q, --quickcheck-test-mode              Run in QuickCheck test mode\n"
-                    + " -P <seconds>, --cm-poll-interval        Configuration manager poll interval [default: 1]\n"
+                    + " -M <address>:<port>, --management-server=<address>:<port>     Layout endpoint to seed Management Server\n"
                     + " -n, --no-verify                         Disable checksum computation and verification.\n"
                     + " -h, --help  Show this screen\n"
                     + " --version  Show version\n";
@@ -169,20 +171,16 @@ public class CorfuServer {
         }
 
         // Now, we start the Netty router, and have it route to the correct port.
-        NettyServerRouter router = new NettyServerRouter(opts);
+        router = new NettyServerRouter(opts);
 
         // Create a common Server Context for all servers to access.
-        ServerContext serverContext = new ServerContext(opts, router);
+        serverContext = new ServerContext(opts, router);
 
         // Add each role to the router.
-        sequencerServer = new SequencerServer(serverContext);
-        router.addServer(sequencerServer);
-        layoutServer = new LayoutServer(serverContext);
-        router.addServer(layoutServer);
-        logUnitServer = new LogUnitServer(serverContext);
-        router.addServer(logUnitServer);
-        managementServer = new ManagementServer(serverContext);
-        router.addServer(managementServer);
+        addSequencer();
+        addLayoutServer();
+        addLogUnit();
+        addManagementServer();
         router.baseServer.setOptionsMap(opts);
 
         // Create the event loops responsible for servicing inbound messages.
@@ -261,5 +259,25 @@ public class CorfuServer {
             workerGroup.shutdownGracefully();
         }
 
+    }
+
+    public static void addSequencer() {
+        sequencerServer = new SequencerServer(serverContext);
+        router.addServer(sequencerServer);
+    }
+
+    public static void addLayoutServer() {
+        layoutServer = new LayoutServer(serverContext);
+        router.addServer(layoutServer);
+    }
+
+    public static void addLogUnit() {
+        logUnitServer = new LogUnitServer(serverContext);
+        router.addServer(logUnitServer);
+    }
+
+    public static void addManagementServer() {
+        managementServer = new ManagementServer(serverContext);
+        router.addServer(managementServer);
     }
 }

@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.TestClassWithPrimitives;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.junit.Test;
@@ -149,8 +150,9 @@ public class FGMapTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canClearInTX()
             throws Exception {
-        Map<String, String> testMap = getDefaultRuntime()
-        .getObjectsView()
+        getDefaultRuntime();
+
+        Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
                 .setTypeToken(new TypeToken<FGMap<String, String>>() {})
@@ -166,7 +168,8 @@ public class FGMapTest extends AbstractViewTest {
         }
         testMap.clear();
         assertThat(testMap)
-                .hasSize(0);
+                .isEmpty();
+//                .hasSize(0);
         getRuntime().getObjectsView().TXEnd();
 
         assertThat(testMap)
