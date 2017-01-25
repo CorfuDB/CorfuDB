@@ -16,8 +16,10 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Created by sfritchie on 1/12/17.
+ * Utilities for common options parsing and session configuration for
+ * encrypted & authenticated TLS sessions.
  */
+
 public class TlsUtils {
     public enum SslContextType { SERVER_CONTEXT, CLIENT_CONTEXT };
 
