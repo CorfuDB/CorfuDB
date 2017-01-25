@@ -276,14 +276,14 @@ public class LogUnitClient implements IClient {
      * @param address The address to fill a hole at.
      */
     public CompletableFuture<Boolean> fillHole(long address) {
-        Timer.Context context = getTimerContext("fileHole");
+        Timer.Context context = getTimerContext("fillHole");
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(null, address)));
         return cf.thenApply(x -> { context.stop(); return x; });
     }
 
     public CompletableFuture<Boolean> fillHole(UUID streamID, long address) {
-        Timer.Context context = getTimerContext("fileHole");
+        Timer.Context context = getTimerContext("fillHole");
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));
         return cf.thenApply(x -> { context.stop(); return x; });
