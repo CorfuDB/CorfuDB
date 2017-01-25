@@ -7,9 +7,15 @@ import java.util.List;
 
 /**
  * Failure Report Model:
- * Contains a list of node health models.
- * Each of these models contains the metrics of
- * that node required by the management server.
+ * Contains a list of all records accumulated by
+ * the failure detecting (polling) policy from all other nodes.
+ * <p>
+ * Each of these records (NodeHealthModel) contains:
+ * nodeMetrics which are status metrics specific to that node.
+ * Network metrics monitored by the polling node.
+ * <p>
+ * This failureReportModel is then passed on to the
+ * Management Server which analyzes them to handle faults if any.
  * <p>
  * Created by zlokhandwala on 1/12/17.
  */

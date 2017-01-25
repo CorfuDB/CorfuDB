@@ -267,7 +267,7 @@ public class ManagementServer extends AbstractServer {
      * @param r
      */
     @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
-    public synchronized void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    public void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         // Currently builds a default instance of the model.
         // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
         NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();

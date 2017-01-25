@@ -33,8 +33,8 @@ public class NodeHealthModel {
         nodeHealthDataTypeMap.put(NodeHealthDataType.ENDPOINT, endpoint);
     }
 
-    public Boolean getNodeMetrics() {
-        return (Boolean) nodeHealthDataTypeMap.get(NodeHealthDataType.NODE_METRICS);
+    public NodeMetrics getNodeMetrics() {
+        return (NodeMetrics) nodeHealthDataTypeMap.get(NodeHealthDataType.NODE_METRICS);
     }
 
     public void setNodeMetrics(NodeMetrics nodeMetrics) {
