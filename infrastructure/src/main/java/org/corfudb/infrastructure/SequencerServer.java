@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
@@ -16,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 
@@ -24,8 +26,38 @@ import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
  * <p>
  * It currently supports a single operation, which is a incoming request:
  * <p>
- * TOKEN_REQ - Request the next token.
+ * TOKEN_REQ - Request the next address.
+ *
  * <p>
+ * The sequencer server maintains the current tail of the log, the current
+ * tail of every stream, and a cache of timestamps of updates on recent
+ * conflict-parameters.
+ * <p>
+ * A token request can be of several sub-types, which are defined in
+ * {@link TokenRequest}:
+ * <p>
+ * {@link TokenRequest::TK_QUERY} - used for only querying the current tail
+ * of the log and/or the tails of specific streams
+ *
+ * {@link TokenRequest::TK_RAW} - reserved for getting a "raw" token in the
+ * global log
+ *
+ * {@link TokenRequest::TK_MULTI_STREAM} - used for logging across one or
+ * more streams
+ *
+ * {@link TokenRequest::TK_TX} - used for reserving an address for transaction
+ * commit.
+ *
+ * The transaction commit is the most sophisticated functaionality of the
+ * sequencer. The sequencer reserves an address for the transaction
+ * only on if it knows that it can commit.
+ *
+ * The TK_TX request contains a conflict-set and a write-set. The sequencer
+ * checks the conflict-set against the stream-tails and against the
+ * conflict-parameters timestamp cache it maintains. If the transaction
+ * commits, the sequencer updates the tails of all the streams and the cache
+ * of conflict parameters.
+ *
  * Created by mwei on 12/8/15.
  */
 @Slf4j
@@ -35,7 +67,6 @@ public class SequencerServer extends AbstractServer {
      * key-name for storing {@link SequencerServer} state in {@link ServerContext::getDataStore()}.
      */
     private static final String PREFIX_SEQUENCER = "SEQUENCER";
-    private static final String KEY_SEQUENCER = "CURRENT";
 
     /**
      * Inherit from CorfuServer a server context
@@ -50,10 +81,17 @@ public class SequencerServer extends AbstractServer {
     /**
      * The sequencer maintains information about log and streams:
      *
-     *  - {@link SequencerServer::globalLogTail}: global log tail. points to the first available position (initially, 0).
-     *  - {@link SequencerServer::streamTailMap}: a map of per-streams tail. points to per-streams first available position.
-     *  - {@link SequencerServer::streamTailToGlobalTailMap}: per streams map to last issued global-log position. used for backpointers.
-     *  - {@link SequencerServer::conflictToGlobalTailCache}: the {@link SequencerServer::maxConflictCacheSize} latest conflict keys and their latest commit (global-log) position
+     *  - {@link SequencerServer::globalLogTail}:
+     *      global log tail. points to the first available position (initially, 0).
+     *  - {@link SequencerServer::streamTailMap}:
+     *      a map of per-streams tail. points to per-streams first available position.
+     *  - {@link SequencerServer::streamTailToGlobalTailMap}:
+     *      per streams map to last issued global-log position. used for backpointers.
+     *  - {@link SequencerServer::conflictToGlobalTailCache}:
+     *      a cache of recent conflict keys and their latest global-log position
+     *  - {@link SequencerServer::maxConflictWildcard} :
+     *      a "wildcard" representing the maximal update timestamp of
+     *      all the confict keys which were evicted from the cache
      *
      * Every append to the log updates the information in these maps.
      */
@@ -62,33 +100,15 @@ public class SequencerServer extends AbstractServer {
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
-    /**
-     * A cache of conflict parameter modification timestamps.
-     *
-     * A "wildcard" {@link SequencerServer::maxConflictWildcard} representing all the entries which were evicted from the cache holds
-     * theier maximal modification time.
-     */
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
-    private final Cache<Integer, Long> conflictToGlobalTailCache = Caffeine.newBuilder()
+    private final Cache<Integer, Long>
+            conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
-            .removalListener((Integer  K, Long V, RemovalCause cause) -> {
+            .removalListener((Integer K, Long V, RemovalCause cause) -> {
                 maxConflictWildcard = Math.max(V, maxConflictWildcard);
             })
             .build();
-
-    /**
-     * A sequencer needs a lease to serve a certain number of tokens.
-     * The lease starting index is persisted.
-     * A lease is good for (@Link #SequencerServer::leaseLength) number of tokens.
-     *
-     * A lease is renewed when we reach leaseRenew tokens away from the limit.
-     *
-     * TODO: these parameters should probably be configurable from somewhere
-     */
-    @Getter
-    private final long leaseLength = 100_000;
-    private final long leaseRenewalNotice = 10_000; // renew when token crosses leaseLength - leaseRenewalNotice threshold
 
     /** Handler for this server */
     @Getter
@@ -101,11 +121,20 @@ public class SequencerServer extends AbstractServer {
 
         long initialToken = Utils.parseLong(opts.get("--initial-token"));
         if (initialToken == NON_LOG_ADDR_MAGIC) {
-            getInitalLease();
+            globalLogTail.set(0L);
         } else {
-            renewLease(initialToken);
             globalLogTail.set(initialToken);
         }
+    }
+
+    /** Get the conflict hash code for a stream ID and conflict param.
+     *
+     * @param streamID          The stream ID.
+     * @param conflictParam     The conflict parameter.
+     * @return                  A conflict hash code.
+     */
+    public int getConflictHashCode(UUID streamID, int conflictParam) {
+            return Objects.hash(streamID, conflictParam);
     }
 
     /**
@@ -129,14 +158,20 @@ public class SequencerServer extends AbstractServer {
             // if conflict-parameters are present, check for conflict based on conflict-parameter updates
             Set<Integer> conflictParamSet = entry.getValue();
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
+                // for each key pair, check for conflict;
+                // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    Long v = conflictToGlobalTailCache.getIfPresent(conflictParam);
+                    int conflictKeyHash = getConflictHashCode(entry.getKey(),
+                            conflictParam);
+                    Long v = conflictToGlobalTailCache.getIfPresent
+                            (conflictKeyHash);
                     log.trace("txn resolution for conflictparam {}, last update {}",
-                            conflictParam, v);
+                            conflictKeyHash, v);
                     if ((v != null && v > txData.getSnapshotTimestamp()) ||
                             (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
-                        log.debug("Rejecting request due to update-timestamp > {} on conflictParam {}",
-                                txData.getSnapshotTimestamp(), conflictParam);
+                        log.debug("Rejecting request due to update-timestamp " +
+                                        "> {} on conflictKeyPair {}",
+                                txData.getSnapshotTimestamp(), conflictKeyHash);
                         commit.set(false);
                     }
                 });
@@ -205,11 +240,6 @@ public class SequencerServer extends AbstractServer {
             return;
         }
 
-        // check if log tail getting close to lease-limit. If so, we need to renew sequencer lease
-        long leaseRenew = getCurrentLease() + leaseLength;
-        if (globalLogTail.get() >= (leaseRenew - leaseRenewalNotice))
-            renewLease(leaseRenew);
-
         // for raw log implementation, simply extend the global log tail and return the global-log token
         if (req.getReqType() == TokenRequest.TK_RAW) {
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
@@ -273,9 +303,19 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null)
-            for (Set<Integer> conflictParams : req.getTxnResolution().getWriteConflictParams().values())
-                for (Integer cParam : conflictParams)
-                    conflictToGlobalTailCache.put(cParam, newTail-1);
+            req.getTxnResolution().getWriteConflictParams().entrySet()
+                .stream()
+            // for each entry
+                .forEach(txEntry ->
+                        // and for each conflict param
+                            txEntry.getValue().stream().forEach(conflictParam ->
+                                    // insert an entry with the new timestamp
+                                    // using the hash code based on the param
+                                    // and the stream id.
+                                    conflictToGlobalTailCache.put(
+                                            getConflictHashCode(txEntry
+                                                    .getKey(), conflictParam),
+                                            newTail - 1)));
 
         log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
         // return the token response with the new global tail, new streams tails, and the streams backpointers
@@ -283,47 +323,5 @@ public class SequencerServer extends AbstractServer {
                 new TokenResponse(currentTail,
                         backPointerMap.build(),
                         requestStreamTokens.build())));
-    }
-
-    /**
-     * obtain the initial lease (a log tail).
-     * for now, this works only with a local file.
-     * TODO in the future, a sequencer needs to obtain the lease from the layout service
-     */
-    private void getInitalLease() {
-
-        // check for existing previous lease
-        Long leaseTail = serverContext.getDataStore()
-                .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
-
-        if (leaseTail != null) {
-            // if a previous lease exists, go past it to teh next lease segment
-            renewLease(leaseTail + leaseLength);
-            globalLogTail.set(leaseTail + leaseLength);
-            // todo: we need to update the conflictCache to reflect the lack of information up to the current tail
-        } else {
-            // otherwise, grab a lease from the start of the log
-            renewLease(0L);
-            globalLogTail.set(0L);
-        }
-
-    }
-
-    /**
-     * extend the current lease to a new tail
-     * @param leaseStart the new lease starting point
-     */
-    private void renewLease(long leaseStart) {
-        serverContext.getDataStore()
-                .put(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER, leaseStart);
-    }
-
-    /**
-     * query the current lease
-     * @return the lease's starting point
-     */
-    private long getCurrentLease() {
-        return serverContext.getDataStore()
-                .get(Long.class, PREFIX_SEQUENCER, KEY_SEQUENCER);
     }
 }

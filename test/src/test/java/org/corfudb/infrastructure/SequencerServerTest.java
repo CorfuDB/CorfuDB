@@ -193,37 +193,4 @@ public class SequencerServerTest extends AbstractServerTest {
                     .isEqualTo(Alocal);
         }
     }
-
-    @Test
-    public void checkSequencerLeaseWorks()
-            throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-
-        SequencerServer s1 = new SequencerServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .setMemory(false)
-                .build());
-
-        this.router.reset();
-        this.router.addServer(s1);
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                new TokenRequest(1L, Collections.singleton(CorfuRuntime.getStreamID("a")), false, false)));
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                new TokenRequest(1L, Collections.singleton(CorfuRuntime.getStreamID("a")), false, false)));
-        assertThat(s1)
-                .tokenIsAt(2);
-        Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
-        s1.shutdown();
-
-        SequencerServer s2 = new SequencerServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .setMemory(false)
-                .setInitialToken(NON_LOG_ADDR_MAGIC)
-                .build());
-        this.router.reset();
-        this.router.addServer(s2);
-        assertThat(s2)
-                .tokenIsAt(s2.getLeaseLength());
-    }
-
 }

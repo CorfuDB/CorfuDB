@@ -2,6 +2,7 @@ package org.corfudb.runtime.object.transactions;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
 import java.util.Deque;
 import java.util.LinkedList;
 
@@ -14,6 +15,11 @@ import java.util.LinkedList;
  */
 @Slf4j
 public class TransactionalContext {
+    /** MicroTransaction support:
+     * allow short-lived transactions to run without contention for this
+     * duration
+     */
+    public static final Duration mTxDuration = Duration.ofMillis(1);
 
     /** A thread local stack containing all transaction contexts
      * for a given thread.
