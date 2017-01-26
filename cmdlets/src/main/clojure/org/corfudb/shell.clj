@@ -88,14 +88,39 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 ; Get a runtime or a router, and add it to the runtime/router table
 (defn add-client ([client] (.. *o (addClient client)))
   ([client, router] (.. router (addClient client))))
-(defn get-runtime [endpoint] (def *r (new CorfuRuntime endpoint)) *r)
-(defn get-router [endpoint]  (do
-   (def *o (new NettyClientRouter (get-host endpoint) (get-port endpoint))))
-   (add-client (new org.corfudb.runtime.clients.LayoutClient))
-   (add-client (new org.corfudb.runtime.clients.LogUnitClient))
-   (add-client (new org.corfudb.runtime.clients.SequencerClient))
-   (add-client (new org.corfudb.runtime.clients.ManagementClient))
-  *o)
+(defn get-runtime
+  ([endpoint] (get-runtime endpoint nil))
+  ([endpoint opts] (do
+    (def *r (new CorfuRuntime endpoint))
+    (cond
+      (nil? opts) *r
+      (.. opts (get "--enable-tls"))
+        (.. *r (enableTls
+          (.. opts (get "--keystore"))
+          (.. opts (get "--keystore-password-file"))
+          (.. opts (get "--truststore"))
+          (.. opts (get "--truststore-password-file")))))
+    *r)))
+(defn get-router
+  ([endpoint] (get-router endpoint nil))
+  ([endpoint opts] (do
+    (cond
+      (nil? opts) (def *o (new NettyClientRouter (get-host endpoint) (get-port endpoint)))
+      (.. opts (get "--enable-tls"))
+        (def *o (new NettyClientRouter
+          (get-host endpoint)
+          (get-port endpoint)
+          (.. opts (get "--enable-tls"))
+          (.. opts (get "--keystore"))
+          (.. opts (get "--keystore-password-file"))
+          (.. opts (get "--truststore"))
+          (.. opts (get "--truststore-password-file"))))
+      :else (def *o (new NettyClientRouter (get-host endpoint) (get-port endpoint))))
+    (add-client (new org.corfudb.runtime.clients.LayoutClient))
+    (add-client (new org.corfudb.runtime.clients.LogUnitClient))
+    (add-client (new org.corfudb.runtime.clients.SequencerClient))
+    (add-client (new org.corfudb.runtime.clients.ManagementClient))
+   *o)))
 (defn connect-runtime ([] (.. *r (connect)))
                           ([runtime] (.. runtime (connect))))
 

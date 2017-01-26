@@ -4,11 +4,16 @@
 
 (def usage "corfu_sequencer, directly interact with a Corfu sequencer.
 Usage:
-  corfu_sequencer [-i <stream-id>] -c <config> latest
-  corfu_sequencer [-i <stream-id>] -c <config> next-token <num-tokens>
+  corfu_sequencer [-i <stream-id>] -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] latest
+  corfu_sequencer [-i <stream-id>] -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] next-token <num-tokens>
 Options:
-  -i <stream-id>, --stream-id <stream-id>     ID or name of the stream to work with.
-  -c <config>, --config <config>              Configuration string to use.
+  -i <stream-id>, --stream-id <stream-id>                                                ID or name of the stream to work with.
+  -c <config>, --config <config>                                                         Configuration string to use.
+  -e, --enable-tls                                                                       Enable TLS.
+  -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
+  -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
+  -r <truststore>, --truststore=<truststore>                                             Path to the trust store.
+  -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.
   -h, --help     Show this screen.
 ")
 
@@ -26,7 +31,7 @@ Options:
                                                    (java.util.Collections/singleton stream)) num-tokens))
            (getToken))))
 
-(get-runtime (.. localcmd (get "--config")))
+(get-runtime (.. localcmd (get "--config")) localcmd)
 (connect-runtime)
 ; determine what to do
 (cond (.. localcmd (get "latest")) (get-token stream 0)

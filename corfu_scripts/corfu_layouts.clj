@@ -6,10 +6,15 @@
 (require 'clojure.java.shell)
 (def usage "corfu_layouts, work with the Corfu layout view.
 Usage:
-  corfu_layouts -c <config> query
-  corfu_layouts -c <config> edit
+  corfu_layouts -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] query
+  corfu_layouts -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] edit
 Options:
-  -c <config>, --config <config>              Configuration string to use.
+  -c <config>, --config <config>                                                         Configuration string to use.
+  -e, --enable-tls                                                                       Enable TLS.
+  -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
+  -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
+  -r <truststore>, --truststore=<truststore>                                             Path to the trust store.
+  -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.
   -h, --help     Show this screen.
 ")
 
@@ -17,7 +22,7 @@ Options:
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
 ; Get the runtime.
-(get-runtime (.. localcmd (get "--config")))
+(get-runtime (.. localcmd (get "--config")) localcmd)
 (connect-runtime)
 (def layout-view (get-layout-view))
 
@@ -72,7 +77,7 @@ Options:
                                        ; (2) install layout on all servers
                                        (do
                                          (doseq [server (.getLayoutServers new-layout)]
-                                         (do (get-router server)
+                                         (do (get-router server localcmd)
                                              (try
                                                (.get (.bootstrapLayout (get-layout-client) new-layout))
                                                (catch Exception e
