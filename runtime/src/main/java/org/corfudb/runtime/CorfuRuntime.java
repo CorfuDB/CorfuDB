@@ -154,8 +154,12 @@ public class CorfuRuntime {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
-        MetricsUtils.addJVMMetrics(metrics, mp);
-        MetricsUtils.metricsReportingSetup(metrics);
+        synchronized (metrics) {
+            if (metrics.getNames().isEmpty()) {
+                MetricsUtils.addJVMMetrics(metrics, mp);
+                MetricsUtils.metricsReportingSetup(metrics);
+            }
+        }
         log.debug("Corfu runtime version {} initialized.", getVersionString());
     }
 

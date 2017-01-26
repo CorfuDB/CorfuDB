@@ -80,9 +80,13 @@ public class ServerContext {
         this.failureHandlerPolicy = new PurgeFailurePolicy();
 
         // Metrics setup & reporting configuration
-        addJVMMetrics(metrics, mp);
-        MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
-        MetricsUtils.metricsReportingSetup(metrics);
+        synchronized (metrics) {
+            if (metrics.getNames().isEmpty()) {
+                addJVMMetrics(metrics, mp);
+                MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
+                MetricsUtils.metricsReportingSetup(metrics);
+            }
+        }
     }
 
     /**
