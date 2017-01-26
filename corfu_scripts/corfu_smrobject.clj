@@ -5,16 +5,21 @@
 
 (def usage "corfu_smrobject, work with Corfu SMR objects.
 Usage:
-  corfu_smrobject -i <stream-id> -c <config> <class> <method> [<args>...]
+  corfu_smrobject -i <stream-id> -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] <class> <method> [<args>...]
 Options:
-  -i <stream-id>, --stream-id <stream-id>     ID or name of the stream to work with.
-  -c <config>, --config <config>              Configuration string to use.
+  -i <stream-id>, --stream-id <stream-id>                                                ID or name of the stream to work with.
+  -c <config>, --config <config>                                                         Configuration string to use.
+  -e, --enable-tls                                                                       Enable TLS.
+  -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
+  -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
+  -r <truststore>, --truststore=<truststore>                                             Path to the trust store.
+  -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.
   -h, --help     Show this screen.
 ")
 
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
-(get-runtime (.. localcmd (get "--config")))
+(get-runtime (.. localcmd (get "--config")) localcmd)
 (connect-runtime)
 
 (def stream (uuid-from-string (.. localcmd (get "--stream-id"))))

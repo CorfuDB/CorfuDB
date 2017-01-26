@@ -19,6 +19,7 @@ public class ServerContextBuilder {
     boolean memory = true;
     String logPath = null;
     boolean noVerify = false;
+    boolean tlsEnabled = false;
     int maxCache = 1000000;
     String address = "test";
     int port = 9000;
@@ -45,6 +46,7 @@ public class ServerContextBuilder {
                 .put("--no-verify", noVerify)
                 .put("--max-cache", maxCache)
                 .put("--address", address)
+                .put("--enable-tls", tlsEnabled)
                 .put("<port>", port);
         return new ServerContext(builder.build(), serverRouter);
     }

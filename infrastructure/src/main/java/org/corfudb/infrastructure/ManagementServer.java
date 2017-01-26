@@ -283,6 +283,12 @@ public class ManagementServer extends AbstractServer {
 
         if (corfuRuntime == null) {
             corfuRuntime = new CorfuRuntime();
+            if ((Boolean) opts.get("--enable-tls")) {
+                corfuRuntime.enableTls((String) opts.get("--keystore"),
+                    (String) opts.get("--keystore-password-file"),
+                    (String) opts.get("--truststore"),
+                    (String) opts.get("--truststore-password-file"));
+            }
             // Runtime can be set up either using the layout or the bootstrapEndpoint address.
             if (latestLayout != null)
                 latestLayout.getLayoutServers().forEach(ls -> corfuRuntime.addLayoutServer(ls));
