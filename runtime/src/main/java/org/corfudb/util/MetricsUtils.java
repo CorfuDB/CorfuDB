@@ -5,6 +5,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.jvm.FileDescriptorRatioGauge;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class MetricsUtils {
+    private static final FileDescriptorRatioGauge metricsJVMFdGauge = new FileDescriptorRatioGauge();
     private static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
     private static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
     private static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
@@ -105,6 +107,7 @@ public class MetricsUtils {
             metrics.register(pfx + "jvm.gc", metricsJVMGC);
             metrics.register(pfx + "jvm.memory", metricsJVMMem);
             metrics.register(pfx + "jvm.thread", metricsJVMThread);
+            metrics.register(pfx + "jvm.file-descriptors-used", metricsJVMFdGauge);
         } catch (IllegalArgumentException e) {
             // Re-registering metrics during test runs, not a problem
         }
