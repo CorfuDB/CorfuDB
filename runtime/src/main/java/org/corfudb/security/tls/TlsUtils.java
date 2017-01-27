@@ -1,4 +1,4 @@
-package org.corfudb.util;
+package org.corfudb.security.tls;
 
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -30,10 +30,10 @@ public class TlsUtils {
                                        Consumer<Exception> trustStoreException,
                                        Consumer<Exception> tsPasswordFileException) {
         return enableTls(desiredType,
-                (String) opts.get("--keystore-password-file"), keyStoreException,
-                (String) opts.get("--keystore"), ksPasswordFileException,
-                (String) opts.get("--truststore-password-file"), trustStoreException,
-                (String) opts.get("--truststore"), tsPasswordFileException);
+                (String) opts.get("--keystore"), keyStoreException,
+                (String) opts.get("--keystore-password-file"), ksPasswordFileException,
+                (String) opts.get("--truststore"), trustStoreException,
+                (String) opts.get("--truststore-password-file"), tsPasswordFileException);
     }
 
     public static SslContext enableTls(SslContextType desiredType,

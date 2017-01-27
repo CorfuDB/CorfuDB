@@ -22,8 +22,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.TlsUtils;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
@@ -239,20 +239,20 @@ public class CorfuServer {
             try {
                 sslContext =
                         TlsUtils.enableTls(TlsUtils.SslContextType.SERVER_CONTEXT,
-                                (String) opts.get("--keystore-password-file"), e -> {
-                                    log.error("Could not read the key store password file.");
-                                    System.exit(1);
-                                },
                                 (String) opts.get("--keystore"), e -> {
                                     log.error("Could not load keys from the key store.");
                                     System.exit(1);
                                 },
-                                (String) opts.get("--truststore-password-file"), e -> {
-                                    log.error("Could not read the trust store password file.");
+                                (String) opts.get("--keystore-password-file"), e -> {
+                                    log.error("Could not read the key store password file.");
                                     System.exit(1);
                                 },
                                 (String) opts.get("--truststore"), e -> {
                                     log.error("Could not load keys from the trust store.");
+                                    System.exit(1);
+                                },
+                                (String) opts.get("--truststore-password-file"), e -> {
+                                    log.error("Could not read the trust store password file.");
                                     System.exit(1);
                                 });
             } catch (Exception ex) {

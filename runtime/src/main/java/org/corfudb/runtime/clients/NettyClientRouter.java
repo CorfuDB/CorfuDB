@@ -29,8 +29,8 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.TlsUtils;
 
 import java.io.FileInputStream;
 import java.nio.file.Files;
