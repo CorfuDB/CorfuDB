@@ -34,14 +34,9 @@ public class SequencerView extends AbstractView {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(streamIDs, numTokens)));
     }
 
-    public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens, boolean overwrite, boolean replexOverwrite) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(
-                streamIDs, numTokens, overwrite, replexOverwrite)));
-    }
 
-    public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens, boolean overwrite, boolean replexOverwrite,
-                                   TxResolutionInfo conflictInfo) {
+    public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens, TxResolutionInfo conflictInfo) {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(
-                streamIDs, numTokens, overwrite, replexOverwrite, conflictInfo)));
+                streamIDs, numTokens, conflictInfo)));
     }
 }
