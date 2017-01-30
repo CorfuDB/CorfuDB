@@ -4,9 +4,9 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -258,6 +258,23 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
+     * Handles the heartbeat request.
+     * It accumulates the metrics required to build
+     * and send the response(NodeMetrics).
+     *
+     * @param msg
+     * @param ctx
+     * @param r
+     */
+    @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
+    public void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // Currently builds a default instance of the model.
+        // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
+        NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();
+        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.HEARTBEAT_RESPONSE, nodeMetrics.toByteArray()));
+    }
+
+    /**
      * Returns a connected instance of the CorfuRuntime.
      *
      * @return A connected instance of runtime.
@@ -359,6 +376,7 @@ public class ManagementServer extends AbstractServer {
      * Shuts down the fault detector service.
      */
     public void shutdown() {
+        super.shutdown();
         // Shutting the fault detector.
         failureDetectorService.shutdownNow();
 
@@ -372,5 +390,6 @@ public class ManagementServer extends AbstractServer {
         } catch (InterruptedException ie) {
             log.debug("failureDetectorService awaitTermination interrupted : {}", ie);
         }
+        log.info("Management Server shutting down.");
     }
 }

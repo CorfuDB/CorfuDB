@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
+import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.infrastructure.*;
 import org.junit.After;
 import org.junit.Test;
@@ -82,5 +83,28 @@ public class ManagementClientTest extends AbstractClientTest {
         Map map = new HashMap<String, Boolean>();
         map.put("Key", true);
         assertThat(client.handleFailure(map).get()).isEqualTo(true);
+    }
+
+    /**
+     * Tests the failure handler start trigger.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void initiateFailureHandler()
+            throws Exception {
+        assertThat(client.initiateFailureHandler().get()).isEqualTo(true);
+    }
+
+    /**
+     * Tests the heartbeat request and asserts if response is received.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void sendHeartbeatRequest()
+            throws Exception {
+        byte[] buffer = client.sendHeartbeatRequest().get();
+        assertThat(NodeMetrics.parseFrom(buffer)).isNotNull();
     }
 }
