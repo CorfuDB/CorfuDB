@@ -100,6 +100,10 @@ public class CorfuRuntime {
     private String trustStore;
     private String tsPasswordFile;
 
+    private boolean saslPlainTextEnabled = false;
+    private String usernameFile;
+    private String passwordFile;
+
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
      * framework to ensure the default routers used are for testing.
@@ -124,8 +128,9 @@ public class CorfuRuntime {
         String host = address.split(":")[0];
         Integer port = Integer.parseInt(address.split(":")[1]);
         // Generate a new router, start it and add it to the table.
-        NettyClientRouter router = new NettyClientRouter(host, port, tlsEnabled, keyStore,
-            ksPasswordFile, trustStore, tsPasswordFile);
+        NettyClientRouter router = new NettyClientRouter(host, port,
+            tlsEnabled, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
+            saslPlainTextEnabled, usernameFile, passwordFile);
         log.debug("Connecting to new router {}:{}", host, port);
         try {
             router.addClient(new LayoutClient())
@@ -157,15 +162,22 @@ public class CorfuRuntime {
         this.parseConfigurationString(configurationString);
     }
 
-    public void enableTls(String keyStore, String ksPasswordFile, String trustStore,
+    public CorfuRuntime enableTls(String keyStore, String ksPasswordFile, String trustStore,
         String tsPasswordFile) {
         this.keyStore = keyStore;
         this.ksPasswordFile = ksPasswordFile;
         this.trustStore = trustStore;
         this.tsPasswordFile = tsPasswordFile;
         this.tlsEnabled = true;
+        return this;
     }
 
+    public CorfuRuntime enableSaslPlainText(String usernameFile, String passwordFile) {
+        this.usernameFile = usernameFile;
+        this.passwordFile = passwordFile;
+        this.saslPlainTextEnabled = true;
+        return this;
+    }
     /**
      * Shuts down the CorfuRuntime.
      * Stops async tasks from fetching the layout.
