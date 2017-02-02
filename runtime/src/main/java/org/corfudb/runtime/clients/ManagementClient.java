@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
@@ -36,6 +37,8 @@ public class ManagementClient implements IClient {
                     .add(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR)
                     .add(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)
                     .add(CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER)
+                    .add(CorfuMsgType.HEARTBEAT_REQUEST)
+                    .add(CorfuMsgType.HEARTBEAT_RESPONSE)
                     .build();
 
     @Setter
@@ -56,6 +59,9 @@ public class ManagementClient implements IClient {
                 break;
             case MANAGEMENT_ALREADY_BOOTSTRAP_ERROR:
                 router.completeExceptionally(msg.getRequestID(), new AlreadyBootstrappedException());
+                break;
+            case HEARTBEAT_RESPONSE:
+                router.completeRequest(msg.getRequestID(), ((CorfuPayloadMsg<byte[]>)msg).getPayload());
                 break;
         }
     }
@@ -88,5 +94,15 @@ public class ManagementClient implements IClient {
      */
     public CompletableFuture<Boolean> initiateFailureHandler() {
         return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER.msg());
+    }
+
+    /**
+     * Requests for a heartbeat message containing the node status.
+     *
+     * @return A future which will return the node health metrics of
+     * the node which was requested for the heartbeat.
+     */
+    public CompletableFuture<byte[]> sendHeartbeatRequest() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 }
